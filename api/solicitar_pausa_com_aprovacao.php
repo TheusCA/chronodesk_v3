@@ -4,6 +4,7 @@
  * Correções: CSRF, validação, limite de observação
  */
 require_once __DIR__ . '/../init.php';
+require_once __DIR__ . '/../auth_ldap.php';
 header('Content-Type: application/json; charset=utf-8');
 
 require_csrf_token();
@@ -11,6 +12,9 @@ require_json_content_type();
 
 global $gerenciador;
 $data = json_decode(file_get_contents('php://input'), true);
+if (!is_array($data)) {
+    json_response(["sucesso" => false, "mensagem" => "Dados inválidos."], 400);
+}
 
 $funcionario_id = validate_funcionario_id($data['funcionario_id'] ?? null);
 if (!$funcionario_id) {
@@ -24,6 +28,8 @@ if (!$motivo) {
 
 // Limitar tamanho da observação
 $observacao = sanitize_input($data['observacao'] ?? '', 500);
+
+exigir_autenticacao_ci_pausa($data, $funcionario_id, 'solicitar_pausa');
 
 $funcionario = $gerenciador->getFuncionario($funcionario_id);
 if (!$funcionario) {

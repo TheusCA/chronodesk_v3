@@ -47,6 +47,69 @@ function fecharBannerCritico() {
     if (b) b.style.display = 'none';
 }
 
+// ----------- Autenticação AD -----------
+let adAuthResolver = null;
+
+function limparSenhaAd() {
+    const senha = document.getElementById('ad-auth-senha');
+    if (senha) senha.value = '';
+}
+
+function fecharModalAutenticacaoAd() {
+    const modal = document.getElementById('ad-auth-modal');
+    if (modal) {
+        modal.classList.remove('ativo');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    limparSenhaAd();
+}
+
+function solicitarCredenciaisAd() {
+    return new Promise((resolve, reject) => {
+        const modal = document.getElementById('ad-auth-modal');
+        const login = document.getElementById('ad-auth-login');
+        const senha = document.getElementById('ad-auth-senha');
+
+        if (!modal || !login || !senha) {
+            reject(new Error('Modal de autenticação AD não encontrado.'));
+            return;
+        }
+
+        adAuthResolver = { resolve, reject };
+        modal.classList.add('ativo');
+        modal.setAttribute('aria-hidden', 'false');
+        senha.value = '';
+        setTimeout(() => (login.value ? senha.focus() : login.focus()), 0);
+    });
+}
+
+function cancelarAutenticacaoAd() {
+    if (adAuthResolver) {
+        adAuthResolver.reject(new Error('Autenticação cancelada.'));
+        adAuthResolver = null;
+    }
+    fecharModalAutenticacaoAd();
+}
+
+function confirmarAutenticacaoAd(event) {
+    event.preventDefault();
+    const login = document.getElementById('ad-auth-login');
+    const senha = document.getElementById('ad-auth-senha');
+    const loginAd = login ? login.value.trim() : '';
+    const senhaAd = senha ? senha.value : '';
+
+    if (!loginAd || !senhaAd) {
+        exibirMensagem('Informe login e senha do AD.', 'error');
+        return;
+    }
+
+    if (adAuthResolver) {
+        adAuthResolver.resolve({ login_ad: loginAd, senha_ad: senhaAd });
+        adAuthResolver = null;
+    }
+    fecharModalAutenticacaoAd();
+}
+
 // ----------- Lista de funcionários para selects -----------
 let _funcionariosCache = [];
 
@@ -102,18 +165,36 @@ async function iniciarPausa() {
         return;
     }
 
+    let credenciaisAd;
+    try {
+        credenciaisAd = await solicitarCredenciaisAd();
+    } catch (error) {
+        return;
+    }
+
     // Confirmação com nome do CI
     const nomeCi = sel.options[sel.selectedIndex]?.text || `ID ${funcionarioId}`;
-    if (!confirm(`Confirmar início de pausa para ${nomeCi}?\nMotivo: ${motivoPausa}`)) return;
+    if (!confirm(`Confirmar início de pausa para ${nomeCi}?\nMotivo: ${motivoPausa}`)) {
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
+        return;
+    }
 
     try {
         const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
         const response = await fetch(apiUrl + '/iniciar_pausa.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ funcionario_id: funcionarioId, motivo_pausa: motivoPausa })
+            body: JSON.stringify({
+                funcionario_id: funcionarioId,
+                motivo_pausa: motivoPausa,
+                login_ad: credenciaisAd.login_ad,
+                senha_ad: credenciaisAd.senha_ad
+            })
         });
         const resultado = await response.json();
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
         if (resultado.sucesso) {
             exibirMensagem(resultado.mensagem, 'success');
             sel.value = '';
@@ -123,6 +204,8 @@ async function iniciarPausa() {
             exibirMensagem(resultado.mensagem, 'error');
         }
     } catch (error) {
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
         exibirMensagem('Erro ao iniciar pausa: ' + error.message, 'error');
     }
 }
@@ -138,16 +221,34 @@ async function finalizarPausa() {
     }
 
     const nomeCi = sel.options[sel.selectedIndex]?.text || `ID ${funcionarioId}`;
-    if (!confirm(`Confirmar finalização de pausa para ${nomeCi}?`)) return;
+
+    let credenciaisAd;
+    try {
+        credenciaisAd = await solicitarCredenciaisAd();
+    } catch (error) {
+        return;
+    }
+
+    if (!confirm(`Confirmar finalização de pausa para ${nomeCi}?`)) {
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
+        return;
+    }
 
     try {
         const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
         const response = await fetch(apiUrl + '/finalizar_pausa.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ funcionario_id: funcionarioId })
+            body: JSON.stringify({
+                funcionario_id: funcionarioId,
+                login_ad: credenciaisAd.login_ad,
+                senha_ad: credenciaisAd.senha_ad
+            })
         });
         const resultado = await response.json();
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
         if (resultado.sucesso) {
             exibirMensagem(resultado.mensagem, 'success');
             sel.value = '';
@@ -156,6 +257,8 @@ async function finalizarPausa() {
             exibirMensagem(resultado.mensagem, 'error');
         }
     } catch (error) {
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
         exibirMensagem('Erro ao finalizar pausa: ' + error.message, 'error');
     }
 }
@@ -400,16 +503,36 @@ async function solicitarPausaComAprovacao() {
     if (!observacao) { exibirMensagem('Por favor, descreva o motivo da reunião.', 'error'); return; }
 
     const nomeCi = sel.options[sel.selectedIndex]?.text || `ID ${funcionarioId}`;
-    if (!confirm(`Solicitar pausa de reunião para ${nomeCi}?\n\nObservação: ${observacao}`)) return;
+
+    let credenciaisAd;
+    try {
+        credenciaisAd = await solicitarCredenciaisAd();
+    } catch (error) {
+        return;
+    }
+
+    if (!confirm(`Solicitar pausa de reunião para ${nomeCi}?\n\nObservação: ${observacao}`)) {
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
+        return;
+    }
 
     try {
         const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
         const response = await fetch(apiUrl + '/solicitar_pausa_com_aprovacao.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ funcionario_id: funcionarioId, motivo_pausa: 'Reunião', observacao })
+            body: JSON.stringify({
+                funcionario_id: funcionarioId,
+                motivo_pausa: 'Reunião',
+                observacao,
+                login_ad: credenciaisAd.login_ad,
+                senha_ad: credenciaisAd.senha_ad
+            })
         });
         const data = await response.json();
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
         if (data.sucesso) {
             exibirMensagem(data.mensagem, 'success');
             sel.value = '';
@@ -421,12 +544,29 @@ async function solicitarPausaComAprovacao() {
             exibirMensagem(data.mensagem, 'error');
         }
     } catch (error) {
+        credenciaisAd.senha_ad = '';
+        limparSenhaAd();
         exibirMensagem('Erro ao solicitar pausa de reunião: ' + error.message, 'error');
     }
 }
 
 // ----------- Init (FIX: apenas 1 setInterval) -----------
 document.addEventListener('DOMContentLoaded', function() {
+    const adAuthForm = document.getElementById('ad-auth-form');
+    const adAuthCancelar = document.getElementById('ad-auth-cancelar');
+    const adAuthModal = document.getElementById('ad-auth-modal');
+
+    if (adAuthForm) adAuthForm.addEventListener('submit', confirmarAutenticacaoAd);
+    if (adAuthCancelar) adAuthCancelar.addEventListener('click', cancelarAutenticacaoAd);
+    if (adAuthModal) {
+        adAuthModal.addEventListener('click', function(event) {
+            if (event.target === adAuthModal) cancelarAutenticacaoAd();
+        });
+    }
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && adAuthResolver) cancelarAutenticacaoAd();
+    });
+
     carregarFuncionariosSelect();
     atualizarStatus();
     // CORREÇÃO: apenas UM setInterval (o outro estava duplicado no escopo global)

@@ -74,6 +74,51 @@ require_once __DIR__ . '/config_assets.php';
             border-radius: 10px;
             color: var(--text-secondary, #555);
         }
+        .ad-auth-modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            background: rgba(0,0,0,0.55);
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .ad-auth-modal-backdrop.ativo { display: flex; }
+        .ad-auth-modal {
+            width: 100%;
+            max-width: 380px;
+            background: var(--card-bg, #fff);
+            color: var(--text-primary, #111);
+            border-radius: 8px;
+            border: 1px solid var(--border-color, #ddd);
+            box-shadow: 0 16px 48px rgba(0,0,0,0.35);
+            padding: 20px;
+        }
+        .ad-auth-modal h2 {
+            font-size: 1.1rem;
+            margin: 0 0 14px;
+        }
+        .ad-auth-modal label {
+            display: block;
+            font-weight: 600;
+            margin: 12px 0 6px;
+        }
+        .ad-auth-modal input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color, #ccc);
+            background: var(--input-bg, #fff);
+            color: var(--text-primary, #111);
+        }
+        .ad-auth-modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 18px;
+        }
     </style>
 </head>
 <body>
@@ -146,6 +191,24 @@ require_once __DIR__ . '/config_assets.php';
         </div>
 
         <div id="message-area" class="message-area"></div>
+    </div>
+
+    <div id="ad-auth-modal" class="ad-auth-modal-backdrop" aria-hidden="true">
+        <div class="ad-auth-modal" role="dialog" aria-modal="true" aria-labelledby="ad-auth-title">
+            <h2 id="ad-auth-title">Autenticação AD</h2>
+            <form id="ad-auth-form">
+                <label for="ad-auth-login">Login AD</label>
+                <input id="ad-auth-login" name="login_ad" type="text" autocomplete="username" required>
+
+                <label for="ad-auth-senha">Senha AD</label>
+                <input id="ad-auth-senha" name="senha_ad" type="password" autocomplete="current-password" required>
+
+                <div class="ad-auth-modal-actions">
+                    <button id="ad-auth-cancelar" type="button" class="btn btn-secondary">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Confirmar</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script>

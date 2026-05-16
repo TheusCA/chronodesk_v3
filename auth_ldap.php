@@ -26,19 +26,22 @@
  * @param string $password  Senha do Windows
  * @return array|false      Array com dados do usuário AD em caso de sucesso, false em falha
  */
-function autenticar_ad(string $username, string $password): array|false {
+function autenticar_ad(string $username, string $password) {
+    if (!function_exists('get_db_connection')) {
+        require_once __DIR__ . '/db.php';
+    }
+
     // Configurações do AD - mova para .env em produção
     $ad_domain    = getenv('AD_DOMAIN')    ?: 'gruponp.local';
+    $ad_upn_suffix = getenv('AD_UPN_SUFFIX') ?: $ad_domain;
     $ad_servers   = explode(',', getenv('AD_SERVERS') ?: '10.108.50.206,10.110.53.205,10.108.50.205');
     $ad_port      = (int)(getenv('AD_PORT') ?: 389);    // 389=LDAP, 636=LDAPS
     $ad_use_tls   = getenv('AD_USE_TLS') === 'true';    // StartTLS
 
     // Sanitização básica - login não deve conter caracteres perigosos para LDAP
-    $username = sanitize_ldap_username($username);
+    $login_info = normalizar_login_ldap($username, $ad_upn_suffix, $ad_domain);
+    $username = $login_info['samaccountname'];
     if (!$username || !$password) return false;
-
-    // Formato UPN para bind: usuario@dominio
-    $bind_dn = $username . '@' . $ad_domain;
 
     // Tentar cada servidor AD em ordem (failover)
     foreach ($ad_servers as $server) {
@@ -62,8 +65,14 @@ function autenticar_ad(string $username, string $password): array|false {
             }
         }
 
-        // Tentar bind com as credenciais do usuário
-        $bind = @ldap_bind($conn, $bind_dn, $password);
+        // Tentar bind com os UPNs em ordem de preferência
+        $bind = false;
+        foreach ($login_info['bind_upns'] as $bind_dn) {
+            $bind = @ldap_bind($conn, $bind_dn, $password);
+            if ($bind) {
+                break;
+            }
+        }
 
         if ($bind) {
             // Autenticação bem-sucedida - buscar atributos do usuário no AD
@@ -74,7 +83,7 @@ function autenticar_ad(string $username, string $password): array|false {
             return $user_data ?: [
                 'login'        => $username,
                 'display_name' => $username,
-                'email'        => $username . '@' . $ad_domain,
+                'email'        => $username . '@' . $ad_upn_suffix,
                 'groups'       => []
             ];
         }
@@ -102,10 +111,10 @@ function autenticar_ad(string $username, string $password): array|false {
  */
 function buscar_atributos_usuario($conn, string $username, string $domain): array {
     // Converter domínio em base DN: gruponp.local → DC=gruponp,DC=local
-    $base_dn = implode(',', array_map(
-        fn($part) => 'DC=' . $part,
-        explode('.', $domain)
-    ));
+    $base_dn_parts = array_map(function($part) {
+        return 'DC=' . $part;
+    }, explode('.', $domain));
+    $base_dn = implode(',', $base_dn_parts);
 
     $filter     = "(sAMAccountName=" . ldap_escape($username, '', LDAP_ESCAPE_FILTER) . ")";
     $attributes = ['displayName', 'mail', 'memberOf', 'sAMAccountName', 'department'];
@@ -141,13 +150,46 @@ function buscar_atributos_usuario($conn, string $username, string $domain): arra
  * Sanitização do username para LDAP
  * Remove caracteres especiais perigosos para evitar LDAP Injection
  */
-function sanitize_ldap_username(string $username): string {
-    $username = trim($username);
+function normalizar_login_ldap(string $login, string $ad_upn_suffix, string $ad_domain): array {
+    $login = trim($login);
     // Apenas letras, números, ponto, hífen, underscore e arroba
-    $username = preg_replace('/[^a-zA-Z0-9.\-_@]/', '', $username);
-    // Remover @ se presente (aceitar "joao.silva" ou "joao.silva@gruponp.local")
-    $username = explode('@', $username)[0];
-    return strlen($username) >= 2 ? $username : '';
+    $login = preg_replace('/[^a-zA-Z0-9.\-_@]/', '', $login);
+
+    $username = $login;
+    $explicit_upn = '';
+    if (strpos($login, '@') !== false) {
+        list($user_part, $suffix) = explode('@', $login, 2);
+        $username = $user_part;
+        if ($user_part !== '' && $suffix !== '') {
+            $explicit_upn = strtolower($user_part . '@' . $suffix);
+        }
+    }
+
+    $username = strtolower($username);
+    if (strlen($username) < 2) {
+        return ['samaccountname' => '', 'bind_upns' => []];
+    }
+
+    $bind_upns = [];
+    if ($explicit_upn) {
+        $bind_upns[] = $explicit_upn;
+    }
+
+    if ($ad_upn_suffix) {
+        $bind_upns[] = strtolower($username . '@' . $ad_upn_suffix);
+    }
+
+    if ($ad_domain && strcasecmp($ad_domain, $ad_upn_suffix) !== 0) {
+        $bind_upns[] = strtolower($username . '@' . $ad_domain);
+    }
+
+    $bind_upns = array_values(array_unique($bind_upns));
+    return ['samaccountname' => $username, 'bind_upns' => $bind_upns];
+}
+
+function sanitize_ldap_username(string $username, string $allowed_suffix = ''): string {
+    $login_info = normalizar_login_ldap($username, $allowed_suffix, $allowed_suffix);
+    return $login_info['samaccountname'];
 }
 
 /**
@@ -155,18 +197,45 @@ function sanitize_ldap_username(string $username): string {
  * Retorna o array do funcionário ou null se não encontrado
  */
 function buscar_funcionario_por_ad_login(string $ad_login): ?array {
+    if (!function_exists('get_db_connection')) {
+        require_once __DIR__ . '/db.php';
+    }
+
+    $ad_login = strtolower(trim($ad_login));
+
     try {
         $pdo = get_db_connection();
         $stmt = $pdo->prepare(
             "SELECT id, nome, equipe, ativo FROM funcionarios WHERE ad_login = :login AND ativo = 1 LIMIT 1"
         );
-        $stmt->execute([':login' => strtolower(trim($ad_login))]);
+        $stmt->execute([':login' => $ad_login]);
         $row = $stmt->fetch();
-        return $row ?: null;
+        if ($row) {
+            $row['id'] = (int)$row['id'];
+            return $row;
+        }
     } catch (Exception $e) {
         error_log("[AUTH_AD] Erro ao buscar funcionário por AD login: " . $e->getMessage());
-        return null;
     }
+
+    if (function_exists('carregar_funcionarios_sistema')) {
+        $funcionarios = carregar_funcionarios_sistema();
+        foreach ($funcionarios as $funcionario) {
+            if (!isset($funcionario['ad_login'])) {
+                continue;
+            }
+            if (strtolower(trim($funcionario['ad_login'])) === $ad_login && (!isset($funcionario['ativo']) || $funcionario['ativo'])) {
+                return [
+                    'id' => (int)$funcionario['id'],
+                    'nome' => $funcionario['nome'],
+                    'equipe' => $funcionario['equipe'],
+                    'ativo' => true,
+                ];
+            }
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -204,4 +273,40 @@ function autenticar_ci_via_ad(string $username, string $password): array {
         'ad_user'      => $ad_user,
         'mensagem'     => "Autenticado como {$funcionario['nome']}."
     ];
+}
+
+/**
+ * Exige autenticação AD do próprio CI antes de ações de pausa.
+ */
+function exigir_autenticacao_ci_pausa($data, $funcionario_id, $contexto = 'pausa') {
+    if (!is_array($data)) {
+        json_response(['sucesso' => false, 'mensagem' => 'Dados inválidos.'], 400);
+    }
+
+    $login_ad = sanitize_input($data['login_ad'] ?? '', 150);
+    $senha_ad = isset($data['senha_ad']) ? (string)$data['senha_ad'] : '';
+
+    if (!$login_ad || !$senha_ad) {
+        json_response(['sucesso' => false, 'mensagem' => 'Informe login e senha do AD.'], 400);
+    }
+
+    $rate_key = 'ad_' . $contexto . '_' . preg_replace('/[^a-zA-Z0-9_]/', '_', strtolower($login_ad));
+    if (function_exists('check_rate_limit') && !check_rate_limit($rate_key, 5, 300)) {
+        json_response(['sucesso' => false, 'mensagem' => 'Muitas tentativas de autenticação. Aguarde alguns minutos e tente novamente.'], 429);
+    }
+
+    $autenticacao = autenticar_ci_via_ad($login_ad, $senha_ad);
+    if (!$autenticacao['sucesso']) {
+        json_response(['sucesso' => false, 'mensagem' => $autenticacao['mensagem']], 401);
+    }
+
+    $funcionario_autenticado_id = (int)($autenticacao['funcionario']['id'] ?? 0);
+    if ($funcionario_autenticado_id !== (int)$funcionario_id) {
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'As credenciais informadas não pertencem ao CI selecionado.'
+        ], 403);
+    }
+
+    return $autenticacao;
 }
