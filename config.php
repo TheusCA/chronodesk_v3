@@ -357,41 +357,199 @@ function carregar_funcionarios_sistema() {
         ['id' => 17, 'nome' => 'Davi Henrique', 'equipe' => 'n2', 'jornada_entrada' => '08:00', 'jornada_saida' => '17:00', 'almoco_inicio' => '12:00', 'almoco_fim' => '13:00', 'ativo' => true],
     ];
     
-    if (file_exists(FUNCIONARIOS_JSON)) {
-        $funcionarios = json_decode(file_get_contents(FUNCIONARIOS_JSON), true);
-        if ($funcionarios && is_array($funcionarios) && count($funcionarios) > 0) {
-            foreach ($funcionarios as &$func) {
-                if (!isset($func['jornada_entrada'])) $func['jornada_entrada'] = '08:00';
-                if (!isset($func['jornada_saida'])) $func['jornada_saida'] = '17:00';
-                if (!isset($func['almoco_inicio'])) $func['almoco_inicio'] = '12:00';
-                if (!isset($func['almoco_fim'])) $func['almoco_fim'] = '13:00';
-                if (!isset($func['ativo'])) $func['ativo'] = true;
-            }
-            unset($func);
-            return $funcionarios;
-        }
+    $funcionarios_mysql = carregar_funcionarios_mysql();
+    if (count($funcionarios_mysql) > 0) {
+        return $funcionarios_mysql;
     }
-    
+
+    $funcionarios_json = carregar_funcionarios_json_fallback();
+    if (count($funcionarios_json) > 0) {
+        return $funcionarios_json;
+    }
+
     salvar_funcionarios_sistema($funcionarios_padrao);
     return $funcionarios_padrao;
 }
 
 function salvar_funcionarios_sistema($funcionarios) {
+    if (salvar_funcionarios_mysql($funcionarios)) {
+        return true;
+    }
+
+    return salvar_funcionarios_json_fallback($funcionarios);
+}
+
+function normalizar_ad_login($ad_login) {
+    $ad_login = strtolower(sanitize_input($ad_login ?? '', 100));
+    return $ad_login === '' ? null : $ad_login;
+}
+
+function validate_ad_login($ad_login) {
+    $ad_login = normalizar_ad_login($ad_login);
+    if ($ad_login === null) {
+        return null;
+    }
+    if (strlen($ad_login) > 100) {
+        return false;
+    }
+    return preg_match('/^[a-z0-9._@-]+$/', $ad_login) === 1 ? $ad_login : false;
+}
+
+function carregar_funcionarios_mysql() {
+    try {
+        if (!function_exists('get_db_connection')) {
+            require_once __DIR__ . '/db.php';
+        }
+        $pdo = get_db_connection();
+        $stmt = $pdo->query("SELECT id, nome, equipe, ad_login, jornada_entrada, jornada_saida, almoco_inicio, almoco_fim, ativo FROM funcionarios ORDER BY id ASC");
+        $funcionarios = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $funcionarios[] = normalizar_funcionario_array($row);
+        }
+        return $funcionarios;
+    } catch (Exception $e) {
+        error_log('[FUNCIONARIOS] Fallback JSON ativo: ' . $e->getMessage());
+        return [];
+    }
+}
+
+function carregar_funcionarios_json_fallback() {
+    if (!file_exists(FUNCIONARIOS_JSON)) {
+        return [];
+    }
+
+    $funcionarios = json_decode(file_get_contents(FUNCIONARIOS_JSON), true);
+    if (!$funcionarios || !is_array($funcionarios) || count($funcionarios) === 0) {
+        return [];
+    }
+
+    $normalizados = [];
+    foreach ($funcionarios as $func) {
+        $normalizados[] = normalizar_funcionario_array($func);
+    }
+    return $normalizados;
+}
+
+function salvar_funcionarios_mysql($funcionarios) {
+    try {
+        if (!function_exists('get_db_connection')) {
+            require_once __DIR__ . '/db.php';
+        }
+        $pdo = get_db_connection();
+        $sql = "INSERT INTO funcionarios (
+                    id, nome, equipe, ad_login, jornada_entrada, jornada_saida,
+                    almoco_inicio, almoco_fim, ativo
+                ) VALUES (
+                    :id, :nome, :equipe, :ad_login, :jornada_entrada, :jornada_saida,
+                    :almoco_inicio, :almoco_fim, :ativo
+                )
+                ON DUPLICATE KEY UPDATE
+                    nome = VALUES(nome),
+                    equipe = VALUES(equipe),
+                    ad_login = VALUES(ad_login),
+                    jornada_entrada = VALUES(jornada_entrada),
+                    jornada_saida = VALUES(jornada_saida),
+                    almoco_inicio = VALUES(almoco_inicio),
+                    almoco_fim = VALUES(almoco_fim),
+                    ativo = VALUES(ativo)";
+        $stmt = $pdo->prepare($sql);
+        foreach ($funcionarios as $func) {
+            $func = normalizar_funcionario_array($func);
+            $stmt->execute([
+                ':id' => $func['id'],
+                ':nome' => $func['nome'],
+                ':equipe' => $func['equipe'],
+                ':ad_login' => $func['ad_login'],
+                ':jornada_entrada' => formatar_hora_mysql($func['jornada_entrada'], '08:00:00'),
+                ':jornada_saida' => formatar_hora_mysql($func['jornada_saida'], '17:00:00'),
+                ':almoco_inicio' => formatar_hora_mysql($func['almoco_inicio'], '12:00:00'),
+                ':almoco_fim' => formatar_hora_mysql($func['almoco_fim'], '13:00:00'),
+                ':ativo' => $func['ativo'] ? 1 : 0,
+            ]);
+        }
+        return true;
+    } catch (Exception $e) {
+        error_log('[FUNCIONARIOS] Erro ao salvar no MySQL: ' . $e->getMessage());
+        return false;
+    }
+}
+
+function funcionario_ad_login_ativo_existe($ad_login, $ignorar_id = null) {
+    $ad_login = normalizar_ad_login($ad_login);
+    if ($ad_login === null) {
+        return false;
+    }
+
+    try {
+        if (!function_exists('get_db_connection')) {
+            require_once __DIR__ . '/db.php';
+        }
+        $pdo = get_db_connection();
+        $sql = "SELECT id FROM funcionarios WHERE ad_login = :ad_login AND ativo = 1";
+        $params = [':ad_login' => $ad_login];
+        if ($ignorar_id !== null) {
+            $sql .= " AND id <> :id";
+            $params[':id'] = (int)$ignorar_id;
+        }
+        $sql .= " LIMIT 1";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
+        return (bool)$stmt->fetch();
+    } catch (Exception $e) {
+        foreach (carregar_funcionarios_json_fallback() as $func) {
+            if ((int)$func['id'] === (int)$ignorar_id) {
+                continue;
+            }
+            if (($func['ativo'] ?? true) && normalizar_ad_login($func['ad_login'] ?? null) === $ad_login) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+function normalizar_funcionario_array($func) {
+    $ad_login = validate_ad_login($func['ad_login'] ?? null);
+    if ($ad_login === false) {
+        $ad_login = null;
+    }
+
+    return [
+        'id' => validate_funcionario_id($func['id'] ?? 0) ?? 0,
+        'nome' => validate_nome($func['nome'] ?? '') ?: '',
+        'equipe' => validate_equipe($func['equipe'] ?? 'n1') ? strtolower($func['equipe']) : 'n1',
+        'ad_login' => $ad_login,
+        'jornada_entrada' => normalizar_hora_funcionario($func['jornada_entrada'] ?? '08:00', '08:00'),
+        'jornada_saida' => normalizar_hora_funcionario($func['jornada_saida'] ?? '17:00', '17:00'),
+        'almoco_inicio' => normalizar_hora_funcionario($func['almoco_inicio'] ?? '12:00', '12:00'),
+        'almoco_fim' => normalizar_hora_funcionario($func['almoco_fim'] ?? '13:00', '13:00'),
+        'ativo' => isset($func['ativo']) ? (bool)$func['ativo'] : true
+    ];
+}
+
+function normalizar_hora_funcionario($hora, $default = '08:00') {
+    $hora = (string)$hora;
+    if (preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $hora, $m)) {
+        return $m[1] . ':' . $m[2];
+    }
+    return $default;
+}
+
+function formatar_hora_mysql($hora, $default = '08:00:00') {
+    $hora = (string)$hora;
+    if (preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/', $hora, $m)) {
+        return $m[1] . ':' . $m[2] . ':' . ($m[3] ?? '00');
+    }
+    return $default;
+}
+
+function salvar_funcionarios_json_fallback($funcionarios) {
     $safe_path = safe_file_path(dirname(FUNCIONARIOS_JSON), __DIR__);
     if ($safe_path === false) return false;
     
     $sanitized = [];
     foreach ($funcionarios as $func) {
-        $sanitized[] = [
-            'id' => validate_funcionario_id($func['id'] ?? 0) ?? 0,
-            'nome' => validate_nome($func['nome'] ?? '') ?: '',
-            'equipe' => validate_equipe($func['equipe'] ?? 'n1') ? $func['equipe'] : 'n1',
-            'jornada_entrada' => validate_time($func['jornada_entrada'] ?? '08:00') ? $func['jornada_entrada'] : '08:00',
-            'jornada_saida' => validate_time($func['jornada_saida'] ?? '17:00') ? $func['jornada_saida'] : '17:00',
-            'almoco_inicio' => validate_time($func['almoco_inicio'] ?? '12:00') ? $func['almoco_inicio'] : '12:00',
-            'almoco_fim' => validate_time($func['almoco_fim'] ?? '13:00') ? $func['almoco_fim'] : '13:00',
-            'ativo' => isset($func['ativo']) ? (bool)$func['ativo'] : true
-        ];
+        $sanitized[] = normalizar_funcionario_array($func);
     }
     
     $result = file_put_contents(

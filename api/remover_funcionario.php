@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
+require_once __DIR__ . '/../db.php';
 
 verificar_admin_login();
 require_csrf_token();
@@ -23,15 +24,14 @@ if (!$gerenciador) {
     json_response(['sucesso' => false, 'mensagem' => 'Gerenciador não inicializado'], 500);
 }
 
-// Remover do arquivo JSON
-$funcionarios = carregar_funcionarios_sistema();
-$funcionarios = array_filter($funcionarios, function($func) use ($funcionario_id) {
-    return $func['id'] != $funcionario_id;
-});
-$funcionarios = array_values($funcionarios); // Reindexar array
-salvar_funcionarios_sistema($funcionarios);
+try {
+    $pdo = get_db_connection();
+    $stmt = $pdo->prepare("UPDATE funcionarios SET ativo = 0 WHERE id = :id");
+    $stmt->execute([':id' => $funcionario_id]);
+} catch (Exception $e) {
+    json_response(['sucesso' => false, 'mensagem' => 'Erro ao desativar funcionário: ' . $e->getMessage()], 500);
+}
 
-// Remover do gerenciador
 $resultado = $gerenciador->remover_funcionario($funcionario_id);
 
 json_response($resultado);

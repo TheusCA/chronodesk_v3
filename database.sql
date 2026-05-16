@@ -3,6 +3,31 @@ CREATE DATABASE IF NOT EXISTS sistema_pausas CHARACTER SET utf8mb4 COLLATE utf8m
 
 USE sistema_pausas;
 
+-- Tabela de Funcionários (fonte principal)
+CREATE TABLE IF NOT EXISTS funcionarios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nome VARCHAR(100) NOT NULL,
+    equipe VARCHAR(10) NOT NULL DEFAULT 'n1',
+    ad_login VARCHAR(100) DEFAULT NULL COMMENT 'Login do Active Directory',
+    jornada_entrada TIME NOT NULL DEFAULT '08:00:00',
+    jornada_saida TIME NOT NULL DEFAULT '17:00:00',
+    almoco_inicio TIME NOT NULL DEFAULT '12:00:00',
+    almoco_fim TIME NOT NULL DEFAULT '13:00:00',
+    ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    ad_login_ativo VARCHAR(100) GENERATED ALWAYS AS (
+        CASE
+            WHEN ativo = 1 AND ad_login IS NOT NULL AND ad_login <> '' THEN ad_login
+            ELSE NULL
+        END
+    ) STORED,
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_funcionarios_equipe (equipe),
+    INDEX idx_funcionarios_ad_login (ad_login),
+    INDEX idx_funcionarios_ativo (ativo),
+    UNIQUE KEY uq_funcionarios_ad_login_ativo (ad_login_ativo)
+) ENGINE=InnoDB;
+
 -- Tabela de Histórico de Pausas (Substitui o pausas.csv)
 CREATE TABLE IF NOT EXISTS pausas (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -20,5 +45,6 @@ CREATE TABLE IF NOT EXISTS pausas (
     data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_funcionario (id_funcionario),
     INDEX idx_data (inicio_pausa),
-    INDEX idx_equipe (equipe)
+    INDEX idx_equipe (equipe),
+    CONSTRAINT fk_pausas_funcionarios FOREIGN KEY (id_funcionario) REFERENCES funcionarios(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB;

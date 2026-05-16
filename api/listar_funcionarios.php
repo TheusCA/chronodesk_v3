@@ -8,15 +8,31 @@ header('Content-Type: application/json; charset=utf-8');
 
 global $gerenciador;
 $lista = [];
+$is_admin = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
 
 if ($gerenciador) {
     foreach ($gerenciador->getFuncionarios() as $f) {
-        $lista[] = [
+        $ativo = $f->ativo ?? true;
+        if (!$is_admin && !$ativo) {
+            continue;
+        }
+
+        $item = [
             'id'     => $f->id,
             'nome'   => $f->nome,
             'equipe' => $f->equipe,
-            'ativo'  => $f->ativo ?? true,
+            'ativo'  => $ativo,
+            'em_pausa' => $f->em_pausa ?? false,
+            'jornada_entrada' => $f->jornada_entrada ?? '08:00',
+            'jornada_saida' => $f->jornada_saida ?? '17:00',
+            'almoco_inicio' => $f->almoco_inicio ?? '12:00',
+            'almoco_fim' => $f->almoco_fim ?? '13:00',
+            'disponibilidade' => $f->status_disponibilidade(),
         ];
+        if ($is_admin) {
+            $item['ad_login'] = $f->ad_login ?? null;
+        }
+        $lista[] = $item;
     }
     // Ordenar por nome
     usort($lista, fn($a, $b) => strcmp($a['nome'], $b['nome']));

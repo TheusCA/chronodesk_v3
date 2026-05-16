@@ -16,8 +16,9 @@ class Funcionario {
     public $almoco_inicio;        // Início do horário de almoço (ex: "12:00")
     public $almoco_fim;           // Fim do horário de almoço (ex: "13:00")
     public $ativo;                // Se o funcionário está ativo (true) ou inativo (false)
+    public $ad_login;             // Login vinculado no Active Directory
 
-    public function __construct($id, $nome, $equipe, $jornada_entrada = "08:00", $jornada_saida = "17:00", $almoco_inicio = "12:00", $almoco_fim = "13:00", $ativo = true) {
+    public function __construct($id, $nome, $equipe, $jornada_entrada = "08:00", $jornada_saida = "17:00", $almoco_inicio = "12:00", $almoco_fim = "13:00", $ativo = true, $ad_login = null) {
         $this->id = $id;
         $this->nome = $nome;
         $this->equipe = $equipe;
@@ -34,6 +35,7 @@ class Funcionario {
         $this->almoco_inicio = $almoco_inicio;
         $this->almoco_fim = $almoco_fim;
         $this->ativo = $ativo;
+        $this->ad_login = $ad_login;
     }
     
     /**

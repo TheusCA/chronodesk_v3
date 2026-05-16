@@ -507,14 +507,14 @@ class GerenciadorPausas {
 
     public function remover_funcionario($funcionario_id) {
         if (isset($this->funcionarios[$funcionario_id])) {
-            unset($this->funcionarios[$funcionario_id]);
+            $this->funcionarios[$funcionario_id]->ativo = false;
             $this->salvar_estado();
-            return ["sucesso" => true, "mensagem" => "Funcionário removido com sucesso."];
+            return ["sucesso" => true, "mensagem" => "Funcionário desativado com sucesso."];
         }
         return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];
     }
 
-    public function atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada = null, $jornada_saida = null, $almoco_inicio = null, $almoco_fim = null, $ativo = null) {
+    public function atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada = null, $jornada_saida = null, $almoco_inicio = null, $almoco_fim = null, $ativo = null, $ad_login = null) {
         if (isset($this->funcionarios[$funcionario_id])) {
             $func = $this->funcionarios[$funcionario_id];
             $func->nome = $nome;
@@ -526,6 +526,7 @@ class GerenciadorPausas {
             if ($almoco_inicio !== null) $func->almoco_inicio = $almoco_inicio;
             if ($almoco_fim !== null) $func->almoco_fim = $almoco_fim;
             if ($ativo !== null) $func->ativo = $ativo;
+            $func->ad_login = $ad_login;
             
             $this->salvar_estado();
             return ["sucesso" => true, "mensagem" => "Funcionário atualizado com sucesso."];

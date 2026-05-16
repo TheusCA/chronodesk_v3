@@ -23,11 +23,18 @@ CREATE TABLE IF NOT EXISTS funcionarios (
     almoco_inicio   TIME NOT NULL DEFAULT '12:00:00',
     almoco_fim      TIME NOT NULL DEFAULT '13:00:00',
     ativo         BOOLEAN NOT NULL DEFAULT TRUE,
+    ad_login_ativo VARCHAR(100) GENERATED ALWAYS AS (
+        CASE
+            WHEN ativo = 1 AND ad_login IS NOT NULL AND ad_login <> '' THEN ad_login
+            ELSE NULL
+        END
+    ) STORED,
     criado_em     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_equipe (equipe),
     INDEX idx_ad_login (ad_login),
-    INDEX idx_ativo (ativo)
+    INDEX idx_ativo (ativo),
+    UNIQUE KEY uq_funcionarios_ad_login_ativo (ad_login_ativo)
 ) ENGINE=InnoDB;
 
 -- ============================================

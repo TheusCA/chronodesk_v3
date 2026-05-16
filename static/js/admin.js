@@ -69,6 +69,7 @@ async function adicionarFuncionario() {
     const id = parseInt(document.getElementById('novo-id').value);
     const nome = document.getElementById('novo-nome').value.trim();
     const equipe = document.getElementById('novo-equipe').value;
+    const adLogin = document.getElementById('novo-ad-login').value.trim();
     const jornadaEntrada = document.getElementById('novo-jornada-entrada').value || '08:00';
     const jornadaSaida = document.getElementById('novo-jornada-saida').value || '17:00';
     const almocoInicio = document.getElementById('novo-almoco-inicio').value || '12:00';
@@ -101,6 +102,7 @@ async function adicionarFuncionario() {
                 id: id,
                 nome: nome,
                 equipe: equipe,
+                ad_login: adLogin || null,
                 jornada_entrada: jornadaEntrada,
                 jornada_saida: jornadaSaida,
                 almoco_inicio: almocoInicio,
@@ -116,6 +118,7 @@ async function adicionarFuncionario() {
             // Limpar campos
             document.getElementById('novo-id').value = '';
             document.getElementById('novo-nome').value = '';
+            document.getElementById('novo-ad-login').value = '';
             document.getElementById('novo-equipe').value = 'n1';
             document.getElementById('novo-jornada-entrada').value = '08:00';
             document.getElementById('novo-jornada-saida').value = '17:00';
@@ -165,7 +168,7 @@ async function removerFuncionario(id) {
 }
 
 // Função para editar funcionário (abre modal ou formulário)
-function editarFuncionario(id, nome, equipe, jornadaEntrada, jornadaSaida, almocoInicio, almocoFim, ativo) {
+function editarFuncionario(id, nome, equipe, jornadaEntrada, jornadaSaida, almocoInicio, almocoFim, ativo, adLogin) {
     // Usar valores padrão se não fornecidos
     jornadaEntrada = jornadaEntrada || '08:00';
     jornadaSaida = jornadaSaida || '17:00';
@@ -189,13 +192,14 @@ function editarFuncionario(id, nome, equipe, jornadaEntrada, jornadaSaida, almoc
     const novaJornadaSaida = prompt('Horário de saída (HH:MM):', jornadaSaida) || jornadaSaida;
     const novoAlmocoInicio = prompt('Início do almoço (HH:MM):', almocoInicio) || almocoInicio;
     const novoAlmocoFim = prompt('Fim do almoço (HH:MM):', almocoFim) || almocoFim;
+    const novoAdLogin = prompt('Login AD (deixe em branco para não vincular):', adLogin || '');
     const novoAtivo = confirm('Funcionário está ativo? (OK para ativo, Cancelar para inativo)');
 
-    atualizarFuncionario(id, novoNome.trim(), novaEquipe, novaJornadaEntrada, novaJornadaSaida, novoAlmocoInicio, novoAlmocoFim, novoAtivo);
+    atualizarFuncionario(id, novoNome.trim(), novaEquipe, novaJornadaEntrada, novaJornadaSaida, novoAlmocoInicio, novoAlmocoFim, novoAtivo, (novoAdLogin || '').trim());
 }
 
 // Função para atualizar funcionário
-async function atualizarFuncionario(id, nome, equipe, jornadaEntrada, jornadaSaida, almocoInicio, almocoFim, ativo) {
+async function atualizarFuncionario(id, nome, equipe, jornadaEntrada, jornadaSaida, almocoInicio, almocoFim, ativo, adLogin) {
     try {
         const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
         const response = await fetch(apiUrl + '/atualizar_funcionario.php', {
@@ -207,6 +211,7 @@ async function atualizarFuncionario(id, nome, equipe, jornadaEntrada, jornadaSai
                 funcionario_id: id,
                 nome: nome,
                 equipe: equipe,
+                ad_login: adLogin || null,
                 jornada_entrada: jornadaEntrada || '08:00',
                 jornada_saida: jornadaSaida || '17:00',
                 almoco_inicio: almocoInicio || '12:00',
@@ -227,6 +232,10 @@ async function atualizarFuncionario(id, nome, equipe, jornadaEntrada, jornadaSai
     } catch (error) {
         exibirMensagemAdmin('Erro ao atualizar funcionário: ' + error.message, 'error');
     }
+}
+
+function escapeJsString(value) {
+    return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
 }
 
 // Função para carregar lista de funcionários
@@ -269,12 +278,13 @@ function exibirFuncionarios(funcionarios) {
         const jornadaSaida = func.jornada_saida || '17:00';
         const almocoInicio = func.almoco_inicio || '12:00';
         const almocoFim = func.almoco_fim || '13:00';
-        
+        const adLogin = func.ad_login || '';
+
         html += `
             <div class="funcionario-item">
                 <div class="funcionario-info">
                     <strong>ID ${func.id}: ${func.nome}</strong>
-                    <span>Equipe: ${equipeLabel} | ${ativoStatus} | Status: ${statusEmPausa}</span>
+                    <span>Equipe: ${equipeLabel} | AD: ${adLogin || 'Não vinculado'} | ${ativoStatus} | Status: ${statusEmPausa}</span>
                     <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--gray-600);">
                         <span style="display: inline-block; margin-right: 1rem;">
                             ⏰ Jornada: ${jornadaEntrada} - ${jornadaSaida}
@@ -289,7 +299,7 @@ function exibirFuncionarios(funcionarios) {
                     </div>
                 </div>
                 <div class="funcionario-actions">
-                    <button class="btn-small btn-edit" onclick="editarFuncionario(${func.id}, '${func.nome.replace(/'/g, "\\'")}', '${func.equipe}', '${jornadaEntrada}', '${jornadaSaida}', '${almocoInicio}', '${almocoFim}', ${func.ativo !== false})">
+                    <button class="btn-small btn-edit" onclick="editarFuncionario(${func.id}, '${escapeJsString(func.nome)}', '${escapeJsString(func.equipe)}', '${escapeJsString(jornadaEntrada)}', '${escapeJsString(jornadaSaida)}', '${escapeJsString(almocoInicio)}', '${escapeJsString(almocoFim)}', ${func.ativo !== false}, '${escapeJsString(adLogin)}')">
                         ✏️ Editar
                     </button>
                     <button class="btn-small btn-delete" onclick="removerFuncionario(${func.id})">

@@ -18,7 +18,14 @@ if ($gerenciador) {
             'id' => $func->id,
             'nome' => $func->nome,
             'equipe' => $func->equipe,
-            'em_pausa' => $func->em_pausa ?? false
+            'ad_login' => $func->ad_login ?? null,
+            'em_pausa' => $func->em_pausa ?? false,
+            'ativo' => $func->ativo ?? true,
+            'jornada_entrada' => $func->jornada_entrada ?? '08:00',
+            'jornada_saida' => $func->jornada_saida ?? '17:00',
+            'almoco_inicio' => $func->almoco_inicio ?? '12:00',
+            'almoco_fim' => $func->almoco_fim ?? '13:00',
+            'disponibilidade' => $func->status_disponibilidade()
         ];
     }
 }
@@ -170,6 +177,10 @@ $base_path_admin = get_base_path();
                                 <div class="form-group flex-grow">
                                     <label>Nome</label>
                                     <input type="text" id="novo-nome" placeholder="Nome completo">
+                                </div>
+                                <div class="form-group">
+                                    <label>Login AD</label>
+                                    <input type="text" id="novo-ad-login" placeholder="usuario.ad">
                                 </div>
                                 <div class="form-group">
                                     <label>Equipe</label>
