@@ -1,0 +1,22 @@
+COMO HOSPEDAR NO XAMPP
+======================
+
+O código foi limpo e preparado para rodar no XAMPP (PHP).
+Arquivos antigos do Python foram removidos.
+
+PASSO A PASSO:
+
+1. Instale o XAMPP (https://www.apachefriends.org/).
+2. Copie a pasta "Sistema_Pausas" inteira para dentro da pasta "htdocs" do seu XAMPP.
+   - Caminho comum: C:\xampp\htdocs\Sistema_Pausas
+
+3. Inicie o "Apache" no Painel de Controle do XAMPP.
+
+4. Acesse no navegador:
+   http://localhost/Sistema_Pausas/
+
+---
+OBSERVAÇÕES:
+- O sistema usa arquivos CSV e JSON para guardar os dados, então não precisa configurar banco de dados MySQL por enquanto.
+- Se quiser alterar usuários ou senhas, edite o arquivo 'config.php'.
+- Para adicionar funcionários, edite o arquivo 'init.php'.

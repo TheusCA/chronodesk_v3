@@ -1,0 +1,35 @@
+# ============================================
+# ChronoDesk - Regras de Segurança Apache
+# ============================================
+
+# Bloquear acesso direto a arquivos sensíveis
+<FilesMatch "\.(json|csv|sql|md|sh|bat|ps1|txt|env|log|bak)$">
+    Require all denied
+</FilesMatch>
+
+# Bloquear arquivos ocultos (.env, .git, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Bloquear acesso ao diretório classes
+<DirectoryMatch ".*/classes/">
+    Require all denied
+</DirectoryMatch>
+
+# Bloquear acesso ao diretório de sessões (se existir)
+<DirectoryMatch ".*/sessions/">
+    Require all denied
+</DirectoryMatch>
+
+# Desabilitar listagem de diretórios
+Options -Indexes
+
+# Desabilitar server signature
+ServerSignature Off
+
+# Habilitar rewrite engine
+RewriteEngine On
+
+# Bloquear acesso a arquivos de backup
+RewriteRule "\.(bak|orig|old|save)$" - [F,L]

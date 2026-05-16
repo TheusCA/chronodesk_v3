@@ -1,0 +1,39 @@
+# Ambiente / segredos
+.env
+.env.*
+!.env.example
+
+# Arquivos de estado/dados locais
+estado.json
+pausas.csv
+relatorio_metricas.csv
+config_sistema.json
+funcionarios.json
+
+# Backups / compactados
+*.zip
+*.rar
+*.7z
+*.bak
+*.backup
+*.old
+
+# Logs
+*.log
+logs/
+error_log
+
+# Sistema / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Dependências
+node_modules/
+vendor/
+
+# Sessões/cache locais
+sessions/
+cache/
+tmp/

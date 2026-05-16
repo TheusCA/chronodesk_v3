@@ -1,0 +1,82 @@
+========================================
+  SISTEMA DE GERENCIAMENTO DE PAUSAS
+  Guia Rápido de Instalação
+========================================
+
+📋 COMO EXECUTAR OS SCRIPTS NO POWERSHELL
+========================================
+
+No PowerShell, você DEVE usar ".\" antes do nome do script:
+
+✅ CORRETO:
+   .\setup.ps1
+   .\iniciar.ps1
+   .\INSTALAR.ps1
+
+❌ INCORRETO:
+   setup.ps1
+   iniciar.ps1
+
+========================================
+🚀 INSTALAÇÃO RÁPIDA (3 PASSOS)
+========================================
+
+OPÇÃO 1: Script Automático Completo
+-------------------------------------
+1. Abra o PowerShell neste diretório
+2. Execute: .\INSTALAR.ps1
+3. Siga as instruções na tela
+
+OPÇÃO 2: Scripts Separados
+-------------------------------------
+1. Execute: .\setup.ps1
+2. Copie os arquivos para o XAMPP (se necessário)
+3. Execute: .\iniciar.ps1
+
+OPÇÃO 3: Scripts Batch (Mais Simples)
+-------------------------------------
+1. Dê duplo clique em: setup.bat
+2. Dê duplo clique em: iniciar.bat
+
+========================================
+⚠️ SE DER ERRO DE POLÍTICA DE EXECUÇÃO
+========================================
+
+Execute no PowerShell (como Administrador):
+   Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+Ou execute apenas uma vez:
+   Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+
+========================================
+📁 ONDE ESTÃO OS ARQUIVOS?
+========================================
+
+Após a instalação, os arquivos devem estar em:
+   C:\xampp\htdocs\Sistema_Pausas\
+
+Se seu XAMPP estiver em outro lugar, edite os scripts
+e altere a variável XAMPP_PATH.
+
+========================================
+🌐 ACESSAR O SISTEMA
+========================================
+
+Após iniciar o Apache, acesse:
+   http://localhost/Sistema_Pausas/
+
+⚠️ IMPORTANTE: 
+   - O sistema usa autenticação segura com hash de senhas
+   - A senha inicial deve ser definida via interface administrativa
+   - Configure uma senha forte após primeira instalação
+   
+⚠️ CONFIGURE A SENHA ADMINISTRATIVA APÓS PRIMEIRA INSTALAÇÃO!
+
+========================================
+📚 MAIS INFORMAÇÕES
+========================================
+
+Consulte o arquivo INSTALACAO.md para documentação completa.
+
+========================================
+

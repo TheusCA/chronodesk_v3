@@ -1,0 +1,208 @@
+# Sistema de Gerenciamento de Pausas - Versão PHP/XAMPP
+
+Esta é a versão migrada do sistema de gerenciamento de pausas, agora utilizando **PHP** com **XAMPP**.
+
+## 📋 Requisitos
+
+- **XAMPP** instalado (versão 7.4 ou superior recomendada)
+- **PHP 7.4+** (incluído no XAMPP)
+- **Apache** (incluído no XAMPP)
+- Extensão **ZipArchive** do PHP (geralmente já habilitada)
+
+## 🚀 Instalação
+
+### 1. Copiar arquivos para o XAMPP
+
+1. Copie toda a pasta do projeto para o diretório `htdocs` do XAMPP:
+   - **Windows**: `C:\xampp\htdocs\Sistema_Pausas`
+   - **Linux**: `/opt/lampp/htdocs/Sistema_Pausas`
+   - **macOS**: `/Applications/XAMPP/htdocs/Sistema_Pausas`
+
+### 2. Configurar permissões (Linux/macOS)
+
+```bash
+chmod -R 755 /opt/lampp/htdocs/Sistema_Pausas
+chmod 666 /opt/lampp/htdocs/Sistema_Pausas/pausas.csv
+```
+
+### 3. Iniciar serviços do XAMPP
+
+1. Abra o **Painel de Controle do XAMPP**
+2. Inicie o **Apache**
+3. (Opcional) Inicie o **MySQL** se precisar de banco de dados no futuro
+
+### 4. Acessar a aplicação
+
+Abra seu navegador e acesse:
+```
+http://localhost/Sistema_Pausas/
+```
+
+## 📁 Estrutura do Projeto
+
+```
+Sistema_Pausas/
+├── api/                          # Endpoints da API REST
+│   ├── status.php
+│   ├── iniciar_pausa.php
+│   ├── finalizar_pausa.php
+│   ├── metricas.php
+│   ├── solicitar_pausa_com_aprovacao.php
+│   ├── aprovar_pausa.php
+│   ├── rejeitar_pausa.php
+│   ├── solicitacoes_pendentes.php
+│   └── download_relatorio.php
+├── classes/                      # Classes PHP
+│   ├── Funcionario.php
+│   └── GerenciadorPausas.php
+├── static/                       # Arquivos estáticos
+│   ├── css/
+│   │   └── style.css
+│   └── js/
+│       ├── script.js
+│       └── metricas.js
+├── config.php                    # Configurações do sistema
+├── init.php                      # Inicialização (funcionários, etc)
+├── index.php                     # Página principal
+├── login.php                     # Página de login
+├── metricas.php                  # Página de métricas
+├── logout.php                    # Logout
+├── .htaccess                     # Configurações Apache
+├── pausas.csv                    # Arquivo de dados (criado automaticamente)
+└── README.md                     # Este arquivo
+```
+
+## 🔧 Configuração
+
+### Alterar credenciais de login
+
+Edite o arquivo `config.php`:
+
+```php
+define('USUARIO_ADMIN', 'seu_usuario');
+define('SENHA_ADMIN', 'sua_senha_segura');
+```
+
+### Alterar funcionários
+
+Edite o arquivo `init.php` para adicionar, remover ou modificar funcionários.
+
+### Alterar limites de pausa
+
+Edite o arquivo `init.php`:
+
+```php
+$gerenciador = new GerenciadorPausas(
+    limite_pausa_por_equipe: 2,      // Máximo de pausas simultâneas por equipe
+    duracao_pausa_minutos: 20        // Duração limite da pausa
+);
+```
+
+## 🌐 Endpoints da API
+
+Todos os endpoints retornam JSON:
+
+- `GET /api/status.php` - Status de todos os funcionários
+- `POST /api/iniciar_pausa.php` - Iniciar pausa
+- `POST /api/finalizar_pausa.php` - Finalizar pausa
+- `GET /api/metricas.php` - Obter métricas (requer login)
+- `POST /api/solicitar_pausa_com_aprovacao.php` - Solicitar pausa de reunião
+- `POST /api/aprovar_pausa.php` - Aprovar pausa pendente
+- `POST /api/rejeitar_pausa.php` - Rejeitar pausa pendente
+- `GET /api/solicitacoes_pendentes.php` - Listar solicitações pendentes
+- `GET /api/download_relatorio.php` - Download de relatório (requer login)
+
+## 🔐 Segurança
+
+### Autenticação
+
+- O sistema usa autenticação segura com hash de senhas
+- Configure uma senha forte via interface administrativa após primeira instalação
+- Usuário padrão: `administrador`
+
+⚠️ **IMPORTANTE**: Configure uma senha forte após primeira instalação via interface admin!
+
+### Recomendações
+
+1. Altere as credenciais padrão em `config.php`
+2. Use HTTPS em produção
+3. Configure firewall adequadamente
+4. Mantenha o XAMPP atualizado
+5. Não exponha o XAMPP diretamente à internet sem proteção adequada
+
+## 📊 Funcionalidades
+
+- ✅ Gerenciamento de pausas por equipe
+- ✅ Controle de limite de pausas simultâneas
+- ✅ Sistema de aprovação para pausas de reunião
+- ✅ Métricas detalhadas
+- ✅ Relatórios em CSV/ZIP
+- ✅ Alertas de tempo (15min e 20min)
+- ✅ Interface responsiva
+- ✅ API REST completa
+
+## 🐛 Solução de Problemas
+
+### Erro 500 (Internal Server Error)
+
+1. Verifique os logs do Apache em:
+   - Windows: `C:\xampp\apache\logs\error.log`
+   - Linux: `/opt/lampp/logs/error_log`
+
+2. Verifique se a extensão ZipArchive está habilitada:
+   ```php
+   <?php phpinfo(); ?>
+   ```
+   Procure por "zip" na saída.
+
+### Arquivo CSV não é criado
+
+1. Verifique permissões de escrita na pasta do projeto
+2. Verifique se o PHP tem permissão para criar arquivos
+
+### Página em branco
+
+1. Ative a exibição de erros no `config.php` (apenas em desenvolvimento):
+   ```php
+   error_reporting(E_ALL);
+   ini_set('display_errors', 1);
+   ```
+
+2. Verifique os logs do Apache
+
+### Rotas não funcionam
+
+1. Verifique se o módulo `mod_rewrite` está habilitado no Apache
+2. Verifique se o arquivo `.htaccess` está presente
+3. No `httpd.conf` do Apache, certifique-se de que:
+   ```apache
+   AllowOverride All
+   ```
+
+## 🔄 Migração do Sistema Python
+
+Este sistema foi migrado do Python/Flask para PHP. As principais mudanças:
+
+- **Backend**: Python/Flask → PHP puro
+- **Templates**: Jinja2 → PHP nativo
+- **API**: Mesma estrutura REST, agora em PHP
+- **Persistência**: CSV (mantido)
+- **Frontend**: JavaScript/CSS (mantido)
+
+## 📝 Notas
+
+- O arquivo `pausas.csv` é criado automaticamente na primeira execução
+- Os dados são persistidos em CSV, compatível com o sistema anterior
+- A interface visual permanece idêntica ao sistema Python
+- Todos os recursos do sistema original foram mantidos
+
+## 📞 Suporte
+
+Para problemas ou dúvidas, verifique:
+1. Logs do Apache
+2. Logs do PHP (se configurado)
+3. Console do navegador (F12) para erros JavaScript
+
+## 📄 Licença
+
+Este projeto mantém a mesma licença do sistema original.
