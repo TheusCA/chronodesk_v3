@@ -1,0 +1,419 @@
+/* ============================================
+   Painel Administrativo - Premium Design
+   ============================================ */
+
+.admin-main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    margin-bottom: 3rem;
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Grid System para o Admin */
+.admin-grid-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+    gap: 2rem;
+    width: 100%;
+}
+
+.management-row {
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+}
+
+.wide-section {
+    grid-column: span 1;
+}
+
+/* Seções Administrativas - Glassmorphism */
+.admin-section {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-light);
+    position: relative;
+    overflow: hidden;
+    transition: var(--transition);
+    height: 100%; /* Para alinhar alturas */
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-section:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: var(--border-hover);
+}
+
+.admin-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, var(--text-main), var(--primary));
+}
+
+.admin-section h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Formulários Elegantes */
+.config-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 100%;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-main);
+    letter-spacing: 0.01em;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="password"],
+.form-group input[type="time"],
+.form-group select {
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    background: var(--bg-body);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.95rem;
+    transition: var(--transition);
+    width: 100%;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--bg-surface);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding-bottom: 0;
+    justify-content: center;
+}
+
+.form-group small {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+}
+
+/* Checkbox Personalizado */
+.form-group label:has(input[type="checkbox"]) {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+.form-group input[type="checkbox"] {
+    width: 1.25rem;
+    height: 1.25rem;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+/* Layout de Formulário Compacto (Add User) */
+.form-row-compact {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+    align-items: end;
+    background: var(--bg-body);
+    padding: 1.25rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1.5rem;
+}
+
+.form-row-compact .form-group {
+    margin-bottom: 0;
+    width: 100%;
+}
+
+.btn-icon-only {
+    padding: 0.875rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 46px; /* Altura para alinhar com inputs */
+    width: 100%;
+}
+
+/* Layout de Formulário (Add Funcionario) */
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    align-items: end;
+    margin-bottom: 1.5rem;
+}
+
+.flex-grow {
+    grid-column: span 2;
+}
+
+/* Em telas menores, flex-grow deve ocupar tudo ou se ajustar */
+@media (max-width: 600px) {
+    .flex-grow {
+        grid-column: span 1;
+    }
+}
+
+.time-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg-body);
+    padding: 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-light);
+}
+
+.time-inputs input[type="time"] {
+    border: none;
+    background: transparent;
+    padding: 0.25rem;
+    font-size: 0.9rem;
+    width: auto;
+}
+
+.time-inputs input[type="time"]:focus {
+    box-shadow: none;
+    outline: none;
+    color: var(--primary);
+}
+
+.time-inputs span {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* Gerenciamento de Funcionários/Usuários */
+.funcionarios-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    flex: 1;
+}
+
+.add-funcionario-section {
+    background: var(--bg-body);
+    padding: 1.5rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-light);
+}
+
+.add-funcionario-section h3,
+.funcionarios-list h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-main);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Lista/Tabela de Usuários */
+.compact-list {
+    overflow-x: auto;
+}
+
+/* Lista de Funcionários */
+.funcionarios-list {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 600px; /* Scroll interno se ficar muito grande */
+    padding-right: 0.5rem;
+}
+
+.funcionario-item {
+    background: var(--bg-body);
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: var(--transition);
+}
+
+.funcionario-item:hover {
+    transform: translateX(4px);
+    border-color: var(--primary-light);
+    background: var(--bg-surface);
+}
+
+.funcionario-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.funcionario-id-badge {
+    background: var(--border-light);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
+.funcionario-info strong {
+    color: var(--text-main);
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.funcionario-equipe-badge {
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-size: 0.75rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 99px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+/* Botões de Ação Pequenos */
+.funcionario-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-small {
+    padding: 0.4rem 0.8rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-edit {
+    background: var(--info-bg);
+    color: var(--info);
+}
+
+.btn-edit:hover {
+    background: var(--info);
+    color: white;
+}
+
+.btn-delete {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.btn-delete:hover {
+    background: var(--danger);
+    color: white;
+}
+
+/* Ações Gerais */
+.admin-actions {
+    display: flex;
+    gap: 1.5rem;
+    justify-content: center;
+    margin-top: 3rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-light);
+}
+
+.admin-actions .btn {
+    min-width: 200px;
+    max-width: 300px;
+    height: 50px;
+}
+
+@media (max-width: 768px) {
+    .admin-actions {
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .admin-actions .btn {
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
+/* Responsividade */
+@media (max-width: 1024px) {
+    .management-row {
+        grid-template-columns: 1fr; /* Empilha em telas médias */
+    }
+    
+    .wide-section {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .admin-grid-row {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-section {
+        padding: 1.5rem;
+    }
+
+    .form-row, .form-row-compact {
+        grid-template-columns: 1fr;
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .flex-grow {
+        grid-column: span 1;
+    }
+
+    .funcionario-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .funcionario-actions {
+        width: 100%;
+        justify-content: flex-end;
+        border-top: 1px solid var(--border-light);
+        padding-top: 0.5rem;
+    }
+}

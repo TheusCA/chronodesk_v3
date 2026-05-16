@@ -1,0 +1,431 @@
+/* ============================================
+   Pagina de Metricas - Dashboard Premium Design
+   ============================================ */
+
+/* Importar Base */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* Dashboard Layout */
+.metrics-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    padding-bottom: 2rem;
+    animation: fadeIn 0.6s ease-out;
+}
+
+.dashboard-section-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-main);
+    margin-top: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--primary-soft);
+    display: inline-block;
+}
+
+/* KPI Grid (Top Cards) */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.kpi-card {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: 1.75rem;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-light);
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+    height: 100%; /* Garantir altura igual */
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--primary);
+}
+
+.kpi-card.warning::before {
+    background: var(--warning);
+}
+
+.kpi-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-light);
+}
+
+.kpi-icon {
+    font-size: 2.5rem;
+    background: var(--bg-body);
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+}
+
+.kpi-content {
+    flex: 1;
+}
+
+.kpi-content h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+    letter-spacing: 0.05em;
+}
+
+.kpi-value-container {
+    font-size: 1.1rem; /* Fonte base, o JS injeta itens */
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+/* O JS injeta .metric-item dentro do .kpi-value-container, vamos limpá-lo visualmente */
+.kpi-value-container .metric-item {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: var(--text-main);
+}
+.kpi-value-container .metric-item strong {
+    font-weight: 800; /* Reforçar */
+    margin-right: 0.5rem;
+}
+
+/* Details Grid (Middle Cards) */
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+}
+
+.details-grid.two-columns {
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+}
+
+.detail-card {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    transition: var(--transition);
+}
+
+.detail-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--border-hover);
+}
+
+.detail-card h3 {
+    background: var(--bg-body);
+    padding: 1rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.scrollable-content {
+    padding: 0;
+    max-height: 300px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-muted) var(--bg-body);
+}
+
+/* Estilização dos Itens Injetados pelo JS (.metric-item) */
+.metric-item {
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border-light);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    color: var(--text-main);
+}
+
+.metric-item:last-child {
+    border-bottom: none;
+}
+
+.metric-item:hover {
+    background-color: var(--bg-body);
+}
+
+.metric-item strong {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+/* Estilização específica para KPIs que podem ter múltiplos itens (ex: Equipe N1, N2) */
+.kpi-value-container .metric-item {
+    padding: 0.25rem 0;
+    border: none;
+    font-size: 1rem;
+}
+
+/* Alert Cards */
+.alert-card h3 {
+    background: var(--warning-bg);
+    color: #b45309; /* Warning Dark */
+}
+
+.alert-card.critical h3 {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.split-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.split-content h4 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+/* Theme Toggle na Header */
+.theme-toggle-container {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+}
+
+.btn-theme-toggle {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.2rem;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-main);
+}
+
+.btn-theme-toggle:hover {
+    background: var(--primary);
+    color: white;
+    transform: rotate(15deg);
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+}
+
+/* Botões de Ação */
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+
+.download-button,
+.back-button,
+.logout-button {
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    text-decoration: none;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+}
+
+.download-button {
+    background: var(--success);
+    color: white;
+    box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+}
+
+.download-button:hover {
+    background: #059669;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+}
+
+.back-button {
+    background: var(--bg-surface);
+    color: var(--text-main);
+    border: 1px solid var(--border-light);
+}
+
+.back-button:hover {
+    background: var(--bg-body);
+    border-color: var(--text-muted);
+    transform: translateY(-2px);
+}
+
+.logout-button {
+    background: var(--bg-surface);
+    color: var(--danger);
+    border: 1px solid var(--border-light);
+}
+
+.logout-button:hover {
+    background: var(--danger-bg);
+    border-color: var(--danger);
+    transform: translateY(-2px);
+}
+
+/* Solicitações Pendentes */
+.pending-requests-container {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    border: 2px solid var(--warning);
+    animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+    0% { border-color: var(--warning); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+    70% { border-color: var(--warning); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+    100% { border-color: var(--warning); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+.pending-requests-container h2 {
+    color: #b45309;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pending-request-item {
+    background: var(--bg-body);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 0.75rem;
+    border: 1px solid var(--border-light);
+}
+
+.request-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+}
+
+.request-time {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.request-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.btn-approve {
+    background: var(--success);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-reject {
+    background: var(--danger);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+/* Responsividade */
+@media (max-width: 1024px) {
+    .details-grid, .details-grid.two-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 1rem;
+    }
+    
+    .kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .kpi-card {
+        padding: 1.5rem;
+    }
+
+    .metric-item {
+        padding: 0.5rem 1rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    
+    .split-content {
+        grid-template-columns: 1fr;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .download-button, .back-button, .logout-button {
+        justify-content: center;
+    }
+}
+
+/* Loading State */
+.loading-text {
+    color: var(--text-muted);
+    font-style: italic;
+    animation: pulse-text 1.5s infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+}
+
+@keyframes pulse-text {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+}
