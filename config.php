@@ -89,6 +89,17 @@ define('AUTH_SOURCE', getenv('AUTH_SOURCE') ?: 'json_fallback');
 // 'json_fallback' = MySQL com fallback para config_sistema.json (legacy/migração)
 
 // ============================================
+// Autenticação administrativa híbrida
+// ============================================
+define('DEFAULT_AD_ADMIN_USERS', 'mmdcamargo,dhrmendes,rgluciano');
+
+$ad_admin_users_env = getenv('AD_ADMIN_USERS');
+define('AD_ADMIN_USERS', ($ad_admin_users_env !== false && trim($ad_admin_users_env) !== '') ? $ad_admin_users_env : DEFAULT_AD_ADMIN_USERS);
+
+$enable_local_admin_env = strtolower(trim((string)(getenv('ENABLE_LOCAL_ADMIN') ?: 'true')));
+define('ENABLE_LOCAL_ADMIN', !in_array($enable_local_admin_env, ['false', '0', 'no'], true));
+
+// ============================================
 // Ambiente e Debug
 // ============================================
 define('APP_ENV', getenv('APP_ENV') ?: 'development');
@@ -334,6 +345,41 @@ function salvar_configuracao($config) {
     }
     
     return $result !== false;
+}
+
+function normalizar_samaccountname($login) {
+    $login = strtolower(sanitize_input($login ?? '', 150));
+    $login = trim($login);
+    if ($login === '') {
+        return null;
+    }
+
+    if (strpos($login, '@') !== false) {
+        $parts = explode('@', $login, 2);
+        $login = $parts[0];
+    }
+
+    $login = preg_replace('/[^a-z0-9._-]/', '', $login);
+    return $login === '' ? null : $login;
+}
+
+function get_ad_admin_users() {
+    $users = [];
+    foreach (explode(',', AD_ADMIN_USERS) as $user) {
+        $normalized = normalizar_samaccountname($user);
+        if ($normalized !== null) {
+            $users[] = $normalized;
+        }
+    }
+    return array_values(array_unique($users));
+}
+
+function is_ad_admin_authorized($login) {
+    $normalized = normalizar_samaccountname($login);
+    if ($normalized === null) {
+        return false;
+    }
+    return in_array($normalized, get_ad_admin_users(), true);
 }
 
 function carregar_funcionarios_sistema() {

@@ -74,13 +74,38 @@ Sistema_Pausas/
 
 ## 🔧 Configuração
 
-### Alterar credenciais de login
+### Variáveis de ambiente
 
-Edite o arquivo `config.php`:
+Copie `.env.example` para `.env` fora do document root, quando possível, e ajuste os valores do ambiente. Nunca versione o `.env` real.
 
-```php
-define('USUARIO_ADMIN', 'seu_usuario');
-define('SENHA_ADMIN', 'sua_senha_segura');
+```env
+SECRET_KEY=GERE_UMA_CHAVE_FORTE_AQUI
+DB_HOST=localhost
+DB_NAME=sistema_pausas
+DB_USER=chronodesk_user
+DB_PASS=troque_esta_senha
+```
+
+### Login administrativo
+
+O painel administrativo aceita autenticação híbrida:
+
+- Login local existente, mantido como contingência por padrão.
+- Login via AD/LDAP para usuários autorizados em `AD_ADMIN_USERS`.
+
+Configuração:
+
+```env
+AD_ADMIN_USERS=mmdcamargo,dhrmendes,rgluciano
+ENABLE_LOCAL_ADMIN=true
+```
+
+`AD_ADMIN_USERS` deve conter sAMAccountNames separados por vírgula. Se a variável não for configurada, o sistema usa `mmdcamargo,dhrmendes,rgluciano` como fallback inicial. O login AD aceita `usuario` ou `usuario@paschoalotto.com.br`, normaliza para sAMAccountName em minúsculo e não salva senha AD.
+
+Para bloquear o login local administrativo e permitir apenas AD/LDAP autorizado:
+
+```env
+ENABLE_LOCAL_ADMIN=false
 ```
 
 ### Alterar funcionários

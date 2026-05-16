@@ -27,6 +27,11 @@
  * @return array|false      Array com dados do usuário AD em caso de sucesso, false em falha
  */
 function autenticar_ad(string $username, string $password) {
+    if (!function_exists('ldap_connect')) {
+        error_log('[AUTH_AD] Extensão PHP LDAP não está habilitada.');
+        return false;
+    }
+
     if (!function_exists('get_db_connection')) {
         require_once __DIR__ . '/db.php';
     }
