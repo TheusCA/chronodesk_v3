@@ -157,6 +157,9 @@ function set_security_headers() {
     // event handlers dinâmicos no JS. Refatorar para addEventListener em fase futura.
     header("Content-Security-Policy: "
         . "default-src 'self'; "
+        . "base-uri 'self'; "
+        . "frame-ancestors 'none'; "
+        . "form-action 'self'; "
         . "script-src 'self' 'unsafe-inline' 'nonce-{$nonce}'; "
         . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com 'nonce-{$nonce}'; "
         . "img-src 'self' data:; "
@@ -193,10 +196,20 @@ function set_security_headers() {
 
 function secure_session_start() {
     if (session_status() === PHP_SESSION_NONE) {
+        $secure_cookie = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on';
+        $secure_cookie_env = getenv('SESSION_COOKIE_SECURE');
+        if ($secure_cookie_env !== false && $secure_cookie_env !== '') {
+            $secure_cookie = in_array(strtolower(trim($secure_cookie_env)), ['1', 'true', 'yes', 'on'], true);
+        }
+        $same_site = getenv('SESSION_COOKIE_SAMESITE') ?: 'Strict';
+        if (!in_array($same_site, ['Strict', 'Lax', 'None'], true)) {
+            $same_site = 'Strict';
+        }
+
         ini_set('session.cookie_httponly', 1);
         ini_set('session.use_only_cookies', 1);
-        ini_set('session.cookie_secure', isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 1 : 0);
-        ini_set('session.cookie_samesite', 'Strict');
+        ini_set('session.cookie_secure', $secure_cookie ? 1 : 0);
+        ini_set('session.cookie_samesite', $same_site);
         ini_set('session.use_strict_mode', 1);
         
         $savePath = session_save_path();
@@ -227,6 +240,13 @@ function secure_session_start() {
             $_SESSION['created'] = time();
         }
     }
+}
+
+function public_error_message($exception, $production_message = 'Erro interno. Tente novamente ou contate o suporte.') {
+    if (defined('APP_DEBUG') && APP_DEBUG) {
+        return $exception instanceof \Throwable ? $exception->getMessage() : (string)$exception;
+    }
+    return $production_message;
 }
 
 // ============================================
@@ -340,6 +360,42 @@ function require_json_content_type() {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
+}
+
+function require_get_method() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+        http_response_code(405);
+        header('Allow: GET');
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'sucesso' => false,
+            'mensagem' => 'Método não permitido'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+function destroy_current_session() {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    $_SESSION = [];
+
+    if (ini_get('session.use_cookies')) {
+        $params = session_get_cookie_params();
+        setcookie(
+            session_name(),
+            '',
+            time() - 42000,
+            $params['path'] ?? '/',
+            $params['domain'] ?? '',
+            $params['secure'] ?? false,
+            $params['httponly'] ?? true
+        );
+    }
+
+    session_destroy();
 }
 
 // ============================================

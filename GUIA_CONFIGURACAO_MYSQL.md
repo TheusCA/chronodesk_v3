@@ -28,16 +28,29 @@ Este guia irá ajudá-lo a configurar o banco de dados MySQL no XAMPP para o Sis
 5.  Role até o final da página e clique no botão **Importar** (ou "Go").
 6.  Você deve ver uma mensagem verde confirmando que a importação foi executada com sucesso.
 
-## Passo 5: Verificar a Configuração
+## Passo 5: Criar Usuário Dedicado
 
-O sistema já está configurado para conectar com as credenciais padrão do XAMPP:
-- **Host:** localhost
-- **Usuário:** root
-- **Senha:** (vazio)
-- **Banco:** sistema_pausas
+Em produção, não use `root`. Crie um usuário dedicado com permissões mínimas para o banco do ChronoDesk:
 
-Se você alterou a senha do root no seu XAMPP, precisará editar o arquivo `config.php` na raiz do projeto e atualizar a linha:
-`define('DB_PASS', ''); // Coloque sua senha aqui se houver`
+```sql
+CREATE USER 'chronodesk_user'@'localhost' IDENTIFIED BY 'troque_esta_senha';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX
+  ON sistema_pausas.* TO 'chronodesk_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+Não conceda `GRANT OPTION`, `SUPER`, `FILE` nem acesso a outros bancos.
+
+No XAMPP local, o fallback `root` sem senha ainda funciona quando `APP_ENV=development`, mas o `.env.example` já usa:
+
+```env
+DB_HOST=localhost
+DB_NAME=sistema_pausas
+DB_USER=chronodesk_user
+DB_PASS=troque_esta_senha
+```
+
+Em produção, `APP_ENV=production` exige usuário diferente de `root` e senha definida.
 
 ## Passo 6: Migrar Dados Antigos (Opcional)
 

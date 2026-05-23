@@ -7,10 +7,20 @@
 // ============================================================
 
 // ----------- Mensagens -----------
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function exibirMensagem(mensagem, tipo) {
     const messageArea = document.getElementById('message-area');
     const icon = tipo === 'success' ? '✅' : tipo === 'error' ? '❌' : tipo === 'warning' ? '⚠️' : tipo === 'critical' ? '🚨' : 'ℹ️';
-    messageArea.innerHTML = `<div class="message ${tipo}">${icon} ${mensagem}</div>`;
+    const safeTipo = ['success', 'error', 'warning', 'critical'].includes(tipo) ? tipo : 'info';
+    messageArea.innerHTML = `<div class="message ${safeTipo}">${icon} ${escapeHtml(mensagem)}</div>`;
     if (tipo !== 'critical') {
         setTimeout(() => {
             messageArea.style.opacity = '0';
@@ -47,54 +57,99 @@ function fecharBannerCritico() {
     if (b) b.style.display = 'none';
 }
 
-// ----------- Autenticação AD -----------
-let adAuthResolver = null;
+// ----------- Sessão CI -----------
+function getCiFuncionarioId() {
+    return parseInt(window.CI_FUNCIONARIO_ID || 0, 10);
+}
 
-function limparSenhaAd() {
-    const senha = document.getElementById('ad-auth-senha');
+function isAppDebugMode() {
+    return window.APP_DEBUG === true || document.querySelector('meta[name="app-debug"]')?.getAttribute('content') === 'true';
+}
+
+function logDebug(...args) {
+    if (!isAppDebugMode()) return;
+    if (typeof debugLog === 'function') {
+        debugLog(...args);
+        return;
+    }
+    console.log(...args);
+}
+
+function getApiBaseUrl() {
+    if (window.API_BASE_URL && typeof window.API_BASE_URL === 'string') {
+        return window.API_BASE_URL.replace(/\/$/, '');
+    }
+
+    const path = window.location.pathname || '';
+    let basePath = path;
+
+    if (basePath.endsWith('/')) {
+        basePath = basePath.slice(0, -1);
+    } else {
+        const lastSlash = basePath.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            basePath = basePath.substring(0, lastSlash);
+        }
+    }
+
+    return (basePath || '') + '/api';
+}
+
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+}
+
+function getJsonHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken()
+    };
+}
+
+async function fetchJsonSeguro(url, options = {}) {
+    const response = await fetch(url, options);
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+
+    let data = null;
+    if (contentType.includes('application/json')) {
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            throw new Error('A API retornou JSON inválido.');
+        }
+    } else {
+        const preview = text.substring(0, 120).replace(/\s+/g, ' ');
+        throw new Error(`A API retornou resposta não JSON. HTTP ${response.status}. Prévia: ${preview}`);
+    }
+
+    return { response, data };
+}
+
+function limparSenhaCi() {
+    const senha = document.getElementById('ci-senha-ad');
     if (senha) senha.value = '';
 }
 
-function fecharModalAutenticacaoAd() {
-    const modal = document.getElementById('ad-auth-modal');
-    if (modal) {
-        modal.classList.remove('ativo');
-        modal.setAttribute('aria-hidden', 'true');
+function setDashboardVisible(visible) {
+    const loginScreen = document.getElementById('ci-login-screen');
+    const dashboard = document.getElementById('dashboard-main');
+    const sessionInfo = document.getElementById('ci-session-info');
+    if (loginScreen) {
+        loginScreen.classList.toggle('hidden', visible);
+        loginScreen.style.display = visible ? 'none' : '';
     }
-    limparSenhaAd();
-}
-
-function solicitarCredenciaisAd() {
-    return new Promise((resolve, reject) => {
-        const modal = document.getElementById('ad-auth-modal');
-        const login = document.getElementById('ad-auth-login');
-        const senha = document.getElementById('ad-auth-senha');
-
-        if (!modal || !login || !senha) {
-            reject(new Error('Modal de autenticação AD não encontrado.'));
-            return;
-        }
-
-        adAuthResolver = { resolve, reject };
-        modal.classList.add('ativo');
-        modal.setAttribute('aria-hidden', 'false');
-        senha.value = '';
-        setTimeout(() => (login.value ? senha.focus() : login.focus()), 0);
-    });
-}
-
-function cancelarAutenticacaoAd() {
-    if (adAuthResolver) {
-        adAuthResolver.reject(new Error('Autenticação cancelada.'));
-        adAuthResolver = null;
+    if (dashboard) {
+        dashboard.classList.toggle('hidden', !visible);
+        dashboard.style.display = visible ? '' : 'none';
     }
-    fecharModalAutenticacaoAd();
+    if (sessionInfo) sessionInfo.classList.toggle('hidden', !visible);
 }
 
-function confirmarAutenticacaoAd(event) {
+async function loginCi(event) {
     event.preventDefault();
-    const login = document.getElementById('ad-auth-login');
-    const senha = document.getElementById('ad-auth-senha');
+    const login = document.getElementById('ci-login-ad');
+    const senha = document.getElementById('ci-senha-ad');
     const loginAd = login ? login.value.trim() : '';
     const senhaAd = senha ? senha.value : '';
 
@@ -103,11 +158,53 @@ function confirmarAutenticacaoAd(event) {
         return;
     }
 
-    if (adAuthResolver) {
-        adAuthResolver.resolve({ login_ad: loginAd, senha_ad: senhaAd });
-        adAuthResolver = null;
+    try {
+        const { data: resultado } = await fetchJsonSeguro(getApiBaseUrl() + '/login_ci.php', {
+            method: 'POST',
+            headers: getJsonHeaders(),
+            body: JSON.stringify({ login_ad: loginAd, senha_ad: senhaAd })
+        });
+        limparSenhaCi();
+
+        if (!resultado.sucesso) {
+            exibirMensagem(resultado.mensagem || 'Falha no login CI.', 'error');
+            return;
+        }
+
+        window.CI_AUTHENTICATED = true;
+        window.CI_FUNCIONARIO_ID = parseInt(resultado.ci?.funcionario_id || 0, 10);
+        window.CI_NOME = resultado.ci?.nome || '';
+
+        const sessionName = document.getElementById('ci-session-name');
+        if (sessionName) sessionName.textContent = window.CI_NOME;
+        setDashboardVisible(true);
+        await carregarFuncionariosSelect();
+        await atualizarStatus();
+        exibirMensagem('Login CI realizado com sucesso.', 'success');
+    } catch (error) {
+        limparSenhaCi();
+        exibirMensagem('Erro ao autenticar CI: ' + error.message, 'error');
     }
-    fecharModalAutenticacaoAd();
+}
+
+async function logoutCi() {
+    try {
+        const { data: resultado } = await fetchJsonSeguro(getApiBaseUrl() + '/logout_ci.php', {
+            method: 'POST',
+            headers: getJsonHeaders(),
+            body: JSON.stringify({})
+        });
+        if (resultado && resultado.sucesso === false) {
+            logDebug('Falha ao encerrar sessão CI:', resultado.mensagem || resultado);
+        }
+    } catch (error) {
+        logDebug('Falha ao encerrar sessão CI:', error);
+    }
+    window.CI_AUTHENTICATED = false;
+    window.CI_FUNCIONARIO_ID = 0;
+    window.CI_NOME = '';
+    setDashboardVisible(false);
+    limparSenhaCi();
 }
 
 // ----------- Lista de funcionários para selects -----------
@@ -115,12 +212,15 @@ let _funcionariosCache = [];
 
 async function carregarFuncionariosSelect() {
     try {
-        const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
+        const apiUrl = getApiBaseUrl();
         const resp = await fetch(apiUrl + '/listar_funcionarios.php');
         const data = await resp.json();
         if (data.sucesso && data.funcionarios) {
-            _funcionariosCache = data.funcionarios;
-            preencherSelects(data.funcionarios);
+            const ciId = getCiFuncionarioId();
+            _funcionariosCache = ciId > 0
+                ? data.funcionarios.filter(f => parseInt(f.id, 10) === ciId)
+                : data.funcionarios;
+            preencherSelects(_funcionariosCache);
         }
     } catch (e) {
         console.warn('Não foi possível carregar lista de funcionários:', e);
@@ -165,36 +265,27 @@ async function iniciarPausa() {
         return;
     }
 
-    let credenciaisAd;
-    try {
-        credenciaisAd = await solicitarCredenciaisAd();
-    } catch (error) {
+    if (!window.CI_AUTHENTICATED || getCiFuncionarioId() !== funcionarioId) {
+        exibirMensagem('Faça login com o CI selecionado antes de iniciar pausa.', 'error');
         return;
     }
 
     // Confirmação com nome do CI
     const nomeCi = sel.options[sel.selectedIndex]?.text || `ID ${funcionarioId}`;
     if (!confirm(`Confirmar início de pausa para ${nomeCi}?\nMotivo: ${motivoPausa}`)) {
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         return;
     }
 
     try {
-        const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
-        const response = await fetch(apiUrl + '/iniciar_pausa.php', {
+        const apiUrl = getApiBaseUrl();
+        const { data: resultado } = await fetchJsonSeguro(apiUrl + '/iniciar_pausa.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getJsonHeaders(),
             body: JSON.stringify({
                 funcionario_id: funcionarioId,
-                motivo_pausa: motivoPausa,
-                login_ad: credenciaisAd.login_ad,
-                senha_ad: credenciaisAd.senha_ad
+                motivo_pausa: motivoPausa
             })
         });
-        const resultado = await response.json();
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         if (resultado.sucesso) {
             exibirMensagem(resultado.mensagem, 'success');
             sel.value = '';
@@ -204,8 +295,6 @@ async function iniciarPausa() {
             exibirMensagem(resultado.mensagem, 'error');
         }
     } catch (error) {
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         exibirMensagem('Erro ao iniciar pausa: ' + error.message, 'error');
     }
 }
@@ -222,33 +311,24 @@ async function finalizarPausa() {
 
     const nomeCi = sel.options[sel.selectedIndex]?.text || `ID ${funcionarioId}`;
 
-    let credenciaisAd;
-    try {
-        credenciaisAd = await solicitarCredenciaisAd();
-    } catch (error) {
+    if (!window.CI_AUTHENTICATED || getCiFuncionarioId() !== funcionarioId) {
+        exibirMensagem('Faça login com o CI selecionado antes de finalizar pausa.', 'error');
         return;
     }
 
     if (!confirm(`Confirmar finalização de pausa para ${nomeCi}?`)) {
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         return;
     }
 
     try {
-        const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
-        const response = await fetch(apiUrl + '/finalizar_pausa.php', {
+        const apiUrl = getApiBaseUrl();
+        const { data: resultado } = await fetchJsonSeguro(apiUrl + '/finalizar_pausa.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getJsonHeaders(),
             body: JSON.stringify({
-                funcionario_id: funcionarioId,
-                login_ad: credenciaisAd.login_ad,
-                senha_ad: credenciaisAd.senha_ad
+                funcionario_id: funcionarioId
             })
         });
-        const resultado = await response.json();
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         if (resultado.sucesso) {
             exibirMensagem(resultado.mensagem, 'success');
             sel.value = '';
@@ -257,8 +337,6 @@ async function finalizarPausa() {
             exibirMensagem(resultado.mensagem, 'error');
         }
     } catch (error) {
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         exibirMensagem('Erro ao finalizar pausa: ' + error.message, 'error');
     }
 }
@@ -271,7 +349,7 @@ async function atualizarStatus() {
         if (equipeN1) equipeN1.style.opacity = '0.6';
         if (equipeN2) equipeN2.style.opacity = '0.6';
 
-        const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
+        const apiUrl = getApiBaseUrl();
         const response = await fetch(apiUrl + '/status.php');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const status = await response.json();
@@ -342,7 +420,7 @@ function verificarPausasEsquecidas(status) {
     } else {
         fecharBannerCritico();
         if (alerta15.length > 0) {
-            exibirMensagem(`⚠️ ATENÇÃO: ${alerta15.map(f => f.nome).join(', ')} em pausa há mais de 15 min.`, 'warning');
+            exibirMensagem(`ATENÇÃO: ${alerta15.map(f => f.nome).join(', ')} em pausa há mais de 15 min.`, 'warning');
         }
     }
 }
@@ -424,22 +502,23 @@ function criarCardFuncionario(funcionario) {
         pausasHojeHtml = `<div class="detalhe-item"><span class="detalhe-label">Pausas hoje:</span> <span class="detalhe-valor">${funcionario.pausas_hoje}</span></div>`;
     }
 
-    const detalhesId = `detalhes-${funcionario.id}-${Date.now()}`;
+    const safeFuncionarioId = parseInt(funcionario.id, 10) || 0;
+    const detalhesId = `detalhes-${safeFuncionarioId}-${Date.now()}`;
     let detalhesHtml = pausasHojeHtml;
-    if (funcionario.em_pausa && funcionario.motivo_pausa) detalhesHtml += `<div class="detalhe-item"><span class="detalhe-label">Motivo:</span> <span class="detalhe-valor">${obterIconeMotivo(funcionario.motivo_pausa)} ${funcionario.motivo_pausa}</span></div>`;
-    if (funcionario.jornada_entrada && funcionario.jornada_saida) detalhesHtml += `<div class="detalhe-item"><span class="detalhe-label">Jornada:</span> <span class="detalhe-valor">${funcionario.jornada_entrada} - ${funcionario.jornada_saida}</span></div>`;
+    if (funcionario.em_pausa && funcionario.motivo_pausa) detalhesHtml += `<div class="detalhe-item"><span class="detalhe-label">Motivo:</span> <span class="detalhe-valor">${obterIconeMotivo(funcionario.motivo_pausa)} ${escapeHtml(funcionario.motivo_pausa)}</span></div>`;
+    if (funcionario.jornada_entrada && funcionario.jornada_saida) detalhesHtml += `<div class="detalhe-item"><span class="detalhe-label">Jornada:</span> <span class="detalhe-valor">${escapeHtml(funcionario.jornada_entrada)} - ${escapeHtml(funcionario.jornada_saida)}</span></div>`;
     if (funcionario.ativo === false) detalhesHtml += `<div class="detalhe-item"><span class="detalhe-label">Status:</span> <span class="detalhe-valor inativo">⛔ Inativo</span></div>`;
 
     card.innerHTML = `
         <div class="card-header">
-            <div class="funcionario-nome">${funcionario.nome}</div>
-            <div class="funcionario-equipe-badge">${(funcionario.equipe || '').toUpperCase()}</div>
+            <div class="funcionario-nome">${escapeHtml(funcionario.nome)}</div>
+            <div class="funcionario-equipe-badge">${escapeHtml((funcionario.equipe || '').toUpperCase())}</div>
         </div>
         <div class="status-principal" style="border-left:4px solid ${corStatus};">
             <div class="status-icone-texto">
                 <span class="status-icone" style="color:${corStatus};font-size:2rem;">${iconeStatus}</span>
                 <div class="status-texto-container">
-                    <div class="status-texto-principal" style="color:${corStatus};font-weight:600;font-size:1.125rem;">${textoStatus}</div>
+                    <div class="status-texto-principal" style="color:${corStatus};font-weight:600;font-size:1.125rem;">${escapeHtml(textoStatus)}</div>
                     ${tempoPausaHtml}
                 </div>
             </div>
@@ -504,35 +583,26 @@ async function solicitarPausaComAprovacao() {
 
     const nomeCi = sel.options[sel.selectedIndex]?.text || `ID ${funcionarioId}`;
 
-    let credenciaisAd;
-    try {
-        credenciaisAd = await solicitarCredenciaisAd();
-    } catch (error) {
+    if (!window.CI_AUTHENTICATED || getCiFuncionarioId() !== funcionarioId) {
+        exibirMensagem('Faça login com o CI selecionado antes de solicitar pausa.', 'error');
         return;
     }
 
     if (!confirm(`Solicitar pausa de reunião para ${nomeCi}?\n\nObservação: ${observacao}`)) {
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         return;
     }
 
     try {
-        const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
-        const response = await fetch(apiUrl + '/solicitar_pausa_com_aprovacao.php', {
+        const apiUrl = getApiBaseUrl();
+        const { data } = await fetchJsonSeguro(apiUrl + '/solicitar_pausa_com_aprovacao.php', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getJsonHeaders(),
             body: JSON.stringify({
                 funcionario_id: funcionarioId,
                 motivo_pausa: 'Reunião',
-                observacao,
-                login_ad: credenciaisAd.login_ad,
-                senha_ad: credenciaisAd.senha_ad
+                observacao
             })
         });
-        const data = await response.json();
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         if (data.sucesso) {
             exibirMensagem(data.mensagem, 'success');
             sel.value = '';
@@ -544,32 +614,26 @@ async function solicitarPausaComAprovacao() {
             exibirMensagem(data.mensagem, 'error');
         }
     } catch (error) {
-        credenciaisAd.senha_ad = '';
-        limparSenhaAd();
         exibirMensagem('Erro ao solicitar pausa de reunião: ' + error.message, 'error');
     }
 }
 
 // ----------- Init (FIX: apenas 1 setInterval) -----------
 document.addEventListener('DOMContentLoaded', function() {
-    const adAuthForm = document.getElementById('ad-auth-form');
-    const adAuthCancelar = document.getElementById('ad-auth-cancelar');
-    const adAuthModal = document.getElementById('ad-auth-modal');
+    const ciLoginForm = document.getElementById('ci-login-form');
+    const ciLogoutButton = document.getElementById('btn-ci-logout');
+    if (ciLoginForm) ciLoginForm.addEventListener('submit', loginCi);
+    if (ciLogoutButton) ciLogoutButton.addEventListener('click', logoutCi);
 
-    if (adAuthForm) adAuthForm.addEventListener('submit', confirmarAutenticacaoAd);
-    if (adAuthCancelar) adAuthCancelar.addEventListener('click', cancelarAutenticacaoAd);
-    if (adAuthModal) {
-        adAuthModal.addEventListener('click', function(event) {
-            if (event.target === adAuthModal) cancelarAutenticacaoAd();
-        });
+    setDashboardVisible(!!window.CI_AUTHENTICATED);
+    if (window.CI_AUTHENTICATED) {
+        carregarFuncionariosSelect();
+        atualizarStatus();
     }
-    document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape' && adAuthResolver) cancelarAutenticacaoAd();
-    });
-
-    carregarFuncionariosSelect();
-    atualizarStatus();
     // CORREÇÃO: apenas UM setInterval (o outro estava duplicado no escopo global)
-    setInterval(atualizarStatus, 30000);
-    console.log('✅ ChronoDesk v3.0 inicializado - Atualização automática a cada 30s');
+    setInterval(() => {
+        if (window.CI_AUTHENTICATED) atualizarStatus();
+    }, 30000);
+    logDebug('API base calculada:', getApiBaseUrl());
+    logDebug('ChronoDesk v3.0 inicializado - Atualização automática a cada 30s');
 });

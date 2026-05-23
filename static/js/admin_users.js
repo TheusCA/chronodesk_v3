@@ -1,4 +1,13 @@
 // Função para adicionar usuário
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 async function adicionarUsuario() {
     const username = document.getElementById('novo-user-login').value.trim();
     const password = document.getElementById('novo-user-senha').value;
@@ -111,12 +120,12 @@ function exibirUsuariosSistema(usuarios) {
             
         html += `
             <tr>
-                <td>${user.id}</td>
-                <td><strong>${user.username}</strong></td>
+                <td>${parseInt(user.id, 10)}</td>
+                <td><strong>${escapeHtml(user.username)}</strong></td>
                 <td>${roleBadge}</td>
-                <td>${new Date(user.created_at).toLocaleDateString('pt-BR')}</td>
+                <td>${escapeHtml(new Date(user.created_at).toLocaleDateString('pt-BR'))}</td>
                 <td>
-                    <button class="btn-small btn-delete" onclick="removerUsuario(${user.id})">🗑️</button>
+                    <button class="btn-small btn-delete" onclick="removerUsuario(${parseInt(user.id, 10)})">🗑️</button>
                 </td>
             </tr>
         `;

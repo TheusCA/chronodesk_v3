@@ -1,8 +1,18 @@
 // Função para exibir mensagens
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function exibirMensagemAdmin(mensagem, tipo) {
     const messageArea = document.getElementById('admin-message-area');
     const icon = tipo === 'success' ? '✅' : tipo === 'error' ? '❌' : tipo === 'warning' ? '⚠️' : 'ℹ️';
-    messageArea.innerHTML = `<div class="message ${tipo}">${icon} ${mensagem}</div>`;
+    const safeTipo = ['success', 'error', 'warning'].includes(tipo) ? tipo : 'info';
+    messageArea.innerHTML = `<div class="message ${safeTipo}">${icon} ${escapeHtml(mensagem)}</div>`;
     
     // Limpar mensagem após 5 segundos
     setTimeout(() => {
@@ -267,7 +277,7 @@ function exibirFuncionarios(funcionarios) {
     let html = '';
     funcionarios.forEach(func => {
         const statusEmPausa = func.em_pausa ? '🔴 Em pausa' : '🟢 Disponível';
-        const equipeLabel = func.equipe.toUpperCase();
+        const equipeLabel = String(func.equipe || '').toUpperCase();
         
         // Informações de disponibilidade
         const disponibilidade = func.disponibilidade || {status: 'indisponivel', label: 'Indisponível', cor: '#999'};
@@ -283,26 +293,26 @@ function exibirFuncionarios(funcionarios) {
         html += `
             <div class="funcionario-item">
                 <div class="funcionario-info">
-                    <strong>ID ${func.id}: ${func.nome}</strong>
-                    <span>Equipe: ${equipeLabel} | AD: ${adLogin || 'Não vinculado'} | ${ativoStatus} | Status: ${statusEmPausa}</span>
+                    <strong>ID ${parseInt(func.id, 10)}: ${escapeHtml(func.nome)}</strong>
+                    <span>Equipe: ${escapeHtml(equipeLabel)} | AD: ${escapeHtml(adLogin || 'Não vinculado')} | ${ativoStatus} | Status: ${statusEmPausa}</span>
                     <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--gray-600);">
                         <span style="display: inline-block; margin-right: 1rem;">
-                            ⏰ Jornada: ${jornadaEntrada} - ${jornadaSaida}
+                            ⏰ Jornada: ${escapeHtml(jornadaEntrada)} - ${escapeHtml(jornadaSaida)}
                         </span>
                         <span style="display: inline-block; margin-right: 1rem;">
-                            🍽️ Almoço: ${almocoInicio} - ${almocoFim}
+                            🍽️ Almoço: ${escapeHtml(almocoInicio)} - ${escapeHtml(almocoFim)}
                         </span>
-                        <span style="display: inline-block; color: ${disponibilidade.cor}; font-weight: 600;">
-                            ${disponibilidade.status === 'disponivel' ? '✅' : disponibilidade.status === 'almoco' ? '🍽️' : '⏸️'} 
-                            ${disponibilidade.label}
+                        <span style="display: inline-block; color: ${escapeHtml(disponibilidade.cor)}; font-weight: 600;">
+                            ${disponibilidade.status === 'disponivel' ? '✅' : disponibilidade.status === 'almoco' ? '🍽️' : '⏸️'}
+                            ${escapeHtml(disponibilidade.label)}
                         </span>
                     </div>
                 </div>
                 <div class="funcionario-actions">
-                    <button class="btn-small btn-edit" onclick="editarFuncionario(${func.id}, '${escapeJsString(func.nome)}', '${escapeJsString(func.equipe)}', '${escapeJsString(jornadaEntrada)}', '${escapeJsString(jornadaSaida)}', '${escapeJsString(almocoInicio)}', '${escapeJsString(almocoFim)}', ${func.ativo !== false}, '${escapeJsString(adLogin)}')">
+                    <button class="btn-small btn-edit" onclick="editarFuncionario(${parseInt(func.id, 10)}, '${escapeJsString(func.nome)}', '${escapeJsString(func.equipe)}', '${escapeJsString(jornadaEntrada)}', '${escapeJsString(jornadaSaida)}', '${escapeJsString(almocoInicio)}', '${escapeJsString(almocoFim)}', ${func.ativo !== false}, '${escapeJsString(adLogin)}')">
                         ✏️ Editar
                     </button>
-                    <button class="btn-small btn-delete" onclick="removerFuncionario(${func.id})">
+                    <button class="btn-small btn-delete" onclick="removerFuncionario(${parseInt(func.id, 10)})">
                         🗑️ Remover
                     </button>
                 </div>

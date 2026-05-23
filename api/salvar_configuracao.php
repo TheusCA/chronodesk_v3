@@ -46,6 +46,7 @@ if (salvar_configuracao($config)) {
     if ($gerenciador) {
         $gerenciador->atualizar_configuracoes($limite_pausa, $duracao_minutos);
     }
+    audit_log('CONFIGURACAO_ATUALIZADA', "Configuração de pausas atualizada: limite={$limite_pausa}, duração={$duracao_minutos}", 'WARNING');
     
     json_response([
         'sucesso' => true,

@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ?>
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path . '/static/css/style.css?v=' . time()); ?>" type="text/css">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path . '/static/css/login.css?v=' . time()); ?>" type="text/css">
-    <script src="static/js/theme.js" defer></script>
+    <script src="<?php echo htmlspecialchars($base_path . '/static/js/theme.js'); ?>" defer></script>
 </head>
 <body>
     <div class="login-container">
@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button id="theme-toggle" class="btn-theme-toggle" title="Alternar Tema">🌙</button>
             </div>
             <div class="logo-container">
-                <img src="static/img/logo.png" alt="ChronoDesk Logo" class="logo-img">
+                <div class="brand-logo-text">⏳ ChronoDesk</div>
             </div>
             <h2>Acesso às Métricas</h2>
             

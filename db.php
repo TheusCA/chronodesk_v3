@@ -31,6 +31,6 @@ function get_db_connection() {
     } catch (\PDOException $e) {
         // Em produção, logar o erro e mostrar mensagem genérica
         error_log("Erro de conexão com o banco: " . $e->getMessage());
-        throw new \Exception("Erro ao conectar ao banco de dados. Verifique as configurações.");
+        throw new \Exception(public_error_message($e, "Erro ao conectar ao banco de dados."));
     }
 }

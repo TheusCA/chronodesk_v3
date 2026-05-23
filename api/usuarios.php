@@ -6,14 +6,9 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../classes/Usuario.php';
 
-if (session_status() === PHP_SESSION_NONE) session_start();
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    http_response_code(403);
-    echo json_encode(['error' => 'Acesso negado']);
-    exit;
-}
+verificar_admin_login();
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 $action = $_GET['action'] ?? '';
 
 try {
@@ -81,5 +76,6 @@ try {
     }
 } catch (Exception $e) {
     http_response_code(400);
-    echo json_encode(['error' => $e->getMessage()]);
+    error_log('[USUARIOS] Erro na ação ' . sanitize_input($action, 50) . ': ' . $e->getMessage());
+    echo json_encode(['error' => public_error_message($e, 'Não foi possível processar a solicitação.')], JSON_UNESCAPED_UNICODE);
 }

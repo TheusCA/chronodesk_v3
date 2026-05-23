@@ -2,13 +2,10 @@
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 
-// Apenas CLI ou admin logado pode rodar isso
 if (php_sapi_name() !== 'cli') {
-    session_start();
-    if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-        die("Acesso negado. Execute via linha de comando ou faça login como administrador.");
-    }
-    echo "<pre>";
+    http_response_code(403);
+    echo "Execute este script via CLI.\n";
+    exit(1);
 }
 
 echo "Iniciando migração de CSV para MySQL...\n";

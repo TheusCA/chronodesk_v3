@@ -116,12 +116,14 @@ try {
     $funcionario = new Funcionario($id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, $ativo, $ad_login);
     $gerenciador->adicionar_funcionario($funcionario);
     $gerenciador->salvar_estado();
+    audit_log('FUNCIONARIO_ADICIONADO', "Funcionario '{$nome}' adicionado (ID: {$id}, equipe: {$equipe})", 'WARNING');
     
     json_response([
         'sucesso' => true,
         'mensagem' => "Funcionário '{$nome}' adicionado com sucesso!"
     ]);
 } catch (Exception $e) {
-    json_response(['sucesso' => false, 'mensagem' => 'Erro ao adicionar funcionário: ' . $e->getMessage()], 500);
+    error_log('[FUNCIONARIO] Erro ao adicionar funcionário: ' . $e->getMessage());
+    json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao adicionar funcionário.')], 500);
 }
 ?>

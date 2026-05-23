@@ -29,6 +29,9 @@
 function autenticar_ad(string $username, string $password) {
     if (!function_exists('ldap_connect')) {
         error_log('[AUTH_AD] Extensão PHP LDAP não está habilitada.');
+        if (function_exists('audit_log')) {
+            audit_log('LDAP_EXTENSION_MISSING', 'Extensão PHP LDAP não habilitada', 'CRITICAL');
+        }
         return false;
     }
 
@@ -108,6 +111,9 @@ function autenticar_ad(string $username, string $password) {
     }
 
     error_log("[AUTH_AD] Todos os servidores AD falharam para: {$username}");
+    if (function_exists('audit_log')) {
+        audit_log('LDAP_SERVERS_UNAVAILABLE', 'Falha de autenticação AD por indisponibilidade dos servidores configurados', 'WARNING');
+    }
     return false;
 }
 
@@ -258,7 +264,7 @@ function autenticar_ci_via_ad(string $username, string $password): array {
         return [
             'sucesso'      => false,
             'funcionario'  => null,
-            'mensagem'     => 'Login ou senha incorretos. Use suas credenciais do Windows.'
+            'mensagem'     => 'Login ou senha incorretos. Utilize suas credenciais do AD corporativo.'
         ];
     }
 
@@ -280,12 +286,66 @@ function autenticar_ci_via_ad(string $username, string $password): array {
     ];
 }
 
+function ci_sessao_autenticada_para_funcionario($funcionario_id): bool {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    if (!isset($_SESSION['ci_logged_in']) || $_SESSION['ci_logged_in'] !== true) {
+        return false;
+    }
+
+    $session_funcionario_id = (int)($_SESSION['ci_funcionario_id'] ?? 0);
+    if ($session_funcionario_id !== (int)$funcionario_id) {
+        if (function_exists('audit_log')) {
+            audit_log(
+                'CI_PAUSA_OUTRO_FUNCIONARIO',
+                'Sessao CI tentou agir para funcionario ID ' . (int)$funcionario_id . ' usando sessao do funcionario ID ' . $session_funcionario_id,
+                'CRITICAL'
+            );
+        }
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Sua sessão CI não pertence ao funcionário selecionado.'
+        ], 403);
+    }
+
+    if (function_exists('carregar_funcionarios_sistema')) {
+        foreach (carregar_funcionarios_sistema() as $funcionario) {
+            if ((int)($funcionario['id'] ?? 0) === $session_funcionario_id) {
+                if (!($funcionario['ativo'] ?? true)) {
+                    json_response(['sucesso' => false, 'mensagem' => 'Funcionário inativo não pode executar ações de pausa.'], 403);
+                }
+                return true;
+            }
+        }
+    }
+
+    json_response(['sucesso' => false, 'mensagem' => 'Sessão CI inválida. Faça login novamente.'], 401);
+    return false;
+}
+
 /**
  * Exige autenticação AD do próprio CI antes de ações de pausa.
  */
 function exigir_autenticacao_ci_pausa($data, $funcionario_id, $contexto = 'pausa') {
     if (!is_array($data)) {
         json_response(['sucesso' => false, 'mensagem' => 'Dados inválidos.'], 400);
+    }
+
+    if (ci_sessao_autenticada_para_funcionario($funcionario_id)) {
+        return [
+            'sucesso' => true,
+            'funcionario' => [
+                'id' => (int)$_SESSION['ci_funcionario_id'],
+                'nome' => $_SESSION['ci_nome'] ?? '',
+                'ativo' => true,
+            ],
+            'ad_user' => [
+                'login' => $_SESSION['ci_username'] ?? '',
+            ],
+            'mensagem' => 'Sessão CI autenticada.'
+        ];
     }
 
     $login_ad = sanitize_input($data['login_ad'] ?? '', 150);
@@ -302,11 +362,21 @@ function exigir_autenticacao_ci_pausa($data, $funcionario_id, $contexto = 'pausa
 
     $autenticacao = autenticar_ci_via_ad($login_ad, $senha_ad);
     if (!$autenticacao['sucesso']) {
+        if (function_exists('audit_log')) {
+            audit_log('CI_AD_LOGIN_FAILURE', 'Falha de autenticacao AD no contexto ' . $contexto . ' para login ' . normalizar_samaccountname($login_ad), 'WARNING');
+        }
         json_response(['sucesso' => false, 'mensagem' => $autenticacao['mensagem']], 401);
     }
 
     $funcionario_autenticado_id = (int)($autenticacao['funcionario']['id'] ?? 0);
     if ($funcionario_autenticado_id !== (int)$funcionario_id) {
+        if (function_exists('audit_log')) {
+            audit_log(
+                'CI_PAUSA_OUTRO_FUNCIONARIO',
+                'Tentativa de ' . $contexto . ' para funcionario ID ' . (int)$funcionario_id . ' usando credenciais do funcionario ID ' . $funcionario_autenticado_id,
+                'CRITICAL'
+            );
+        }
         json_response([
             'sucesso' => false,
             'mensagem' => 'As credenciais informadas não pertencem ao CI selecionado.'

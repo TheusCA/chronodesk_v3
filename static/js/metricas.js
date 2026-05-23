@@ -3,6 +3,15 @@ document.addEventListener("DOMContentLoaded", async function() {
     await carregarSolicitacoesPendentes();
 });
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 async function carregarMetricas() {
     try {
         const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
@@ -52,7 +61,7 @@ function preencherMetrica(elementId, data, unit, formatter = null) {
         if (formatter) {
             value = formatter(value);
         }
-        html += `<div class="metric-item"><strong>${key}:</strong> ${value} ${unit}</div>`;
+        html += `<div class="metric-item"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value)} ${escapeHtml(unit)}</div>`;
     }
     element.innerHTML = html;
 }
@@ -76,7 +85,7 @@ function preencherMetricaComIcone(elementId, data, unit, formatter = null) {
             value = formatter(value);
         }
         const icone = obterIconeMotivo(key);
-        html += `<div class="metric-item"><strong>${icone} ${key}:</strong> ${value} ${unit}</div>`;
+        html += `<div class="metric-item"><strong>${icone} ${escapeHtml(key)}:</strong> ${escapeHtml(value)} ${escapeHtml(unit)}</div>`;
     }
     element.innerHTML = html;
 }
@@ -136,20 +145,20 @@ function criarItemSolicitacao(solicitacao) {
     item.innerHTML = `
         <div class="request-header">
             <div class="request-info">
-                ${iconeMotivo} ${solicitacao.nome} (ID: ${solicitacao.id}) - Equipe ${solicitacao.equipe.toUpperCase()} - ${solicitacao.motivo}
+                ${iconeMotivo} ${escapeHtml(solicitacao.nome)} (ID: ${parseInt(solicitacao.id, 10)}) - Equipe ${escapeHtml(String(solicitacao.equipe || '').toUpperCase())} - ${escapeHtml(solicitacao.motivo)}
             </div>
             <div class="request-time">
-                Solicitado em: ${timeString}
+                Solicitado em: ${escapeHtml(timeString)}
             </div>
         </div>
         <div class="request-observation">
-            <strong>Observação:</strong> ${solicitacao.observacao || 'Nenhuma observação fornecida'}
+            <strong>Observação:</strong> ${escapeHtml(solicitacao.observacao || 'Nenhuma observação fornecida')}
         </div>
         <div class="request-actions">
-            <button class="btn btn-success btn-sm" onclick="aprovarSolicitacao(${solicitacao.id})">
+            <button class="btn btn-success btn-sm" onclick="aprovarSolicitacao(${parseInt(solicitacao.id, 10)})">
                 ✅ Aprovar
             </button>
-            <button class="btn btn-danger btn-sm" onclick="rejeitarSolicitacao(${solicitacao.id})">
+            <button class="btn btn-danger btn-sm" onclick="rejeitarSolicitacao(${parseInt(solicitacao.id, 10)})">
                 ❌ Rejeitar
             </button>
         </div>

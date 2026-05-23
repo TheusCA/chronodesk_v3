@@ -52,6 +52,20 @@ foreach ($env_paths as $env_path) {
 // Timezone
 date_default_timezone_set('America/Sao_Paulo');
 
+// ============================================
+// Ambiente, debug e tratamento de erros
+// ============================================
+define('APP_ENV', getenv('APP_ENV') ?: 'development');
+define('APP_DEBUG', getenv('APP_DEBUG') === 'true');
+
+error_reporting(E_ALL);
+ini_set('display_errors', APP_DEBUG ? '1' : '0');
+ini_set('display_startup_errors', APP_DEBUG ? '1' : '0');
+ini_set('log_errors', '1');
+if (getenv('PHP_ERROR_LOG')) {
+    ini_set('error_log', getenv('PHP_ERROR_LOG'));
+}
+
 // Caminhos de arquivos
 define('PAUSAS_CSV', __DIR__ . '/pausas.csv');
 define('ESTADO_JSON', __DIR__ . '/estado.json');
@@ -63,17 +77,20 @@ define('FUNCIONARIOS_JSON', __DIR__ . '/funcionarios.json');
 // ============================================
 define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 define('DB_NAME', getenv('DB_NAME') ?: 'sistema_pausas');
-define('DB_USER', getenv('DB_USER') ?: 'root');        // Fallback para dev
-define('DB_PASS', getenv('DB_PASS') ?: '');             // Fallback para dev
+define('DB_USER', getenv('DB_USER') ?: (APP_ENV === 'production' ? 'chronodesk_user' : 'root'));
+define('DB_PASS', getenv('DB_PASS') ?: '');
 
 // ============================================
 // [VULN-001] SECRET_KEY fixa via .env
 // ============================================
 $secret_key = getenv('SECRET_KEY');
 if (!$secret_key || strpos($secret_key, 'GERE_UMA_CHAVE') !== false) {
-    // Em desenvolvimento, gerar uma chave temporária mas logar warning
+    if (APP_ENV === 'production') {
+        error_log('[SECURITY CRITICAL] SECRET_KEY não configurada para produção.');
+        throw new RuntimeException('Configuração de produção incompleta.');
+    }
     $secret_key = 'DEV_ONLY_' . hash('sha256', __DIR__ . php_uname());
-    error_log('[SECURITY WARNING] SECRET_KEY não configurada em .env! Usando chave temporária de desenvolvimento.');
+    error_log('[SECURITY WARNING] SECRET_KEY não configurada em .env. Usando chave temporária de desenvolvimento.');
 }
 define('SECRET_KEY', $secret_key);
 
@@ -99,11 +116,16 @@ define('AD_ADMIN_USERS', ($ad_admin_users_env !== false && trim($ad_admin_users_
 $enable_local_admin_env = strtolower(trim((string)(getenv('ENABLE_LOCAL_ADMIN') ?: 'true')));
 define('ENABLE_LOCAL_ADMIN', !in_array($enable_local_admin_env, ['false', '0', 'no'], true));
 
-// ============================================
-// Ambiente e Debug
-// ============================================
-define('APP_ENV', getenv('APP_ENV') ?: 'development');
-define('APP_DEBUG', getenv('APP_DEBUG') === 'true');
+if (APP_ENV === 'production') {
+    if (APP_DEBUG) {
+        error_log('[SECURITY CRITICAL] APP_DEBUG=true não é permitido em produção.');
+        throw new RuntimeException('Configuração de produção insegura.');
+    }
+    if (DB_USER === 'root' || DB_PASS === '') {
+        error_log('[SECURITY CRITICAL] Produção exige usuário MySQL dedicado e senha definida.');
+        throw new RuntimeException('Configuração de banco de dados de produção incompleta.');
+    }
+}
 
 // Configurar headers de segurança
 set_security_headers();
@@ -126,8 +148,8 @@ if (in_array($origin, $allowed_origins, true)) {
 }
 // Se a origem não está na lista, NÃO enviar headers CORS
 
-// Tratar requisições OPTIONS (preflight)
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+// Tratar requisições OPTIONS (preflight). Em CLI, REQUEST_METHOD não existe.
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }

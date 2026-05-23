@@ -2,25 +2,15 @@
 # ChronoDesk - Regras de Segurança Apache
 # ============================================
 
-# Bloquear acesso direto a arquivos sensíveis
-<FilesMatch "\.(json|csv|sql|md|sh|bat|ps1|txt|env|log|bak)$">
+# Bloquear acesso direto a arquivos sensíveis (Apache 2.4)
+<FilesMatch "(^\.env(\..*)?$|^(composer\..*|package.*\.json)$|\.(json|csv|sql|md|log|bak|backup|zip|rar|7z|sh|bat|ps1|txt|old|orig|save)$)">
     Require all denied
 </FilesMatch>
 
-# Bloquear arquivos ocultos (.env, .git, etc.)
+# Bloquear arquivos ocultos (.env, .gitignore, etc.)
 <FilesMatch "^\.">
     Require all denied
 </FilesMatch>
-
-# Bloquear acesso ao diretório classes
-<DirectoryMatch ".*/classes/">
-    Require all denied
-</DirectoryMatch>
-
-# Bloquear acesso ao diretório de sessões (se existir)
-<DirectoryMatch ".*/sessions/">
-    Require all denied
-</DirectoryMatch>
 
 # Desabilitar listagem de diretórios
 Options -Indexes
@@ -28,8 +18,22 @@ Options -Indexes
 # Desabilitar server signature
 ServerSignature Off
 
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "DENY"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+</IfModule>
+
 # Habilitar rewrite engine
 RewriteEngine On
 
-# Bloquear acesso a arquivos de backup
-RewriteRule "\.(bak|orig|old|save)$" - [F,L]
+# Bloquear diretórios que nunca devem ser publicados
+RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|sessions|cache|tmp)(/|$)" - [F,L]
+
+# Bloquear scripts operacionais que devem rodar somente via CLI
+RewriteRule "^migrar_.*\.php$" - [F,L]
+
+# Bloquear arquivos sensíveis por padrão, preservando assets estáticos em static/
+RewriteRule "(^|/)(\.env(\..*)?|composer\..*|package.*\.json)$" - [F,L]
+RewriteRule "\.(json|csv|sql|md|log|bak|backup|zip|rar|7z|old|orig|save)$" - [F,L]

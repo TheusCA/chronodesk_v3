@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
 
+require_get_method();
 verificar_login();
 
 global $gerenciador;
@@ -173,9 +174,18 @@ if ($zip->open($relatorio_zip_path, ZipArchive::CREATE) === TRUE) {
     $zip->addFile($relatorio_path, 'relatorio_metricas_' . $timestamp . '.csv');
     $zip->addFile($relatorio_detalhado_path, 'relatorio_pausas_detalhado_' . $timestamp . '.csv');
     $zip->close();
+} else {
+    @unlink($relatorio_path);
+    @unlink($relatorio_detalhado_path);
+    audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Falha ao criar ZIP de relatório', 'WARNING');
+    json_response(['sucesso' => false, 'mensagem' => 'Erro ao gerar relatório.'], 500);
 }
 
 // Enviar arquivo ZIP
+audit_log('RELATORIO_DOWNLOAD', 'Download de relatório completo solicitado', 'INFO');
+header('X-Content-Type-Options: nosniff');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 header('Content-Type: application/zip');
 header('Content-Disposition: attachment; filename="relatorio_completo_' . $timestamp . '.zip"');
 header('Content-Length: ' . filesize($relatorio_zip_path));

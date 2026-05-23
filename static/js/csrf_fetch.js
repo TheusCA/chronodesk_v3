@@ -22,8 +22,11 @@ function getCsrfToken() {
 // Wrapper para fetch que inclui CSRF automaticamente
 const _originalFetch = window.fetch;
 window.fetch = function(url, options = {}) {
+    const requestUrl = new URL(url, window.location.href);
+    const sameOrigin = requestUrl.origin === window.location.origin;
+
     // Apenas adicionar CSRF em requisições POST
-    if (options.method && options.method.toUpperCase() === 'POST') {
+    if (sameOrigin && options.method && options.method.toUpperCase() === 'POST') {
         if (!options.headers) {
             options.headers = {};
         }

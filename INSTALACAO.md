@@ -226,9 +226,28 @@ Se encontrar problemas:
 
 Após a instalação bem-sucedida:
 
-1. ✅ Altere as credenciais em `config.php`
+1. ✅ Configure credenciais e segredos no `.env`
 2. ✅ Configure funcionários em `init.php` (se necessário)
 3. ✅ Teste todas as funcionalidades
 4. ✅ Configure backup do arquivo `pausas.csv`
 5. ✅ Configure HTTPS (recomendado para produção)
+
+## Deploy em VM Linux Corporativa
+
+Checklist recomendado para produção Apache/PHP/MySQL:
+
+1. Instalar Apache, MySQL e PHP 7.4+.
+2. Habilitar módulos/extensões: `mod_rewrite`, `php-mysql`, `php-ldap` e `php-zip`.
+3. Criar o banco `sistema_pausas` com charset `utf8mb4`.
+4. Criar usuário MySQL dedicado (`chronodesk_user`) e não usar `root`.
+5. Importar `database.sql` e aplicar scripts de atualização necessários, como `update_users_table.sql`.
+6. Copiar `.env.example` para `.env`, preferencialmente fora do document root, e ajustar `APP_ENV=production`, `APP_DEBUG=false`, DB e AD/LDAP.
+7. Configurar permissões de escrita somente para arquivos de estado/log necessários pelo usuário do Apache.
+8. Configurar VirtualHost com `DocumentRoot` no projeto e `AllowOverride All`.
+9. Habilitar HTTPS e definir `SESSION_COOKIE_SECURE=true`.
+10. Validar conectividade com os DCs em `AD_SERVERS` na porta `AD_PORT` e TLS quando `AD_USE_TLS=true`.
+11. Rodar a migração de funcionários para MySQL e validar vínculos `ad_login`.
+12. Conferir logs do Apache/PHP após o primeiro login e primeiro fluxo de pausa.
+
+Pendências típicas do time de SO/Redes: certificado HTTPS, regras de firewall, DNS/VirtualHost, acesso de rede aos controladores AD e política de backup/rotação de logs.
 

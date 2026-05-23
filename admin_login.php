@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     require_csrf_token();
     // Rate limiting básico (5 tentativas por 15 minutos)
     if (!check_rate_limit('admin_login', 5, 900)) {
+        audit_log('ADMIN_LOGIN_RATE_LIMIT', 'Rate limit no login administrativo', 'WARNING');
         $error = 'Muitas tentativas de login. Aguarde 15 minutos antes de tentar novamente.';
     } else {
         $username = sanitize_input($_POST['username'] ?? '');
@@ -94,6 +95,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['admin_auth_type'] = $auth_type ?: 'local';
             $_SESSION['admin_username'] = sanitize_output($session_username);
             $_SESSION['login_time'] = time();
+            $_SESSION['last_activity'] = time();
+
+            audit_log(
+                'ADMIN_LOGIN_SUCCESS',
+                'Login administrativo via ' . ($_SESSION['admin_auth_type'] ?? 'local') . ' para usuario ' . $session_username,
+                'INFO'
+            );
             
             $base_path = get_base_path();
             $admin_url = $base_path . '/admin.php';
@@ -103,7 +111,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (empty($error)) {
                 $error = $local_permission_error ? 'Acesso permitido apenas para administradores.' : 'Credenciais inválidas';
             }
-            error_log("Tentativa de login admin falhou para usuário: " . $username);
+            $safe_username = sanitize_input($username, 150);
+            audit_log('ADMIN_LOGIN_FAILURE', 'Falha de login administrativo para usuario ' . $safe_username, 'WARNING');
+            error_log("Tentativa de login admin falhou para usuário: " . $safe_username);
         }
     }
 }
@@ -127,7 +137,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ?>
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path . '/static/css/style.css?v=' . time()); ?>" type="text/css">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path . '/static/css/login.css?v=' . time()); ?>" type="text/css">
-    <script src="static/js/theme.js" defer></script>
+    <script src="<?php echo htmlspecialchars($base_path . '/static/js/theme.js'); ?>" defer></script>
 </head>
 <body>
     <div class="login-container">
@@ -136,7 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <button id="theme-toggle" class="btn-theme-toggle" title="Alternar Tema">🌙</button>
             </div>
             <div class="logo-container">
-                <img src="static/img/logo.png" alt="ChronoDesk Logo" class="logo-img">
+                <div class="brand-logo-text">⏳ ChronoDesk</div>
             </div>
             <h2>Acesso Restrito</h2>
             <p style="text-align: center; color: var(--text-muted); margin-bottom: 1.5rem;">Painel Administrativo</p>

@@ -17,7 +17,10 @@ if (!$data || !isset($data['funcionario_id'])) {
     json_response(['sucesso' => false, 'mensagem' => 'Dados inválidos'], 400);
 }
 
-$funcionario_id = intval($data['funcionario_id']);
+$funcionario_id = validate_funcionario_id($data['funcionario_id']);
+if (!$funcionario_id) {
+    json_response(['sucesso' => false, 'mensagem' => 'ID do funcionário inválido'], 400);
+}
 $nome = isset($data['nome']) ? trim($data['nome']) : '';
 $equipe = isset($data['equipe']) ? trim($data['equipe']) : '';
 $ad_login = validate_ad_login($data['ad_login'] ?? null);
@@ -109,7 +112,12 @@ try {
 
     $resultado = $gerenciador->atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, $ativo, $ad_login);
 } catch (Exception $e) {
-    json_response(['sucesso' => false, 'mensagem' => 'Erro ao atualizar funcionário: ' . $e->getMessage()], 500);
+    error_log('[FUNCIONARIO] Erro ao atualizar funcionário: ' . $e->getMessage());
+    json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao atualizar funcionário.')], 500);
+}
+
+if (($resultado['sucesso'] ?? false) === true) {
+    audit_log('FUNCIONARIO_ATUALIZADO', "Funcionario '{$nome}' atualizado (ID: {$funcionario_id}, equipe: {$equipe}, ativo: " . ($ativo ? 'sim' : 'nao') . ")", 'WARNING');
 }
 
 json_response($resultado);

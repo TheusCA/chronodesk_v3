@@ -17,7 +17,10 @@ if (!$data || !isset($data['funcionario_id'])) {
     json_response(['sucesso' => false, 'mensagem' => 'ID do funcionário não fornecido'], 400);
 }
 
-$funcionario_id = intval($data['funcionario_id']);
+$funcionario_id = validate_funcionario_id($data['funcionario_id']);
+if (!$funcionario_id) {
+    json_response(['sucesso' => false, 'mensagem' => 'ID do funcionário inválido'], 400);
+}
 
 global $gerenciador;
 if (!$gerenciador) {
@@ -29,10 +32,15 @@ try {
     $stmt = $pdo->prepare("UPDATE funcionarios SET ativo = 0 WHERE id = :id");
     $stmt->execute([':id' => $funcionario_id]);
 } catch (Exception $e) {
-    json_response(['sucesso' => false, 'mensagem' => 'Erro ao desativar funcionário: ' . $e->getMessage()], 500);
+    error_log('[FUNCIONARIO] Erro ao desativar funcionário: ' . $e->getMessage());
+    json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao desativar funcionário.')], 500);
 }
 
 $resultado = $gerenciador->remover_funcionario($funcionario_id);
+
+if (($resultado['sucesso'] ?? false) === true) {
+    audit_log('FUNCIONARIO_REMOVIDO', "Funcionario desativado (ID: {$funcionario_id})", 'CRITICAL');
+}
 
 json_response($resultado);
 ?>

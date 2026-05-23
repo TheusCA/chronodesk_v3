@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/init.php';
 require_once __DIR__ . '/config_assets.php';
+$ci_logged_in = isset($_SESSION['ci_logged_in']) && $_SESSION['ci_logged_in'] === true;
+$ci_funcionario_id = (int)($_SESSION['ci_funcionario_id'] ?? 0);
+$ci_nome = $_SESSION['ci_nome'] ?? '';
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -74,51 +77,7 @@ require_once __DIR__ . '/config_assets.php';
             border-radius: 10px;
             color: var(--text-secondary, #555);
         }
-        .ad-auth-modal-backdrop {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 10000;
-            background: rgba(0,0,0,0.55);
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-        }
-        .ad-auth-modal-backdrop.ativo { display: flex; }
-        .ad-auth-modal {
-            width: 100%;
-            max-width: 380px;
-            background: var(--card-bg, #fff);
-            color: var(--text-primary, #111);
-            border-radius: 8px;
-            border: 1px solid var(--border-color, #ddd);
-            box-shadow: 0 16px 48px rgba(0,0,0,0.35);
-            padding: 20px;
-        }
-        .ad-auth-modal h2 {
-            font-size: 1.1rem;
-            margin: 0 0 14px;
-        }
-        .ad-auth-modal label {
-            display: block;
-            font-weight: 600;
-            margin: 12px 0 6px;
-        }
-        .ad-auth-modal input {
-            width: 100%;
-            box-sizing: border-box;
-            padding: 10px 12px;
-            border-radius: 6px;
-            border: 1px solid var(--border-color, #ccc);
-            background: var(--input-bg, #fff);
-            color: var(--text-primary, #111);
-        }
-        .ad-auth-modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 18px;
-        }
+        .hidden { display: none !important; }
     </style>
 </head>
 <body>
@@ -126,9 +85,34 @@ require_once __DIR__ . '/config_assets.php';
         <header>
             <h1>⏳ ChronoDesk</h1>
             <p>Gestão Inteligente de Tempo e Pausas</p>
+            <?php if ($ci_logged_in && $ci_nome !== ''): ?>
+                <div id="ci-session-info" class="ci-session-info">
+                    <span id="ci-session-name"><?php echo htmlspecialchars($ci_nome, ENT_QUOTES, 'UTF-8'); ?></span>
+                    <button id="btn-ci-logout" type="button" class="btn btn-secondary">Sair</button>
+                </div>
+            <?php endif; ?>
         </header>
 
-        <div class="main-content">
+        <section id="ci-login-screen" class="ci-login-screen<?php echo $ci_logged_in ? ' hidden' : ''; ?>" style="<?php echo $ci_logged_in ? 'display:none;' : ''; ?>">
+            <div class="ci-login-card">
+                <div class="ci-login-icon">⏳</div>
+                <h2>ChronoDesk</h2>
+                <p>Gestão Inteligente de Tempo e Pausas</p>
+                <div class="ci-login-section-title">Acesso do CI</div>
+                <form id="ci-login-form" autocomplete="off">
+                    <label for="ci-login-ad">Login AD</label>
+                    <input id="ci-login-ad" name="login_ad" type="text" autocomplete="username" required>
+
+                    <label for="ci-senha-ad">Senha AD</label>
+                    <input id="ci-senha-ad" name="senha_ad" type="password" autocomplete="current-password" required>
+
+                    <button type="submit" class="btn btn-primary">Entrar</button>
+                </form>
+                <a href="<?php echo get_base_path(); ?>/admin_login.php" class="ci-admin-link">Acesso Administrativo</a>
+            </div>
+        </section>
+
+        <div id="dashboard-main" class="main-content<?php echo $ci_logged_in ? '' : ' hidden'; ?>" style="<?php echo $ci_logged_in ? '' : 'display:none;'; ?>">
             <div class="actions-panel">
                 <h2>Ações Rápidas</h2>
                 <div id="contador-pausas-wrap">
@@ -193,27 +177,13 @@ require_once __DIR__ . '/config_assets.php';
         <div id="message-area" class="message-area"></div>
     </div>
 
-    <div id="ad-auth-modal" class="ad-auth-modal-backdrop" aria-hidden="true">
-        <div class="ad-auth-modal" role="dialog" aria-modal="true" aria-labelledby="ad-auth-title">
-            <h2 id="ad-auth-title">Autenticação AD</h2>
-            <form id="ad-auth-form">
-                <label for="ad-auth-login">Login AD</label>
-                <input id="ad-auth-login" name="login_ad" type="text" autocomplete="username" required>
-
-                <label for="ad-auth-senha">Senha AD</label>
-                <input id="ad-auth-senha" name="senha_ad" type="password" autocomplete="current-password" required>
-
-                <div class="ad-auth-modal-actions">
-                    <button id="ad-auth-cancelar" type="button" class="btn btn-secondary">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Confirmar</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script>
-        const BASE_PATH = '<?php echo htmlspecialchars($base_path_test, ENT_QUOTES, 'UTF-8'); ?>';
-        const API_BASE_URL = BASE_PATH + '/api';
+        window.BASE_PATH = <?php echo json_encode($base_path_test, JSON_UNESCAPED_SLASHES); ?>;
+        window.API_BASE_URL = window.BASE_PATH + '/api';
+        window.APP_DEBUG = <?php echo defined('APP_DEBUG') && APP_DEBUG ? 'true' : 'false'; ?>;
+        window.CI_AUTHENTICATED = <?php echo $ci_logged_in ? 'true' : 'false'; ?>;
+        window.CI_FUNCIONARIO_ID = <?php echo $ci_funcionario_id; ?>;
+        window.CI_NOME = <?php echo json_encode($ci_nome, JSON_UNESCAPED_UNICODE); ?>;
     </script>
     <script src="<?php echo htmlspecialchars($base_path_test . '/static/js/script.js?v=' . time()); ?>"></script>
 </body>

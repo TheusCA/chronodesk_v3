@@ -149,11 +149,62 @@ Todos os endpoints retornam JSON:
 
 ### Recomendações
 
-1. Altere as credenciais padrão em `config.php`
+1. Configure segredos e credenciais no `.env`, não em `config.php`
 2. Use HTTPS em produção
 3. Configure firewall adequadamente
 4. Mantenha o XAMPP atualizado
 5. Não exponha o XAMPP diretamente à internet sem proteção adequada
+
+### Hardening de Produção
+
+Para deploy em VM Linux corporativa:
+
+1. Use `APP_ENV=production` e `APP_DEBUG=false`.
+2. Configure `SECRET_KEY` forte no `.env`.
+3. Use usuário MySQL dedicado, nunca `root`:
+   ```sql
+   CREATE USER 'chronodesk_user'@'localhost' IDENTIFIED BY 'troque_esta_senha';
+   GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX
+     ON sistema_pausas.* TO 'chronodesk_user'@'localhost';
+   FLUSH PRIVILEGES;
+   ```
+4. Instale/habilite extensões PHP: `php-mysql`, `php-ldap` e `php-zip`.
+5. Configure LDAP/AD no `.env`: `AD_DOMAIN`, `AD_UPN_SUFFIX`, `AD_SERVERS`, `AD_PORT`, `AD_USE_TLS`, `AD_ADMIN_USERS`.
+6. Use HTTPS no VirtualHost e defina `SESSION_COOKIE_SECURE=true`.
+7. Mantenha `AllowOverride All` para o `.htaccess` bloquear arquivos sensíveis.
+8. Garanta que `.env`, CSV, JSON, SQL, logs, dumps e ZIPs reais não sejam publicados nem versionados.
+
+Headers ativos: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` e CSP. A CSP ainda permite `unsafe-inline` por compatibilidade com scripts/estilos inline existentes; remover isso fica como pendência de refatoração frontend.
+
+O rate limit atual cobre login administrativo e autenticação AD nos fluxos de pausa via helper `check_rate_limit()` em `security.php`.
+
+Não há funcionalidade de upload de arquivos. O download de relatório é gerado no servidor em diretório temporário, exige sessão autenticada e não aceita caminho de arquivo fornecido pelo usuário.
+
+Antes de migrations em produção, faça backup do banco e dos arquivos locais de estado. Ordem recomendada:
+
+1. Importar `database.sql`.
+2. Configurar `.env`.
+3. Rodar `php migrar_funcionarios_json_para_mysql.php`.
+4. Testar login local de contingência.
+5. Testar login AD administrativo.
+6. Testar autenticação AD nos fluxos de pausa.
+
+### Checklist Manual OWASP/WSTG
+
+Valide no ambiente de homologação:
+
+1. Acessar `/.env`, `/funcionarios.json`, `/database.sql`, `/.git/config` e confirmar HTTP 403/404.
+2. Acessar `/migrar_funcionarios_json_para_mysql.php` e `/migrar_csv_para_mysql.php` pelo navegador e confirmar bloqueio.
+3. Enviar POST sensível sem `X-CSRF-Token` e confirmar HTTP 403.
+4. Enviar POST JSON com `Content-Type` incorreto e confirmar HTTP 415.
+5. Tentar usar credenciais AD de um CI para pausar outro CI e confirmar bloqueio.
+6. Tentar admin AD fora de `AD_ADMIN_USERS` e confirmar negação.
+7. Definir `ENABLE_LOCAL_ADMIN=false` e confirmar bloqueio do admin local.
+8. Confirmar que `ad_login` não aparece em `api/listar_funcionarios.php` sem sessão admin.
+9. Confirmar que funcionário inativo não aparece na tela pública.
+10. Confirmar que `APP_DEBUG=false` oculta detalhes técnicos.
+11. Conferir headers: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` e CSP.
+12. Confirmar que HTML/CSS/JS ficam visíveis ao navegador, mas PHP, `.env`, SQL, JSON real, CSV real, logs, backups, dumps e `.git` não ficam acessíveis por URL.
 
 ## 📊 Funcionalidades
 

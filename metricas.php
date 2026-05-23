@@ -22,7 +22,7 @@ verificar_login();
     ?>
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path_metricas . '/static/css/style.css?v=' . time()); ?>" type="text/css">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path_metricas . '/static/css/metricas.css?v=' . time()); ?>" type="text/css">
-    <script src="<?php echo htmlspecialchars($base_path_metricas . \'/static/js/csrf_fetch.js\'); ?>"></script>
+    <script src="<?php echo htmlspecialchars($base_path_metricas . '/static/js/csrf_fetch.js'); ?>"></script>
     <script src="<?php echo htmlspecialchars($base_path_metricas . '/static/js/theme.js'); ?>" defer></script>
 </head>
 <body>
