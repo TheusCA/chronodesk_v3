@@ -1,0 +1,70 @@
+# ChronoDesk - Apache VirtualHost example
+# Ajuste ServerName, certificados e caminhos antes de usar em producao.
+
+<VirtualHost *:80>
+    ServerName chronodesk.interno.local
+
+    DocumentRoot /var/www/chronodesk
+    DirectoryIndex index.php
+
+    ErrorLog ${APACHE_LOG_DIR}/chronodesk_error.log
+    CustomLog ${APACHE_LOG_DIR}/chronodesk_access.log combined
+
+    <Directory /var/www/chronodesk>
+        Options -Indexes
+        AllowOverride All
+        Require all granted
+        DirectoryIndex index.php
+    </Directory>
+
+    # Defesa adicional no VirtualHost. As regras principais continuam no .htaccess.
+    <FilesMatch "(^\.env(\..*)?$|^\.git|^(composer\..*|package.*\.json)$|\.(sql|md|log|bak|backup|zip|rar|7z|old|orig|save|csv|json|sh|bat|ps1|txt)$)">
+        Require all denied
+    </FilesMatch>
+
+    <IfModule mod_headers.c>
+        Header always set X-Content-Type-Options "nosniff"
+        Header always set X-Frame-Options "DENY"
+        Header always set Referrer-Policy "strict-origin-when-cross-origin"
+        Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    </IfModule>
+
+    # Recomendado: habilitar HTTPS interno com certificado corporativo ou self-signed controlado.
+    # Depois de configurar SSL, redirecione HTTP para HTTPS:
+    # Redirect permanent / https://chronodesk.interno.local/
+</VirtualHost>
+
+# Exemplo HTTPS. Descomente e ajuste certificados quando disponiveis.
+# <VirtualHost *:443>
+#     ServerName chronodesk.interno.local
+#
+#     DocumentRoot /var/www/chronodesk
+#     DirectoryIndex index.php
+#
+#     ErrorLog ${APACHE_LOG_DIR}/chronodesk_ssl_error.log
+#     CustomLog ${APACHE_LOG_DIR}/chronodesk_ssl_access.log combined
+#
+#     SSLEngine on
+#     SSLCertificateFile /etc/ssl/certs/chronodesk.interno.local.crt
+#     SSLCertificateKeyFile /etc/ssl/private/chronodesk.interno.local.key
+#
+#     <Directory /var/www/chronodesk>
+#         Options -Indexes
+#         AllowOverride All
+#         Require all granted
+#         DirectoryIndex index.php
+#     </Directory>
+#
+#     <FilesMatch "(^\.env(\..*)?$|^\.git|^(composer\..*|package.*\.json)$|\.(sql|md|log|bak|backup|zip|rar|7z|old|orig|save|csv|json|sh|bat|ps1|txt)$)">
+#         Require all denied
+#     </FilesMatch>
+#
+#     <IfModule mod_headers.c>
+#         Header always set X-Content-Type-Options "nosniff"
+#         Header always set X-Frame-Options "DENY"
+#         Header always set Referrer-Policy "strict-origin-when-cross-origin"
+#         Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+#         Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+#     </IfModule>
+# </VirtualHost>
+
