@@ -13,7 +13,14 @@ if (isset($_SESSION['ci_logged_in']) && $_SESSION['ci_logged_in'] === true) {
     audit_log('CI_LOGOUT', 'Logout CI para funcionario ID ' . (int)($_SESSION['ci_funcionario_id'] ?? 0), 'INFO');
 }
 
-unset($_SESSION['ci_logged_in'], $_SESSION['ci_funcionario_id'], $_SESSION['ci_username'], $_SESSION['ci_nome']);
+unset(
+    $_SESSION['ci_logged_in'],
+    $_SESSION['ci_funcionario_id'],
+    $_SESSION['ci_username'],
+    $_SESSION['ci_nome'],
+    $_SESSION['ci_login_time'],
+    $_SESSION['ci_last_activity']
+);
 session_regenerate_id(true);
 
 json_response(['sucesso' => true, 'mensagem' => 'Sessão CI encerrada.']);

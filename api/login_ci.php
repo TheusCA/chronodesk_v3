@@ -46,6 +46,8 @@ $_SESSION['ci_logged_in'] = true;
 $_SESSION['ci_funcionario_id'] = (int)$funcionario['id'];
 $_SESSION['ci_username'] = normalizar_samaccountname($autenticacao['ad_user']['login'] ?? $login_ad);
 $_SESSION['ci_nome'] = sanitize_input($funcionario['nome'] ?? '', 100);
+$_SESSION['ci_login_time'] = time();
+$_SESSION['ci_last_activity'] = time();
 
 audit_log('CI_LOGIN_SUCCESS', 'Login CI bem-sucedido para funcionario ID ' . (int)$funcionario['id'], 'INFO');
 

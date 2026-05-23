@@ -86,6 +86,17 @@ DB_USER=chronodesk_user
 DB_PASS=troque_esta_senha
 ```
 
+### Timeout da sessão CI
+
+As sessões do fluxo CI usam timeouts configuráveis em segundos:
+
+```env
+CI_SESSION_ABSOLUTE_TIMEOUT=28800
+CI_SESSION_IDLE_TIMEOUT=1800
+```
+
+`CI_SESSION_ABSOLUTE_TIMEOUT` controla o tempo máximo absoluto da sessão CI. `CI_SESSION_IDLE_TIMEOUT` controla o tempo máximo de inatividade da sessão CI. Os defaults atuais são `28800` segundos para timeout absoluto e `1800` segundos para inatividade.
+
 ### Login administrativo
 
 O painel administrativo aceita autenticação híbrida:
