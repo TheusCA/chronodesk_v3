@@ -116,11 +116,6 @@ function verify_csrf_token($token) {
 function require_csrf_token() {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
     
-    // Em modo development, permitir desabilitar CSRF (NÃO usar em produção!)
-    if (defined('APP_ENV') && APP_ENV === 'development' && defined('CSRF_DISABLED') && CSRF_DISABLED) {
-        return;
-    }
-    
     $token = $_POST['csrf_token'] 
         ?? $_SERVER['HTTP_X_CSRF_TOKEN'] 
         ?? null;
@@ -268,34 +263,42 @@ function check_rate_limit($key, $max_requests = 5, $time_window = 900) {
     $rate_file = sys_get_temp_dir() . '/chronodesk_rate_' . md5($safe_key . '_' . $ip) . '.json';
     $now = time();
     
-    $data = ['count' => 0, 'reset' => $now + $time_window, 'first_attempt' => $now];
-    
-    if (file_exists($rate_file)) {
-        $content = @file_get_contents($rate_file);
-        if ($content) {
-            $stored = json_decode($content, true);
-            if ($stored && is_array($stored)) {
-                $data = $stored;
-            }
-        }
-    }
-    
-    // Resetar se o tempo expirou
-    if ($now > ($data['reset'] ?? 0)) {
-        $data = ['count' => 1, 'reset' => $now + $time_window, 'first_attempt' => $now];
-        @file_put_contents($rate_file, json_encode($data), LOCK_EX);
-        return true;
-    }
-    
-    // Verificar limite
-    if (($data['count'] ?? 0) >= $max_requests) {
+    $handle = @fopen($rate_file, 'c+');
+    if ($handle === false || !flock($handle, LOCK_EX)) {
+        if (is_resource($handle)) fclose($handle);
+        error_log('[RATE_LIMIT] Falha ao bloquear arquivo de rate limit.');
         return false;
     }
-    
-    // Incrementar
-    $data['count'] = ($data['count'] ?? 0) + 1;
-    @file_put_contents($rate_file, json_encode($data), LOCK_EX);
-    return true;
+
+    try {
+        rewind($handle);
+        $content = stream_get_contents($handle);
+        $stored = $content ? json_decode($content, true) : null;
+        $data = is_array($stored)
+            ? $stored
+            : ['count' => 0, 'reset' => $now + $time_window, 'first_attempt' => $now];
+
+        if ($now > ($data['reset'] ?? 0)) {
+            $data = ['count' => 0, 'reset' => $now + $time_window, 'first_attempt' => $now];
+        }
+
+        if (($data['count'] ?? 0) >= $max_requests) {
+            return false;
+        }
+
+        $data['count'] = ($data['count'] ?? 0) + 1;
+        rewind($handle);
+        ftruncate($handle, 0);
+        if (fwrite($handle, json_encode($data)) === false) {
+            error_log('[RATE_LIMIT] Falha ao persistir rate limit.');
+            return false;
+        }
+        fflush($handle);
+        return true;
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
+    }
 }
 
 // ============================================
@@ -346,7 +349,8 @@ function require_json_content_type() {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
     
     $ct = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
-    if (stripos($ct, 'application/json') === false) {
+    $media_type = strtolower(trim(explode(';', $ct, 2)[0]));
+    if ($media_type !== 'application/json' && !str_ends_with($media_type, '+json')) {
         http_response_code(415);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -368,6 +372,41 @@ function require_get_method() {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
+}
+
+function session_window_is_current($login_time, $last_activity, $absolute_timeout, $idle_timeout, $now = null) {
+    $now = $now ?? time();
+    $login_time = (int)$login_time;
+    $last_activity = (int)$last_activity;
+    $absolute_timeout = (int)$absolute_timeout;
+    $idle_timeout = (int)$idle_timeout;
+
+    if ($login_time <= 0 || $last_activity <= 0) {
+        return false;
+    }
+    if ($absolute_timeout > 0 && ($now - $login_time) > $absolute_timeout) {
+        return false;
+    }
+    if ($idle_timeout > 0 && ($now - $last_activity) > $idle_timeout) {
+        return false;
+    }
+    return true;
+}
+
+function ci_session_is_current(): bool {
+    if (!isset($_SESSION['ci_logged_in']) || $_SESSION['ci_logged_in'] !== true) {
+        return false;
+    }
+
+    $absolute_timeout = max(60, (int)(getenv('CI_SESSION_ABSOLUTE_TIMEOUT') ?: 28800));
+    $idle_timeout = max(60, (int)(getenv('CI_SESSION_IDLE_TIMEOUT') ?: 1800));
+
+    return session_window_is_current(
+        $_SESSION['ci_login_time'] ?? 0,
+        $_SESSION['ci_last_activity'] ?? 0,
+        $absolute_timeout,
+        $idle_timeout
+    );
 }
 
 function require_post_method() {

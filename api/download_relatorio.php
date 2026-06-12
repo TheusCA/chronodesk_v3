@@ -9,96 +9,108 @@ global $gerenciador;
 $metricas = $gerenciador->obter_metricas();
 $timestamp = date('Ymd_His');
 
+function csv_safe_value($value) {
+    if (!is_string($value)) {
+        return $value;
+    }
+
+    return preg_match('/^[=+\-@]/u', $value) ? "'" . $value : $value;
+}
+
+function csv_safe_row($handle, array $row): void {
+    fputcsv($handle, array_map('csv_safe_value', $row));
+}
+
 // Criar arquivo temporário para métricas
 $temp_dir = sys_get_temp_dir();
 $relatorio_path = $temp_dir . '/relatorio_metricas_' . $timestamp . '.csv';
 
 $file = fopen($relatorio_path, 'w');
-fputcsv($file, ['tipo_metrica', 'categoria', 'valor', 'unidade']);
+csv_safe_row($file, ['tipo_metrica', 'categoria', 'valor', 'unidade']);
 
 // Total de pausas por funcionário
 foreach ($metricas['total_pausas_funcionario'] as $func => $total) {
-    fputcsv($file, ['Total de Pausas', $func, $total, 'pausas']);
+    csv_safe_row($file, ['Total de Pausas', $func, $total, 'pausas']);
 }
 
 // Duração total por funcionário
 foreach ($metricas['duracao_total_funcionario'] as $func => $duracao) {
-    fputcsv($file, ['Duração Total', $func, $duracao, 'segundos']);
+    csv_safe_row($file, ['Duração Total', $func, $duracao, 'segundos']);
 }
 
 // Duração média por funcionário
 foreach ($metricas['duracao_media_funcionario'] as $func => $media) {
-    fputcsv($file, ['Duração Média', $func, round($media, 2), 'segundos']);
+    csv_safe_row($file, ['Duração Média', $func, round($media, 2), 'segundos']);
 }
 
 // Total de pausas por equipe
 foreach ($metricas['total_pausas_equipe'] as $equipe => $total) {
-    fputcsv($file, ['Total de Pausas', 'Equipe ' . strtoupper($equipe), $total, 'pausas']);
+    csv_safe_row($file, ['Total de Pausas', 'Equipe ' . strtoupper($equipe), $total, 'pausas']);
 }
 
 // Duração total por equipe
 foreach ($metricas['duracao_total_equipe'] as $equipe => $duracao) {
-    fputcsv($file, ['Duração Total', 'Equipe ' . strtoupper($equipe), $duracao, 'segundos']);
+    csv_safe_row($file, ['Duração Total', 'Equipe ' . strtoupper($equipe), $duracao, 'segundos']);
 }
 
 // Duração média por equipe
 foreach ($metricas['duracao_media_equipe'] as $equipe => $media) {
-    fputcsv($file, ['Duração Média', 'Equipe ' . strtoupper($equipe), round($media, 2), 'segundos']);
+    csv_safe_row($file, ['Duração Média', 'Equipe ' . strtoupper($equipe), round($media, 2), 'segundos']);
 }
 
 // Pausas excedidas
 foreach ($metricas['pausas_excedidas'] as $func => $excedidas) {
-    fputcsv($file, ['Pausas Excedidas', $func, $excedidas, 'pausas excedidas']);
+    csv_safe_row($file, ['Pausas Excedidas', $func, $excedidas, 'pausas excedidas']);
 }
 
 // Total de pausas por motivo
 foreach ($metricas['total_pausas_por_motivo'] as $motivo => $total) {
-    fputcsv($file, ['Total de Pausas por Motivo', $motivo, $total, 'pausas']);
+    csv_safe_row($file, ['Total de Pausas por Motivo', $motivo, $total, 'pausas']);
 }
 
 // Duração total por motivo
 foreach ($metricas['duracao_total_por_motivo'] as $motivo => $duracao) {
-    fputcsv($file, ['Duração Total por Motivo', $motivo, $duracao, 'segundos']);
+    csv_safe_row($file, ['Duração Total por Motivo', $motivo, $duracao, 'segundos']);
 }
 
 // Duração média por motivo
 foreach ($metricas['duracao_media_por_motivo'] as $motivo => $media) {
-    fputcsv($file, ['Duração Média por Motivo', $motivo, round($media, 2), 'segundos']);
+    csv_safe_row($file, ['Duração Média por Motivo', $motivo, round($media, 2), 'segundos']);
 }
 
 // Alertas 15min por funcionário
 foreach ($metricas['alertas_15min_funcionario'] as $func => $alertas) {
-    fputcsv($file, ['Alertas 15min', $func, $alertas, 'alertas']);
+    csv_safe_row($file, ['Alertas 15min', $func, $alertas, 'alertas']);
 }
 
 // Alertas 15min por equipe
 foreach ($metricas['alertas_15min_equipe'] as $equipe => $alertas) {
-    fputcsv($file, ['Alertas 15min', 'Equipe ' . strtoupper($equipe), $alertas, 'alertas']);
+    csv_safe_row($file, ['Alertas 15min', 'Equipe ' . strtoupper($equipe), $alertas, 'alertas']);
 }
 
 // Alertas 20min por funcionário
 foreach ($metricas['alertas_20min_funcionario'] as $func => $alertas) {
-    fputcsv($file, ['Alertas 20min', $func, $alertas, 'alertas']);
+    csv_safe_row($file, ['Alertas 20min', $func, $alertas, 'alertas']);
 }
 
 // Alertas 20min por equipe
 foreach ($metricas['alertas_20min_equipe'] as $equipe => $alertas) {
-    fputcsv($file, ['Alertas 20min', 'Equipe ' . strtoupper($equipe), $alertas, 'alertas']);
+    csv_safe_row($file, ['Alertas 20min', 'Equipe ' . strtoupper($equipe), $alertas, 'alertas']);
 }
 
 // Pausas de Reunião Aprovadas
 foreach ($metricas['pausas_reuniao_aprovadas'] as $func => $total) {
-    fputcsv($file, ['Pausas de Reunião Aprovadas', $func, $total, 'pausas']);
+    csv_safe_row($file, ['Pausas de Reunião Aprovadas', $func, $total, 'pausas']);
 }
 
 // Pausas de Reunião Rejeitadas
 foreach ($metricas['pausas_reuniao_rejeitadas'] as $func => $total) {
-    fputcsv($file, ['Pausas de Reunião Rejeitadas', $func, $total, 'pausas']);
+    csv_safe_row($file, ['Pausas de Reunião Rejeitadas', $func, $total, 'pausas']);
 }
 
 // Pausas de Reunião Pendentes
 foreach ($metricas['pausas_reuniao_pendentes'] as $func => $total) {
-    fputcsv($file, ['Pausas de Reunião Pendentes', $func, $total, 'pausas']);
+    csv_safe_row($file, ['Pausas de Reunião Pendentes', $func, $total, 'pausas']);
 }
 
 fclose($file);
@@ -111,7 +123,7 @@ $headers_detalhado = [
     'duracao_segundos', 'duracao_formatada', 'motivo_pausa', 'alerta_15min',
     'alerta_20min', 'excedeu_limite', 'status_aprovacao', 'observacao_reuniao'
 ];
-fputcsv($file_detalhado, $headers_detalhado);
+csv_safe_row($file_detalhado, $headers_detalhado);
 
 foreach ($metricas['pausas_detalhadas'] as $pausa) {
     $duracao_seg = $pausa['duracao_segundos'];
@@ -149,7 +161,7 @@ foreach ($metricas['pausas_detalhadas'] as $pausa) {
         // Manter formato original em caso de erro
     }
 
-    fputcsv($file_detalhado, [
+    csv_safe_row($file_detalhado, [
         $pausa['id_funcionario'],
         $pausa['nome_funcionario'],
         strtoupper($pausa['equipe']),

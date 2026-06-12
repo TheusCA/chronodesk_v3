@@ -21,7 +21,7 @@ $funcionario_id = validate_funcionario_id($data['funcionario_id']);
 if (!$funcionario_id) {
     json_response(['sucesso' => false, 'mensagem' => 'ID do funcionário inválido'], 400);
 }
-$nome = isset($data['nome']) ? trim($data['nome']) : '';
+$nome = validate_nome($data['nome'] ?? '', 3, 100);
 $equipe = isset($data['equipe']) ? trim($data['equipe']) : '';
 $ad_login = validate_ad_login($data['ad_login'] ?? null);
 $jornada_entrada = isset($data['jornada_entrada']) ? trim($data['jornada_entrada']) : '08:00';
@@ -30,8 +30,8 @@ $almoco_inicio = isset($data['almoco_inicio']) ? trim($data['almoco_inicio']) : 
 $almoco_fim = isset($data['almoco_fim']) ? trim($data['almoco_fim']) : '13:00';
 $ativo = isset($data['ativo']) ? (bool)$data['ativo'] : true;
 
-if (strlen($nome) < 3) {
-    json_response(['sucesso' => false, 'mensagem' => 'Nome deve ter no mínimo 3 caracteres'], 400);
+if ($nome === false) {
+    json_response(['sucesso' => false, 'mensagem' => 'Nome inválido. Use de 3 a 100 caracteres válidos.'], 400);
 }
 
 if ($equipe !== 'n1' && $equipe !== 'n2') {

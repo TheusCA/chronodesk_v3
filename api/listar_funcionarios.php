@@ -6,9 +6,13 @@
 require_once __DIR__ . '/../init.php';
 header('Content-Type: application/json; charset=utf-8');
 
+require_get_method();
+
 global $gerenciador;
 $lista = [];
-$is_admin = isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
+$is_admin = isset($_SESSION['admin_logged_in'])
+    && $_SESSION['admin_logged_in'] === true
+    && usuario_pode_acessar_metricas();
 
 if ($gerenciador) {
     foreach ($gerenciador->getFuncionarios() as $f) {

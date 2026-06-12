@@ -176,6 +176,13 @@ function normalizar_login_ldap(string $login, string $ad_upn_suffix, string $ad_
         list($user_part, $suffix) = explode('@', $login, 2);
         $username = $user_part;
         if ($user_part !== '' && $suffix !== '') {
+            $allowed_suffixes = array_filter(array_unique([
+                strtolower(trim($ad_upn_suffix)),
+                strtolower(trim($ad_domain)),
+            ]));
+            if (!in_array(strtolower($suffix), $allowed_suffixes, true)) {
+                return ['samaccountname' => '', 'bind_upns' => []];
+            }
             $explicit_upn = strtolower($user_part . '@' . $suffix);
         }
     }
@@ -276,6 +283,15 @@ function normalizar_nome_ad(string $nome): string {
 }
 
 function tentar_vincular_funcionario_ad(array $ad_user): ?array {
+    $auto_link_enabled = in_array(
+        strtolower(trim((string)(getenv('ENABLE_AD_AUTO_LINK') ?: 'false'))),
+        ['1', 'true', 'yes', 'on'],
+        true
+    );
+    if (!$auto_link_enabled) {
+        return null;
+    }
+
     $login = normalizar_samaccountname($ad_user['login'] ?? '');
     $display_name = normalizar_nome_ad((string)($ad_user['display_name'] ?? ''));
     if ($login === null || $display_name === '') {
@@ -366,27 +382,18 @@ function ci_sessao_autenticada_para_funcionario($funcionario_id): bool {
         session_start();
     }
 
-    if (!isset($_SESSION['ci_logged_in']) || $_SESSION['ci_logged_in'] !== true) {
+    if (!ci_session_is_current()) {
+        if (isset($_SESSION['ci_logged_in']) && $_SESSION['ci_logged_in'] === true) {
+            if (function_exists('audit_log')) {
+                audit_log('CI_SESSION_EXPIRED', 'Sessao CI expirada por timeout para funcionario ID ' . (int)($_SESSION['ci_funcionario_id'] ?? 0), 'INFO');
+            }
+            clear_ci_session();
+            json_response(['sucesso' => false, 'mensagem' => 'Sessão CI expirada. Faça login novamente.'], 401);
+        }
         return false;
     }
 
     $now = time();
-    $absolute_timeout = (int)(getenv('CI_SESSION_ABSOLUTE_TIMEOUT') ?: 28800);
-    $idle_timeout = (int)(getenv('CI_SESSION_IDLE_TIMEOUT') ?: 1800);
-    $login_time = (int)($_SESSION['ci_login_time'] ?? 0);
-    $last_activity = (int)($_SESSION['ci_last_activity'] ?? 0);
-
-    if (
-        ($login_time > 0 && $absolute_timeout > 0 && ($now - $login_time) > $absolute_timeout) ||
-        ($last_activity > 0 && $idle_timeout > 0 && ($now - $last_activity) > $idle_timeout)
-    ) {
-        if (function_exists('audit_log')) {
-            audit_log('CI_SESSION_EXPIRED', 'Sessao CI expirada por timeout para funcionario ID ' . (int)($_SESSION['ci_funcionario_id'] ?? 0), 'INFO');
-        }
-        clear_ci_session();
-        json_response(['sucesso' => false, 'mensagem' => 'Sessão CI expirada. Faça login novamente.'], 401);
-    }
-
     $_SESSION['ci_last_activity'] = $now;
 
     $session_funcionario_id = (int)($_SESSION['ci_funcionario_id'] ?? 0);

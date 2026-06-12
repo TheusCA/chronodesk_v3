@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/init.php';
 require_once __DIR__ . '/config_assets.php';
-$ci_logged_in = isset($_SESSION['ci_logged_in']) && $_SESSION['ci_logged_in'] === true;
+$ci_logged_in = ci_session_is_current();
 $ci_funcionario_id = (int)($_SESSION['ci_funcionario_id'] ?? 0);
 $ci_nome = $_SESSION['ci_nome'] ?? '';
 ?>

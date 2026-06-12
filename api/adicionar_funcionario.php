@@ -19,7 +19,7 @@ if (!$data) {
 }
 
 $id = isset($data['id']) ? intval($data['id']) : 0;
-$nome = isset($data['nome']) ? trim($data['nome']) : '';
+$nome = validate_nome($data['nome'] ?? '', 3, 100);
 $equipe = isset($data['equipe']) ? trim($data['equipe']) : '';
 $ad_login = validate_ad_login($data['ad_login'] ?? null);
 $jornada_entrada = isset($data['jornada_entrada']) ? trim($data['jornada_entrada']) : '08:00';
@@ -32,8 +32,8 @@ if ($id < 1 || $id > 999) {
     json_response(['sucesso' => false, 'mensagem' => 'ID inválido (deve estar entre 1 e 999)'], 400);
 }
 
-if (strlen($nome) < 3) {
-    json_response(['sucesso' => false, 'mensagem' => 'Nome deve ter no mínimo 3 caracteres'], 400);
+if ($nome === false) {
+    json_response(['sucesso' => false, 'mensagem' => 'Nome inválido. Use de 3 a 100 caracteres válidos.'], 400);
 }
 
 if ($equipe !== 'n1' && $equipe !== 'n2') {

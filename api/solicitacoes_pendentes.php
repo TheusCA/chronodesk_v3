@@ -6,6 +6,7 @@
 require_once __DIR__ . '/../init.php';
 header('Content-Type: application/json; charset=utf-8');
 
+require_get_method();
 // [VULN-003] Exigir autenticação para ver solicitações
 verificar_login_api();
 

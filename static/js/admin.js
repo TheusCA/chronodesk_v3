@@ -244,10 +244,6 @@ async function atualizarFuncionario(id, nome, equipe, jornadaEntrada, jornadaSai
     }
 }
 
-function escapeJsString(value) {
-    return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
-}
-
 // Função para carregar lista de funcionários
 async function carregarFuncionarios() {
     try {
@@ -274,8 +270,14 @@ function exibirFuncionarios(funcionarios) {
         return;
     }
 
+    const funcionariosPorId = new Map();
     let html = '';
     funcionarios.forEach(func => {
+        const funcionarioId = Number.parseInt(func.id, 10);
+        if (!Number.isInteger(funcionarioId) || funcionarioId < 1) {
+            return;
+        }
+        funcionariosPorId.set(funcionarioId, func);
         const statusEmPausa = func.em_pausa ? '🔴 Em pausa' : '🟢 Disponível';
         const equipeLabel = String(func.equipe || '').toUpperCase();
         
@@ -293,7 +295,7 @@ function exibirFuncionarios(funcionarios) {
         html += `
             <div class="funcionario-item">
                 <div class="funcionario-info">
-                    <strong>ID ${parseInt(func.id, 10)}: ${escapeHtml(func.nome)}</strong>
+                    <strong>ID ${funcionarioId}: ${escapeHtml(func.nome)}</strong>
                     <span>Equipe: ${escapeHtml(equipeLabel)} | AD: ${escapeHtml(adLogin || 'Não vinculado')} | ${ativoStatus} | Status: ${statusEmPausa}</span>
                     <div style="margin-top: 0.5rem; font-size: 0.875rem; color: var(--gray-600);">
                         <span style="display: inline-block; margin-right: 1rem;">
@@ -309,18 +311,46 @@ function exibirFuncionarios(funcionarios) {
                     </div>
                 </div>
                 <div class="funcionario-actions">
-                    <button class="btn-small btn-edit" onclick="editarFuncionario(${parseInt(func.id, 10)}, '${escapeJsString(func.nome)}', '${escapeJsString(func.equipe)}', '${escapeJsString(jornadaEntrada)}', '${escapeJsString(jornadaSaida)}', '${escapeJsString(almocoInicio)}', '${escapeJsString(almocoFim)}', ${func.ativo !== false}, '${escapeJsString(adLogin)}')">
+                    <button class="btn-small btn-edit" type="button" data-action="edit" data-funcionario-id="${funcionarioId}">
                         ✏️ Editar
                     </button>
-                    <button class="btn-small btn-delete" onclick="removerFuncionario(${parseInt(func.id, 10)})">
+                    <button class="btn-small btn-delete" type="button" data-action="remove" data-funcionario-id="${funcionarioId}">
                         🗑️ Remover
                     </button>
                 </div>
             </div>
         `;
     });
-    
+
     lista.innerHTML = html;
+
+    lista.querySelectorAll('[data-action][data-funcionario-id]').forEach(button => {
+        button.addEventListener('click', () => {
+            const funcionarioId = Number.parseInt(button.dataset.funcionarioId, 10);
+            const funcionario = funcionariosPorId.get(funcionarioId);
+            if (!funcionario) {
+                exibirMensagemAdmin('Funcionário não encontrado na lista atual.', 'error');
+                return;
+            }
+
+            if (button.dataset.action === 'remove') {
+                removerFuncionario(funcionarioId);
+                return;
+            }
+
+            editarFuncionario(
+                funcionarioId,
+                funcionario.nome,
+                funcionario.equipe,
+                funcionario.jornada_entrada,
+                funcionario.jornada_saida,
+                funcionario.almoco_inicio,
+                funcionario.almoco_fim,
+                funcionario.ativo !== false,
+                funcionario.ad_login || ''
+            );
+        });
+    });
 }
 
 // Função para alterar senha do administrador
@@ -328,8 +358,8 @@ async function alterarSenhaAdmin() {
     const novaSenha = document.getElementById('admin-password').value;
     const confirmarSenha = document.getElementById('admin-password-confirm').value;
 
-    if (!novaSenha || novaSenha.length < 6) {
-        exibirMensagemAdmin('A senha deve ter no mínimo 6 caracteres', 'error');
+    if (!novaSenha || novaSenha.length < 8) {
+        exibirMensagemAdmin('A senha deve ter no mínimo 8 caracteres', 'error');
         return;
     }
 

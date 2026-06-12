@@ -262,24 +262,28 @@ function verificar_login() {
         _redirecionar_login('login.php');
     }
     
-    // Timeout absoluto: 8 horas
-    if (isset($_SESSION['login_time']) && (time() - $_SESSION['login_time'] > 28800)) {
-        session_destroy();
+    if (!session_window_is_current(
+        $_SESSION['login_time'] ?? 0,
+        $_SESSION['last_activity'] ?? 0,
+        28800,
+        1800
+    )) {
+        destroy_current_session();
         _redirecionar_login('login.php', 'Sessão expirada. Faça login novamente.');
-    }
-    
-    // Timeout de inatividade: 30 minutos
-    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1800)) {
-        session_destroy();
-        _redirecionar_login('login.php', 'Sessão expirada por inatividade.');
     }
     $_SESSION['last_activity'] = time();
 }
 
 function usuario_pode_acessar_metricas() {
-    return (
+    $authenticated = (
         (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) ||
         (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true)
+    );
+    return $authenticated && session_window_is_current(
+        $_SESSION['login_time'] ?? 0,
+        $_SESSION['last_activity'] ?? 0,
+        14400,
+        1200
     );
 }
 
@@ -294,10 +298,7 @@ function verificar_login_api() {
     $now = time();
     $login_time = (int)($_SESSION['login_time'] ?? 0);
     $last_activity = (int)($_SESSION['last_activity'] ?? 0);
-    if (
-        ($login_time > 0 && ($now - $login_time) > 14400) ||
-        ($last_activity > 0 && ($now - $last_activity) > 1200)
-    ) {
+    if (!session_window_is_current($login_time, $last_activity, 14400, 1200, $now)) {
         audit_log('SESSION_EXPIRED', 'Sessão de gestor expirada em API', 'INFO');
         destroy_current_session();
         json_response([
@@ -319,18 +320,15 @@ function verificar_admin_login() {
         _redirecionar_login('admin_login.php');
     }
     
-    // Timeout absoluto: 4 horas (mais restritivo para admin)
-    if (isset($_SESSION['login_time']) && (time() - $_SESSION['login_time'] > 14400)) {
-        audit_log('SESSION_EXPIRED', 'Admin session timeout absoluto', 'INFO');
-        session_destroy();
+    if (!session_window_is_current(
+        $_SESSION['login_time'] ?? 0,
+        $_SESSION['last_activity'] ?? 0,
+        14400,
+        1200
+    )) {
+        audit_log('SESSION_EXPIRED', 'Sessão administrativa expirada', 'INFO');
+        destroy_current_session();
         _redirecionar_login('admin_login.php', 'Sessão administrativa expirada.');
-    }
-    
-    // Timeout de inatividade: 20 minutos
-    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 1200)) {
-        audit_log('SESSION_EXPIRED', 'Admin session inatividade', 'INFO');
-        session_destroy();
-        _redirecionar_login('admin_login.php', 'Sessão expirada por inatividade.');
     }
     $_SESSION['last_activity'] = time();
 }
