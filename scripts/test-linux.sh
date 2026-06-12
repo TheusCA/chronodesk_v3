@@ -80,6 +80,9 @@ check_status "/.git/config" blocked
 check_status "/database_SECURED.sql" blocked
 check_status "/README.md" blocked
 check_status "/frontend/src/App.jsx" blocked
+check_status "/frontend/vite.config.js" blocked
+check_status "/frontend/package.json" blocked
+check_status "/frontend/.env" blocked
 
 echo "All Linux validation checks passed."
 

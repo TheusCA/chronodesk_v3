@@ -1,10 +1,7 @@
 <?php
 require_once __DIR__ . '/../config.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    json_response(['sucesso' => false, 'mensagem' => 'Método não permitido.'], 405);
-}
-
+require_post_method();
 require_csrf_token();
 require_json_content_type();
 

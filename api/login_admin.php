@@ -2,10 +2,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../auth_ldap.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    json_response(['sucesso' => false, 'mensagem' => 'Método não permitido.'], 405);
-}
-
+require_post_method();
 require_csrf_token();
 require_json_content_type();
 
@@ -22,7 +19,7 @@ if ($username === null || $password === '') {
 }
 
 $rate_key = 'admin_api_' . preg_replace('/[^a-z0-9_]/', '_', $username);
-if (!check_rate_limit($rate_key, 5, 900)) {
+if (!check_rate_limit('admin_api_global', 10, 900) || !check_rate_limit($rate_key, 5, 900)) {
     audit_log('ADMIN_LOGIN_FAILURE', 'Rate limit no login administrativo para ' . $username, 'WARNING');
     json_response([
         'sucesso' => false,

@@ -181,8 +181,13 @@ function set_security_headers() {
     if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') {
         header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
     } else {
-        // Redirecionar para HTTPS em produção
-        if (defined('APP_ENV') && APP_ENV === 'production') {
+        // Redirecionar somente quando o VirtualHost HTTPS estiver configurado.
+        $force_https = in_array(
+            strtolower(trim((string)(getenv('FORCE_HTTPS') ?: 'false'))),
+            ['1', 'true', 'yes', 'on'],
+            true
+        );
+        if (defined('APP_ENV') && APP_ENV === 'production' && $force_https) {
             $redirect = 'https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
             header('Location: ' . $redirect, true, 301);
             exit;
@@ -362,6 +367,45 @@ function require_get_method() {
             'mensagem' => 'Método não permitido'
         ], JSON_UNESCAPED_UNICODE);
         exit;
+    }
+}
+
+function require_post_method() {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        http_response_code(405);
+        header('Allow: POST');
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'sucesso' => false,
+            'mensagem' => 'Metodo nao permitido'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+
+function with_pause_state_lock(callable $callback) {
+    $state_path = defined('ESTADO_JSON') ? ESTADO_JSON : __DIR__ . '/estado.json';
+    $lock_path = sys_get_temp_dir() . '/chronodesk_pause_' . md5($state_path) . '.lock';
+    $handle = @fopen($lock_path, 'c');
+    if ($handle === false || !flock($handle, LOCK_EX)) {
+        if (is_resource($handle)) {
+            fclose($handle);
+        }
+        error_log('[PAUSE_STATE] Falha ao adquirir lock de estado.');
+        if (function_exists('json_response') && PHP_SAPI !== 'cli') {
+            json_response([
+                'sucesso' => false,
+                'mensagem' => 'O estado de pausas esta temporariamente indisponivel.'
+            ], 503);
+        }
+        throw new RuntimeException('Nao foi possivel bloquear o estado de pausas.');
+    }
+
+    try {
+        return $callback();
+    } finally {
+        flock($handle, LOCK_UN);
+        fclose($handle);
     }
 }
 

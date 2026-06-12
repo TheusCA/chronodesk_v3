@@ -18,8 +18,8 @@ async function adicionarUsuario() {
         return;
     }
 
-    if (!password || password.length < 6) {
-        exibirMensagemAdmin('Senha deve ter pelo menos 6 caracteres', 'error');
+    if (!password || password.length < 8) {
+        exibirMensagemAdmin('Senha deve ter pelo menos 8 caracteres', 'error');
         return;
     }
 

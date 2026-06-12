@@ -438,3 +438,8 @@
     color: var(--danger);
     text-align: center;
 }
+
+.inline-form {
+    display: inline-flex;
+    margin: 0;
+}

@@ -3,8 +3,7 @@
  * ============================================================
  * ChronoDesk v3.0 - Autenticação LDAP / Active Directory
  * ============================================================
- * Domínio AD da empresa: gruponp.local
- * Servidores AD: 10.108.50.206 / 10.110.53.205 / 10.108.50.205
+ * Domínio e servidores AD são definidos pelo ambiente.
  *
  * COMO FUNCIONA:
  * 1. O usuário digita seu login do Windows (ex: joao.silva) + senha do AD
@@ -15,7 +14,7 @@
  * PRÉ-REQUISITOS NO SERVIDOR LINUX:
  * - Extensão PHP LDAP habilitada: sudo apt install php-ldap
  * - PHP >= 7.4
- * - Acesso de rede aos IPs dos servidores AD (10.108.50.x) na porta 389 (LDAP) ou 636 (LDAPS)
+ * - Acesso de rede aos servidores configurados na porta 389 (LDAP) ou 636 (LDAPS)
  * ============================================================
  */
 
@@ -42,7 +41,12 @@ function autenticar_ad(string $username, string $password) {
     // Configurações do AD - mova para .env em produção
     $ad_domain    = getenv('AD_DOMAIN')    ?: 'gruponp.local';
     $ad_upn_suffix = getenv('AD_UPN_SUFFIX') ?: $ad_domain;
-    $ad_servers   = explode(',', getenv('AD_SERVERS') ?: '10.108.50.206,10.110.53.205,10.108.50.205');
+    $ad_servers_env = trim((string)(getenv('AD_SERVERS') ?: ''));
+    if ($ad_servers_env === '') {
+        error_log('[AUTH_AD] AD_SERVERS não configurado.');
+        return false;
+    }
+    $ad_servers   = explode(',', $ad_servers_env);
     $ad_port      = (int)(getenv('AD_PORT') ?: 389);    // 389=LDAP, 636=LDAPS
     $ad_use_tls   = getenv('AD_USE_TLS') === 'true';    // StartTLS
 

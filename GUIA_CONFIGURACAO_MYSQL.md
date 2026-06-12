@@ -41,7 +41,7 @@ FLUSH PRIVILEGES;
 
 Não conceda `GRANT OPTION`, `SUPER`, `FILE` nem acesso a outros bancos.
 
-No XAMPP local, o fallback `root` sem senha ainda funciona quando `APP_ENV=development`, mas o `.env.example` já usa:
+Mesmo em desenvolvimento, configure o usuário dedicado da aplicação:
 
 ```env
 DB_HOST=localhost

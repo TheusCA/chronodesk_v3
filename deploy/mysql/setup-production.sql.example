@@ -7,18 +7,17 @@ CREATE DATABASE IF NOT EXISTS sistema_pausas
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
-CREATE USER IF NOT EXISTS 'chronodesk_app'@'%' IDENTIFIED BY 'troque_essa_senha';
+CREATE USER IF NOT EXISTS 'chronodesk_app'@'localhost' IDENTIFIED BY 'troque_essa_senha';
 
 GRANT SELECT, INSERT, UPDATE, DELETE
 ON sistema_pausas.*
-TO 'chronodesk_app'@'%';
+TO 'chronodesk_app'@'localhost';
 
 FLUSH PRIVILEGES;
 
 -- Depois disso, importe o schema da aplicacao:
 -- mysql -uroot -p sistema_pausas < /var/www/chronodesk/database_SECURED.sql
 --
--- Se o MySQL estiver publicado somente em 127.0.0.1 na VM, tambem e possivel
--- restringir o usuario para 'chronodesk_app'@'localhost' ou para o IP/rede
--- especifica usada pelo Apache/PHP.
+-- Se Apache/PHP for movido para outro host ou container, crie uma conta
+-- separada restrita ao IP ou rede exata. Nao use '%' em producao.
 

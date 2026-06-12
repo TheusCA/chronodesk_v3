@@ -144,7 +144,10 @@ verificar_login();
         <div class="action-buttons">
             <a href="<?php echo get_base_path(); ?>/api/download_relatorio.php" class="btn btn-success">📥 Baixar Relatório Completo</a>
             <a href="<?php echo get_base_path(); ?>/index.php" class="btn btn-secondary">🏠 Voltar ao Gerenciador</a>
-            <a href="<?php echo get_base_path(); ?>/logout.php" class="btn btn-danger">🚪 Sair</a>
+            <form method="POST" action="<?php echo get_base_path(); ?>/logout.php" class="inline-form">
+                <input type="hidden" name="csrf_token" value="<?php echo sanitize_attr(generate_csrf_token()); ?>">
+                <button type="submit" class="btn btn-danger">🚪 Sair</button>
+            </form>
         </div>
     </div>
 

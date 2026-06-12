@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+require_post_method();
+require_csrf_token();
+
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
     audit_log('LOGOUT', 'Logout administrativo para usuario ' . ($_SESSION['admin_username'] ?? 'unknown'), 'INFO');
 }

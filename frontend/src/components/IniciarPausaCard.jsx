@@ -22,8 +22,10 @@ export function IniciarPausaCard({ onStart, onRequest, loading }) {
 
   async function submit() {
     if (!reason) return
-    if (meeting) await onRequest(reason.value, observation)
-    else await onStart(reason.value)
+    const result = meeting
+      ? await onRequest(reason.value, observation)
+      : await onStart(reason.value)
+    if (!result) return
     setReason(null)
     setObservation('')
   }

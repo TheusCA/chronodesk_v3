@@ -77,7 +77,7 @@ define('FUNCIONARIOS_JSON', __DIR__ . '/funcionarios.json');
 // ============================================
 define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
 define('DB_NAME', getenv('DB_NAME') ?: 'sistema_pausas');
-define('DB_USER', getenv('DB_USER') ?: (APP_ENV === 'production' ? 'chronodesk_app' : 'root'));
+define('DB_USER', getenv('DB_USER') ?: 'chronodesk_app');
 define('DB_PASS', getenv('DB_PASS') ?: '');
 
 // ============================================
@@ -108,12 +108,10 @@ define('AUTH_SOURCE', getenv('AUTH_SOURCE') ?: 'json_fallback');
 // ============================================
 // Autenticação administrativa híbrida
 // ============================================
-define('DEFAULT_AD_ADMIN_USERS', 'mmdcamargo,dhrmendes,rgluciano');
-
 $ad_admin_users_env = getenv('AD_ADMIN_USERS');
-define('AD_ADMIN_USERS', ($ad_admin_users_env !== false && trim($ad_admin_users_env) !== '') ? $ad_admin_users_env : DEFAULT_AD_ADMIN_USERS);
+define('AD_ADMIN_USERS', ($ad_admin_users_env !== false) ? trim($ad_admin_users_env) : '');
 
-$enable_local_admin_env = strtolower(trim((string)(getenv('ENABLE_LOCAL_ADMIN') ?: 'true')));
+$enable_local_admin_env = strtolower(trim((string)(getenv('ENABLE_LOCAL_ADMIN') ?: 'false')));
 define('ENABLE_LOCAL_ADMIN', !in_array($enable_local_admin_env, ['false', '0', 'no'], true));
 
 if (APP_ENV === 'production') {
@@ -124,6 +122,10 @@ if (APP_ENV === 'production') {
     if (DB_USER === 'root' || DB_PASS === '') {
         error_log('[SECURITY CRITICAL] Produção exige usuário MySQL dedicado e senha definida.');
         throw new RuntimeException('Configuração de banco de dados de produção incompleta.');
+    }
+    if (AD_ADMIN_USERS === '') {
+        error_log('[SECURITY CRITICAL] AD_ADMIN_USERS não configurado para produção.');
+        throw new RuntimeException('Configuração administrativa de produção incompleta.');
     }
 }
 
@@ -174,6 +176,7 @@ function inicializar_csv() {
  * Agora reseta pausas abandonadas individualmente (>24h)
  */
 function limpar_estado_antigo() {
+    with_pause_state_lock(function () {
     if (!file_exists(ESTADO_JSON)) return;
     
     $estado = json_decode(file_get_contents(ESTADO_JSON), true);
@@ -210,6 +213,7 @@ function limpar_estado_antigo() {
     if ($modificado) {
         file_put_contents(ESTADO_JSON, json_encode($estado, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
     }
+    });
 }
 
 function json_response($data, $status_code = 200) {

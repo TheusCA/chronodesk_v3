@@ -7,6 +7,7 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../auth_ldap.php';
 header('Content-Type: application/json; charset=utf-8');
 
+require_post_method();
 // [VULN-005] Verificar CSRF
 require_csrf_token();
 // [VULN-022] Validar Content-Type
@@ -28,10 +29,16 @@ $motivo = validate_motivo_pausa($data['motivo_pausa'] ?? '');
 if (!$motivo) {
     json_response(["sucesso" => false, "mensagem" => "Motivo de pausa inválido. Use: Café, Pessoal ou Reunião."], 400);
 }
+if ($motivo === 'Reunião') {
+    json_response(["sucesso" => false, "mensagem" => "Reuniões devem ser enviadas pelo fluxo de solicitação e aprovação."], 400);
+}
 
 exigir_autenticacao_ci_pausa($data, $funcionario_id, 'iniciar_pausa');
 
-$resultado = $gerenciador->iniciar_pausa($funcionario_id, $motivo);
+$resultado = with_pause_state_lock(function () use ($gerenciador, $funcionario_id, $motivo) {
+    $gerenciador->carregar_estado();
+    return $gerenciador->iniciar_pausa($funcionario_id, $motivo);
+});
 if ($resultado['sucesso']) {
     audit_log('PAUSE_START', 'Pausa iniciada para funcionário ID ' . $funcionario_id, 'INFO');
 }

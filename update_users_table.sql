@@ -8,6 +8,4 @@ CREATE TABLE IF NOT EXISTS usuarios (
     last_login TIMESTAMP NULL
 ) ENGINE=InnoDB;
 
--- Inserir usuário administrador padrão (se não existir)
--- A senha padrão será 'admin123' (hash será gerado via aplicação se necessário, mas aqui deixamos um placeholder se for via SQL direto)
--- Na prática, o script de migração PHP vai inserir o admin atual do config.json
+-- Nenhum usuário ou senha padrão é criado por este script.

@@ -38,7 +38,7 @@ try {
             $role = in_array($input['role'] ?? '', ['admin', 'gestor']) ? $input['role'] : 'gestor';
 
             if (empty($username) || strlen($username) < 3) throw new Exception('Usuário deve ter pelo menos 3 caracteres');
-            if (empty($password) || strlen($password) < 6) throw new Exception('Senha deve ter pelo menos 6 caracteres');
+            if (empty($password) || strlen($password) < 8) throw new Exception('Senha deve ter pelo menos 8 caracteres');
 
             if ($usuarioModel->criar($username, $password, $role)) {
                 audit_log('USER_CREATED', "Usuário '{$username}' criado com role '{$role}'", 'WARNING');

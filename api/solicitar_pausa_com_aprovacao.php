@@ -7,6 +7,7 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../auth_ldap.php';
 header('Content-Type: application/json; charset=utf-8');
 
+require_post_method();
 require_csrf_token();
 require_json_content_type();
 
@@ -25,6 +26,9 @@ $motivo = validate_motivo_pausa($data['motivo_pausa'] ?? '');
 if (!$motivo) {
     json_response(["sucesso" => false, "mensagem" => "Motivo inválido."], 400);
 }
+if ($motivo !== 'Reunião') {
+    json_response(["sucesso" => false, "mensagem" => "Somente pausas de reunião usam o fluxo de aprovação."], 400);
+}
 
 // Limitar tamanho da observação
 $observacao = sanitize_input($data['observacao'] ?? '', 500);
@@ -40,18 +44,10 @@ if ($funcionario->em_pausa) {
     json_response(["sucesso" => false, "mensagem" => "{$funcionario->nome} já está em pausa."], 400);
 }
 
-$resultado = $gerenciador->solicitar_pausa($funcionario_id, $motivo, $observacao);
-
-if ($resultado["sucesso"] && $motivo == "Reunião") {
-    $funcionario = $gerenciador->getFuncionario($funcionario_id);
-    if ($funcionario) {
-        $funcionario->observacao_reuniao = $observacao;
-        $gerenciador->salvar_estado();
-        if (!empty($observacao)) {
-            $resultado["mensagem"] .= " Observação: {$observacao}";
-        }
-    }
-}
+$resultado = with_pause_state_lock(function () use ($gerenciador, $funcionario_id, $motivo, $observacao) {
+    $gerenciador->carregar_estado();
+    return $gerenciador->solicitar_pausa($funcionario_id, $motivo, $observacao);
+});
 
 if ($resultado['sucesso']) {
     audit_log('PAUSE_REQUEST', 'Solicitação para funcionário ID ' . $funcionario_id, 'INFO');

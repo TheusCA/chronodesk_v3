@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+require_post_method();
+require_csrf_token();
+
 if (usuario_pode_acessar_metricas()) {
     audit_log('LOGOUT', 'Logout do painel de métricas', 'INFO');
 }

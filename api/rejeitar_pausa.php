@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../init.php';
 
+require_post_method();
 verificar_login_api();
 require_csrf_token();
 require_json_content_type();
@@ -16,7 +17,10 @@ if (!$funcionario_id) {
 }
 
 global $gerenciador;
-$resultado = $gerenciador->rejeitar_pausa($funcionario_id);
+$resultado = with_pause_state_lock(function () use ($gerenciador, $funcionario_id) {
+    $gerenciador->carregar_estado();
+    return $gerenciador->rejeitar_pausa($funcionario_id);
+});
 if ($resultado['sucesso']) {
     audit_log('PAUSE_REJECT', 'Pausa rejeitada para funcionário ID ' . $funcionario_id, 'INFO');
 }

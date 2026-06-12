@@ -235,7 +235,10 @@ $base_path_admin = get_base_path();
             <!-- Botões de Ação -->
             <div class="admin-actions">
                 <a href="<?php echo get_base_path(); ?>/index.php" class="btn btn-secondary">🏠 Voltar ao Sistema</a>
-                <a href="<?php echo get_base_path(); ?>/admin_logout.php" class="btn btn-danger">🚪 Sair da Área Administrativa</a>
+                <form method="POST" action="<?php echo get_base_path(); ?>/admin_logout.php" class="inline-form">
+                    <input type="hidden" name="csrf_token" value="<?php echo sanitize_attr(generate_csrf_token()); ?>">
+                    <button type="submit" class="btn btn-danger">🚪 Sair da Área Administrativa</button>
+                </form>
             </div>
         </div>
     </div>

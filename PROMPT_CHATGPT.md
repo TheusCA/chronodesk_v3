@@ -14,11 +14,11 @@ O novo responsável pelo projeto (você, leitor deste prompt) ficou encarregado 
 4. Deixar o sistema acessível a todos os colaboradores da empresa via rede interna
 
 A empresa usa **Active Directory (AD)** com domínio `gruponp.local`. Os servidores AD disponíveis na rede são:
-- `10.108.50.206`
-- `10.110.53.205`
-- `10.108.50.205`
+- `servidor-ad-1.exemplo.local`
+- `servidor-ad-2.exemplo.local`
+- `servidor-ad-3.exemplo.local`
 
-O DNS interno da rede é `10.190.16.1`.
+O DNS interno deve ser configurado conforme a rede da empresa.
 
 ---
 
@@ -324,8 +324,8 @@ php -m | grep ldap
 # Se não aparecer: sudo apt install php-ldap && sudo phpenmod ldap && sudo systemctl restart apache2
 
 # 11. Verificar conectividade com o AD
-nc -zv 10.108.50.206 389
-# Deve retornar: Connection to 10.108.50.206 389 port [tcp/ldap] succeeded!
+nc -zv servidor-ad-1.exemplo.local 389
+# Deve retornar uma conexão LDAP bem-sucedida.
 
 # 12. Configurar VirtualHost do Apache (opcional, mas recomendado)
 sudo nano /etc/apache2/sites-available/chronodesk.conf
@@ -358,7 +358,7 @@ sudo systemctl reload apache2
 2. Verificar que os selects de CI estão preenchidos
 3. Acessar `http://IP_DA_VM/chronodesk/admin_login.php` — deve mostrar tela de login
 4. Verificar que o MySQL está recebendo pausas: `SELECT * FROM pausas ORDER BY id DESC LIMIT 5;`
-5. Testar conectividade LDAP: `ldapsearch -H ldap://10.108.50.206 -x -b "DC=gruponp,DC=local" -D "usuario@gruponp.local" -W`
+5. Testar conectividade LDAP: `ldapsearch -H ldap://servidor-ad-1.exemplo.local -x -b "DC=exemplo,DC=local" -D "usuario@exemplo.local" -W`
 
 ---
 

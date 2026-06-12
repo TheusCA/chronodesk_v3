@@ -31,14 +31,14 @@ class GerenciadorPausas {
                     if (isset($this->funcionarios[$id])) {
                         $func = $this->funcionarios[$id];
                         $func->em_pausa = $data['em_pausa'] ?? false;
-                        if ($data['inicio_pausa'] ?? null) {
-                            $func->inicio_pausa = new DateTime($data['inicio_pausa']);
-                        }
+                        $func->inicio_pausa = ($data['inicio_pausa'] ?? null)
+                            ? new DateTime($data['inicio_pausa'])
+                            : null;
                         $func->motivo_pausa = $data['motivo_pausa'] ?? null;
                         $func->status_aprovacao = $data['status_aprovacao'] ?? null;
-                        if ($data['solicitacao_timestamp'] ?? null) {
-                            $func->solicitacao_timestamp = new DateTime($data['solicitacao_timestamp']);
-                        }
+                        $func->solicitacao_timestamp = ($data['solicitacao_timestamp'] ?? null)
+                            ? new DateTime($data['solicitacao_timestamp'])
+                            : null;
                         $func->observacao_reuniao = $data['observacao_reuniao'] ?? null;
                     }
                 }
@@ -66,53 +66,35 @@ class GerenciadorPausas {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} já está em pausa."];
         }
 
+        if ($motivo === "Reunião") {
+            return ["sucesso" => false, "mensagem" => "Pausas de reunião devem ser solicitadas para aprovação."];
+        }
+
         // Verificar disponibilidade baseada em horários (jornada e almoço)
         if (!$funcionario->esta_disponivel()) {
             $status_disp = $funcionario->status_disponibilidade();
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} não está disponível no momento. Status: {$status_disp['label']}. Jornada: {$funcionario->jornada_entrada} - {$funcionario->jornada_saida}. Almoço: {$funcionario->almoco_inicio} - {$funcionario->almoco_fim}."];
         }
 
-        // Verificar limite de pausas ativas da equipe
-        // IMPORTANTE: Reuniões pendentes NÃO contam no limite e podem ser solicitadas livremente
-        // Apenas pausas aprovadas (Café, Pessoal, Reuniões aprovadas) contam no limite
-        // Se for uma reunião, não verificar o limite (será verificada apenas na aprovação)
-        if ($motivo != "Reunião") {
-            $pausas_ativas_equipe = 0;
-            foreach ($this->funcionarios as $f) {
-                if ($f->equipe == $funcionario->equipe && $f->em_pausa) {
-                    // Reuniões pendentes não contam no limite
-                    if ($f->motivo_pausa == "Reunião" && ($f->status_aprovacao == "pendente" || $f->status_aprovacao === null)) {
-                        continue; // Pular reuniões pendentes
-                    }
-                    // Contar todas as outras pausas (aprovadas ou não reunião)
-                    if ($f->status_aprovacao == "aprovado" || $f->motivo_pausa != "Reunião") {
-                        $pausas_ativas_equipe++;
-                    }
+        $pausas_ativas_equipe = 0;
+        foreach ($this->funcionarios as $f) {
+            if ($f->equipe == $funcionario->equipe && $f->em_pausa) {
+                if ($f->status_aprovacao == "aprovado" || $f->motivo_pausa != "Reunião") {
+                    $pausas_ativas_equipe++;
                 }
             }
-            
-            // Verificar se já atingiu o limite ANTES de adicionar esta nova pausa
-            if ($pausas_ativas_equipe >= $this->limite_pausa_por_equipe) {
-                $equipe_nome = strtoupper($funcionario->equipe);
-                return ["sucesso" => false, "mensagem" => "Limite de pausas simultâneas atingido para a equipe {$equipe_nome}. Atualmente há {$pausas_ativas_equipe} pausas ativas. Máximo permitido: {$this->limite_pausa_por_equipe} pausas."];
-            }
+        }
+
+        if ($pausas_ativas_equipe >= $this->limite_pausa_por_equipe) {
+            $equipe_nome = strtoupper($funcionario->equipe);
+            return ["sucesso" => false, "mensagem" => "Limite de pausas simultâneas atingido para a equipe {$equipe_nome}. Atualmente há {$pausas_ativas_equipe} pausas ativas. Máximo permitido: {$this->limite_pausa_por_equipe} pausas."];
         }
 
         $funcionario->em_pausa = true;
         $funcionario->inicio_pausa = new DateTime();
         $funcionario->motivo_pausa = $motivo;
 
-        // Se for reunião, definir status como pendente
-        if ($motivo == "Reunião") {
-            $funcionario->status_aprovacao = "pendente";
-            $funcionario->solicitacao_timestamp = new DateTime();
-            $hora = $funcionario->inicio_pausa->format('H:i:s');
-            // Salvar estado antes de retornar para reuniões
-            $this->salvar_estado();
-            return ["sucesso" => true, "mensagem" => "{$funcionario->nome} solicitou pausa para {$motivo} às {$hora}. Aguardando aprovação."];
-        } else {
-            $funcionario->status_aprovacao = "aprovado";
-        }
+        $funcionario->status_aprovacao = "aprovado";
 
         $hora = $funcionario->inicio_pausa->format('H:i:s');
         $this->salvar_estado();
@@ -127,6 +109,9 @@ class GerenciadorPausas {
         $funcionario = $this->funcionarios[$funcionario_id];
         if (!$funcionario->ativo) {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} está inativo."];
+        }
+        if ($motivo !== "Reunião") {
+            return ["sucesso" => false, "mensagem" => "Somente pausas de reunião exigem aprovação."];
         }
         if ($funcionario->em_pausa || $funcionario->status_aprovacao === 'pendente') {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} já possui uma pausa ativa ou solicitação pendente."];

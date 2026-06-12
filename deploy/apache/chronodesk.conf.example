@@ -17,6 +17,10 @@
         DirectoryIndex index.php
     </Directory>
 
+    <Directory /var/www/chronodesk/frontend>
+        Require all denied
+    </Directory>
+
     # Defesa adicional no VirtualHost. As regras principais continuam no .htaccess.
     <FilesMatch "(^\.env(\..*)?$|^\.git|^(composer\..*|package.*\.json)$|\.(sql|md|log|bak|backup|zip|rar|7z|old|orig|save|csv|json|sh|bat|ps1|txt)$)">
         Require all denied
@@ -27,6 +31,9 @@
         Header always set X-Frame-Options "DENY"
         Header always set Referrer-Policy "strict-origin-when-cross-origin"
         Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+        <FilesMatch "\.html$">
+            Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'"
+        </FilesMatch>
     </IfModule>
 
     # Recomendado: habilitar HTTPS interno com certificado corporativo ou self-signed controlado.
@@ -53,6 +60,10 @@
 #         AllowOverride All
 #         Require all granted
 #         DirectoryIndex index.php
+#     </Directory>
+#
+#     <Directory /var/www/chronodesk/frontend>
+#         Require all denied
 #     </Directory>
 #
 #     <FilesMatch "(^\.env(\..*)?$|^\.git|^(composer\..*|package.*\.json)$|\.(sql|md|log|bak|backup|zip|rar|7z|old|orig|save|csv|json|sh|bat|ps1|txt)$)">

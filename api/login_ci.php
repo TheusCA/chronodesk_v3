@@ -3,10 +3,7 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../auth_ldap.php';
 header('Content-Type: application/json; charset=utf-8');
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    json_response(['sucesso' => false, 'mensagem' => 'Método não permitido.'], 405);
-}
-
+require_post_method();
 require_csrf_token();
 require_json_content_type();
 
@@ -22,7 +19,7 @@ if (!$login_ad || !$senha_ad) {
 }
 
 $rate_key = 'ci_login_' . preg_replace('/[^a-zA-Z0-9_]/', '_', strtolower($login_ad));
-if (!check_rate_limit($rate_key, 5, 300)) {
+if (!check_rate_limit('ci_login_global', 20, 300) || !check_rate_limit($rate_key, 5, 300)) {
     audit_log('CI_LOGIN_RATE_LIMIT', 'Rate limit no login CI para usuario ' . normalizar_samaccountname($login_ad), 'WARNING');
     json_response(['sucesso' => false, 'mensagem' => 'Muitas tentativas de autenticação. Aguarde alguns minutos e tente novamente.'], 429);
 }

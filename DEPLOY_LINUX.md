@@ -96,14 +96,29 @@ Preencha somente valores reais no servidor. Nao versione `.env` real.
 4. Ajustar permissoes:
 
 ```bash
-sudo chown -R www-data:www-data /var/www/chronodesk
+sudo chown -R root:www-data /var/www/chronodesk
 sudo find /var/www/chronodesk -type d -exec chmod 750 {} \;
 sudo find /var/www/chronodesk -type f -exec chmod 640 {} \;
 sudo chmod 640 /var/www/.env
 sudo chown root:www-data /var/www/.env
+
+sudo touch /var/www/chronodesk/estado.json \
+  /var/www/chronodesk/pausas.csv \
+  /var/www/chronodesk/config_sistema.json
+sudo chown www-data:www-data \
+  /var/www/chronodesk/estado.json \
+  /var/www/chronodesk/pausas.csv \
+  /var/www/chronodesk/config_sistema.json
+sudo chmod 660 \
+  /var/www/chronodesk/estado.json \
+  /var/www/chronodesk/pausas.csv \
+  /var/www/chronodesk/config_sistema.json
 ```
 
-Se a aplicacao precisar escrever arquivos legados JSON/CSV durante a operacao, limite permissao de escrita somente aos arquivos necessarios e reavalie a migracao para MySQL.
+Nao entregue a propriedade dos arquivos PHP ao usuario do Apache. A escrita fica
+limitada aos arquivos operacionais legados acima. Se o PHP nao puder usar o
+diretorio de sessao do sistema, crie `sessions/` com dono `www-data`, modo `700`
+e mantenha o bloqueio HTTP ja existente.
 
 5. Configurar Apache:
 
@@ -179,6 +194,7 @@ Use HTTPS mesmo na rede interna, com certificado corporativo ou self-signed dist
 
 - Ajuste `ALLOWED_ORIGINS=https://chronodesk.interno.local`.
 - Ajuste `SESSION_COOKIE_SECURE=true`.
+- Ajuste `FORCE_HTTPS=true` somente depois que o VirtualHost HTTPS responder.
 - Use redirecionamento HTTP para HTTPS no VirtualHost.
 - Monitore validade e renovacao do certificado.
 

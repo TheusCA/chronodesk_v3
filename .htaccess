@@ -23,6 +23,10 @@ ServerSignature Off
     Header always set X-Frame-Options "DENY"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+
+    <FilesMatch "\.html$">
+        Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'"
+    </FilesMatch>
 </IfModule>
 
 # Habilitar rewrite engine
@@ -30,7 +34,7 @@ RewriteEngine On
 
 # Bloquear diretórios que nunca devem ser publicados
 RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|sessions|cache|tmp)(/|$)" - [F,L]
-RewriteRule "^frontend/(src|node_modules)(/|$)" - [F,L]
+RewriteRule "^frontend(?:/|$)" - [F,L]
 
 # Bloquear scripts operacionais que devem rodar somente via CLI
 RewriteRule "^migrar_.*\.php$" - [F,L]
