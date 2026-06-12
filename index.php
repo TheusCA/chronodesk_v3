@@ -85,12 +85,10 @@ $ci_nome = $_SESSION['ci_nome'] ?? '';
         <header>
             <h1>⏳ ChronoDesk</h1>
             <p>Gestão Inteligente de Tempo e Pausas</p>
-            <?php if ($ci_logged_in && $ci_nome !== ''): ?>
-                <div id="ci-session-info" class="ci-session-info">
-                    <span id="ci-session-name"><?php echo htmlspecialchars($ci_nome, ENT_QUOTES, 'UTF-8'); ?></span>
-                    <button id="btn-ci-logout" type="button" class="btn btn-secondary">Sair</button>
-                </div>
-            <?php endif; ?>
+            <div id="ci-session-info" class="ci-session-info<?php echo $ci_logged_in ? '' : ' hidden'; ?>">
+                <span id="ci-session-name"><?php echo htmlspecialchars($ci_nome, ENT_QUOTES, 'UTF-8'); ?></span>
+                <button id="btn-ci-logout" type="button" class="btn btn-secondary">Sair</button>
+            </div>
         </header>
 
         <section id="ci-login-screen" class="ci-login-screen<?php echo $ci_logged_in ? ' hidden' : ''; ?>" style="<?php echo $ci_logged_in ? 'display:none;' : ''; ?>">

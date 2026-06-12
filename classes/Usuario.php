@@ -6,24 +6,15 @@ class Usuario {
 
     public function __construct() {
         $this->pdo = get_db_connection();
-        $this->criarTabela();
-    }
-
-    private function criarTabela() {
-        $sql = "CREATE TABLE IF NOT EXISTS usuarios (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) NOT NULL UNIQUE,
-            password_hash VARCHAR(255) NOT NULL,
-            role VARCHAR(20) NOT NULL DEFAULT 'gestor',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP NULL
-        ) ENGINE=InnoDB;";
-        $this->pdo->exec($sql);
     }
 
     // Criar novo usuário
     public function criar($username, $password, $role = 'gestor') {
         try {
+            $username = normalizar_samaccountname($username);
+            if ($username === null) {
+                throw new Exception("Usuário inválido.");
+            }
             $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
             $sql = "INSERT INTO usuarios (username, password_hash, role) VALUES (:username, :hash, :role)";
             $stmt = $this->pdo->prepare($sql);
@@ -56,6 +47,10 @@ class Usuario {
 
     // Autenticar usuário
     public function autenticar($username, $password) {
+        $username = normalizar_samaccountname($username);
+        if ($username === null) {
+            return false;
+        }
         $sql = "SELECT id, username, password_hash, role FROM usuarios WHERE username = :username LIMIT 1";
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute([':username' => $username]);

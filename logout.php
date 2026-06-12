@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/config.php';
 
+if (usuario_pode_acessar_metricas()) {
+    audit_log('LOGOUT', 'Logout do painel de métricas', 'INFO');
+}
 destroy_current_session();
 
 // Calcular caminho base corretamente

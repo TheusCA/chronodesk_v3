@@ -1,40 +1,24 @@
 <?php
-/**
- * [SECURED] Rejeitar Pausa
- * Correções: Autenticação obrigatória, CSRF, validação
- */
 require_once __DIR__ . '/../init.php';
-header('Content-Type: application/json; charset=utf-8');
 
-verificar_login();
+verificar_login_api();
 require_csrf_token();
 require_json_content_type();
 
-global $gerenciador;
 $data = json_decode(file_get_contents('php://input'), true);
+if (!is_array($data)) {
+    json_response(['sucesso' => false, 'mensagem' => 'Dados inválidos.'], 400);
+}
 
 $funcionario_id = validate_funcionario_id($data['funcionario_id'] ?? null);
 if (!$funcionario_id) {
-    json_response(["sucesso" => false, "mensagem" => "ID do funcionário inválido."], 400);
+    json_response(['sucesso' => false, 'mensagem' => 'ID do funcionário inválido.'], 400);
 }
 
-$funcionario = $gerenciador->getFuncionario($funcionario_id);
-if (!$funcionario) {
-    json_response(["sucesso" => false, "mensagem" => "Funcionário não encontrado."], 404);
+global $gerenciador;
+$resultado = $gerenciador->rejeitar_pausa($funcionario_id);
+if ($resultado['sucesso']) {
+    audit_log('PAUSE_REJECT', 'Pausa rejeitada para funcionário ID ' . $funcionario_id, 'INFO');
 }
 
-if ($funcionario->status_aprovacao != "pendente") {
-    json_response(["sucesso" => false, "mensagem" => "Não há solicitação pendente para este funcionário."], 400);
-}
-
-$funcionario->status_aprovacao = "rejeitado";
-$funcionario->em_pausa = false;
-$funcionario->inicio_pausa = null;
-$funcionario->motivo_pausa = null;
-$funcionario->solicitacao_timestamp = null;
-$funcionario->observacao_reuniao = null;
-$gerenciador->salvar_estado();
-
-audit_log('PAUSA_REJEITADA', "Pausa rejeitada para {$funcionario->nome} (ID: {$funcionario_id})", 'INFO');
-
-json_response(["sucesso" => true, "mensagem" => "Pausa de reunião rejeitada para {$funcionario->nome}."]);
+json_response($resultado, $resultado['sucesso'] ? 200 : 409);

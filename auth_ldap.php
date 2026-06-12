@@ -212,12 +212,19 @@ function buscar_funcionario_por_ad_login(string $ad_login): ?array {
         require_once __DIR__ . '/db.php';
     }
 
-    $ad_login = strtolower(trim($ad_login));
+    $ad_login = normalizar_samaccountname($ad_login);
+    if ($ad_login === null) {
+        return null;
+    }
 
     try {
         $pdo = get_db_connection();
         $stmt = $pdo->prepare(
-            "SELECT id, nome, equipe, ativo FROM funcionarios WHERE ad_login = :login AND ativo = 1 LIMIT 1"
+            "SELECT id, nome, equipe, ativo
+             FROM funcionarios
+             WHERE (LOWER(ad_login) = :login OR LOWER(ad_login_ativo) = :login)
+               AND ativo = 1
+             LIMIT 1"
         );
         $stmt->execute([':login' => $ad_login]);
         $row = $stmt->fetch();
@@ -235,7 +242,7 @@ function buscar_funcionario_por_ad_login(string $ad_login): ?array {
             if (!isset($funcionario['ad_login'])) {
                 continue;
             }
-            if (strtolower(trim($funcionario['ad_login'])) === $ad_login && (!isset($funcionario['ativo']) || $funcionario['ativo'])) {
+            if (normalizar_samaccountname($funcionario['ad_login']) === $ad_login && (!isset($funcionario['ativo']) || $funcionario['ativo'])) {
                 return [
                     'id' => (int)$funcionario['id'],
                     'nome' => $funcionario['nome'],
@@ -247,6 +254,67 @@ function buscar_funcionario_por_ad_login(string $ad_login): ?array {
     }
 
     return null;
+}
+
+function normalizar_nome_ad(string $nome): string {
+    $nome = function_exists('mb_strtolower')
+        ? mb_strtolower($nome, 'UTF-8')
+        : strtolower($nome);
+    $nome = trim($nome);
+    if (class_exists('Transliterator')) {
+        $transliterator = \Transliterator::create('NFD; [:Nonspacing Mark:] Remove; NFC');
+        if ($transliterator) {
+            $nome = $transliterator->transliterate($nome);
+        }
+    }
+    $nome = preg_replace('/[^a-z0-9]+/u', ' ', $nome);
+    return trim(preg_replace('/\s+/', ' ', $nome));
+}
+
+function tentar_vincular_funcionario_ad(array $ad_user): ?array {
+    $login = normalizar_samaccountname($ad_user['login'] ?? '');
+    $display_name = normalizar_nome_ad((string)($ad_user['display_name'] ?? ''));
+    if ($login === null || $display_name === '') {
+        return null;
+    }
+
+    try {
+        $pdo = get_db_connection();
+        $stmt = $pdo->query(
+            "SELECT id, nome, equipe, ativo
+             FROM funcionarios
+             WHERE ativo = 1 AND (ad_login IS NULL OR ad_login = '')"
+        );
+        $matches = array_values(array_filter(
+            $stmt->fetchAll(PDO::FETCH_ASSOC),
+            fn($row) => normalizar_nome_ad((string)$row['nome']) === $display_name
+        ));
+        if (count($matches) !== 1) {
+            return null;
+        }
+
+        $funcionario = $matches[0];
+        $update = $pdo->prepare(
+            "UPDATE funcionarios
+             SET ad_login = :login
+             WHERE id = :id AND ativo = 1 AND (ad_login IS NULL OR ad_login = '')"
+        );
+        $update->execute([':login' => $login, ':id' => (int)$funcionario['id']]);
+        if ($update->rowCount() !== 1) {
+            return null;
+        }
+
+        audit_log(
+            'AD_LOGIN_AUTO_LINK',
+            'Login AD vinculado automaticamente ao funcionário ID ' . (int)$funcionario['id'],
+            'INFO'
+        );
+        $funcionario['id'] = (int)$funcionario['id'];
+        return $funcionario;
+    } catch (Throwable $e) {
+        error_log('[AUTH_AD] Falha no vínculo automático: ' . $e->getMessage());
+        return null;
+    }
 }
 
 /**
@@ -270,6 +338,9 @@ function autenticar_ci_via_ad(string $username, string $password): array {
 
     // 2. Verificar se o login está associado a um funcionário no sistema
     $funcionario = buscar_funcionario_por_ad_login($ad_user['login']);
+    if (!$funcionario) {
+        $funcionario = tentar_vincular_funcionario_ad($ad_user);
+    }
     if (!$funcionario) {
         return [
             'sucesso'      => false,
@@ -308,14 +379,7 @@ function ci_sessao_autenticada_para_funcionario($funcionario_id): bool {
         if (function_exists('audit_log')) {
             audit_log('CI_SESSION_EXPIRED', 'Sessao CI expirada por timeout para funcionario ID ' . (int)($_SESSION['ci_funcionario_id'] ?? 0), 'INFO');
         }
-        unset(
-            $_SESSION['ci_logged_in'],
-            $_SESSION['ci_funcionario_id'],
-            $_SESSION['ci_username'],
-            $_SESSION['ci_nome'],
-            $_SESSION['ci_login_time'],
-            $_SESSION['ci_last_activity']
-        );
+        clear_ci_session();
         json_response(['sucesso' => false, 'mensagem' => 'Sessão CI expirada. Faça login novamente.'], 401);
     }
 

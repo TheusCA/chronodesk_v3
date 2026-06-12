@@ -24,4 +24,7 @@ if (!$funcionario_id) {
 exigir_autenticacao_ci_pausa($data, $funcionario_id, 'finalizar_pausa');
 
 $resultado = $gerenciador->finalizar_pausa($funcionario_id);
-json_response($resultado);
+if ($resultado['sucesso']) {
+    audit_log('PAUSE_FINISH', 'Pausa finalizada para funcionário ID ' . $funcionario_id, 'INFO');
+}
+json_response($resultado, $resultado['sucesso'] ? 200 : 409);

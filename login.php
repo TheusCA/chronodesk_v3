@@ -1,93 +1,71 @@
 <?php
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/config_assets.php';
-require_once __DIR__ . '/classes/Usuario.php';
+require_once __DIR__ . '/auth_ldap.php';
 
-// Se já estiver logado, redirecionar para métricas
-if (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
-    $base_path = get_base_path();
-    $metricas_url = $base_path . '/metricas.php';
-    header('Location: ' . $metricas_url);
+if (usuario_pode_acessar_metricas()) {
+    header('Location: ' . get_base_path() . '/metricas.php');
     exit;
 }
 
 $error = '';
-$usuarioModel = new Usuario();
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // [VULN-005] Verificar CSRF no formulário de login
     require_csrf_token();
-    // Rate limiting básico (5 tentativas por 15 minutos)
+
+    $username_input = sanitize_input($_POST['username'] ?? '', 150);
+    $password = (string)($_POST['password'] ?? '');
+    $username = normalizar_samaccountname($username_input);
+
     if (!check_rate_limit('metricas_login', 5, 900)) {
         $error = 'Muitas tentativas de login. Aguarde 15 minutos antes de tentar novamente.';
+    } elseif ($username === null || $password === '') {
+        $error = 'Informe seu login e senha do AD.';
     } else {
-        $username = sanitize_input($_POST['username'] ?? '');
-        $password = $_POST['password'] ?? '';
-        
         $authenticated = false;
-        
-        // 1. Tentar autenticação via Banco de Dados
-        $user = $usuarioModel->autenticar($username, $password);
-        if ($user) {
-            // Qualquer usuário (admin ou gestor) pode acessar métricas
-            $authenticated = true;
-        }
-        
-        // 2. Fallback: Configuração (se não autenticou no banco)
-        if (!$authenticated) {
-            $config = carregar_configuracao();
-            $admin_username = $config['admin_username'] ?? ADMIN_USERNAME;
-            $admin_password_hash = $config['admin_password_hash'] ?? null;
-            
-            if ($username === $admin_username && $admin_password_hash && verify_password($password, $admin_password_hash)) {
+        $auth_type = '';
+
+        $ad_user = autenticar_ad($username_input, $password);
+        if ($ad_user) {
+            $ad_username = normalizar_samaccountname($ad_user['login'] ?? $username);
+            if ($ad_username !== null && is_ad_admin_authorized($ad_username)) {
                 $authenticated = true;
-                
-                // Auto-migração silenciosa
-                try {
-                    if (!$usuarioModel->autenticar($username, $password)) {
-                         $usuarioModel->criar($username, $password, 'admin');
-                    }
-                } catch (Exception $e) { }
-            }
-        }
-        
-        if ($authenticated) {
-            // Regenerar ID de sessão após login bem-sucedido
-            if (session_status() === PHP_SESSION_NONE) {
-                session_start();
-            }
-            session_regenerate_id(true);
-            
-            $_SESSION['logged_in'] = true;
-            $_SESSION['username'] = sanitize_output($username);
-            $_SESSION['login_time'] = time();
-            
-            $base_path = get_base_path();
-            
-            // Verificar se há URL de retorno (com sanitização)
-            // [FIX] Open Redirect: validar que return_url é relativo e pertence ao app
-            $return_url = isset($_GET['return']) ? sanitize_input($_GET['return']) : '';
-            if (!empty($return_url)) {
-                // Rejeitar qualquer coisa com esquema (http://, //, etc.)
-                if (preg_match('/^(\/\/|https?:|javascript:|data:)/i', $return_url)) {
-                    $return_url = '';
-                }
-                // Garantir que começa com / (relativo)
-                if (!empty($return_url) && $return_url[0] === '/') {
-                    $redirect_url = $base_path . $return_url;
-                } else {
-                    $redirect_url = $base_path . '/metricas.php';
-                }
+                $auth_type = 'ad';
+                $username = $ad_username;
             } else {
-                $redirect_url = $base_path . '/metricas.php';
+                $error = 'Usuário AD autenticado, mas não autorizado como gestor ou administrador.';
             }
-            
-            header('Location: ' . $redirect_url);
-            exit;
-        } else {
-            $error = 'Credenciais inválidas';
-            error_log("Tentativa de login métricas falhou para usuário: " . $username);
         }
+
+        if (!$authenticated && $error === '' && ENABLE_LOCAL_ADMIN) {
+            require_once __DIR__ . '/classes/Usuario.php';
+            try {
+                $user = (new Usuario())->autenticar($username, $password);
+                if ($user && in_array($user['role'], ['admin', 'gestor'], true)) {
+                    $authenticated = true;
+                    $auth_type = 'local';
+                }
+            } catch (Throwable $e) {
+                error_log('[METRICAS_LOGIN] Falha na autenticação local: ' . $e->getMessage());
+            }
+        }
+
+        $password = '';
+        if ($authenticated) {
+            session_regenerate_id(true);
+            $_SESSION['logged_in'] = true;
+            $_SESSION['username'] = $username;
+            $_SESSION['auth_type'] = $auth_type;
+            $_SESSION['login_time'] = time();
+            $_SESSION['last_activity'] = time();
+            audit_log('ADMIN_LOGIN_SUCCESS', 'Acesso às métricas via ' . $auth_type . ' para ' . $username, 'INFO');
+            header('Location: ' . get_base_path() . '/metricas.php');
+            exit;
+        }
+
+        if ($error === '') {
+            $error = 'Login ou senha incorretos.';
+        }
+        audit_log('ADMIN_LOGIN_FAILURE', 'Falha de acesso às métricas para ' . ($username ?? 'inválido'), 'WARNING');
     }
 }
 ?>
@@ -97,53 +75,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>Login - ChronoDesk</title>
-    <?php
-    $base_path = dirname($_SERVER['SCRIPT_NAME']);
-    if ($base_path === '/') {
-        $base_path = '';
-    } else {
-        $base_path = rtrim($base_path, '/');
-    }
-    ?>
-    <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path . '/static/css/style.css?v=' . time()); ?>" type="text/css">
-    <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path . '/static/css/login.css?v=' . time()); ?>" type="text/css">
-    <script src="<?php echo htmlspecialchars($base_path . '/static/js/theme.js'); ?>" defer></script>
+    <title>Login de métricas - ChronoDesk</title>
+    <link rel="stylesheet" href="<?php echo sanitize_attr(get_base_path() . '/static/css/style.css'); ?>">
+    <link rel="stylesheet" href="<?php echo sanitize_attr(get_base_path() . '/static/css/login.css'); ?>">
+    <script src="<?php echo sanitize_attr(get_base_path() . '/static/js/theme.js'); ?>" defer></script>
 </head>
-<body>
-    <div class="login-container">
-        <div class="login-box">
-            <div class="theme-toggle-container">
-                <button id="theme-toggle" class="btn-theme-toggle" title="Alternar Tema">🌙</button>
-            </div>
-            <div class="logo-container">
-                <div class="brand-logo-text">⏳ ChronoDesk</div>
-            </div>
-            <h2>Acesso às Métricas</h2>
-            
-            <?php if ($error): ?>
-                <div class="error-message">❌ <?php echo htmlspecialchars($error); ?></div>
+<body class="dark-mode">
+    <main class="login-container">
+        <section class="login-box" aria-labelledby="login-title">
+            <div class="logo-container"><div class="brand-logo-text">ChronoDesk</div></div>
+            <h2 id="login-title">Acesso às métricas</h2>
+            <p class="login-description">Use suas credenciais corporativas.</p>
+
+            <?php if ($error !== ''): ?>
+                <div class="error-message" role="alert"><?php echo sanitize_output($error); ?></div>
             <?php endif; ?>
-            
-            <form method="POST">
-                <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+
+            <form method="POST" autocomplete="on">
+                <input type="hidden" name="csrf_token" value="<?php echo sanitize_attr(generate_csrf_token()); ?>">
                 <div class="form-group">
-                    <label for="username">👤 Usuário:</label>
-                    <input type="text" id="username" name="username" required placeholder="Digite seu usuário">
+                    <label for="username">Login AD</label>
+                    <input type="text" id="username" name="username" autocomplete="username" required autofocus
+                           placeholder="usuario ou usuario@paschoalotto.com.br">
                 </div>
-                
                 <div class="form-group">
-                    <label for="password">🔒 Senha:</label>
-                    <input type="password" id="password" name="password" required placeholder="Digite sua senha">
+                    <label for="password">Senha</label>
+                    <input type="password" id="password" name="password" autocomplete="current-password" required>
                 </div>
-                
-                <button type="submit" class="login-btn">🚀 Entrar</button>
+                <button type="submit" class="login-btn">Entrar</button>
             </form>
-            
-            <a href="<?php echo get_base_path(); ?>/index.php" class="back-link">🏠 Voltar ao ChronoDesk</a>
-        </div>
-    </div>
+            <a href="<?php echo sanitize_attr(get_base_path() . '/index.php'); ?>" class="back-link">Voltar ao ChronoDesk</a>
+        </section>
+    </main>
 </body>
 </html>

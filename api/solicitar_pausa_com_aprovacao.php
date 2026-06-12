@@ -40,7 +40,7 @@ if ($funcionario->em_pausa) {
     json_response(["sucesso" => false, "mensagem" => "{$funcionario->nome} já está em pausa."], 400);
 }
 
-$resultado = $gerenciador->iniciar_pausa($funcionario_id, $motivo);
+$resultado = $gerenciador->solicitar_pausa($funcionario_id, $motivo, $observacao);
 
 if ($resultado["sucesso"] && $motivo == "Reunião") {
     $funcionario = $gerenciador->getFuncionario($funcionario_id);
@@ -53,4 +53,7 @@ if ($resultado["sucesso"] && $motivo == "Reunião") {
     }
 }
 
-json_response($resultado);
+if ($resultado['sucesso']) {
+    audit_log('PAUSE_REQUEST', 'Solicitação para funcionário ID ' . $funcionario_id, 'INFO');
+}
+json_response($resultado, $resultado['sucesso'] ? 200 : 409);

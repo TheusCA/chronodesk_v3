@@ -4,7 +4,7 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../classes/Funcionario.php';
 
-verificar_admin_login();
+verificar_admin_login_api();
 require_csrf_token();
 require_json_content_type();
 

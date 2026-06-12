@@ -5,7 +5,14 @@
  */
 require_once __DIR__ . '/../config.php';
 
-verificar_admin_login();
+verificar_admin_login_api();
+
+if (!ENABLE_LOCAL_ADMIN) {
+    json_response([
+        'sucesso' => false,
+        'mensagem' => 'Autenticação local está desativada. A senha deve ser alterada no Active Directory.'
+    ], 403);
+}
 require_csrf_token();
 require_json_content_type();
 

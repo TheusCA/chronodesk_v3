@@ -6,12 +6,19 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../classes/Usuario.php';
 
-verificar_admin_login();
+verificar_admin_login_api();
 
 header('Content-Type: application/json; charset=utf-8');
 $action = $_GET['action'] ?? '';
 
 try {
+    if (!ENABLE_LOCAL_ADMIN) {
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Gerenciamento de usuários locais está desativado.'
+        ], 403);
+    }
+
     $usuarioModel = new Usuario();
 
     switch ($action) {

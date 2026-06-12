@@ -32,4 +32,7 @@ if (!$motivo) {
 exigir_autenticacao_ci_pausa($data, $funcionario_id, 'iniciar_pausa');
 
 $resultado = $gerenciador->iniciar_pausa($funcionario_id, $motivo);
-json_response($resultado);
+if ($resultado['sucesso']) {
+    audit_log('PAUSE_START', 'Pausa iniciada para funcionário ID ' . $funcionario_id, 'INFO');
+}
+json_response($resultado, $resultado['sucesso'] ? 200 : 409);

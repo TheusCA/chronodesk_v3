@@ -309,19 +309,9 @@ function audit_log($action, $details = '', $severity = 'INFO') {
         try {
             $pdo->query("SELECT 1 FROM audit_log LIMIT 1");
         } catch (\PDOException $e) {
+            error_log('[AUDIT] Tabela audit_log indisponível; execute o schema de deploy.');
+            return;
             // Tabela não existe, tentar criar
-            $pdo->exec("CREATE TABLE IF NOT EXISTS audit_log (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                user_ip VARCHAR(45) NOT NULL DEFAULT 'unknown',
-                username VARCHAR(50) DEFAULT 'anonymous',
-                action VARCHAR(100) NOT NULL,
-                details TEXT,
-                severity ENUM('INFO','WARNING','CRITICAL') DEFAULT 'INFO',
-                INDEX idx_timestamp (timestamp),
-                INDEX idx_action (action),
-                INDEX idx_severity (severity)
-            ) ENGINE=InnoDB;");
         }
         
         $stmt = $pdo->prepare(
@@ -329,7 +319,7 @@ function audit_log($action, $details = '', $severity = 'INFO') {
         );
         $stmt->execute([
             $_SERVER['REMOTE_ADDR'] ?? 'unknown',
-            $_SESSION['admin_username'] ?? $_SESSION['username'] ?? 'anonymous',
+            $_SESSION['admin_username'] ?? $_SESSION['username'] ?? $_SESSION['ci_username'] ?? 'anonymous',
             substr($action, 0, 100),
             substr($details, 0, 5000),
             in_array($severity, ['INFO', 'WARNING', 'CRITICAL']) ? $severity : 'INFO'
@@ -396,6 +386,17 @@ function destroy_current_session() {
     }
 
     session_destroy();
+}
+
+function clear_ci_session() {
+    unset(
+        $_SESSION['ci_logged_in'],
+        $_SESSION['ci_funcionario_id'],
+        $_SESSION['ci_username'],
+        $_SESSION['ci_nome'],
+        $_SESSION['ci_login_time'],
+        $_SESSION['ci_last_activity']
+    );
 }
 
 // ============================================

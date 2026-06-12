@@ -119,6 +119,86 @@ class GerenciadorPausas {
         return ["sucesso" => true, "mensagem" => "{$funcionario->nome} iniciou a pausa ({$motivo}) às {$hora}."];
     }
 
+    public function solicitar_pausa($funcionario_id, $motivo, $observacao = '') {
+        if (!isset($this->funcionarios[$funcionario_id])) {
+            return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];
+        }
+
+        $funcionario = $this->funcionarios[$funcionario_id];
+        if (!$funcionario->ativo) {
+            return ["sucesso" => false, "mensagem" => "{$funcionario->nome} está inativo."];
+        }
+        if ($funcionario->em_pausa || $funcionario->status_aprovacao === 'pendente') {
+            return ["sucesso" => false, "mensagem" => "{$funcionario->nome} já possui uma pausa ativa ou solicitação pendente."];
+        }
+        if (!$funcionario->esta_disponivel()) {
+            return ["sucesso" => false, "mensagem" => "{$funcionario->nome} não está disponível no momento."];
+        }
+
+        $funcionario->em_pausa = false;
+        $funcionario->inicio_pausa = null;
+        $funcionario->motivo_pausa = $motivo;
+        $funcionario->status_aprovacao = 'pendente';
+        $funcionario->solicitacao_timestamp = new DateTime();
+        $funcionario->observacao_reuniao = $observacao;
+        $this->salvar_estado();
+
+        return ["sucesso" => true, "mensagem" => "Solicitação de pausa enviada para aprovação."];
+    }
+
+    public function aprovar_pausa($funcionario_id) {
+        $funcionario = $this->funcionarios[$funcionario_id] ?? null;
+        if (!$funcionario) {
+            return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];
+        }
+        if ($funcionario->status_aprovacao !== 'pendente') {
+            return ["sucesso" => false, "mensagem" => "Não há solicitação pendente para este funcionário."];
+        }
+
+        $pausas_ativas = 0;
+        foreach ($this->funcionarios as $outro) {
+            if (
+                $outro->equipe === $funcionario->equipe &&
+                $outro->em_pausa &&
+                $outro->status_aprovacao === 'aprovado'
+            ) {
+                $pausas_ativas++;
+            }
+        }
+        if ($pausas_ativas >= $this->limite_pausa_por_equipe) {
+            return [
+                "sucesso" => false,
+                "mensagem" => "Limite de pausas simultâneas atingido para a equipe " . strtoupper($funcionario->equipe) . "."
+            ];
+        }
+
+        $funcionario->em_pausa = true;
+        $funcionario->inicio_pausa = new DateTime();
+        $funcionario->status_aprovacao = 'aprovado';
+        $funcionario->solicitacao_timestamp = null;
+        $this->salvar_estado();
+        return ["sucesso" => true, "mensagem" => "Pausa aprovada para {$funcionario->nome}."];
+    }
+
+    public function rejeitar_pausa($funcionario_id) {
+        $funcionario = $this->funcionarios[$funcionario_id] ?? null;
+        if (!$funcionario) {
+            return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];
+        }
+        if ($funcionario->status_aprovacao !== 'pendente') {
+            return ["sucesso" => false, "mensagem" => "Não há solicitação pendente para este funcionário."];
+        }
+
+        $funcionario->em_pausa = false;
+        $funcionario->inicio_pausa = null;
+        $funcionario->motivo_pausa = null;
+        $funcionario->status_aprovacao = null;
+        $funcionario->solicitacao_timestamp = null;
+        $funcionario->observacao_reuniao = null;
+        $this->salvar_estado();
+        return ["sucesso" => true, "mensagem" => "Solicitação rejeitada para {$funcionario->nome}."];
+    }
+
     public function finalizar_pausa($funcionario_id) {
         if (!isset($this->funcionarios[$funcionario_id])) {
             return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];
@@ -128,6 +208,10 @@ class GerenciadorPausas {
 
         if (!$funcionario->em_pausa) {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} não está em pausa."];
+        }
+
+        if ($funcionario->status_aprovacao !== 'aprovado' || !$funcionario->inicio_pausa) {
+            return ["sucesso" => false, "mensagem" => "A pausa ainda não foi aprovada."];
         }
 
         $fim_pausa = new DateTime();

@@ -272,6 +272,39 @@ function verificar_login() {
     $_SESSION['last_activity'] = time();
 }
 
+function usuario_pode_acessar_metricas() {
+    return (
+        (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) ||
+        (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true)
+    );
+}
+
+function verificar_login_api() {
+    if (!usuario_pode_acessar_metricas()) {
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Sessão expirada ou acesso não autorizado.'
+        ], 401);
+    }
+
+    $now = time();
+    $login_time = (int)($_SESSION['login_time'] ?? 0);
+    $last_activity = (int)($_SESSION['last_activity'] ?? 0);
+    if (
+        ($login_time > 0 && ($now - $login_time) > 14400) ||
+        ($last_activity > 0 && ($now - $last_activity) > 1200)
+    ) {
+        audit_log('SESSION_EXPIRED', 'Sessão de gestor expirada em API', 'INFO');
+        destroy_current_session();
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Sessão expirada. Faça login novamente.'
+        ], 401);
+    }
+
+    $_SESSION['last_activity'] = $now;
+}
+
 /**
  * [VULN-009] Verificar login admin com timeouts
  */
@@ -296,6 +329,17 @@ function verificar_admin_login() {
         _redirecionar_login('admin_login.php', 'Sessão expirada por inatividade.');
     }
     $_SESSION['last_activity'] = time();
+}
+
+function verificar_admin_login_api() {
+    if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Acesso administrativo não autorizado.'
+        ], 401);
+    }
+
+    verificar_login_api();
 }
 
 function _redirecionar_login($page, $msg = '') {
@@ -448,8 +492,7 @@ function salvar_funcionarios_sistema($funcionarios) {
 }
 
 function normalizar_ad_login($ad_login) {
-    $ad_login = strtolower(sanitize_input($ad_login ?? '', 100));
-    return $ad_login === '' ? null : $ad_login;
+    return normalizar_samaccountname($ad_login);
 }
 
 function validate_ad_login($ad_login) {
