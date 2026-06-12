@@ -132,9 +132,9 @@ $ci_nome = $_SESSION['ci_nome'] ?? '';
                         </select>
                         <div id="observacao-reuniao" class="observacao-reuniao" style="display: none;">
                             <textarea id="observacao-texto" placeholder="Descrição da reunião..." maxlength="200" rows="3"></textarea>
-                            <button onclick="solicitarPausaComAprovacao()" class="btn btn-warning">Solicitar</button>
+                            <button id="btn-solicitar-pausa" type="button" onclick="solicitarPausaComAprovacao()" class="btn btn-warning">Solicitar</button>
                         </div>
-                        <button id="btn-iniciar-normal" onclick="iniciarPausa()" class="btn btn-primary">Iniciar</button>
+                        <button id="btn-iniciar-normal" type="button" onclick="iniciarPausa()" class="btn btn-primary">Iniciar</button>
                     </div>
                 </div>
 
@@ -145,7 +145,7 @@ $ci_nome = $_SESSION['ci_nome'] ?? '';
                         <select id="select-finalizar-ci" class="select-ci">
                             <option value="">— Selecione o CI —</option>
                         </select>
-                        <button onclick="finalizarPausa()" class="btn btn-secondary">Finalizar</button>
+                        <button id="btn-finalizar-pausa" type="button" onclick="finalizarPausa()" class="btn btn-secondary">Finalizar</button>
                     </div>
                 </div>
 

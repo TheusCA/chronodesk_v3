@@ -429,3 +429,12 @@
     50% { opacity: 1; }
     100% { opacity: 0.5; }
 }
+.metrics-error {
+    grid-column: 1 / -1;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--danger);
+    border-radius: var(--radius-md);
+    background: var(--danger-bg);
+    color: var(--danger);
+    text-align: center;
+}

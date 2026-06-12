@@ -146,8 +146,23 @@ function setDashboardVisible(visible) {
     if (sessionInfo) sessionInfo.classList.toggle('hidden', !visible);
 }
 
+function setButtonLoading(button, loading, loadingText = 'Processando...') {
+    if (!button) return;
+    if (loading) {
+        button.dataset.originalText = button.textContent;
+        button.textContent = loadingText;
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+    } else {
+        button.textContent = button.dataset.originalText || button.textContent;
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+    }
+}
+
 async function loginCi(event) {
     event.preventDefault();
+    const submitButton = event.currentTarget.querySelector('button[type="submit"]');
     const login = document.getElementById('ci-login-ad');
     const senha = document.getElementById('ci-senha-ad');
     const loginAd = login ? login.value.trim() : '';
@@ -158,6 +173,7 @@ async function loginCi(event) {
         return;
     }
 
+    setButtonLoading(submitButton, true, 'Entrando...');
     try {
         const { data: resultado } = await fetchJsonSeguro(getApiBaseUrl() + '/login_ci.php', {
             method: 'POST',
@@ -184,10 +200,14 @@ async function loginCi(event) {
     } catch (error) {
         limparSenhaCi();
         exibirMensagem('Erro ao autenticar CI: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(submitButton, false);
     }
 }
 
 async function logoutCi() {
+    const logoutButton = document.getElementById('btn-ci-logout');
+    setButtonLoading(logoutButton, true, 'Saindo...');
     try {
         const { data: resultado } = await fetchJsonSeguro(getApiBaseUrl() + '/logout_ci.php', {
             method: 'POST',
@@ -205,6 +225,8 @@ async function logoutCi() {
     window.CI_NOME = '';
     setDashboardVisible(false);
     limparSenhaCi();
+    setButtonLoading(logoutButton, false);
+    exibirMensagem('Sessão encerrada.', 'success');
 }
 
 // ----------- Lista de funcionários para selects -----------
@@ -276,6 +298,8 @@ async function iniciarPausa() {
         return;
     }
 
+    const actionButton = document.getElementById('btn-iniciar-normal');
+    setButtonLoading(actionButton, true, 'Iniciando...');
     try {
         const apiUrl = getApiBaseUrl();
         const { data: resultado } = await fetchJsonSeguro(apiUrl + '/iniciar_pausa.php', {
@@ -296,6 +320,8 @@ async function iniciarPausa() {
         }
     } catch (error) {
         exibirMensagem('Erro ao iniciar pausa: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(actionButton, false);
     }
 }
 
@@ -320,6 +346,8 @@ async function finalizarPausa() {
         return;
     }
 
+    const actionButton = document.getElementById('btn-finalizar-pausa');
+    setButtonLoading(actionButton, true, 'Finalizando...');
     try {
         const apiUrl = getApiBaseUrl();
         const { data: resultado } = await fetchJsonSeguro(apiUrl + '/finalizar_pausa.php', {
@@ -338,6 +366,8 @@ async function finalizarPausa() {
         }
     } catch (error) {
         exibirMensagem('Erro ao finalizar pausa: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(actionButton, false);
     }
 }
 
@@ -455,10 +485,11 @@ function criarCardFuncionario(funcionario) {
 
     const solicitacaoPendente = funcionario.status_aprovacao === 'pendente';
     let classes = 'funcionario-card';
-    if (funcionario.em_pausa) {
+    if (solicitacaoPendente) {
+        classes += ' solicitacao-pendente';
+    } else if (funcionario.em_pausa) {
         classes += ' em-pausa';
-        if (solicitacaoPendente) classes += ' solicitacao-pendente';
-        else if (nivelAlerta === 'critico') classes += ' alerta-critico';
+        if (nivelAlerta === 'critico') classes += ' alerta-critico';
         else if (nivelAlerta === 'alerta') classes += ' alerta-15min';
     } else {
         switch(disponibilidade.status) {
@@ -471,10 +502,12 @@ function criarCardFuncionario(funcionario) {
     }
     card.className = classes;
 
-    const iconeStatus = funcionario.em_pausa ? '🔴' : obterIconeDisponibilidade(disponibilidade.status);
-    const textoStatus = funcionario.em_pausa ? 'Em Pausa' : (disponibilidade.label || 'Indisponível');
+    const iconeStatus = solicitacaoPendente ? '📋' : (funcionario.em_pausa ? '🔴' : obterIconeDisponibilidade(disponibilidade.status));
+    const textoStatus = solicitacaoPendente ? 'Aguardando aprovação' : (funcionario.em_pausa ? 'Em Pausa' : (disponibilidade.label || 'Indisponível'));
     let corStatus = '#E81123';
-    if (!funcionario.em_pausa) {
+    if (solicitacaoPendente) {
+        corStatus = '#eab308';
+    } else if (!funcionario.em_pausa) {
         switch(disponibilidade.status) {
             case 'disponivel': corStatus = '#107C10'; break;
             case 'antes_jornada': case 'apos_jornada': corStatus = '#FFB900'; break;
@@ -490,9 +523,10 @@ function criarCardFuncionario(funcionario) {
     }
 
     let alertaHtml = '';
-    if (funcionario.em_pausa) {
-        if (solicitacaoPendente) alertaHtml = '<div class="status-alerta status-pendente">📋 Pendente</div>';
-        else if (nivelAlerta === 'critico') alertaHtml = '<div class="status-alerta status-critico">🚨 Crítico</div>';
+    if (solicitacaoPendente) {
+        alertaHtml = '<div class="status-alerta status-pendente">Pendente</div>';
+    } else if (funcionario.em_pausa) {
+        if (nivelAlerta === 'critico') alertaHtml = '<div class="status-alerta status-critico">🚨 Crítico</div>';
         else if (nivelAlerta === 'alerta') alertaHtml = '<div class="status-alerta status-warning">⚠️ 15min</div>';
     }
 
@@ -592,6 +626,8 @@ async function solicitarPausaComAprovacao() {
         return;
     }
 
+    const actionButton = document.getElementById('btn-solicitar-pausa');
+    setButtonLoading(actionButton, true, 'Enviando...');
     try {
         const apiUrl = getApiBaseUrl();
         const { data } = await fetchJsonSeguro(apiUrl + '/solicitar_pausa_com_aprovacao.php', {
@@ -615,6 +651,8 @@ async function solicitarPausaComAprovacao() {
         }
     } catch (error) {
         exibirMensagem('Erro ao solicitar pausa de reunião: ' + error.message, 'error');
+    } finally {
+        setButtonLoading(actionButton, false);
     }
 }
 

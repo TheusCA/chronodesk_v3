@@ -430,6 +430,14 @@ textarea:focus {
     transform: scale(0.98);
 }
 
+.btn:disabled,
+.btn[aria-busy="true"] {
+    cursor: wait;
+    opacity: 0.65;
+    transform: none;
+    box-shadow: none;
+}
+
 .btn-primary {
     background: var(--primary);
     color: white;
@@ -763,6 +771,15 @@ textarea:focus {
 .message.success { border-color: var(--success); }
 .message.error { border-color: var(--danger); }
 .message.warning { border-color: var(--warning); }
+.message.critical { border-color: var(--danger); }
+
+.funcionario-card.solicitacao-pendente .status-principal {
+    background: linear-gradient(to bottom, var(--bg-surface), var(--warning-bg));
+}
+
+.funcionario-card.solicitacao-pendente .status-texto-principal {
+    color: var(--warning);
+}
 
 @keyframes slideIn {
     from { transform: translateX(100%); opacity: 0; }

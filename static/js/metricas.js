@@ -17,6 +17,9 @@ async function carregarMetricas() {
         const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
         const response = await fetch(apiUrl + '/metricas.php');
         const metricas = await response.json();
+        if (!response.ok) {
+            throw new Error(metricas.mensagem || `Falha ao carregar métricas (HTTP ${response.status}).`);
+        }
 
         preencherMetrica("total-pausas-funcionario", metricas.total_pausas_funcionario, "pausas");
         preencherMetrica("duracao-total-funcionario", metricas.duracao_total_funcionario, "segundos", formatarTempo);
@@ -39,7 +42,10 @@ async function carregarMetricas() {
 
     } catch (error) {
         console.error("Erro ao carregar métricas:", error);
-        document.querySelector(".metrics-container").innerHTML = "<p style=\"color: red; text-align: center;\">Erro ao carregar métricas. Verifique o console para detalhes.</p>";
+        const dashboard = document.querySelector(".metrics-dashboard");
+        if (dashboard) {
+            dashboard.innerHTML = `<p class="metrics-error">${escapeHtml(error.message)}</p>`;
+        }
     }
 }
 
@@ -155,10 +161,10 @@ function criarItemSolicitacao(solicitacao) {
             <strong>Observação:</strong> ${escapeHtml(solicitacao.observacao || 'Nenhuma observação fornecida')}
         </div>
         <div class="request-actions">
-            <button class="btn btn-success btn-sm" onclick="aprovarSolicitacao(${parseInt(solicitacao.id, 10)})">
+            <button class="btn btn-success btn-sm" onclick="aprovarSolicitacao(${parseInt(solicitacao.id, 10)}, this)">
                 ✅ Aprovar
             </button>
-            <button class="btn btn-danger btn-sm" onclick="rejeitarSolicitacao(${parseInt(solicitacao.id, 10)})">
+            <button class="btn btn-danger btn-sm" onclick="rejeitarSolicitacao(${parseInt(solicitacao.id, 10)}, this)">
                 ❌ Rejeitar
             </button>
         </div>
@@ -168,7 +174,12 @@ function criarItemSolicitacao(solicitacao) {
 }
 
 // Função para aprovar solicitação
-async function aprovarSolicitacao(funcionarioId) {
+async function aprovarSolicitacao(funcionarioId, button) {
+    const originalText = button?.textContent;
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Aprovando...';
+    }
     try {
         const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
         const response = await fetch(apiUrl + '/aprovar_pausa.php', {
@@ -191,12 +202,22 @@ async function aprovarSolicitacao(funcionarioId) {
         }
     } catch (error) {
         alert('Erro ao aprovar solicitação: ' + error.message);
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = originalText;
+        }
     }
 }
 
 // Função para rejeitar solicitação
-async function rejeitarSolicitacao(funcionarioId) {
+async function rejeitarSolicitacao(funcionarioId, button) {
     if (confirm('Tem certeza que deseja rejeitar esta solicitação de pausa?')) {
+        const originalText = button?.textContent;
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Rejeitando...';
+        }
         try {
             const apiUrl = (typeof API_BASE_URL !== 'undefined') ? API_BASE_URL : '/api';
             const response = await fetch(apiUrl + '/rejeitar_pausa.php', {
@@ -219,6 +240,11 @@ async function rejeitarSolicitacao(funcionarioId) {
             }
         } catch (error) {
             alert('Erro ao rejeitar solicitação: ' + error.message);
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.textContent = originalText;
+            }
         }
     }
 }
