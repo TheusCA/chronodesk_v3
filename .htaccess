@@ -30,6 +30,7 @@ RewriteEngine On
 
 # Bloquear diretórios que nunca devem ser publicados
 RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|sessions|cache|tmp)(/|$)" - [F,L]
+RewriteRule "^frontend/(src|node_modules)(/|$)" - [F,L]
 
 # Bloquear scripts operacionais que devem rodar somente via CLI
 RewriteRule "^migrar_.*\.php$" - [F,L]

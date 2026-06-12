@@ -33,6 +33,7 @@ Thumbs.db
 # Dependências
 node_modules/
 vendor/
+frontend/dist/
 
 # Sessões/cache locais
 sessions/

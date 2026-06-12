@@ -75,9 +75,9 @@ define('FUNCIONARIOS_JSON', __DIR__ . '/funcionarios.json');
 // ============================================
 // [VULN-002] Credenciais do banco via variáveis de ambiente
 // ============================================
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
 define('DB_NAME', getenv('DB_NAME') ?: 'sistema_pausas');
-define('DB_USER', getenv('DB_USER') ?: (APP_ENV === 'production' ? 'chronodesk_user' : 'root'));
+define('DB_USER', getenv('DB_USER') ?: (APP_ENV === 'production' ? 'chronodesk_app' : 'root'));
 define('DB_PASS', getenv('DB_PASS') ?: '');
 
 // ============================================

@@ -221,3 +221,19 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] Logs do Apache revisados.
 - [ ] Backup do MySQL testado.
 - [ ] Rollback documentado e testado.
+# Frontend React (implantação paralela)
+
+A interface legada continua sendo servida por `index.php`, `admin.php` e
+`metricas.php`. Para publicar a nova interface sem substituir o fluxo atual:
+
+```bash
+cd /var/www/chronodesk/frontend
+npm ci
+npm run build
+sudo mkdir -p /var/www/chronodesk/app
+sudo rsync -a --delete dist/ /var/www/chronodesk/app/
+```
+
+A nova interface ficará disponível em `/app/` e consumirá os endpoints PHP na
+mesma origem. Não publique `frontend/src` como aplicação final e não injete
+credenciais ou variáveis LDAP no build Vite.
