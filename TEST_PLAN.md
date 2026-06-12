@@ -140,3 +140,21 @@ Plano de testes para ChronoDesk PHP 8 / XAMPP / MySQL / JavaScript Vanilla, cobr
 | D-004 | `.htaccess` ativo | Arquivos sensiveis bloqueados |
 | D-005 | Extensoes PHP necessarias | PDO MySQL, LDAP e Zip habilitadas |
 | D-006 | Logs | Erros e auditoria gerados sem secrets |
+# Validação da interface React
+
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run build
+```
+
+Publicar `frontend/dist/` em `/var/www/chronodesk/app/` e validar:
+
+```bash
+curl -I http://127.0.0.1/app/
+curl -I http://127.0.0.1/frontend/src/App.jsx
+```
+
+O primeiro endereço deve responder `200`; o código-fonte em `frontend/src`
+deve responder `403` ou `404`.

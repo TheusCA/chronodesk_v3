@@ -11,13 +11,29 @@ done
 
 if command -v node >/dev/null 2>&1; then
     echo "== JavaScript syntax =="
-    find . -type f -name '*.js' -not -path './.git/*' -print | sort | while IFS= read -r file; do
+    find . -type f -name '*.js' \
+        -not -path './.git/*' \
+        -not -path './frontend/node_modules/*' \
+        -not -path './frontend/dist/*' \
+        -print | sort | while IFS= read -r file; do
         node --check "$file" >/dev/null
         echo "OK $file"
     done
 else
     echo "== JavaScript syntax =="
     echo "SKIP node not found"
+fi
+
+if command -v npm >/dev/null 2>&1 && [ -d frontend/node_modules ]; then
+    echo "== React frontend =="
+    (
+        cd frontend
+        npm run lint
+        npm run build
+    )
+else
+    echo "== React frontend =="
+    echo "SKIP dependencies not installed (run: cd frontend && npm ci)"
 fi
 
 echo "== Git whitespace =="
@@ -53,11 +69,17 @@ check_status() {
 echo "== HTTP checks against $BASE_URL =="
 check_status "/" public
 check_status "/index.php" public
+check_status "/login.php" public
+check_status "/admin_login.php" public
+check_status "/metricas.php" public
+check_status "/admin.php" public
 check_status "/api/status.php" public
+check_status "/api/session.php" public
 check_status "/.env" blocked
 check_status "/.git/config" blocked
 check_status "/database_SECURED.sql" blocked
 check_status "/README.md" blocked
+check_status "/frontend/src/App.jsx" blocked
 
 echo "All Linux validation checks passed."
 
