@@ -41,12 +41,26 @@ if (!$funcionario || !($funcionario['ativo'] ?? true)) {
 clear_rate_limit('ci_login_global');
 clear_rate_limit($rate_key);
 session_regenerate_id(true);
+$access_role = validate_access_role($funcionario['access_role'] ?? 'tecnico') ?? 'tecnico';
 $_SESSION['ci_logged_in'] = true;
 $_SESSION['ci_funcionario_id'] = (int)$funcionario['id'];
 $_SESSION['ci_username'] = normalizar_samaccountname($autenticacao['ad_user']['login'] ?? $login_ad);
 $_SESSION['ci_nome'] = sanitize_input($funcionario['nome'] ?? '', 100);
+$_SESSION['ci_access_role'] = $access_role;
 $_SESSION['ci_login_time'] = time();
 $_SESSION['ci_last_activity'] = time();
+
+if (in_array($access_role, ['admin', 'gestor'], true)) {
+    $_SESSION['ci_elevated_session'] = true;
+    $_SESSION['admin_logged_in'] = $access_role === 'admin';
+    $_SESSION['admin_auth_type'] = 'employee_role';
+    $_SESSION['admin_username'] = $_SESSION['ci_username'];
+    $_SESSION['portal_role'] = $access_role;
+    $_SESSION['logged_in'] = true;
+    $_SESSION['username'] = $_SESSION['ci_username'];
+    $_SESSION['login_time'] = time();
+    $_SESSION['last_activity'] = time();
+}
 
 audit_log('CI_LOGIN_SUCCESS', 'Login CI bem-sucedido para funcionario ID ' . (int)$funcionario['id'], 'INFO');
 
@@ -57,5 +71,6 @@ json_response([
         'funcionario_id' => (int)$funcionario['id'],
         'username' => $_SESSION['ci_username'],
         'nome' => $_SESSION['ci_nome'],
+        'role' => $access_role,
     ],
 ]);

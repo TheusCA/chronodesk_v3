@@ -17,6 +17,7 @@ json_response([
         'funcionario_id' => $ci_authenticated ? (int)($_SESSION['ci_funcionario_id'] ?? 0) : 0,
         'nome' => $ci_authenticated ? sanitize_input($_SESSION['ci_nome'] ?? '', 100) : '',
         'username' => $ci_authenticated ? sanitize_input($_SESSION['ci_username'] ?? '', 100) : '',
+        'role' => $ci_authenticated ? ($role ?? 'tecnico') : null,
     ],
     'gestor' => [
         'autenticado' => $gestor_authenticated,

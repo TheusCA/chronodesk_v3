@@ -22,7 +22,7 @@
     </Directory>
 
     # Defesa adicional no VirtualHost. As regras principais continuam no .htaccess.
-    <FilesMatch "(^\.env(\..*)?$|^\.git|^(composer\..*|package.*\.json)$|\.(sql|md|log|bak|backup|zip|rar|7z|old|orig|save|csv|json|sh|bat|ps1|txt)$)">
+    <FilesMatch "(^\.env(\..*)?$|^\.git|^(composer\..*|package.*\.json)$|\.(sql|md|log|bak|backup|zip|rar|7z|old|orig|save|csv|xlsx|docx|json|sh|bat|ps1|txt)$)">
         Require all denied
     </FilesMatch>
 
@@ -66,7 +66,7 @@
 #         Require all denied
 #     </Directory>
 #
-#     <FilesMatch "(^\.env(\..*)?$|^\.git|^(composer\..*|package.*\.json)$|\.(sql|md|log|bak|backup|zip|rar|7z|old|orig|save|csv|json|sh|bat|ps1|txt)$)">
+#     <FilesMatch "(^\.env(\..*)?$|^\.git|^(composer\..*|package.*\.json)$|\.(sql|md|log|bak|backup|zip|rar|7z|old|orig|save|csv|xlsx|docx|json|sh|bat|ps1|txt)$)">
 #         Require all denied
 #     </FilesMatch>
 #

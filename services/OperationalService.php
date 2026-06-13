@@ -737,7 +737,7 @@ final class OperationalService {
         $params = [':date_from' => $from, ':date_to' => $to];
         $team = $this->team($filters['team'] ?? null, true);
         $employeeId = $this->positiveInt($filters['employee_id'] ?? null, true);
-        if ($actor['role'] === 'tecnico') {
+        if (in_array($actor['role'], ['tecnico', 'somente_leitura'], true)) {
             $employeeId = (int)$actor['employee_id'];
         }
         $this->appendEmployeeTeamFilters($sql, $params, $team, $employeeId);
@@ -807,6 +807,9 @@ final class OperationalService {
     }
 
     private function targetEmployee(array $data, array $actor): array {
+        if ($actor['role'] === 'somente_leitura') {
+            throw new DomainException('Seu perfil possui acesso somente para leitura.');
+        }
         if ($actor['role'] === 'tecnico') {
             if (empty($actor['employee_id'])) {
                 throw new DomainException('Sessao sem colaborador vinculado.');

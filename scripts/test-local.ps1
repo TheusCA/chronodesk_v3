@@ -142,6 +142,7 @@ if ($SkipHttp) {
         @{ Url = "$BaseUrl/api/portal/time_corrections.php"; Expect = @(401) },
         @{ Url = "$BaseUrl/api/portal/oncall.php"; Expect = @(401) },
         @{ Url = "$BaseUrl/api/portal/reports.php"; Expect = @(401) },
+        @{ Url = "$BaseUrl/api/portal/documents.php"; Expect = @(401) },
         @{ Url = "$BaseUrl/api/configuracoes.php"; Expect = @(401) },
         @{ Url = "$BaseUrl/.env"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/.git/config"; Expect = @(403, 404) },
@@ -150,17 +151,22 @@ if ($SkipHttp) {
         @{ Url = "$BaseUrl/frontend/vite.config.js"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/services/PortalService.php"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/services/OperationalService.php"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/services/DocumentService.php"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/services/SharePointSyncService.php"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/services/MailerService.php"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/migrations/20260612_001_portal_foundation.sql"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/migrations/20260613_003_operational_modules.sql"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/migrations/20260613_004_operational_hardening.sql"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/migrations/20260613_005_documents_and_employee_roles.sql"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/database_SECURED.sql"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/README.md"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/backup.bak"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/archive.zip"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/secret.csv"; Expect = @(403, 404) },
-        @{ Url = "$BaseUrl/secret.json"; Expect = @(403, 404) }
+        @{ Url = "$BaseUrl/secret.json"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/secret.xlsx"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/secret.docx"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/uploads/test.pdf"; Expect = @(403, 404) }
     )
 
     foreach ($target in $targets) {

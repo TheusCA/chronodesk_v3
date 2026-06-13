@@ -102,6 +102,8 @@ sudo find /var/www/chronodesk -type f -exec chmod 640 {} \;
 sudo chmod 640 /var/www/.env
 sudo chown root:www-data /var/www/.env
 
+sudo install -d -o www-data -g www-data -m 700 /var/lib/chronodesk/documents
+
 sudo touch /var/www/chronodesk/estado.json \
   /var/www/chronodesk/pausas.csv \
   /var/www/chronodesk/config_sistema.json
@@ -145,6 +147,11 @@ Importe o schema da aplicacao:
 
 ```bash
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/database_SECURED.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260612_001_portal_foundation.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260612_002_notification_reads.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_003_operational_modules.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_004_operational_hardening.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_005_documents_and_employee_roles.sql
 ```
 
 7. Testar conectividade PHP/MySQL:
@@ -225,6 +232,8 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] `mod_rewrite` e `mod_headers` habilitados.
 - [ ] HTTPS interno configurado ou excecao formal registrada.
 - [ ] `.env` real criado manualmente e fora do Git.
+- [ ] `DOCUMENT_STORAGE_PATH=/var/lib/chronodesk/documents` configurado.
+- [ ] Diretorio privado de documentos com dono `www-data` e modo `700`.
 - [ ] `APP_ENV=production`.
 - [ ] `APP_DEBUG=false`.
 - [ ] `SECRET_KEY` forte e unica.

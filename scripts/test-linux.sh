@@ -76,6 +76,7 @@ check_status "/metricas.php" public
 check_status "/admin.php" public
 check_status "/api/status.php" public
 check_status "/api/session.php" public
+check_status "/api/portal/documents.php" public
 check_status "/.env" blocked
 check_status "/.git/config" blocked
 check_status "/database_SECURED.sql" blocked
@@ -85,12 +86,17 @@ check_status "/frontend/vite.config.js" blocked
 check_status "/frontend/package.json" blocked
 check_status "/frontend/.env" blocked
 check_status "/services/OperationalService.php" blocked
+check_status "/services/DocumentService.php" blocked
 check_status "/migrations/20260613_003_operational_modules.sql" blocked
 check_status "/migrations/20260613_004_operational_hardening.sql" blocked
+check_status "/migrations/20260613_005_documents_and_employee_roles.sql" blocked
 check_status "/backup.bak" blocked
 check_status "/archive.zip" blocked
 check_status "/secret.csv" blocked
 check_status "/secret.json" blocked
+check_status "/secret.xlsx" blocked
+check_status "/secret.docx" blocked
+check_status "/uploads/test.pdf" blocked
 
 legacy_post_status="$(curl -k -s -o /dev/null -w '%{http_code}' -X POST "${BASE_URL}/login.php")"
 echo "$legacy_post_status POST /login.php"

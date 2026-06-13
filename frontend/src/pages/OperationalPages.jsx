@@ -247,6 +247,7 @@ function WorkflowPage({ kind, session, notify }) {
   const endpoint = overtime ? 'portal/overtime.php' : 'portal/time_corrections.php'
   const employees = useEmployees()
   const canApprove = session.role === 'admin' || session.role === 'gestor'
+  const canCreate = session.role !== 'somente_leitura'
   const ownEmployee = session.ci.funcionario_id || ''
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', status: '' })
   const resource = useResource(`${endpoint}${queryString(filters)}`)
@@ -268,7 +269,8 @@ function WorkflowPage({ kind, session, notify }) {
   return (
     <div className="space-y-5">
       <PeriodFilters filters={filters} setFilters={setFilters} extra={<label className="label">Status<select className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="rejected">Rejeitado</option><option value="synced">Sincronizado</option><option value="sync_error">Erro de sync</option></select></label>} />
-      <form className="card space-y-4" onSubmit={create}>
+      {!canCreate && <div className="card border-blue-500/20 text-sm text-slate-400">Seu perfil possui acesso somente para leitura. Novos lançamentos e decisões estão desabilitados.</div>}
+      <form className={`card space-y-4 ${canCreate ? '' : 'hidden'}`} onSubmit={create}>
         <div><h2 className="font-bold text-white">{overtime ? 'Nova hora extra' : 'Novo ajuste de ponto'}</h2><p className="mt-1 text-sm text-slate-500">Competencia atual: {currentCompetency.label}, de {formatDate(currentCompetency.start)} a {formatDate(currentCompetency.end)}.</p></div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="label">Colaborador<EmployeeSelect disabled={!canApprove} employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>

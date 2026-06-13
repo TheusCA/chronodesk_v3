@@ -183,6 +183,83 @@
   .login-glow-right {
     @apply -right-32 bottom-0 h-96 w-96 bg-cyan-500/5;
   }
+
+  .tech-login-shell {
+    background:
+      radial-gradient(circle at 50% 45%, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.92) 65%),
+      linear-gradient(145deg, #020617 0%, #071326 48%, #020617 100%);
+  }
+
+  .tech-grid {
+    @apply pointer-events-none absolute inset-0 opacity-30;
+    background-image:
+      linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: linear-gradient(to bottom, transparent, black 22%, black 70%, transparent);
+  }
+
+  .tech-horizon {
+    @apply pointer-events-none absolute bottom-[-18%] left-1/2 h-[55%] w-[130%] -translate-x-1/2 rounded-[50%] border border-cyan-400/10;
+    box-shadow:
+      0 -20px 90px rgba(14, 165, 233, 0.08),
+      inset 0 20px 80px rgba(37, 99, 235, 0.05);
+  }
+
+  .tech-node {
+    @apply pointer-events-none absolute h-2 w-2 rounded-full bg-cyan-300/60 shadow-[0_0_20px_rgba(34,211,238,0.55)];
+  }
+
+  .tech-node::before,
+  .tech-node::after {
+    content: '';
+    @apply absolute left-1/2 top-1/2 h-px origin-left bg-gradient-to-r from-cyan-400/30 to-transparent;
+  }
+
+  .tech-node-one {
+    @apply left-[8%] top-[24%];
+  }
+
+  .tech-node-one::before {
+    @apply w-44 -rotate-12;
+  }
+
+  .tech-node-two {
+    @apply right-[12%] top-[18%];
+  }
+
+  .tech-node-two::before {
+    @apply w-36 rotate-[155deg];
+  }
+
+  .tech-node-three {
+    @apply bottom-[18%] right-[20%];
+  }
+
+  .tech-node-three::before {
+    @apply w-52 rotate-[205deg];
+  }
+
+  .portal-tech-shell {
+    @apply relative isolate overflow-x-hidden;
+  }
+
+  .portal-tech-shell::before {
+    content: '';
+    @apply pointer-events-none fixed inset-0 -z-10 opacity-40;
+    background-image:
+      linear-gradient(rgba(59, 130, 246, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59, 130, 246, 0.035) 1px, transparent 1px),
+      radial-gradient(circle at 80% 15%, rgba(14, 165, 233, 0.09), transparent 28rem),
+      radial-gradient(circle at 25% 85%, rgba(37, 99, 235, 0.06), transparent 32rem);
+    background-size: 64px 64px, 64px 64px, auto, auto;
+  }
+
+  .portal-tech-shell::after {
+    content: '';
+    @apply pointer-events-none fixed bottom-[-16rem] right-[-12rem] -z-10 h-[34rem] w-[34rem] rounded-full border border-blue-400/10;
+    box-shadow: 0 0 100px rgba(37, 99, 235, 0.08), inset 0 0 90px rgba(14, 165, 233, 0.04);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

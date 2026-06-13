@@ -3,7 +3,7 @@
 # ============================================
 
 # Bloquear acesso direto a arquivos sensíveis (Apache 2.4)
-<FilesMatch "(^\.env(\..*)?$|^(composer\..*|package.*\.json)$|\.(json|csv|sql|md|log|bak|backup|zip|rar|7z|sh|bat|ps1|txt|old|orig|save)$)">
+<FilesMatch "(^\.env(\..*)?$|^(composer\..*|package.*\.json)$|\.(json|csv|xlsx|docx|sql|md|log|bak|backup|zip|rar|7z|sh|bat|ps1|txt|old|orig|save)$)">
     Require all denied
 </FilesMatch>
 
@@ -34,7 +34,7 @@ ServerSignature Off
 RewriteEngine On
 
 # Bloquear diretórios que nunca devem ser publicados
-RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|services|migrations|deploy|scripts|sessions|cache|tmp)(/|$)" - [F,L]
+RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|services|migrations|deploy|scripts|sessions|cache|tmp|uploads|chronodesk_private|private_storage)(/|$)" - [F,L]
 RewriteRule "^frontend(?:/|$)" - [F,L]
 RewriteRule "^api/(?:.*/)?_[^/]*\.php$" - [F,L]
 RewriteRule "^(?:auth_ldap|config|config_assets|db|init|security)\.php$" - [F,L]
@@ -44,7 +44,7 @@ RewriteRule "^migrar_.*\.php$" - [F,L]
 
 # Bloquear arquivos sensíveis por padrão, preservando assets estáticos em static/
 RewriteRule "(^|/)(\.env(\..*)?|composer\..*|package.*\.json)$" - [F,L]
-RewriteRule "\.(json|csv|sql|md|log|bak|backup|zip|rar|7z|old|orig|save)$" - [F,L]
+RewriteRule "\.(json|csv|xlsx|docx|sql|md|log|bak|backup|zip|rar|7z|old|orig|save)$" - [F,L]
 
 # SPA fallback limitado ao build público React.
 # O portal React e a entrada oficial. Apenas paginas visuais GET/HEAD sao

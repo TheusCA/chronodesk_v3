@@ -111,6 +111,18 @@ function validate_equipe($equipe) {
     return in_array($equipe, ['n1', 'n2'], true);
 }
 
+function validate_funcionario_equipe($equipe) {
+    $equipe = strtolower(trim((string)$equipe));
+    return in_array($equipe, ['n1', 'n2', 'na'], true) ? $equipe : null;
+}
+
+function validate_access_role($role) {
+    $role = strtolower(trim((string)$role));
+    return in_array($role, ['tecnico', 'gestor', 'admin', 'somente_leitura'], true)
+        ? $role
+        : null;
+}
+
 function validate_nome($nome, $min_length = 3, $max_length = 100) {
     $nome = sanitize_input($nome, $max_length);
     if (strlen($nome) < $min_length) return false;
@@ -508,18 +520,18 @@ function clear_rate_limit($key): void {
 }
 
 function current_portal_role(): ?string {
-    if (
-        isset($_SESSION['admin_logged_in'])
-        && $_SESSION['admin_logged_in'] === true
-        && usuario_pode_acessar_metricas()
-    ) {
-        return 'admin';
-    }
     if (usuario_pode_acessar_metricas()) {
+        if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+            return 'admin';
+        }
+        $role = validate_access_role($_SESSION['portal_role'] ?? '');
+        if ($role === 'gestor') {
+            return $role;
+        }
         return 'gestor';
     }
     if (ci_session_is_current()) {
-        return 'tecnico';
+        return validate_access_role($_SESSION['ci_access_role'] ?? '') ?? 'tecnico';
     }
     return null;
 }
@@ -557,9 +569,10 @@ function require_portal_auth(array $allowed_roles = []): string {
         ], 403);
     }
 
-    if ($role === 'tecnico') {
+    if (ci_session_is_current()) {
         $_SESSION['ci_last_activity'] = time();
-    } else {
+    }
+    if (in_array($role, ['admin', 'gestor'], true)) {
         $_SESSION['last_activity'] = time();
     }
     return $role;
@@ -614,14 +627,29 @@ function destroy_current_session() {
 }
 
 function clear_ci_session() {
+    $clear_elevated_session = ($_SESSION['ci_elevated_session'] ?? false) === true;
     unset(
         $_SESSION['ci_logged_in'],
         $_SESSION['ci_funcionario_id'],
         $_SESSION['ci_username'],
         $_SESSION['ci_nome'],
+        $_SESSION['ci_access_role'],
+        $_SESSION['ci_elevated_session'],
         $_SESSION['ci_login_time'],
         $_SESSION['ci_last_activity']
     );
+    if ($clear_elevated_session) {
+        unset(
+            $_SESSION['admin_logged_in'],
+            $_SESSION['admin_auth_type'],
+            $_SESSION['admin_username'],
+            $_SESSION['portal_role'],
+            $_SESSION['logged_in'],
+            $_SESSION['username'],
+            $_SESSION['login_time'],
+            $_SESSION['last_activity']
+        );
+    }
 }
 
 // ============================================

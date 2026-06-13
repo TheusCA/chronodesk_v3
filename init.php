@@ -27,6 +27,7 @@ foreach ($funcionarios as $func_data) {
     $almoco_fim = $func_data['almoco_fim'] ?? '13:00';
     $ativo = isset($func_data['ativo']) ? (bool)$func_data['ativo'] : true;
     $ad_login = $func_data['ad_login'] ?? null;
+    $access_role = $func_data['access_role'] ?? 'tecnico';
     
     $gerenciador->adicionar_funcionario(new Funcionario(
         $func_data['id'],
@@ -37,7 +38,8 @@ foreach ($funcionarios as $func_data) {
         $almoco_inicio,
         $almoco_fim,
         $ativo,
-        $ad_login
+        $ad_login,
+        $access_role
     ));
 }
 

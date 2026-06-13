@@ -15,7 +15,9 @@ export async function api(path, options = {}) {
   const method = (options.method || 'GET').toUpperCase()
   const headers = new Headers(options.headers || {})
   if (!['GET', 'HEAD'].includes(method)) {
-    headers.set('Content-Type', 'application/json')
+    if (!(options.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json')
+    }
     headers.set('X-CSRF-Token', csrfToken)
   }
 
@@ -46,3 +48,4 @@ export async function api(path, options = {}) {
 }
 
 export const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body) })
+export const postForm = (path, body) => api(path, { method: 'POST', body })

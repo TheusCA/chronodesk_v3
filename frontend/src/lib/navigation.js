@@ -1,6 +1,6 @@
 export const navigation = [
   { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { path: '/pausas', label: 'Pausas', icon: 'pause' },
+  { path: '/pausas', label: 'Pausas', icon: 'pause', permission: 'pausas.use' },
   { path: '/admin', label: 'Admin', icon: 'shield', permission: 'admin.manage' },
   { path: '/metricas', label: 'Métricas', icon: 'chart', permission: 'metricas.read' },
   { section: 'Operação' },

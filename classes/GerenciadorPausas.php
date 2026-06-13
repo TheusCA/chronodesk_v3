@@ -333,9 +333,8 @@ class GerenciadorPausas {
             // Garantir que a equipe existe e está no formato correto
             $equipe = isset($funcionario->equipe) ? strtolower($funcionario->equipe) : 'n1';
             if ($equipe !== 'n1' && $equipe !== 'n2') {
-                $equipe = 'n1'; // Fallback para n1 se equipe inválida
+                continue;
             }
-            
             $info_funcionario = [
                 "id" => $funcionario->id,
                 "nome" => $funcionario->nome,
@@ -634,7 +633,7 @@ class GerenciadorPausas {
         return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];
     }
 
-    public function atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada = null, $jornada_saida = null, $almoco_inicio = null, $almoco_fim = null, $ativo = null, $ad_login = null) {
+    public function atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada = null, $jornada_saida = null, $almoco_inicio = null, $almoco_fim = null, $ativo = null, $ad_login = null, $access_role = null) {
         if (isset($this->funcionarios[$funcionario_id])) {
             $func = $this->funcionarios[$funcionario_id];
             $func->nome = $nome;
@@ -647,6 +646,7 @@ class GerenciadorPausas {
             if ($almoco_fim !== null) $func->almoco_fim = $almoco_fim;
             if ($ativo !== null) $func->ativo = $ativo;
             $func->ad_login = $ad_login;
+            if ($access_role !== null) $func->access_role = $access_role;
             
             $this->salvar_estado();
             return ["sucesso" => true, "mensagem" => "Funcionário atualizado com sucesso."];

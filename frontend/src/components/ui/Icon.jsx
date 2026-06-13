@@ -20,6 +20,9 @@ const paths = {
   logout: ['M10 17l5-5-5-5', 'M15 12H3', 'M21 19V5a2 2 0 00-2-2h-6'],
   menu: ['M4 6h16', 'M4 12h16', 'M4 18h16'],
   close: ['M6 6l12 12', 'M18 6L6 18'],
+  upload: ['M12 16V4', 'M7 9l5-5 5 5', 'M4 20h16'],
+  download: ['M12 4v12', 'M7 11l5 5 5-5', 'M4 20h16'],
+  trash: ['M3 6h18', 'M8 6V4h8v2', 'M19 6l-1 15H6L5 6', 'M10 10v7', 'M14 10v7'],
 }
 
 export function Icon({ name, className = 'h-5 w-5' }) {

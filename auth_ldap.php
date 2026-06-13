@@ -236,8 +236,12 @@ function buscar_funcionario_por_ad_login(string $ad_login): ?array {
 
     try {
         $pdo = get_db_connection();
+        $roleColumn = function_exists('funcionarios_access_role_supported')
+            && funcionarios_access_role_supported()
+            ? 'access_role'
+            : "'tecnico' AS access_role";
         $stmt = $pdo->prepare(
-            "SELECT id, nome, equipe, ativo
+            "SELECT id, nome, equipe, {$roleColumn}, ativo
              FROM funcionarios
              WHERE (LOWER(ad_login) = :login OR LOWER(ad_login_ativo) = :active_login)
                AND ativo = 1
@@ -267,6 +271,7 @@ function buscar_funcionario_por_ad_login(string $ad_login): ?array {
                     'id' => (int)$funcionario['id'],
                     'nome' => $funcionario['nome'],
                     'equipe' => $funcionario['equipe'],
+                    'access_role' => $funcionario['access_role'] ?? 'tecnico',
                     'ativo' => true,
                 ];
             }
@@ -309,8 +314,12 @@ function tentar_vincular_funcionario_ad(array $ad_user): ?array {
 
     try {
         $pdo = get_db_connection();
+        $roleColumn = function_exists('funcionarios_access_role_supported')
+            && funcionarios_access_role_supported()
+            ? 'access_role'
+            : "'tecnico' AS access_role";
         $stmt = $pdo->query(
-            "SELECT id, nome, equipe, ativo
+            "SELECT id, nome, equipe, {$roleColumn}, ativo
              FROM funcionarios
              WHERE ativo = 1 AND (ad_login IS NULL OR ad_login = '')"
         );
@@ -441,6 +450,11 @@ function ci_sessao_autenticada_para_funcionario($funcionario_id): bool {
 function exigir_autenticacao_ci_pausa($data, $funcionario_id, $contexto = 'pausa') {
     if (!is_array($data)) {
         json_response(['sucesso' => false, 'mensagem' => 'Dados inválidos.'], 400);
+    }
+
+    if (current_portal_role() === 'somente_leitura') {
+        audit_log('CI_PAUSE_READ_ONLY_DENIED', 'Perfil somente leitura tentou executar acao de pausa.', 'WARNING');
+        json_response(['sucesso' => false, 'mensagem' => 'Seu perfil possui acesso somente para leitura.'], 403);
     }
 
     if (ci_sessao_autenticada_para_funcionario($funcionario_id)) {

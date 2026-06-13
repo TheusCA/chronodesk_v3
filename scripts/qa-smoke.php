@@ -19,6 +19,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../auth_ldap.php';
 require_once __DIR__ . '/../services/MailerService.php';
 require_once __DIR__ . '/../services/OperationalService.php';
+require_once __DIR__ . '/../services/DocumentService.php';
 
 function assert_same($expected, $actual, string $message): void {
     if ($expected !== $actual) {
@@ -92,6 +93,9 @@ $_SESSION['admin_logged_in'] = true;
 assert_same('admin', current_portal_role(), 'RBAC identifica admin');
 assert_same(true, in_array('admin.manage', portal_permissions_for_role('admin'), true), 'admin recebe permissao administrativa');
 $_SESSION = [];
+assert_same('na', validate_funcionario_equipe('NA'), 'aceita equipe administrativa');
+assert_same('somente_leitura', validate_access_role('somente_leitura'), 'aceita perfil somente leitura');
+assert_same(null, validate_access_role('superadmin'), 'rejeita perfil desconhecido');
 
 $aprilCompetency = OperationalService::competencyRange('2026-04');
 assert_same('2026-03-16', $aprilCompetency['start'], 'competencia abril inicia em 16/03');
@@ -126,6 +130,50 @@ try {
     $unknownHeaderRejected = true;
 }
 assert_same(true, $unknownHeaderRejected, 'rejeita cabecalho inesperado na importacao');
+
+$documentService = new DocumentService(
+    new QaTransactionPdo(),
+    sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'chronodesk_document_qa_' . bin2hex(random_bytes(4))
+);
+$validateDocumentContent = new ReflectionMethod(DocumentService::class, 'validateContent');
+$validateDocumentContent->setAccessible(true);
+$rejectDangerousName = new ReflectionMethod(DocumentService::class, 'rejectDangerousName');
+$rejectDangerousName->setAccessible(true);
+$resolveDocumentPath = new ReflectionMethod(DocumentService::class, 'resolveStoragePath');
+$resolveDocumentPath->setAccessible(true);
+
+$textDocument = tempnam(sys_get_temp_dir(), 'chronodesk_txt_');
+file_put_contents($textDocument, "procedimento seguro\nlinha 2");
+$validateDocumentContent->invoke($documentService, $textDocument, 'txt');
+assert_same(true, is_file($textDocument), 'aceita conteudo textual permitido');
+
+$binaryDocument = tempnam(sys_get_temp_dir(), 'chronodesk_bin_');
+file_put_contents($binaryDocument, "cabecalho\0binario");
+$binaryRejected = false;
+try {
+    $validateDocumentContent->invoke($documentService, $binaryDocument, 'txt');
+} catch (ReflectionException | InvalidArgumentException $error) {
+    $binaryRejected = true;
+}
+assert_same(true, $binaryRejected, 'rejeita binario disfarçado de texto');
+
+$dangerousNameRejected = false;
+try {
+    $rejectDangerousName->invoke($documentService, 'manual.php.pdf');
+} catch (ReflectionException | InvalidArgumentException $error) {
+    $dangerousNameRejected = true;
+}
+assert_same(true, $dangerousNameRejected, 'rejeita extensao perigosa em nome composto');
+
+$traversalRejected = false;
+try {
+    $resolveDocumentPath->invoke($documentService, '../arquivo.pdf');
+} catch (ReflectionException | RuntimeException $error) {
+    $traversalRejected = true;
+}
+assert_same(true, $traversalRejected, 'rejeita path traversal em chave de documento');
+@unlink($textDocument);
+@unlink($binaryDocument);
 
 $ownPdo = new QaTransactionPdo();
 $ownService = new OperationalService($ownPdo);

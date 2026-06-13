@@ -11,9 +11,7 @@ require_portal_auth();
 
 global $gerenciador;
 $lista = [];
-$is_admin = isset($_SESSION['admin_logged_in'])
-    && $_SESSION['admin_logged_in'] === true
-    && usuario_pode_acessar_metricas();
+$is_admin = current_portal_role() === 'admin';
 
 if ($gerenciador) {
     foreach ($gerenciador->getFuncionarios() as $f) {
@@ -36,6 +34,7 @@ if ($gerenciador) {
         ];
         if ($is_admin) {
             $item['ad_login'] = $f->ad_login ?? null;
+            $item['access_role'] = $f->access_role ?? 'tecnico';
         }
         $lista[] = $item;
     }

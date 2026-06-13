@@ -34,12 +34,23 @@ function portal_list_response(string $resource, array $roles = []): void {
 
 function portal_actor(?string $role = null): array {
     $role = $role ?? require_portal_auth();
+    $isEmployeeRole = in_array($role, ['tecnico', 'somente_leitura'], true);
     return [
         'role' => $role,
         'username' => portal_username(),
-        'employee_id' => $role === 'tecnico' ? (int)($_SESSION['ci_funcionario_id'] ?? 0) : null,
-        'employee_name' => $role === 'tecnico' ? sanitize_input($_SESSION['ci_nome'] ?? '', 100) : null,
+        'employee_id' => $isEmployeeRole ? (int)($_SESSION['ci_funcionario_id'] ?? 0) : null,
+        'employee_name' => $isEmployeeRole ? sanitize_input($_SESSION['ci_nome'] ?? '', 100) : null,
     ];
+}
+
+function require_portal_write_access(string $role): void {
+    if ($role === 'somente_leitura') {
+        audit_log('PORTAL_WRITE_DENIED', 'Perfil somente leitura tentou executar operacao de escrita.', 'WARNING');
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Seu perfil possui acesso somente para leitura.',
+        ], 403);
+    }
 }
 
 function portal_json_input(int $maxBytes = PORTAL_DEFAULT_JSON_MAX_BYTES): array {

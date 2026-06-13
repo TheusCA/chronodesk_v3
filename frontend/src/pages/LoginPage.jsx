@@ -3,7 +3,12 @@ import { LoginCI } from '../components/LoginCI'
 
 export function LoginPage({ onLoginCI, onLoginAdmin, loading }) {
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
+    <main className="tech-login-shell relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
+      <div className="tech-grid" />
+      <div className="tech-horizon" />
+      <div className="tech-node tech-node-one" />
+      <div className="tech-node tech-node-two" />
+      <div className="tech-node tech-node-three" />
       <div className="login-glow login-glow-left" />
       <div className="login-glow login-glow-right" />
       <div className="relative z-10 w-full max-w-5xl">

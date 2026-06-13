@@ -520,13 +520,38 @@ function validate_ad_login($ad_login) {
     return preg_match('/^[a-z0-9._@-]+$/', $ad_login) === 1 ? $ad_login : false;
 }
 
+function funcionarios_access_role_supported(): bool {
+    static $supported = null;
+    if ($supported !== null) {
+        return $supported;
+    }
+    try {
+        if (!function_exists('get_db_connection')) {
+            require_once __DIR__ . '/db.php';
+        }
+        get_db_connection()->query('SELECT access_role FROM funcionarios LIMIT 0');
+        $supported = true;
+    } catch (Throwable $error) {
+        $supported = false;
+    }
+    return $supported;
+}
+
 function carregar_funcionarios_mysql() {
     try {
         if (!function_exists('get_db_connection')) {
             require_once __DIR__ . '/db.php';
         }
         $pdo = get_db_connection();
-        $stmt = $pdo->query("SELECT id, nome, equipe, ad_login, jornada_entrada, jornada_saida, almoco_inicio, almoco_fim, ativo FROM funcionarios ORDER BY id ASC");
+        $roleColumn = funcionarios_access_role_supported()
+            ? 'access_role'
+            : "'tecnico' AS access_role";
+        $stmt = $pdo->query(
+            "SELECT id, nome, equipe, {$roleColumn}, ad_login, jornada_entrada,
+                    jornada_saida, almoco_inicio, almoco_fim, ativo
+             FROM funcionarios
+             ORDER BY id ASC"
+        );
         $funcionarios = [];
         foreach ($stmt->fetchAll() as $row) {
             $funcionarios[] = normalizar_funcionario_array($row);
@@ -561,16 +586,20 @@ function salvar_funcionarios_mysql($funcionarios) {
             require_once __DIR__ . '/db.php';
         }
         $pdo = get_db_connection();
+        $hasAccessRole = funcionarios_access_role_supported();
+        $roleInsertColumn = $hasAccessRole ? ', access_role' : '';
+        $roleInsertValue = $hasAccessRole ? ', :access_role' : '';
+        $roleUpdate = $hasAccessRole ? ', access_role = VALUES(access_role)' : '';
         $sql = "INSERT INTO funcionarios (
-                    id, nome, equipe, ad_login, jornada_entrada, jornada_saida,
-                    almoco_inicio, almoco_fim, ativo
+                    id, nome, equipe{$roleInsertColumn}, ad_login, jornada_entrada,
+                    jornada_saida, almoco_inicio, almoco_fim, ativo
                 ) VALUES (
-                    :id, :nome, :equipe, :ad_login, :jornada_entrada, :jornada_saida,
-                    :almoco_inicio, :almoco_fim, :ativo
+                    :id, :nome, :equipe{$roleInsertValue}, :ad_login, :jornada_entrada,
+                    :jornada_saida, :almoco_inicio, :almoco_fim, :ativo
                 )
                 ON DUPLICATE KEY UPDATE
                     nome = VALUES(nome),
-                    equipe = VALUES(equipe),
+                    equipe = VALUES(equipe){$roleUpdate},
                     ad_login = VALUES(ad_login),
                     jornada_entrada = VALUES(jornada_entrada),
                     jornada_saida = VALUES(jornada_saida),
@@ -580,7 +609,7 @@ function salvar_funcionarios_mysql($funcionarios) {
         $stmt = $pdo->prepare($sql);
         foreach ($funcionarios as $func) {
             $func = normalizar_funcionario_array($func);
-            $stmt->execute([
+            $params = [
                 ':id' => $func['id'],
                 ':nome' => $func['nome'],
                 ':equipe' => $func['equipe'],
@@ -590,7 +619,11 @@ function salvar_funcionarios_mysql($funcionarios) {
                 ':almoco_inicio' => formatar_hora_mysql($func['almoco_inicio'], '12:00:00'),
                 ':almoco_fim' => formatar_hora_mysql($func['almoco_fim'], '13:00:00'),
                 ':ativo' => $func['ativo'] ? 1 : 0,
-            ]);
+            ];
+            if ($hasAccessRole) {
+                $params[':access_role'] = $func['access_role'];
+            }
+            $stmt->execute($params);
         }
         return true;
     } catch (Exception $e) {
@@ -639,10 +672,17 @@ function normalizar_funcionario_array($func) {
         $ad_login = null;
     }
 
+    $access_role = validate_access_role($func['access_role'] ?? 'tecnico') ?? 'tecnico';
+    $equipe = validate_funcionario_equipe($func['equipe'] ?? 'n1') ?? 'n1';
+    if ($access_role === 'tecnico' && $equipe === 'na') {
+        $equipe = 'n1';
+    }
+
     return [
         'id' => validate_funcionario_id($func['id'] ?? 0) ?? 0,
         'nome' => validate_nome($func['nome'] ?? '') ?: '',
-        'equipe' => validate_equipe($func['equipe'] ?? 'n1') ? strtolower($func['equipe']) : 'n1',
+        'equipe' => $equipe,
+        'access_role' => $access_role,
         'ad_login' => $ad_login,
         'jornada_entrada' => normalizar_hora_funcionario($func['jornada_entrada'] ?? '08:00', '08:00'),
         'jornada_saida' => normalizar_hora_funcionario($func['jornada_saida'] ?? '17:00', '17:00'),

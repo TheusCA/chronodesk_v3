@@ -22,7 +22,8 @@ if (!$funcionario_id) {
     json_response(['sucesso' => false, 'mensagem' => 'ID do funcionário inválido'], 400);
 }
 $nome = validate_nome($data['nome'] ?? '', 3, 100);
-$equipe = isset($data['equipe']) ? trim($data['equipe']) : '';
+$equipe = validate_funcionario_equipe($data['equipe'] ?? '');
+$access_role = validate_access_role($data['access_role'] ?? 'tecnico');
 $ad_login = validate_ad_login($data['ad_login'] ?? null);
 $jornada_entrada = isset($data['jornada_entrada']) ? trim($data['jornada_entrada']) : '08:00';
 $jornada_saida = isset($data['jornada_saida']) ? trim($data['jornada_saida']) : '17:00';
@@ -34,8 +35,16 @@ if ($nome === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Nome inválido. Use de 3 a 100 caracteres válidos.'], 400);
 }
 
-if ($equipe !== 'n1' && $equipe !== 'n2') {
-    json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida (deve ser n1 ou n2)'], 400);
+if ($equipe === null) {
+    json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2 ou Não se aplica.'], 400);
+}
+
+if ($access_role === null) {
+    json_response(['sucesso' => false, 'mensagem' => 'Perfil de acesso inválido.'], 400);
+}
+
+if ($access_role === 'tecnico' && $equipe === 'na') {
+    json_response(['sucesso' => false, 'mensagem' => 'Técnicos devem pertencer à equipe N1 ou N2.'], 400);
 }
 
 if ($ad_login === false) {
@@ -82,10 +91,17 @@ if ($ativo && $ad_login !== null && funcionario_ad_login_ativo_existe($ad_login,
 
 try {
     $pdo = get_db_connection();
+    $currentStmt = $pdo->prepare('SELECT access_role FROM funcionarios WHERE id = :id LIMIT 1');
+    $currentStmt->execute([':id' => $funcionario_id]);
+    $currentRole = $currentStmt->fetchColumn();
+    if ($currentRole === false) {
+        json_response(['sucesso' => false, 'mensagem' => 'Funcionário não encontrado.'], 404);
+    }
     $stmt = $pdo->prepare(
         "UPDATE funcionarios
          SET nome = :nome,
              equipe = :equipe,
+             access_role = :access_role,
              ad_login = :ad_login,
              jornada_entrada = :jornada_entrada,
              jornada_saida = :jornada_saida,
@@ -98,6 +114,7 @@ try {
         ':id' => $funcionario_id,
         ':nome' => $nome,
         ':equipe' => $equipe,
+        ':access_role' => $access_role,
         ':ad_login' => $ad_login,
         ':jornada_entrada' => formatar_hora_mysql($jornada_entrada, '08:00:00'),
         ':jornada_saida' => formatar_hora_mysql($jornada_saida, '17:00:00'),
@@ -110,14 +127,17 @@ try {
         json_response(['sucesso' => false, 'mensagem' => 'Funcionário não encontrado.'], 404);
     }
 
-    $resultado = $gerenciador->atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, $ativo, $ad_login);
+    $resultado = $gerenciador->atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, $ativo, $ad_login, $access_role);
 } catch (Exception $e) {
     error_log('[FUNCIONARIO] Erro ao atualizar funcionário: ' . $e->getMessage());
     json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao atualizar funcionário.')], 500);
 }
 
 if (($resultado['sucesso'] ?? false) === true) {
-    audit_log('FUNCIONARIO_ATUALIZADO', "Funcionario '{$nome}' atualizado (ID: {$funcionario_id}, equipe: {$equipe}, ativo: " . ($ativo ? 'sim' : 'nao') . ")", 'WARNING');
+    audit_log('FUNCIONARIO_ATUALIZADO', "Funcionario '{$nome}' atualizado (ID: {$funcionario_id}, equipe: {$equipe}, perfil: {$access_role}, ativo: " . ($ativo ? 'sim' : 'nao') . ")", 'WARNING');
+    if ((string)$currentRole !== $access_role) {
+        audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Perfil do funcionario ID {$funcionario_id} alterado de {$currentRole} para {$access_role}", 'CRITICAL');
+    }
 }
 
 json_response($resultado);

@@ -14,6 +14,7 @@ try {
             'competency' => OperationalService::competencyRange($_GET['competency'] ?? null),
         ]);
     }
+    require_portal_write_access($role);
     $data = portal_json_input();
     $action = $data['action'] ?? 'create';
     if ($action === 'create') {

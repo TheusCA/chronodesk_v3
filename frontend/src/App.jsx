@@ -3,6 +3,7 @@ import { Feedback } from './components/Feedback'
 import { PortalLayout } from './components/PortalLayout'
 import { AdminPage } from './pages/AdminPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { DocumentsPage } from './pages/DocumentsPage'
 import { LoginPage } from './pages/LoginPage'
 import { MetricasPage } from './pages/MetricasPage'
 import { ModulePage, SettingsPage } from './pages/ModulePage'
@@ -176,6 +177,8 @@ export default function App() {
     content = <OncallPage session={session} notify={notify} />
   } else if (router.path === '/relatorios') {
     content = <OperationalReportsPage />
+  } else if (router.path === '/documentacao') {
+    content = <DocumentsPage notify={notify} />
   } else if (router.path === '/configuracoes') {
     content = <SettingsPage session={session} />
   } else if (route) {

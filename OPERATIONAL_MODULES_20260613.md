@@ -20,6 +20,8 @@ Aplicar, nesta ordem, sem remover migrations anteriores:
 1. `migrations/20260612_001_portal_foundation.sql`
 2. `migrations/20260612_002_notification_reads.sql`
 3. `migrations/20260613_003_operational_modules.sql`
+4. `migrations/20260613_004_operational_hardening.sql`
+5. `migrations/20260613_005_documents_and_employee_roles.sql`
 
 A migration nova cria tabelas independentes e nao apaga nem altera dados
 legados. O usuario runtime continua sem privilegio de DDL.
@@ -64,6 +66,9 @@ Microsoft Graph for ativado. O MySQL permanece a fonte principal.
   CSV com delimitador virgula ou ponto e virgula esta disponivel.
 - O worker Microsoft Graph ainda nao envia dados; a fila fica persistida para
   processamento e reprocessamento em uma fase posterior.
+- Documentos ficam fora do webroot, com allowlist e download autenticado. A
+  varredura por antivirus permanece pendente e deve ser adicionada antes de
+  aceitar arquivos de origens nao confiaveis.
 - Testes autenticados e de persistencia dependem de MySQL e AD do ambiente.
 
 ## Validacao
