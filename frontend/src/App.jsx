@@ -5,7 +5,15 @@ import { AdminPage } from './pages/AdminPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { MetricasPage } from './pages/MetricasPage'
-import { ModulePage, ReportsPage, SettingsPage } from './pages/ModulePage'
+import { ModulePage, SettingsPage } from './pages/ModulePage'
+import {
+  CalendarPage,
+  OncallPage,
+  OperationalReportsPage,
+  OvertimePage,
+  SchedulePage,
+  TimeCorrectionPage,
+} from './pages/OperationalPages'
 import { PausasPage } from './pages/PausasPage'
 import { api, post, setCsrfToken } from './lib/api'
 import { navigation } from './lib/navigation'
@@ -156,8 +164,18 @@ export default function App() {
     content = <AdminPage search={router.search} navigate={router.navigate} notify={notify} refreshStatus={refreshStatus} />
   } else if (router.path === '/metricas') {
     content = <MetricasPage />
+  } else if (router.path === '/calendario') {
+    content = <CalendarPage session={session} notify={notify} />
+  } else if (router.path === '/escala-presencial') {
+    content = <SchedulePage session={session} notify={notify} />
+  } else if (router.path === '/horas-extras') {
+    content = <OvertimePage session={session} notify={notify} />
+  } else if (router.path === '/correcao-ponto') {
+    content = <TimeCorrectionPage session={session} notify={notify} />
+  } else if (router.path === '/plantonistas') {
+    content = <OncallPage session={session} notify={notify} />
   } else if (router.path === '/relatorios') {
-    content = <ReportsPage />
+    content = <OperationalReportsPage />
   } else if (router.path === '/configuracoes') {
     content = <SettingsPage session={session} />
   } else if (route) {

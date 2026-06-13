@@ -18,12 +18,52 @@ $_SERVER['HTTP_HOST'] = "attacker.example\r\nX-Test: injected";
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../auth_ldap.php';
 require_once __DIR__ . '/../services/MailerService.php';
+require_once __DIR__ . '/../services/OperationalService.php';
 
 function assert_same($expected, $actual, string $message): void {
     if ($expected !== $actual) {
         fwrite(STDERR, "FAIL: {$message}\n");
         exit(1);
     }
+}
+
+final class QaTransactionPdo extends PDO {
+    public bool $active = false;
+    public int $begins = 0;
+    public int $commits = 0;
+    public int $rollbacks = 0;
+
+    public function __construct(bool $active = false) {
+        $this->active = $active;
+    }
+
+    public function inTransaction(): bool {
+        return $this->active;
+    }
+
+    public function beginTransaction(): bool {
+        $this->begins++;
+        $this->active = true;
+        return true;
+    }
+
+    public function commit(): bool {
+        $this->commits++;
+        $this->active = false;
+        return true;
+    }
+
+    public function rollBack(): bool {
+        $this->rollbacks++;
+        $this->active = false;
+        return true;
+    }
+}
+
+function invoke_atomic(OperationalService $service, callable $callback) {
+    $method = new ReflectionMethod(OperationalService::class, 'atomic');
+    $method->setAccessible(true);
+    return $method->invoke($service, $callback);
 }
 
 assert_same('user.name', normalizar_samaccountname('User.Name'), 'normaliza samAccountName');
@@ -52,6 +92,67 @@ $_SESSION['admin_logged_in'] = true;
 assert_same('admin', current_portal_role(), 'RBAC identifica admin');
 assert_same(true, in_array('admin.manage', portal_permissions_for_role('admin'), true), 'admin recebe permissao administrativa');
 $_SESSION = [];
+
+$aprilCompetency = OperationalService::competencyRange('2026-04');
+assert_same('2026-03-16', $aprilCompetency['start'], 'competencia abril inicia em 16/03');
+assert_same('2026-04-15', $aprilCompetency['end'], 'competencia abril termina em 15/04');
+assert_same('onsite', OperationalService::presenceForRule('even_days', '2026-04-16'), 'regra par gera presencial');
+assert_same('remote', OperationalService::presenceForRule('even_days', '2026-04-17'), 'regra par gera remoto em dia impar');
+assert_same('onsite', OperationalService::presenceForRule('odd_days', '2026-04-17'), 'regra impar gera presencial');
+assert_same(500, OperationalService::MAX_IMPORT_ROWS, 'limite de linhas da importacao');
+assert_same(6, OperationalService::MAX_IMPORT_COLUMNS, 'limite de colunas da importacao');
+
+$validatedImport = OperationalService::validateScheduleImportRows([
+    ['id' => '1', 'equipe' => 'n1', 'regra' => 'par'],
+]);
+assert_same('1', $validatedImport[0]['id'], 'estrutura CSV valida');
+
+$invalidImportRejected = false;
+try {
+    OperationalService::validateScheduleImportRows([
+        ['id' => '1', 'regra' => ['nested']],
+    ]);
+} catch (InvalidArgumentException $e) {
+    $invalidImportRejected = true;
+}
+assert_same(true, $invalidImportRejected, 'rejeita celula aninhada na importacao');
+
+$unknownHeaderRejected = false;
+try {
+    OperationalService::validateScheduleImportRows([
+        ['id' => '1', 'regra' => 'par', 'arquivo' => 'payload.php'],
+    ]);
+} catch (InvalidArgumentException $e) {
+    $unknownHeaderRejected = true;
+}
+assert_same(true, $unknownHeaderRejected, 'rejeita cabecalho inesperado na importacao');
+
+$ownPdo = new QaTransactionPdo();
+$ownService = new OperationalService($ownPdo);
+assert_same('ok', invoke_atomic($ownService, static fn(): string => 'ok'), 'atomic retorna resultado');
+assert_same(1, $ownPdo->begins, 'atomic abre transacao propria');
+assert_same(1, $ownPdo->commits, 'atomic confirma transacao propria');
+assert_same(0, $ownPdo->rollbacks, 'atomic nao reverte sucesso');
+
+$outerPdo = new QaTransactionPdo(true);
+$outerService = new OperationalService($outerPdo);
+assert_same('nested', invoke_atomic($outerService, static fn(): string => 'nested'), 'atomic aceita transacao externa');
+assert_same(0, $outerPdo->begins, 'atomic nao abre transacao aninhada');
+assert_same(0, $outerPdo->commits, 'atomic nao confirma transacao externa');
+assert_same(0, $outerPdo->rollbacks, 'atomic nao reverte transacao externa');
+
+$rollbackPdo = new QaTransactionPdo();
+$rollbackService = new OperationalService($rollbackPdo);
+$rollbackCaught = false;
+try {
+    invoke_atomic($rollbackService, static function (): void {
+        throw new RuntimeException('rollback');
+    });
+} catch (RuntimeException $e) {
+    $rollbackCaught = true;
+}
+assert_same(true, $rollbackCaught, 'atomic propaga excecao');
+assert_same(1, $rollbackPdo->rollbacks, 'atomic reverte transacao propria em erro');
 
 clear_rate_limit('qa_smoke');
 assert_same(true, check_rate_limit('qa_smoke', 1, 60), 'primeira tentativa permitida');

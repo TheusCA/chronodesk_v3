@@ -35,8 +35,10 @@ pelo portal. Não use `root` nem conceda privilégios de DDL ao runtime.
 
 ## Compatibilidade
 
-`/admin.php` e `/metricas.php` permanecem disponíveis. Nenhum redirecionamento legado foi
-ativado. A migration não remove nem altera tabelas existentes.
+Os arquivos legados permanecem no repositório como fallback protegido. Requisições visuais
+GET/HEAD para `/`, `/index.php`, `/login.php`, `/admin_login.php`, `/admin.php` e
+`/metricas.php` são redirecionadas ao portal React. POSTs legados e APIs não são
+redirecionados. As migrations não removem dados existentes.
 
 ## Validação dependente do ambiente
 

@@ -110,8 +110,14 @@ if ($SkipHttp) {
     Warn "Checks HTTP pulados por parametro"
 } else {
     $targets = @(
-        @{ Url = "$BaseUrl/index.php"; Expect = @(200) },
+        @{ Url = "$BaseUrl/"; Expect = @(302) },
+        @{ Url = "$BaseUrl/index.php"; Expect = @(302) },
+        @{ Url = "$BaseUrl/login.php"; Expect = @(302) },
+        @{ Url = "$BaseUrl/admin_login.php"; Expect = @(302) },
+        @{ Url = "$BaseUrl/admin.php"; Expect = @(302) },
+        @{ Url = "$BaseUrl/metricas.php"; Expect = @(302) },
         @{ Url = "$BaseUrl/api/status.php"; Expect = @(200) },
+        @{ Url = "$BaseUrl/api/session.php"; Expect = @(200) },
         @{ Url = "$BaseUrl/app/"; Expect = @(200) },
         @{ Url = "$BaseUrl/app/admin"; Expect = @(200) },
         @{ Url = "$BaseUrl/app/metricas"; Expect = @(200) },
@@ -130,6 +136,12 @@ if ($SkipHttp) {
         @{ Url = "$BaseUrl/app/configuracoes"; Expect = @(200) },
         @{ Url = "$BaseUrl/app/integracoes"; Expect = @(200) },
         @{ Url = "$BaseUrl/api/portal/dashboard.php"; Expect = @(401) },
+        @{ Url = "$BaseUrl/api/portal/calendar.php"; Expect = @(401) },
+        @{ Url = "$BaseUrl/api/portal/schedules.php"; Expect = @(401) },
+        @{ Url = "$BaseUrl/api/portal/overtime.php"; Expect = @(401) },
+        @{ Url = "$BaseUrl/api/portal/time_corrections.php"; Expect = @(401) },
+        @{ Url = "$BaseUrl/api/portal/oncall.php"; Expect = @(401) },
+        @{ Url = "$BaseUrl/api/portal/reports.php"; Expect = @(401) },
         @{ Url = "$BaseUrl/api/configuracoes.php"; Expect = @(401) },
         @{ Url = "$BaseUrl/.env"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/.git/config"; Expect = @(403, 404) },
@@ -137,10 +149,18 @@ if ($SkipHttp) {
         @{ Url = "$BaseUrl/frontend/package.json"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/frontend/vite.config.js"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/services/PortalService.php"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/services/OperationalService.php"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/services/SharePointSyncService.php"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/services/MailerService.php"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/migrations/20260612_001_portal_foundation.sql"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/migrations/20260613_003_operational_modules.sql"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/migrations/20260613_004_operational_hardening.sql"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/database_SECURED.sql"; Expect = @(403, 404) },
-        @{ Url = "$BaseUrl/README.md"; Expect = @(403, 404) }
+        @{ Url = "$BaseUrl/README.md"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/backup.bak"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/archive.zip"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/secret.csv"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/secret.json"; Expect = @(403, 404) }
     )
 
     foreach ($target in $targets) {
@@ -161,6 +181,30 @@ if ($SkipHttp) {
         } else {
             Fail "$($target.Url) retornou HTTP $statusCode; esperado $($target.Expect -join '/')"
         }
+    }
+
+    try {
+        $legacyPost = Invoke-WebRequest `
+            -Uri "$BaseUrl/login.php" `
+            -Method POST `
+            -ContentType "application/x-www-form-urlencoded" `
+            -Body "" `
+            -UseBasicParsing `
+            -MaximumRedirection 0 `
+            -ErrorAction Stop
+        $legacyPostStatus = [int]$legacyPost.StatusCode
+    } catch {
+        if ($_.Exception.Response) {
+            $legacyPostStatus = [int]$_.Exception.Response.StatusCode
+        } else {
+            Fail "Falha ao validar POST legado: $($_.Exception.Message)"
+            $legacyPostStatus = 0
+        }
+    }
+    if ($legacyPostStatus -ge 300 -and $legacyPostStatus -lt 400) {
+        Fail "POST legado foi redirecionado com HTTP $legacyPostStatus"
+    } elseif ($legacyPostStatus -gt 0) {
+        Pass "POST legado nao foi redirecionado (HTTP $legacyPostStatus)"
     }
 
     try {

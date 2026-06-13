@@ -8,6 +8,7 @@ class IntegrationRegistry {
             new EnvironmentIntegration('senior', 'Senior', 'SENIOR_API_URL'),
             new EnvironmentIntegration('sailpoint', 'SailPoint', 'SAILPOINT_API_URL'),
             new EnvironmentIntegration('microsoft_365', 'Microsoft 365', 'M365_TENANT_ID'),
+            new EnvironmentIntegration('sharepoint_excel', 'SharePoint Excel', 'SHAREPOINT_SITE_URL'),
             new EnvironmentIntegration('teams', 'Microsoft Teams', 'TEAMS_ENABLED', true),
             new EnvironmentIntegration('servicenow', 'ServiceNow', 'SERVICENOW_API_URL'),
             new EnvironmentIntegration('grafana', 'Grafana', 'GRAFANA_URL'),

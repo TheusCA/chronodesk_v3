@@ -29,6 +29,7 @@ if command -v npm >/dev/null 2>&1 && [ -d frontend/node_modules ]; then
     (
         cd frontend
         npm run lint
+        npm run qa:operational
         npm run build
     )
 else
@@ -83,6 +84,19 @@ check_status "/frontend/src/App.jsx" blocked
 check_status "/frontend/vite.config.js" blocked
 check_status "/frontend/package.json" blocked
 check_status "/frontend/.env" blocked
+check_status "/services/OperationalService.php" blocked
+check_status "/migrations/20260613_003_operational_modules.sql" blocked
+check_status "/migrations/20260613_004_operational_hardening.sql" blocked
+check_status "/backup.bak" blocked
+check_status "/archive.zip" blocked
+check_status "/secret.csv" blocked
+check_status "/secret.json" blocked
+
+legacy_post_status="$(curl -k -s -o /dev/null -w '%{http_code}' -X POST "${BASE_URL}/login.php")"
+echo "$legacy_post_status POST /login.php"
+case "$legacy_post_status" in
+    3*) echo "Legacy POST must not be redirected"; exit 1 ;;
+esac
 
 echo "All Linux validation checks passed."
 

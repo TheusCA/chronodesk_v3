@@ -47,6 +47,19 @@ RewriteRule "(^|/)(\.env(\..*)?|composer\..*|package.*\.json)$" - [F,L]
 RewriteRule "\.(json|csv|sql|md|log|bak|backup|zip|rar|7z|old|orig|save)$" - [F,L]
 
 # SPA fallback limitado ao build público React.
+# O portal React e a entrada oficial. Apenas paginas visuais GET/HEAD sao
+# redirecionadas; POSTs legados permanecem como fallback protegido.
+RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
+RewriteRule ^$ app/ [R=302,L]
+RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
+RewriteRule ^(?:index|login)\.php$ app/ [R=302,L]
+RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
+RewriteRule ^admin_login\.php$ app/admin [R=302,L]
+RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
+RewriteRule ^admin\.php$ app/admin [R=302,L]
+RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
+RewriteRule ^metricas\.php$ app/metricas [R=302,L]
+
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^app/(.+)/$ app/$1 [R=308,L]
 RewriteCond %{REQUEST_FILENAME} !-f

@@ -1,0 +1,412 @@
+import { useMemo, useState } from 'react'
+import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
+import { useResource } from '../hooks/useResource'
+import { apiUrl, post } from '../lib/api'
+import { formatDate, formatDateTime } from '../lib/format'
+import {
+  competencyFor,
+  IMPORT_LIMITS,
+  localDate,
+  minutesLabel,
+  parseCsv,
+  queryString,
+} from '../lib/operational'
+
+const today = localDate()
+const currentCompetency = competencyFor()
+
+function Status({ value }) {
+  const tone = {
+    approved: 'status-success',
+    active: 'status-success',
+    synced: 'status-success',
+    onsite: 'status-success',
+    pending: 'status-warning',
+    remote: 'status-info',
+    rejected: 'status-danger',
+    sync_error: 'status-danger',
+    cancelled: 'status-neutral',
+  }[value] || 'status-neutral'
+  return <span className={`status-badge ${tone}`}>{String(value || 'nao informado').replaceAll('_', ' ')}</span>
+}
+
+function EmployeeSelect({ employees, value, onChange, disabled = false }) {
+  return (
+    <select className="field mt-2" disabled={disabled} required value={value} onChange={onChange}>
+      <option value="">Selecione</option>
+      {(employees || []).map((employee) => (
+        <option key={employee.id} value={employee.id}>{employee.nome} - {employee.equipe.toUpperCase()}</option>
+      ))}
+    </select>
+  )
+}
+
+function OperationalShell({ resource, children }) {
+  if (resource.loading) return <LoadingState />
+  if (resource.error) return <ErrorState message={resource.error.message} onRetry={resource.refresh} />
+  return children
+}
+
+function useEmployees() {
+  return useResource('listar_funcionarios.php')
+}
+
+async function submit(action, refresh, notify) {
+  try {
+    const result = await action()
+    notify(result.mensagem || 'Operacao concluida.')
+    await refresh()
+    return result
+  } catch (error) {
+    notify(error.message, 'error')
+    return null
+  }
+}
+
+function PeriodFilters({ filters, setFilters, extra = null }) {
+  return (
+    <section className="card grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <label className="label">Inicio<input className="field mt-2" type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
+      <label className="label">Fim<input className="field mt-2" min={filters.from} type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
+      <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
+      {extra}
+    </section>
+  )
+}
+
+export function CalendarPage({ session, notify }) {
+  const canManage = session.role === 'admin' || session.role === 'gestor'
+  const employees = useEmployees()
+  const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '', type: '', status: '' })
+  const resource = useResource(`portal/calendar.php${queryString(filters)}`)
+  const [form, setForm] = useState({ title: '', description: '', type: 'manual', starts_at: `${today}T09:00`, ends_at: `${today}T10:00`, team: '' })
+
+  async function create(event) {
+    event.preventDefault()
+    const result = await submit(() => post('portal/calendar.php', form), resource.refresh, notify)
+    if (result) setForm({ ...form, title: '', description: '' })
+  }
+
+  return (
+    <div className="space-y-5">
+      <PeriodFilters filters={filters} setFilters={setFilters} extra={(
+        <>
+          <label className="label">Competencia<input className="field mt-2" type="month" value={filters.to ? competencyFor(`${filters.to}T12:00:00`).key : ''} onChange={(event) => {
+            if (!event.target.value) return
+            const competency = competencyFor(`${event.target.value}-01T12:00:00`)
+            setFilters({ ...filters, from: competency.start, to: competency.end })
+          }} /></label>
+          <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>
+          <label className="label">Tipo<select className="field mt-2" value={filters.type} onChange={(event) => setFilters({ ...filters, type: event.target.value })}><option value="">Todos</option><option value="manual">Manual</option><option value="pause">Pausa</option><option value="schedule">Escala</option><option value="overtime">Hora extra</option><option value="time_adjustment">Ajuste</option><option value="oncall">Plantao</option></select></label>
+          <label className="label">Status<input className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })} /></label>
+        </>
+      )} />
+      {canManage && (
+        <form className="card space-y-4" onSubmit={create}>
+          <h2 className="font-bold text-white">Novo evento operacional</h2>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <label className="label xl:col-span-2">Titulo<input className="field mt-2" maxLength="160" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
+            <label className="label">Inicio<input className="field mt-2" required type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
+            <label className="label">Fim<input className="field mt-2" type="datetime-local" value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
+            <label className="label">Equipe<select className="field mt-2" value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
+            <label className="label xl:col-span-3">Descricao<input className="field mt-2" maxLength="1000" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+          </div>
+          <button className="btn-primary" type="submit">Cadastrar evento</button>
+        </form>
+      )}
+      <OperationalShell resource={resource}>
+        {(resource.data?.items || []).length === 0 ? <EmptyState title="Nenhum evento no periodo" description="Ajuste os filtros ou cadastre um evento operacional." /> : (
+          <section className="card table-wrap">
+            <table className="data-table">
+              <thead><tr><th>Data</th><th>Evento</th><th>Tipo</th><th>Equipe</th><th>Status</th></tr></thead>
+              <tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDateTime(item.starts_at)}</td><td><strong>{item.title}</strong><small>{item.description || 'Sem descricao'}</small></td><td>{item.event_type}</td><td>{item.team?.toUpperCase() || 'Todas'}</td><td><Status value={item.status} /></td></tr>)}</tbody>
+            </table>
+          </section>
+        )}
+      </OperationalShell>
+    </div>
+  )
+}
+
+export function SchedulePage({ session, notify }) {
+  const canManage = session.role === 'admin' || session.role === 'gestor'
+  const employees = useEmployees()
+  const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '' })
+  const resource = useResource(`portal/schedules.php${queryString(filters)}`)
+  const [rule, setRule] = useState({ employee_id: '', rule_type: 'undefined', effective_from: today })
+  const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
+  const [importRows, setImportRows] = useState([])
+  const [preview, setPreview] = useState(null)
+
+  async function saveRule(event) {
+    event.preventDefault()
+    await submit(() => post('portal/schedules.php', { action: 'rule', ...rule, employee_id: Number(rule.employee_id) }), resource.refresh, notify)
+  }
+
+  async function saveException(event) {
+    event.preventDefault()
+    await submit(() => post('portal/schedules.php', { action: 'exception', ...exception, employee_id: Number(exception.employee_id) }), resource.refresh, notify)
+  }
+
+  async function readCsv(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setImportRows([])
+    setPreview(null)
+    const lowerName = file.name.toLowerCase()
+    if (!IMPORT_LIMITS.acceptedExtensions.some((extension) => lowerName.endsWith(extension))) {
+      notify('Use um arquivo CSV nesta etapa.', 'error')
+      event.target.value = ''
+      return
+    }
+    if (file.size > IMPORT_LIMITS.maxFileBytes) {
+      notify(
+        `O CSV excede o limite de ${Math.floor(IMPORT_LIMITS.maxFileBytes / 1024)} KB.`,
+        'error',
+      )
+      event.target.value = ''
+      return
+    }
+    try {
+      const rows = parseCsv(await file.text())
+      setImportRows(rows)
+      setPreview(await post('portal/schedules.php', { action: 'import_preview', rows }))
+    } catch (error) {
+      notify(error.message, 'error')
+      setImportRows([])
+      setPreview(null)
+    }
+    event.target.value = ''
+  }
+
+  async function confirmImport() {
+    const result = await submit(
+      () => post('portal/schedules.php', { action: 'import_confirm', rows: importRows }),
+      resource.refresh,
+      notify,
+    )
+    if (result) {
+      setImportRows([])
+      setPreview(null)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <PeriodFilters filters={filters} setFilters={setFilters} extra={<label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>} />
+      {canManage && (
+        <div className="grid gap-5 xl:grid-cols-2">
+          <form className="card space-y-4" onSubmit={saveRule}>
+            <h2 className="font-bold text-white">Regra fixa por colaborador</h2>
+            <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={rule.employee_id} onChange={(event) => setRule({ ...rule, employee_id: event.target.value })} /></label>
+            <label className="label">Regra<select className="field mt-2" value={rule.rule_type} onChange={(event) => setRule({ ...rule, rule_type: event.target.value })}><option value="even_days">Presencial em dias pares</option><option value="odd_days">Presencial em dias impares</option><option value="always_remote">Sempre remoto</option><option value="always_onsite">Sempre presencial</option><option value="undefined">Sem escala definida</option></select></label>
+            <label className="label">Vigencia<input className="field mt-2" required type="date" value={rule.effective_from} onChange={(event) => setRule({ ...rule, effective_from: event.target.value })} /></label>
+            <button className="btn-primary" type="submit">Salvar regra</button>
+          </form>
+          <form className="card space-y-4" onSubmit={saveException}>
+            <h2 className="font-bold text-white">Excecao por data</h2>
+            <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={exception.employee_id} onChange={(event) => setException({ ...exception, employee_id: event.target.value })} /></label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="label">Data<input className="field mt-2" required type="date" value={exception.exception_date} onChange={(event) => setException({ ...exception, exception_date: event.target.value })} /></label>
+              <label className="label">Tipo<select className="field mt-2" value={exception.exception_type} onChange={(event) => setException({ ...exception, exception_type: event.target.value })}><option value="remote">Remoto excepcional</option><option value="onsite">Presencial excepcional</option><option value="day_off">Folga</option><option value="absence">Ausencia</option><option value="training">Treinamento</option><option value="oncall">Plantao</option><option value="vacation">Ferias</option><option value="leave">Licenca</option></select></label>
+            </div>
+            <label className="label">Observacao<input className="field mt-2" maxLength="1000" value={exception.note} onChange={(event) => setException({ ...exception, note: event.target.value })} /></label>
+            <button className="btn-primary" type="submit">Salvar excecao</button>
+          </form>
+          <section className="card space-y-4 xl:col-span-2">
+            <div><h2 className="font-bold text-white">Importar regras por CSV</h2><p className="mt-1 text-sm text-slate-500">Cabecalhos aceitos: id, login_ad, email, nome, equipe, regra.</p></div>
+            <input accept={IMPORT_LIMITS.acceptedExtensions.join(',')} className="field" type="file" onChange={readCsv} />
+            {preview && (
+              <div className="space-y-3">
+                <p className="text-sm text-slate-300">{preview.valid_count} valida(s), {preview.invalid_count} invalida(s).</p>
+                <div className="max-h-56 overflow-auto rounded-lg border border-white/5">
+                  {preview.rows.map((row) => <div className="border-b border-white/5 px-3 py-2 text-sm" key={row.line}><span className={row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span> - {row.employee_name || row.ad_login || 'Nao identificado'} - {row.rule_type || row.errors.join(' ')}</div>)}
+                </div>
+                <button className="btn-primary" disabled={preview.invalid_count > 0} onClick={confirmImport} type="button">Confirmar importacao</button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+      <OperationalShell resource={resource}>
+        {(resource.data?.generated || []).length === 0 ? <EmptyState title="Nenhuma escala gerada" description="Cadastre regras fixas para gerar automaticamente os dias presenciais e remotos." /> : (
+          <section className="card table-wrap">
+            <table className="data-table">
+              <thead><tr><th>Data</th><th>Colaborador</th><th>Equipe</th><th>Modalidade</th><th>Origem</th></tr></thead>
+              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_type}</small></td><td>{item.team.toUpperCase()}</td><td><Status value={item.presence_type} /></td><td>{item.source === 'exception' ? item.label : 'Regra fixa'}</td></tr>)}</tbody>
+            </table>
+          </section>
+        )}
+      </OperationalShell>
+    </div>
+  )
+}
+
+function WorkflowPage({ kind, session, notify }) {
+  const overtime = kind === 'overtime'
+  const endpoint = overtime ? 'portal/overtime.php' : 'portal/time_corrections.php'
+  const employees = useEmployees()
+  const canApprove = session.role === 'admin' || session.role === 'gestor'
+  const ownEmployee = session.ci.funcionario_id || ''
+  const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', status: '' })
+  const resource = useResource(`${endpoint}${queryString(filters)}`)
+  const [form, setForm] = useState(overtime
+    ? { employee_id: ownEmployee, work_date: today, start_time: '18:00', end_time: '19:00', reason: '', justification: '' }
+    : { employee_id: ownEmployee, adjustment_date: today, adjustment_type: 'entry', correct_time: '08:00', recorded_time: '', justification: '' })
+
+  async function create(event) {
+    event.preventDefault()
+    const result = await submit(() => post(endpoint, { action: 'create', ...form, employee_id: Number(form.employee_id) }), resource.refresh, notify)
+    if (result) setForm({ ...form, reason: '', justification: '' })
+  }
+
+  async function decide(id, decision) {
+    await submit(() => post(endpoint, { action: 'decision', id, decision }), resource.refresh, notify)
+  }
+
+  const items = resource.data?.items || []
+  return (
+    <div className="space-y-5">
+      <PeriodFilters filters={filters} setFilters={setFilters} extra={<label className="label">Status<select className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="rejected">Rejeitado</option><option value="synced">Sincronizado</option><option value="sync_error">Erro de sync</option></select></label>} />
+      <form className="card space-y-4" onSubmit={create}>
+        <div><h2 className="font-bold text-white">{overtime ? 'Nova hora extra' : 'Novo ajuste de ponto'}</h2><p className="mt-1 text-sm text-slate-500">Competencia atual: {currentCompetency.label}, de {formatDate(currentCompetency.start)} a {formatDate(currentCompetency.end)}.</p></div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <label className="label">Colaborador<EmployeeSelect disabled={!canApprove} employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>
+          {overtime ? (
+            <>
+              <label className="label">Data<input className="field mt-2" required type="date" value={form.work_date} onChange={(event) => setForm({ ...form, work_date: event.target.value })} /></label>
+              <label className="label">Inicio<input className="field mt-2" required type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} /></label>
+              <label className="label">Fim<input className="field mt-2" required type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} /></label>
+              <label className="label xl:col-span-2">Motivo<input className="field mt-2" maxLength="500" required value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
+            </>
+          ) : (
+            <>
+              <label className="label">Data<input className="field mt-2" required type="date" value={form.adjustment_date} onChange={(event) => setForm({ ...form, adjustment_date: event.target.value })} /></label>
+              <label className="label">Tipo<select className="field mt-2" value={form.adjustment_type} onChange={(event) => setForm({ ...form, adjustment_type: event.target.value })}><option value="entry">Entrada</option><option value="lunch_out">Saida almoco</option><option value="lunch_return">Retorno almoco</option><option value="exit">Saida</option><option value="absence">Ausencia</option><option value="other">Outro</option></select></label>
+              <label className="label">Horario correto<input className="field mt-2" disabled={form.adjustment_type === 'absence'} type="time" value={form.correct_time} onChange={(event) => setForm({ ...form, correct_time: event.target.value })} /></label>
+              <label className="label">Horario registrado<input className="field mt-2" type="time" value={form.recorded_time} onChange={(event) => setForm({ ...form, recorded_time: event.target.value })} /></label>
+            </>
+          )}
+          <label className="label xl:col-span-2">Justificativa<textarea className="field mt-2 min-h-24" maxLength="2000" required value={form.justification} onChange={(event) => setForm({ ...form, justification: event.target.value })} /></label>
+        </div>
+        <button className="btn-primary" type="submit">Enviar para aprovacao</button>
+      </form>
+      <OperationalShell resource={resource}>
+        {items.length === 0 ? <EmptyState title="Nenhum lancamento encontrado" description="Os lancamentos do periodo aparecerao aqui." /> : (
+          <section className="card table-wrap">
+            <table className="data-table">
+              <thead><tr><th>Data</th><th>Colaborador</th><th>Detalhe</th><th>Status</th><th>Aprovacao</th></tr></thead>
+              <tbody>{items.map((item) => <tr key={item.id}><td>{formatDate(overtime ? item.work_date : item.adjustment_date)}</td><td><strong>{item.employee_name}</strong><small>{item.team.toUpperCase()}</small></td><td>{overtime ? <><strong>{item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}</strong><small>{minutesLabel(item.total_minutes)} - {item.reason}</small></> : <><strong>{item.adjustment_type}</strong><small>{item.correct_time?.slice(0, 5) || 'Sem horario'} - {item.justification}</small></>}</td><td><Status value={item.status} /></td><td>{canApprove && item.status === 'pending' ? <div className="flex gap-2"><button className="table-action text-emerald-300" onClick={() => decide(item.id, 'approved')} type="button">Aprovar</button><button className="table-action text-red-300" onClick={() => decide(item.id, 'rejected')} type="button">Rejeitar</button></div> : item.approved_by || 'Aguardando'}</td></tr>)}</tbody>
+            </table>
+          </section>
+        )}
+      </OperationalShell>
+    </div>
+  )
+}
+
+export function OvertimePage(props) {
+  return <WorkflowPage kind="overtime" {...props} />
+}
+
+export function TimeCorrectionPage(props) {
+  return <WorkflowPage kind="time_correction" {...props} />
+}
+
+export function OncallPage({ session, notify }) {
+  const canManage = session.role === 'admin' || session.role === 'gestor'
+  const employees = useEmployees()
+  const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '' })
+  const resource = useResource(`portal/oncall.php${queryString(filters)}`)
+  const [form, setForm] = useState({ employee_id: '', starts_on: today, ends_on: today, start_time: '18:00', end_time: '08:00', shift_type: 'oncall', note: '' })
+
+  async function create(event) {
+    event.preventDefault()
+    await submit(() => post('portal/oncall.php', { ...form, employee_id: Number(form.employee_id) }), resource.refresh, notify)
+  }
+
+  return (
+    <div className="space-y-5">
+      <PeriodFilters filters={filters} setFilters={setFilters} />
+      {canManage && (
+        <form className="card space-y-4" onSubmit={create}>
+          <h2 className="font-bold text-white">Cadastrar plantao</h2>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <label className="label xl:col-span-2">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>
+            <label className="label">Data inicial<input className="field mt-2" required type="date" value={form.starts_on} onChange={(event) => setForm({ ...form, starts_on: event.target.value })} /></label>
+            <label className="label">Data final<input className="field mt-2" min={form.starts_on} required type="date" value={form.ends_on} onChange={(event) => setForm({ ...form, ends_on: event.target.value })} /></label>
+            <label className="label">Hora inicial<input className="field mt-2" required type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} /></label>
+            <label className="label">Hora final<input className="field mt-2" required type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} /></label>
+            <label className="label">Tipo<select className="field mt-2" value={form.shift_type} onChange={(event) => setForm({ ...form, shift_type: event.target.value })}><option value="oncall">Plantao</option><option value="standby">Sobreaviso</option><option value="emergency">Emergencia</option><option value="weekend">Fim de semana</option><option value="holiday">Feriado</option></select></label>
+            <label className="label">Observacao<input className="field mt-2" maxLength="1000" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+          </div>
+          <button className="btn-primary" type="submit">Cadastrar plantao</button>
+        </form>
+      )}
+      <OperationalShell resource={resource}>
+        {(resource.data?.items || []).length === 0 ? <EmptyState title="Nenhum plantao no periodo" /> : (
+          <section className="card table-wrap">
+            <table className="data-table"><thead><tr><th>Periodo</th><th>Colaborador</th><th>Horario</th><th>Tipo</th><th>Status</th></tr></thead><tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDate(item.starts_on)} a {formatDate(item.ends_on)}</td><td><strong>{item.employee_name}</strong><small>{item.team.toUpperCase()}</small></td><td>{item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}</td><td>{item.shift_type}</td><td><Status value={item.status} /></td></tr>)}</tbody></table>
+          </section>
+        )}
+      </OperationalShell>
+    </div>
+  )
+}
+
+export function OperationalReportsPage() {
+  const [filters, setFilters] = useState({ competency: currentCompetency.key, team: '', employee_id: '' })
+  const resource = useResource(`portal/reports.php${queryString(filters)}`)
+  const employees = useEmployees()
+  const indicators = useMemo(() => {
+    const summary = resource.data?.summary || {}
+    return [
+      ['Horas extras', minutesLabel(summary.overtime_minutes)],
+      ['Ajustes de ponto', summary.adjustments_count || 0],
+      ['Plantoes', summary.oncall_count || 0],
+      ['Dias presenciais', summary.onsite_days || 0],
+      ['Dias remotos', summary.remote_days || 0],
+      ['Pendencias', summary.pending || 0],
+      ['Rejeitados', summary.rejected || 0],
+      ['Erros de sync', summary.sync_errors || 0],
+    ]
+  }, [resource.data?.summary])
+
+  return (
+    <div className="space-y-5">
+      <section className="card grid gap-3 md:grid-cols-3">
+        <label className="label">Competencia<input className="field mt-2" type="month" value={filters.competency} onChange={(event) => setFilters({ ...filters, competency: event.target.value })} /></label>
+        <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
+        <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>
+      </section>
+      <OperationalShell resource={resource}>
+        <>
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-2xl font-black text-white">{value}</p></article>)}</section>
+          <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div><h2 className="font-bold text-white">Competencia {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-slate-500">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>
+            <a className="btn-primary" href={apiUrl(`portal/reports.php${queryString({ ...filters, format: 'csv' })}`)}>Exportar CSV</a>
+          </section>
+          <section className="grid gap-5 lg:grid-cols-2">
+            <SummaryTable title="Resumo por colaborador" values={resource.data?.by_employee} />
+            <SummaryTable title="Resumo por equipe" values={resource.data?.by_team} />
+          </section>
+        </>
+      </OperationalShell>
+    </div>
+  )
+}
+
+function SummaryTable({ title, values }) {
+  const entries = Object.entries(values || {})
+  return (
+    <section className="card">
+      <h2 className="mb-4 font-bold text-white">{title}</h2>
+      {entries.length === 0 ? <p className="text-sm text-slate-500">Sem dados no periodo.</p> : entries.map(([label, value]) => (
+        <div className="flex items-center justify-between gap-3 border-b border-white/5 py-3 text-sm" key={label}>
+          <strong className="text-slate-200">{label}</strong>
+          <span className="text-right text-slate-500">{minutesLabel(value.overtime_minutes)} HE, {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantao(oes), {value.onsite_days || 0} presencial(is)</span>
+        </div>
+      ))}
+    </section>
+  )
+}
