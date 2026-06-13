@@ -50,9 +50,10 @@ if (!$authenticated && ENABLE_LOCAL_ADMIN) {
     require_once __DIR__ . '/../classes/Usuario.php';
     try {
         $user = (new Usuario())->autenticar($username, $password);
-        if ($user && $user['role'] === 'admin') {
+        if ($user && in_array($user['role'], ['admin', 'gestor'], true)) {
             $authenticated = true;
             $auth_type = 'local';
+            $local_role = $user['role'];
         }
     } catch (Throwable $e) {
         error_log('[ADMIN_API_LOGIN] Falha local: ' . $e->getMessage());
@@ -65,10 +66,14 @@ if (!$authenticated) {
     json_response(['sucesso' => false, 'mensagem' => 'Login ou senha incorretos.'], 401);
 }
 
+clear_rate_limit('admin_api_global');
+clear_rate_limit($rate_key);
 session_regenerate_id(true);
-$_SESSION['admin_logged_in'] = true;
+$session_role = $auth_type === 'local' ? ($local_role ?? 'gestor') : 'admin';
+$_SESSION['admin_logged_in'] = $session_role === 'admin';
 $_SESSION['admin_auth_type'] = $auth_type;
 $_SESSION['admin_username'] = $username;
+$_SESSION['portal_role'] = $session_role;
 $_SESSION['logged_in'] = true;
 $_SESSION['username'] = $username;
 $_SESSION['login_time'] = time();
@@ -80,7 +85,8 @@ json_response([
     'mensagem' => 'Login administrativo realizado.',
     'gestor' => [
         'autenticado' => true,
-        'admin' => true,
+        'admin' => $session_role === 'admin',
         'username' => $username,
+        'role' => $session_role,
     ],
 ]);

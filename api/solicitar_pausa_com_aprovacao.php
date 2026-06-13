@@ -5,6 +5,8 @@
  */
 require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../auth_ldap.php';
+require_once __DIR__ . '/../services/NotificationService.php';
+require_once __DIR__ . '/../services/ApprovalRequestService.php';
 header('Content-Type: application/json; charset=utf-8');
 
 require_post_method();
@@ -51,5 +53,21 @@ $resultado = with_pause_state_lock(function () use ($gerenciador, $funcionario_i
 
 if ($resultado['sucesso']) {
     audit_log('PAUSE_REQUEST', 'Solicitação para funcionário ID ' . $funcionario_id, 'INFO');
+    $funcionario_atualizado = $gerenciador->getFuncionario($funcionario_id);
+    (new ApprovalRequestService())->create([
+        'employee_id' => $funcionario_atualizado->id,
+        'employee_name' => $funcionario_atualizado->nome,
+        'team' => $funcionario_atualizado->equipe,
+        'reason' => $funcionario_atualizado->motivo_pausa,
+        'observation' => $funcionario_atualizado->observacao_reuniao,
+        'requested_at' => $funcionario_atualizado->solicitacao_timestamp,
+    ]);
+    (new NotificationService())->notifyMeetingApproval([
+        'employee_name' => $funcionario_atualizado->nome,
+        'team' => $funcionario_atualizado->equipe,
+        'reason' => $funcionario_atualizado->motivo_pausa,
+        'observation' => $funcionario_atualizado->observacao_reuniao,
+        'requested_at' => $funcionario_atualizado->solicitacao_timestamp,
+    ]);
 }
 json_response($resultado, $resultado['sucesso'] ? 200 : 409);

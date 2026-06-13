@@ -5,9 +5,10 @@ export default {
     extend: {
       colors: {
         chrono: {
-          bg: '#0f172a',
-          card: '#1e2a3a',
-          border: '#334155',
+          bg: '#070b14',
+          sidebar: '#0a101c',
+          card: '#101827',
+          border: '#243044',
           green: '#22c55e',
           yellow: '#eab308',
           red: '#ef4444',
@@ -15,6 +16,9 @@ export default {
       },
       borderRadius: {
         card: '12px',
+      },
+      gridTemplateColumns: {
+        20: 'repeat(20, minmax(0, 1fr))',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

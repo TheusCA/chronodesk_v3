@@ -14,12 +14,13 @@ function get_db_connection() {
 
     try {
         $host = DB_HOST;
+        $port = DB_PORT;
         $dbname = DB_NAME;
         $user = DB_USER;
         $pass = DB_PASS;
-        $charset = 'utf8mb4';
+        $charset = DB_CHARSET;
 
-        $dsn = "mysql:host=$host;dbname=$dbname;charset=$charset";
+        $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=$charset";
         $options = [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -30,7 +31,7 @@ function get_db_connection() {
         return $pdo;
     } catch (\PDOException $e) {
         // Em produção, logar o erro e mostrar mensagem genérica
-        error_log("Erro de conexão com o banco: " . $e->getMessage());
+        error_log("Erro de conexão com o banco de dados.");
         throw new \Exception(public_error_message($e, "Erro ao conectar ao banco de dados."));
     }
 }

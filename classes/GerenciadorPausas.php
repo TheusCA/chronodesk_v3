@@ -209,6 +209,8 @@ class GerenciadorPausas {
         $alerta_15min = $duracao_real >= $LIMITE_ALERTA_15MIN;
         $alerta_20min = $duracao_real >= $LIMITE_ALERTA_20MIN;
 
+        $persistido = false;
+
         // Registrar a pausa no Banco de Dados (MySQL)
         if ($this->pdo) {
             try {
@@ -236,14 +238,34 @@ class GerenciadorPausas {
                     ':status_aprovacao' => $funcionario->status_aprovacao,
                     ':observacao_reuniao' => $funcionario->observacao_reuniao ?? ''
                 ]);
+                $persistido = true;
             } catch (PDOException $e) {
-                // Fallback para CSV em caso de erro no banco (segurança)
-                error_log("Erro ao salvar pausa no MySQL: " . $e->getMessage());
-                $this->salvar_csv_backup($funcionario, $fim_pausa, $duracao_real, $alerta_15min, $alerta_20min);
+                error_log("Erro ao salvar pausa no MySQL; tentando fallback CSV.");
+                $persistido = $this->salvar_csv_backup(
+                    $funcionario,
+                    $fim_pausa,
+                    $duracao_real,
+                    $alerta_15min,
+                    $alerta_20min
+                );
             }
         } else {
             // Se não houver conexão, salvar no CSV
-            $this->salvar_csv_backup($funcionario, $fim_pausa, $duracao_real, $alerta_15min, $alerta_20min);
+            $persistido = $this->salvar_csv_backup(
+                $funcionario,
+                $fim_pausa,
+                $duracao_real,
+                $alerta_15min,
+                $alerta_20min
+            );
+        }
+
+        if (!$persistido) {
+            error_log('[PAUSA] Historico indisponivel; pausa ativa foi preservada.');
+            return [
+                "sucesso" => false,
+                "mensagem" => "Não foi possível registrar o histórico. A pausa continua ativa; tente novamente.",
+            ];
         }
 
         // Limpar dados da pausa
@@ -272,8 +294,14 @@ class GerenciadorPausas {
         return ["sucesso" => true, "mensagem" => $mensagem];
     }
 
-    private function salvar_csv_backup($funcionario, $fim_pausa, $duracao_real, $alerta_15min, $alerta_20min) {
-        $file = fopen(PAUSAS_CSV, 'a');
+    private function salvar_csv_backup($funcionario, $fim_pausa, $duracao_real, $alerta_15min, $alerta_20min): bool {
+        $file = @fopen(PAUSAS_CSV, 'a');
+        if ($file === false || !flock($file, LOCK_EX)) {
+            if (is_resource($file)) {
+                fclose($file);
+            }
+            return false;
+        }
         $row = [
             'id_funcionario' => $funcionario->id,
             'nome_funcionario' => $funcionario->nome,
@@ -287,8 +315,13 @@ class GerenciadorPausas {
             'status_aprovacao' => $funcionario->status_aprovacao,
             'observacao_reuniao' => $funcionario->observacao_reuniao ?? ''
         ];
-        fputcsv($file, $row);
-        fclose($file);
+        try {
+            $written = fputcsv($file, $row);
+            return $written !== false && fflush($file);
+        } finally {
+            flock($file, LOCK_UN);
+            fclose($file);
+        }
     }
 
     public function obter_status() {
@@ -309,6 +342,8 @@ class GerenciadorPausas {
                 "equipe" => $equipe,
                 "em_pausa" => $funcionario->em_pausa,
                 "tempo_pausa" => 0,
+                "inicio_pausa" => $funcionario->inicio_pausa ? $funcionario->inicio_pausa->format('c') : null,
+                "duracao_limite_segundos" => $this->duracao_pausa_minutos * 60,
                 "motivo_pausa" => $funcionario->motivo_pausa,
                 "status_aprovacao" => $funcionario->status_aprovacao,
                 "solicitacao_timestamp" => $funcionario->solicitacao_timestamp ? $funcionario->solicitacao_timestamp->format('c') : null,
@@ -350,7 +385,9 @@ class GerenciadorPausas {
             "pausas_reuniao_aprovadas" => [],
             "pausas_reuniao_rejeitadas" => [],
             "pausas_reuniao_pendentes" => [],
-            "pausas_detalhadas" => []
+            "pausas_detalhadas" => [],
+            "dados_truncados" => false,
+            "limite_registros" => 0,
         ];
 
         if (!$this->pdo) {
@@ -362,9 +399,23 @@ class GerenciadorPausas {
         }
 
         try {
-            // Buscar dados do banco de dados
-            $stmt = $this->pdo->query("SELECT * FROM pausas ORDER BY inicio_pausa DESC");
+            $limit = max(100, min((int)(getenv('METRICS_MAX_ROWS') ?: 10000), 50000));
+            $metricas["limite_registros"] = $limit;
+            $stmt = $this->pdo->prepare(
+                "SELECT id_funcionario, nome_funcionario, equipe, inicio_pausa, fim_pausa,
+                        duracao_segundos, motivo_pausa, alerta_15min, alerta_20min,
+                        status_aprovacao, observacao_reuniao
+                 FROM pausas
+                 ORDER BY inicio_pausa DESC
+                 LIMIT :limit"
+            );
+            $stmt->bindValue(':limit', $limit + 1, PDO::PARAM_INT);
+            $stmt->execute();
             $rows = $stmt->fetchAll();
+            if (count($rows) > $limit) {
+                $metricas["dados_truncados"] = true;
+                $rows = array_slice($rows, 0, $limit);
+            }
 
             foreach ($rows as $row) {
                 $this->processar_linha_metrica($metricas, $row);

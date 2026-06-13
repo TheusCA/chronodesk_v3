@@ -38,6 +38,8 @@ if (!$funcionario || !($funcionario['ativo'] ?? true)) {
     json_response(['sucesso' => false, 'mensagem' => 'Funcionário inativo ou não cadastrado.'], 403);
 }
 
+clear_rate_limit('ci_login_global');
+clear_rate_limit($rate_key);
 session_regenerate_id(true);
 $_SESSION['ci_logged_in'] = true;
 $_SESSION['ci_funcionario_id'] = (int)$funcionario['id'];

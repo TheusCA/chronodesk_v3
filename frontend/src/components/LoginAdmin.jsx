@@ -35,7 +35,7 @@ export function LoginAdmin({ onSubmit, loading }) {
           required
         />
       </label>
-      <button className="btn-secondary w-full" disabled={loading}>{loading ? 'Validando...' : 'Entrar como gestor'}</button>
+      <button className="btn-secondary w-full" disabled={loading}>{loading ? 'Validando...' : 'Entrar como gestor/admin'}</button>
     </form>
   )
 }

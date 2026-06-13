@@ -51,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $password = '';
         if ($authenticated) {
+            clear_rate_limit('metricas_login');
             session_regenerate_id(true);
             $_SESSION['logged_in'] = true;
             $_SESSION['username'] = $username;

@@ -7,6 +7,7 @@ require_once __DIR__ . '/../init.php';
 header('Content-Type: application/json; charset=utf-8');
 
 require_get_method();
+require_portal_auth();
 
 global $gerenciador;
 $lista = [];

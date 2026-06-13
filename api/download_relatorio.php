@@ -8,6 +8,7 @@ verificar_login_api();
 global $gerenciador;
 $metricas = $gerenciador->obter_metricas();
 $timestamp = date('Ymd_His');
+$request_id = $timestamp . '_' . bin2hex(random_bytes(8));
 
 function csv_safe_value($value) {
     if (!is_string($value)) {
@@ -23,9 +24,23 @@ function csv_safe_row($handle, array $row): void {
 
 // Criar arquivo temporário para métricas
 $temp_dir = sys_get_temp_dir();
-$relatorio_path = $temp_dir . '/relatorio_metricas_' . $timestamp . '.csv';
+$relatorio_path = $temp_dir . '/relatorio_metricas_' . $request_id . '.csv';
+$relatorio_detalhado_path = $temp_dir . '/relatorio_pausas_detalhado_' . $request_id . '.csv';
+$relatorio_zip_path = $temp_dir . '/relatorio_completo_' . $request_id . '.zip';
+$temporary_files = [$relatorio_path, $relatorio_detalhado_path, $relatorio_zip_path];
+register_shutdown_function(static function () use ($temporary_files): void {
+    foreach ($temporary_files as $path) {
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+});
 
-$file = fopen($relatorio_path, 'w');
+$file = @fopen($relatorio_path, 'wb');
+if ($file === false) {
+    audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Falha ao criar arquivo temporario de metricas', 'WARNING');
+    json_response(['sucesso' => false, 'mensagem' => 'Erro ao gerar relatório.'], 500);
+}
 csv_safe_row($file, ['tipo_metrica', 'categoria', 'valor', 'unidade']);
 
 // Total de pausas por funcionário
@@ -116,8 +131,11 @@ foreach ($metricas['pausas_reuniao_pendentes'] as $func => $total) {
 fclose($file);
 
 // Criar arquivo detalhado
-$relatorio_detalhado_path = $temp_dir . '/relatorio_pausas_detalhado_' . $timestamp . '.csv';
-$file_detalhado = fopen($relatorio_detalhado_path, 'w');
+$file_detalhado = @fopen($relatorio_detalhado_path, 'wb');
+if ($file_detalhado === false) {
+    audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Falha ao criar arquivo temporario detalhado', 'WARNING');
+    json_response(['sucesso' => false, 'mensagem' => 'Erro ao gerar relatório.'], 500);
+}
 $headers_detalhado = [
     'id_funcionario', 'nome_funcionario', 'equipe', 'inicio_pausa', 'fim_pausa',
     'duracao_segundos', 'duracao_formatada', 'motivo_pausa', 'alerta_15min',
@@ -180,15 +198,16 @@ foreach ($metricas['pausas_detalhadas'] as $pausa) {
 fclose($file_detalhado);
 
 // Criar ZIP
-$relatorio_zip_path = $temp_dir . '/relatorio_completo_' . $timestamp . '.zip';
+if (!class_exists('ZipArchive')) {
+    audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Extensao ZipArchive indisponivel', 'WARNING');
+    json_response(['sucesso' => false, 'mensagem' => 'Exportação indisponível no servidor.'], 503);
+}
 $zip = new ZipArchive();
-if ($zip->open($relatorio_zip_path, ZipArchive::CREATE) === TRUE) {
+if ($zip->open($relatorio_zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) === TRUE) {
     $zip->addFile($relatorio_path, 'relatorio_metricas_' . $timestamp . '.csv');
     $zip->addFile($relatorio_detalhado_path, 'relatorio_pausas_detalhado_' . $timestamp . '.csv');
     $zip->close();
 } else {
-    @unlink($relatorio_path);
-    @unlink($relatorio_detalhado_path);
     audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Falha ao criar ZIP de relatório', 'WARNING');
     json_response(['sucesso' => false, 'mensagem' => 'Erro ao gerar relatório.'], 500);
 }
@@ -202,11 +221,6 @@ header('Content-Type: application/zip');
 header('Content-Disposition: attachment; filename="relatorio_completo_' . $timestamp . '.zip"');
 header('Content-Length: ' . filesize($relatorio_zip_path));
 readfile($relatorio_zip_path);
-
-// Limpar arquivos temporários
-@unlink($relatorio_path);
-@unlink($relatorio_detalhado_path);
-@unlink($relatorio_zip_path);
 exit;
 ?>
 

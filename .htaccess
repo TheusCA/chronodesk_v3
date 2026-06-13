@@ -25,7 +25,8 @@ ServerSignature Off
     Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
 
     <FilesMatch "\.html$">
-        Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'"
+        Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'"
+        Header always set Cache-Control "no-store, no-cache, must-revalidate"
     </FilesMatch>
 </IfModule>
 
@@ -33,8 +34,10 @@ ServerSignature Off
 RewriteEngine On
 
 # Bloquear diretórios que nunca devem ser publicados
-RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|sessions|cache|tmp)(/|$)" - [F,L]
+RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|services|migrations|deploy|scripts|sessions|cache|tmp)(/|$)" - [F,L]
 RewriteRule "^frontend(?:/|$)" - [F,L]
+RewriteRule "^api/(?:.*/)?_[^/]*\.php$" - [F,L]
+RewriteRule "^(?:auth_ldap|config|config_assets|db|init|security)\.php$" - [F,L]
 
 # Bloquear scripts operacionais que devem rodar somente via CLI
 RewriteRule "^migrar_.*\.php$" - [F,L]
@@ -42,3 +45,10 @@ RewriteRule "^migrar_.*\.php$" - [F,L]
 # Bloquear arquivos sensíveis por padrão, preservando assets estáticos em static/
 RewriteRule "(^|/)(\.env(\..*)?|composer\..*|package.*\.json)$" - [F,L]
 RewriteRule "\.(json|csv|sql|md|log|bak|backup|zip|rar|7z|old|orig|save)$" - [F,L]
+
+# SPA fallback limitado ao build público React.
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^app/(.+)/$ app/$1 [R=308,L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^app(?:/.*)?$ app/index.html [L]

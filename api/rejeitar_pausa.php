@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../init.php';
+require_once __DIR__ . '/../services/ApprovalRequestService.php';
 
 require_post_method();
 verificar_login_api();
@@ -23,6 +24,11 @@ $resultado = with_pause_state_lock(function () use ($gerenciador, $funcionario_i
 });
 if ($resultado['sucesso']) {
     audit_log('PAUSE_REJECT', 'Pausa rejeitada para funcionário ID ' . $funcionario_id, 'INFO');
+    (new ApprovalRequestService())->decide(
+        $funcionario_id,
+        'rejected',
+        sanitize_input($_SESSION['admin_username'] ?? $_SESSION['username'] ?? 'gestor', 100)
+    );
 }
 
 json_response($resultado, $resultado['sucesso'] ? 200 : 409);

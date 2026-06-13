@@ -21,6 +21,53 @@ function get_csp_nonce() {
     return $GLOBALS['csp_nonce'] ?? '';
 }
 
+function configured_application_base_url(): ?string {
+    $configured = rtrim(trim((string)(getenv('APP_BASE_URL') ?: '')), '/');
+    if ($configured === '' || !filter_var($configured, FILTER_VALIDATE_URL)) {
+        return null;
+    }
+
+    $parts = parse_url($configured);
+    if (
+        !is_array($parts)
+        || !isset($parts['scheme'], $parts['host'])
+        || !in_array(strtolower($parts['scheme']), ['http', 'https'], true)
+    ) {
+        return null;
+    }
+
+    return $configured;
+}
+
+function safe_request_origin(?string $scheme = null): string {
+    $configured = configured_application_base_url();
+    if ($configured !== null) {
+        $parts = parse_url($configured);
+        $origin = strtolower($scheme ?: $parts['scheme']) . '://' . $parts['host'];
+        if (isset($parts['port'])) {
+            $origin .= ':' . (int)$parts['port'];
+        }
+        return $origin;
+    }
+
+    $scheme = $scheme ?: (
+        isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http'
+    );
+    $host = trim((string)($_SERVER['SERVER_NAME'] ?? 'localhost'));
+    if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        $host = '[' . $host . ']';
+    } elseif (
+        !filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+        && preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i', $host) !== 1
+    ) {
+        $host = 'localhost';
+    }
+
+    $port = (int)($_SERVER['SERVER_PORT'] ?? 0);
+    $default_port = $scheme === 'https' ? 443 : 80;
+    return $scheme . '://' . $host . ($port > 0 && $port !== $default_port ? ':' . $port : '');
+}
+
 // ============================================
 // SANITIZAÇÃO
 // ============================================
@@ -114,7 +161,8 @@ function verify_csrf_token($token) {
  * Verifica header X-CSRF-Token ou campo POST csrf_token
  */
 function require_csrf_token() {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if (!in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) return;
     
     $token = $_POST['csrf_token'] 
         ?? $_SERVER['HTTP_X_CSRF_TOKEN'] 
@@ -183,7 +231,11 @@ function set_security_headers() {
             true
         );
         if (defined('APP_ENV') && APP_ENV === 'production' && $force_https) {
-            $redirect = 'https://' . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+            $request_uri = str_replace(["\r", "\n"], '', (string)($_SERVER['REQUEST_URI'] ?? '/'));
+            if ($request_uri === '' || $request_uri[0] !== '/') {
+                $request_uri = '/';
+            }
+            $redirect = safe_request_origin('https') . $request_uri;
             header('Location: ' . $redirect, true, 301);
             exit;
         }
@@ -201,9 +253,13 @@ function secure_session_start() {
         if ($secure_cookie_env !== false && $secure_cookie_env !== '') {
             $secure_cookie = in_array(strtolower(trim($secure_cookie_env)), ['1', 'true', 'yes', 'on'], true);
         }
-        $same_site = getenv('SESSION_COOKIE_SAMESITE') ?: 'Strict';
+        $same_site = ucfirst(strtolower((string)(getenv('SESSION_COOKIE_SAMESITE') ?: 'Strict')));
         if (!in_array($same_site, ['Strict', 'Lax', 'None'], true)) {
             $same_site = 'Strict';
+        }
+        if ($same_site === 'None' && !$secure_cookie) {
+            error_log('[SESSION] SameSite=None exige cookie Secure; usando Lax.');
+            $same_site = 'Lax';
         }
 
         ini_set('session.cookie_httponly', 1);
@@ -257,10 +313,14 @@ function public_error_message($exception, $production_message = 'Erro interno. T
  * Rate limiting baseado em IP usando arquivos temporários
  * NÃO pode ser contornado removendo cookies de sessão
  */
-function check_rate_limit($key, $max_requests = 5, $time_window = 900) {
+function rate_limit_file_path($key): string {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
     $safe_key = preg_replace('/[^a-zA-Z0-9_]/', '', $key);
-    $rate_file = sys_get_temp_dir() . '/chronodesk_rate_' . md5($safe_key . '_' . $ip) . '.json';
+    return sys_get_temp_dir() . '/chronodesk_rate_' . md5($safe_key . '_' . $ip) . '.json';
+}
+
+function check_rate_limit($key, $max_requests = 5, $time_window = 900) {
+    $rate_file = rate_limit_file_path($key);
     $now = time();
     
     $handle = @fopen($rate_file, 'c+');
@@ -334,7 +394,7 @@ function audit_log($action, $details = '', $severity = 'INFO') {
         ]);
     } catch (\Exception $e) {
         // Fallback para error_log se o banco falhar
-        error_log("[AUDIT] [{$severity}] {$action}: {$details} - DB Error: " . $e->getMessage());
+        error_log("[AUDIT] [{$severity}] {$action}: {$details} - persistencia indisponivel");
     }
 }
 
@@ -346,11 +406,13 @@ function audit_log($action, $details = '', $severity = 'INFO') {
  * Exige Content-Type application/json em requisições POST
  */
 function require_json_content_type() {
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if (!in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) return;
     
     $ct = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
     $media_type = strtolower(trim(explode(';', $ct, 2)[0]));
-    if ($media_type !== 'application/json' && !str_ends_with($media_type, '+json')) {
+    $is_json_suffix = strlen($media_type) > 5 && substr($media_type, -5) === '+json';
+    if ($media_type !== 'application/json' && !$is_json_suffix) {
         http_response_code(415);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode([
@@ -372,6 +434,22 @@ function require_get_method() {
         ], JSON_UNESCAPED_UNICODE);
         exit;
     }
+}
+
+function require_http_method(array $allowed_methods): string {
+    $allowed_methods = array_values(array_unique(array_map('strtoupper', $allowed_methods)));
+    $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+    if (!in_array($method, $allowed_methods, true)) {
+        http_response_code(405);
+        header('Allow: ' . implode(', ', $allowed_methods));
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'sucesso' => false,
+            'mensagem' => 'Método não permitido'
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    return $method;
 }
 
 function session_window_is_current($login_time, $last_activity, $absolute_timeout, $idle_timeout, $now = null) {
@@ -422,6 +500,71 @@ function require_post_method() {
     }
 }
 
+function clear_rate_limit($key): void {
+    $rate_file = rate_limit_file_path($key);
+    if (is_file($rate_file) && !@unlink($rate_file)) {
+        error_log('[RATE_LIMIT] Falha ao limpar contador de rate limit.');
+    }
+}
+
+function current_portal_role(): ?string {
+    if (
+        isset($_SESSION['admin_logged_in'])
+        && $_SESSION['admin_logged_in'] === true
+        && usuario_pode_acessar_metricas()
+    ) {
+        return 'admin';
+    }
+    if (usuario_pode_acessar_metricas()) {
+        return 'gestor';
+    }
+    if (ci_session_is_current()) {
+        return 'tecnico';
+    }
+    return null;
+}
+
+function portal_permissions_for_role(?string $role): array {
+    $permissions = [
+        'admin' => [
+            'portal.read', 'pausas.use', 'admin.manage', 'metricas.read',
+            'relatorios.read', 'configuracoes.manage', 'integracoes.manage',
+            'documentacao.edit', 'avisos.manage', 'operacao.approve'
+        ],
+        'gestor' => [
+            'portal.read', 'pausas.use', 'metricas.read', 'relatorios.read',
+            'documentacao.edit', 'avisos.manage', 'operacao.approve'
+        ],
+        'tecnico' => ['portal.read', 'pausas.use'],
+        'somente_leitura' => ['portal.read'],
+    ];
+    return $permissions[$role] ?? [];
+}
+
+function require_portal_auth(array $allowed_roles = []): string {
+    $role = current_portal_role();
+    if ($role === null) {
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Sessão expirada ou acesso não autorizado.'
+        ], 401);
+    }
+    if ($allowed_roles && !in_array($role, $allowed_roles, true)) {
+        audit_log('PORTAL_ACCESS_DENIED', 'Acesso negado para role ' . $role, 'WARNING');
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Seu perfil não possui permissão para este recurso.'
+        ], 403);
+    }
+
+    if ($role === 'tecnico') {
+        $_SESSION['ci_last_activity'] = time();
+    } else {
+        $_SESSION['last_activity'] = time();
+    }
+    return $role;
+}
+
 function with_pause_state_lock(callable $callback) {
     $state_path = defined('ESTADO_JSON') ? ESTADO_JSON : __DIR__ . '/estado.json';
     $lock_path = sys_get_temp_dir() . '/chronodesk_pause_' . md5($state_path) . '.lock';
@@ -457,15 +600,14 @@ function destroy_current_session() {
 
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
-        setcookie(
-            session_name(),
-            '',
-            time() - 42000,
-            $params['path'] ?? '/',
-            $params['domain'] ?? '',
-            $params['secure'] ?? false,
-            $params['httponly'] ?? true
-        );
+        setcookie(session_name(), '', [
+            'expires' => time() - 42000,
+            'path' => $params['path'] ?? '/',
+            'domain' => $params['domain'] ?? '',
+            'secure' => $params['secure'] ?? false,
+            'httponly' => $params['httponly'] ?? true,
+            'samesite' => $params['samesite'] ?? 'Strict',
+        ]);
     }
 
     session_destroy();
@@ -489,8 +631,9 @@ function clear_ci_session() {
 function safe_file_path($file_path, $base_directory) {
     $base_directory = realpath($base_directory);
     $file_path = realpath($file_path);
-    if ($file_path === false) return false;
-    if (substr($file_path, 0, strlen($base_directory)) !== $base_directory) return false;
+    if ($base_directory === false || $file_path === false) return false;
+    $base_prefix = rtrim($base_directory, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+    if ($file_path !== $base_directory && strncmp($file_path, $base_prefix, strlen($base_prefix)) !== 0) return false;
     return $file_path;
 }
 

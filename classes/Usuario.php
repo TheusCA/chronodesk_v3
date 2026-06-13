@@ -13,9 +13,18 @@ class Usuario {
         try {
             $username = normalizar_samaccountname($username);
             if ($username === null) {
-                throw new Exception("Usuário inválido.");
+                throw new InvalidArgumentException("Usuário inválido.");
+            }
+            if (!in_array($role, ['admin', 'gestor'], true)) {
+                throw new InvalidArgumentException("Perfil inválido.");
+            }
+            if (!is_string($password) || strlen($password) < 8 || strlen($password) > 128) {
+                throw new InvalidArgumentException("A senha deve ter entre 8 e 128 caracteres.");
             }
             $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+            if ($hash === false) {
+                throw new RuntimeException("Não foi possível proteger a senha.");
+            }
             $sql = "INSERT INTO usuarios (username, password_hash, role) VALUES (:username, :hash, :role)";
             $stmt = $this->pdo->prepare($sql);
             return $stmt->execute([
@@ -26,7 +35,7 @@ class Usuario {
         } catch (PDOException $e) {
             // Código 23000 é violação de constraint UNIQUE (usuário duplicado)
             if ($e->getCode() == 23000) {
-                throw new Exception("Usuário já existe.");
+                throw new DomainException("Usuário já existe.");
             }
             throw $e;
         }
@@ -38,11 +47,106 @@ class Usuario {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    // Deletar usuário (exceto o admin principal se for o caso, mas deixarei livre por enquanto)
     public function deletar($id) {
-        $sql = "DELETE FROM usuarios WHERE id = :id";
-        $stmt = $this->pdo->prepare($sql);
-        return $stmt->execute([':id' => $id]);
+        return $this->deletarProtegido((int)$id) !== null;
+    }
+
+    public function deletarProtegido(int $id): ?array {
+        $this->pdo->beginTransaction();
+        try {
+            $admins = $this->pdo
+                ->query("SELECT id FROM usuarios WHERE role = 'admin' ORDER BY id FOR UPDATE")
+                ->fetchAll(PDO::FETCH_COLUMN);
+            $stmt = $this->pdo->prepare(
+                "SELECT id, username, role FROM usuarios WHERE id = :id FOR UPDATE"
+            );
+            $stmt->execute([':id' => $id]);
+            $target = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$target) {
+                $this->pdo->commit();
+                return null;
+            }
+            if ($target['role'] === 'admin' && count($admins) <= 1) {
+                throw new DomainException('Não é possível remover o último administrador do sistema.');
+            }
+
+            $delete = $this->pdo->prepare("DELETE FROM usuarios WHERE id = :id");
+            $delete->execute([':id' => $id]);
+            if ($delete->rowCount() !== 1) {
+                throw new RuntimeException('O usuário não pôde ser removido.');
+            }
+            $this->pdo->commit();
+            return $target;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    public function atualizarRole($id, $role) {
+        return $this->atualizarRoleProtegido((int)$id, $role) !== null;
+    }
+
+    public function atualizarRoleProtegido(int $id, string $role): ?array {
+        if (!in_array($role, ['admin', 'gestor'], true)) {
+            throw new InvalidArgumentException('Perfil inválido.');
+        }
+
+        $this->pdo->beginTransaction();
+        try {
+            $admins = $this->pdo
+                ->query("SELECT id FROM usuarios WHERE role = 'admin' ORDER BY id FOR UPDATE")
+                ->fetchAll(PDO::FETCH_COLUMN);
+            $stmt = $this->pdo->prepare(
+                "SELECT id, username, role FROM usuarios WHERE id = :id FOR UPDATE"
+            );
+            $stmt->execute([':id' => $id]);
+            $target = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$target) {
+                $this->pdo->commit();
+                return null;
+            }
+            if ($target['role'] === 'admin' && $role !== 'admin' && count($admins) <= 1) {
+                throw new DomainException('Não é possível remover o perfil do último administrador.');
+            }
+
+            if ($target['role'] !== $role) {
+                $update = $this->pdo->prepare("UPDATE usuarios SET role = :role WHERE id = :id");
+                $update->execute([':role' => $role, ':id' => $id]);
+            }
+            $this->pdo->commit();
+            $target['new_role'] = $role;
+            return $target;
+        } catch (Throwable $e) {
+            if ($this->pdo->inTransaction()) {
+                $this->pdo->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    public function atualizarSenhaPorUsername($username, $password) {
+        $username = normalizar_samaccountname($username);
+        if ($username === null) {
+            throw new InvalidArgumentException('Usuário inválido.');
+        }
+        if (!is_string($password) || strlen($password) < 8 || strlen($password) > 128) {
+            throw new InvalidArgumentException('A senha deve ter entre 8 e 128 caracteres.');
+        }
+        $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
+        if ($hash === false) {
+            throw new RuntimeException('Não foi possível proteger a senha.');
+        }
+        $stmt = $this->pdo->prepare(
+            'UPDATE usuarios SET password_hash = :password_hash WHERE username = :username'
+        );
+        $stmt->execute([
+            ':password_hash' => $hash,
+            ':username' => $username,
+        ]);
+        return $stmt->rowCount() > 0;
     }
 
     // Autenticar usuário

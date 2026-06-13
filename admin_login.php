@@ -53,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $password = '';
         if ($authenticated) {
+            clear_rate_limit('admin_login');
             session_regenerate_id(true);
             $_SESSION['admin_logged_in'] = true;
             $_SESSION['admin_auth_type'] = $auth_type;

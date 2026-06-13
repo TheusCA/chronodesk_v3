@@ -167,8 +167,14 @@ function buscar_atributos_usuario($conn, string $username, string $domain): arra
  */
 function normalizar_login_ldap(string $login, string $ad_upn_suffix, string $ad_domain): array {
     $login = trim($login);
-    // Apenas letras, números, ponto, hífen, underscore e arroba
-    $login = preg_replace('/[^a-zA-Z0-9.\-_@]/', '', $login);
+    if (
+        $login === ''
+        || strlen($login) > 150
+        || preg_match('/^[a-zA-Z0-9.\-_@]+$/', $login) !== 1
+        || substr_count($login, '@') > 1
+    ) {
+        return ['samaccountname' => '', 'bind_upns' => []];
+    }
 
     $username = $login;
     $explicit_upn = '';
@@ -188,7 +194,7 @@ function normalizar_login_ldap(string $login, string $ad_upn_suffix, string $ad_
     }
 
     $username = strtolower($username);
-    if (strlen($username) < 2) {
+    if (strlen($username) < 2 || strlen($username) > 100) {
         return ['samaccountname' => '', 'bind_upns' => []];
     }
 
@@ -233,11 +239,14 @@ function buscar_funcionario_por_ad_login(string $ad_login): ?array {
         $stmt = $pdo->prepare(
             "SELECT id, nome, equipe, ativo
              FROM funcionarios
-             WHERE (LOWER(ad_login) = :login OR LOWER(ad_login_ativo) = :login)
+             WHERE (LOWER(ad_login) = :login OR LOWER(ad_login_ativo) = :active_login)
                AND ativo = 1
              LIMIT 1"
         );
-        $stmt->execute([':login' => $ad_login]);
+        $stmt->execute([
+            ':login' => $ad_login,
+            ':active_login' => $ad_login,
+        ]);
         $row = $stmt->fetch();
         if ($row) {
             $row['id'] = (int)$row['id'];
@@ -467,6 +476,9 @@ function exigir_autenticacao_ci_pausa($data, $funcionario_id, $contexto = 'pausa
             audit_log('CI_AD_LOGIN_FAILURE', 'Falha de autenticacao AD no contexto ' . $contexto . ' para login ' . normalizar_samaccountname($login_ad), 'WARNING');
         }
         json_response(['sucesso' => false, 'mensagem' => $autenticacao['mensagem']], 401);
+    }
+    if (function_exists('clear_rate_limit')) {
+        clear_rate_limit($rate_key);
     }
 
     $funcionario_autenticado_id = (int)($autenticacao['funcionario']['id'] ?? 0);

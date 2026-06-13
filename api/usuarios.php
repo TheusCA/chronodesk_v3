@@ -1,21 +1,19 @@
 <?php
 /**
- * [SECURED] CRUD de Usuários
- * Correções: Proteção contra exclusão do último admin, auditoria
+ * CRUD de usuarios locais, restrito a administradores.
  */
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../classes/Usuario.php';
 
 verificar_admin_login_api();
 
-header('Content-Type: application/json; charset=utf-8');
 $action = $_GET['action'] ?? '';
 
 try {
     if (!ENABLE_LOCAL_ADMIN) {
         json_response([
             'sucesso' => false,
-            'mensagem' => 'Gerenciamento de usuários locais está desativado.'
+            'mensagem' => 'Gerenciamento de usuarios locais esta desativado.',
         ], 403);
     }
 
@@ -23,66 +21,123 @@ try {
 
     switch ($action) {
         case 'listar':
-            $usuarios = $usuarioModel->listar();
-            echo json_encode(['usuarios' => $usuarios]);
-            break;
+            require_get_method();
+            json_response([
+                'sucesso' => true,
+                'usuarios' => $usuarioModel->listar(),
+            ]);
 
         case 'criar':
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('Método inválido');
+            require_post_method();
             require_csrf_token();
             require_json_content_type();
-            
+
             $input = json_decode(file_get_contents('php://input'), true);
-            $username = sanitize_input($input['username'] ?? '');
-            $password = $input['password'] ?? '';  // NÃO sanitizar senha
-            $role = in_array($input['role'] ?? '', ['admin', 'gestor']) ? $input['role'] : 'gestor';
-
-            if (empty($username) || strlen($username) < 3) throw new Exception('Usuário deve ter pelo menos 3 caracteres');
-            if (empty($password) || strlen($password) < 8) throw new Exception('Senha deve ter pelo menos 8 caracteres');
-
-            if ($usuarioModel->criar($username, $password, $role)) {
-                audit_log('USER_CREATED', "Usuário '{$username}' criado com role '{$role}'", 'WARNING');
-                echo json_encode(['success' => true, 'message' => 'Usuário criado com sucesso']);
-            } else {
-                throw new Exception('Erro ao criar usuário');
+            if (!is_array($input)) {
+                throw new InvalidArgumentException('Dados invalidos.');
             }
-            break;
+            $username = sanitize_input($input['username'] ?? '', 100);
+            $password = $input['password'] ?? '';
+            $role = in_array($input['role'] ?? '', ['admin', 'gestor'], true)
+                ? $input['role']
+                : 'gestor';
+
+            if (strlen($username) < 3) {
+                throw new InvalidArgumentException('Usuario deve ter pelo menos 3 caracteres.');
+            }
+            if (!is_string($password) || strlen($password) < 8 || strlen($password) > 128) {
+                throw new InvalidArgumentException('Senha deve ter entre 8 e 128 caracteres.');
+            }
+
+            if (!$usuarioModel->criar($username, $password, $role)) {
+                throw new RuntimeException('Erro ao criar usuario.');
+            }
+            audit_log('USER_CREATED', "Usuario '{$username}' criado com role '{$role}'", 'WARNING');
+            json_response([
+                'success' => true,
+                'sucesso' => true,
+                'message' => 'Usuario criado com sucesso',
+                'mensagem' => 'Usuario criado com sucesso',
+            ], 201);
 
         case 'deletar':
-            if ($_SERVER['REQUEST_METHOD'] !== 'POST') throw new Exception('Método inválido');
+            require_post_method();
             require_csrf_token();
             require_json_content_type();
-            
+
             $input = json_decode(file_get_contents('php://input'), true);
-            $id = intval($input['id'] ?? 0);
-            if ($id <= 0) throw new Exception('ID inválido');
-
-            // [VULN-011] Proteger contra exclusão do último admin
-            $usuarios = $usuarioModel->listar();
-            $admins = array_filter($usuarios, fn($u) => $u['role'] === 'admin');
-            $usuario_alvo = null;
-            foreach ($usuarios as $u) {
-                if ($u['id'] == $id) { $usuario_alvo = $u; break; }
+            if (!is_array($input)) {
+                throw new InvalidArgumentException('Dados invalidos.');
+            }
+            $id = filter_var($input['id'] ?? null, FILTER_VALIDATE_INT, [
+                'options' => ['min_range' => 1],
+            ]);
+            if (!$id) {
+                throw new InvalidArgumentException('ID invalido.');
             }
 
-            if ($usuario_alvo && $usuario_alvo['role'] === 'admin' && count($admins) <= 1) {
-                throw new Exception('Não é possível remover o último administrador do sistema');
+            $target = $usuarioModel->deletarProtegido((int)$id);
+            if (!$target) {
+                throw new InvalidArgumentException('Usuario nao encontrado.');
+            }
+            audit_log('USER_DELETED', "Usuario '{$target['username']}' removido", 'CRITICAL');
+            json_response([
+                'success' => true,
+                'sucesso' => true,
+                'message' => 'Usuario removido com sucesso',
+                'mensagem' => 'Usuario removido com sucesso',
+            ]);
+
+        case 'atualizar_role':
+            require_post_method();
+            require_csrf_token();
+            require_json_content_type();
+
+            $input = json_decode(file_get_contents('php://input'), true);
+            if (!is_array($input)) {
+                throw new InvalidArgumentException('Dados invalidos.');
+            }
+            $id = filter_var($input['id'] ?? null, FILTER_VALIDATE_INT, [
+                'options' => ['min_range' => 1],
+            ]);
+            $role = $input['role'] ?? '';
+            if (!$id || !in_array($role, ['admin', 'gestor'], true)) {
+                throw new InvalidArgumentException('Usuario ou perfil invalido.');
             }
 
-            if ($usuarioModel->deletar($id)) {
-                $nome_deletado = $usuario_alvo['username'] ?? 'ID:' . $id;
-                audit_log('USER_DELETED', "Usuário '{$nome_deletado}' removido", 'CRITICAL');
-                echo json_encode(['success' => true, 'message' => 'Usuário removido com sucesso']);
-            } else {
-                throw new Exception('Erro ao remover usuário');
+            $target = $usuarioModel->atualizarRoleProtegido((int)$id, $role);
+            if (!$target) {
+                throw new InvalidArgumentException('Usuario nao encontrado.');
             }
-            break;
+            audit_log('USER_ROLE_UPDATED', "Perfil do usuario ID {$id} alterado para '{$role}'", 'WARNING');
+            json_response([
+                'success' => true,
+                'sucesso' => true,
+                'message' => 'Perfil atualizado com sucesso',
+                'mensagem' => 'Perfil atualizado com sucesso',
+            ]);
 
         default:
-            throw new Exception('Ação inválida');
+            throw new InvalidArgumentException('Acao invalida.');
     }
-} catch (Exception $e) {
-    http_response_code(400);
-    error_log('[USUARIOS] Erro na ação ' . sanitize_input($action, 50) . ': ' . $e->getMessage());
-    echo json_encode(['error' => public_error_message($e, 'Não foi possível processar a solicitação.')], JSON_UNESCAPED_UNICODE);
+} catch (DomainException $e) {
+    json_response([
+        'sucesso' => false,
+        'error' => $e->getMessage(),
+        'mensagem' => $e->getMessage(),
+    ], 409);
+} catch (InvalidArgumentException $e) {
+    json_response([
+        'sucesso' => false,
+        'error' => $e->getMessage(),
+        'mensagem' => $e->getMessage(),
+    ], 400);
+} catch (Throwable $e) {
+    error_log('[USUARIOS] Falha na acao ' . sanitize_input($action, 50));
+    $message = public_error_message($e, 'Nao foi possivel processar a solicitacao.');
+    json_response([
+        'sucesso' => false,
+        'error' => $message,
+        'mensagem' => $message,
+    ], 500);
 }

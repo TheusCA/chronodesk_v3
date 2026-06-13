@@ -30,7 +30,7 @@ function load_env($path) {
         $value = trim($value);
         // Remover aspas se presentes
         $value = trim($value, '"\'');
-        if (!getenv($key)) {
+        if (getenv($key) === false) {
             putenv("{$key}={$value}");
             $_ENV[$key] = $value;
         }
@@ -76,9 +76,12 @@ define('FUNCIONARIOS_JSON', __DIR__ . '/funcionarios.json');
 // [VULN-002] Credenciais do banco via variáveis de ambiente
 // ============================================
 define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+define('DB_PORT', max(1, min((int)(getenv('DB_PORT') ?: 3306), 65535)));
 define('DB_NAME', getenv('DB_NAME') ?: 'sistema_pausas');
 define('DB_USER', getenv('DB_USER') ?: 'chronodesk_app');
 define('DB_PASS', getenv('DB_PASS') ?: '');
+$db_charset = strtolower(trim((string)(getenv('DB_CHARSET') ?: 'utf8mb4')));
+define('DB_CHARSET', in_array($db_charset, ['utf8mb4', 'utf8'], true) ? $db_charset : 'utf8mb4');
 
 // ============================================
 // [VULN-001] SECRET_KEY fixa via .env
@@ -144,7 +147,7 @@ $allowed_origins = array_map('trim', explode(',', $cors_origins_env));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (in_array($origin, $allowed_origins, true)) {
     header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
     header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
     header('Access-Control-Allow-Credentials: true');
 }
@@ -288,7 +291,11 @@ function usuario_pode_acessar_metricas() {
 }
 
 function verificar_login_api() {
-    if (!usuario_pode_acessar_metricas()) {
+    $authenticated = (
+        (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) ||
+        (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true)
+    );
+    if (!$authenticated) {
         json_response([
             'sucesso' => false,
             'mensagem' => 'Sessão expirada ou acesso não autorizado.'
@@ -334,14 +341,14 @@ function verificar_admin_login() {
 }
 
 function verificar_admin_login_api() {
+    verificar_login_api();
+
     if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
         json_response([
             'sucesso' => false,
-            'mensagem' => 'Acesso administrativo não autorizado.'
-        ], 401);
+            'mensagem' => 'Seu perfil não possui permissão administrativa.'
+        ], 403);
     }
-
-    verificar_login_api();
 }
 
 function _redirecionar_login($page, $msg = '') {
@@ -416,19 +423,24 @@ function salvar_configuracao($config) {
 }
 
 function normalizar_samaccountname($login) {
-    $login = strtolower(sanitize_input($login ?? '', 150));
-    $login = trim($login);
-    if ($login === '') {
+    $login = strtolower(trim(sanitize_input($login ?? '', 150)));
+    if ($login === '' || preg_match('/^[a-z0-9._@-]+$/', $login) !== 1) {
         return null;
     }
 
     if (strpos($login, '@') !== false) {
-        $parts = explode('@', $login, 2);
-        $login = $parts[0];
+        [$username, $suffix] = explode('@', $login, 2);
+        $allowed_suffixes = array_filter(array_unique([
+            strtolower(trim((string)(getenv('AD_UPN_SUFFIX') ?: ''))),
+            strtolower(trim((string)(getenv('AD_DOMAIN') ?: ''))),
+        ]));
+        if ($username === '' || $suffix === '' || !in_array($suffix, $allowed_suffixes, true)) {
+            return null;
+        }
+        $login = $username;
     }
 
-    $login = preg_replace('/[^a-z0-9._-]/', '', $login);
-    return $login === '' ? null : $login;
+    return strlen($login) >= 2 && strlen($login) <= 100 ? $login : null;
 }
 
 function get_ad_admin_users() {
