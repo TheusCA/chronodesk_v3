@@ -37,6 +37,7 @@ Extensoes PHP recomendadas:
 - `curl`
 - `xml`
 - `zip`
+- `fileinfo`
 - `json`
 - `openssl`
 - `session`
@@ -122,6 +123,21 @@ limitada aos arquivos operacionais legados acima. Se o PHP nao puder usar o
 diretorio de sessao do sistema, crie `sessions/` com dono `www-data`, modo `700`
 e mantenha o bloqueio HTTP ja existente.
 
+Configure tambem os limites do PHP usados pelo upload privado:
+
+```bash
+PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+sudo tee "/etc/php/${PHP_VERSION}/apache2/conf.d/99-chronodesk.ini" >/dev/null <<'EOF'
+upload_max_filesize=10M
+post_max_size=12M
+max_file_uploads=1
+display_errors=Off
+display_startup_errors=Off
+expose_php=Off
+EOF
+sudo systemctl reload apache2
+```
+
 5. Configurar Apache:
 
 ```bash
@@ -152,7 +168,12 @@ docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_003_operational_modules.sql
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_004_operational_hardening.sql
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_005_documents_and_employee_roles.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260614_006_critical_incidents.sql
 ```
+
+O login LDAP atual faz bind com a credencial informada pelo usuario e nao exige
+senha de conta de servico. Para preparar uma futura integracao com cofre, siga
+`AD_CREDENTIALS.md`; nao chame scripts Bash a partir de requisicoes PHP.
 
 7. Testar conectividade PHP/MySQL:
 
@@ -234,10 +255,14 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] `.env` real criado manualmente e fora do Git.
 - [ ] `DOCUMENT_STORAGE_PATH=/var/lib/chronodesk/documents` configurado.
 - [ ] Diretorio privado de documentos com dono `www-data` e modo `700`.
+- [ ] `fileinfo`, `zip`, `pdo_mysql` e `ldap` presentes em `php -m`.
+- [ ] `upload_max_filesize=10M`, `post_max_size=12M` e `max_file_uploads=1`.
+- [ ] `LimitRequestBody 12582912` aplicado no VirtualHost.
 - [ ] `APP_ENV=production`.
 - [ ] `APP_DEBUG=false`.
 - [ ] `SECRET_KEY` forte e unica.
 - [ ] Usuario MySQL dedicado, sem uso de `root` pela aplicacao.
+- [ ] Usuario MySQL runtime sem `CREATE`, `ALTER`, `DROP` ou `INDEX`.
 - [ ] Banco `sistema_pausas` importado.
 - [ ] `api/status.php` responde.
 - [ ] Arquivos sensiveis retornam `403` ou `404`.

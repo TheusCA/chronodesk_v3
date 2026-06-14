@@ -175,11 +175,13 @@ Para deploy em VM Linux corporativa:
 3. Use usuário MySQL dedicado, nunca `root`:
    ```sql
    CREATE USER 'chronodesk_user'@'localhost' IDENTIFIED BY 'troque_esta_senha';
-   GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX
+   GRANT SELECT, INSERT, UPDATE, DELETE
      ON sistema_pausas.* TO 'chronodesk_user'@'localhost';
    FLUSH PRIVILEGES;
    ```
-4. Instale/habilite extensões PHP: `php-mysql`, `php-ldap` e `php-zip`.
+   Execute migrations com uma credencial administrativa separada. O usuário
+   runtime da aplicação não deve manter permissões `CREATE`, `ALTER` ou `INDEX`.
+4. Instale/habilite extensões PHP: `php-mysql`, `php-ldap`, `php-zip` e `fileinfo`.
 5. Configure LDAP/AD no `.env`: `AD_DOMAIN`, `AD_UPN_SUFFIX`, `AD_SERVERS`, `AD_PORT`, `AD_USE_TLS`, `AD_ADMIN_USERS`.
 6. Use HTTPS no VirtualHost e defina `SESSION_COOKIE_SECURE=true`.
 7. Mantenha `AllowOverride All` para o `.htaccess` bloquear arquivos sensíveis.
@@ -189,7 +191,12 @@ Headers ativos: `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, 
 
 O rate limit atual cobre login administrativo e autenticação AD nos fluxos de pausa via helper `check_rate_limit()` em `security.php`.
 
-Não há funcionalidade de upload de arquivos. O download de relatório é gerado no servidor em diretório temporário, exige sessão autenticada e não aceita caminho de arquivo fornecido pelo usuário.
+O módulo de documentação aceita apenas a allowlist configurada, valida MIME real
+com `fileinfo`, inspeciona pacotes Office com `ZipArchive`, limita arquivo a 10 MB
+e requisição a 12 MB, gera nome físico aleatório e armazena fora do webroot.
+Upload, download e exclusão exigem sessão/RBAC; escritas também exigem CSRF.
+Configure `upload_max_filesize=10M`, `post_max_size=12M` e
+`DOCUMENT_STORAGE_PATH=/var/lib/chronodesk/documents`.
 
 Antes de migrations em produção, faça backup do banco e dos arquivos locais de estado. Ordem recomendada:
 
@@ -199,6 +206,13 @@ Antes de migrations em produção, faça backup do banco e dos arquivos locais d
 4. Testar login local de contingência.
 5. Testar login AD administrativo.
 6. Testar autenticação AD nos fluxos de pausa.
+
+Para habilitar Chamados criticos / War Room, aplique tambem
+`migrations/20260614_006_critical_incidents.sql` depois das migrations anteriores.
+O modulo usa MySQL como fonte principal e nao grava o CSV importado no servidor.
+
+O funcionamento atual do bind AD e o plano de migracao para credenciais
+materializadas por cofre estao documentados em `AD_CREDENTIALS.md`.
 
 ### Checklist Manual OWASP/WSTG
 

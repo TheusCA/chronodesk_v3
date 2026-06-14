@@ -368,7 +368,7 @@ const securityProtections = [
   ['Validação de entrada', 'Ativo', 'edit', 'Tipos, limites, formatos e estruturas inesperadas são rejeitados.'],
   ['Proteção contra XSS', 'Configurado', 'shield', 'React escapa conteúdo e o legado usa codificação de saída.'],
   ['Headers de segurança', 'Ativo', 'file', 'Aplicados pelo Apache sem revelar configuração sensível.'],
-  ['Content Security Policy', 'Ativo', 'shield', "Política restrita a 'self', sem unsafe-inline."],
+  ['Content Security Policy', 'Parcial', 'shield', "O React usa política restrita a 'self'; páginas legadas ainda dependem temporariamente de conteúdo inline."],
   ['Proteção contra framing', 'Ativo', 'shield', 'X-Frame-Options DENY e frame-ancestors none.'],
   ['X-Content-Type-Options', 'Ativo', 'file', 'nosniff reduz interpretação indevida de conteúdo.'],
   ['Referrer-Policy', 'Ativo', 'file', 'strict-origin-when-cross-origin configurado.'],

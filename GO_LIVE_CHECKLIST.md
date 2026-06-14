@@ -7,6 +7,7 @@
 - [ ] VM Linux provisionada e acessivel pela rede interna.
 - [ ] Hostname interno definido, por exemplo `chronodesk.interno.local`.
 - [ ] Apache, PHP 8 e extensoes necessarias instalados.
+- [ ] `fileinfo`, `zip`, `pdo_mysql` e `ldap` confirmados em `php -m`.
 - [ ] Container Docker MySQL criado e operacional.
 - [ ] Backup inicial do MySQL validado.
 - [ ] Certificado HTTPS interno disponivel ou excecao formal registrada.
@@ -22,8 +23,13 @@
 - [ ] `AllowOverride All` habilitado para preservar `.htaccess`.
 - [ ] `rewrite`, `headers` e `ssl` habilitados no Apache.
 - [ ] Schema SQL importado no MySQL Docker.
+- [ ] Migration `20260614_006_critical_incidents.sql` aplicada.
 - [ ] Usuario MySQL dedicado criado.
 - [ ] Aplicacao configurada para nao usar `root` no banco.
+- [ ] Usuario runtime sem permissoes DDL apos as migrations.
+- [ ] `upload_max_filesize=10M`, `post_max_size=12M` e `max_file_uploads=1`.
+- [ ] `LimitRequestBody 12582912` aplicado no Apache.
+- [ ] Storage privado de documentos fora do webroot com modo `700`.
 
 ## Pos-Deploy
 
@@ -50,6 +56,7 @@
 - [ ] `.htaccess` presente e aplicado.
 - [ ] HTTPS interno ativo quando possivel.
 - [ ] `SESSION_COOKIE_SECURE=true` quando HTTPS estiver ativo.
+- [ ] `FORCE_HTTPS=true` apos validar o VirtualHost HTTPS.
 - [ ] `ALLOWED_ORIGINS` restrito ao hostname real.
 - [ ] `SECRET_KEY` forte e unica definida no servidor.
 - [ ] `ENABLE_LOCAL_ADMIN=false` em producao.
@@ -79,6 +86,11 @@
 - [ ] Finalizacao de pausa validada.
 - [ ] Solicitacao de pausa com aprovacao validada.
 - [ ] Aprovacao/rejeicao por gestor validada.
+- [ ] Gestor/admin consegue decidir a propria solicitacao de pausa.
+- [ ] Tecnico recebe `403` ao tentar aprovar ou rejeitar pausa.
+- [ ] Chamados criticos: criar, editar, filtrar e alterar status validados.
+- [ ] CSV de chamados criticos: preview, confirmacao e exportacao validados.
+- [ ] CSV invalido, acima do limite ou com coluna desconhecida rejeitado.
 - [ ] Metricas validadas.
 - [ ] Relatorio/download validado.
 - [ ] Logout validado.
@@ -92,6 +104,7 @@
 - [ ] `AD_UPN_SUFFIX` confirmado.
 - [ ] `AD_SERVERS` confirmado.
 - [ ] `AD_USE_TLS` validado.
+- [ ] `AD_CREDENTIAL_PROVIDER=none` enquanto nao houver contrato real com o cofre.
 - [ ] Usuarios admin em `AD_ADMIN_USERS` revisados.
 - [ ] Usuario nao autorizado bloqueado.
 
@@ -111,5 +124,6 @@
 - [ ] `/database_SECURED.sql` retorna `403` ou `404`.
 - [ ] `/README.md` retorna `403` ou `404`.
 - [ ] Arquivos `.sql`, `.csv`, `.json`, `.log`, `.bak` e scripts operacionais nao sao publicados.
+- [ ] Documentos enviados nao sao acessiveis diretamente pelo Apache.
 - [ ] `classes/`, `sessions/`, `cache/`, `tmp/`, `vendor/` e `node_modules/` bloqueados quando existirem.
 

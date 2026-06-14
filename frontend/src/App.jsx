@@ -4,6 +4,7 @@ import { PortalLayout } from './components/PortalLayout'
 import { AdminPage } from './pages/AdminPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DocumentsPage } from './pages/DocumentsPage'
+import { CriticalIncidentsPage } from './pages/CriticalIncidentsPage'
 import { LoginPage } from './pages/LoginPage'
 import { MetricasPage } from './pages/MetricasPage'
 import { ModulePage, SettingsPage } from './pages/ModulePage'
@@ -175,6 +176,8 @@ export default function App() {
     content = <TimeCorrectionPage session={session} notify={notify} />
   } else if (router.path === '/plantonistas') {
     content = <OncallPage session={session} notify={notify} />
+  } else if (router.path === '/chamados-criticos') {
+    content = <CriticalIncidentsPage session={session} notify={notify} />
   } else if (router.path === '/relatorios') {
     content = <OperationalReportsPage />
   } else if (router.path === '/documentacao') {

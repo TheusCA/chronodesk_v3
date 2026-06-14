@@ -3,7 +3,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
 
 require_get_method();
-verificar_login_api();
+require_portal_auth(['admin', 'gestor']);
 
 global $gerenciador;
 $metricas = $gerenciador->obter_metricas();

@@ -20,6 +20,8 @@ require_once __DIR__ . '/../auth_ldap.php';
 require_once __DIR__ . '/../services/MailerService.php';
 require_once __DIR__ . '/../services/OperationalService.php';
 require_once __DIR__ . '/../services/DocumentService.php';
+require_once __DIR__ . '/../services/CriticalIncidentService.php';
+require_once __DIR__ . '/../services/AdCredentialProvider.php';
 
 function assert_same($expected, $actual, string $message): void {
     if ($expected !== $actual) {
@@ -89,13 +91,50 @@ $_SESSION = [
 ];
 assert_same('gestor', current_portal_role(), 'RBAC identifica gestor');
 assert_same(false, in_array('admin.manage', portal_permissions_for_role('gestor'), true), 'gestor nao recebe admin');
+assert_same(true, in_array('operacao.approve', portal_permissions_for_role('gestor'), true), 'gestor pode decidir pausas');
+assert_same(false, in_array('operacao.approve', portal_permissions_for_role('tecnico'), true), 'tecnico nao pode decidir pausas');
 $_SESSION['admin_logged_in'] = true;
 assert_same('admin', current_portal_role(), 'RBAC identifica admin');
 assert_same(true, in_array('admin.manage', portal_permissions_for_role('admin'), true), 'admin recebe permissao administrativa');
+assert_same(true, in_array('operacao.approve', portal_permissions_for_role('admin'), true), 'admin pode decidir pausas proprias ou de terceiros');
 $_SESSION = [];
+
+foreach (['aprovar', 'rejeitar'] as $pauseDecision) {
+    $decisionSource = file_get_contents(__DIR__ . '/../api/' . $pauseDecision . '_pausa.php');
+    assert_same(true, is_string($decisionSource), "le endpoint de {$pauseDecision} pausa");
+    assert_same(
+        true,
+        strpos($decisionSource, "require_portal_auth(['admin', 'gestor'])") !== false,
+        "{$pauseDecision} exige role administrativa no backend"
+    );
+    assert_same(
+        true,
+        strpos($decisionSource, 'require_csrf_token()') !== false,
+        "{$pauseDecision} exige CSRF"
+    );
+    assert_same(
+        false,
+        strpos($decisionSource, 'session_actor_matches_employee') !== false,
+        "{$pauseDecision} permite decisao propria para admin ou gestor"
+    );
+}
+
 assert_same('na', validate_funcionario_equipe('NA'), 'aceita equipe administrativa');
 assert_same('somente_leitura', validate_access_role('somente_leitura'), 'aceita perfil somente leitura');
 assert_same(null, validate_access_role('superadmin'), 'rejeita perfil desconhecido');
+
+putenv('AD_CREDENTIAL_PROVIDER=none');
+assert_same('none', AdCredentialProviderFactory::fromEnvironment()->source(), 'provider AD desabilitado por padrao');
+putenv('AD_CREDENTIAL_PROVIDER=env');
+putenv('AD_BIND_USER=svc.chronodesk');
+$qaAdPassword = 'qa-' . bin2hex(random_bytes(4));
+putenv('AD_BIND_PASS=' . $qaAdPassword);
+$adCredentials = AdCredentialProviderFactory::fromEnvironment()->credentials();
+assert_same('svc.chronodesk', $adCredentials['username'], 'provider AD le usuario do ambiente');
+assert_same($qaAdPassword, $adCredentials['password'], 'provider AD le senha do ambiente sem transforma-la');
+putenv('AD_BIND_USER');
+putenv('AD_BIND_PASS');
+putenv('AD_CREDENTIAL_PROVIDER=none');
 
 $aprilCompetency = OperationalService::competencyRange('2026-04');
 assert_same('2026-03-16', $aprilCompetency['start'], 'competencia abril inicia em 16/03');
@@ -130,6 +169,46 @@ try {
     $unknownHeaderRejected = true;
 }
 assert_same(true, $unknownHeaderRejected, 'rejeita cabecalho inesperado na importacao');
+
+assert_same(500, CriticalIncidentService::MAX_IMPORT_ROWS, 'limite de linhas dos chamados criticos');
+assert_same(26, CriticalIncidentService::MAX_IMPORT_COLUMNS, 'limite de colunas dos chamados criticos');
+CriticalIncidentService::assertImportRowsShape([[
+    'ticket_number' => 'INC001',
+    'source' => 'servicenow',
+    'title' => 'Indisponibilidade',
+    'severity' => 'critical',
+    'status' => 'open',
+    'opened_at' => '2026-06-14 10:00',
+]]);
+
+$criticalNestedRejected = false;
+try {
+    CriticalIncidentService::assertImportRowsShape([[
+        'ticket_number' => 'INC001',
+        'source' => 'servicenow',
+        'title' => ['nested'],
+        'severity' => 'critical',
+        'status' => 'open',
+        'opened_at' => '2026-06-14 10:00',
+    ]]);
+} catch (InvalidArgumentException $error) {
+    $criticalNestedRejected = true;
+}
+assert_same(true, $criticalNestedRejected, 'rejeita estrutura aninhada em chamados criticos');
+
+$criticalMissingHeaderRejected = false;
+try {
+    CriticalIncidentService::assertImportRowsShape([[
+        'ticket_number' => 'INC001',
+        'title' => 'Sem origem',
+        'severity' => 'critical',
+        'status' => 'open',
+        'opened_at' => '2026-06-14 10:00',
+    ]]);
+} catch (InvalidArgumentException $error) {
+    $criticalMissingHeaderRejected = true;
+}
+assert_same(true, $criticalMissingHeaderRejected, 'rejeita coluna obrigatoria ausente em chamados criticos');
 
 $documentService = new DocumentService(
     new QaTransactionPdo(),
@@ -201,6 +280,20 @@ try {
 }
 assert_same(true, $macroLegacyWordRejected, 'rejeita documento Word legado com macro');
 
+$fakeOfficePackage = tempnam(sys_get_temp_dir(), 'chronodesk_fake_office_');
+file_put_contents(
+    $fakeOfficePackage,
+    "PK\x03\x04[Content_Types].xml word/document.xml "
+    . 'application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml'
+);
+$fakeOfficeRejected = false;
+try {
+    $validateDocumentContent->invoke($documentService, $fakeOfficePackage, 'docx');
+} catch (ReflectionException | InvalidArgumentException | RuntimeException $error) {
+    $fakeOfficeRejected = true;
+}
+assert_same(true, $fakeOfficeRejected, 'rejeita pacote Office falso sem estrutura ZIP valida');
+
 $traversalRejected = false;
 try {
     $resolveDocumentPath->invoke($documentService, '../arquivo.pdf');
@@ -213,6 +306,7 @@ assert_same(true, $traversalRejected, 'rejeita path traversal em chave de docume
 @unlink($legacyWordDocument);
 @unlink($fakeLegacyWordDocument);
 @unlink($macroLegacyWordDocument);
+@unlink($fakeOfficePackage);
 
 $ownPdo = new QaTransactionPdo();
 $ownService = new OperationalService($ownPdo);

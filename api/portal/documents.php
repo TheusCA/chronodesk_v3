@@ -22,12 +22,17 @@ try {
     }
 
     require_csrf_token();
+    $contentLengthHeader = $_SERVER['CONTENT_LENGTH'] ?? null;
     $contentLength = filter_var(
-        $_SERVER['CONTENT_LENGTH'] ?? 0,
+        $contentLengthHeader,
         FILTER_VALIDATE_INT,
-        ['options' => ['min_range' => 0]]
+        ['options' => ['min_range' => 1]]
     );
-    if ($contentLength !== false && $contentLength > DocumentService::MAX_REQUEST_BYTES) {
+    if ($contentLengthHeader === null || $contentLength === false) {
+        audit_log('DOCUMENT_UPLOAD_REJECTED', 'Requisicao sem tamanho valido.', 'WARNING');
+        json_response(['sucesso' => false, 'mensagem' => 'Tamanho da requisicao nao informado.'], 411);
+    }
+    if ($contentLength > DocumentService::MAX_REQUEST_BYTES) {
         audit_log('DOCUMENT_UPLOAD_REJECTED', 'Requisicao de upload acima do limite.', 'WARNING');
         json_response(['sucesso' => false, 'mensagem' => 'A requisicao excede o limite de 12 MB.'], 413);
     }
@@ -59,7 +64,7 @@ try {
     audit_log('DOCUMENT_UPLOAD_REJECTED', $error->getMessage(), 'WARNING');
     json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 400);
 } catch (Throwable $error) {
-    audit_log('DOCUMENT_UPLOAD_FAILED', 'Falha interna ao processar upload de documento.', 'ERROR');
+    audit_log('DOCUMENT_UPLOAD_FAILED', 'Falha interna ao processar upload de documento.', 'CRITICAL');
     error_log('[DOCUMENT_UPLOAD] ' . get_class($error) . ': ' . $error->getMessage());
     json_response(['sucesso' => false, 'mensagem' => 'Nao foi possivel processar o documento.'], 500);
 }

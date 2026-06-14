@@ -31,9 +31,9 @@ try {
     exit;
 } catch (DomainException $error) {
     audit_log('DOCUMENT_DOWNLOAD_DENIED', 'Download negado para documento ID ' . (int)$id, 'WARNING');
-    json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 403);
+    json_response(['sucesso' => false, 'mensagem' => 'Documento nao encontrado.'], 404);
 } catch (Throwable $error) {
-    audit_log('DOCUMENT_DOWNLOAD_FAILED', 'Falha interna no download do documento ID ' . (int)$id, 'ERROR');
+    audit_log('DOCUMENT_DOWNLOAD_FAILED', 'Falha interna no download do documento ID ' . (int)$id, 'CRITICAL');
     error_log('[DOCUMENT_DOWNLOAD] ' . get_class($error) . ': ' . $error->getMessage());
     json_response(['sucesso' => false, 'mensagem' => 'Documento indisponivel.'], 500);
 }

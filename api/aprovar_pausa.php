@@ -3,7 +3,7 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../services/ApprovalRequestService.php';
 
 require_post_method();
-verificar_login_api();
+require_portal_auth(['admin', 'gestor']);
 require_csrf_token();
 require_json_content_type();
 
@@ -18,6 +18,11 @@ if (!$funcionario_id) {
 }
 
 global $gerenciador;
+$funcionario = $gerenciador->getFuncionario($funcionario_id);
+if (!$funcionario) {
+    json_response(['sucesso' => false, 'mensagem' => 'Funcionário não encontrado.'], 404);
+}
+
 $resultado = with_pause_state_lock(function () use ($gerenciador, $funcionario_id) {
     $gerenciador->carregar_estado();
     return $gerenciador->aprovar_pausa($funcionario_id);

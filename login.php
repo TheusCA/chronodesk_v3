@@ -77,6 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Login de métricas - ChronoDesk</title>
+    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.svg'); ?>" type="image/svg+xml">
     <link rel="stylesheet" href="<?php echo sanitize_attr(get_base_path() . '/static/css/style.css'); ?>">
     <link rel="stylesheet" href="<?php echo sanitize_attr(get_base_path() . '/static/css/login.css'); ?>">
     <script src="<?php echo sanitize_attr(get_base_path() . '/static/js/theme.js'); ?>" defer></script>

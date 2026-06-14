@@ -13,6 +13,8 @@ final class DocumentService {
     ];
     public const ALLOWED_STATUSES = ['active', 'archived', 'deleted'];
     public const ALLOWED_VISIBILITY = ['internal', 'management'];
+    private const MAX_OFFICE_ARCHIVE_ENTRIES = 2000;
+    private const MAX_OFFICE_METADATA_BYTES = 1048576;
 
     private const MIME_TYPES = [
         'pdf' => ['application/pdf'],
@@ -71,8 +73,15 @@ final class DocumentService {
 
         $search = $this->text($filters['search'] ?? '', 100, true);
         if ($search !== '') {
-            $sql .= ' AND (title LIKE :search OR original_name LIKE :search OR uploaded_by LIKE :search)';
-            $params[':search'] = '%' . $search . '%';
+            $sql .= ' AND (
+                title LIKE :search_title
+                OR original_name LIKE :search_original_name
+                OR uploaded_by LIKE :search_uploaded_by
+            )';
+            $searchValue = '%' . $search . '%';
+            $params[':search_title'] = $searchValue;
+            $params[':search_original_name'] = $searchValue;
+            $params[':search_uploaded_by'] = $searchValue;
         }
         $category = $this->text($filters['category'] ?? '', 60, true);
         if ($category !== '') {
@@ -336,17 +345,7 @@ final class DocumentService {
         }
 
         if (in_array($extension, ['docx', 'xlsx'], true)) {
-            $content = file_get_contents($path);
-            if (
-                $content === false
-                || !str_starts_with($content, "PK\x03\x04")
-                || !str_contains($content, '[Content_Types].xml')
-                || !str_contains($content, $extension === 'docx' ? 'word/' : 'xl/')
-                || stripos($content, 'vbaProject.bin') !== false
-                || stripos($content, 'macroEnabled') !== false
-            ) {
-                throw new InvalidArgumentException('Pacote Office invalido.');
-            }
+            $this->validateOfficePackage($path, $extension);
         }
 
         if ($extension === 'doc') {
@@ -376,6 +375,79 @@ final class DocumentService {
             if ($image === false) {
                 throw new InvalidArgumentException('Imagem invalida.');
             }
+        }
+    }
+
+    private function validateOfficePackage(string $path, string $extension): void {
+        if (!class_exists(ZipArchive::class)) {
+            throw new RuntimeException('Extensao ZipArchive indisponivel no servidor.');
+        }
+
+        $archive = new ZipArchive();
+        $opened = $archive->open($path, ZipArchive::RDONLY);
+        if ($opened !== true) {
+            throw new InvalidArgumentException('Pacote Office invalido.');
+        }
+
+        try {
+            if ($archive->numFiles < 1 || $archive->numFiles > self::MAX_OFFICE_ARCHIVE_ENTRIES) {
+                throw new InvalidArgumentException('Pacote Office excede a complexidade permitida.');
+            }
+
+            $requiredEntry = $extension === 'docx' ? 'word/document.xml' : 'xl/workbook.xml';
+            $requiredFound = false;
+            for ($index = 0; $index < $archive->numFiles; $index++) {
+                $entry = $archive->getNameIndex($index);
+                if (!is_string($entry) || $entry === '') {
+                    throw new InvalidArgumentException('Pacote Office invalido.');
+                }
+                $normalizedEntry = str_replace('\\', '/', $entry);
+                $lowerEntry = strtolower($normalizedEntry);
+                if (
+                    str_contains($normalizedEntry, "\0")
+                    || str_starts_with($normalizedEntry, '/')
+                    || preg_match('#(^|/)\.\.(?:/|$)#', $normalizedEntry)
+                ) {
+                    throw new InvalidArgumentException('Pacote Office contem caminho inseguro.');
+                }
+                if ($normalizedEntry === $requiredEntry) {
+                    $requiredFound = true;
+                }
+                if (
+                    str_ends_with($lowerEntry, '/vbaproject.bin')
+                    || str_ends_with($lowerEntry, '/vbadata.xml')
+                    || str_contains($lowerEntry, '/macros/')
+                ) {
+                    throw new InvalidArgumentException('Documentos Office com macros nao sao permitidos.');
+                }
+            }
+
+            $contentTypesStat = $archive->statName('[Content_Types].xml');
+            if (
+                !$requiredFound
+                || !is_array($contentTypesStat)
+                || (int)($contentTypesStat['size'] ?? 0) < 1
+                || (int)$contentTypesStat['size'] > self::MAX_OFFICE_METADATA_BYTES
+            ) {
+                throw new InvalidArgumentException('Pacote Office invalido.');
+            }
+            $contentTypes = $archive->getFromName(
+                '[Content_Types].xml',
+                self::MAX_OFFICE_METADATA_BYTES
+            );
+            $expectedType = $extension === 'docx'
+                ? 'wordprocessingml.document.main+xml'
+                : 'spreadsheetml.sheet.main+xml';
+            if (
+                !is_string($contentTypes)
+                || stripos($contentTypes, $expectedType) === false
+                || stripos($contentTypes, 'macroEnabled') !== false
+                || stripos($contentTypes, 'vbaProject') !== false
+            ) {
+                throw new InvalidArgumentException('Pacote Office invalido ou habilitado para macros.');
+            }
+        } finally {
+            $archive->close();
         }
     }
 

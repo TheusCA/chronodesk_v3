@@ -15,6 +15,7 @@
         AllowOverride All
         Require all granted
         DirectoryIndex index.php
+        LimitRequestBody 12582912
     </Directory>
 
     <Directory /var/www/chronodesk/frontend>
@@ -60,6 +61,7 @@
 #         AllowOverride All
 #         Require all granted
 #         DirectoryIndex index.php
+#         LimitRequestBody 12582912
 #     </Directory>
 #
 #     <Directory /var/www/chronodesk/frontend>

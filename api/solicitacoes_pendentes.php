@@ -8,7 +8,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_get_method();
 // [VULN-003] Exigir autenticação para ver solicitações
-verificar_login_api();
+require_portal_auth(['admin', 'gestor']);
 
 global $gerenciador;
 $solicitacoes = [];

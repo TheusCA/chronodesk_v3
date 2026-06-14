@@ -20,6 +20,7 @@ verificar_login();
     // Calcular caminho base
     $base_path_metricas = get_base_path();
     ?>
+    <link rel="icon" href="<?php echo sanitize_attr($base_path_metricas . '/app/favicon.svg'); ?>" type="image/svg+xml">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path_metricas . '/static/css/style.css?v=' . time()); ?>" type="text/css">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path_metricas . '/static/css/metricas.css?v=' . time()); ?>" type="text/css">
     <script src="<?php echo htmlspecialchars($base_path_metricas . '/static/js/csrf_fetch.js'); ?>"></script>

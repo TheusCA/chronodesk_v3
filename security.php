@@ -285,13 +285,15 @@ function secure_session_start() {
         
         if (!is_writable($savePath)) {
             $localPath = __DIR__ . '/sessions';
-            if (!file_exists($localPath)) @mkdir($localPath, 0755, true);
+            if (!file_exists($localPath)) @mkdir($localPath, 0700, true);
+            if (is_dir($localPath)) @chmod($localPath, 0700);
             if (is_writable($localPath)) session_save_path($localPath);
         }
         
         if (!@session_start()) {
             $localPath = __DIR__ . '/sessions';
-            if (!file_exists($localPath)) @mkdir($localPath, 0755, true);
+            if (!file_exists($localPath)) @mkdir($localPath, 0700, true);
+            if (is_dir($localPath)) @chmod($localPath, 0700);
             if (is_writable($localPath)) {
                 session_save_path($localPath);
                 @session_start();

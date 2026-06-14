@@ -1,0 +1,63 @@
+warning: in the working copy of '.env.example', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.env.production.example', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'DEPLOY_LINUX.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'GO_LIVE_CHECKLIST.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'admin.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'admin_login.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'api/aprovar_pausa.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'api/portal/documents.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'api/portal/documents_delete.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'api/portal/documents_download.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'api/rejeitar_pausa.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'api/solicitacoes_pendentes.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'deploy/apache/chronodesk.conf.example', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/index.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/scripts/qa-operational.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/App.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/components/ui/Icon.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/lib/navigation.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/lib/operational.js', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'frontend/src/pages/AdminPage.jsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'index.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'login.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'metricas.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/qa-smoke.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/test-document-upload.sh', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/test-linux.sh', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'scripts/test-local.ps1', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'security.php', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'services/DocumentService.php', LF will be replaced by CRLF the next time Git touches it
+ .env.example                          |  7 [32m+++[m
+ .env.production.example               | 14 [32m+++[m[31m--[m
+ DEPLOY_LINUX.md                       | 25 [32m+++++++++[m
+ GO_LIVE_CHECKLIST.md                  | 14 [32m+++++[m
+ README.md                             | 20 [32m+++++[m[31m--[m
+ admin.php                             |  1 [32m+[m
+ admin_login.php                       |  1 [32m+[m
+ api/aprovar_pausa.php                 |  7 [32m++[m[31m-[m
+ api/download_relatorio.php            |  2 [32m+[m[31m-[m
+ api/metricas.php                      |  2 [32m+[m[31m-[m
+ api/portal/documents.php              | 13 [32m+++[m[31m--[m
+ api/portal/documents_delete.php       |  2 [32m+[m[31m-[m
+ api/portal/documents_download.php     |  4 [32m+[m[31m-[m
+ api/rejeitar_pausa.php                |  7 [32m++[m[31m-[m
+ api/solicitacoes_pendentes.php        |  2 [32m+[m[31m-[m
+ deploy/apache/chronodesk.conf.example |  2 [32m+[m
+ frontend/index.html                   |  2 [32m+[m[31m-[m
+ frontend/scripts/qa-operational.mjs   | 29 [32m++++++++++[m[31m-[m
+ frontend/src/App.jsx                  |  3 [32m++[m
+ frontend/src/components/ui/Icon.jsx   |  1 [32m+[m
+ frontend/src/lib/navigation.js        |  2 [32m+[m
+ frontend/src/lib/operational.js       | 89 [32m+++++++++++++++++++++++++++++++[m
+ frontend/src/pages/AdminPage.jsx      |  2 [32m+[m[31m-[m
+ index.php                             |  1 [32m+[m
+ login.php                             |  1 [32m+[m
+ metricas.php                          |  1 [32m+[m
+ scripts/qa-smoke.php                  | 94 [32m+++++++++++++++++++++++++++++++++[m
+ scripts/test-document-upload.sh       | 82 [32m++++++++++++++++++++++++++++[m[31m-[m
+ scripts/test-linux.sh                 |  5 [32m++[m
+ scripts/test-local.ps1                |  6 [32m+++[m
+ security.php                          |  6 [32m++[m[31m-[m
+ services/DocumentService.php          | 98 [32m++++++++++++++++++++++++++++++[m[31m-----[m
+ 32 files changed, 507 insertions(+), 38 deletions(-)

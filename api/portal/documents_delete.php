@@ -20,7 +20,7 @@ try {
 } catch (DomainException $error) {
     json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 404);
 } catch (Throwable $error) {
-    audit_log('DOCUMENT_DELETE_FAILED', 'Falha interna na exclusao logica do documento ID ' . (int)($id ?? 0), 'ERROR');
+    audit_log('DOCUMENT_DELETE_FAILED', 'Falha interna na exclusao logica do documento ID ' . (int)($id ?? 0), 'CRITICAL');
     error_log('[DOCUMENT_DELETE] ' . get_class($error) . ': ' . $error->getMessage());
     json_response(['sucesso' => false, 'mensagem' => 'Nao foi possivel remover o documento.'], 500);
 }

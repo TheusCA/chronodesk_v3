@@ -14,6 +14,26 @@ export const IMPORT_LIMITS = Object.freeze({
   ]),
 })
 
+export const CRITICAL_INCIDENT_IMPORT_LIMITS = Object.freeze({
+  maxFileBytes: 1048576,
+  maxPayloadBytes: 2097152,
+  maxRows: 500,
+  maxColumns: 26,
+  maxCellChars: 4000,
+  acceptedExtensions: Object.freeze(['.csv']),
+  acceptedHeaders: Object.freeze([
+    'ticket_number', 'source', 'title', 'summary', 'severity', 'status',
+    'opened_at', 'war_room_started_at', 'mitigated_at', 'resolved_at',
+    'impact', 'affected_users', 'affected_services', 'responsible_area',
+    'owner_name', 'owner_login', 'involved_teams', 'root_cause',
+    'resolution', 'workaround', 'actions_taken', 'next_steps',
+    'meeting_url', 'participants', 'notes',
+  ]),
+  requiredHeaders: Object.freeze([
+    'ticket_number', 'source', 'title', 'severity', 'status', 'opened_at',
+  ]),
+})
+
 export function competencyFor(reference = new Date()) {
   const date = new Date(reference)
   const start = date.getDate() >= 16
@@ -104,6 +124,75 @@ export function parseCsv(text) {
     if (values.some((value) => value.length > IMPORT_LIMITS.maxCellChars)) {
       throw new Error(
         `A linha ${index + 2} possui celula acima de ${IMPORT_LIMITS.maxCellChars} caracteres.`,
+      )
+    }
+  })
+
+  return rows.slice(1).map((values) => Object.fromEntries(
+    headers.map((header, index) => [header, values[index] ?? '']),
+  ))
+}
+
+export function parseCriticalIncidentCsv(text) {
+  const limits = CRITICAL_INCIDENT_IMPORT_LIMITS
+  const rows = []
+  let row = []
+  let field = ''
+  let quoted = false
+  const input = String(text).replace(/^\uFEFF/, '')
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index]
+    if (char === '"') {
+      if (quoted && input[index + 1] === '"') {
+        field += '"'
+        index += 1
+      } else {
+        quoted = !quoted
+      }
+    } else if ((char === ',' || char === ';') && !quoted) {
+      row.push(field.trim())
+      field = ''
+    } else if ((char === '\n' || char === '\r') && !quoted) {
+      if (char === '\r' && input[index + 1] === '\n') index += 1
+      row.push(field.trim())
+      if (row.some(Boolean)) rows.push(row)
+      row = []
+      field = ''
+    } else {
+      field += char
+    }
+  }
+  row.push(field.trim())
+  if (row.some(Boolean)) rows.push(row)
+
+  if (quoted) throw new Error('O CSV possui aspas sem fechamento.')
+  if (rows.length < 2) throw new Error('O CSV deve conter cabecalho e ao menos uma linha.')
+  if (rows.length - 1 > limits.maxRows) {
+    throw new Error(`O CSV excede o limite de ${limits.maxRows} linhas.`)
+  }
+
+  const headers = rows[0].map((header) => header.toLowerCase().trim())
+  if (headers.length > limits.maxColumns) {
+    throw new Error(`O CSV excede o limite de ${limits.maxColumns} colunas.`)
+  }
+  if (headers.some((header) => !header || !limits.acceptedHeaders.includes(header))) {
+    throw new Error('O CSV possui cabecalho vazio ou nao permitido.')
+  }
+  if (new Set(headers).size !== headers.length) {
+    throw new Error('O CSV possui cabecalhos duplicados.')
+  }
+  if (limits.requiredHeaders.some((header) => !headers.includes(header))) {
+    throw new Error(`Cabecalhos obrigatorios: ${limits.requiredHeaders.join(', ')}.`)
+  }
+
+  rows.slice(1).forEach((values, index) => {
+    if (values.length > headers.length || values.length > limits.maxColumns) {
+      throw new Error(`A linha ${index + 2} possui colunas alem do cabecalho.`)
+    }
+    if (values.some((value) => value.length > limits.maxCellChars)) {
+      throw new Error(
+        `A linha ${index + 2} possui celula acima de ${limits.maxCellChars} caracteres.`,
       )
     }
   })
