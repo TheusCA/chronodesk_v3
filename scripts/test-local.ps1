@@ -165,6 +165,7 @@ if ($SkipHttp) {
         @{ Url = "$BaseUrl/secret.csv"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/secret.json"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/secret.xlsx"; Expect = @(403, 404) },
+        @{ Url = "$BaseUrl/secret.doc"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/secret.docx"; Expect = @(403, 404) },
         @{ Url = "$BaseUrl/uploads/test.pdf"; Expect = @(403, 404) }
     )

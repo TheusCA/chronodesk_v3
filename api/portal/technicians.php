@@ -11,7 +11,6 @@ foreach ($gerenciador->getFuncionarios() as $funcionario) {
     if (
         !($funcionario->ativo ?? true)
         || !in_array(strtolower((string)$funcionario->equipe), ['n1', 'n2'], true)
-        || ($funcionario->access_role ?? 'tecnico') !== 'tecnico'
     ) {
         continue;
     }
@@ -19,7 +18,7 @@ foreach ($gerenciador->getFuncionarios() as $funcionario) {
         'id' => (int)$funcionario->id,
         'name' => $funcionario->nome,
         'team' => strtoupper($funcionario->equipe),
-        'role' => 'Técnico',
+        'role' => ucfirst(str_replace('_', ' ', $funcionario->access_role ?? 'tecnico')),
         'shift' => $funcionario->jornada_entrada . ' - ' . $funcionario->jornada_saida,
         'status' => $funcionario->status_disponibilidade()['label'] ?? 'Indisponível',
         'on_break' => (bool)$funcionario->em_pausa,

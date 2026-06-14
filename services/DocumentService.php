@@ -5,7 +5,7 @@ final class DocumentService {
     public const MAX_FILE_BYTES = 10485760;
     public const MAX_REQUEST_BYTES = 12582912;
     public const ALLOWED_EXTENSIONS = [
-        'pdf', 'docx', 'xlsx', 'csv', 'txt', 'md', 'png', 'jpg', 'jpeg',
+        'pdf', 'doc', 'docx', 'xlsx', 'csv', 'txt', 'md', 'png', 'jpg', 'jpeg',
     ];
     public const BLOCKED_EXTENSIONS = [
         'php', 'phtml', 'phar', 'js', 'html', 'htm', 'svg', 'exe', 'bat',
@@ -16,6 +16,12 @@ final class DocumentService {
 
     private const MIME_TYPES = [
         'pdf' => ['application/pdf'],
+        'doc' => [
+            'application/msword',
+            'application/vnd.ms-office',
+            'application/x-ole-storage',
+            'application/cdfv2',
+        ],
         'docx' => [
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'application/zip',
@@ -132,7 +138,11 @@ final class DocumentService {
         $title = $this->requiredText($metadata['title'] ?? pathinfo($originalName, PATHINFO_FILENAME), 180, 'Titulo');
         $category = $this->requiredText($metadata['category'] ?? null, 60, 'Categoria');
         $description = $this->text($metadata['description'] ?? '', 2000, true);
-        $visibility = (string)($metadata['visibility'] ?? 'internal');
+        $visibilityValue = $metadata['visibility'] ?? 'internal';
+        if (!is_string($visibilityValue)) {
+            throw new InvalidArgumentException('Visibilidade invalida.');
+        }
+        $visibility = $visibilityValue;
         if (!in_array($visibility, self::ALLOWED_VISIBILITY, true)) {
             throw new InvalidArgumentException('Visibilidade invalida.');
         }
@@ -332,8 +342,32 @@ final class DocumentService {
                 || !str_starts_with($content, "PK\x03\x04")
                 || !str_contains($content, '[Content_Types].xml')
                 || !str_contains($content, $extension === 'docx' ? 'word/' : 'xl/')
+                || stripos($content, 'vbaProject.bin') !== false
+                || stripos($content, 'macroEnabled') !== false
             ) {
                 throw new InvalidArgumentException('Pacote Office invalido.');
+            }
+        }
+
+        if ($extension === 'doc') {
+            $content = file_get_contents($path);
+            $wordStream = "W\0o\0r\0d\0D\0o\0c\0u\0m\0e\0n\0t";
+            $macroMarkers = [
+                "V\0B\0A",
+                "_\0V\0B\0A\0_\0P\0R\0O\0J\0E\0C\0T",
+                "M\0a\0c\0r\0o\0s",
+            ];
+            if (
+                $content === false
+                || !str_starts_with($content, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1")
+                || (!str_contains($content, 'WordDocument') && !str_contains($content, $wordStream))
+            ) {
+                throw new InvalidArgumentException('Documento Word legado invalido.');
+            }
+            foreach ($macroMarkers as $marker) {
+                if (str_contains($content, $marker)) {
+                    throw new InvalidArgumentException('Documentos Word com macros nao sao permitidos.');
+                }
             }
         }
 

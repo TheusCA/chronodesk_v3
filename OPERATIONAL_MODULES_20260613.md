@@ -66,7 +66,8 @@ Microsoft Graph for ativado. O MySQL permanece a fonte principal.
   CSV com delimitador virgula ou ponto e virgula esta disponivel.
 - O worker Microsoft Graph ainda nao envia dados; a fila fica persistida para
   processamento e reprocessamento em uma fase posterior.
-- Documentos ficam fora do webroot, com allowlist e download autenticado. A
+- Documentos PDF, DOC, DOCX, XLSX, CSV, TXT, MD, PNG e JPEG ficam fora do
+  webroot, com allowlist, validacao de MIME/conteudo e download autenticado. A
   varredura por antivirus permanece pendente e deve ser adicionada antes de
   aceitar arquivos de origens nao confiaveis.
 - Testes autenticados e de persistencia dependem de MySQL e AD do ambiente.

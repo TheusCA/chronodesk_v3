@@ -3,6 +3,7 @@ import { post } from '../lib/api'
 import { navigation, pageMetadata } from '../lib/navigation'
 import { useResource } from '../hooks/useResource'
 import { Icon } from './ui/Icon'
+import { BrandMark } from './BrandMark'
 
 function userLabel(session) {
   return session.ci.autenticado
@@ -60,7 +61,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
   const navContent = (
     <>
       <div className="flex h-20 items-center gap-3 border-b border-white/5 px-5">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 font-black text-white shadow-lg shadow-blue-600/20">CD</div>
+        <BrandMark className="h-11 w-11 shrink-0 drop-shadow-[0_8px_18px_rgba(37,99,235,0.25)]" />
         <div>
           <p className="font-bold tracking-tight text-white">ChronoDesk</p>
           <p className="text-xs text-slate-500">Portal Operacional SDK</p>

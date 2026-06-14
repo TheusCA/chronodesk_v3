@@ -255,10 +255,9 @@ A interface legada continua sendo servida por `index.php`, `admin.php` e
 cd /var/www/chronodesk/frontend
 npm ci
 npm run build
-sudo mkdir -p /var/www/chronodesk/app
-sudo rsync -a --delete dist/ /var/www/chronodesk/app/
 ```
 
+A configuração Vite grava o build diretamente em `/var/www/chronodesk/app`.
 A nova interface ficará disponível em `/app/` e consumirá os endpoints PHP na
 mesma origem. Não publique `frontend/src` como aplicação final e não injete
 credenciais ou variáveis LDAP no build Vite.

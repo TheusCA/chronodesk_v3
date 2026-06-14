@@ -95,6 +95,7 @@ check_status "/archive.zip" blocked
 check_status "/secret.csv" blocked
 check_status "/secret.json" blocked
 check_status "/secret.xlsx" blocked
+check_status "/secret.doc" blocked
 check_status "/secret.docx" blocked
 check_status "/uploads/test.pdf" blocked
 

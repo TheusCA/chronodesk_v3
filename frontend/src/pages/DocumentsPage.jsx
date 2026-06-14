@@ -6,7 +6,7 @@ import { apiUrl, post, postForm } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 
 const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024
-const DEFAULT_EXTENSIONS = ['pdf', 'docx', 'xlsx', 'csv', 'txt', 'md', 'png', 'jpg', 'jpeg']
+const DEFAULT_EXTENSIONS = ['pdf', 'doc', 'docx', 'xlsx', 'csv', 'txt', 'md', 'png', 'jpg', 'jpeg']
 
 function extensionOf(name) {
   const parts = String(name).toLowerCase().split('.')

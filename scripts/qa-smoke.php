@@ -164,6 +164,42 @@ try {
     $dangerousNameRejected = true;
 }
 assert_same(true, $dangerousNameRejected, 'rejeita extensao perigosa em nome composto');
+assert_same(true, in_array('doc', DocumentService::ALLOWED_EXTENSIONS, true), 'permite extensao doc validada');
+
+$legacyWordDocument = tempnam(sys_get_temp_dir(), 'chronodesk_doc_');
+file_put_contents(
+    $legacyWordDocument,
+    "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
+    . str_repeat("\0", 64)
+    . "W\0o\0r\0d\0D\0o\0c\0u\0m\0e\0n\0t"
+);
+$validateDocumentContent->invoke($documentService, $legacyWordDocument, 'doc');
+assert_same(true, is_file($legacyWordDocument), 'aceita assinatura OLE de documento Word legado');
+
+$fakeLegacyWordDocument = tempnam(sys_get_temp_dir(), 'chronodesk_fake_doc_');
+file_put_contents($fakeLegacyWordDocument, "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat("\0", 128));
+$fakeLegacyWordRejected = false;
+try {
+    $validateDocumentContent->invoke($documentService, $fakeLegacyWordDocument, 'doc');
+} catch (ReflectionException | InvalidArgumentException $error) {
+    $fakeLegacyWordRejected = true;
+}
+assert_same(true, $fakeLegacyWordRejected, 'rejeita arquivo OLE sem stream Word');
+
+$macroLegacyWordDocument = tempnam(sys_get_temp_dir(), 'chronodesk_macro_doc_');
+file_put_contents(
+    $macroLegacyWordDocument,
+    "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
+    . "W\0o\0r\0d\0D\0o\0c\0u\0m\0e\0n\0t"
+    . "_\0V\0B\0A\0_\0P\0R\0O\0J\0E\0C\0T"
+);
+$macroLegacyWordRejected = false;
+try {
+    $validateDocumentContent->invoke($documentService, $macroLegacyWordDocument, 'doc');
+} catch (ReflectionException | InvalidArgumentException $error) {
+    $macroLegacyWordRejected = true;
+}
+assert_same(true, $macroLegacyWordRejected, 'rejeita documento Word legado com macro');
 
 $traversalRejected = false;
 try {
@@ -174,6 +210,9 @@ try {
 assert_same(true, $traversalRejected, 'rejeita path traversal em chave de documento');
 @unlink($textDocument);
 @unlink($binaryDocument);
+@unlink($legacyWordDocument);
+@unlink($fakeLegacyWordDocument);
+@unlink($macroLegacyWordDocument);
 
 $ownPdo = new QaTransactionPdo();
 $ownService = new OperationalService($ownPdo);

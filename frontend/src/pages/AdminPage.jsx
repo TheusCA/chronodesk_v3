@@ -396,6 +396,14 @@ const securityStatusClass = {
   Pendente: 'status-neutral',
 }
 
+const securityGroups = [
+  ['Aplicação', ['PDO e prepared statements', 'Validação de entrada', 'Proteção contra XSS', 'Limites de payload', 'Validação de CSV', 'Formula injection em CSV', 'Erros HTTP controlados']],
+  ['Autenticação e sessão', ['Autenticação AD/LDAP', 'Sessões seguras', 'CSRF em escritas', 'RBAC', 'Rate limit']],
+  ['Upload e arquivos', ['Upload privado', 'Logs sem conteúdo de arquivo', 'Antivírus de documentos']],
+  ['Infraestrutura e hardening', ['Headers de segurança', 'Content Security Policy', 'Proteção contra framing', 'X-Content-Type-Options', 'Referrer-Policy', 'Permissions-Policy', 'Arquivos sensíveis', 'MySQL como fonte principal', 'Redirects do legado']],
+  ['Auditoria e compliance', ['Auditoria sensível', 'Microsoft Graph/SharePoint', 'Fila de sincronização']],
+]
+
 function SecurityTab({ config, notify }) {
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -406,6 +414,10 @@ function SecurityTab({ config, notify }) {
   ))
   const activeCount = protections.filter(([, status]) => ['Ativo', 'Configurado'].includes(status)).length
   const pendingCount = protections.filter(([, status]) => ['Parcial', 'Pendente'].includes(status)).length
+  const groupedProtections = securityGroups.map(([group, titles]) => [
+    group,
+    titles.map((title) => protections.find(([itemTitle]) => itemTitle === title)).filter(Boolean),
+  ])
 
   async function submit(event) {
     event.preventDefault()
@@ -442,18 +454,26 @@ function SecurityTab({ config, notify }) {
         </div>
       </section>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {protections.map(([title, status, icon, description]) => (
-          <article className="card min-h-44" key={title}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-500/10 text-blue-300"><Icon name={icon} /></div>
-              <span className={`status-badge ${securityStatusClass[status]}`}>{status}</span>
-            </div>
-            <h3 className="mt-4 font-bold text-white">{title}</h3>
-            <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
-          </article>
-        ))}
-      </div>
+      {groupedProtections.map(([group, items]) => (
+        <section className="space-y-3" key={group}>
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">{group}</h3>
+            <span className="h-px flex-1 bg-white/5" />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {items.map(([title, status, icon, description]) => (
+              <article className="card min-h-44" key={title}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-500/10 text-blue-300"><Icon name={icon} /></div>
+                  <span className={`status-badge ${securityStatusClass[status]}`}>{status}</span>
+                </div>
+                <h4 className="mt-4 font-bold text-white">{title}</h4>
+                <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
 
       <section className="grid gap-5 md:grid-cols-2">
         <div className="card">
