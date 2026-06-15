@@ -93,7 +93,8 @@ final class OperationalService {
             $sql = 'SELECT id, title, description, type, starts_at, ends_at, team,
                            related_username, status
                     FROM portal_calendar_events
-                    WHERE DATE(starts_at) BETWEEN :date_from AND :date_to';
+                    WHERE starts_at <= CONCAT(:date_to, " 23:59:59")
+                      AND COALESCE(ends_at, starts_at) >= CONCAT(:date_from, " 00:00:00")';
             $params = [':date_from' => $from, ':date_to' => $to];
             if ($team) {
                 $sql .= ' AND team = :team';
@@ -1199,7 +1200,7 @@ final class OperationalService {
     private function csvRow($handle, array $row): void {
         fputcsv($handle, array_map(static function ($value) {
             $text = (string)$value;
-            return preg_match('/^[=+\-@]/u', $text) ? "'" . $text : $text;
+            return preg_match('/^[\s\x00-\x1F]*[=+\-@]/u', $text) ? "'" . $text : $text;
         }, $row), ';');
     }
 }

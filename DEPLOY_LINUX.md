@@ -169,6 +169,7 @@ docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_004_operational_hardening.sql
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_005_documents_and_employee_roles.sql
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260614_006_critical_incidents.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260615_007_war_room_and_shift_feed.sql
 ```
 
 O login LDAP atual faz bind com a credencial informada pelo usuario e nao exige
@@ -188,6 +189,8 @@ curl -I http://chronodesk.interno.local/
 curl -I http://chronodesk.interno.local/index.php
 curl -I http://chronodesk.interno.local/api/status.php
 ```
+
+Sem cookie de sessao, `/api/status.php` deve responder `401`.
 
 9. Validar bloqueio de arquivos sensiveis:
 

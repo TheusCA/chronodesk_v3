@@ -373,22 +373,26 @@ final class CriticalIncidentService {
         $incidentOpenedAt = $this->dateTime(
             $data['incident_opened_at'] ?? $data['opened_at'] ?? ($roomDate . ' 00:00'),
             'Hora de abertura do incidente',
-            true
+            true,
+            $roomDate
         );
         $operationReportedAt = $this->dateTime(
             $data['operation_reported_at'] ?? null,
             'Hora do report da operacao',
-            true
+            true,
+            $roomDate
         );
         $roomOpenedAt = $this->dateTime(
             $data['room_opened_at'] ?? $data['war_room_started_at'] ?? null,
             'Hora de abertura da sala',
-            true
+            true,
+            $roomDate
         );
         $normalizedAt = $this->dateTime(
             $data['normalized_at'] ?? $data['mitigated_at'] ?? $data['resolved_at'] ?? null,
             'Hora de normalizacao',
-            true
+            true,
+            $roomDate
         );
         $roomDescription = $this->nullableText(
             $data['room_description'] ?? $data['summary'] ?? $data['title'] ?? null,
@@ -440,7 +444,8 @@ final class CriticalIncidentService {
                 $data['resolved_at']
                     ?? (($data['status'] ?? 'open') === 'resolved' ? $normalizedAt : null),
                 'Resolucao',
-                true
+                true,
+                $roomDate
             ),
             ':impact' => $this->nullableText($data['impact'] ?? null, 4000),
             ':affected_users' => $this->nullableNonNegativeInt($data['affected_users'] ?? null),
@@ -611,6 +616,10 @@ final class CriticalIncidentService {
     }
 
     private function date($value, string $label): string {
+        $excelDate = $this->excelDateTime($value);
+        if ($excelDate !== null) {
+            return $excelDate->format('Y-m-d');
+        }
         if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
             throw new InvalidArgumentException("{$label} invalida.");
         }
@@ -622,9 +631,25 @@ final class CriticalIncidentService {
         return $date->format('Y-m-d');
     }
 
-    private function dateTime($value, string $label, bool $nullable = false): ?string {
+    private function dateTime(
+        $value,
+        string $label,
+        bool $nullable = false,
+        ?string $baseDate = null
+    ): ?string {
         if (($value === null || $value === '') && $nullable) {
             return null;
+        }
+        $excelDate = $this->excelDateTime($value, $baseDate);
+        if ($excelDate !== null) {
+            return $excelDate->format('Y-m-d H:i:s');
+        }
+        if (
+            $baseDate !== null
+            && is_string($value)
+            && preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $value)
+        ) {
+            $value = $baseDate . ' ' . $value;
         }
         if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?$/', $value)) {
             throw new InvalidArgumentException("{$label} invalida.");
@@ -637,6 +662,31 @@ final class CriticalIncidentService {
             throw new InvalidArgumentException("{$label} invalida.");
         }
         return $date->format('Y-m-d H:i:s');
+    }
+
+    private function excelDateTime($value, ?string $baseDate = null): ?DateTimeImmutable {
+        if (
+            (!is_int($value) && !is_float($value) && !is_string($value))
+            || !is_numeric($value)
+        ) {
+            return null;
+        }
+        $serial = (float)$value;
+        if (!is_finite($serial) || $serial < 0 || $serial > 2958465) {
+            return null;
+        }
+        if ($serial < 1 && $baseDate !== null) {
+            $base = DateTimeImmutable::createFromFormat('!Y-m-d', $baseDate);
+            if (!$base) {
+                return null;
+            }
+            return $base->modify('+' . (int)round($serial * 86400) . ' seconds');
+        }
+        if ($serial < 1) {
+            return null;
+        }
+        $base = new DateTimeImmutable('1899-12-30 00:00:00');
+        return $base->modify('+' . (int)round($serial * 86400) . ' seconds');
     }
 
     private function positiveInt($value): int {

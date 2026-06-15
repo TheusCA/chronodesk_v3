@@ -157,7 +157,7 @@ export default function App() {
       />
     )
   } else if (router.path === '/admin') {
-    content = <AdminPage search={router.search} navigate={router.navigate} notify={notify} refreshStatus={refreshStatus} />
+    content = <AdminPage session={session} search={router.search} navigate={router.navigate} notify={notify} refreshStatus={refreshStatus} />
   } else if (router.path === '/metricas') {
     content = <MetricasPage />
   } else if (router.path === '/calendario') {

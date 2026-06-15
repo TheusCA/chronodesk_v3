@@ -15,6 +15,9 @@ final class DocumentService {
     public const ALLOWED_VISIBILITY = ['internal', 'management'];
     private const MAX_OFFICE_ARCHIVE_ENTRIES = 2000;
     private const MAX_OFFICE_METADATA_BYTES = 1048576;
+    private const MAX_OFFICE_UNCOMPRESSED_BYTES = 67108864;
+    private const MAX_OFFICE_ENTRY_BYTES = 33554432;
+    private const MAX_OFFICE_COMPRESSION_RATIO = 100;
 
     private const MIME_TYPES = [
         'pdf' => ['application/pdf'],
@@ -396,6 +399,7 @@ final class DocumentService {
 
             $requiredEntry = $extension === 'docx' ? 'word/document.xml' : 'xl/workbook.xml';
             $requiredFound = false;
+            $totalUncompressed = 0;
             for ($index = 0; $index < $archive->numFiles; $index++) {
                 $entry = $archive->getNameIndex($index);
                 if (!is_string($entry) || $entry === '') {
@@ -417,8 +421,25 @@ final class DocumentService {
                     str_ends_with($lowerEntry, '/vbaproject.bin')
                     || str_ends_with($lowerEntry, '/vbadata.xml')
                     || str_contains($lowerEntry, '/macros/')
+                    || str_contains($lowerEntry, '/externallinks/')
+                    || str_contains($lowerEntry, '/embeddings/')
+                    || str_contains($lowerEntry, '/activex/')
                 ) {
-                    throw new InvalidArgumentException('Documentos Office com macros nao sao permitidos.');
+                    throw new InvalidArgumentException('Documentos Office com macros ou conteudo ativo nao sao permitidos.');
+                }
+                $stat = $archive->statIndex($index);
+                if (!is_array($stat)) {
+                    throw new InvalidArgumentException('Pacote Office invalido.');
+                }
+                $size = (int)($stat['size'] ?? 0);
+                $compressedSize = max(1, (int)($stat['comp_size'] ?? 0));
+                $totalUncompressed += $size;
+                if (
+                    $size > self::MAX_OFFICE_ENTRY_BYTES
+                    || $size / $compressedSize > self::MAX_OFFICE_COMPRESSION_RATIO
+                    || $totalUncompressed > self::MAX_OFFICE_UNCOMPRESSED_BYTES
+                ) {
+                    throw new InvalidArgumentException('Pacote Office possui compressao suspeita ou tamanho excessivo.');
                 }
             }
 

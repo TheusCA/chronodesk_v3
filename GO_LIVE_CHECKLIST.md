@@ -24,12 +24,14 @@
 - [ ] `rewrite`, `headers` e `ssl` habilitados no Apache.
 - [ ] Schema SQL importado no MySQL Docker.
 - [ ] Migration `20260614_006_critical_incidents.sql` aplicada.
+- [ ] Migration `20260615_007_war_room_and_shift_feed.sql` aplicada.
 - [ ] Usuario MySQL dedicado criado.
 - [ ] Aplicacao configurada para nao usar `root` no banco.
 - [ ] Usuario runtime sem permissoes DDL apos as migrations.
 - [ ] `upload_max_filesize=10M`, `post_max_size=12M` e `max_file_uploads=1`.
 - [ ] `LimitRequestBody 12582912` aplicado no Apache.
 - [ ] Storage privado de documentos fora do webroot com modo `700`.
+- [ ] Storage privado de escalas fora do webroot com modo `700`.
 
 ## Pos-Deploy
 
@@ -37,7 +39,7 @@
 - [ ] Apache recarregado.
 - [ ] `/` responde.
 - [ ] `/index.php` responde.
-- [ ] `/api/status.php` responde.
+- [ ] `/api/status.php` sem sessao responde `401`.
 - [ ] Logs separados do VirtualHost recebendo eventos.
 - [ ] `APP_ENV=production`.
 - [ ] `APP_DEBUG=false`.

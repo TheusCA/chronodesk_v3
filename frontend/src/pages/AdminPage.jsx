@@ -500,15 +500,19 @@ function SecurityTab({ config, notify }) {
   )
 }
 
-export function AdminPage({ search, navigate, notify, refreshStatus }) {
+export function AdminPage({ session, search, navigate, notify, refreshStatus }) {
+  const isAdmin = session.role === 'admin'
+  const availableTabs = isAdmin ? tabs : tabs.filter(([key]) => key === 'aprovacoes')
   const rawRequestedTab = new URLSearchParams(search).get('tab')
   const requestedTab = rawRequestedTab === 'segurança' ? 'seguranca' : rawRequestedTab
-  const activeTab = tabs.some(([key]) => key === requestedTab) ? requestedTab : 'aprovacoes'
+  const activeTab = availableTabs.some(([key]) => key === requestedTab) ? requestedTab : 'aprovacoes'
   const requests = useResource('solicitacoes_pendentes.php')
   const refreshRequests = requests.refresh
-  const config = useResource('configuracoes.php')
-  const employees = useResource('listar_funcionarios.php')
-  const users = useResource('usuarios.php?action=listar', { enabled: Boolean(config.data?.configuracoes?.local_admin_enabled) })
+  const config = useResource('configuracoes.php', { enabled: isAdmin })
+  const employees = useResource('listar_funcionarios.php', { enabled: isAdmin })
+  const users = useResource('usuarios.php?action=listar', {
+    enabled: isAdmin && Boolean(config.data?.configuracoes?.local_admin_enabled),
+  })
 
   useEffect(() => {
     const timer = window.setInterval(() => refreshRequests(), 30000)
@@ -518,7 +522,7 @@ export function AdminPage({ search, navigate, notify, refreshStatus }) {
   return (
     <div className="space-y-5">
       <div className="flex gap-2 overflow-x-auto border-b border-white/5 pb-3">
-        {tabs.map(([key, label]) => (
+        {availableTabs.map(([key, label]) => (
           <button className={`tab-button ${activeTab === key ? 'tab-button-active' : ''}`} key={key} onClick={() => navigate(`/admin?tab=${key}`)} type="button">{label}</button>
         ))}
       </div>

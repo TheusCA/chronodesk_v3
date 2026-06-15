@@ -84,9 +84,15 @@ export function CalendarPage({ session, notify }) {
   const events = useMemo(() => resource.data?.items || [], [resource.data?.items])
   const byDay = useMemo(() => {
     const map = new Map()
+    const rangeStart = new Date(`${asLocalDate(range.start)}T12:00:00`)
+    const rangeEnd = new Date(`${asLocalDate(range.end)}T12:00:00`)
     events.forEach((event) => {
-      const start = new Date(`${dateKey(event.starts_at)}T12:00:00`)
-      const end = new Date(`${dateKey(event.ends_at || event.starts_at)}T12:00:00`)
+      const eventStart = new Date(`${dateKey(event.starts_at)}T12:00:00`)
+      const eventEnd = new Date(`${dateKey(event.ends_at || event.starts_at)}T12:00:00`)
+      if (!Number.isFinite(eventStart.getTime()) || !Number.isFinite(eventEnd.getTime())) return
+      const start = eventStart < rangeStart ? rangeStart : eventStart
+      const end = eventEnd > rangeEnd ? rangeEnd : eventEnd
+      if (end < start) return
       for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
         const key = asLocalDate(day)
         if (!map.has(key)) map.set(key, [])
@@ -94,7 +100,7 @@ export function CalendarPage({ session, notify }) {
       }
     })
     return map
-  }, [events])
+  }, [events, range.end, range.start])
   const days = useMemo(() => {
     const total = view === 'week' ? 7 : 42
     return Array.from({ length: total }, (_, index) => {

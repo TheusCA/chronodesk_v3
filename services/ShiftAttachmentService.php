@@ -188,13 +188,25 @@ final class ShiftAttachmentService {
     }
 
     private function ensurePrivateDirectory(string $directory): void {
+        if (!$this->isAbsolutePath($this->storageRoot)) {
+            throw new RuntimeException('Storage de escalas exige caminho absoluto.');
+        }
         if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
             throw new RuntimeException('Storage privado indisponivel.');
         }
         $root = realpath($this->storageRoot);
-        $documentRoot = realpath((string)($_SERVER['DOCUMENT_ROOT'] ?? ''));
-        if ($root === false || ($documentRoot !== false && str_starts_with($root, $documentRoot . DIRECTORY_SEPARATOR))) {
-            throw new RuntimeException('Storage de escalas deve ficar fora do webroot.');
+        if ($root === false) {
+            throw new RuntimeException('Storage privado indisponivel.');
+        }
+        $protectedRoots = [realpath(dirname(__DIR__))];
+        $documentRoot = trim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''));
+        if ($documentRoot !== '') {
+            $protectedRoots[] = realpath($documentRoot);
+        }
+        foreach (array_filter($protectedRoots, 'is_string') as $protectedRoot) {
+            if ($root === $protectedRoot || str_starts_with($root, $protectedRoot . DIRECTORY_SEPARATOR)) {
+                throw new RuntimeException('Storage de escalas deve ficar fora do projeto e do webroot.');
+            }
         }
     }
 
@@ -221,6 +233,12 @@ final class ShiftAttachmentService {
             throw new InvalidArgumentException('Nome de arquivo invalido.');
         }
         return trim($name, " .");
+    }
+
+    private function isAbsolutePath(string $path): bool {
+        return str_starts_with($path, DIRECTORY_SEPARATOR)
+            || preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1
+            || str_starts_with($path, '\\\\');
     }
 
     private function mime(string $path): string {

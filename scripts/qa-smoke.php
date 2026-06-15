@@ -103,6 +103,22 @@ assert_same(true, in_array('admin.manage', portal_permissions_for_role('admin'),
 assert_same(true, in_array('operacao.approve', portal_permissions_for_role('admin'), true), 'admin pode decidir pausas proprias ou de terceiros');
 $_SESSION = [];
 
+$statusSource = file_get_contents(__DIR__ . '/../api/status.php');
+assert_same(true, is_string($statusSource), 'le endpoint de status');
+assert_same(
+    true,
+    strpos($statusSource, 'require_portal_auth()') !== false,
+    'status operacional exige autenticacao'
+);
+
+$configSource = file_get_contents(__DIR__ . '/../config.php');
+assert_same(true, is_string($configSource), 'le configuracao principal');
+assert_same(
+    true,
+    strpos($configSource, "in_array(\$enable_local_admin_env, ['true', '1', 'yes', 'on'], true)") !== false,
+    'admin local usa allowlist explicita'
+);
+
 foreach (['aprovar', 'rejeitar'] as $pauseDecision) {
     $decisionSource = file_get_contents(__DIR__ . '/../api/' . $pauseDecision . '_pausa.php');
     assert_same(true, is_string($decisionSource), "le endpoint de {$pauseDecision} pausa");
@@ -199,6 +215,19 @@ $normalizedCritical = $normalizeCritical->invoke($criticalService, [
 assert_same(12, $normalizedCritical[':room_opening_duration_minutes'], 'calcula tempo para abrir sala');
 assert_same(50, $normalizedCritical[':room_duration_minutes'], 'calcula tempo de sala');
 
+$normalizedExcelCritical = $normalizeCritical->invoke($criticalService, [
+    'incident_number' => 'INC-EXCEL',
+    'room_date' => '46188',
+    'operation_reported_at' => (string)(10 / 24),
+    'room_opened_at' => (string)((10 * 60 + 12) / 1440),
+    'normalized_at' => (string)((11 * 60 + 2) / 1440),
+    'room_description' => 'Datas numericas do Excel',
+]);
+assert_same('2026-06-15', $normalizedExcelCritical[':room_date'], 'converte data serial do Excel');
+assert_same('2026-06-15 10:12:00', $normalizedExcelCritical[':room_opened_at'], 'converte hora serial do Excel');
+assert_same(12, $normalizedExcelCritical[':room_opening_duration_minutes'], 'calcula abertura com horas do Excel');
+assert_same(50, $normalizedExcelCritical[':room_duration_minutes'], 'calcula duracao com horas do Excel');
+
 $spreadsheetCsv = tempnam(sys_get_temp_dir(), 'chronodesk_sheet_');
 file_put_contents($spreadsheetCsv, "incident_number;room_date\nINC003;2026-06-15\n");
 $spreadsheetService = new SpreadsheetImportService();
@@ -233,6 +262,23 @@ try {
     $shiftExecutableRejected = true;
 }
 assert_same(true, $shiftExecutableRejected, 'feed de escalas rejeita double extension executavel');
+
+$shiftStorageValidation = new ReflectionMethod(ShiftAttachmentService::class, 'ensurePrivateDirectory');
+$shiftStorageValidation->setAccessible(true);
+$unsafeShiftStorage = __DIR__ . DIRECTORY_SEPARATOR . 'unsafe-shift-storage';
+$projectStorageService = new ShiftAttachmentService(new QaTransactionPdo(), $unsafeShiftStorage);
+$projectStorageRejected = false;
+try {
+    $shiftStorageValidation->invoke(
+        $projectStorageService,
+        $unsafeShiftStorage . DIRECTORY_SEPARATOR . 'aa'
+    );
+} catch (ReflectionException | RuntimeException $error) {
+    $projectStorageRejected = true;
+}
+assert_same(true, $projectStorageRejected, 'feed de escalas rejeita storage dentro do projeto');
+@rmdir($unsafeShiftStorage . DIRECTORY_SEPARATOR . 'aa');
+@rmdir($unsafeShiftStorage);
 
 $criticalNestedRejected = false;
 try {

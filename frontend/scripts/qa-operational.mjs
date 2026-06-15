@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   competencyFor,
   CRITICAL_INCIDENT_IMPORT_LIMITS,
@@ -52,5 +53,12 @@ const oversizedCriticalCell = [
   `INC001;manual;${'x'.repeat(CRITICAL_INCIDENT_IMPORT_LIMITS.maxCellChars + 1)};high;open;2026-06-14 10:00`,
 ].join('\n')
 assert.throws(() => parseCriticalIncidentCsv(oversizedCriticalCell))
+
+const navigationSource = readFileSync(new URL('../src/lib/navigation.js', import.meta.url), 'utf8')
+assert.match(navigationSource, /path: '\/admin'.*permission: 'operacao\.approve'/)
+
+const adminSource = readFileSync(new URL('../src/pages/AdminPage.jsx', import.meta.url), 'utf8')
+assert.match(adminSource, /availableTabs = isAdmin \? tabs : tabs\.filter/)
+assert.match(adminSource, /useResource\('configuracoes\.php', \{ enabled: isAdmin \}\)/)
 
 console.log('Operational frontend QA OK')

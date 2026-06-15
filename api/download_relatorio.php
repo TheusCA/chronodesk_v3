@@ -15,7 +15,7 @@ function csv_safe_value($value) {
         return $value;
     }
 
-    return preg_match('/^[=+\-@]/u', $value) ? "'" . $value : $value;
+    return preg_match('/^[\s\x00-\x1F]*[=+\-@]/u', $value) ? "'" . $value : $value;
 }
 
 function csv_safe_row($handle, array $row): void {

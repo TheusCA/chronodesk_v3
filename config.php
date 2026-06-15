@@ -87,7 +87,10 @@ define('DB_CHARSET', in_array($db_charset, ['utf8mb4', 'utf8'], true) ? $db_char
 // [VULN-001] SECRET_KEY fixa via .env
 // ============================================
 $secret_key = getenv('SECRET_KEY');
-if (!$secret_key || strpos($secret_key, 'GERE_UMA_CHAVE') !== false) {
+$secret_key_is_placeholder = !is_string($secret_key)
+    || strlen($secret_key) < 32
+    || preg_match('/(?:GERE_UMA_CHAVE|troque|changeme|change_me)/i', $secret_key) === 1;
+if ($secret_key_is_placeholder) {
     if (APP_ENV === 'production') {
         error_log('[SECURITY CRITICAL] SECRET_KEY não configurada para produção.');
         throw new RuntimeException('Configuração de produção incompleta.');
@@ -115,14 +118,16 @@ $ad_admin_users_env = getenv('AD_ADMIN_USERS');
 define('AD_ADMIN_USERS', ($ad_admin_users_env !== false) ? trim($ad_admin_users_env) : '');
 
 $enable_local_admin_env = strtolower(trim((string)(getenv('ENABLE_LOCAL_ADMIN') ?: 'false')));
-define('ENABLE_LOCAL_ADMIN', !in_array($enable_local_admin_env, ['false', '0', 'no'], true));
+define('ENABLE_LOCAL_ADMIN', in_array($enable_local_admin_env, ['true', '1', 'yes', 'on'], true));
 
 if (APP_ENV === 'production') {
     if (APP_DEBUG) {
         error_log('[SECURITY CRITICAL] APP_DEBUG=true não é permitido em produção.');
         throw new RuntimeException('Configuração de produção insegura.');
     }
-    if (DB_USER === 'root' || DB_PASS === '') {
+    $db_password_is_placeholder = DB_PASS === ''
+        || preg_match('/(?:troque|changeme|change_me)/i', DB_PASS) === 1;
+    if (DB_USER === 'root' || $db_password_is_placeholder) {
         error_log('[SECURITY CRITICAL] Produção exige usuário MySQL dedicado e senha definida.');
         throw new RuntimeException('Configuração de banco de dados de produção incompleta.');
     }
