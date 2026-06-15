@@ -229,23 +229,17 @@ function json_response($data, $status_code = 200) {
 function get_base_path() {
     static $cached_path = null;
     if ($cached_path !== null) return $cached_path;
-    
-    if (isset($_SERVER['SCRIPT_NAME']) && !empty($_SERVER['SCRIPT_NAME'])) {
-        $cached_path = dirname($_SERVER['SCRIPT_NAME']);
+
+    $scriptName = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (
+        $scriptName === ''
+        || preg_match('#(?:^|/)(?:var/www|srv/www|home/[^/]+|[A-Za-z]:)(?:/|$)#i', $scriptName)
+    ) {
+        $cached_path = '';
     } else {
-        if (isset($_SERVER['SCRIPT_FILENAME']) && isset($_SERVER['DOCUMENT_ROOT'])) {
-            $script_file = str_replace('\\', '/', $_SERVER['SCRIPT_FILENAME']);
-            $doc_root = str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT']);
-            if (strpos($script_file, $doc_root) === 0) {
-                $cached_path = dirname(substr($script_file, strlen($doc_root)));
-            } else {
-                $cached_path = '';
-            }
-        } else {
-            $cached_path = '';
-        }
+        $cached_path = dirname('/' . ltrim($scriptName, '/'));
     }
-    
+
     if (strlen($cached_path) > 0 && $cached_path[0] !== '/') {
         $cached_path = '/' . $cached_path;
     }

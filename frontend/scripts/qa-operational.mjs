@@ -33,6 +33,12 @@ const criticalRows = parseCriticalIncidentCsv(
 assert.equal(criticalRows.length, 1)
 assert.equal(criticalRows[0].ticket_number, 'INC001')
 
+const operationalCriticalRows = parseCriticalIncidentCsv(
+  'incident_number;room_date;operation_reported_at;room_opened_at\n'
+  + 'INC002;2026-06-15;2026-06-15 10:00;2026-06-15 10:12',
+)
+assert.equal(operationalCriticalRows[0].incident_number, 'INC002')
+
 for (const invalidCriticalCsv of [
   'ticket_number;title;severity;status;opened_at\nINC001;Falha;critical;open;2026-06-14 10:00',
   'ticket_number;source;title;severity;status;opened_at;payload\nINC001;manual;Falha;high;open;2026-06-14 10:00;x',

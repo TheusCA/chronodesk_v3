@@ -4,10 +4,15 @@ require_once __DIR__ . '/OperationalService.php';
 
 final class CriticalIncidentService {
     public const MAX_IMPORT_ROWS = 500;
-    public const MAX_IMPORT_COLUMNS = 26;
+    public const MAX_IMPORT_COLUMNS = 39;
     public const MAX_IMPORT_CELL_CHARS = 4000;
     public const MAX_IMPORT_PAYLOAD_BYTES = 2097152;
     public const ALLOWED_IMPORT_HEADERS = [
+        'incident_number', 'room_date', 'incident_opened_at',
+        'operation_reported_at', 'room_opened_at', 'normalized_at',
+        'room_description', 'room_finalization_description',
+        'room_opening_duration_minutes', 'room_duration_minutes',
+        'sector', 'sdk_activity',
         'ticket_number', 'source', 'title', 'summary', 'severity', 'status',
         'opened_at', 'war_room_started_at', 'mitigated_at', 'resolved_at',
         'impact', 'affected_users', 'affected_services', 'responsible_area',
@@ -16,6 +21,9 @@ final class CriticalIncidentService {
         'meeting_url', 'participants', 'notes',
     ];
     public const REQUIRED_IMPORT_HEADERS = [
+        'incident_number', 'room_date',
+    ];
+    private const LEGACY_REQUIRED_IMPORT_HEADERS = [
         'ticket_number', 'source', 'title', 'severity', 'status', 'opened_at',
     ];
 
@@ -26,12 +34,21 @@ final class CriticalIncidentService {
     ];
 
     private const LIST_COLUMNS = '
-        id, ticket_number, source, title, severity, status, opened_at,
+        id, incident_number, room_date, incident_opened_at,
+        operation_reported_at, room_opened_at, normalized_at,
+        room_opening_duration_minutes, room_duration_minutes, sector,
+        room_description, sdk_activity,
+        ticket_number, source, title, severity, status, opened_at,
         war_room_started_at, mitigated_at, resolved_at, responsible_area,
         owner_name, involved_teams, updated_at';
 
     private const DETAIL_COLUMNS = '
-        id, ticket_number, source, title, summary, severity, status, opened_at,
+        id, incident_number, room_date, incident_opened_at,
+        operation_reported_at, room_opened_at, normalized_at,
+        room_description, room_finalization_description,
+        room_opening_duration_minutes, room_duration_minutes, sector,
+        sdk_activity,
+        ticket_number, source, title, summary, severity, status, opened_at,
         war_room_started_at, mitigated_at, resolved_at, impact, affected_users,
         affected_services, responsible_area, owner_name, owner_login,
         involved_teams, root_cause, resolution, workaround, actions_taken,
@@ -90,7 +107,19 @@ final class CriticalIncidentService {
         try {
             $stmt = $this->pdo->prepare(
                 'UPDATE portal_critical_incidents
-                 SET ticket_number = :ticket_number,
+                 SET incident_number = :incident_number,
+                     room_date = :room_date,
+                     incident_opened_at = :incident_opened_at,
+                     operation_reported_at = :operation_reported_at,
+                     room_opened_at = :room_opened_at,
+                     normalized_at = :normalized_at,
+                     room_description = :room_description,
+                     room_finalization_description = :room_finalization_description,
+                     room_opening_duration_minutes = :room_opening_duration_minutes,
+                     room_duration_minutes = :room_duration_minutes,
+                     sector = :sector,
+                     sdk_activity = :sdk_activity,
+                     ticket_number = :ticket_number,
                      source = :source,
                      title = :title,
                      summary = :summary,
@@ -137,11 +166,23 @@ final class CriticalIncidentService {
         $sets = ['status = :status', 'updated_by = :updated_by'];
         if ($status === 'war_room') {
             $sets[] = 'war_room_started_at = COALESCE(war_room_started_at, CURRENT_TIMESTAMP)';
+            $sets[] = 'room_opened_at = COALESCE(room_opened_at, war_room_started_at, CURRENT_TIMESTAMP)';
+            $sets[] = 'room_date = COALESCE(room_date, CURRENT_DATE)';
         } elseif ($status === 'mitigated') {
             $sets[] = 'mitigated_at = COALESCE(mitigated_at, CURRENT_TIMESTAMP)';
+            $sets[] = 'normalized_at = COALESCE(normalized_at, mitigated_at, CURRENT_TIMESTAMP)';
+            $sets[] = 'room_duration_minutes = COALESCE(
+                room_duration_minutes,
+                TIMESTAMPDIFF(MINUTE, room_opened_at, COALESCE(normalized_at, CURRENT_TIMESTAMP))
+            )';
         } elseif ($status === 'resolved') {
             $sets[] = 'mitigated_at = COALESCE(mitigated_at, CURRENT_TIMESTAMP)';
             $sets[] = 'resolved_at = COALESCE(resolved_at, CURRENT_TIMESTAMP)';
+            $sets[] = 'normalized_at = COALESCE(normalized_at, mitigated_at, resolved_at, CURRENT_TIMESTAMP)';
+            $sets[] = 'room_duration_minutes = COALESCE(
+                room_duration_minutes,
+                TIMESTAMPDIFF(MINUTE, room_opened_at, COALESCE(normalized_at, CURRENT_TIMESTAMP))
+            )';
         }
         $stmt = $this->pdo->prepare(
             'UPDATE portal_critical_incidents
@@ -181,8 +222,8 @@ final class CriticalIncidentService {
             }
             $result[] = [
                 'line' => $index + 2,
-                'ticket_number' => is_array($row) && is_scalar($row['ticket_number'] ?? null)
-                    ? (string)$row['ticket_number']
+                'ticket_number' => is_array($row) && is_scalar($row['incident_number'] ?? $row['ticket_number'] ?? null)
+                    ? (string)($row['incident_number'] ?? $row['ticket_number'])
                     : '',
                 'title' => is_array($row) && is_scalar($row['title'] ?? null)
                     ? (string)$row['title']
@@ -246,10 +287,18 @@ final class CriticalIncidentService {
             if (count($row) > self::MAX_IMPORT_COLUMNS) {
                 throw new InvalidArgumentException('A importacao excede o limite de colunas.');
             }
-            foreach (self::REQUIRED_IMPORT_HEADERS as $requiredHeader) {
-                if (!array_key_exists($requiredHeader, $row)) {
-                    throw new InvalidArgumentException('A importacao nao possui todas as colunas obrigatorias.');
-                }
+            $hasOperationalHeaders = count(array_intersect(
+                self::REQUIRED_IMPORT_HEADERS,
+                array_keys($row)
+            )) === count(self::REQUIRED_IMPORT_HEADERS);
+            $hasLegacyHeaders = count(array_intersect(
+                self::LEGACY_REQUIRED_IMPORT_HEADERS,
+                array_keys($row)
+            )) === count(self::LEGACY_REQUIRED_IMPORT_HEADERS);
+            if (!$hasOperationalHeaders && !$hasLegacyHeaders) {
+                throw new InvalidArgumentException(
+                    'A importacao exige incident_number e room_date, ou o conjunto legado completo.'
+                );
             }
             foreach ($row as $key => $value) {
                 if (
@@ -273,14 +322,24 @@ final class CriticalIncidentService {
         try {
             $stmt = $this->pdo->prepare(
                 'INSERT INTO portal_critical_incidents
-                    (ticket_number, source, title, summary, severity, status,
+                    (incident_number, room_date, incident_opened_at,
+                     operation_reported_at, room_opened_at, normalized_at,
+                     room_description, room_finalization_description,
+                     room_opening_duration_minutes, room_duration_minutes,
+                     sector, sdk_activity,
+                     ticket_number, source, title, summary, severity, status,
                      opened_at, war_room_started_at, mitigated_at, resolved_at,
                      impact, affected_users, affected_services, responsible_area,
                      owner_name, owner_login, involved_teams, root_cause, resolution,
                      workaround, actions_taken, next_steps, meeting_url, participants,
                      notes, created_by, updated_by)
                  VALUES
-                    (:ticket_number, :source, :title, :summary, :severity, :status,
+                    (:incident_number, :room_date, :incident_opened_at,
+                     :operation_reported_at, :room_opened_at, :normalized_at,
+                     :room_description, :room_finalization_description,
+                     :room_opening_duration_minutes, :room_duration_minutes,
+                     :sector, :sdk_activity,
+                     :ticket_number, :source, :title, :summary, :severity, :status,
                      :opened_at, :war_room_started_at, :mitigated_at, :resolved_at,
                      :impact, :affected_users, :affected_services, :responsible_area,
                      :owner_name, :owner_login, :involved_teams, :root_cause, :resolution,
@@ -300,28 +359,100 @@ final class CriticalIncidentService {
     }
 
     private function normalizeRecord(array $data): array {
+        $incidentNumber = $this->requiredText(
+            $data['incident_number'] ?? $data['ticket_number'] ?? null,
+            100,
+            'INCIDENTE'
+        );
+        $roomDate = $this->date(
+            $data['room_date']
+                ?? (is_string($data['opened_at'] ?? null) ? substr($data['opened_at'], 0, 10) : null)
+                ?? date('Y-m-d'),
+            'Data da sala'
+        );
+        $incidentOpenedAt = $this->dateTime(
+            $data['incident_opened_at'] ?? $data['opened_at'] ?? ($roomDate . ' 00:00'),
+            'Hora de abertura do incidente',
+            true
+        );
+        $operationReportedAt = $this->dateTime(
+            $data['operation_reported_at'] ?? null,
+            'Hora do report da operacao',
+            true
+        );
+        $roomOpenedAt = $this->dateTime(
+            $data['room_opened_at'] ?? $data['war_room_started_at'] ?? null,
+            'Hora de abertura da sala',
+            true
+        );
+        $normalizedAt = $this->dateTime(
+            $data['normalized_at'] ?? $data['mitigated_at'] ?? $data['resolved_at'] ?? null,
+            'Hora de normalizacao',
+            true
+        );
+        $roomDescription = $this->nullableText(
+            $data['room_description'] ?? $data['summary'] ?? $data['title'] ?? null,
+            4000
+        );
+        $roomFinalization = $this->nullableText(
+            $data['room_finalization_description'] ?? $data['resolution'] ?? null,
+            4000
+        );
+        $openingDuration = $this->durationMinutes(
+            $data['room_opening_duration_minutes'] ?? null,
+            $operationReportedAt,
+            $roomOpenedAt,
+            'Tempo de abertura da sala'
+        );
+        $roomDuration = $this->durationMinutes(
+            $data['room_duration_minutes'] ?? null,
+            $roomOpenedAt,
+            $normalizedAt,
+            'Tempo de sala'
+        );
         $record = [
-            ':ticket_number' => $this->requiredText($data['ticket_number'] ?? null, 100, 'Numero do chamado'),
+            ':incident_number' => $incidentNumber,
+            ':room_date' => $roomDate,
+            ':incident_opened_at' => $incidentOpenedAt,
+            ':operation_reported_at' => $operationReportedAt,
+            ':room_opened_at' => $roomOpenedAt,
+            ':normalized_at' => $normalizedAt,
+            ':room_description' => $roomDescription,
+            ':room_finalization_description' => $roomFinalization,
+            ':room_opening_duration_minutes' => $openingDuration,
+            ':room_duration_minutes' => $roomDuration,
+            ':sector' => $this->nullableText($data['sector'] ?? $data['responsible_area'] ?? null, 160),
+            ':sdk_activity' => $this->nullableText($data['sdk_activity'] ?? $data['actions_taken'] ?? null, 12000),
+            ':ticket_number' => $incidentNumber,
             ':source' => $this->enum($data['source'] ?? 'manual', self::SOURCES, 'Origem'),
-            ':title' => $this->requiredText($data['title'] ?? null, 180, 'Titulo'),
-            ':summary' => $this->nullableText($data['summary'] ?? null, 4000),
-            ':severity' => $this->enum($data['severity'] ?? null, self::SEVERITIES, 'Criticidade'),
+            ':title' => $this->requiredText(
+                $data['title'] ?? $roomDescription ?? $incidentNumber,
+                180,
+                'Titulo'
+            ),
+            ':summary' => $this->nullableText($data['summary'] ?? $roomDescription, 4000),
+            ':severity' => $this->enum($data['severity'] ?? 'high', self::SEVERITIES, 'Criticidade'),
             ':status' => $this->enum($data['status'] ?? 'open', self::STATUSES, 'Status'),
-            ':opened_at' => $this->dateTime($data['opened_at'] ?? null, 'Abertura'),
-            ':war_room_started_at' => $this->dateTime($data['war_room_started_at'] ?? null, 'Inicio da war room', true),
-            ':mitigated_at' => $this->dateTime($data['mitigated_at'] ?? null, 'Mitigacao', true),
-            ':resolved_at' => $this->dateTime($data['resolved_at'] ?? null, 'Resolucao', true),
+            ':opened_at' => $incidentOpenedAt ?? ($roomDate . ' 00:00:00'),
+            ':war_room_started_at' => $roomOpenedAt,
+            ':mitigated_at' => $normalizedAt,
+            ':resolved_at' => $this->dateTime(
+                $data['resolved_at']
+                    ?? (($data['status'] ?? 'open') === 'resolved' ? $normalizedAt : null),
+                'Resolucao',
+                true
+            ),
             ':impact' => $this->nullableText($data['impact'] ?? null, 4000),
             ':affected_users' => $this->nullableNonNegativeInt($data['affected_users'] ?? null),
             ':affected_services' => $this->nullableText($data['affected_services'] ?? null, 2000),
-            ':responsible_area' => $this->nullableText($data['responsible_area'] ?? null, 120),
+            ':responsible_area' => $this->nullableText($data['responsible_area'] ?? $data['sector'] ?? null, 120),
             ':owner_name' => $this->nullableText($data['owner_name'] ?? null, 160),
             ':owner_login' => $this->ownerLogin($data['owner_login'] ?? null),
             ':involved_teams' => $this->nullableText($data['involved_teams'] ?? null, 500),
             ':root_cause' => $this->nullableText($data['root_cause'] ?? null, 4000),
-            ':resolution' => $this->nullableText($data['resolution'] ?? null, 4000),
+            ':resolution' => $this->nullableText($data['resolution'] ?? $roomFinalization, 4000),
             ':workaround' => $this->nullableText($data['workaround'] ?? null, 4000),
-            ':actions_taken' => $this->nullableText($data['actions_taken'] ?? null, 12000),
+            ':actions_taken' => $this->nullableText($data['actions_taken'] ?? $data['sdk_activity'] ?? null, 12000),
             ':next_steps' => $this->nullableText($data['next_steps'] ?? null, 4000),
             ':meeting_url' => $this->meetingUrl($data['meeting_url'] ?? null),
             ':participants' => $this->nullableText($data['participants'] ?? null, 4000),
@@ -360,10 +491,8 @@ final class CriticalIncidentService {
                 SUM(status IN ("open", "in_progress", "war_room", "mitigated")) AS open_count,
                 SUM(status = "war_room") AS war_room_count,
                 SUM(status = "resolved") AS resolved_count,
-                ROUND(AVG(CASE WHEN mitigated_at IS NOT NULL
-                    THEN TIMESTAMPDIFF(MINUTE, opened_at, mitigated_at) END)) AS avg_mitigation_minutes,
-                ROUND(AVG(CASE WHEN resolved_at IS NOT NULL
-                    THEN TIMESTAMPDIFF(MINUTE, opened_at, resolved_at) END)) AS avg_resolution_minutes,
+                ROUND(AVG(room_opening_duration_minutes)) AS avg_mitigation_minutes,
+                ROUND(AVG(room_duration_minutes)) AS avg_resolution_minutes,
                 SUM(severity IN ("high", "critical")) AS high_critical_count,
                 SUM(root_cause IS NULL OR TRIM(root_cause) = "") AS missing_root_cause_count
              FROM portal_critical_incidents ' . $where
@@ -400,7 +529,7 @@ final class CriticalIncidentService {
             throw new InvalidArgumentException('Periodo invalido ou acima de 366 dias.');
         }
 
-        $where = 'WHERE opened_at >= :opened_from AND opened_at < DATE_ADD(:opened_to, INTERVAL 1 DAY)';
+        $where = 'WHERE COALESCE(room_date, DATE(opened_at)) BETWEEN :opened_from AND :opened_to';
         $params = [':opened_from' => $from, ':opened_to' => $to];
         foreach ([
             'status' => [self::STATUSES, 'status'],
@@ -417,7 +546,7 @@ final class CriticalIncidentService {
             'responsible_area' => 'responsible_area',
             'owner' => 'owner_name',
             'team' => 'involved_teams',
-            'ticket_number' => 'ticket_number',
+            'ticket_number' => 'incident_number',
         ] as $filter => $column) {
             $value = $this->nullableText($filters[$filter] ?? null, 120);
             if ($value !== null) {
@@ -428,13 +557,15 @@ final class CriticalIncidentService {
         $search = $this->nullableText($filters['search'] ?? null, 120);
         if ($search !== null) {
             $where .= ' AND (
-                title LIKE :search_title
+                incident_number LIKE :search_incident
+                OR title LIKE :search_title
                 OR summary LIKE :search_summary
                 OR impact LIKE :search_impact
                 OR affected_services LIKE :search_services
                 OR root_cause LIKE :search_root_cause
             )';
             $searchValue = '%' . $search . '%';
+            $params[':search_incident'] = $searchValue;
             $params[':search_title'] = $searchValue;
             $params[':search_summary'] = $searchValue;
             $params[':search_impact'] = $searchValue;
@@ -527,6 +658,27 @@ final class CriticalIncidentService {
             throw new InvalidArgumentException('Quantidade de usuarios afetados invalida.');
         }
         return (int)$result;
+    }
+
+    private function durationMinutes($value, ?string $from, ?string $to, string $label): ?int {
+        if ($value !== null && $value !== '') {
+            $result = filter_var($value, FILTER_VALIDATE_INT, [
+                'options' => ['min_range' => 0, 'max_range' => 525600],
+            ]);
+            if ($result === false) {
+                throw new InvalidArgumentException("{$label} invalido.");
+            }
+            return (int)$result;
+        }
+        if ($from === null || $to === null) {
+            return null;
+        }
+        $seconds = (new DateTimeImmutable($to))->getTimestamp()
+            - (new DateTimeImmutable($from))->getTimestamp();
+        if ($seconds < 0) {
+            throw new InvalidArgumentException("{$label} nao pode ser negativo.");
+        }
+        return (int)floor($seconds / 60);
     }
 
     private function enum($value, array $allowed, string $label): string {

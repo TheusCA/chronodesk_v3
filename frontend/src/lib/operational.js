@@ -1,10 +1,10 @@
 export const IMPORT_LIMITS = Object.freeze({
-  maxFileBytes: 524288,
+  maxFileBytes: 2097152,
   maxPayloadBytes: 1048576,
   maxRows: 500,
   maxColumns: 6,
   maxCellChars: 500,
-  acceptedExtensions: Object.freeze(['.csv']),
+  acceptedExtensions: Object.freeze(['.csv', '.xlsx']),
   acceptedHeaders: Object.freeze([
     'id', 'employee_id',
     'login_ad', 'ad_login', 'email',
@@ -15,13 +15,18 @@ export const IMPORT_LIMITS = Object.freeze({
 })
 
 export const CRITICAL_INCIDENT_IMPORT_LIMITS = Object.freeze({
-  maxFileBytes: 1048576,
+  maxFileBytes: 2097152,
   maxPayloadBytes: 2097152,
   maxRows: 500,
-  maxColumns: 26,
+  maxColumns: 39,
   maxCellChars: 4000,
-  acceptedExtensions: Object.freeze(['.csv']),
+  acceptedExtensions: Object.freeze(['.csv', '.xlsx']),
   acceptedHeaders: Object.freeze([
+    'incident_number', 'room_date', 'incident_opened_at',
+    'operation_reported_at', 'room_opened_at', 'normalized_at',
+    'room_description', 'room_finalization_description',
+    'room_opening_duration_minutes', 'room_duration_minutes',
+    'sector', 'sdk_activity',
     'ticket_number', 'source', 'title', 'summary', 'severity', 'status',
     'opened_at', 'war_room_started_at', 'mitigated_at', 'resolved_at',
     'impact', 'affected_users', 'affected_services', 'responsible_area',
@@ -29,9 +34,7 @@ export const CRITICAL_INCIDENT_IMPORT_LIMITS = Object.freeze({
     'resolution', 'workaround', 'actions_taken', 'next_steps',
     'meeting_url', 'participants', 'notes',
   ]),
-  requiredHeaders: Object.freeze([
-    'ticket_number', 'source', 'title', 'severity', 'status', 'opened_at',
-  ]),
+  requiredHeaders: Object.freeze(['incident_number', 'room_date']),
 })
 
 export function competencyFor(reference = new Date()) {
@@ -182,8 +185,11 @@ export function parseCriticalIncidentCsv(text) {
   if (new Set(headers).size !== headers.length) {
     throw new Error('O CSV possui cabecalhos duplicados.')
   }
-  if (limits.requiredHeaders.some((header) => !headers.includes(header))) {
-    throw new Error(`Cabecalhos obrigatorios: ${limits.requiredHeaders.join(', ')}.`)
+  const legacyRequired = ['ticket_number', 'source', 'title', 'severity', 'status', 'opened_at']
+  const hasOperationalHeaders = limits.requiredHeaders.every((header) => headers.includes(header))
+  const hasLegacyHeaders = legacyRequired.every((header) => headers.includes(header))
+  if (!hasOperationalHeaders && !hasLegacyHeaders) {
+    throw new Error('Use incident_number e room_date, ou o conjunto legado completo.')
   }
 
   rows.slice(1).forEach((values, index) => {

@@ -21,6 +21,8 @@ require_once __DIR__ . '/../services/MailerService.php';
 require_once __DIR__ . '/../services/OperationalService.php';
 require_once __DIR__ . '/../services/DocumentService.php';
 require_once __DIR__ . '/../services/CriticalIncidentService.php';
+require_once __DIR__ . '/../services/SpreadsheetImportService.php';
+require_once __DIR__ . '/../services/ShiftAttachmentService.php';
 require_once __DIR__ . '/../services/AdCredentialProvider.php';
 
 function assert_same($expected, $actual, string $message): void {
@@ -80,6 +82,8 @@ $invalidLdap = normalizar_login_ldap('user)(name', 'corp.local', 'corp.local');
 assert_same('', $invalidLdap['samaccountname'], 'rejeita metacaracteres LDAP');
 
 assert_same('http://chronodesk.local', safe_request_origin(), 'ignora Host header nao confiavel');
+$_SERVER['SCRIPT_NAME'] = '/var/www/chronodesk/app/index.php';
+assert_same('', get_base_path(), 'caminho fisico nunca vira URL publica');
 assert_same(true, session_window_is_current(900, 950, 500, 100, 1000), 'sessao dentro da janela');
 assert_same(false, session_window_is_current(100, 950, 500, 100, 1000), 'sessao absoluta expirada');
 
@@ -171,7 +175,7 @@ try {
 assert_same(true, $unknownHeaderRejected, 'rejeita cabecalho inesperado na importacao');
 
 assert_same(500, CriticalIncidentService::MAX_IMPORT_ROWS, 'limite de linhas dos chamados criticos');
-assert_same(26, CriticalIncidentService::MAX_IMPORT_COLUMNS, 'limite de colunas dos chamados criticos');
+assert_same(39, CriticalIncidentService::MAX_IMPORT_COLUMNS, 'limite de colunas dos chamados criticos');
 CriticalIncidentService::assertImportRowsShape([[
     'ticket_number' => 'INC001',
     'source' => 'servicenow',
@@ -180,6 +184,55 @@ CriticalIncidentService::assertImportRowsShape([[
     'status' => 'open',
     'opened_at' => '2026-06-14 10:00',
 ]]);
+
+$criticalService = new CriticalIncidentService(new QaTransactionPdo());
+$normalizeCritical = new ReflectionMethod(CriticalIncidentService::class, 'normalizeRecord');
+$normalizeCritical->setAccessible(true);
+$normalizedCritical = $normalizeCritical->invoke($criticalService, [
+    'incident_number' => 'INC002',
+    'room_date' => '2026-06-15',
+    'operation_reported_at' => '2026-06-15 10:00',
+    'room_opened_at' => '2026-06-15 10:12',
+    'normalized_at' => '2026-06-15 11:02',
+    'room_description' => 'Indisponibilidade operacional',
+]);
+assert_same(12, $normalizedCritical[':room_opening_duration_minutes'], 'calcula tempo para abrir sala');
+assert_same(50, $normalizedCritical[':room_duration_minutes'], 'calcula tempo de sala');
+
+$spreadsheetCsv = tempnam(sys_get_temp_dir(), 'chronodesk_sheet_');
+file_put_contents($spreadsheetCsv, "incident_number;room_date\nINC003;2026-06-15\n");
+$spreadsheetService = new SpreadsheetImportService();
+$parseSpreadsheetCsv = new ReflectionMethod(SpreadsheetImportService::class, 'parseCsv');
+$parseSpreadsheetCsv->setAccessible(true);
+$spreadsheetRows = $parseSpreadsheetCsv->invoke($spreadsheetService, $spreadsheetCsv, 500, 39, 4000);
+assert_same('INC003', $spreadsheetRows[0]['incident_number'], 'parser seguro le CSV');
+
+$legacyXlsRejected = false;
+try {
+    $spreadsheetService->parseUpload([
+        'name' => 'war-room.xls',
+        'tmp_name' => $spreadsheetCsv,
+        'error' => UPLOAD_ERR_OK,
+        'size' => filesize($spreadsheetCsv),
+    ], 500, 39, 4000);
+} catch (DomainException $error) {
+    $legacyXlsRejected = true;
+}
+assert_same(true, $legacyXlsRejected, 'XLS legado exige conversao explicita');
+
+$shiftService = new ShiftAttachmentService(
+    new QaTransactionPdo(),
+    sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'chronodesk_shift_qa_' . bin2hex(random_bytes(4))
+);
+$safeShiftName = new ReflectionMethod(ShiftAttachmentService::class, 'safeName');
+$safeShiftName->setAccessible(true);
+$shiftExecutableRejected = false;
+try {
+    $safeShiftName->invoke($shiftService, 'escala.php.png');
+} catch (ReflectionException | InvalidArgumentException $error) {
+    $shiftExecutableRejected = true;
+}
+assert_same(true, $shiftExecutableRejected, 'feed de escalas rejeita double extension executavel');
 
 $criticalNestedRejected = false;
 try {
@@ -307,6 +360,7 @@ assert_same(true, $traversalRejected, 'rejeita path traversal em chave de docume
 @unlink($fakeLegacyWordDocument);
 @unlink($macroLegacyWordDocument);
 @unlink($fakeOfficePackage);
+@unlink($spreadsheetCsv);
 
 $ownPdo = new QaTransactionPdo();
 $ownService = new OperationalService($ownPdo);

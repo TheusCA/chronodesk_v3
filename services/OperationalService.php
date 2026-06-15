@@ -133,6 +133,49 @@ final class OperationalService {
             }
         }
 
+        if (!$type || $type === 'war_room') {
+            $sql = 'SELECT id, incident_number AS title,
+                           COALESCE(room_description, title) AS description,
+                           COALESCE(room_opened_at, incident_opened_at, opened_at) AS starts_at,
+                           COALESCE(normalized_at, resolved_at) AS ends_at,
+                           sector AS team, status
+                    FROM portal_critical_incidents
+                    WHERE COALESCE(room_date, DATE(opened_at)) BETWEEN :date_from AND :date_to';
+            $params = [':date_from' => $from, ':date_to' => $to];
+            if ($status) {
+                $sql .= ' AND status = :status';
+                $params[':status'] = $status;
+            }
+            $stmt = $this->pdo->prepare($sql . ' ORDER BY starts_at');
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll() as $row) {
+                $events[] = $this->calendarRow('war_room', $row);
+            }
+        }
+
+        if (!$type || $type === 'absence') {
+            $sql = 'SELECT id, employee_name AS title, reason AS description,
+                           CONCAT(starts_on, " 00:00:00") AS starts_at,
+                           CONCAT(ends_on, " 23:59:59") AS ends_at,
+                           NULL AS team, employee_id, status
+                    FROM portal_absences
+                    WHERE starts_on <= :date_to AND ends_on >= :date_from';
+            $params = [':date_from' => $from, ':date_to' => $to];
+            if ($employeeId) {
+                $sql .= ' AND employee_id = :employee_id';
+                $params[':employee_id'] = $employeeId;
+            }
+            if ($status) {
+                $sql .= ' AND status = :status';
+                $params[':status'] = $status;
+            }
+            $stmt = $this->pdo->prepare($sql . ' ORDER BY starts_at');
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll() as $row) {
+                $events[] = $this->calendarRow('absence', $row);
+            }
+        }
+
         foreach ([
             ['overtime', 'portal_overtime_entries', 'work_date', 'start_time', 'end_time', 'reason'],
             ['time_adjustment', 'portal_time_adjustments', 'adjustment_date', 'correct_time', 'correct_time', 'justification'],

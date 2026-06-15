@@ -325,7 +325,13 @@ class GerenciadorPausas {
     }
 
     public function obter_status() {
-        $status = ["n1" => [], "n2" => []];
+        $serverNow = new DateTime();
+        $status = [
+            "n1" => [],
+            "n2" => [],
+            "server_now" => $serverNow->format('c'),
+            "poll_interval_seconds" => 15,
+        ];
 
         foreach ($this->funcionarios as $funcionario) {
             $status_disp = $funcionario->status_disponibilidade();
@@ -341,6 +347,7 @@ class GerenciadorPausas {
                 "equipe" => $equipe,
                 "em_pausa" => $funcionario->em_pausa,
                 "tempo_pausa" => 0,
+                "elapsed_seconds" => 0,
                 "inicio_pausa" => $funcionario->inicio_pausa ? $funcionario->inicio_pausa->format('c') : null,
                 "duracao_limite_segundos" => $this->duracao_pausa_minutos * 60,
                 "motivo_pausa" => $funcionario->motivo_pausa,
@@ -355,8 +362,9 @@ class GerenciadorPausas {
             ];
 
             if ($funcionario->em_pausa && $funcionario->inicio_pausa) {
-                $tempo_decorrido = (new DateTime())->getTimestamp() - $funcionario->inicio_pausa->getTimestamp();
+                $tempo_decorrido = $serverNow->getTimestamp() - $funcionario->inicio_pausa->getTimestamp();
                 $info_funcionario["tempo_pausa"] = $tempo_decorrido;
+                $info_funcionario["elapsed_seconds"] = $tempo_decorrido;
             }
 
             $status[$equipe][] = $info_funcionario;

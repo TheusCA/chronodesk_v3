@@ -16,7 +16,7 @@ $ci_nome = $_SESSION['ci_nome'] ?? '';
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>ChronoDesk - Gestão de Tempo</title>
-    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.svg'); ?>" type="image/svg+xml">
+    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.png'); ?>" type="image/png">
     <?php
     $base_path_test = dirname($_SERVER['SCRIPT_NAME']);
     if ($base_path_test === '/') $base_path_test = '';

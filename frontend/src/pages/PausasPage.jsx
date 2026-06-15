@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { formatDuration, parseDate } from '../lib/format'
+import { useMemo, useState } from 'react'
+import { formatDuration } from '../lib/format'
 
 const reasons = ['Café', 'Pessoal', 'Reunião']
 
@@ -14,15 +14,7 @@ function PauseProgress({ elapsed, limit }) {
   )
 }
 
-function ActivePauseCard({ current, loading, onFinish }) {
-  const [now, setNow] = useState(Date.now())
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const startedAt = parseDate(current.inicio_pausa).getTime()
-  const elapsed = Number.isNaN(startedAt) ? Number(current.tempo_pausa || 0) : Math.max(0, Math.floor((now - startedAt) / 1000))
+function ActivePauseCard({ current, elapsed, loading, onFinish }) {
   const limit = Number(current.duracao_limite_segundos || 1200)
   const remaining = limit - elapsed
   const ratio = elapsed / limit
@@ -93,7 +85,7 @@ function StartPauseCard({ loading, onStart, onRequest }) {
   )
 }
 
-function TeamStatus({ title, items }) {
+function TeamStatus({ title, items, elapsedFor }) {
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
@@ -113,7 +105,7 @@ function TeamStatus({ title, items }) {
                 </div>
                 <span className={`status-badge ${item.em_pausa || pending ? 'status-warning' : item.disponibilidade?.status === 'disponivel' ? 'status-success' : 'status-neutral'}`}>{label}</span>
               </div>
-              {item.em_pausa && <p className="mt-4 text-sm text-slate-400">{item.motivo_pausa} · {formatDuration(item.tempo_pausa)}</p>}
+              {item.em_pausa && <p className="mt-4 font-mono text-sm text-amber-300">{item.motivo_pausa} · {formatDuration(elapsedFor(item))}</p>}
             </article>
           )
         })}
@@ -122,7 +114,7 @@ function TeamStatus({ title, items }) {
   )
 }
 
-export function PausasPage({ session, status, loading, onStart, onRequest, onFinish }) {
+export function PausasPage({ session, status, livePauses, loading, onStart, onRequest, onFinish }) {
   const employees = useMemo(() => [...(status.n1 || []), ...(status.n2 || [])], [status])
   const current = employees.find((item) => Number(item.id) === Number(session.ci.funcionario_id))
 
@@ -131,7 +123,7 @@ export function PausasPage({ session, status, loading, onStart, onRequest, onFin
       {session.ci.autenticado ? (
         <div className="grid gap-5 lg:grid-cols-2">
           {current?.em_pausa
-            ? <ActivePauseCard current={current} loading={loading} onFinish={onFinish} />
+            ? <ActivePauseCard current={current} elapsed={livePauses.elapsedFor(current)} loading={loading} onFinish={onFinish} />
             : <StartPauseCard loading={loading} onStart={onStart} onRequest={onRequest} />}
           <section className="card flex flex-col justify-center">
             <p className="text-sm text-slate-500">Sessão do colaborador</p>
@@ -149,8 +141,11 @@ export function PausasPage({ session, status, loading, onStart, onRequest, onFin
           A sessão administrativa permite monitoramento. Entre como CI para iniciar ou finalizar sua própria pausa.
         </div>
       )}
-      <TeamStatus title="Equipe N1" items={status.n1 || []} />
-      <TeamStatus title="Equipe N2" items={status.n2 || []} />
+      <div className={`text-xs ${livePauses.connection === 'online' ? 'text-emerald-400' : 'text-amber-400'}`}>
+        {livePauses.connection === 'online' ? 'Atualizacao em tempo real ativa' : 'Conexao instavel; exibindo o ultimo estado recebido'}
+      </div>
+      <TeamStatus title="Equipe N1" items={status.n1 || []} elapsedFor={livePauses.elapsedFor} />
+      <TeamStatus title="Equipe N2" items={status.n2 || []} elapsedFor={livePauses.elapsedFor} />
     </div>
   )
 }

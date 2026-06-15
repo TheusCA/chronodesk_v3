@@ -5,11 +5,12 @@ import { AdminPage } from './pages/AdminPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DocumentsPage } from './pages/DocumentsPage'
 import { CriticalIncidentsPage } from './pages/CriticalIncidentsPage'
+import { CalendarPage } from './pages/CalendarPage'
+import { ShiftSchedulesPage } from './pages/ShiftSchedulesPage'
 import { LoginPage } from './pages/LoginPage'
 import { MetricasPage } from './pages/MetricasPage'
 import { ModulePage, SettingsPage } from './pages/ModulePage'
 import {
-  CalendarPage,
   OncallPage,
   OperationalReportsPage,
   OvertimePage,
@@ -20,6 +21,7 @@ import { PausasPage } from './pages/PausasPage'
 import { api, post, setCsrfToken } from './lib/api'
 import { navigation } from './lib/navigation'
 import { useRouter } from './lib/router'
+import { useLivePauses } from './hooks/useLivePauses'
 
 const emptySession = {
   role: null,
@@ -41,12 +43,13 @@ function AccessDenied({ navigate }) {
 export default function App() {
   const router = useRouter()
   const [session, setSession] = useState(emptySession)
-  const [status, setStatus] = useState({ n1: [], n2: [] })
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [feedback, setFeedback] = useState(null)
   const feedbackTimer = useRef(null)
   const authenticated = session.ci.autenticado || session.gestor.autenticado
+  const livePauses = useLivePauses({ enabled: authenticated })
+  const status = livePauses.status
 
   const notify = useCallback((message, type = 'success') => {
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
@@ -61,11 +64,7 @@ export default function App() {
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
   }, [])
 
-  const refreshStatus = useCallback(async () => {
-    const result = await api('status.php')
-    setStatus(result)
-    return result
-  }, [])
+  const refreshStatus = livePauses.refresh
 
   const refreshSession = useCallback(async () => {
     const data = await api('session.php')
@@ -80,16 +79,10 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    Promise.all([refreshSession(), refreshStatus()])
+    refreshSession()
       .catch((error) => notify(error.message, 'error'))
       .finally(() => setLoading(false))
-  }, [notify, refreshSession, refreshStatus])
-
-  useEffect(() => {
-    if (!authenticated) return undefined
-    const timer = window.setInterval(() => refreshStatus().catch(() => {}), 30000)
-    return () => window.clearInterval(timer)
-  }, [authenticated, refreshStatus])
+  }, [notify, refreshSession])
 
   useEffect(() => {
     const handleUnauthorized = () => refreshSession().catch(() => setSession(emptySession))
@@ -150,12 +143,13 @@ export default function App() {
   if (!allowed) {
     content = <AccessDenied navigate={router.navigate} />
   } else if (router.path === '/dashboard') {
-    content = <DashboardPage navigate={router.navigate} />
+    content = <DashboardPage navigate={router.navigate} livePauses={livePauses} />
   } else if (router.path === '/pausas') {
     content = (
       <PausasPage
         session={session}
         status={status}
+        livePauses={livePauses}
         loading={actionLoading}
         onStart={(reason) => runAction(() => post('iniciar_pausa.php', { funcionario_id: funcionarioId, motivo_pausa: reason }))}
         onRequest={(reason, observation) => runAction(() => post('solicitar_pausa_com_aprovacao.php', { funcionario_id: funcionarioId, motivo_pausa: reason, observacao: observation }))}
@@ -170,6 +164,8 @@ export default function App() {
     content = <CalendarPage session={session} notify={notify} />
   } else if (router.path === '/escala-presencial') {
     content = <SchedulePage session={session} notify={notify} />
+  } else if (router.path === '/escala-turnos') {
+    content = <ShiftSchedulesPage session={session} notify={notify} />
   } else if (router.path === '/horas-extras') {
     content = <OvertimePage session={session} notify={notify} />
   } else if (router.path === '/correcao-ponto') {

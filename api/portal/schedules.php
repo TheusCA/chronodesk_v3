@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/_bootstrap.php';
+require_once __DIR__ . '/../../services/SpreadsheetImportService.php';
 
 $method = require_http_method(['GET', 'POST']);
 $role = require_portal_auth();
@@ -17,6 +18,25 @@ try {
     }
     if (!in_array($role, ['admin', 'gestor'], true)) {
         json_response(['sucesso' => false, 'mensagem' => 'Apenas gestores podem alterar escalas.'], 403);
+    }
+    if (isset($_FILES['spreadsheet']) && is_array($_FILES['spreadsheet'])) {
+        require_csrf_token();
+        $contentLength = filter_var($_SERVER['CONTENT_LENGTH'] ?? null, FILTER_VALIDATE_INT);
+        if ($contentLength === false || $contentLength < 1) {
+            json_response(['sucesso' => false, 'mensagem' => 'Tamanho da requisicao invalido.'], 411);
+        }
+        if ($contentLength > SpreadsheetImportService::MAX_REQUEST_BYTES) {
+            throw new LengthException('A requisicao de importacao excede 3 MB.');
+        }
+        $rows = (new SpreadsheetImportService())->parseUpload(
+            $_FILES['spreadsheet'],
+            OperationalService::MAX_IMPORT_ROWS,
+            OperationalService::MAX_IMPORT_COLUMNS,
+            OperationalService::MAX_IMPORT_CELL_CHARS
+        );
+        $preview = $service->previewScheduleImport($rows);
+        audit_log('SCHEDULE_IMPORT_FILE_PREVIEWED', 'Planilha de escala validada.', 'INFO');
+        json_response(['sucesso' => true, 'parsed_rows' => $rows] + $preview);
     }
     $data = portal_json_input(OperationalService::MAX_IMPORT_PAYLOAD_BYTES);
     $action = $data['action'] ?? 'rule';

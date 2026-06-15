@@ -11,13 +11,13 @@ const cards = [
   ['sobreavisos_ativos', 'Sobreavisos ativos', 'text-cyan-300'],
 ]
 
-export function DashboardPage({ navigate }) {
+export function DashboardPage({ navigate, livePauses }) {
   const resource = useResource('portal/dashboard.php')
   if (resource.loading) return <LoadingState />
   if (resource.error) return <ErrorState message={resource.error.message} onRetry={resource.refresh} />
 
-  const summary = resource.data?.summary || {}
-  const activePauses = resource.data?.active_pauses || []
+  const activePauses = livePauses.employees.filter((item) => item.em_pausa)
+  const summary = { ...(resource.data?.summary || {}), pausas_ativas: activePauses.length }
 
   return (
     <div className="space-y-6">
@@ -33,7 +33,7 @@ export function DashboardPage({ navigate }) {
         <div className="mb-5 flex items-center justify-between gap-4">
           <div>
             <h2 className="font-bold text-white">Pausas em andamento</h2>
-            <p className="text-sm text-slate-500">Atualização baseada no estado persistido do backend.</p>
+            <p className="text-sm text-slate-500">Polling a cada 15s e contador sincronizado pelo horario do servidor.</p>
           </div>
           <button className="btn-secondary" onClick={() => navigate('/pausas')} type="button">Abrir pausas</button>
         </div>
@@ -50,7 +50,7 @@ export function DashboardPage({ navigate }) {
                     </div>
                     <span className="status-badge status-warning">{item.motivo_pausa}</span>
                   </div>
-                  <p className="mt-4 text-2xl font-bold text-amber-300">{formatDuration(item.tempo_pausa)}</p>
+                  <p className="mt-4 font-mono text-2xl font-bold text-amber-300">{formatDuration(livePauses.elapsedFor(item))}</p>
                 </article>
               ))}
             </div>

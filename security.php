@@ -32,6 +32,7 @@ function configured_application_base_url(): ?string {
         !is_array($parts)
         || !isset($parts['scheme'], $parts['host'])
         || !in_array(strtolower($parts['scheme']), ['http', 'https'], true)
+        || preg_match('#/(?:var|srv|home)/[^/]+/#i', (string)($parts['path'] ?? ''))
     ) {
         return null;
     }

@@ -209,7 +209,10 @@ Antes de migrations em produção, faça backup do banco e dos arquivos locais d
 
 Para habilitar Chamados criticos / War Room, aplique tambem
 `migrations/20260614_006_critical_incidents.sql` depois das migrations anteriores.
-O modulo usa MySQL como fonte principal e nao grava o CSV importado no servidor.
+Em seguida aplique `migrations/20260615_007_war_room_and_shift_feed.sql`.
+O modulo usa MySQL como fonte principal e processa CSV/XLSX em arquivo
+temporario seguro, sem publicar a planilha no webroot. XLS legado deve ser
+convertido para XLSX ou CSV.
 
 O funcionamento atual do bind AD e o plano de migracao para credenciais
 materializadas por cofre estao documentados em `AD_CREDENTIALS.md`.

@@ -87,8 +87,7 @@ class NotificationService {
             return $configured;
         }
 
-        $script = str_replace('\\', '/', (string)($_SERVER['SCRIPT_NAME'] ?? ''));
-        $base = preg_replace('#/api(?:/.*)?$#', '', dirname($script));
+        $base = function_exists('get_base_path') ? get_base_path() : '';
         $origin = function_exists('safe_request_origin')
             ? safe_request_origin()
             : 'http://localhost';

@@ -62,8 +62,11 @@ Microsoft Graph for ativado. O MySQL permanece a fonte principal.
 
 ## Limites conhecidos
 
-- Importacao XLSX nao foi adicionada para evitar uma dependencia pesada.
-  CSV com delimitador virgula ou ponto e virgula esta disponivel.
+- Importacoes de War Room e escala presencial aceitam CSV e XLSX com
+  validacao estrutural no backend. A VM precisa das extensoes PHP `fileinfo`
+  e `zip`.
+- XLS legado (BIFF/OLE) nao e interpretado sem uma biblioteca especializada.
+  Converta o arquivo para XLSX ou CSV; a interface informa essa limitacao.
 - O worker Microsoft Graph ainda nao envia dados; a fila fica persistida para
   processamento e reprocessamento em uma fase posterior.
 - Documentos PDF, DOC, DOCX, XLSX, CSV, TXT, MD, PNG e JPEG ficam fora do

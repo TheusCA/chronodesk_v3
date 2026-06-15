@@ -5,10 +5,7 @@ export function setCsrfToken(token) {
 }
 
 export function apiUrl(path) {
-  const marker = '/app'
-  const appIndex = window.location.pathname.indexOf(marker)
-  const basePath = appIndex >= 0 ? window.location.pathname.slice(0, appIndex) : ''
-  return `${basePath}/api/${String(path).replace(/^(\.\.\/api\/|\/?api\/|\/)/, '')}`
+  return `/api/${String(path).replace(/^(\.\.\/api\/|\/?api\/|\/)/, '')}`
 }
 
 export async function api(path, options = {}) {

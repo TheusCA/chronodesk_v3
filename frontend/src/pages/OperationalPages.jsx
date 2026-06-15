@@ -1,14 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { useResource } from '../hooks/useResource'
-import { apiUrl, post } from '../lib/api'
+import { apiUrl, post, postForm } from '../lib/api'
 import { formatDate, formatDateTime } from '../lib/format'
 import {
   competencyFor,
   IMPORT_LIMITS,
   localDate,
   minutesLabel,
-  parseCsv,
   queryString,
 } from '../lib/operational'
 
@@ -137,6 +136,9 @@ export function SchedulePage({ session, notify }) {
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
   const [importRows, setImportRows] = useState([])
   const [preview, setPreview] = useState(null)
+  const [importLoading, setImportLoading] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const importInputRef = useRef(null)
 
   async function saveRule(event) {
     event.preventDefault()
@@ -148,35 +150,36 @@ export function SchedulePage({ session, notify }) {
     await submit(() => post('portal/schedules.php', { action: 'exception', ...exception, employee_id: Number(exception.employee_id) }), resource.refresh, notify)
   }
 
-  async function readCsv(event) {
-    const file = event.target.files?.[0]
+  async function readSpreadsheet(file) {
     if (!file) return
     setImportRows([])
     setPreview(null)
     const lowerName = file.name.toLowerCase()
     if (!IMPORT_LIMITS.acceptedExtensions.some((extension) => lowerName.endsWith(extension))) {
-      notify('Use um arquivo CSV nesta etapa.', 'error')
-      event.target.value = ''
+      notify('Use CSV ou XLSX. XLS legado deve ser convertido para XLSX.', 'error')
       return
     }
     if (file.size > IMPORT_LIMITS.maxFileBytes) {
       notify(
-        `O CSV excede o limite de ${Math.floor(IMPORT_LIMITS.maxFileBytes / 1024)} KB.`,
+        `A planilha excede o limite de ${Math.floor(IMPORT_LIMITS.maxFileBytes / 1024)} KB.`,
         'error',
       )
-      event.target.value = ''
       return
     }
+    setImportLoading(true)
     try {
-      const rows = parseCsv(await file.text())
-      setImportRows(rows)
-      setPreview(await post('portal/schedules.php', { action: 'import_preview', rows }))
+      const body = new FormData()
+      body.append('spreadsheet', file)
+      const result = await postForm('portal/schedules.php', body)
+      setImportRows(result.parsed_rows)
+      setPreview(result)
     } catch (error) {
       notify(error.message, 'error')
       setImportRows([])
       setPreview(null)
+    } finally {
+      setImportLoading(false)
     }
-    event.target.value = ''
   }
 
   async function confirmImport() {
@@ -214,8 +217,20 @@ export function SchedulePage({ session, notify }) {
             <button className="btn-primary" type="submit">Salvar excecao</button>
           </form>
           <section className="card space-y-4 xl:col-span-2">
-            <div><h2 className="font-bold text-white">Importar regras por CSV</h2><p className="mt-1 text-sm text-slate-500">Cabecalhos aceitos: id, login_ad, email, nome, equipe, regra.</p></div>
-            <input accept={IMPORT_LIMITS.acceptedExtensions.join(',')} className="field" type="file" onChange={readCsv} />
+            <div><h2 className="font-bold text-white">Importar planilha de regras</h2><p className="mt-1 text-sm text-slate-500">CSV ou XLSX. Cabecalhos: id, login_ad, email, nome, equipe, regra.</p></div>
+            <button
+              className={`drop-zone ${dragging ? 'drop-zone-active' : ''}`}
+              onClick={() => importInputRef.current?.click()}
+              onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
+              onDragLeave={(event) => { event.preventDefault(); setDragging(false) }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => { event.preventDefault(); setDragging(false); readSpreadsheet(event.dataTransfer.files?.[0]) }}
+              type="button"
+            >
+              <strong className="text-sm text-slate-200">{importLoading ? 'Validando planilha...' : 'Clique ou arraste a planilha'}</strong>
+              <span className="mt-1 text-xs text-slate-500">CSV ou XLSX; preview obrigatorio</span>
+            </button>
+            <input ref={importInputRef} accept={IMPORT_LIMITS.acceptedExtensions.join(',')} className="hidden" type="file" onChange={(event) => { readSpreadsheet(event.target.files?.[0]); event.target.value = '' }} />
             {preview && (
               <div className="space-y-3">
                 <p className="text-sm text-slate-300">{preview.valid_count} valida(s), {preview.invalid_count} invalida(s).</p>

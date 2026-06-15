@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 function appBasePath() {
-  const index = window.location.pathname.indexOf('/app')
-  return index >= 0 ? window.location.pathname.slice(0, index + 4) : '/app'
+  return '/app'
 }
 
 function currentLocation() {
