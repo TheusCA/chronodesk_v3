@@ -15,7 +15,7 @@ verificar_login();
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Métricas de Pausas - ChronoDesk</title>
+    <title>Métricas de Pausas - Portal SDK</title>
     <?php
     // Calcular caminho base
     $base_path_metricas = get_base_path();
@@ -29,7 +29,7 @@ verificar_login();
 <body>
     <div class="container">
         <header>
-            <h1>📊 Métricas ChronoDesk</h1>
+            <h1>📊 Métricas Portal SDK</h1>
             <p>Análise detalhada de produtividade e bem-estar</p>
             <div class="theme-toggle-container">
                 <button id="theme-toggle" class="btn-theme-toggle" title="Alternar Tema">🌙</button>

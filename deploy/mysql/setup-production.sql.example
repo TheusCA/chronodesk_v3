@@ -1,4 +1,4 @@
--- ChronoDesk - MySQL production setup example
+-- Portal SDK - MySQL production setup example
 -- Execute como administrador do MySQL no container.
 -- Troque a senha placeholder antes de executar em producao.
 -- A aplicacao nunca deve usar root.

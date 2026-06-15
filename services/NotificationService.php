@@ -14,7 +14,7 @@ class NotificationService {
             : date('d/m/Y H:i:s');
 
         $body = implode("\n", [
-            'Uma solicitação de pausa de reunião aguarda aprovação no ChronoDesk.',
+            'Uma solicitação de pausa de reunião aguarda aprovação no Portal SDK.',
             '',
             'Colaborador: ' . ($request['employee_name'] ?? ''),
             'Equipe: ' . strtoupper((string)($request['team'] ?? '')),
@@ -37,7 +37,7 @@ class NotificationService {
         try {
             $result = $mailer->send(
                 $approvers,
-                'ChronoDesk - pausa de reunião pendente',
+                'Portal SDK - pausa de reunião pendente',
                 $body
             );
             if ($result['sent']) {

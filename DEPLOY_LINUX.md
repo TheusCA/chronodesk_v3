@@ -1,6 +1,6 @@
-# ChronoDesk - Deploy Linux Interno
+# Portal SDK - Deploy Linux Interno
 
-Este guia prepara o ChronoDesk para deploy em VM Linux interna usando Apache + PHP na VM e MySQL em container Docker.
+Este guia prepara o Portal SDK para deploy em VM Linux interna usando Apache + PHP na VM e MySQL em container Docker.
 
 ## Arquitetura Recomendada
 
@@ -11,7 +11,7 @@ Este guia prepara o ChronoDesk para deploy em VM Linux interna usando Apache + P
 - `DocumentRoot` apontando para `/var/www/chronodesk`.
 - Arquivo `.env` criado manualmente no servidor, preferencialmente em `/var/www/.env`, um nivel acima do projeto.
 - `.htaccess` mantido ativo com `AllowOverride All`.
-- Logs do Apache separados para o VirtualHost do ChronoDesk.
+- Logs do Apache separados para o VirtualHost do Portal SDK.
 - Backups do banco e dos arquivos operacionais mantidos fora do `DocumentRoot`.
 
 Apache e recomendado neste momento porque o projeto ja usa `.htaccess` para hardening, bloqueio de arquivos sensiveis, headers e regras de rewrite. Usar Apache no deploy inicial reduz a chance de divergencia entre desenvolvimento, seguranca ja implementada e producao.

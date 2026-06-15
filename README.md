@@ -1,6 +1,6 @@
-# Sistema de Gerenciamento de Pausas - Versão PHP/XAMPP
+# Portal SDK
 
-Esta é a versão migrada do sistema de gerenciamento de pausas, agora utilizando **PHP** com **XAMPP**.
+O Portal SDK centraliza operações, métricas, aprovações e o gerenciamento de pausas, utilizando **PHP** com **XAMPP**.
 
 ## 📋 Requisitos
 

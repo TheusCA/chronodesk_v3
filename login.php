@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>Login de métricas - ChronoDesk</title>
+    <title>Login de métricas - Portal SDK</title>
     <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.png'); ?>" type="image/png">
     <link rel="stylesheet" href="<?php echo sanitize_attr(get_base_path() . '/static/css/style.css'); ?>">
     <link rel="stylesheet" href="<?php echo sanitize_attr(get_base_path() . '/static/css/login.css'); ?>">
@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body class="dark-mode">
     <main class="login-container">
         <section class="login-box" aria-labelledby="login-title">
-            <div class="logo-container"><div class="brand-logo-text">ChronoDesk</div></div>
+            <div class="logo-container"><div class="brand-logo-text">Portal SDK</div></div>
             <h2 id="login-title">Acesso às métricas</h2>
             <p class="login-description">Use suas credenciais corporativas.</p>
 
@@ -106,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <button type="submit" class="login-btn">Entrar</button>
             </form>
-            <a href="<?php echo sanitize_attr(get_base_path() . '/index.php'); ?>" class="back-link">Voltar ao ChronoDesk</a>
+            <a href="<?php echo sanitize_attr(get_base_path() . '/index.php'); ?>" class="back-link">Voltar ao Portal SDK</a>
         </section>
     </main>
 </body>

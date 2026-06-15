@@ -1,7 +1,7 @@
 <?php
 /**
  * ============================================================
- * ChronoDesk v3.0 - Autenticação LDAP / Active Directory
+ * Portal SDK v3.0 - Autenticação LDAP / Active Directory
  * ============================================================
  * Domínio e servidores AD são definidos pelo ambiente.
  *

@@ -751,7 +751,7 @@ final class OperationalService {
     }
 
     public function streamReportCsv(array $report): void {
-        $filename = 'chronodesk_' . $report['competency']['key'] . '.csv';
+        $filename = 'portal_sdk_' . $report['competency']['key'] . '.csv';
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Cache-Control: no-store');

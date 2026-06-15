@@ -1,5 +1,5 @@
 # ============================================
-# ChronoDesk - Regras de Segurança Apache
+# Portal SDK - Regras de Segurança Apache
 # ============================================
 
 # Bloquear acesso direto a arquivos sensíveis (Apache 2.4)

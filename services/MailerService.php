@@ -14,7 +14,7 @@ class MailerService {
     public function __construct() {
         $this->enabled = filter_var(getenv('MAIL_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN);
         $this->from = trim((string)(getenv('MAIL_FROM') ?: ''));
-        $this->fromName = $this->sanitizeHeader((string)(getenv('MAIL_FROM_NAME') ?: 'ChronoDesk'));
+        $this->fromName = $this->sanitizeHeader((string)(getenv('MAIL_FROM_NAME') ?: 'Portal SDK'));
         $this->host = trim((string)(getenv('SMTP_HOST') ?: ''));
         $this->port = max(1, min((int)(getenv('SMTP_PORT') ?: 587), 65535));
         $this->username = (string)(getenv('SMTP_USERNAME') ?: '');
@@ -52,7 +52,7 @@ class MailerService {
                 'From: ' . $this->formatAddress($this->from, $this->fromName),
                 'Content-Type: text/plain; charset=UTF-8',
                 'Content-Transfer-Encoding: 8bit',
-                'X-Mailer: ChronoDesk',
+                'X-Mailer: Portal SDK',
             ];
             $sent = @mail(
                 implode(', ', $recipients),

@@ -2,7 +2,7 @@
 
 ## Estado atual
 
-O login do ChronoDesk nao usa uma conta de servico armazenada no `.env`.
+O login do Portal SDK nao usa uma conta de servico armazenada no `.env`.
 `auth_ldap.php` recebe o login e a senha digitados pelo usuario, faz o bind
 LDAP diretamente com essa identidade e usa a mesma conexao autenticada para
 consultar os atributos do usuario.
@@ -67,5 +67,5 @@ Ainda faltam, para uma integracao real:
 - politica de renovacao e comportamento durante indisponibilidade do cofre;
 - operacao AD concreta que usara a conta de servico.
 
-Sem esses dados, o ChronoDesk nao chama o cofre e preserva o bind atual do
+Sem esses dados, o Portal SDK nao chama o cofre e preserva o bind atual do
 usuario final.

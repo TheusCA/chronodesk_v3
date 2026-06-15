@@ -43,7 +43,7 @@ $base_path_admin = get_base_path();
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Painel Administrativo - ChronoDesk</title>
+    <title>Painel Administrativo - Portal SDK</title>
     <link rel="icon" href="<?php echo sanitize_attr($base_path_admin . '/app/favicon.png'); ?>" type="image/png">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path_admin . '/static/css/style.css?v=' . time()); ?>" type="text/css">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path_admin . '/static/css/admin.css?v=' . time()); ?>" type="text/css">

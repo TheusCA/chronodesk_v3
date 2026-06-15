@@ -2,7 +2,7 @@
 # [SECURED] Script de Inicialização - Sem credenciais expostas
 
 echo ""
-echo "  ChronoDesk - Iniciando Servidor"
+echo "  Portal SDK - Iniciando Servidor"
 echo ""
 
 # ... (manter lógica de detecção de OS e início do Apache) ...

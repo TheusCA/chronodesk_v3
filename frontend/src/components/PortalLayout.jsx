@@ -30,7 +30,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
   const notificationResource = useResource('portal/notifications.php')
   const refreshNotifications = notificationResource.refresh
   const permissions = useMemo(() => new Set(session.permissions || []), [session.permissions])
-  const metadata = pageMetadata[path] || ['Portal Operacional', 'Módulo do ChronoDesk.']
+  const metadata = pageMetadata[path] || ['Portal Operacional', 'Módulo do Portal SDK.']
 
   useEffect(() => {
     const timer = window.setInterval(() => refreshNotifications(), 60000)
@@ -63,7 +63,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
       <div className="flex h-20 items-center gap-3 border-b border-white/5 px-5">
         <BrandMark className="h-11 w-11 shrink-0 drop-shadow-[0_8px_18px_rgba(37,99,235,0.25)]" />
         <div>
-          <p className="font-bold tracking-tight text-white">ChronoDesk</p>
+          <p className="font-bold tracking-tight text-white">Portal SDK</p>
           <p className="text-xs text-slate-500">Portal Operacional SDK</p>
         </div>
       </div>

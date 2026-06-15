@@ -1,4 +1,4 @@
-# ChronoDesk - Checklist de Homologacao da Fase 5
+# Portal SDK - Checklist de Homologacao da Fase 5
 
 ## Antes do Deploy
 

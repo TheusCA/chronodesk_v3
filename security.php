@@ -1,6 +1,6 @@
 <?php
 /**
- * Módulo de Segurança - ChronoDesk
+ * Módulo de Segurança - Portal SDK
  * [SECURED] Versão corrigida com todas as mitigações aplicadas
  * 
  * Correções aplicadas:

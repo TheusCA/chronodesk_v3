@@ -30,7 +30,7 @@ Este guia irá ajudá-lo a configurar o banco de dados MySQL no XAMPP para o Sis
 
 ## Passo 5: Criar Usuário Dedicado
 
-Em produção, não use `root`. Crie um usuário dedicado com permissões mínimas para o banco do ChronoDesk:
+Em produção, não use `root`. Crie um usuário dedicado com permissões mínimas para o banco do Portal SDK:
 
 ```sql
 CREATE USER 'chronodesk_user'@'localhost' IDENTIFIED BY 'troque_esta_senha';

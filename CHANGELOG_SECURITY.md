@@ -1,4 +1,4 @@
-# 🛡️ Security Changelog — ChronoDesk v2.1.0 (SECURED)
+# 🛡️ Security Changelog — Portal SDK v2.1.0 (SECURED)
 
 ## Arquivos Novos
 | Arquivo | Descrição |

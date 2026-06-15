@@ -1,8 +1,8 @@
-# ChronoDesk - Plano de Testes da Fase 5
+# Portal SDK - Plano de Testes da Fase 5
 
 ## Escopo
 
-Plano de testes para ChronoDesk PHP 8 / XAMPP / MySQL / JavaScript Vanilla, cobrindo fluxos CI, gestor/metricas e admin.
+Plano de testes para Portal SDK PHP 8 / XAMPP / MySQL / JavaScript Vanilla, cobrindo fluxos CI, gestor/metricas e admin.
 
 ## Ambientes
 

@@ -1,11 +1,11 @@
-# PROMPT COMPLETO PARA O CHATGPT — ChronoDesk v3.0
+# PROMPT COMPLETO PARA O CHATGPT — Portal SDK v3.0
 ## Contexto, Levantamento de Requisitos, Alterações Realizadas e Próximos Passos
 
 ---
 
 ## 1. CONTEXTO DO PROJETO
 
-Este projeto se chama **ChronoDesk**. É um sistema web de **controle de pausas de colaboradores** desenvolvido em **PHP + MySQL + HTML/CSS/JS puro**, sem frameworks. Ele foi originalmente desenvolvido por um colaborador que saiu da empresa e ficou rodando localmente em um **XAMPP no Windows** (máquina física interna).
+Este projeto se chama **Portal SDK**. É um sistema web de **controle de pausas de colaboradores** desenvolvido em **PHP + MySQL + HTML/CSS/JS puro**, sem frameworks. Ele foi originalmente desenvolvido por um colaborador que saiu da empresa e ficou rodando localmente em um **XAMPP no Windows** (máquina física interna).
 
 O novo responsável pelo projeto (você, leitor deste prompt) ficou encarregado de:
 1. Entender o projeto
@@ -25,7 +25,7 @@ O DNS interno deve ser configurado conforme a rede da empresa.
 ## 2. O QUE O SISTEMA FAZ (LEVANTAMENTO DE REQUISITOS COMPLETO)
 
 ### 2.1 Visão Geral
-O ChronoDesk é um painel de controle de pausas para um time de suporte técnico dividido em duas equipes: **N1** e **N2**. Cada equipe tem entre 7 e 9 colaboradores (chamados de CIs — Colaboradores Internos).
+O Portal SDK é um painel de controle de pausas para um time de suporte técnico dividido em duas equipes: **N1** e **N2**. Cada equipe tem entre 7 e 9 colaboradores (chamados de CIs — Colaboradores Internos).
 
 ### 2.2 Fluxo Operacional
 1. **Tela principal (index.php):** Exibe os cards de todos os CIs de N1 e N2, mostrando em tempo real quem está em pausa, há quanto tempo, e a situação de disponibilidade (dentro/fora da jornada, almoço, disponível).

@@ -1,4 +1,4 @@
-# Portal Operacional SDK / ChronoDesk
+# Portal SDK
 
 ## Escopo implementado
 

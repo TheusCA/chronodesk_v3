@@ -15,8 +15,8 @@ export function LoginPage({ onLoginCI, onLoginAdmin, loading }) {
       <div className="relative z-10 w-full max-w-5xl">
         <div className="mb-8 text-center">
           <BrandMark className="mx-auto mb-4 h-16 w-16 drop-shadow-[0_14px_28px_rgba(37,99,235,0.35)]" />
-          <h1 className="text-3xl font-black tracking-tight text-white">Portal Operacional SDK</h1>
-          <p className="mt-2 text-slate-400">ChronoDesk, operações, métricas e aprovações em um único lugar.</p>
+          <h1 className="text-3xl font-black tracking-tight text-white">Portal SDK</h1>
+          <p className="mt-2 text-slate-400">Operações, métricas e aprovações em um único lugar.</p>
         </div>
         <div className="grid gap-5 md:grid-cols-2">
           <LoginCI onSubmit={onLoginCI} loading={loading} />

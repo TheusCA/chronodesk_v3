@@ -1,4 +1,4 @@
-# ChronoDesk - Go-Live Checklist
+# Portal SDK - Go-Live Checklist
 
 ## Pre-Deploy
 

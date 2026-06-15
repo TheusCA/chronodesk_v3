@@ -15,7 +15,7 @@ $ci_nome = $_SESSION['ci_nome'] ?? '';
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>ChronoDesk - Gestão de Tempo</title>
+    <title>Portal SDK - Gestão de Tempo</title>
     <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.png'); ?>" type="image/png">
     <?php
     $base_path_test = dirname($_SERVER['SCRIPT_NAME']);
@@ -84,7 +84,7 @@ $ci_nome = $_SESSION['ci_nome'] ?? '';
 <body>
     <div class="container">
         <header>
-            <h1>⏳ ChronoDesk</h1>
+            <h1>⏳ Portal SDK</h1>
             <p>Gestão Inteligente de Tempo e Pausas</p>
             <div id="ci-session-info" class="ci-session-info<?php echo $ci_logged_in ? '' : ' hidden'; ?>">
                 <span id="ci-session-name"><?php echo htmlspecialchars($ci_nome, ENT_QUOTES, 'UTF-8'); ?></span>
@@ -95,7 +95,7 @@ $ci_nome = $_SESSION['ci_nome'] ?? '';
         <section id="ci-login-screen" class="ci-login-screen<?php echo $ci_logged_in ? ' hidden' : ''; ?>" style="<?php echo $ci_logged_in ? 'display:none;' : ''; ?>">
             <div class="ci-login-card">
                 <div class="ci-login-icon">⏳</div>
-                <h2>ChronoDesk</h2>
+                <h2>Portal SDK</h2>
                 <p>Gestão Inteligente de Tempo e Pausas</p>
                 <div class="ci-login-section-title">Acesso do CI</div>
                 <form id="ci-login-form" autocomplete="off">

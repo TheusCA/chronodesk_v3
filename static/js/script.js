@@ -1,5 +1,5 @@
 // ============================================================
-// ChronoDesk v3.0 - script.js
+// Portal SDK v3.0 - script.js
 // FIX: double setInterval removido (estava duplicado)
 // NOVO: seleção de CI por nome ao invés de ID numérico
 // NOVO: confirmação antes de iniciar/finalizar
@@ -673,5 +673,5 @@ document.addEventListener('DOMContentLoaded', function() {
         if (window.CI_AUTHENTICATED) atualizarStatus();
     }, 30000);
     logDebug('API base calculada:', getApiBaseUrl());
-    logDebug('ChronoDesk v3.0 inicializado - Atualização automática a cada 30s');
+    logDebug('Portal SDK v3.0 inicializado - Atualização automática a cada 30s');
 });

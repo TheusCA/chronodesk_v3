@@ -1,5 +1,5 @@
 -- ============================================
--- ChronoDesk v3.0 - Schema do Banco de Dados
+-- Portal SDK v3.0 - Schema do Banco de Dados
 -- Atualizado para incluir: tabela funcionarios,
 -- suporte a LDAP/AD, logs de autenticação
 -- ============================================

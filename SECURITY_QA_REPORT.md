@@ -1,4 +1,4 @@
-# ChronoDesk - Relatorio de Seguranca e QA da Fase 5
+# Portal SDK - Relatorio de Seguranca e QA da Fase 5
 
 ## Resumo Executivo
 

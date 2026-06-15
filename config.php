@@ -1,6 +1,6 @@
 <?php
 /**
- * Configurações do Sistema - ChronoDesk
+ * Configurações do Sistema - Portal SDK
  * [SECURED] Versão corrigida com todas as mitigações aplicadas
  * 
  * Correções aplicadas:

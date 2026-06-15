@@ -1,4 +1,4 @@
-# ChronoDesk - Apache VirtualHost example
+# Portal SDK - Apache VirtualHost example
 # Ajuste ServerName, certificados e caminhos antes de usar em producao.
 
 <VirtualHost *:80>

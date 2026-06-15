@@ -1,4 +1,4 @@
-# ChronoDesk - entrega operacional 2026-06-13
+# Portal SDK - entrega operacional 2026-06-13
 
 ## Escopo
 

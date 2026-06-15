@@ -1,4 +1,4 @@
-# ChronoDesk frontend
+# Portal SDK frontend
 
 ## Desenvolvimento
 
