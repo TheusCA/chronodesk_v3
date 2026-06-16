@@ -207,7 +207,8 @@ $normalizeCritical->setAccessible(true);
 $normalizedCritical = $normalizeCritical->invoke($criticalService, [
     'incident_number' => 'INC002',
     'room_date' => '2026-06-15',
-    'operation_reported_at' => '2026-06-15 10:00',
+    'incident_opened_at' => '2026-06-15 10:00',
+    'operation_reported_at' => '2026-06-15 10:02',
     'room_opened_at' => '2026-06-15 10:12',
     'normalized_at' => '2026-06-15 11:02',
     'room_description' => 'Indisponibilidade operacional',
@@ -215,10 +216,21 @@ $normalizedCritical = $normalizeCritical->invoke($criticalService, [
 assert_same(12, $normalizedCritical[':room_opening_duration_minutes'], 'calcula tempo para abrir sala');
 assert_same(50, $normalizedCritical[':room_duration_minutes'], 'calcula tempo de sala');
 
+$normalizedCriticalDurations = $normalizeCritical->invoke($criticalService, [
+    'incident_number' => 'INC-DURATION',
+    'room_date' => '2026-06-15',
+    'room_opening_duration_minutes' => '00:12',
+    'room_duration_minutes' => '02:23',
+    'room_description' => 'Duracoes HH:MM',
+]);
+assert_same(12, $normalizedCriticalDurations[':room_opening_duration_minutes'], 'aceita tempo de abertura HH:MM');
+assert_same(143, $normalizedCriticalDurations[':room_duration_minutes'], 'aceita tempo de sala HH:MM');
+
 $normalizedExcelCritical = $normalizeCritical->invoke($criticalService, [
     'incident_number' => 'INC-EXCEL',
     'room_date' => '46188',
-    'operation_reported_at' => (string)(10 / 24),
+    'incident_opened_at' => (string)(10 / 24),
+    'operation_reported_at' => (string)((10 * 60 + 2) / 1440),
     'room_opened_at' => (string)((10 * 60 + 12) / 1440),
     'normalized_at' => (string)((11 * 60 + 2) / 1440),
     'room_description' => 'Datas numericas do Excel',
@@ -308,6 +320,14 @@ try {
     $criticalMissingHeaderRejected = true;
 }
 assert_same(true, $criticalMissingHeaderRejected, 'rejeita coluna obrigatoria ausente em chamados criticos');
+
+CriticalIncidentService::assertImportRowsShape([[
+    'INCIDENTE' => 'INC004',
+    'Data da Sala' => '2026-06-15',
+    'Hora de abertura Incidente' => '10:00',
+    'Hora abertura sala' => '10:12',
+    'Tempo de Sala' => '00:50',
+]]);
 
 $documentService = new DocumentService(
     new QaTransactionPdo(),

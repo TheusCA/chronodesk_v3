@@ -621,6 +621,20 @@ final class OperationalService {
         $this->decideWorkflow('portal_time_adjustments', 'time_adjustment', $id, $decision, $actor);
     }
 
+    public function listPendingWorkflowApprovals(array $actor): array {
+        if (!in_array($actor['role'], ['admin', 'gestor'], true)) {
+            return [
+                'overtime' => [],
+                'time_adjustments' => [],
+            ];
+        }
+
+        return [
+            'overtime' => $this->pendingWorkflowRecords('portal_overtime_entries', 'work_date'),
+            'time_adjustments' => $this->pendingWorkflowRecords('portal_time_adjustments', 'adjustment_date'),
+        ];
+    }
+
     public function listOncall(array $filters): array {
         [$from, $to] = $this->period($filters, 366);
         $sql = 'SELECT id, employee_id, employee_name, team, starts_on, ends_on,
@@ -830,7 +844,8 @@ final class OperationalService {
             if ($record['status'] !== 'pending') {
                 throw new DomainException('Somente registros pendentes podem ser decididos.');
             }
-            if (strcasecmp((string)$record['created_by'], $actor['username']) === 0) {
+            $actorEmployeeId = $this->actorEmployeeId($actor);
+            if ($actorEmployeeId !== null && (int)$record['employee_id'] === $actorEmployeeId) {
                 throw new DomainException('Nao e permitido aprovar o proprio lancamento.');
             }
             $update = $this->pdo->prepare(
@@ -848,6 +863,34 @@ final class OperationalService {
             $record['approved_by'] = $actor['username'];
             $this->sync->enqueue($this->pdo, $recordType, $id, $record, $actor['username']);
         });
+    }
+
+    private function pendingWorkflowRecords(string $table, string $dateColumn): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT ' . $this->workflowColumns($table)
+            . " FROM {$table} WHERE status = :status ORDER BY {$dateColumn} DESC, id DESC LIMIT 500"
+        );
+        $stmt->execute([':status' => 'pending']);
+        return $stmt->fetchAll();
+    }
+
+    private function actorEmployeeId(array $actor): ?int {
+        if (!empty($actor['employee_id'])) {
+            return (int)$actor['employee_id'];
+        }
+        $username = strtolower(trim((string)($actor['username'] ?? '')));
+        if ($username === '') {
+            return null;
+        }
+        if (strpos($username, '@') !== false) {
+            $username = explode('@', $username, 2)[0];
+        }
+        $stmt = $this->pdo->prepare(
+            'SELECT id FROM funcionarios WHERE ativo = 1 AND LOWER(ad_login) = :ad_login LIMIT 1'
+        );
+        $stmt->execute([':ad_login' => $username]);
+        $id = $stmt->fetchColumn();
+        return $id === false ? null : (int)$id;
     }
 
     private function targetEmployee(array $data, array $actor): array {

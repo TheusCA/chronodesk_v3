@@ -4,11 +4,13 @@
  * Correções: Autenticação obrigatória
  */
 require_once __DIR__ . '/../init.php';
+require_once __DIR__ . '/portal/_bootstrap.php';
 header('Content-Type: application/json; charset=utf-8');
 
 require_get_method();
 // [VULN-003] Exigir autenticação para ver solicitações
-require_portal_auth(['admin', 'gestor']);
+$role = require_portal_auth(['admin', 'gestor']);
+$actor = portal_actor($role);
 
 global $gerenciador;
 $solicitacoes = [];
@@ -24,4 +26,9 @@ foreach ($gerenciador->getFuncionarios() as $funcionario) {
         ];
     }
 }
-json_response(["solicitacoes" => $solicitacoes]);
+$operational = (new OperationalService())->listPendingWorkflowApprovals($actor);
+json_response([
+    "solicitacoes" => $solicitacoes,
+    "overtime" => $operational['overtime'],
+    "time_adjustments" => $operational['time_adjustments'],
+]);

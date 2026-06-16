@@ -21,12 +21,20 @@ try {
     if ($output === false) {
         throw new RuntimeException('Nao foi possivel gerar o CSV.');
     }
-    $headers = CriticalIncidentService::ALLOWED_IMPORT_HEADERS;
-    fputcsv($output, $headers, ';');
+    $columns = CriticalIncidentService::EXPORT_COLUMNS;
+    fputcsv($output, array_keys($columns), ';');
     foreach ($rows as $row) {
         $values = [];
-        foreach ($headers as $header) {
-            $text = (string)($row[$header] ?? '');
+        foreach ($columns as $field) {
+            $value = $row[$field] ?? '';
+            if (in_array($field, ['room_opening_duration_minutes', 'room_duration_minutes'], true)
+                && $value !== null
+                && $value !== ''
+            ) {
+                $minutes = max(0, (int)$value);
+                $value = sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
+            }
+            $text = (string)$value;
             $values[] = preg_match('/^[\s\x00-\x1F]*[=+\-@]/u', $text) ? "'" . $text : $text;
         }
         fputcsv($output, $values, ';');

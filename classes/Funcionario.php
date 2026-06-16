@@ -79,6 +79,24 @@ class Funcionario {
         return true; // Disponível para pausas
     }
     
+    public function esta_disponivel_para_pausa($hora_atual = null) {
+        if (!$this->ativo) {
+            return false;
+        }
+
+        if ($hora_atual === null) {
+            $hora_atual = new DateTime();
+        } elseif (is_string($hora_atual)) {
+            $hora_atual = DateTime::createFromFormat('H:i', $hora_atual);
+            if ($hora_atual === false) {
+                $hora_atual = new DateTime();
+            }
+        }
+
+        $hora_str = $hora_atual->format('H:i');
+        return $hora_str >= $this->jornada_entrada && $hora_str < $this->jornada_saida;
+    }
+
     /**
      * Retorna o status de disponibilidade como texto
      */

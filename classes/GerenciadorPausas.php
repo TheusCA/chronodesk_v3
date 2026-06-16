@@ -71,23 +71,25 @@ class GerenciadorPausas {
         }
 
         // Verificar disponibilidade baseada em horários (jornada e almoço)
-        if (!$funcionario->esta_disponivel()) {
+        if (!$funcionario->esta_disponivel_para_pausa()) {
             $status_disp = $funcionario->status_disponibilidade();
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} não está disponível no momento. Status: {$status_disp['label']}. Jornada: {$funcionario->jornada_entrada} - {$funcionario->jornada_saida}. Almoço: {$funcionario->almoco_inicio} - {$funcionario->almoco_fim}."];
         }
 
-        $pausas_ativas_equipe = 0;
-        foreach ($this->funcionarios as $f) {
-            if ($f->equipe == $funcionario->equipe && $f->em_pausa) {
-                if ($f->status_aprovacao == "aprovado" || $f->motivo_pausa != "Reunião") {
-                    $pausas_ativas_equipe++;
+        if ($this->pausa_conta_para_limite($motivo)) {
+            $pausas_ativas_equipe = 0;
+            foreach ($this->funcionarios as $f) {
+                if ($f->equipe == $funcionario->equipe && $f->em_pausa) {
+                    if ($this->pausa_conta_para_limite($f->motivo_pausa)) {
+                        $pausas_ativas_equipe++;
+                    }
                 }
             }
-        }
 
-        if ($pausas_ativas_equipe >= $this->limite_pausa_por_equipe) {
-            $equipe_nome = strtoupper($funcionario->equipe);
-            return ["sucesso" => false, "mensagem" => "Limite de pausas simultâneas atingido para a equipe {$equipe_nome}. Atualmente há {$pausas_ativas_equipe} pausas ativas. Máximo permitido: {$this->limite_pausa_por_equipe} pausas."];
+            if ($pausas_ativas_equipe >= $this->limite_pausa_por_equipe) {
+                $equipe_nome = strtoupper($funcionario->equipe);
+                return ["sucesso" => false, "mensagem" => "Limite de pausas simultâneas atingido para a equipe {$equipe_nome}. Atualmente há {$pausas_ativas_equipe} pausas ativas. Máximo permitido: {$this->limite_pausa_por_equipe} pausas."];
+            }
         }
 
         $funcionario->em_pausa = true;
@@ -116,7 +118,7 @@ class GerenciadorPausas {
         if ($funcionario->em_pausa || $funcionario->status_aprovacao === 'pendente') {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} já possui uma pausa ativa ou solicitação pendente."];
         }
-        if (!$funcionario->esta_disponivel()) {
+        if (!$funcionario->esta_disponivel_para_pausa()) {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} não está disponível no momento."];
         }
 
@@ -138,23 +140,6 @@ class GerenciadorPausas {
         }
         if ($funcionario->status_aprovacao !== 'pendente') {
             return ["sucesso" => false, "mensagem" => "Não há solicitação pendente para este funcionário."];
-        }
-
-        $pausas_ativas = 0;
-        foreach ($this->funcionarios as $outro) {
-            if (
-                $outro->equipe === $funcionario->equipe &&
-                $outro->em_pausa &&
-                $outro->status_aprovacao === 'aprovado'
-            ) {
-                $pausas_ativas++;
-            }
-        }
-        if ($pausas_ativas >= $this->limite_pausa_por_equipe) {
-            return [
-                "sucesso" => false,
-                "mensagem" => "Limite de pausas simultâneas atingido para a equipe " . strtoupper($funcionario->equipe) . "."
-            ];
         }
 
         $funcionario->em_pausa = true;
@@ -206,8 +191,9 @@ class GerenciadorPausas {
         $LIMITE_ALERTA_15MIN = 15 * 60;
         $LIMITE_ALERTA_20MIN = 20 * 60;
 
-        $alerta_15min = $duracao_real >= $LIMITE_ALERTA_15MIN;
-        $alerta_20min = $duracao_real >= $LIMITE_ALERTA_20MIN;
+        $aplica_limite_tempo = $this->pausa_conta_para_limite($funcionario->motivo_pausa);
+        $alerta_15min = $aplica_limite_tempo && $duracao_real >= $LIMITE_ALERTA_15MIN;
+        $alerta_20min = $aplica_limite_tempo && $duracao_real >= $LIMITE_ALERTA_20MIN;
 
         $persistido = false;
 
@@ -281,7 +267,7 @@ class GerenciadorPausas {
         $hora = $fim_pausa->format('H:i:s');
         $mensagem = "{$funcionario->nome} finalizou a pausa às {$hora}. Duração: {$duracao_real} segundos.";
 
-        if ($duracao_real > $this->duracao_pausa_minutos * 60) {
+        if ($aplica_limite_tempo && $duracao_real > $this->duracao_pausa_minutos * 60) {
             $mensagem .= " (Excedeu o tempo limite de {$this->duracao_pausa_minutos} minutos!)";
         }
 
@@ -349,7 +335,9 @@ class GerenciadorPausas {
                 "tempo_pausa" => 0,
                 "elapsed_seconds" => 0,
                 "inicio_pausa" => $funcionario->inicio_pausa ? $funcionario->inicio_pausa->format('c') : null,
-                "duracao_limite_segundos" => $this->duracao_pausa_minutos * 60,
+                "duracao_limite_segundos" => $this->pausa_conta_para_limite($funcionario->motivo_pausa)
+                    ? $this->duracao_pausa_minutos * 60
+                    : 0,
                 "motivo_pausa" => $funcionario->motivo_pausa,
                 "status_aprovacao" => $funcionario->status_aprovacao,
                 "solicitacao_timestamp" => $funcionario->solicitacao_timestamp ? $funcionario->solicitacao_timestamp->format('c') : null,
@@ -479,7 +467,8 @@ class GerenciadorPausas {
             'alerta_20min' => $alerta_20min,
             'status_aprovacao' => $status_aprovacao,
             'observacao_reuniao' => $observacao_reuniao,
-            'excedeu_limite' => $duracao > $this->duracao_pausa_minutos * 60
+            'excedeu_limite' => $this->pausa_conta_para_limite($motivo)
+                && $duracao > $this->duracao_pausa_minutos * 60
         ];
         $metricas["pausas_detalhadas"][] = $pausa_detalhada;
 
@@ -500,7 +489,7 @@ class GerenciadorPausas {
         $metricas["duracao_total_equipe"][$equipe_func] += $duracao;
 
         // Pausas excedidas
-        if ($duracao > $this->duracao_pausa_minutos * 60) {
+        if ($this->pausa_conta_para_limite($motivo) && $duracao > $this->duracao_pausa_minutos * 60) {
             if (!isset($metricas["pausas_excedidas"][$func_key])) {
                 $metricas["pausas_excedidas"][$func_key] = 0;
             }
@@ -605,6 +594,11 @@ class GerenciadorPausas {
 
     public function getFuncionarios() {
         return $this->funcionarios;
+    }
+
+    private function pausa_conta_para_limite($motivo): bool {
+        $motivo = strtolower((string)$motivo);
+        return !($motivo === 'pessoal' || strpos($motivo, 'reuni') === 0);
     }
 
     public function salvar_estado() {

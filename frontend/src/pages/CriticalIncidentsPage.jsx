@@ -83,8 +83,8 @@ function normalizeForForm(item) {
   })
   form.incident_number = item?.incident_number || item?.ticket_number || ''
   form.room_date = item?.room_date || String(item?.opened_at || '').slice(0, 10) || emptyIncident.room_date
-  form.room_opening_duration_minutes = item?.room_opening_duration_minutes ?? ''
-  form.room_duration_minutes = item?.room_duration_minutes ?? ''
+  form.room_opening_duration_minutes = minutesToClock(item?.room_opening_duration_minutes)
+  form.room_duration_minutes = minutesToClock(item?.room_duration_minutes)
   form.affected_users = item?.affected_users ?? ''
   return form
 }
@@ -94,7 +94,14 @@ function minutesBetween(from, to) {
   const start = new Date(from).getTime()
   const end = new Date(to).getTime()
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return ''
-  return Math.floor((end - start) / 60000)
+  return minutesToClock(Math.floor((end - start) / 60000))
+}
+
+function minutesToClock(value) {
+  if (value === null || value === undefined || value === '') return ''
+  const minutes = Number(value)
+  if (!Number.isFinite(minutes) || minutes < 0) return ''
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 }
 
 function badgeTone(value) {
@@ -129,8 +136,7 @@ function minutesLabel(value) {
   if (value === null || value === undefined || value === '') return 'Nao calculado'
   const minutes = Number(value)
   if (!Number.isFinite(minutes) || minutes < 0) return 'Sem dados'
-  if (minutes < 60) return `${minutes} min`
-  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}min`
+  return minutesToClock(minutes)
 }
 
 function IncidentForm({ initial, onClose, onSave, submitting }) {
@@ -138,9 +144,9 @@ function IncidentForm({ initial, onClose, onSave, submitting }) {
   const [form, setForm] = useState(normalizeForForm(initial))
   const update = (key, value) => setForm((current) => {
     const next = { ...current, [key]: value }
-    if (['operation_reported_at', 'room_opened_at'].includes(key)) {
+    if (['incident_opened_at', 'room_opened_at'].includes(key)) {
       next.room_opening_duration_minutes = minutesBetween(
-        next.operation_reported_at,
+        next.incident_opened_at,
         next.room_opened_at,
       )
     }
@@ -201,8 +207,8 @@ function IncidentForm({ initial, onClose, onSave, submitting }) {
             <label className="label">Hora report da operacao<input className="field mt-2" type="datetime-local" value={form.operation_reported_at} onChange={(event) => update('operation_reported_at', event.target.value)} /></label>
             <label className="label">Hora abertura sala<input className="field mt-2" type="datetime-local" value={form.room_opened_at} onChange={(event) => update('room_opened_at', event.target.value)} /></label>
             <label className="label">Hora de normalizacao<input className="field mt-2" type="datetime-local" value={form.normalized_at} onChange={(event) => update('normalized_at', event.target.value)} /></label>
-            <label className="label">Tempo de abertura da sala (min)<input className="field mt-2" min="0" type="number" value={form.room_opening_duration_minutes} onChange={(event) => update('room_opening_duration_minutes', event.target.value)} /></label>
-            <label className="label">Tempo de Sala (min)<input className="field mt-2" min="0" type="number" value={form.room_duration_minutes} onChange={(event) => update('room_duration_minutes', event.target.value)} /></label>
+            <label className="label">Tempo de abertura da sala<input className="field mt-2" inputMode="numeric" pattern="\\d{1,4}:[0-5]\\d" placeholder="00:02" value={form.room_opening_duration_minutes} onChange={(event) => update('room_opening_duration_minutes', event.target.value)} /></label>
+            <label className="label">Tempo de Sala<input className="field mt-2" inputMode="numeric" pattern="\\d{1,4}:[0-5]\\d" placeholder="02:23" value={form.room_duration_minutes} onChange={(event) => update('room_duration_minutes', event.target.value)} /></label>
           </div>
         </section>
 
@@ -379,6 +385,7 @@ function ImportPanel({ onClose, onImported }) {
 
 export function CriticalIncidentsPage({ session, notify }) {
   const canManage = session.role === 'admin' || session.role === 'gestor'
+  const canCreate = session.role !== 'somente_leitura'
   const [filters, setFilters] = useState({
     competency: competency.key,
     from: '',
@@ -453,7 +460,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         <div className="flex flex-wrap gap-2">
           <a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha CSV</a>
           {canManage && <button className="btn-secondary gap-2" onClick={() => setImportOpen(true)} type="button"><Icon className="h-4 w-4" name="upload" /> Importar planilha</button>}
-          {canManage && <button className="btn-primary" onClick={() => setFormItem({})} type="button">Novo chamado</button>}
+          {canCreate && <button className="btn-primary" onClick={() => setFormItem({})} type="button">Novo chamado</button>}
         </div>
       </section>
 

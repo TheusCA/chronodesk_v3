@@ -25,8 +25,34 @@ async function perform(action, refreshers, notify) {
   }
 }
 
+function approvalMinutes(value) {
+  const minutes = Number(value || 0)
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}min`
+}
+
+function ApprovalActions({ onApprove, onReject }) {
+  return (
+    <div className="flex gap-2">
+      <button className="btn-primary" onClick={onApprove} type="button">Aprovar</button>
+      <button className="btn-danger" onClick={onReject} type="button">Reprovar</button>
+    </div>
+  )
+}
+
+function ApprovalSection({ title, count, children }) {
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">{title}</h3>
+        <span className="status-badge status-warning">{count} pendente(s)</span>
+      </div>
+      {count === 0 ? <div className="card py-6 text-sm text-slate-500">Nenhuma pendencia neste grupo.</div> : children}
+    </section>
+  )
+}
+
 function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
-  async function decide(id, action) {
+  async function decidePause(id, action) {
     await perform(
       () => post(`${action}_pausa.php`, { funcionario_id: id }),
       [refresh, refreshStatus],
@@ -34,38 +60,85 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
     )
   }
 
+  async function decideWorkflow(endpoint, id, decision) {
+    await perform(
+      () => post(endpoint, { action: 'decision', id, decision }),
+      [refresh, refreshStatus],
+      notify,
+    )
+  }
+
   if (requests.loading) return <LoadingState />
   if (requests.error) return <ErrorState message={requests.error.message} onRetry={requests.refresh} />
-  const items = requests.data?.solicitacoes || []
+  const pauses = requests.data?.solicitacoes || []
+  const overtime = requests.data?.overtime || []
+  const adjustments = requests.data?.time_adjustments || []
+  const total = pauses.length + overtime.length + adjustments.length
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">Solicitações de reunião aguardando decisão.</p>
-        <span className="status-badge status-warning">{items.length} pendente(s)</span>
+        <p className="text-sm text-slate-400">Decisoes operacionais pendentes centralizadas.</p>
+        <span className="status-badge status-warning">{total} pendente(s)</span>
       </div>
-      {items.length === 0 && <EmptyState title="Nenhuma aprovação pendente" description="Novas solicitações de reunião aparecerão automaticamente nesta área." />}
-      {items.map((request) => (
-        <article className="card flex flex-col justify-between gap-5 lg:flex-row lg:items-center" key={request.id}>
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-semibold text-white">{request.nome}</h3>
-              <span className="status-badge status-neutral">Equipe {request.equipe?.toUpperCase()}</span>
+      {total === 0 && <EmptyState title="Nenhuma aprovacao pendente" description="Novas solicitacoes operacionais aparecerao automaticamente nesta area." />}
+
+      <ApprovalSection count={pauses.length} title="Pausas/Reunioes pendentes">
+        {pauses.map((request) => (
+          <article className="card flex flex-col justify-between gap-5 lg:flex-row lg:items-center" key={`pause-${request.id}`}>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-semibold text-white">{request.nome}</h4>
+                <span className="status-badge status-neutral">Equipe {request.equipe?.toUpperCase()}</span>
+                <span className="status-badge status-warning">Pendente</span>
+              </div>
+              <p className="mt-2 text-sm text-slate-300">{request.motivo}</p>
+              <p className="mt-1 text-sm text-slate-500">{request.observacao || 'Sem observacao.'}</p>
+              <p className="mt-3 text-xs text-slate-600">Solicitado em {formatDateTime(request.solicitacao_timestamp)}</p>
             </div>
-            <p className="mt-2 text-sm text-slate-300">{request.motivo}</p>
-            <p className="mt-1 text-sm text-slate-500">{request.observacao || 'Sem observação.'}</p>
-            <p className="mt-3 text-xs text-slate-600">Solicitado em {formatDateTime(request.solicitacao_timestamp)}</p>
-          </div>
-          <div className="flex gap-2">
-            <button className="btn-primary" onClick={() => decide(request.id, 'aprovar')} type="button">Aprovar</button>
-            <button className="btn-danger" onClick={() => decide(request.id, 'rejeitar')} type="button">Rejeitar</button>
-          </div>
-        </article>
-      ))}
+            <ApprovalActions onApprove={() => decidePause(request.id, 'aprovar')} onReject={() => decidePause(request.id, 'rejeitar')} />
+          </article>
+        ))}
+      </ApprovalSection>
+
+      <ApprovalSection count={overtime.length} title="Horas extras pendentes">
+        {overtime.map((item) => (
+          <article className="card flex flex-col justify-between gap-5 lg:flex-row lg:items-center" key={`overtime-${item.id}`}>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-semibold text-white">{item.employee_name}</h4>
+                <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
+                <span className="status-badge status-warning">{item.status}</span>
+              </div>
+              <p className="mt-2 text-sm text-slate-300">Hora extra em {item.work_date} das {String(item.start_time).slice(0, 5)} as {String(item.end_time).slice(0, 5)} ({approvalMinutes(item.total_minutes)})</p>
+              <p className="mt-1 text-sm text-slate-500">{item.reason} - {item.justification}</p>
+              <p className="mt-3 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
+            </div>
+            <ApprovalActions onApprove={() => decideWorkflow('portal/overtime.php', item.id, 'approved')} onReject={() => decideWorkflow('portal/overtime.php', item.id, 'rejected')} />
+          </article>
+        ))}
+      </ApprovalSection>
+
+      <ApprovalSection count={adjustments.length} title="Ajustes de ponto pendentes">
+        {adjustments.map((item) => (
+          <article className="card flex flex-col justify-between gap-5 lg:flex-row lg:items-center" key={`adjustment-${item.id}`}>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-semibold text-white">{item.employee_name}</h4>
+                <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
+                <span className="status-badge status-warning">{item.status}</span>
+              </div>
+              <p className="mt-2 text-sm text-slate-300">Ajuste em {item.adjustment_date}: {item.adjustment_type} {item.correct_time ? `- ${String(item.correct_time).slice(0, 5)}` : ''}</p>
+              <p className="mt-1 text-sm text-slate-500">{item.justification}</p>
+              <p className="mt-3 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
+            </div>
+            <ApprovalActions onApprove={() => decideWorkflow('portal/time_corrections.php', item.id, 'approved')} onReject={() => decideWorkflow('portal/time_corrections.php', item.id, 'rejected')} />
+          </article>
+        ))}
+      </ApprovalSection>
     </div>
   )
 }
-
 function SettingsTab({ resource, notify }) {
   const [form, setForm] = useState(null)
   useEffect(() => {

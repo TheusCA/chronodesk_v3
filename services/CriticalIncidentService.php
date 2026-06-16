@@ -19,12 +19,54 @@ final class CriticalIncidentService {
         'owner_name', 'owner_login', 'involved_teams', 'root_cause',
         'resolution', 'workaround', 'actions_taken', 'next_steps',
         'meeting_url', 'participants', 'notes',
+        'incidente', 'data da sala', 'hora de abertura incidente',
+        'hora report da operação', 'hora report da operacao',
+        'hora abertura sala', 'hora de normalização', 'hora de normalizacao',
+        'descrição da sala', 'descricao da sala',
+        'descrição da finalização da sala', 'descricao da finalizacao da sala',
+        'tempo de abertura da sala', 'tempo de sala', 'setor',
+        'observação', 'observacao', 'atividade sdk',
+    ];
+    public const EXPORT_COLUMNS = [
+        'INCIDENTE' => 'incident_number',
+        'Data da Sala' => 'room_date',
+        'Hora de abertura Incidente' => 'incident_opened_at',
+        'Hora report da operação' => 'operation_reported_at',
+        'Hora abertura sala' => 'room_opened_at',
+        'Hora de normalização' => 'normalized_at',
+        'Descrição da sala' => 'room_description',
+        'Descrição da finalização da sala' => 'room_finalization_description',
+        'Tempo de abertura da sala' => 'room_opening_duration_minutes',
+        'Tempo de Sala' => 'room_duration_minutes',
+        'Setor' => 'sector',
+        'Observação' => 'notes',
+        'Atividade SDK' => 'sdk_activity',
     ];
     public const REQUIRED_IMPORT_HEADERS = [
         'incident_number', 'room_date',
     ];
     private const LEGACY_REQUIRED_IMPORT_HEADERS = [
         'ticket_number', 'source', 'title', 'severity', 'status', 'opened_at',
+    ];
+    private const IMPORT_HEADER_ALIASES = [
+        'incidente' => 'incident_number',
+        'data da sala' => 'room_date',
+        'hora de abertura incidente' => 'incident_opened_at',
+        'hora report da operação' => 'operation_reported_at',
+        'hora report da operacao' => 'operation_reported_at',
+        'hora abertura sala' => 'room_opened_at',
+        'hora de normalização' => 'normalized_at',
+        'hora de normalizacao' => 'normalized_at',
+        'descrição da sala' => 'room_description',
+        'descricao da sala' => 'room_description',
+        'descrição da finalização da sala' => 'room_finalization_description',
+        'descricao da finalizacao da sala' => 'room_finalization_description',
+        'tempo de abertura da sala' => 'room_opening_duration_minutes',
+        'tempo de sala' => 'room_duration_minutes',
+        'setor' => 'sector',
+        'observação' => 'notes',
+        'observacao' => 'notes',
+        'atividade sdk' => 'sdk_activity',
     ];
 
     private const SOURCES = ['servicenow', 'jira', 'teams', 'manual', 'other'];
@@ -207,6 +249,7 @@ final class CriticalIncidentService {
             $errors = [];
             $record = null;
             try {
+                $row = self::normalizeImportRow($row);
                 $record = $this->normalizeRecord($row);
                 $duplicateKey = $record[':source'] . ':' . strtolower($record[':ticket_number']);
                 if (isset($seen[$duplicateKey])) {
@@ -287,13 +330,14 @@ final class CriticalIncidentService {
             if (count($row) > self::MAX_IMPORT_COLUMNS) {
                 throw new InvalidArgumentException('A importacao excede o limite de colunas.');
             }
+            $canonicalKeys = array_keys(self::normalizeImportRow($row));
             $hasOperationalHeaders = count(array_intersect(
                 self::REQUIRED_IMPORT_HEADERS,
-                array_keys($row)
+                $canonicalKeys
             )) === count(self::REQUIRED_IMPORT_HEADERS);
             $hasLegacyHeaders = count(array_intersect(
                 self::LEGACY_REQUIRED_IMPORT_HEADERS,
-                array_keys($row)
+                $canonicalKeys
             )) === count(self::LEGACY_REQUIRED_IMPORT_HEADERS);
             if (!$hasOperationalHeaders && !$hasLegacyHeaders) {
                 throw new InvalidArgumentException(
@@ -301,9 +345,10 @@ final class CriticalIncidentService {
                 );
             }
             foreach ($row as $key => $value) {
+                $normalizedKey = is_string($key) ? strtolower(trim($key)) : $key;
                 if (
                     !is_string($key)
-                    || !in_array($key, self::ALLOWED_IMPORT_HEADERS, true)
+                    || !in_array($normalizedKey, self::ALLOWED_IMPORT_HEADERS, true)
                 ) {
                     throw new InvalidArgumentException('Cabecalho de importacao nao permitido.');
                 }
@@ -318,6 +363,7 @@ final class CriticalIncidentService {
     }
 
     private function createUnsafe(array $data, string $actor): int {
+        $data = self::normalizeImportRow($data);
         $record = $this->normalizeRecord($data);
         try {
             $stmt = $this->pdo->prepare(
@@ -356,6 +402,19 @@ final class CriticalIncidentService {
             throw $error;
         }
         return (int)$this->pdo->lastInsertId();
+    }
+
+    private static function normalizeImportRow(array $row): array {
+        $normalized = [];
+        foreach ($row as $key => $value) {
+            $normalizedKey = strtolower(trim((string)$key));
+            $canonical = self::IMPORT_HEADER_ALIASES[$normalizedKey] ?? $normalizedKey;
+            if (array_key_exists($canonical, $normalized) && $normalized[$canonical] !== '' && $value !== '') {
+                throw new InvalidArgumentException('A importacao possui cabecalhos equivalentes duplicados.');
+            }
+            $normalized[$canonical] = $value;
+        }
+        return $normalized;
     }
 
     private function normalizeRecord(array $data): array {
@@ -404,7 +463,7 @@ final class CriticalIncidentService {
         );
         $openingDuration = $this->durationMinutes(
             $data['room_opening_duration_minutes'] ?? null,
-            $operationReportedAt,
+            $incidentOpenedAt,
             $roomOpenedAt,
             'Tempo de abertura da sala'
         );
@@ -461,7 +520,7 @@ final class CriticalIncidentService {
             ':next_steps' => $this->nullableText($data['next_steps'] ?? null, 4000),
             ':meeting_url' => $this->meetingUrl($data['meeting_url'] ?? null),
             ':participants' => $this->nullableText($data['participants'] ?? null, 4000),
-            ':notes' => $this->nullableText($data['notes'] ?? null, 12000),
+            ':notes' => $this->nullableText($data['notes'] ?? $data['observation'] ?? null, 12000),
         ];
 
         $opened = new DateTimeImmutable($record[':opened_at']);
@@ -712,6 +771,13 @@ final class CriticalIncidentService {
 
     private function durationMinutes($value, ?string $from, ?string $to, string $label): ?int {
         if ($value !== null && $value !== '') {
+            if (is_string($value) && preg_match('/^(\d{1,4}):([0-5]\d)$/', trim($value), $match)) {
+                $minutes = ((int)$match[1] * 60) + (int)$match[2];
+                if ($minutes > 525600) {
+                    throw new InvalidArgumentException("{$label} invalido.");
+                }
+                return $minutes;
+            }
             $result = filter_var($value, FILTER_VALIDATE_INT, [
                 'options' => ['min_range' => 0, 'max_range' => 525600],
             ]);

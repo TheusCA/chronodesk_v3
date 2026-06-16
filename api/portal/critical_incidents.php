@@ -25,20 +25,16 @@ try {
         ] + $service->list($_GET));
     }
 
-    if (!in_array($role, ['admin', 'gestor'], true)) {
-        audit_log('CRITICAL_INCIDENT_WRITE_DENIED', 'Perfil sem permissao tentou alterar chamado critico.', 'WARNING');
-        json_response([
-            'sucesso' => false,
-            'mensagem' => 'Apenas administradores e gestores podem alterar chamados criticos.',
-        ], 403);
-    }
-
     $data = portal_json_input(CriticalIncidentService::MAX_IMPORT_PAYLOAD_BYTES);
     $action = $data['action'] ?? 'create';
     if (!is_string($action)) {
         throw new InvalidArgumentException('Acao invalida.');
     }
     if ($action === 'create') {
+        require_portal_write_access($role);
+        if (!in_array($role, ['admin', 'gestor'], true)) {
+            $data['status'] = 'open';
+        }
         $id = $service->create($data, portal_username());
         audit_log('CRITICAL_INCIDENT_CREATED', 'Chamado critico criado. ID ' . $id, 'WARNING');
         json_response([
@@ -46,6 +42,14 @@ try {
             'id' => $id,
             'mensagem' => 'Chamado critico cadastrado.',
         ], 201);
+    }
+
+    if (!in_array($role, ['admin', 'gestor'], true)) {
+        audit_log('CRITICAL_INCIDENT_WRITE_DENIED', 'Perfil sem permissao tentou gerenciar chamado critico.', 'WARNING');
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Apenas administradores e gestores podem gerenciar chamados criticos.',
+        ], 403);
     }
 
     $id = filter_var(

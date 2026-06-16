@@ -15,11 +15,13 @@ function PauseProgress({ elapsed, limit }) {
 }
 
 function ActivePauseCard({ current, elapsed, loading, onFinish }) {
-  const limit = Number(current.duracao_limite_segundos || 1200)
+  const pauseReason = String(current.motivo_pausa || '').toLowerCase()
+  const unlimited = pauseReason === 'pessoal' || pauseReason.startsWith('reuni')
+  const limit = unlimited ? 0 : Number(current.duracao_limite_segundos || 1200)
   const remaining = limit - elapsed
-  const ratio = elapsed / limit
-  const status = ratio < 0.6 ? 'Dentro do tempo' : ratio < 0.85 ? 'Próximo do limite' : ratio <= 1 ? 'Próximo do limite' : 'Tempo excedido'
-  const statusClass = ratio < 0.6 ? 'status-info' : ratio < 0.85 ? 'status-warning' : 'status-danger'
+  const ratio = limit > 0 ? elapsed / limit : 0
+  const status = unlimited ? 'Sem limite' : ratio < 0.6 ? 'Dentro do tempo' : ratio < 0.85 ? 'Próximo do limite' : ratio <= 1 ? 'Próximo do limite' : 'Tempo excedido'
+  const statusClass = unlimited ? 'status-info' : ratio < 0.6 ? 'status-info' : ratio < 0.85 ? 'status-warning' : 'status-danger'
 
   return (
     <section className="card border-amber-500/20">
@@ -33,10 +35,10 @@ function ActivePauseCard({ current, elapsed, loading, onFinish }) {
       <div className="my-7 text-center">
         <p className="font-mono text-4xl font-black tracking-tight text-white sm:text-5xl">{formatDuration(elapsed)}</p>
         <p className="mt-2 text-sm text-slate-500">
-          Limite {formatDuration(limit)} · {remaining >= 0 ? `${formatDuration(remaining)} restantes` : `${formatDuration(Math.abs(remaining))} excedidos`}
+          {unlimited ? 'Timer ativo sem limite automatico' : `Limite ${formatDuration(limit)} · ${remaining >= 0 ? `${formatDuration(remaining)} restantes` : `${formatDuration(Math.abs(remaining))} excedidos`}`}
         </p>
       </div>
-      <PauseProgress elapsed={elapsed} limit={limit} />
+      {!unlimited && <PauseProgress elapsed={elapsed} limit={limit} />}
       <button className="btn-danger mt-6 w-full" disabled={loading} onClick={onFinish} type="button">
         {loading ? 'Finalizando...' : 'Finalizar pausa'}
       </button>
