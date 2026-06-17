@@ -7,17 +7,24 @@ const cards = [
   ['pausas_ativas', 'Pausas ativas', 'text-amber-300'],
   ['solicitacoes_pendentes', 'Aprovações pendentes', 'text-violet-300'],
   ['alertas_operacionais', 'Alertas operacionais', 'text-red-300'],
+  ['chamados_criticos_abertos', 'CIs ativos', 'text-orange-300'],
+  ['war_rooms_ativas', 'War rooms', 'text-red-300'],
   ['plantonistas_ativos', 'Plantonistas ativos', 'text-emerald-300'],
   ['sobreavisos_ativos', 'Sobreavisos ativos', 'text-cyan-300'],
 ]
 
 export function DashboardPage({ navigate, livePauses }) {
-  const resource = useResource('portal/dashboard.php')
+  const resource = useResource('portal/dashboard.php', { intervalMs: 15000 })
   if (resource.loading) return <LoadingState />
   if (resource.error) return <ErrorState message={resource.error.message} onRetry={resource.refresh} />
 
   const activePauses = livePauses.employees.filter((item) => item.em_pausa)
-  const summary = { ...(resource.data?.summary || {}), pausas_ativas: activePauses.length }
+  const pendingPauses = livePauses.employees.filter((item) => item.status_aprovacao === 'pendente').length
+  const summary = {
+    ...(resource.data?.summary || {}),
+    pausas_ativas: activePauses.length,
+    solicitacoes_pendentes: Math.max(resource.data?.summary?.solicitacoes_pendentes || 0, pendingPauses),
+  }
 
   return (
     <div className="space-y-6">
@@ -51,6 +58,14 @@ export function DashboardPage({ navigate, livePauses }) {
                     <span className="status-badge status-warning">{item.motivo_pausa}</span>
                   </div>
                   <p className="mt-4 font-mono text-2xl font-bold text-amber-300">{formatDuration(livePauses.elapsedFor(item))}</p>
+                  {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && (
+                    <p
+                      className="mt-3 line-clamp-2 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-xs leading-5 text-slate-400"
+                      title={item.observacao_reuniao || 'Sem observacao informada'}
+                    >
+                      {item.observacao_reuniao || 'Sem observacao informada'}
+                    </p>
+                  )}
                 </article>
               ))}
             </div>

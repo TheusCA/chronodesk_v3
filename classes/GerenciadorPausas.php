@@ -122,6 +122,23 @@ class GerenciadorPausas {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} não está disponível no momento."];
         }
 
+        if ($this->equipe_normalizada($funcionario->equipe) === 'n2') {
+            $funcionario->em_pausa = true;
+            $funcionario->inicio_pausa = new DateTime();
+            $funcionario->motivo_pausa = $motivo;
+            $funcionario->status_aprovacao = 'aprovado';
+            $funcionario->solicitacao_timestamp = null;
+            $funcionario->observacao_reuniao = $observacao;
+            $this->salvar_estado();
+
+            $hora = $funcionario->inicio_pausa->format('H:i:s');
+            return [
+                "sucesso" => true,
+                "approval_required" => false,
+                "mensagem" => "{$funcionario->nome} iniciou a pausa de reuniao as {$hora}.",
+            ];
+        }
+
         $funcionario->em_pausa = false;
         $funcionario->inicio_pausa = null;
         $funcionario->motivo_pausa = $motivo;
@@ -341,6 +358,7 @@ class GerenciadorPausas {
                 "motivo_pausa" => $funcionario->motivo_pausa,
                 "status_aprovacao" => $funcionario->status_aprovacao,
                 "solicitacao_timestamp" => $funcionario->solicitacao_timestamp ? $funcionario->solicitacao_timestamp->format('c') : null,
+                "observacao_reuniao" => $funcionario->observacao_reuniao,
                 "ativo" => $funcionario->ativo ?? true,
                 "jornada_entrada" => $funcionario->jornada_entrada ?? "08:00",
                 "jornada_saida" => $funcionario->jornada_saida ?? "17:00",
@@ -599,6 +617,15 @@ class GerenciadorPausas {
     private function pausa_conta_para_limite($motivo): bool {
         $motivo = strtolower((string)$motivo);
         return !($motivo === 'pessoal' || strpos($motivo, 'reuni') === 0);
+    }
+
+    private function equipe_normalizada($equipe): string {
+        $value = strtolower(trim((string)$equipe));
+        $value = str_replace([' ', '-', '_'], '', $value);
+        if ($value === 'n2' || $value === 'nivel2') {
+            return 'n2';
+        }
+        return 'n1';
     }
 
     public function salvar_estado() {

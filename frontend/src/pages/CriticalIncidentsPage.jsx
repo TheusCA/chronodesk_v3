@@ -46,6 +46,7 @@ const emptyIncident = {
   affected_users: '',
   affected_services: '',
   responsible_area: '',
+  sdk_responsible_employee_id: '',
   owner_name: '',
   owner_login: '',
   involved_teams: '',
@@ -85,6 +86,7 @@ function normalizeForForm(item) {
   form.room_opening_duration_minutes = minutesToClock(item?.room_opening_duration_minutes)
   form.room_duration_minutes = minutesToClock(item?.room_duration_minutes)
   form.affected_users = item?.affected_users ?? ''
+  form.sdk_responsible_employee_id = item?.sdk_responsible_employee_id ?? ''
   return form
 }
 
@@ -155,7 +157,7 @@ function CalculatedTimeField({ label, value }) {
   )
 }
 
-function IncidentForm({ initial, onClose, onSave, submitting, canManage }) {
+function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResponsibles }) {
   const editing = Boolean(initial?.id)
   const [form, setForm] = useState(normalizeForForm(initial))
   const update = (key, value) => setForm((current) => {
@@ -182,6 +184,7 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage }) {
       opened_at: form.incident_opened_at || '',
       war_room_started_at: form.room_opened_at,
       mitigated_at: form.normalized_at,
+      sdk_responsible_employee_id: form.sdk_responsible_employee_id || null,
       responsible_area: form.responsible_area,
       summary: form.room_description,
       resolution: form.room_finalization_description,
@@ -240,6 +243,7 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage }) {
             <label className="label md:col-span-2">Descricao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_description} onChange={(event) => update('room_description', event.target.value)} /></label>
             <label className="label md:col-span-2">Descricao da finalizacao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_finalization_description} onChange={(event) => update('room_finalization_description', event.target.value)} /></label>
             <label className="label">Carteira - CC<input className="field mt-2" maxLength="160" value={form.sector} onChange={(event) => update('sector', event.target.value)} /></label>
+            <label className="label">Técnico SDK responsável<select className="field mt-2" value={form.sdk_responsible_employee_id} onChange={(event) => update('sdk_responsible_employee_id', event.target.value)}><option value="">Não definido</option>{sdkResponsibles.map((item) => <option key={item.id} value={item.id}>{item.name}{item.ad_login ? ` (${item.ad_login})` : ''}</option>)}</select></label>
             <label className="label">Area responsavel<input className="field mt-2" maxLength="120" placeholder="Telecom, SRE - Netsec, DBA" value={form.responsible_area} onChange={(event) => update('responsible_area', event.target.value)} /></label>
             <label className="label">Usuarios afetados<input className="field mt-2" min="0" type="number" value={form.affected_users} onChange={(event) => update('affected_users', event.target.value)} /></label>
             <label className="label">Link da sala<input className="field mt-2" maxLength="1000" placeholder="https://..." type="url" value={form.meeting_url} onChange={(event) => update('meeting_url', event.target.value)} /></label>
@@ -278,6 +282,7 @@ function IncidentDetails({ item, onClose }) {
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Carteira - CC</small><p className="mt-1 text-sm text-slate-200">{item.sector || 'Nao informado'}</p></div>
+          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Técnico SDK</small><p className="mt-1 text-sm text-slate-200">{item.sdk_responsible_name || 'Nao definido'}</p>{item.sdk_responsible_login && <small className="mt-1 block text-slate-600">{item.sdk_responsible_login}</small>}</div>
           <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Area responsavel</small><p className="mt-1 text-sm text-slate-200">{item.responsible_area || 'Nao informado'}</p></div>
           <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Tempo para abrir sala</small><p className="mt-1 text-sm text-slate-200">{minutesLabel(item.room_opening_duration_minutes)}</p></div>
           <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Tempo de sala</small><p className="mt-1 text-sm text-slate-200">{minutesLabel(item.room_duration_minutes)}</p></div>
@@ -400,12 +405,14 @@ export function CriticalIncidentsPage({ session, notify }) {
     owner: '',
   })
   const resource = useResource(`portal/critical_incidents.php${queryString(filters)}`)
+  const responsibleResource = useResource('portal/sdk_responsibles.php')
   const [formItem, setFormItem] = useState(null)
   const [viewItem, setViewItem] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [loadingItemId, setLoadingItemId] = useState(null)
   const summary = resource.data?.summary || {}
+  const sdkResponsibles = responsibleResource.data?.items || []
   const exportUrl = apiUrl(`portal/critical_incidents_export.php${queryString(filters)}`)
   const topAreas = useMemo(() => summary.top_areas || [], [summary.top_areas])
 
@@ -492,8 +499,8 @@ export function CriticalIncidentsPage({ session, notify }) {
 
       {items.length === 0 ? <EmptyState title="Nenhum chamado critico encontrado" description="Ajuste os filtros ou cadastre o primeiro registro do periodo." /> : (
         <section className="card table-wrap">
-          <table className="data-table min-w-[1250px]">
-            <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descricao</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Carteira - CC</th><th>Acoes</th></tr></thead>
+          <table className="data-table min-w-[1380px]">
+            <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descricao</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Carteira - CC</th><th>Técnico SDK</th><th>Acoes</th></tr></thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
@@ -504,6 +511,7 @@ export function CriticalIncidentsPage({ session, notify }) {
                   <td><IncidentBadge value={item.severity} /></td>
                   <td><IncidentBadge value={item.status} /></td>
                   <td><strong>{item.sector || 'Nao informado'}</strong><small>{item.responsible_area || 'Sem area responsavel'}</small></td>
+                  <td><strong>{item.sdk_responsible_name || 'Nao definido'}</strong><small>{item.sdk_responsible_login || 'Sem login'}</small></td>
                   <td>
                     <div className="flex flex-wrap gap-1">
                       <button className="table-action" disabled={loadingItemId === item.id} onClick={() => openItem(item.id, 'view')} type="button">{loadingItemId === item.id ? 'Carregando' : 'Visualizar'}</button>
@@ -519,7 +527,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         </section>
       )}
 
-      {formItem && <IncidentForm canManage={canManage} initial={formItem.id ? formItem : null} onClose={() => setFormItem(null)} onSave={save} submitting={submitting} />}
+      {formItem && <IncidentForm canManage={canManage} initial={formItem.id ? formItem : null} onClose={() => setFormItem(null)} onSave={save} sdkResponsibles={sdkResponsibles} submitting={submitting} />}
       {viewItem && <IncidentDetails item={viewItem} onClose={() => setViewItem(null)} />}
       {importOpen && <ImportPanel onClose={() => setImportOpen(false)} onImported={async (message) => { notify(message); await resource.refresh() }} />}
     </div>

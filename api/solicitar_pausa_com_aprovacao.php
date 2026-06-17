@@ -52,8 +52,12 @@ $resultado = with_pause_state_lock(function () use ($gerenciador, $funcionario_i
 });
 
 if ($resultado['sucesso']) {
-    audit_log('PAUSE_REQUEST', 'Solicitação para funcionário ID ' . $funcionario_id, 'INFO');
     $funcionario_atualizado = $gerenciador->getFuncionario($funcionario_id);
+    if ($funcionario_atualizado->status_aprovacao !== 'pendente') {
+        audit_log('PAUSE_START', 'Pausa de reuniao iniciada para funcionario ID ' . $funcionario_id, 'INFO');
+        json_response($resultado, 200);
+    }
+    audit_log('PAUSE_REQUEST', 'Solicitacao para funcionario ID ' . $funcionario_id, 'INFO');
     (new ApprovalRequestService())->create([
         'employee_id' => $funcionario_atualizado->id,
         'employee_name' => $funcionario_atualizado->nome,

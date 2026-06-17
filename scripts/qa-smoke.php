@@ -224,7 +224,7 @@ try {
 assert_same(true, $unknownHeaderRejected, 'rejeita cabecalho inesperado na importacao');
 
 assert_same(500, CriticalIncidentService::MAX_IMPORT_ROWS, 'limite de linhas dos chamados criticos');
-assert_same(39, CriticalIncidentService::MAX_IMPORT_COLUMNS, 'limite de colunas dos chamados criticos');
+assert_same(40, CriticalIncidentService::MAX_IMPORT_COLUMNS, 'limite de colunas dos chamados criticos');
 CriticalIncidentService::assertImportRowsShape([[
     'ticket_number' => 'INC001',
     'source' => 'servicenow',
@@ -306,7 +306,7 @@ file_put_contents($spreadsheetCsv, "incident_number;room_date\nINC003;2026-06-15
 $spreadsheetService = new SpreadsheetImportService();
 $parseSpreadsheetCsv = new ReflectionMethod(SpreadsheetImportService::class, 'parseCsv');
 $parseSpreadsheetCsv->setAccessible(true);
-$spreadsheetRows = $parseSpreadsheetCsv->invoke($spreadsheetService, $spreadsheetCsv, 500, 39, 4000);
+$spreadsheetRows = $parseSpreadsheetCsv->invoke($spreadsheetService, $spreadsheetCsv, 500, 40, 4000);
 assert_same('INC003', $spreadsheetRows[0]['incident_number'], 'parser seguro le CSV');
 
 $warRoomCsv = tempnam(sys_get_temp_dir(), 'chronodesk_war_room_');
@@ -315,7 +315,7 @@ file_put_contents(
     "\n\xEF\xBB\xBFINCIDENTE\tData da Sala\tCarteira - CC\tArea responsavel\tUsuarios afetados\tLink da sala\tHora de abertura Incidente\tHora abertura sala\tHora de normalizacao\n"
     . "INC004\t2026-06-15\tCC-01/SRE\tSRE - Netsec\t25\thttps://teams.example/sala\t08:59\t09:01\t11:24\n\n"
 );
-$warRoomRows = $parseSpreadsheetCsv->invoke($spreadsheetService, $warRoomCsv, 500, 39, 4000);
+$warRoomRows = $parseSpreadsheetCsv->invoke($spreadsheetService, $warRoomCsv, 500, 40, 4000);
 assert_same('INC004', $warRoomRows[0]['incidente'], 'parser remove BOM e ignora linhas vazias antes do cabecalho');
 CriticalIncidentService::assertImportRowsShape($warRoomRows);
 $normalizeCriticalImportRow = new ReflectionMethod(CriticalIncidentService::class, 'normalizeImportRow');
@@ -334,7 +334,7 @@ try {
         'tmp_name' => $spreadsheetCsv,
         'error' => UPLOAD_ERR_OK,
         'size' => filesize($spreadsheetCsv),
-    ], 500, 39, 4000);
+    ], 500, 40, 4000);
 } catch (DomainException $error) {
     $legacyXlsRejected = true;
 }

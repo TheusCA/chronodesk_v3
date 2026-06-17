@@ -30,12 +30,21 @@ export function useLivePauses({ enabled = true, intervalMs = 15000 } = {}) {
     mountedRef.current = true
     if (!enabled) return () => { mountedRef.current = false }
     refresh().catch(() => {})
-    const polling = window.setInterval(() => refresh().catch(() => {}), intervalMs)
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'hidden') return
+      refresh().catch(() => {})
+    }
+    const polling = window.setInterval(refreshIfVisible, intervalMs)
     const timer = window.setInterval(() => setTick(Date.now()), 1000)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refresh().catch(() => {})
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
     return () => {
       mountedRef.current = false
       window.clearInterval(polling)
       window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [enabled, intervalMs, refresh])
 

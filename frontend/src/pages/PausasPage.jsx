@@ -39,6 +39,14 @@ function ActivePauseCard({ current, elapsed, loading, onFinish }) {
         </p>
       </div>
       {!unlimited && <PauseProgress elapsed={elapsed} limit={limit} />}
+      {pauseReason.startsWith('reuni') && (
+        <p
+          className="mt-5 line-clamp-3 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400"
+          title={current.observacao_reuniao || 'Sem observacao informada'}
+        >
+          {current.observacao_reuniao || 'Sem observacao informada'}
+        </p>
+      )}
       <button className="btn-danger mt-6 w-full" disabled={loading} onClick={onFinish} type="button">
         {loading ? 'Finalizando...' : 'Finalizar pausa'}
       </button>

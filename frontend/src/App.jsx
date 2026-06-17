@@ -10,6 +10,7 @@ import { ShiftSchedulesPage } from './pages/ShiftSchedulesPage'
 import { LoginPage } from './pages/LoginPage'
 import { MetricasPage } from './pages/MetricasPage'
 import { ModulePage, SettingsPage } from './pages/ModulePage'
+import { PaMapPage } from './pages/PaMapPage'
 import {
   OncallPage,
   OperationalReportsPage,
@@ -155,6 +156,8 @@ export default function App() {
     content = <CalendarPage session={session} notify={notify} />
   } else if (router.path === '/escala-presencial') {
     content = <SchedulePage session={session} notify={notify} />
+  } else if (router.path === '/mapa-pa') {
+    content = <PaMapPage notify={notify} />
   } else if (router.path === '/escala-turnos') {
     content = <ShiftSchedulesPage session={session} notify={notify} />
   } else if (router.path === '/horas-extras') {

@@ -4,7 +4,7 @@ require_once __DIR__ . '/OperationalService.php';
 
 final class CriticalIncidentService {
     public const MAX_IMPORT_ROWS = 500;
-    public const MAX_IMPORT_COLUMNS = 39;
+    public const MAX_IMPORT_COLUMNS = 40;
     public const MAX_IMPORT_CELL_CHARS = 4000;
     public const MAX_IMPORT_PAYLOAD_BYTES = 2097152;
     public const ALLOWED_IMPORT_HEADERS = [
@@ -18,14 +18,14 @@ final class CriticalIncidentService {
         'impact', 'affected_users', 'affected_services', 'responsible_area',
         'owner_name', 'owner_login', 'involved_teams', 'root_cause',
         'resolution', 'workaround', 'actions_taken', 'next_steps',
-        'meeting_url', 'participants', 'notes',
+        'meeting_url', 'participants', 'notes', 'sdk_responsible_name',
         'incidente', 'data da sala', 'hora de abertura incidente',
         'hora report da operação', 'hora report da operacao',
         'hora abertura sala', 'hora de normalização', 'hora de normalizacao',
         'descrição da sala', 'descricao da sala',
         'descrição da finalização da sala', 'descricao da finalizacao da sala',
         'tempo de abertura da sala', 'tempo de sala', 'setor',
-        'carteira - cc', 'area responsavel',
+        'carteira - cc', 'area responsavel', 'tecnico sdk responsavel',
         'usuarios afetados', 'link da sala',
         'observação', 'observacao', 'atividade sdk',
     ];
@@ -42,6 +42,7 @@ final class CriticalIncidentService {
         'Tempo de abertura da sala' => 'room_opening_duration_minutes',
         'Tempo de Sala' => 'room_duration_minutes',
         'Carteira - CC' => 'sector',
+        'Tecnico SDK responsavel' => 'sdk_responsible_name',
         'Área responsável' => 'responsible_area',
         'Usuários afetados' => 'affected_users',
         'Link da sala' => 'meeting_url',
@@ -72,6 +73,7 @@ final class CriticalIncidentService {
         'setor' => 'sector',
         'carteira - cc' => 'sector',
         'area responsavel' => 'responsible_area',
+        'tecnico sdk responsavel' => 'sdk_responsible_name',
         'usuarios afetados' => 'affected_users',
         'link da sala' => 'meeting_url',
         'observação' => 'notes',
@@ -92,7 +94,8 @@ final class CriticalIncidentService {
         room_description, sdk_activity,
         ticket_number, source, title, severity, status, opened_at,
         war_room_started_at, mitigated_at, resolved_at, responsible_area,
-        owner_name, involved_teams, updated_at';
+        owner_name, involved_teams, sdk_responsible_employee_id,
+        sdk_responsible_name, sdk_responsible_login, updated_at';
 
     private const DETAIL_COLUMNS = '
         id, incident_number, room_date, incident_opened_at,
@@ -103,7 +106,8 @@ final class CriticalIncidentService {
         ticket_number, source, title, summary, severity, status, opened_at,
         war_room_started_at, mitigated_at, resolved_at, impact, affected_users,
         affected_services, responsible_area, owner_name, owner_login,
-        involved_teams, root_cause, resolution, workaround, actions_taken,
+        involved_teams, sdk_responsible_employee_id, sdk_responsible_name,
+        sdk_responsible_login, root_cause, resolution, workaround, actions_taken,
         next_steps, meeting_url, participants, notes, created_by, created_at,
         updated_by, updated_at';
 
@@ -153,6 +157,17 @@ final class CriticalIncidentService {
         return $this->atomic(fn(): int => $this->createUnsafe($data, $actor));
     }
 
+    public function listSdkResponsibleOptions(): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, nome AS name, ad_login
+             FROM funcionarios
+             WHERE ativo = 1 AND LOWER(equipe) = "n2"
+             ORDER BY nome'
+        );
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
     public function update(int $id, array $data, string $actor): void {
         $record = $this->normalizeRecord($data);
         $id = $this->positiveInt($id);
@@ -185,6 +200,9 @@ final class CriticalIncidentService {
                      affected_users = :affected_users,
                      affected_services = :affected_services,
                      responsible_area = :responsible_area,
+                     sdk_responsible_employee_id = :sdk_responsible_employee_id,
+                     sdk_responsible_name = :sdk_responsible_name,
+                     sdk_responsible_login = :sdk_responsible_login,
                      owner_name = :owner_name,
                      owner_login = :owner_login,
                      involved_teams = :involved_teams,
@@ -340,6 +358,23 @@ final class CriticalIncidentService {
         return 'Outros';
     }
 
+    public function dashboardSummary(): array {
+        $stmt = $this->pdo->query(
+            'SELECT
+                SUM(status IN ("open", "in_progress", "war_room", "mitigated")) AS open_count,
+                SUM(status = "war_room") AS war_room_count,
+                SUM(severity = "critical" AND status IN ("open", "in_progress", "war_room", "mitigated")) AS critical_open_count,
+                MAX(updated_at) AS last_update
+             FROM portal_critical_incidents'
+        );
+        return $stmt->fetch() ?: [
+            'open_count' => 0,
+            'war_room_count' => 0,
+            'critical_open_count' => 0,
+            'last_update' => null,
+        ];
+    }
+
     public static function assertImportRowsShape(array $rows): void {
         if ($rows === [] || count($rows) > self::MAX_IMPORT_ROWS || !self::isList($rows)) {
             throw new InvalidArgumentException('Quantidade ou estrutura de linhas invalida.');
@@ -398,6 +433,7 @@ final class CriticalIncidentService {
                      ticket_number, source, title, summary, severity, status,
                      opened_at, war_room_started_at, mitigated_at, resolved_at,
                      impact, affected_users, affected_services, responsible_area,
+                     sdk_responsible_employee_id, sdk_responsible_name, sdk_responsible_login,
                      owner_name, owner_login, involved_teams, root_cause, resolution,
                      workaround, actions_taken, next_steps, meeting_url, participants,
                      notes, created_by, updated_by)
@@ -410,6 +446,7 @@ final class CriticalIncidentService {
                      :ticket_number, :source, :title, :summary, :severity, :status,
                      :opened_at, :war_room_started_at, :mitigated_at, :resolved_at,
                      :impact, :affected_users, :affected_services, :responsible_area,
+                     :sdk_responsible_employee_id, :sdk_responsible_name, :sdk_responsible_login,
                      :owner_name, :owner_login, :involved_teams, :root_cause, :resolution,
                      :workaround, :actions_taken, :next_steps, :meeting_url, :participants,
                      :notes, :created_by, :updated_by)'
@@ -524,6 +561,7 @@ final class CriticalIncidentService {
             $normalizedAt,
             'Tempo de sala'
         );
+        $sdkResponsible = $this->sdkResponsible($data['sdk_responsible_employee_id'] ?? null);
         $record = [
             ':incident_number' => $incidentNumber,
             ':room_date' => $roomDate,
@@ -557,6 +595,9 @@ final class CriticalIncidentService {
             ':affected_users' => $this->nullableNonNegativeInt($data['affected_users'] ?? null),
             ':affected_services' => $this->nullableText($data['affected_services'] ?? null, 2000),
             ':responsible_area' => $this->nullableText($data['responsible_area'] ?? null, 120),
+            ':sdk_responsible_employee_id' => $sdkResponsible['id'],
+            ':sdk_responsible_name' => $sdkResponsible['name'],
+            ':sdk_responsible_login' => $sdkResponsible['ad_login'],
             ':owner_name' => $this->nullableText($data['owner_name'] ?? null, 160),
             ':owner_login' => $this->ownerLogin($data['owner_login'] ?? null),
             ':involved_teams' => $this->nullableText($data['involved_teams'] ?? null, 500),
@@ -702,6 +743,33 @@ final class CriticalIncidentService {
         );
         $stmt->execute([':source' => $source, ':ticket_number' => $ticketNumber]);
         return (bool)$stmt->fetchColumn();
+    }
+
+    private function sdkResponsible($value): array {
+        if ($value === null || $value === '') {
+            return ['id' => null, 'name' => null, 'ad_login' => null];
+        }
+        $id = $this->positiveInt($value);
+        $stmt = $this->pdo->prepare(
+            'SELECT id, nome AS name, ad_login, LOWER(equipe) AS team, ativo
+             FROM funcionarios
+             WHERE id = :id
+             LIMIT 1'
+        );
+        $stmt->execute([':id' => $id]);
+        $employee = $stmt->fetch();
+        if (
+            !$employee
+            || (int)$employee['ativo'] !== 1
+            || strtolower((string)$employee['team']) !== 'n2'
+        ) {
+            throw new InvalidArgumentException('Tecnico SDK responsavel invalido ou nao pertence ao N2.');
+        }
+        return [
+            'id' => (int)$employee['id'],
+            'name' => $this->requiredText($employee['name'], 160, 'Tecnico SDK responsavel'),
+            'ad_login' => $this->ownerLogin($employee['ad_login'] ?? null),
+        ];
     }
 
     private function translateDuplicate(PDOException $error): void {
