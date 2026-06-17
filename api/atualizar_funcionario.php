@@ -36,15 +36,15 @@ if ($nome === false) {
 }
 
 if ($equipe === null) {
-    json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2 ou Não se aplica.'], 400);
+    json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2 ou Liderança.'], 400);
 }
 
 if ($access_role === null) {
     json_response(['sucesso' => false, 'mensagem' => 'Perfil de acesso inválido.'], 400);
 }
 
-if ($access_role === 'tecnico' && $equipe === 'na') {
-    json_response(['sucesso' => false, 'mensagem' => 'Técnicos devem pertencer à equipe N1 ou N2.'], 400);
+if ($equipe === 'lideranca') {
+    $access_role = 'admin';
 }
 
 if ($ad_login === false) {

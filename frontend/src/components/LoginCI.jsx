@@ -12,7 +12,7 @@ export function LoginCI({ onSubmit, loading }) {
     <form className="card space-y-4" onSubmit={submit}>
       <div>
         <h2 className="text-lg font-bold">Acesso corporativo</h2>
-        <p className="text-sm text-slate-400">Entre com sua conta AD. O perfil e as permissões sao reconhecidos automaticamente.</p>
+        <p className="text-sm text-slate-400">Entre com sua conta AD.</p>
       </div>
       <label className="block text-sm font-medium">
         Login AD

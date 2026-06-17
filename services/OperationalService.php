@@ -288,21 +288,15 @@ final class OperationalService {
             throw new InvalidArgumentException('Regra de escala invalida.');
         }
         $effectiveFrom = self::dateValue($data['effective_from'] ?? date('Y-m-d'), 'Inicio da vigencia');
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO portal_schedule_rules
-                (employee_id, employee_name, ad_login, team, rule_type, effective_from, created_by, updated_by)
-             VALUES
-                (:employee_id, :employee_name, :ad_login, :team, :rule_type, :effective_from, :created_by, :updated_by)
-             ON DUPLICATE KEY UPDATE
-                employee_name = VALUES(employee_name),
-                ad_login = VALUES(ad_login),
-                team = VALUES(team),
-                rule_type = VALUES(rule_type),
-                effective_from = VALUES(effective_from),
-                effective_until = NULL,
-                updated_by = VALUES(updated_by)'
-        );
-        $stmt->execute([
+        $existing = $this->activeScheduleRulesForEmployee((int)$employee['id']);
+        $replaceExisting = filter_var($data['replace_existing'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (count($existing) > 1) {
+            throw new DomainException('Colaborador possui mais de uma regra ativa. Regularize as duplicidades antes de alterar.');
+        }
+        if (count($existing) === 1 && !$replaceExisting) {
+            throw new DomainException('Colaborador ja possui regra de escala ativa. Confirme a substituicao ou remova a regra atual.');
+        }
+        $params = [
             ':employee_id' => $employee['id'],
             ':employee_name' => $employee['name'],
             ':ad_login' => $employee['ad_login'],
@@ -311,8 +305,32 @@ final class OperationalService {
             ':effective_from' => $effectiveFrom->format('Y-m-d'),
             ':created_by' => $actor,
             ':updated_by' => $actor,
-        ]);
-        $id = $this->scheduleRuleId((int)$employee['id']);
+        ];
+        $previous = count($existing) === 1 ? $existing[0] : $this->latestScheduleRuleForEmployee((int)$employee['id']);
+        if ($previous !== null) {
+            $id = (int)$previous['id'];
+            $stmt = $this->pdo->prepare(
+                'UPDATE portal_schedule_rules
+                 SET employee_name = :employee_name,
+                     ad_login = :ad_login,
+                     team = :team,
+                     rule_type = :rule_type,
+                     effective_from = :effective_from,
+                     effective_until = NULL,
+                     updated_by = :updated_by
+                 WHERE id = :id'
+            );
+            $stmt->execute($params + [':id' => $id]);
+        } else {
+            $stmt = $this->pdo->prepare(
+                'INSERT INTO portal_schedule_rules
+                    (employee_id, employee_name, ad_login, team, rule_type, effective_from, created_by, updated_by)
+                 VALUES
+                    (:employee_id, :employee_name, :ad_login, :team, :rule_type, :effective_from, :created_by, :updated_by)'
+            );
+            $stmt->execute($params);
+            $id = (int)$this->pdo->lastInsertId();
+        }
         $this->sync->enqueue($this->pdo, 'schedule', $id, [
             'employee_id' => (int)$employee['id'],
             'employee_name' => $employee['name'],
@@ -321,6 +339,36 @@ final class OperationalService {
             'effective_from' => $effectiveFrom->format('Y-m-d'),
         ], $actor);
         return $id;
+    }
+
+    public function removeScheduleRule(int $employeeId, string $actor): int {
+        return $this->atomic(function () use ($employeeId, $actor): int {
+            $employee = $this->employee($employeeId);
+            $existing = $this->activeScheduleRulesForEmployee((int)$employee['id']);
+            if ($existing === []) {
+                throw new DomainException('Colaborador nao possui regra de escala ativa.');
+            }
+            $stmt = $this->pdo->prepare(
+                'UPDATE portal_schedule_rules
+                 SET effective_until = DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
+                     updated_by = :updated_by
+                 WHERE employee_id = :employee_id
+                   AND effective_until IS NULL'
+            );
+            $stmt->execute([
+                ':updated_by' => $actor,
+                ':employee_id' => (int)$employee['id'],
+            ]);
+            foreach ($existing as $rule) {
+                $this->sync->enqueue($this->pdo, 'schedule', (int)$rule['id'], [
+                    'kind' => 'rule_removed',
+                    'employee_id' => (int)$employee['id'],
+                    'employee_name' => $employee['name'],
+                    'rule_type' => $rule['rule_type'],
+                ], $actor);
+            }
+            return count($existing);
+        });
     }
 
     public function saveScheduleException(array $data, string $actor): int {
@@ -369,7 +417,7 @@ final class OperationalService {
     }
 
     public static function validateScheduleImportRows(array $rows): array {
-        if (!array_is_list($rows)) {
+        if (!self::isList($rows)) {
             throw new InvalidArgumentException('Rows deve ser uma lista de linhas.');
         }
         if ($rows === []) {
@@ -384,7 +432,7 @@ final class OperationalService {
         $expectedKeys = null;
         $normalizedRows = [];
         foreach ($rows as $index => $row) {
-            if (!is_array($row) || $row === [] || array_is_list($row)) {
+            if (!is_array($row) || $row === [] || self::isList($row)) {
                 throw new InvalidArgumentException('Estrutura invalida na linha ' . ($index + 2) . '.');
             }
             if (count($row) > self::MAX_IMPORT_COLUMNS) {
@@ -459,6 +507,9 @@ final class OperationalService {
             }
             if ($employee && isset($seen[$employee['id']])) {
                 $errors[] = 'Colaborador duplicado no arquivo.';
+            }
+            if ($employee && $this->activeScheduleRulesForEmployee((int)$employee['id']) !== []) {
+                $errors[] = 'Colaborador ja possui regra de escala ativa.';
             }
             if ($employee) {
                 $seen[$employee['id']] = true;
@@ -1050,6 +1101,31 @@ final class OperationalService {
         return (int)$stmt->fetchColumn();
     }
 
+    private function activeScheduleRulesForEmployee(int $employeeId): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, employee_id, employee_name, team, rule_type, effective_from, effective_until
+             FROM portal_schedule_rules
+             WHERE employee_id = :employee_id
+               AND effective_until IS NULL
+             ORDER BY updated_at DESC, id DESC'
+        );
+        $stmt->execute([':employee_id' => $employeeId]);
+        return $stmt->fetchAll();
+    }
+
+    private function latestScheduleRuleForEmployee(int $employeeId): ?array {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, employee_id, employee_name, team, rule_type, effective_from, effective_until
+             FROM portal_schedule_rules
+             WHERE employee_id = :employee_id
+             ORDER BY updated_at DESC, id DESC
+             LIMIT 1'
+        );
+        $stmt->execute([':employee_id' => $employeeId]);
+        $rule = $stmt->fetch();
+        return $rule ?: null;
+    }
+
     private function reportRows(string $table, string $dateColumn, string $from, string $to, ?string $team, ?int $employeeId): array {
         $sql = 'SELECT ' . $this->workflowColumns($table)
             . " FROM {$table} WHERE {$dateColumn} BETWEEN :date_from AND :date_to";
@@ -1230,6 +1306,17 @@ final class OperationalService {
 
     private static function stringLength(string $value): int {
         return function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
+    }
+
+    private static function isList(array $items): bool {
+        $expected = 0;
+        foreach ($items as $key => $_value) {
+            if ($key !== $expected) {
+                return false;
+            }
+            $expected++;
+        }
+        return true;
     }
 
     private static function monthName(int $month): string {

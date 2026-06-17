@@ -181,10 +181,44 @@ const emptyEmployee = {
   jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ativo: true,
 }
 
+function teamLabel(value) {
+  const normalized = normalizeTeamValue(value)
+  return {
+    n1: 'N1',
+    n2: 'N2',
+    na: 'Liderança',
+    lideranca: 'Liderança',
+    'nao se aplica': 'Liderança',
+    nao_se_aplica: 'Liderança',
+    sem_equipe: 'Liderança',
+  }[normalized] || normalized.toUpperCase()
+}
+
+function normalizeTeam(value) {
+  const normalized = normalizeTeamValue(value)
+  return ['na', 'lideranca', 'nao se aplica', 'nao_se_aplica', 'sem_equipe'].includes(normalized) ? 'lideranca' : normalized
+}
+
+function normalizeTeamValue(value) {
+  return String(value || 'n1').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+}
+
 function EmployeeFields({ form, setForm, editing = false }) {
   function updateRole(role) {
-    const equipe = role === 'tecnico' && form.equipe === 'na' ? 'n1' : form.equipe
-    setForm({ ...form, access_role: role, equipe })
+    if (form.equipe === 'lideranca') return
+    setForm({ ...form, access_role: role })
+  }
+
+  function updateTeam(team) {
+    if (team === 'lideranca') {
+      setForm({ ...form, equipe: 'lideranca', access_role: 'admin' })
+      return
+    }
+    if (form.equipe === 'lideranca' && form.access_role === 'admin') {
+      const confirmed = window.confirm('Ao sair de Liderança, revise manualmente o perfil de acesso se este colaborador não deve permanecer como Admin.')
+      if (!confirmed) return
+    }
+    setForm({ ...form, equipe: team })
   }
 
   return (
@@ -199,14 +233,14 @@ function EmployeeFields({ form, setForm, editing = false }) {
         <input className="field mt-2" maxLength="100" placeholder="nome.sobrenome" value={form.ad_login || ''} onChange={(event) => setForm({ ...form, ad_login: event.target.value })} />
       </label>
       <label className="label">Equipe operacional
-        <select className="field mt-2" value={form.equipe} onChange={(event) => setForm({ ...form, equipe: event.target.value })}>
+        <select className="field mt-2" value={normalizeTeam(form.equipe)} onChange={(event) => updateTeam(event.target.value)}>
           <option value="n1">N1</option>
           <option value="n2">N2</option>
-          <option disabled={form.access_role === 'tecnico'} value="na">Não se aplica</option>
+          <option value="lideranca">Liderança</option>
         </select>
       </label>
       <label className="label">Perfil de acesso
-        <select className="field mt-2" value={form.access_role || 'tecnico'} onChange={(event) => updateRole(event.target.value)}>
+        <select className="field mt-2" disabled={form.equipe === 'lideranca'} value={form.access_role || 'tecnico'} onChange={(event) => updateRole(event.target.value)}>
           <option value="tecnico">Técnico</option>
           <option value="gestor">Gestor</option>
           <option value="admin">Admin</option>
@@ -245,8 +279,8 @@ function EmployeesTab({ resource, notify }) {
     const items = resource.data?.funcionarios || []
     const term = search.toLowerCase()
     return items.filter((item) => (
-      (!term || item.nome.toLowerCase().includes(term) || (item.ad_login || '').toLowerCase().includes(term) || item.equipe.toLowerCase().includes(term))
-      && (!team || item.equipe === team)
+      (!term || item.nome.toLowerCase().includes(term) || (item.ad_login || '').toLowerCase().includes(term) || teamLabel(item.equipe).toLowerCase().includes(term))
+      && (!team || normalizeTeam(item.equipe) === team)
       && (!role || item.access_role === role)
       && (!active || String(item.ativo) === active)
     ))
@@ -260,6 +294,7 @@ function EmployeesTab({ resource, notify }) {
       ...emptyEmployee,
       ...item,
       access_role: item.access_role || 'tecnico',
+      equipe: normalizeTeam(item.equipe),
     })
   }
 
@@ -275,7 +310,6 @@ function EmployeesTab({ resource, notify }) {
     if (duplicateId) return 'Já existe um funcionário com este ID.'
     if (duplicateLogin) return 'Este login AD já está vinculado a outro funcionário ativo.'
     if (login && !/^[a-z0-9._@-]+$/.test(login)) return 'O login AD contém caracteres inválidos.'
-    if (form.access_role === 'tecnico' && form.equipe === 'na') return 'Técnicos devem pertencer à equipe N1 ou N2.'
     return ''
   }
 
@@ -324,7 +358,7 @@ function EmployeesTab({ resource, notify }) {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Novo cadastro</p>
           <h3 className="mt-2 font-bold text-white">Adicionar funcionário</h3>
-          <p className="mt-1 text-sm text-slate-500">Equipe operacional e perfil de acesso são controles independentes.</p>
+          <p className="mt-1 text-sm text-slate-500">Equipe Liderança aplica automaticamente o perfil Admin.</p>
         </div>
         <EmployeeFields form={createForm} setForm={setCreateForm} />
         <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Adicionando...' : 'Adicionar funcionário'}</button>
@@ -333,7 +367,7 @@ function EmployeesTab({ resource, notify }) {
       <div className="card">
         <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <input className="field" placeholder="Buscar nome, login ou equipe" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="na">Não se aplica</option></select>
+          <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select>
           <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="admin">Admin</option><option value="somente_leitura">Somente leitura</option></select>
           <select className="field" value={active} onChange={(event) => setActive(event.target.value)}><option value="">Ativos e inativos</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
         </div>
@@ -344,7 +378,7 @@ function EmployeesTab({ resource, notify }) {
               {filtered.map((item) => (
                 <tr key={item.id}>
                   <td><strong>{item.nome}</strong><small>ID {item.id} · {item.ad_login || 'Sem login AD'}</small></td>
-                  <td>{item.equipe === 'na' ? 'Não se aplica' : item.equipe.toUpperCase()}</td>
+                  <td>{teamLabel(item.equipe)}</td>
                   <td><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></td>
                   <td>{item.jornada_entrada} - {item.jornada_saida}</td>
                   <td><span className={`status-badge ${item.ativo ? 'status-success' : 'status-neutral'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>

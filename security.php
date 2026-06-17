@@ -114,7 +114,16 @@ function validate_equipe($equipe) {
 
 function validate_funcionario_equipe($equipe) {
     $equipe = strtolower(trim((string)$equipe));
-    return in_array($equipe, ['n1', 'n2', 'na'], true) ? $equipe : null;
+    $legacy = [
+        'na' => 'lideranca',
+        'não se aplica' => 'lideranca',
+        'nao se aplica' => 'lideranca',
+        'nao_se_aplica' => 'lideranca',
+        'sem_equipe' => 'lideranca',
+        'liderança' => 'lideranca',
+    ];
+    $equipe = $legacy[$equipe] ?? $equipe;
+    return in_array($equipe, ['n1', 'n2', 'lideranca'], true) ? $equipe : null;
 }
 
 function validate_access_role($role) {

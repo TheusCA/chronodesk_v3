@@ -119,6 +119,28 @@ assert_same(
     'admin local usa allowlist explicita'
 );
 
+foreach (['adicionar_funcionario.php', 'atualizar_funcionario.php'] as $employeeEndpoint) {
+    $employeeEndpointSource = file_get_contents(__DIR__ . '/../api/' . $employeeEndpoint);
+    assert_same(true, is_string($employeeEndpointSource), 'le endpoint ' . $employeeEndpoint);
+    assert_same(
+        true,
+        strpos($employeeEndpointSource, 'verificar_admin_login_api()') !== false,
+        $employeeEndpoint . ' exige permissao admin'
+    );
+    assert_same(
+        true,
+        strpos($employeeEndpointSource, "\$equipe === 'lideranca'") !== false
+            && strpos($employeeEndpointSource, "\$access_role = 'admin'") !== false,
+        $employeeEndpoint . ' forca Lideranca como admin'
+    );
+}
+
+$adminPageSource = file_get_contents(__DIR__ . '/../frontend/src/pages/AdminPage.jsx');
+assert_same(true, is_string($adminPageSource), 'le AdminPage');
+assert_same(true, strpos($adminPageSource, 'Liderança') !== false, 'AdminPage exibe Lideranca');
+assert_same(false, strpos($adminPageSource, 'Não se aplica') !== false, 'AdminPage nao exibe Nao se aplica');
+assert_same(true, strpos($adminPageSource, "access_role: 'admin'") !== false, 'UI define admin ao selecionar Lideranca');
+
 foreach (['aprovar', 'rejeitar'] as $pauseDecision) {
     $decisionSource = file_get_contents(__DIR__ . '/../api/' . $pauseDecision . '_pausa.php');
     assert_same(true, is_string($decisionSource), "le endpoint de {$pauseDecision} pausa");
@@ -139,9 +161,20 @@ foreach (['aprovar', 'rejeitar'] as $pauseDecision) {
     );
 }
 
-assert_same('na', validate_funcionario_equipe('NA'), 'aceita equipe administrativa');
+assert_same('lideranca', validate_funcionario_equipe('Liderança'), 'aceita equipe Lideranca');
+assert_same('lideranca', validate_funcionario_equipe('Não se aplica'), 'normaliza equipe legada como Lideranca');
+assert_same(null, validate_funcionario_equipe('supervisao'), 'rejeita equipe desconhecida');
 assert_same('somente_leitura', validate_access_role('somente_leitura'), 'aceita perfil somente leitura');
 assert_same(null, validate_access_role('superadmin'), 'rejeita perfil desconhecido');
+
+$normalizedLeadership = normalizar_funcionario_array([
+    'id' => 998,
+    'nome' => 'Lider QA',
+    'equipe' => 'lideranca',
+    'access_role' => 'tecnico',
+]);
+assert_same('lideranca', $normalizedLeadership['equipe'], 'normaliza funcionario Lideranca');
+assert_same('admin', $normalizedLeadership['access_role'], 'Lideranca recebe perfil admin no backend');
 
 putenv('AD_CREDENTIAL_PROVIDER=none');
 assert_same('none', AdCredentialProviderFactory::fromEnvironment()->source(), 'provider AD desabilitado por padrao');
@@ -229,11 +262,30 @@ assert_same(143, $normalizedCriticalDurations[':room_duration_minutes'], 'aceita
 $normalizedPartialCritical = $normalizeCritical->invoke($criticalService, [
     'incident_number' => 'INC-PARCIAL',
     'room_date' => '2026-06-15',
+    'title' => '',
+    'summary' => '',
 ]);
 assert_same('INC-PARCIAL', $normalizedPartialCritical[':incident_number'], 'aceita chamado critico parcial');
+assert_same('INC-PARCIAL', $normalizedPartialCritical[':title'], 'titulo legado vazio deriva do INCIDENTE');
+assert_same('INC-PARCIAL', $normalizedPartialCritical[':summary'], 'sumario legado vazio deriva do INCIDENTE');
 assert_same(null, $normalizedPartialCritical[':incident_opened_at'], 'chamado parcial nao exige hora de abertura');
 assert_same(null, $normalizedPartialCritical[':room_opening_duration_minutes'], 'chamado parcial nao calcula abertura sem horarios');
 assert_same(null, $normalizedPartialCritical[':room_duration_minutes'], 'chamado parcial nao calcula sala sem horarios');
+
+foreach ([
+    'ServiceNow' => 'servicenow',
+    'Teams' => 'teams',
+    'Outros' => 'other',
+    'jira' => 'other',
+    'manual' => 'other',
+] as $sourceInput => $expectedSource) {
+    $normalizedSource = $normalizeCritical->invoke($criticalService, [
+        'incident_number' => 'INC-SOURCE-' . $expectedSource,
+        'room_date' => '2026-06-15',
+        'source' => $sourceInput,
+    ]);
+    assert_same($expectedSource, $normalizedSource[':source'], 'normaliza origem ' . $sourceInput);
+}
 
 $normalizedExcelCritical = $normalizeCritical->invoke($criticalService, [
     'incident_number' => 'INC-EXCEL',
@@ -294,6 +346,8 @@ $shiftService = new ShiftAttachmentService(
 );
 $safeShiftName = new ReflectionMethod(ShiftAttachmentService::class, 'safeName');
 $safeShiftName->setAccessible(true);
+assert_same(true, in_array('xls', ShiftAttachmentService::ALLOWED_EXTENSIONS, true), 'feed de escalas aceita XLS');
+assert_same(true, in_array('png', ShiftAttachmentService::ALLOWED_EXTENSIONS, true), 'feed de escalas aceita PNG');
 $shiftExecutableRejected = false;
 try {
     $safeShiftName->invoke($shiftService, 'escala.php.png');
@@ -301,6 +355,38 @@ try {
     $shiftExecutableRejected = true;
 }
 assert_same(true, $shiftExecutableRejected, 'feed de escalas rejeita double extension executavel');
+
+$shiftSvgRejected = false;
+try {
+    $safeShiftName->invoke($shiftService, 'escala.svg');
+} catch (ReflectionException | InvalidArgumentException $error) {
+    $shiftSvgRejected = true;
+}
+assert_same(true, $shiftSvgRejected, 'feed de escalas rejeita SVG');
+
+$shiftContentValidation = new ReflectionMethod(ShiftAttachmentService::class, 'validateContent');
+$shiftContentValidation->setAccessible(true);
+$invalidXls = tempnam(sys_get_temp_dir(), 'shift-invalid-xls-');
+file_put_contents($invalidXls, '<html><script>alert(1)</script></html>');
+$invalidXlsRejected = false;
+try {
+    $shiftContentValidation->invoke($shiftService, $invalidXls, 'xls');
+} catch (ReflectionException | InvalidArgumentException $error) {
+    $invalidXlsRejected = true;
+}
+assert_same(true, $invalidXlsRejected, 'feed de escalas rejeita XLS sem assinatura binaria');
+@unlink($invalidXls);
+
+$shiftManagerCheck = new ReflectionMethod(ShiftAttachmentService::class, 'assertManager');
+$shiftManagerCheck->setAccessible(true);
+$shiftManagerCheck->invoke($shiftService, ['role' => 'admin', 'username' => 'qa-admin']);
+$shiftGestorDenied = false;
+try {
+    $shiftManagerCheck->invoke($shiftService, ['role' => 'gestor', 'username' => 'qa-gestor']);
+} catch (ReflectionException | DomainException $error) {
+    $shiftGestorDenied = true;
+}
+assert_same(true, $shiftGestorDenied, 'feed de escalas publica somente admin');
 
 $shiftStorageValidation = new ReflectionMethod(ShiftAttachmentService::class, 'ensurePrivateDirectory');
 $shiftStorageValidation->setAccessible(true);
@@ -318,6 +404,16 @@ try {
 assert_same(true, $projectStorageRejected, 'feed de escalas rejeita storage dentro do projeto');
 @rmdir($unsafeShiftStorage . DIRECTORY_SEPARATOR . 'aa');
 @rmdir($unsafeShiftStorage);
+
+$shiftApiSource = file_get_contents(__DIR__ . '/../api/portal/shift_attachments.php');
+$shiftPageSource = file_get_contents(__DIR__ . '/../frontend/src/pages/ShiftSchedulesPage.jsx');
+$navigationSource = file_get_contents(__DIR__ . '/../frontend/src/lib/navigation.js');
+assert_same(true, is_string($shiftApiSource) && is_string($shiftPageSource) && is_string($navigationSource), 'le feed de escalas');
+assert_same(true, strpos($shiftApiSource, "\$role === 'admin'") !== false, 'endpoint de escalas mostra upload apenas para admin');
+assert_same(true, strpos($shiftPageSource, 'Escalas de Sábado') !== false, 'feed foi renomeado para Escalas de Sabado');
+assert_same(true, strpos($navigationSource, 'Escalas de Sábado') !== false, 'menu foi renomeado para Escalas de Sabado');
+assert_same(false, strpos($shiftPageSource, 'Escala de turnos') !== false, 'feed nao exibe texto antigo de turnos');
+assert_same(true, strpos($shiftPageSource, "'.xls'") !== false, 'frontend aceita XLS no upload de escalas');
 
 $criticalNestedRejected = false;
 try {
@@ -374,9 +470,19 @@ assert_same(
 
 $appSource = file_get_contents(__DIR__ . '/../frontend/src/App.jsx');
 $loginPageSource = file_get_contents(__DIR__ . '/../frontend/src/pages/LoginPage.jsx');
+$loginCiSourceFrontend = file_get_contents(__DIR__ . '/../frontend/src/components/LoginCI.jsx');
 assert_same(true, is_string($appSource) && is_string($loginPageSource), 'le frontend de login');
 assert_same(false, strpos($appSource, "post('login_admin.php'") !== false, 'frontend nao chama login administrativo duplicado');
 assert_same(false, strpos($loginPageSource, 'LoginAdmin') !== false, 'tela de login nao renderiza card administrativo duplicado');
+assert_same(false, strpos($loginCiSourceFrontend, 'perfil e as permiss') !== false, 'login nao exibe texto tecnico de perfil/permissao');
+
+$scheduleApiSource = file_get_contents(__DIR__ . '/../api/portal/schedules.php');
+$operationalSource = file_get_contents(__DIR__ . '/../services/OperationalService.php');
+assert_same(true, is_string($scheduleApiSource) && is_string($operationalSource), 'le backend de escala presencial');
+assert_same(true, strpos($scheduleApiSource, "\$action === 'remove_rule'") !== false, 'endpoint possui acao para remover regra de escala');
+assert_same(true, strpos($scheduleApiSource, "\$role !== 'admin'") !== false, 'remocao de regra exige admin');
+assert_same(true, strpos($operationalSource, 'replace_existing') !== false, 'substituicao de regra exige confirmacao explicita');
+assert_same(true, strpos($operationalSource, 'activeScheduleRulesForEmployee') !== false, 'backend verifica regra ativa por colaborador');
 
 $documentService = new DocumentService(
     new QaTransactionPdo(),

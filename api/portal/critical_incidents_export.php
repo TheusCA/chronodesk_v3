@@ -27,6 +27,9 @@ try {
         $values = [];
         foreach ($columns as $field) {
             $value = $row[$field] ?? '';
+            if ($field === 'source') {
+                $value = CriticalIncidentService::sourceLabel($value);
+            }
             if (in_array($field, ['room_opening_duration_minutes', 'room_duration_minutes'], true)
                 && $value !== null
                 && $value !== ''

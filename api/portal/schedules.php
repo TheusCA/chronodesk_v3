@@ -48,6 +48,23 @@ try {
         audit_log('SCHEDULE_RULE_SAVED', 'Regra de escala salva. ID ' . $id, 'WARNING');
         json_response(['sucesso' => true, 'id' => $id, 'mensagem' => 'Regra de escala salva.']);
     }
+    if ($action === 'remove_rule') {
+        if ($role !== 'admin') {
+            audit_log('SCHEDULE_RULE_REMOVE_DENIED', 'Perfil sem permissao tentou remover regra de escala.', 'WARNING');
+            json_response(['sucesso' => false, 'mensagem' => 'Apenas administradores podem remover regras de escala.'], 403);
+        }
+        $employeeId = filter_var(
+            $data['employee_id'] ?? null,
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1]]
+        );
+        if (!$employeeId) {
+            throw new InvalidArgumentException('Colaborador invalido.');
+        }
+        $count = $service->removeScheduleRule((int)$employeeId, portal_username());
+        audit_log('SCHEDULE_RULE_REMOVED', 'Regra de escala removida para colaborador ID ' . (int)$employeeId, 'WARNING');
+        json_response(['sucesso' => true, 'removed' => $count, 'mensagem' => 'Regra de escala removida.']);
+    }
     if ($action === 'exception') {
         $id = $service->saveScheduleException($data, portal_username());
         audit_log('SCHEDULE_EXCEPTION_SAVED', 'Excecao de escala salva. ID ' . $id, 'WARNING');

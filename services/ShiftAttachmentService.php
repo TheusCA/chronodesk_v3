@@ -4,13 +4,19 @@ require_once __DIR__ . '/../db.php';
 final class ShiftAttachmentService {
     public const MAX_FILE_BYTES = 10485760;
     public const MAX_REQUEST_BYTES = 12582912;
-    public const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'pdf', 'csv', 'xlsx'];
+    public const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'pdf', 'csv', 'xls', 'xlsx'];
     private const MIME_TYPES = [
-        'png' => ['image/png'],
-        'jpg' => ['image/jpeg'],
-        'jpeg' => ['image/jpeg'],
+        'png' => ['image/png', 'image/x-png'],
+        'jpg' => ['image/jpeg', 'image/pjpeg'],
+        'jpeg' => ['image/jpeg', 'image/pjpeg'],
         'pdf' => ['application/pdf'],
         'csv' => ['text/csv', 'text/plain', 'application/csv'],
+        'xls' => [
+            'application/vnd.ms-excel',
+            'application/vnd.ms-office',
+            'application/x-ole-storage',
+            'application/octet-stream',
+        ],
         'xlsx' => [
             'application/zip',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -57,7 +63,7 @@ final class ShiftAttachmentService {
             $params[':search_notes'] = $value;
             $params[':search_file'] = $value;
         }
-        $stmt = $this->pdo->prepare($sql . ' ORDER BY reference_month DESC, uploaded_at DESC, id DESC LIMIT 200');
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY uploaded_at DESC, id DESC LIMIT 200');
         $stmt->execute($params);
         return $stmt->fetchAll();
     }
@@ -69,29 +75,35 @@ final class ShiftAttachmentService {
                 throw new InvalidArgumentException('Estrutura de upload invalida.');
             }
         }
-        if ((int)$file['error'] !== UPLOAD_ERR_OK || !is_uploaded_file((string)$file['tmp_name'])) {
+        if ((int)$file['error'] !== UPLOAD_ERR_OK) {
+            if (in_array((int)$file['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) {
+                throw new LengthException('Arquivo acima do limite de 10 MB.');
+            }
+            throw new InvalidArgumentException('Selecione um arquivo para publicar.');
+        }
+        if (!is_uploaded_file((string)$file['tmp_name'])) {
             throw new InvalidArgumentException('O upload nao foi recebido corretamente.');
         }
         $originalName = $this->safeName((string)$file['name']);
         $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
         if (!in_array($extension, self::ALLOWED_EXTENSIONS, true)) {
-            if ($extension === 'xls') {
-                throw new DomainException('XLS legado nao e aceito. Converta a escala para XLSX ou CSV.');
-            }
-            throw new InvalidArgumentException('Formato de escala nao permitido.');
+            throw new InvalidArgumentException('Formato nao permitido. Envie PNG, JPG, JPEG, PDF, CSV, XLS ou XLSX.');
         }
         $size = (int)$file['size'];
-        if ($size < 1 || $size > self::MAX_FILE_BYTES) {
-            throw new LengthException('O arquivo esta vazio ou excede o limite de 10 MB.');
+        if ($size < 1) {
+            throw new InvalidArgumentException('Selecione um arquivo para publicar.');
+        }
+        if ($size > self::MAX_FILE_BYTES) {
+            throw new LengthException('Arquivo acima do limite de 10 MB.');
         }
         $path = (string)$file['tmp_name'];
         $mime = $this->mime($path);
         if (!in_array($mime, self::MIME_TYPES[$extension], true)) {
-            throw new InvalidArgumentException('O conteudo nao corresponde a extensao informada.');
+            throw new InvalidArgumentException('Formato nao permitido. Envie PNG, JPG, JPEG, PDF, CSV, XLS ou XLSX.');
         }
         $this->validateContent($path, $extension);
 
-        $title = $this->text($metadata['title'] ?? null, 180);
+        $title = $this->text($metadata['title'] ?? null, 180, false, 'Titulo e obrigatorio.');
         $month = $this->month((string)($metadata['reference_month'] ?? ''));
         $notes = $this->text($metadata['notes'] ?? '', 2000, true);
         $storedName = bin2hex(random_bytes(32)) . '.' . $extension;
@@ -177,8 +189,16 @@ final class ShiftAttachmentService {
         }
         if ($extension === 'csv') {
             $content = file_get_contents($path, false, null, 0, min((int)filesize($path), 1048576));
-            if (!is_string($content) || str_contains($content, "\0")) {
+            if (!is_string($content) || strpos($content, "\0") !== false) {
                 throw new InvalidArgumentException('CSV invalido ou binario.');
+            }
+        }
+        if ($extension === 'xls') {
+            $handle = fopen($path, 'rb');
+            $signature = $handle ? fread($handle, 8) : false;
+            if ($handle) fclose($handle);
+            if ($signature !== "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1") {
+                throw new InvalidArgumentException('Planilha XLS invalida.');
             }
         }
         if ($extension === 'xlsx') {
@@ -204,19 +224,19 @@ final class ShiftAttachmentService {
             $protectedRoots[] = realpath($documentRoot);
         }
         foreach (array_filter($protectedRoots, 'is_string') as $protectedRoot) {
-            if ($root === $protectedRoot || str_starts_with($root, $protectedRoot . DIRECTORY_SEPARATOR)) {
+            if ($root === $protectedRoot || strpos($root, $protectedRoot . DIRECTORY_SEPARATOR) === 0) {
                 throw new RuntimeException('Storage de escalas deve ficar fora do projeto e do webroot.');
             }
         }
     }
 
     private function resolvePath(string $key): string {
-        if (!preg_match('#^[a-f0-9]{2}/[a-f0-9]{64}\.(png|jpe?g|pdf|csv|xlsx)$#', $key)) {
+        if (!preg_match('#^[a-f0-9]{2}/[a-f0-9]{64}\.(png|jpe?g|pdf|csv|xls|xlsx)$#', $key)) {
             throw new RuntimeException('Chave de storage invalida.');
         }
         $root = realpath($this->storageRoot);
         $path = $root !== false ? realpath($root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $key)) : false;
-        if ($root === false || $path === false || !str_starts_with($path, $root . DIRECTORY_SEPARATOR)) {
+        if ($root === false || $path === false || strpos($path, $root . DIRECTORY_SEPARATOR) !== 0) {
             throw new RuntimeException('Caminho de storage invalido.');
         }
         return $path;
@@ -226,8 +246,8 @@ final class ShiftAttachmentService {
         if (
             $name === ''
             || strlen($name) > 180
-            || str_contains($name, '/')
-            || str_contains($name, '\\')
+            || strpos($name, '/') !== false
+            || strpos($name, '\\') !== false
             || preg_match('/\.(php|phtml|phar|js|html?|svg|exe|bat|cmd|ps1|sh|jar|msi|dll|zip|rar|7z)(?:\.|$)/i', $name)
         ) {
             throw new InvalidArgumentException('Nome de arquivo invalido.');
@@ -236,9 +256,9 @@ final class ShiftAttachmentService {
     }
 
     private function isAbsolutePath(string $path): bool {
-        return str_starts_with($path, DIRECTORY_SEPARATOR)
+        return strpos($path, DIRECTORY_SEPARATOR) === 0
             || preg_match('/^[A-Za-z]:[\\\\\/]/', $path) === 1
-            || str_starts_with($path, '\\\\');
+            || strpos($path, '\\\\') === 0;
     }
 
     private function mime(string $path): string {
@@ -263,17 +283,17 @@ final class ShiftAttachmentService {
         return $value;
     }
 
-    private function text($value, int $max, bool $empty = false): string {
+    private function text($value, int $max, bool $empty = false, string $requiredMessage = 'Campo obrigatorio nao informado.'): string {
         if (!is_scalar($value) && $value !== null) throw new InvalidArgumentException('Texto invalido.');
         $text = trim((string)$value);
-        if (!$empty && $text === '') throw new InvalidArgumentException('Campo obrigatorio nao informado.');
+        if (!$empty && $text === '') throw new InvalidArgumentException($requiredMessage);
         $length = function_exists('mb_strlen') ? mb_strlen($text, 'UTF-8') : strlen($text);
         if ($length > $max) throw new InvalidArgumentException('Texto excede o limite.');
         return $text;
     }
 
     private function assertManager(array $actor): void {
-        if (!in_array($actor['role'] ?? '', ['admin', 'gestor'], true)) {
+        if (($actor['role'] ?? '') !== 'admin') {
             throw new DomainException('Seu perfil nao pode publicar escalas.');
         }
     }

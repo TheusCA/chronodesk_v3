@@ -16,7 +16,7 @@ try {
     header('Content-Length: ' . (int)$item['size_bytes']);
     $inline = isset($_GET['preview'])
         && $_GET['preview'] === '1'
-        && in_array($item['extension'], ['png', 'jpg', 'jpeg'], true);
+        && in_array($item['extension'], ['png', 'jpg', 'jpeg', 'pdf'], true);
     header('Content-Disposition: ' . ($inline ? 'inline' : 'attachment') . '; filename="' . addcslashes($name, "\"\\") . '"; filename*=UTF-8\'\''
         . rawurlencode($name));
     header('Cache-Control: private, no-store, no-cache, must-revalidate');

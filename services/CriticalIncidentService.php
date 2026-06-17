@@ -32,6 +32,7 @@ final class CriticalIncidentService {
     public const EXPORT_COLUMNS = [
         'INCIDENTE' => 'incident_number',
         'Data da Sala' => 'room_date',
+        'Origem' => 'source',
         'Hora de abertura Incidente' => 'incident_opened_at',
         'Hora report da operação' => 'operation_reported_at',
         'Hora abertura sala' => 'room_opened_at',
@@ -328,6 +329,17 @@ final class CriticalIncidentService {
         return $stmt->fetchAll();
     }
 
+    public static function sourceLabel($value): string {
+        $source = is_string($value) ? strtolower(trim($value)) : '';
+        if ($source === 'servicenow') {
+            return 'ServiceNow';
+        }
+        if ($source === 'teams') {
+            return 'Teams';
+        }
+        return 'Outros';
+    }
+
     public static function assertImportRowsShape(array $rows): void {
         if ($rows === [] || count($rows) > self::MAX_IMPORT_ROWS || !self::isList($rows)) {
             throw new InvalidArgumentException('Quantidade ou estrutura de linhas invalida.');
@@ -526,13 +538,9 @@ final class CriticalIncidentService {
             ':sector' => $this->nullableText($data['sector'] ?? null, 160),
             ':sdk_activity' => $this->nullableText($data['sdk_activity'] ?? $data['actions_taken'] ?? null, 12000),
             ':ticket_number' => $incidentNumber,
-            ':source' => $this->enum($data['source'] ?? 'manual', self::SOURCES, 'Origem'),
-            ':title' => $this->requiredText(
-                $data['title'] ?? $roomDescription ?? $incidentNumber,
-                180,
-                'Titulo'
-            ),
-            ':summary' => $this->nullableText($data['summary'] ?? $roomDescription, 4000),
+            ':source' => $this->source($data['source'] ?? 'other'),
+            ':title' => $this->nullableText($data['title'] ?? null, 180) ?? $roomDescription ?? $incidentNumber,
+            ':summary' => $this->nullableText($data['summary'] ?? null, 4000) ?? $roomDescription ?? $incidentNumber,
             ':severity' => $this->enum($data['severity'] ?? 'high', self::SEVERITIES, 'Criticidade'),
             ':status' => $this->enum($data['status'] ?? 'open', self::STATUSES, 'Status'),
             ':opened_at' => $incidentOpenedAt ?? ($roomDate . ' 00:00:00'),
@@ -637,12 +645,20 @@ final class CriticalIncidentService {
         foreach ([
             'status' => [self::STATUSES, 'status'],
             'severity' => [self::SEVERITIES, 'severity'],
-            'source' => [self::SOURCES, 'source'],
         ] as $filter => [$allowlist, $column]) {
             if (isset($filters[$filter]) && $filters[$filter] !== '') {
                 $value = $this->enum($filters[$filter], $allowlist, ucfirst($filter));
                 $where .= " AND {$column} = :{$filter}";
                 $params[":{$filter}"] = $value;
+            }
+        }
+        if (isset($filters['source']) && $filters['source'] !== '') {
+            $source = $this->source((string)$filters['source']);
+            if ($source === 'other') {
+                $where .= ' AND source IN ("other", "manual", "jira")';
+            } else {
+                $where .= ' AND source = :source';
+                $params[':source'] = $source;
             }
         }
         foreach ([
@@ -845,6 +861,24 @@ final class CriticalIncidentService {
             throw new InvalidArgumentException("{$label} invalido.");
         }
         return $value;
+    }
+
+    private function source($value): string {
+        if (!is_string($value)) {
+            throw new InvalidArgumentException('Origem invalida.');
+        }
+        $source = strtolower(trim($value));
+        $source = strtr($source, [
+            'servicenow' => 'servicenow',
+            'service now' => 'servicenow',
+            'teams' => 'teams',
+            'outros' => 'other',
+            'outro' => 'other',
+        ]);
+        if (in_array($source, ['jira', 'manual'], true)) {
+            return 'other';
+        }
+        return $this->enum($source, self::SOURCES, 'Origem');
     }
 
     private function ownerLogin($value): ?string {

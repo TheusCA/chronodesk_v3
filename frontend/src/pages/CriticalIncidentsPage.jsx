@@ -13,7 +13,11 @@ import {
 const competency = competencyFor()
 const severityOptions = ['low', 'medium', 'high', 'critical']
 const statusOptions = ['open', 'in_progress', 'war_room', 'mitigated', 'resolved', 'cancelled']
-const sourceOptions = ['servicenow', 'jira', 'teams', 'manual', 'other']
+const sourceOptions = [
+  { value: 'servicenow', label: 'ServiceNow' },
+  { value: 'teams', label: 'Teams' },
+  { value: 'other', label: 'Outros' },
+]
 
 const emptyIncident = {
   incident_number: '',
@@ -118,6 +122,12 @@ function IncidentBadge({ value }) {
   return <span className={`status-badge ${badgeTone(value)}`}>{labels[value] || value}</span>
 }
 
+function sourceLabel(value) {
+  if (value === 'servicenow') return 'ServiceNow'
+  if (value === 'teams') return 'Teams'
+  return 'Outros'
+}
+
 function SummaryCard({ label, value, tone = 'text-white' }) {
   return (
     <article className="card">
@@ -202,7 +212,7 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage }) {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <label className="label">INCIDENTE *<input className="field mt-2" maxLength="100" required value={form.incident_number} onChange={(event) => update('incident_number', event.target.value)} /></label>
           <label className="label">Data da Sala *<input className="field mt-2" required type="date" value={form.room_date} onChange={(event) => update('room_date', event.target.value)} /></label>
-          <label className="label">Origem<select className="field mt-2" value={form.source} onChange={(event) => update('source', event.target.value)}>{sourceOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
+          <label className="label">Origem<select className="field mt-2" value={sourceLabel(form.source) === 'Outros' ? 'other' : form.source} onChange={(event) => update('source', event.target.value)}>{sourceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           <label className="label">Criticidade<select className="field mt-2" value={form.severity} onChange={(event) => update('severity', event.target.value)}>{severityOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
           {canManage ? (
             <label className="label">Status<select className="field mt-2" value={form.status} onChange={(event) => update('status', event.target.value)}>{statusOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
@@ -262,7 +272,7 @@ function IncidentDetails({ item, onClose }) {
           <div>
             <div className="flex flex-wrap gap-2"><IncidentBadge value={item.severity} /><IncidentBadge value={item.status} /></div>
             <h2 className="mt-4 text-xl font-bold text-white">{item.incident_number || item.ticket_number}</h2>
-            <p className="mt-2 text-sm text-slate-500">Sala em {item.room_date} / incidente aberto em {formatDateTime(item.incident_opened_at || item.opened_at)}</p>
+            <p className="mt-2 text-sm text-slate-500">Sala em {item.room_date} / origem {sourceLabel(item.source)} / incidente aberto em {formatDateTime(item.incident_opened_at || item.opened_at)}</p>
           </div>
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
         </div>
@@ -382,6 +392,7 @@ export function CriticalIncidentsPage({ session, notify }) {
     to: '',
     status: '',
     severity: '',
+    source: '',
     responsible_area: '',
     team: '',
     ticket_number: '',
@@ -471,6 +482,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         <label className="label">Fim<input className="field mt-2" min={filters.from} type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, competency: '', to: event.target.value })} /></label>
         <label className="label">Status<select className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option>{statusOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
         <label className="label">Criticidade<select className="field mt-2" value={filters.severity} onChange={(event) => setFilters({ ...filters, severity: event.target.value })}><option value="">Todas</option>{severityOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
+        <label className="label">Origem<select className="field mt-2" value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Todas</option>{sourceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
         <label className="label">Chamado<input className="field mt-2" maxLength="100" value={filters.ticket_number} onChange={(event) => setFilters({ ...filters, ticket_number: event.target.value })} /></label>
         <label className="label">Area responsavel<input className="field mt-2" maxLength="120" value={filters.responsible_area} onChange={(event) => setFilters({ ...filters, responsible_area: event.target.value })} /></label>
         <label className="label">Equipe<input className="field mt-2" maxLength="120" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })} /></label>
@@ -485,7 +497,7 @@ export function CriticalIncidentsPage({ session, notify }) {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  <td><strong>{item.incident_number || item.ticket_number}</strong><small>{item.source}</small></td>
+                  <td><strong>{item.incident_number || item.ticket_number}</strong><small>{sourceLabel(item.source)}</small></td>
                   <td>{item.room_date || String(item.opened_at).slice(0, 10)}</td>
                   <td><strong>{item.room_description || item.title}</strong><small>{item.sdk_activity || 'Sem atividade SDK'}</small></td>
                   <td><strong>Abertura: {minutesLabel(item.room_opening_duration_minutes)}</strong><small>Sala: {minutesLabel(item.room_duration_minutes)}</small></td>

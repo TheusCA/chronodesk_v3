@@ -673,8 +673,8 @@ function normalizar_funcionario_array($func) {
 
     $access_role = validate_access_role($func['access_role'] ?? 'tecnico') ?? 'tecnico';
     $equipe = validate_funcionario_equipe($func['equipe'] ?? 'n1') ?? 'n1';
-    if ($access_role === 'tecnico' && $equipe === 'na') {
-        $equipe = 'n1';
+    if ($equipe === 'lideranca') {
+        $access_role = 'admin';
     }
 
     return [

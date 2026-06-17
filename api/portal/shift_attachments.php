@@ -12,7 +12,7 @@ try {
         json_response([
             'sucesso' => true,
             'items' => $service->list($_GET),
-            'can_upload' => in_array($role, ['admin', 'gestor'], true),
+            'can_upload' => $role === 'admin',
             'limits' => [
                 'max_file_bytes' => ShiftAttachmentService::MAX_FILE_BYTES,
                 'allowed_extensions' => ShiftAttachmentService::ALLOWED_EXTENSIONS,
@@ -32,8 +32,15 @@ try {
     }
     $item = $service->upload($_FILES['attachment'], $_POST, $actor);
     audit_log('SHIFT_ATTACHMENT_UPLOADED', 'Escala publicada. ID ' . $item['id'], 'WARNING');
-    json_response(['sucesso' => true, 'item' => $item, 'mensagem' => 'Escala publicada.'], 201);
+    json_response(['sucesso' => true, 'item' => $item, 'mensagem' => 'Escala publicada com sucesso.'], 201);
 } catch (Throwable $error) {
     audit_log('SHIFT_ATTACHMENT_REJECTED', get_class($error) . ': ' . $error->getMessage(), 'WARNING');
+    if ($error instanceof RuntimeException) {
+        error_log('[SHIFT_ATTACHMENT_UPLOAD] ' . get_class($error) . ': ' . $error->getMessage());
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Nao foi possivel salvar o arquivo. Tente novamente ou acione o suporte.',
+        ], 500);
+    }
     portal_operational_error($error);
 }
