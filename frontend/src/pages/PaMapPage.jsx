@@ -33,7 +33,6 @@ function emptyForm(paNumber, date) {
     pa_number: paNumber,
     employee_id: '',
     valid_from: date,
-    valid_until: '',
     notes: '',
   }
 }
@@ -44,9 +43,15 @@ function formFromAssignment(assignment, date) {
     pa_number: assignment.pa_number,
     employee_id: assignment.employee_id,
     valid_from: assignment.valid_from || date,
-    valid_until: assignment.valid_until || '',
     notes: assignment.notes || '',
   }
+}
+
+function teamLabel(team) {
+  if (team === 'n1') return 'N1'
+  if (team === 'n2') return 'N2'
+  if (team === 'lideranca') return 'Liderança'
+  return String(team || '').toUpperCase()
 }
 
 function AssignmentChip({ item }) {
@@ -108,14 +113,14 @@ function AssignmentList({ assignments, canManage, onEdit, onRemove, saving }) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-slate-100">{item.employee_name}</p>
-              <p className="mt-1 text-xs uppercase tracking-wider text-slate-600">Equipe {item.team}</p>
+              <p className="mt-1 text-xs uppercase tracking-wider text-slate-600">Equipe {teamLabel(item.team)}</p>
             </div>
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${ruleTone[item.schedule_rule_type] || ruleTone.undefined}`}>
               {item.schedule_rule_label}
             </span>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            {item.valid_from} {item.valid_until ? `ate ${item.valid_until}` : 'sem data final'}
+            Desde {item.valid_from}
             {item.active_on_date ? ' - presencial na data filtrada' : ' - fora da escala presencial da data'}
           </p>
           {item.notes && <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400" title={item.notes}>{item.notes}</p>}
@@ -173,9 +178,8 @@ function PaModal({ pa, date, employees, canManage, onClose, onSave, onRemove, sa
               {editing && <button className="table-action" onClick={reset} type="button">Novo vinculo</button>}
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="label sm:col-span-2">Colaborador<select className="field mt-2" required value={form.employee_id} onChange={(event) => update('employee_id', event.target.value)}><option value="">Selecione</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} - {employee.team.toUpperCase()} ({employee.schedule_rule_label})</option>)}</select></label>
+              <label className="label sm:col-span-2">Colaborador<select className="field mt-2" required value={form.employee_id} onChange={(event) => update('employee_id', event.target.value)}><option value="">Selecione</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} - {teamLabel(employee.team)} ({employee.schedule_rule_label})</option>)}</select></label>
               <label className="label">Inicio da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => update('valid_from', event.target.value)} /></label>
-              <label className="label">Fim da validade<input className="field mt-2" min={form.valid_from} type="date" value={form.valid_until} onChange={(event) => update('valid_until', event.target.value)} /></label>
               <label className="label sm:col-span-2">Observacao<textarea className="field mt-2 min-h-24" maxLength="1000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             </div>
             <div className="mt-5 flex justify-end gap-3">
@@ -246,7 +250,7 @@ export function PaMapPage({ notify }) {
         </div>
         <div className="card grid gap-3 p-4 sm:grid-cols-2 lg:w-[520px]">
           <label className="label">Data<input className="field mt-2" type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} /></label>
-          <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
+          <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select></label>
         </div>
       </section>
 

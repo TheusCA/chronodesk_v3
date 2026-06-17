@@ -50,19 +50,28 @@ final class PaMapService {
     public function eligibleEmployees(string $date, ?string $team = null): array {
         $date = $this->date($date, 'Data');
         $team = $this->team($team, true);
-        $sql = 'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login
+        $sql = 'SELECT id, nome AS name, equipe AS team, ad_login
                 FROM funcionarios
-                WHERE ativo = 1 AND LOWER(equipe) IN ("n1", "n2")';
+                WHERE ativo = 1';
         $params = [];
         if ($team) {
-            $sql .= ' AND LOWER(equipe) = :team';
-            $params[':team'] = $team;
+            $sql .= ' AND LOWER(equipe) IN (' . $this->teamSqlAliases($team) . ')';
         }
         $stmt = $this->pdo->prepare($sql . ' ORDER BY nome');
         $stmt->execute($params);
         $items = [];
+        $seen = [];
         foreach ($stmt->fetchAll() as $row) {
+            $normalizedTeam = $this->normalizeTeam($row['team'] ?? null);
+            if ($normalizedTeam === null || ($team !== null && $normalizedTeam !== $team)) {
+                continue;
+            }
+            if (isset($seen[(int)$row['id']])) {
+                continue;
+            }
+            $seen[(int)$row['id']] = true;
             $schedule = $this->scheduleForEmployee((int)$row['id'], $date);
+            $row['team'] = $normalizedTeam;
             $items[] = $row + [
                 'schedule_rule_type' => $schedule['rule_type'],
                 'schedule_rule_label' => $this->ruleLabel($schedule['rule_type']),
@@ -175,7 +184,7 @@ final class PaMapService {
     private function inventory(): array {
         try {
             $stmt = $this->pdo->query(
-                'SELECT pa_number, display_order, row_number, column_number, label, status
+                'SELECT pa_number, display_order, grid_row, grid_column, label, status
                  FROM portal_pa_inventory
                  WHERE active = 1
                  ORDER BY display_order, pa_number'
@@ -193,8 +202,8 @@ final class PaMapService {
             $items[] = [
                 'pa_number' => $paNumber,
                 'display_order' => $index + 1,
-                'row_number' => intdiv($index, 8) + 1,
-                'column_number' => ($index % 8) + 1,
+                'grid_row' => intdiv($index, 8) + 1,
+                'grid_column' => ($index % 8) + 1,
                 'label' => null,
                 'status' => 'active',
             ];
@@ -353,16 +362,21 @@ final class PaMapService {
     private function employee($id): array {
         $employeeId = $this->positiveInt($id);
         $stmt = $this->pdo->prepare(
-            'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login
+            'SELECT id, nome AS name, equipe AS team, ad_login
              FROM funcionarios
              WHERE id = :id AND ativo = 1
              LIMIT 1'
         );
         $stmt->execute([':id' => $employeeId]);
         $employee = $stmt->fetch();
-        if (!$employee || !in_array($employee['team'], ['n1', 'n2'], true)) {
+        if (!$employee) {
             throw new InvalidArgumentException('Colaborador ativo invalido.');
         }
+        $normalizedTeam = $this->normalizeTeam($employee['team'] ?? null);
+        if ($normalizedTeam === null) {
+            throw new InvalidArgumentException('Colaborador ativo invalido.');
+        }
+        $employee['team'] = $normalizedTeam;
         return $employee;
     }
 
@@ -523,10 +537,39 @@ final class PaMapService {
             return null;
         }
         $team = strtolower(trim((string)$value));
-        if (!in_array($team, ['n1', 'n2'], true)) {
+        if (!in_array($team, ['n1', 'n2', 'lideranca'], true)) {
             throw new InvalidArgumentException('Equipe invalida.');
         }
         return $team;
+    }
+
+    private function normalizeTeam($value): ?string {
+        $team = strtolower(trim((string)$value));
+        $team = strtr($team, [
+            ' ' => '_',
+            '-' => '_',
+            'ã' => 'a',
+            'á' => 'a',
+            'à' => 'a',
+            'â' => 'a',
+            'ç' => 'c',
+            'í' => 'i',
+            'ê' => 'e',
+        ]);
+        if ($team === 'n1' || $team === 'n2') {
+            return $team;
+        }
+        if (in_array($team, ['lideranca', 'lider', 'leadership', 'na', 'n_a', 'nao_se_aplica', 'não_se_aplica', 'sem_equipe'], true)) {
+            return 'lideranca';
+        }
+        return null;
+    }
+
+    private function teamSqlAliases(string $team): string {
+        if ($team === 'lideranca') {
+            return '"lideranca", "lider", "leadership", "na", "n_a", "nao_se_aplica", "não se aplica", "não_se_aplica", "sem_equipe", "sem equipe"';
+        }
+        return '"' . $team . '"';
     }
 
     private function positiveInt($value, bool $nullable = false): ?int {
