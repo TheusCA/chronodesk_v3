@@ -4,7 +4,14 @@ require_once __DIR__ . '/OperationalService.php';
 
 final class PaMapService {
     public const MAX_PAYLOAD_BYTES = 32768;
-    private const STATUSES = ['onsite', 'hybrid', 'remote', 'free', 'critical', 'unavailable'];
+
+    private const DEFAULT_PA_NUMBERS = [
+        '1732', '1731', '1730', '1729', '1728', '1727', '1726', '1725',
+        '1724', '1723', '1722', '1721', '1720', '1719', '1718', '1717',
+    ];
+    private const RULE_TYPES = [
+        'even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined',
+    ];
 
     private PDO $pdo;
 
@@ -15,23 +22,27 @@ final class PaMapService {
     public function list(array $filters): array {
         $date = $this->date($filters['date'] ?? date('Y-m-d'), 'Data');
         $team = $this->team($filters['team'] ?? null, true);
-        $sql = 'SELECT id, pa_number, work_date, shift_label, employee_id,
-                       employee_name, employee_login, team, status, schedule_status,
-                       schedule_label, notes, created_by, updated_by, created_at, updated_at
-                FROM portal_pa_map
-                WHERE record_status = "active" AND work_date = :work_date';
-        $params = [':work_date' => $date];
-        if ($team) {
-            $sql .= ' AND team = :team';
-            $params[':team'] = $team;
+        $inventory = $this->inventory();
+        $assignments = $this->assignmentsForMap($date, $team);
+        $legacy = $this->legacySpecificDateAssignments($date, $team);
+        $byPa = [];
+
+        foreach (array_merge($assignments, $legacy) as $assignment) {
+            $byPa[$assignment['pa_number']][] = $assignment;
         }
-        $stmt = $this->pdo->prepare($sql . ' ORDER BY pa_number, shift_label, employee_name');
-        $stmt->execute($params);
+
+        $pas = [];
+        foreach ($inventory as $pa) {
+            $pas[] = $pa + [
+                'assignments' => $byPa[$pa['pa_number']] ?? [],
+            ];
+        }
 
         return [
             'date' => $date,
             'team' => $team,
-            'items' => $stmt->fetchAll(),
+            'pas' => $pas,
+            'items' => array_merge($assignments, $legacy),
             'employees' => $this->eligibleEmployees($date, $team),
         ];
     }
@@ -53,6 +64,8 @@ final class PaMapService {
         foreach ($stmt->fetchAll() as $row) {
             $schedule = $this->scheduleForEmployee((int)$row['id'], $date);
             $items[] = $row + [
+                'schedule_rule_type' => $schedule['rule_type'],
+                'schedule_rule_label' => $this->ruleLabel($schedule['rule_type']),
                 'schedule_status' => $schedule['status'],
                 'schedule_label' => $schedule['label'],
                 'schedule_source' => $schedule['source'],
@@ -63,73 +76,77 @@ final class PaMapService {
 
     public function save(array $data, string $actor): array {
         return $this->atomic(function () use ($data, $actor): array {
+            if (!$this->tableExists('portal_pa_assignments')) {
+                throw new DomainException('Tabela de vinculos do Mapa de PA ainda nao foi criada.');
+            }
             $id = $this->positiveInt($data['id'] ?? null, true);
             $paNumber = $this->paNumber($data['pa_number'] ?? null);
-            $date = $this->date($data['work_date'] ?? date('Y-m-d'), 'Data');
-            $shiftLabel = $this->shiftLabel($data['shift_label'] ?? '');
             $employee = $this->employee($data['employee_id'] ?? null);
-            $status = $this->status($data['status'] ?? 'onsite');
+            $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? date('Y-m-d'), 'Inicio da validade');
+            $validUntil = $this->nullableDate($data['valid_until'] ?? null, 'Fim da validade');
+            if ($validUntil !== null && $validUntil < $validFrom) {
+                throw new InvalidArgumentException('Fim da validade nao pode ser anterior ao inicio.');
+            }
             $notes = $this->text($data['notes'] ?? '', 1000, true);
-            $schedule = $this->scheduleForEmployee((int)$employee['id'], $date);
+            $schedule = $this->scheduleForEmployee((int)$employee['id'], $validFrom);
             $warnings = $this->scheduleWarnings($schedule);
 
             if ($schedule['block']) {
                 throw new DomainException($schedule['message']);
             }
-            if (
-                $schedule['status'] === 'remote'
-                && empty($data['confirm_remote_allocation'])
-            ) {
+            if ($schedule['rule_type'] === 'always_remote' && empty($data['confirm_remote_allocation'])) {
                 throw new DomainException('Colaborador marcado como remoto nesta data. Confirme para alocar mesmo assim.');
             }
 
-            $this->assertNoConflict($paNumber, $date, $shiftLabel, (int)$employee['id'], $id);
+            $this->assertNoConflict(
+                $paNumber,
+                (int)$employee['id'],
+                $schedule['rule_type'],
+                $validFrom,
+                $validUntil,
+                $id
+            );
+
             $params = [
                 ':pa_number' => $paNumber,
-                ':work_date' => $date,
-                ':shift_label' => $shiftLabel,
                 ':employee_id' => (int)$employee['id'],
                 ':employee_name' => $employee['name'],
                 ':employee_login' => $employee['ad_login'],
                 ':team' => $employee['team'],
-                ':status' => $status,
-                ':schedule_status' => $schedule['status'],
-                ':schedule_label' => $schedule['label'],
+                ':schedule_rule_type' => $schedule['rule_type'],
+                ':valid_from' => $validFrom,
+                ':valid_until' => $validUntil,
                 ':notes' => $notes ?: null,
                 ':updated_by' => $actor,
             ];
 
             if ($id) {
                 $stmt = $this->pdo->prepare(
-                    'UPDATE portal_pa_map
+                    'UPDATE portal_pa_assignments
                      SET pa_number = :pa_number,
-                         work_date = :work_date,
-                         shift_label = :shift_label,
                          employee_id = :employee_id,
                          employee_name = :employee_name,
                          employee_login = :employee_login,
                          team = :team,
-                         status = :status,
-                         schedule_status = :schedule_status,
-                         schedule_label = :schedule_label,
+                         schedule_rule_type = :schedule_rule_type,
+                         valid_from = :valid_from,
+                         valid_until = :valid_until,
                          notes = :notes,
                          updated_by = :updated_by
-                     WHERE id = :id AND record_status = "active"'
+                     WHERE id = :id AND active = 1'
                 );
                 $stmt->execute($params + [':id' => $id]);
                 if ($stmt->rowCount() !== 1) {
-                    throw new DomainException('Alocacao de PA nao encontrada.');
+                    throw new DomainException('Vinculo de PA nao encontrado.');
                 }
             } else {
                 $stmt = $this->pdo->prepare(
-                    'INSERT INTO portal_pa_map
-                        (pa_number, work_date, shift_label, employee_id, employee_name,
-                         employee_login, team, status, schedule_status, schedule_label,
-                         notes, created_by, updated_by)
+                    'INSERT INTO portal_pa_assignments
+                        (pa_number, employee_id, employee_name, employee_login, team,
+                         schedule_rule_type, valid_from, valid_until, notes, created_by, updated_by)
                      VALUES
-                        (:pa_number, :work_date, :shift_label, :employee_id, :employee_name,
-                         :employee_login, :team, :status, :schedule_status, :schedule_label,
-                         :notes, :created_by, :updated_by)'
+                        (:pa_number, :employee_id, :employee_name, :employee_login, :team,
+                         :schedule_rule_type, :valid_from, :valid_until, :notes, :created_by, :updated_by)'
                 );
                 $stmt->execute($params + [':created_by' => $actor]);
                 $id = (int)$this->pdo->lastInsertId();
@@ -140,57 +157,197 @@ final class PaMapService {
     }
 
     public function remove(int $id, string $actor): void {
+        if (!$this->tableExists('portal_pa_assignments')) {
+            throw new DomainException('Tabela de vinculos do Mapa de PA ainda nao foi criada.');
+        }
         $id = $this->positiveInt($id);
         $stmt = $this->pdo->prepare(
-            'UPDATE portal_pa_map
-             SET record_status = "deleted", deleted_at = CURRENT_TIMESTAMP, updated_by = :updated_by
-             WHERE id = :id AND record_status = "active"'
+            'UPDATE portal_pa_assignments
+             SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_by = :updated_by
+             WHERE id = :id AND active = 1'
         );
         $stmt->execute([':updated_by' => $actor, ':id' => $id]);
         if ($stmt->rowCount() !== 1) {
-            throw new DomainException('Alocacao de PA nao encontrada.');
+            throw new DomainException('Vinculo de PA nao encontrado.');
         }
     }
 
-    private function assertNoConflict(string $paNumber, string $date, string $shiftLabel, int $employeeId, ?int $id): void {
-        $params = [
-            ':pa_number' => $paNumber,
-            ':work_date' => $date,
-            ':shift_label' => $shiftLabel,
-            ':id' => $id ?: 0,
-        ];
-        $stmt = $this->pdo->prepare(
-            'SELECT id FROM portal_pa_map
-             WHERE record_status = "active"
-               AND pa_number = :pa_number
-               AND work_date = :work_date
-               AND shift_label = :shift_label
-               AND id <> :id
-             LIMIT 1 FOR UPDATE'
-        );
-        $stmt->execute($params);
-        if ($stmt->fetchColumn()) {
-            throw new DomainException('Este PA ja possui colaborador nesta data e turno.');
+    private function inventory(): array {
+        try {
+            $stmt = $this->pdo->query(
+                'SELECT pa_number, display_order, row_number, column_number, label, status
+                 FROM portal_pa_inventory
+                 WHERE active = 1
+                 ORDER BY display_order, pa_number'
+            );
+            $items = $stmt->fetchAll();
+            if ($items !== []) {
+                return $items;
+            }
+        } catch (Throwable $error) {
+            error_log('[PA_MAP] Inventario indisponivel; usando PAs padrao.');
         }
 
+        $items = [];
+        foreach (self::DEFAULT_PA_NUMBERS as $index => $paNumber) {
+            $items[] = [
+                'pa_number' => $paNumber,
+                'display_order' => $index + 1,
+                'row_number' => intdiv($index, 8) + 1,
+                'column_number' => ($index % 8) + 1,
+                'label' => null,
+                'status' => 'active',
+            ];
+        }
+        return $items;
+    }
+
+    private function assignmentsForMap(string $date, ?string $team): array {
+        if (!$this->tableExists('portal_pa_assignments')) {
+            return [];
+        }
+        $sql = 'SELECT id, pa_number, employee_id, employee_name, employee_login,
+                       team, schedule_rule_type, valid_from, valid_until, notes,
+                       created_by, updated_by, created_at, updated_at
+                FROM portal_pa_assignments
+                WHERE active = 1
+                  AND valid_from <= :date_until
+                  AND (valid_until IS NULL OR valid_until >= :date_from)';
+        $params = [
+            ':date_from' => $date,
+            ':date_until' => $date,
+        ];
+        if ($team) {
+            $sql .= ' AND team = :team';
+            $params[':team'] = $team;
+        }
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY pa_number, employee_name');
+        $stmt->execute($params);
+
+        $items = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $items[] = $this->assignmentView($row, $date, 'assignment');
+        }
+        return $items;
+    }
+
+    private function legacySpecificDateAssignments(string $date, ?string $team): array {
+        if (!$this->tableExists('portal_pa_map')) {
+            return [];
+        }
+        $sql = 'SELECT id, pa_number, employee_id, employee_name, employee_login,
+                       team, schedule_status, schedule_label, notes, created_by,
+                       updated_by, created_at, updated_at
+                FROM portal_pa_map
+                WHERE record_status = "active" AND work_date = :work_date';
+        $params = [':work_date' => $date];
+        if ($team) {
+            $sql .= ' AND team = :team';
+            $params[':team'] = $team;
+        }
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY pa_number, employee_name');
+        $stmt->execute($params);
+
+        $items = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $ruleType = $this->scheduleForEmployee((int)$row['employee_id'], $date)['rule_type'];
+            $items[] = $this->assignmentView([
+                'id' => 'legacy-' . $row['id'],
+                'pa_number' => $row['pa_number'],
+                'employee_id' => $row['employee_id'],
+                'employee_name' => $row['employee_name'],
+                'employee_login' => $row['employee_login'],
+                'team' => $row['team'],
+                'schedule_rule_type' => $ruleType,
+                'valid_from' => $date,
+                'valid_until' => $date,
+                'notes' => $row['notes'],
+                'created_by' => $row['created_by'],
+                'updated_by' => $row['updated_by'],
+                'created_at' => $row['created_at'],
+                'updated_at' => $row['updated_at'],
+            ], $date, 'legacy');
+        }
+        return $items;
+    }
+
+    private function assignmentView(array $row, string $date, string $source): array {
+        $ruleType = $this->ruleType($row['schedule_rule_type'] ?? 'undefined');
+        $activeOnDate = $this->ruleActiveOnDate($ruleType, $date);
+        return $row + [
+            'source' => $source,
+            'schedule_rule_type' => $ruleType,
+            'schedule_rule_label' => $this->ruleLabel($ruleType),
+            'active_on_date' => $activeOnDate,
+            'presence_status' => $activeOnDate ? 'onsite' : ($ruleType === 'always_remote' ? 'remote' : 'offsite'),
+        ];
+    }
+
+    private function assertNoConflict(
+        string $paNumber,
+        int $employeeId,
+        string $ruleType,
+        string $validFrom,
+        ?string $validUntil,
+        ?int $id
+    ): void {
+        $rangeUntil = $validUntil ?? '9999-12-31';
         $stmt = $this->pdo->prepare(
-            'SELECT id FROM portal_pa_map
-             WHERE record_status = "active"
+            'SELECT id, pa_number
+             FROM portal_pa_assignments
+             WHERE active = 1
                AND employee_id = :employee_id
-               AND work_date = :work_date
-               AND shift_label = :shift_label
                AND id <> :id
+               AND valid_from <= :new_until
+               AND (valid_until IS NULL OR valid_until >= :new_from)
              LIMIT 1 FOR UPDATE'
         );
         $stmt->execute([
             ':employee_id' => $employeeId,
-            ':work_date' => $date,
-            ':shift_label' => $shiftLabel,
             ':id' => $id ?: 0,
+            ':new_until' => $rangeUntil,
+            ':new_from' => $validFrom,
         ]);
-        if ($stmt->fetchColumn()) {
-            throw new DomainException('Este colaborador ja esta alocado em outro PA nesta data e turno.');
+        if ($stmt->fetch()) {
+            throw new DomainException('Este colaborador ja possui vinculo ativo em outro PA no periodo.');
         }
+
+        $stmt = $this->pdo->prepare(
+            'SELECT id, schedule_rule_type, employee_name
+             FROM portal_pa_assignments
+             WHERE active = 1
+               AND pa_number = :pa_number
+               AND id <> :id
+               AND valid_from <= :new_until
+               AND (valid_until IS NULL OR valid_until >= :new_from)
+             FOR UPDATE'
+        );
+        $stmt->execute([
+            ':pa_number' => $paNumber,
+            ':id' => $id ?: 0,
+            ':new_until' => $rangeUntil,
+            ':new_from' => $validFrom,
+        ]);
+        foreach ($stmt->fetchAll() as $existing) {
+            if ($this->rulesConflict($ruleType, $this->ruleType($existing['schedule_rule_type']))) {
+                throw new DomainException('Conflito de escala no PA com ' . $existing['employee_name'] . '.');
+            }
+        }
+    }
+
+    private function rulesConflict(string $a, string $b): bool {
+        $a = $this->ruleType($a);
+        $b = $this->ruleType($b);
+        if ($a === 'always_remote' || $b === 'always_remote') {
+            return false;
+        }
+        if ($a === 'even_days' && $b === 'odd_days') {
+            return false;
+        }
+        if ($a === 'odd_days' && $b === 'even_days') {
+            return false;
+        }
+        return true;
     }
 
     private function employee($id): array {
@@ -215,6 +372,7 @@ final class PaMapService {
             $type = $exception['exception_type'];
             if (in_array($type, ['vacation', 'leave', 'absence', 'day_off'], true)) {
                 return [
+                    'rule_type' => 'undefined',
                     'status' => $type,
                     'label' => $type,
                     'source' => 'exception',
@@ -222,10 +380,14 @@ final class PaMapService {
                     'message' => 'Colaborador com ausencia/ferias nesta data.',
                 ];
             }
+        }
+
+        if (!$this->tableExists('portal_schedule_rules')) {
             return [
-                'status' => in_array($type, ['onsite', 'training', 'oncall'], true) ? 'onsite' : 'remote',
-                'label' => $type,
-                'source' => 'exception',
+                'rule_type' => 'undefined',
+                'status' => 'no_schedule',
+                'label' => 'Sem escala definida',
+                'source' => 'none',
                 'block' => false,
                 'message' => null,
             ];
@@ -235,26 +397,35 @@ final class PaMapService {
             'SELECT rule_type
              FROM portal_schedule_rules
              WHERE employee_id = :employee_id
-               AND effective_from <= :work_date
-               AND (effective_until IS NULL OR effective_until >= :work_date)
+               AND effective_from <= :work_date_from
+               AND (effective_until IS NULL OR effective_until >= :work_date_until)
              ORDER BY effective_from DESC, id DESC
              LIMIT 1'
         );
-        $stmt->execute([':employee_id' => $employeeId, ':work_date' => $date]);
+        $stmt->execute([
+            ':employee_id' => $employeeId,
+            ':work_date_from' => $date,
+            ':work_date_until' => $date,
+        ]);
         $rule = $stmt->fetchColumn();
         if (!$rule) {
             return [
+                'rule_type' => 'undefined',
                 'status' => 'no_schedule',
-                'label' => 'Sem escala confirmada',
+                'label' => 'Sem escala definida',
                 'source' => 'none',
                 'block' => false,
                 'message' => null,
             ];
         }
-        $presence = OperationalService::presenceForRule((string)$rule, $date);
+        $ruleType = $this->ruleType((string)$rule);
+        $presence = $ruleType === 'undefined'
+            ? 'no_schedule'
+            : OperationalService::presenceForRule($ruleType, $date);
         return [
+            'rule_type' => $ruleType,
             'status' => $presence,
-            'label' => $presence,
+            'label' => $this->ruleLabel($ruleType),
             'source' => 'rule',
             'block' => false,
             'message' => null,
@@ -262,6 +433,9 @@ final class PaMapService {
     }
 
     private function scheduleException(int $employeeId, string $date): ?array {
+        if (!$this->tableExists('portal_schedule_exceptions')) {
+            return null;
+        }
         $stmt = $this->pdo->prepare(
             'SELECT exception_type
              FROM portal_schedule_exceptions
@@ -274,13 +448,47 @@ final class PaMapService {
     }
 
     private function scheduleWarnings(array $schedule): array {
-        if ($schedule['status'] === 'remote') {
+        if ($schedule['rule_type'] === 'always_remote') {
             return ['Colaborador marcado como remoto nesta data.'];
         }
-        if ($schedule['status'] === 'no_schedule') {
-            return ['Colaborador sem escala confirmada nesta data.'];
+        if ($schedule['rule_type'] === 'undefined') {
+            return ['Colaborador sem escala definida.'];
         }
         return [];
+    }
+
+    private function ruleActiveOnDate(string $ruleType, string $date): bool {
+        $ruleType = $this->ruleType($ruleType);
+        if ($ruleType === 'always_onsite') {
+            return true;
+        }
+        if ($ruleType === 'always_remote' || $ruleType === 'undefined') {
+            return false;
+        }
+        $day = (int)substr($date, -2);
+        if ($ruleType === 'even_days') {
+            return $day % 2 === 0;
+        }
+        if ($ruleType === 'odd_days') {
+            return $day % 2 === 1;
+        }
+        return false;
+    }
+
+    private function ruleLabel(string $ruleType): string {
+        $labels = [
+            'even_days' => 'Dias pares',
+            'odd_days' => 'Dias impares',
+            'always_onsite' => 'Sempre presencial',
+            'always_remote' => 'Remoto',
+            'undefined' => 'Sem escala',
+        ];
+        return $labels[$this->ruleType($ruleType)];
+    }
+
+    private function ruleType($value): string {
+        $ruleType = strtolower(trim((string)$value));
+        return in_array($ruleType, self::RULE_TYPES, true) ? $ruleType : 'undefined';
     }
 
     private function paNumber($value): string {
@@ -289,25 +497,6 @@ final class PaMapService {
             throw new InvalidArgumentException('PA invalido.');
         }
         return strtoupper(trim($text));
-    }
-
-    private function status($value): string {
-        $status = strtolower(trim((string)$value));
-        if (!in_array($status, self::STATUSES, true)) {
-            throw new InvalidArgumentException('Status do PA invalido.');
-        }
-        return $status;
-    }
-
-    private function shiftLabel($value): string {
-        $text = $this->text($value, 40, true);
-        if ($text === '') {
-            return 'integral';
-        }
-        if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9 .:_-]{0,39}$/', $text)) {
-            throw new InvalidArgumentException('Turno invalido.');
-        }
-        return strtolower($text);
     }
 
     private function date($value, string $label): string {
@@ -320,6 +509,13 @@ final class PaMapService {
             throw new InvalidArgumentException("{$label} invalida.");
         }
         return $date->format('Y-m-d');
+    }
+
+    private function nullableDate($value, string $label): ?string {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        return $this->date($value, $label);
     }
 
     private function team($value, bool $nullable = false): ?string {
@@ -356,6 +552,16 @@ final class PaMapService {
             throw new InvalidArgumentException('Texto excede o limite permitido.');
         }
         return $text;
+    }
+
+    private function tableExists(string $table): bool {
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*)
+             FROM information_schema.TABLES
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name'
+        );
+        $stmt->execute([':table_name' => $table]);
+        return (int)$stmt->fetchColumn() > 0;
     }
 
     private function atomic(callable $callback) {
