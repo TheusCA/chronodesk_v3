@@ -115,15 +115,6 @@ export default function App() {
     })
   }
 
-  async function loginAdmin(credentials) {
-    return runAction(async () => {
-      const result = await post('login_admin.php', credentials)
-      const refreshed = await refreshSession()
-      router.navigate(refreshed.role === 'admin' ? '/admin' : '/dashboard')
-      return result
-    })
-  }
-
   async function logout() {
     await runAction(async () => {
       const result = await post('logout.php', {})
@@ -193,7 +184,7 @@ export default function App() {
   if (!authenticated) {
     return (
       <>
-        <LoginPage onLoginCI={loginCI} onLoginAdmin={loginAdmin} loading={actionLoading} />
+        <LoginPage onLoginCI={loginCI} loading={actionLoading} />
         <Feedback feedback={feedback} />
       </>
     )

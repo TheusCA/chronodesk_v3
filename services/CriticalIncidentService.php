@@ -25,6 +25,8 @@ final class CriticalIncidentService {
         'descrição da sala', 'descricao da sala',
         'descrição da finalização da sala', 'descricao da finalizacao da sala',
         'tempo de abertura da sala', 'tempo de sala', 'setor',
+        'carteira - cc', 'area responsavel',
+        'usuarios afetados', 'link da sala',
         'observação', 'observacao', 'atividade sdk',
     ];
     public const EXPORT_COLUMNS = [
@@ -38,7 +40,10 @@ final class CriticalIncidentService {
         'Descrição da finalização da sala' => 'room_finalization_description',
         'Tempo de abertura da sala' => 'room_opening_duration_minutes',
         'Tempo de Sala' => 'room_duration_minutes',
-        'Setor' => 'sector',
+        'Carteira - CC' => 'sector',
+        'Área responsável' => 'responsible_area',
+        'Usuários afetados' => 'affected_users',
+        'Link da sala' => 'meeting_url',
         'Observação' => 'notes',
         'Atividade SDK' => 'sdk_activity',
     ];
@@ -64,6 +69,10 @@ final class CriticalIncidentService {
         'tempo de abertura da sala' => 'room_opening_duration_minutes',
         'tempo de sala' => 'room_duration_minutes',
         'setor' => 'sector',
+        'carteira - cc' => 'sector',
+        'area responsavel' => 'responsible_area',
+        'usuarios afetados' => 'affected_users',
+        'link da sala' => 'meeting_url',
         'observação' => 'notes',
         'observacao' => 'notes',
         'atividade sdk' => 'sdk_activity',
@@ -320,17 +329,18 @@ final class CriticalIncidentService {
     }
 
     public static function assertImportRowsShape(array $rows): void {
-        if ($rows === [] || count($rows) > self::MAX_IMPORT_ROWS || !array_is_list($rows)) {
+        if ($rows === [] || count($rows) > self::MAX_IMPORT_ROWS || !self::isList($rows)) {
             throw new InvalidArgumentException('Quantidade ou estrutura de linhas invalida.');
         }
         foreach ($rows as $row) {
-            if (!is_array($row) || array_is_list($row)) {
+            if (!is_array($row) || self::isList($row)) {
                 throw new InvalidArgumentException('Cada linha deve ser um objeto simples.');
             }
             if (count($row) > self::MAX_IMPORT_COLUMNS) {
                 throw new InvalidArgumentException('A importacao excede o limite de colunas.');
             }
             $canonicalKeys = array_keys(self::normalizeImportRow($row));
+            $detectedHeaders = implode(', ', array_map('strval', array_keys($row)));
             $hasOperationalHeaders = count(array_intersect(
                 self::REQUIRED_IMPORT_HEADERS,
                 $canonicalKeys
@@ -341,16 +351,16 @@ final class CriticalIncidentService {
             )) === count(self::LEGACY_REQUIRED_IMPORT_HEADERS);
             if (!$hasOperationalHeaders && !$hasLegacyHeaders) {
                 throw new InvalidArgumentException(
-                    'A importacao exige incident_number e room_date, ou o conjunto legado completo.'
+                    'A importacao exige INCIDENTE e Data da Sala, ou o conjunto legado completo. Cabecalhos detectados: ' . $detectedHeaders . '.'
                 );
             }
             foreach ($row as $key => $value) {
-                $normalizedKey = is_string($key) ? strtolower(trim($key)) : $key;
+                $normalizedKey = is_string($key) ? self::canonicalImportKey($key) : $key;
                 if (
                     !is_string($key)
                     || !in_array($normalizedKey, self::ALLOWED_IMPORT_HEADERS, true)
                 ) {
-                    throw new InvalidArgumentException('Cabecalho de importacao nao permitido.');
+                    throw new InvalidArgumentException('Cabecalho de importacao nao permitido: ' . (string)$key . '. Cabecalhos detectados: ' . $detectedHeaders . '.');
                 }
                 if (!is_scalar($value) && $value !== null) {
                     throw new InvalidArgumentException('A importacao contem estrutura aninhada.');
@@ -407,7 +417,7 @@ final class CriticalIncidentService {
     private static function normalizeImportRow(array $row): array {
         $normalized = [];
         foreach ($row as $key => $value) {
-            $normalizedKey = strtolower(trim((string)$key));
+            $normalizedKey = self::canonicalImportKey((string)$key);
             $canonical = self::IMPORT_HEADER_ALIASES[$normalizedKey] ?? $normalizedKey;
             if (array_key_exists($canonical, $normalized) && $normalized[$canonical] !== '' && $value !== '') {
                 throw new InvalidArgumentException('A importacao possui cabecalhos equivalentes duplicados.');
@@ -415,6 +425,35 @@ final class CriticalIncidentService {
             $normalized[$canonical] = $value;
         }
         return $normalized;
+    }
+
+    private static function canonicalImportKey(string $key): string {
+        $key = preg_replace('/^\xEF\xBB\xBF/', '', trim($key));
+        $key = strtr($key, [
+            'Á' => 'A', 'À' => 'A', 'Â' => 'A', 'Ã' => 'A', 'Ä' => 'A',
+            'á' => 'a', 'à' => 'a', 'â' => 'a', 'ã' => 'a', 'ä' => 'a',
+            'É' => 'E', 'Ê' => 'E', 'Ë' => 'E',
+            'é' => 'e', 'ê' => 'e', 'ë' => 'e',
+            'Í' => 'I', 'Î' => 'I', 'Ï' => 'I',
+            'í' => 'i', 'î' => 'i', 'ï' => 'i',
+            'Ó' => 'O', 'Ô' => 'O', 'Õ' => 'O', 'Ö' => 'O',
+            'ó' => 'o', 'ô' => 'o', 'õ' => 'o', 'ö' => 'o',
+            'Ú' => 'U', 'Û' => 'U', 'Ü' => 'U',
+            'ú' => 'u', 'û' => 'u', 'ü' => 'u',
+            'Ç' => 'C', 'ç' => 'c',
+        ]);
+        return strtolower($key);
+    }
+
+    private static function isList(array $items): bool {
+        $expected = 0;
+        foreach ($items as $key => $_value) {
+            if ($key !== $expected) {
+                return false;
+            }
+            $expected++;
+        }
+        return true;
     }
 
     private function normalizeRecord(array $data): array {
@@ -430,7 +469,7 @@ final class CriticalIncidentService {
             'Data da sala'
         );
         $incidentOpenedAt = $this->dateTime(
-            $data['incident_opened_at'] ?? $data['opened_at'] ?? ($roomDate . ' 00:00'),
+            $data['incident_opened_at'] ?? $data['opened_at'] ?? null,
             'Hora de abertura do incidente',
             true,
             $roomDate
@@ -484,7 +523,7 @@ final class CriticalIncidentService {
             ':room_finalization_description' => $roomFinalization,
             ':room_opening_duration_minutes' => $openingDuration,
             ':room_duration_minutes' => $roomDuration,
-            ':sector' => $this->nullableText($data['sector'] ?? $data['responsible_area'] ?? null, 160),
+            ':sector' => $this->nullableText($data['sector'] ?? null, 160),
             ':sdk_activity' => $this->nullableText($data['sdk_activity'] ?? $data['actions_taken'] ?? null, 12000),
             ':ticket_number' => $incidentNumber,
             ':source' => $this->enum($data['source'] ?? 'manual', self::SOURCES, 'Origem'),
@@ -509,7 +548,7 @@ final class CriticalIncidentService {
             ':impact' => $this->nullableText($data['impact'] ?? null, 4000),
             ':affected_users' => $this->nullableNonNegativeInt($data['affected_users'] ?? null),
             ':affected_services' => $this->nullableText($data['affected_services'] ?? null, 2000),
-            ':responsible_area' => $this->nullableText($data['responsible_area'] ?? $data['sector'] ?? null, 120),
+            ':responsible_area' => $this->nullableText($data['responsible_area'] ?? null, 120),
             ':owner_name' => $this->nullableText($data['owner_name'] ?? null, 160),
             ':owner_login' => $this->ownerLogin($data['owner_login'] ?? null),
             ':involved_teams' => $this->nullableText($data['involved_teams'] ?? null, 500),
@@ -770,6 +809,14 @@ final class CriticalIncidentService {
     }
 
     private function durationMinutes($value, ?string $from, ?string $to, string $label): ?int {
+        if ($from !== null && $to !== null) {
+            $seconds = (new DateTimeImmutable($to))->getTimestamp()
+                - (new DateTimeImmutable($from))->getTimestamp();
+            if ($seconds < 0) {
+                throw new InvalidArgumentException("{$label} nao pode ser negativo.");
+            }
+            return (int)floor($seconds / 60);
+        }
         if ($value !== null && $value !== '') {
             if (is_string($value) && preg_match('/^(\d{1,4}):([0-5]\d)$/', trim($value), $match)) {
                 $minutes = ((int)$match[1] * 60) + (int)$match[2];
@@ -786,15 +833,7 @@ final class CriticalIncidentService {
             }
             return (int)$result;
         }
-        if ($from === null || $to === null) {
-            return null;
-        }
-        $seconds = (new DateTimeImmutable($to))->getTimestamp()
-            - (new DateTimeImmutable($from))->getTimestamp();
-        if ($seconds < 0) {
-            throw new InvalidArgumentException("{$label} nao pode ser negativo.");
-        }
-        return (int)floor($seconds / 60);
+        return null;
     }
 
     private function enum($value, array $allowed, string $label): string {

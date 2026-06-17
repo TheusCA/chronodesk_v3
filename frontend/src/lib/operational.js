@@ -33,9 +33,43 @@ export const CRITICAL_INCIDENT_IMPORT_LIMITS = Object.freeze({
     'owner_name', 'owner_login', 'involved_teams', 'root_cause',
     'resolution', 'workaround', 'actions_taken', 'next_steps',
     'meeting_url', 'participants', 'notes',
+    'incidente', 'data da sala', 'hora de abertura incidente',
+    'hora report da operacao', 'hora abertura sala', 'hora de normalizacao',
+    'descricao da sala', 'descricao da finalizacao da sala',
+    'tempo de abertura da sala', 'tempo de sala',
+    'carteira - cc', 'area responsavel', 'usuarios afetados',
+    'link da sala', 'observacao', 'atividade sdk',
   ]),
   requiredHeaders: Object.freeze(['incident_number', 'room_date']),
 })
+
+const CRITICAL_INCIDENT_HEADER_ALIASES = Object.freeze({
+  incidente: 'incident_number',
+  'data da sala': 'room_date',
+  'hora de abertura incidente': 'incident_opened_at',
+  'hora report da operacao': 'operation_reported_at',
+  'hora abertura sala': 'room_opened_at',
+  'hora de normalizacao': 'normalized_at',
+  'descricao da sala': 'room_description',
+  'descricao da finalizacao da sala': 'room_finalization_description',
+  'tempo de abertura da sala': 'room_opening_duration_minutes',
+  'tempo de sala': 'room_duration_minutes',
+  'carteira - cc': 'sector',
+  'area responsavel': 'responsible_area',
+  'usuarios afetados': 'affected_users',
+  'link da sala': 'meeting_url',
+  observacao: 'notes',
+  'atividade sdk': 'sdk_activity',
+})
+
+function normalizeCriticalIncidentHeader(header) {
+  return String(header)
+    .replace(/^\uFEFF/, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
 
 export function competencyFor(reference = new Date()) {
   const date = new Date(reference)
@@ -82,7 +116,7 @@ export function parseCsv(text) {
       } else {
         quoted = !quoted
       }
-    } else if ((char === ',' || char === ';') && !quoted) {
+    } else if ((char === ',' || char === ';' || char === '\t') && !quoted) {
       row.push(field.trim())
       field = ''
     } else if ((char === '\n' || char === '\r') && !quoted) {
@@ -175,12 +209,13 @@ export function parseCriticalIncidentCsv(text) {
     throw new Error(`O CSV excede o limite de ${limits.maxRows} linhas.`)
   }
 
-  const headers = rows[0].map((header) => header.toLowerCase().trim())
+  const rawHeaders = rows[0].map(normalizeCriticalIncidentHeader)
+  const headers = rawHeaders.map((header) => CRITICAL_INCIDENT_HEADER_ALIASES[header] || header)
   if (headers.length > limits.maxColumns) {
     throw new Error(`O CSV excede o limite de ${limits.maxColumns} colunas.`)
   }
   if (headers.some((header) => !header || !limits.acceptedHeaders.includes(header))) {
-    throw new Error('O CSV possui cabecalho vazio ou nao permitido.')
+    throw new Error(`O CSV possui cabecalho vazio ou nao permitido. Cabecalhos detectados: ${rawHeaders.filter(Boolean).join(', ') || 'nenhum'}.`)
   }
   if (new Set(headers).size !== headers.length) {
     throw new Error('O CSV possui cabecalhos duplicados.')
@@ -189,7 +224,7 @@ export function parseCriticalIncidentCsv(text) {
   const hasOperationalHeaders = limits.requiredHeaders.every((header) => headers.includes(header))
   const hasLegacyHeaders = legacyRequired.every((header) => headers.includes(header))
   if (!hasOperationalHeaders && !hasLegacyHeaders) {
-    throw new Error('Use incident_number e room_date, ou o conjunto legado completo.')
+    throw new Error(`Use INCIDENTE e Data da Sala, ou o conjunto legado completo. Cabecalhos detectados: ${rawHeaders.filter(Boolean).join(', ') || 'nenhum'}.`)
   }
 
   rows.slice(1).forEach((values, index) => {

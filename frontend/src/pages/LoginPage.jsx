@@ -1,8 +1,7 @@
-import { LoginAdmin } from '../components/LoginAdmin'
 import { LoginCI } from '../components/LoginCI'
 import { BrandMark } from '../components/BrandMark'
 
-export function LoginPage({ onLoginCI, onLoginAdmin, loading }) {
+export function LoginPage({ onLoginCI, loading }) {
   return (
     <main className="tech-login-shell relative grid min-h-screen place-items-center overflow-hidden px-4 py-10">
       <div className="tech-grid" />
@@ -18,9 +17,8 @@ export function LoginPage({ onLoginCI, onLoginAdmin, loading }) {
           <h1 className="text-3xl font-black tracking-tight text-white">Portal SDK</h1>
           <p className="mt-2 text-slate-400">Operações, métricas e aprovações em um único lugar.</p>
         </div>
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="mx-auto max-w-md">
           <LoginCI onSubmit={onLoginCI} loading={loading} />
-          <LoginAdmin onSubmit={onLoginAdmin} loading={loading} />
         </div>
       </div>
     </main>

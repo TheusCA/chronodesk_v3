@@ -15,15 +15,10 @@ const severityOptions = ['low', 'medium', 'high', 'critical']
 const statusOptions = ['open', 'in_progress', 'war_room', 'mitigated', 'resolved', 'cancelled']
 const sourceOptions = ['servicenow', 'jira', 'teams', 'manual', 'other']
 
-function localDateTime(date = new Date()) {
-  const offset = date.getTimezoneOffset() * 60000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
-}
-
 const emptyIncident = {
   incident_number: '',
   room_date: new Date().toISOString().slice(0, 10),
-  incident_opened_at: localDateTime(),
+  incident_opened_at: '',
   operation_reported_at: '',
   room_opened_at: '',
   normalized_at: '',
@@ -39,7 +34,7 @@ const emptyIncident = {
   summary: '',
   severity: 'high',
   status: 'open',
-  opened_at: localDateTime(),
+  opened_at: '',
   war_room_started_at: '',
   mitigated_at: '',
   resolved_at: '',
@@ -139,7 +134,18 @@ function minutesLabel(value) {
   return minutesToClock(minutes)
 }
 
-function IncidentForm({ initial, onClose, onSave, submitting }) {
+function CalculatedTimeField({ label, value }) {
+  return (
+    <div className="label">
+      {label}
+      <div className="field mt-2 flex items-center text-slate-300" aria-live="polite">
+        {value || '--:--'}
+      </div>
+    </div>
+  )
+}
+
+function IncidentForm({ initial, onClose, onSave, submitting, canManage }) {
   const editing = Boolean(initial?.id)
   const [form, setForm] = useState(normalizeForForm(initial))
   const update = (key, value) => setForm((current) => {
@@ -163,10 +169,10 @@ function IncidentForm({ initial, onClose, onSave, submitting }) {
       id: initial?.id,
       action: editing ? 'update' : 'create',
       ticket_number: form.incident_number,
-      opened_at: form.incident_opened_at || `${form.room_date}T00:00`,
+      opened_at: form.incident_opened_at || '',
       war_room_started_at: form.room_opened_at,
       mitigated_at: form.normalized_at,
-      responsible_area: form.sector,
+      responsible_area: form.responsible_area,
       summary: form.room_description,
       resolution: form.room_finalization_description,
       actions_taken: form.sdk_activity,
@@ -191,13 +197,19 @@ function IncidentForm({ initial, onClose, onSave, submitting }) {
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Cancelar</button>
         </div>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label className="label">INCIDENTE<input className="field mt-2" maxLength="100" required value={form.incident_number} onChange={(event) => update('incident_number', event.target.value)} /></label>
-          <label className="label">Data da Sala<input className="field mt-2" required type="date" value={form.room_date} onChange={(event) => update('room_date', event.target.value)} /></label>
+        <section>
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-slate-500">Identificacao</h3>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <label className="label">INCIDENTE *<input className="field mt-2" maxLength="100" required value={form.incident_number} onChange={(event) => update('incident_number', event.target.value)} /></label>
+          <label className="label">Data da Sala *<input className="field mt-2" required type="date" value={form.room_date} onChange={(event) => update('room_date', event.target.value)} /></label>
           <label className="label">Origem<select className="field mt-2" value={form.source} onChange={(event) => update('source', event.target.value)}>{sourceOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label className="label">Criticidade<select className="field mt-2" value={form.severity} onChange={(event) => update('severity', event.target.value)}>{severityOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
-          <label className="label">Status<select className="field mt-2" value={form.status} onChange={(event) => update('status', event.target.value)}>{statusOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
-          <label className="label md:col-span-2 xl:col-span-3">Descricao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_description} onChange={(event) => update('room_description', event.target.value)} /></label>
+          {canManage ? (
+            <label className="label">Status<select className="field mt-2" value={form.status} onChange={(event) => update('status', event.target.value)}>{statusOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
+          ) : (
+            <div className="label">Status<div className="field mt-2 flex items-center text-slate-300">Aberto</div></div>
+          )}
+          </div>
         </section>
 
         <section>
@@ -207,36 +219,23 @@ function IncidentForm({ initial, onClose, onSave, submitting }) {
             <label className="label">Hora report da operacao<input className="field mt-2" type="datetime-local" value={form.operation_reported_at} onChange={(event) => update('operation_reported_at', event.target.value)} /></label>
             <label className="label">Hora abertura sala<input className="field mt-2" type="datetime-local" value={form.room_opened_at} onChange={(event) => update('room_opened_at', event.target.value)} /></label>
             <label className="label">Hora de normalizacao<input className="field mt-2" type="datetime-local" value={form.normalized_at} onChange={(event) => update('normalized_at', event.target.value)} /></label>
-            <label className="label">Tempo de abertura da sala<input className="field mt-2" inputMode="numeric" pattern="\\d{1,4}:[0-5]\\d" placeholder="00:02" value={form.room_opening_duration_minutes} onChange={(event) => update('room_opening_duration_minutes', event.target.value)} /></label>
-            <label className="label">Tempo de Sala<input className="field mt-2" inputMode="numeric" pattern="\\d{1,4}:[0-5]\\d" placeholder="02:23" value={form.room_duration_minutes} onChange={(event) => update('room_duration_minutes', event.target.value)} /></label>
+            <CalculatedTimeField label="Tempo de abertura da sala" value={form.room_opening_duration_minutes} />
+            <CalculatedTimeField label="Tempo de Sala" value={form.room_duration_minutes} />
           </div>
         </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label className="label md:col-span-2">Setor<input className="field mt-2" maxLength="160" value={form.sector} onChange={(event) => update('sector', event.target.value)} /></label>
-          <label className="label">Responsavel principal<input className="field mt-2" maxLength="160" value={form.owner_name} onChange={(event) => update('owner_name', event.target.value)} /></label>
-          <label className="label">Login do responsavel<input className="field mt-2" maxLength="100" value={form.owner_login} onChange={(event) => update('owner_login', event.target.value)} /></label>
-          <label className="label md:col-span-2">Equipes envolvidas<input className="field mt-2" maxLength="500" placeholder="N1, Infra, Redes, Seguranca" value={form.involved_teams} onChange={(event) => update('involved_teams', event.target.value)} /></label>
-          <label className="label">Usuarios afetados<input className="field mt-2" min="0" type="number" value={form.affected_users} onChange={(event) => update('affected_users', event.target.value)} /></label>
-          <label className="label">Link da sala<input className="field mt-2" maxLength="1000" placeholder="https://..." type="url" value={form.meeting_url} onChange={(event) => update('meeting_url', event.target.value)} /></label>
-          <label className="label md:col-span-2">Servicos afetados<textarea className="field mt-2 min-h-20" maxLength="2000" value={form.affected_services} onChange={(event) => update('affected_services', event.target.value)} /></label>
-          <label className="label md:col-span-2">Impacto<textarea className="field mt-2 min-h-20" maxLength="4000" value={form.impact} onChange={(event) => update('impact', event.target.value)} /></label>
-        </section>
-
-        <section className="grid gap-4 md:grid-cols-2">
-          <label className="label">Descricao da finalizacao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_finalization_description} onChange={(event) => update('room_finalization_description', event.target.value)} /></label>
-          <label className="label">Atividade SDK<textarea className="field mt-2 min-h-24" maxLength="12000" value={form.sdk_activity} onChange={(event) => update('sdk_activity', event.target.value)} /></label>
-          {[
-            ['root_cause', 'Causa raiz', 4000],
-            ['workaround', 'Workaround', 4000],
-            ['next_steps', 'Proximos passos', 4000],
-            ['participants', 'Participantes', 4000],
-            ['notes', 'Observacao', 12000],
-          ].map(([key, label, max]) => (
-            <label className={`label ${key === 'notes' ? 'md:col-span-2' : ''}`} key={key}>
-              {label}<textarea className="field mt-2 min-h-24" maxLength={max} value={form[key]} onChange={(event) => update(key, event.target.value)} />
-            </label>
-          ))}
+        <section>
+          <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-slate-500">Detalhes operacionais</h3>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <label className="label md:col-span-2">Descricao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_description} onChange={(event) => update('room_description', event.target.value)} /></label>
+            <label className="label md:col-span-2">Descricao da finalizacao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_finalization_description} onChange={(event) => update('room_finalization_description', event.target.value)} /></label>
+            <label className="label">Carteira - CC<input className="field mt-2" maxLength="160" value={form.sector} onChange={(event) => update('sector', event.target.value)} /></label>
+            <label className="label">Area responsavel<input className="field mt-2" maxLength="120" placeholder="Telecom, SRE - Netsec, DBA" value={form.responsible_area} onChange={(event) => update('responsible_area', event.target.value)} /></label>
+            <label className="label">Usuarios afetados<input className="field mt-2" min="0" type="number" value={form.affected_users} onChange={(event) => update('affected_users', event.target.value)} /></label>
+            <label className="label">Link da sala<input className="field mt-2" maxLength="1000" placeholder="https://..." type="url" value={form.meeting_url} onChange={(event) => update('meeting_url', event.target.value)} /></label>
+            <label className="label md:col-span-2">Observacao<textarea className="field mt-2 min-h-24" maxLength="12000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
+            <label className="label md:col-span-2">Atividade SDK<textarea className="field mt-2 min-h-24" maxLength="12000" value={form.sdk_activity} onChange={(event) => update('sdk_activity', event.target.value)} /></label>
+          </div>
         </section>
 
         <div className="flex justify-end gap-3">
@@ -253,15 +252,6 @@ function IncidentDetails({ item, onClose }) {
     ['Descricao da sala', item.room_description || item.summary],
     ['Descricao da finalizacao da sala', item.room_finalization_description],
     ['Atividade SDK', item.sdk_activity],
-    ['Impacto', item.impact],
-    ['Servicos afetados', item.affected_services],
-    ['Equipes envolvidas', item.involved_teams],
-    ['Causa raiz', item.root_cause],
-    ['Resolucao', item.resolution],
-    ['Workaround', item.workaround],
-    ['Acoes realizadas', item.actions_taken],
-    ['Proximos passos', item.next_steps],
-    ['Participantes', item.participants],
     ['Observacoes', item.notes],
   ]
   return (
@@ -277,8 +267,8 @@ function IncidentDetails({ item, onClose }) {
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Setor</small><p className="mt-1 text-sm text-slate-200">{item.sector || item.responsible_area || 'Nao informado'}</p></div>
-          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Responsavel</small><p className="mt-1 text-sm text-slate-200">{item.owner_name || 'Nao informado'} {item.owner_login ? `(${item.owner_login})` : ''}</p></div>
+          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Carteira - CC</small><p className="mt-1 text-sm text-slate-200">{item.sector || 'Nao informado'}</p></div>
+          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Area responsavel</small><p className="mt-1 text-sm text-slate-200">{item.responsible_area || 'Nao informado'}</p></div>
           <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Tempo para abrir sala</small><p className="mt-1 text-sm text-slate-200">{minutesLabel(item.room_opening_duration_minutes)}</p></div>
           <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Tempo de sala</small><p className="mt-1 text-sm text-slate-200">{minutesLabel(item.room_duration_minutes)}</p></div>
           {fields.map(([label, value]) => value && <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4 sm:col-span-2" key={label}><small className="text-slate-600">{label}</small><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{value}</p></div>)}
@@ -347,7 +337,7 @@ function ImportPanel({ onClose, onImported }) {
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Preview obrigatorio</p><h2 className="mt-2 text-xl font-bold text-white">Importar planilha War Room</h2></div>
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
         </div>
-        <p className="mt-3 text-sm leading-6 text-slate-500">CSV ou XLSX com incident_number e room_date. O formato legado continua aceito. Limite de 500 linhas e 2 MB.</p>
+        <p className="mt-3 text-sm leading-6 text-slate-500">CSV ou XLSX com cabecalhos da planilha War Room, como INCIDENTE e Data da Sala. Campos incompletos podem ser ajustados depois. Limite de 500 linhas e 2 MB.</p>
         <button
           className={`mt-6 grid w-full place-items-center rounded-2xl border border-dashed px-5 py-10 ${dragging ? 'border-blue-400 bg-blue-500/10' : 'border-white/15 bg-slate-900/50'}`}
           onClick={() => inputRef.current?.click()}
@@ -472,7 +462,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         <SummaryCard label="Tempo medio para mitigar" value={minutesLabel(summary.avg_mitigation_minutes)} />
         <SummaryCard label="Tempo medio para resolver" value={minutesLabel(summary.avg_resolution_minutes)} />
         <SummaryCard label="Sem causa raiz" tone="text-amber-300" value={summary.missing_root_cause_count || 0} />
-        <SummaryCard label="Principal area" value={topAreas[0]?.responsible_area || 'Sem dados'} />
+        <SummaryCard label="Principal area responsavel" value={topAreas[0]?.responsible_area || 'Sem dados'} />
       </section>
 
       <section className="card grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -482,16 +472,16 @@ export function CriticalIncidentsPage({ session, notify }) {
         <label className="label">Status<select className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option>{statusOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
         <label className="label">Criticidade<select className="field mt-2" value={filters.severity} onChange={(event) => setFilters({ ...filters, severity: event.target.value })}><option value="">Todas</option>{severityOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
         <label className="label">Chamado<input className="field mt-2" maxLength="100" value={filters.ticket_number} onChange={(event) => setFilters({ ...filters, ticket_number: event.target.value })} /></label>
-        <label className="label">Area<input className="field mt-2" maxLength="120" value={filters.responsible_area} onChange={(event) => setFilters({ ...filters, responsible_area: event.target.value })} /></label>
+        <label className="label">Area responsavel<input className="field mt-2" maxLength="120" value={filters.responsible_area} onChange={(event) => setFilters({ ...filters, responsible_area: event.target.value })} /></label>
         <label className="label">Equipe<input className="field mt-2" maxLength="120" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })} /></label>
-        <label className="label">Responsavel<input className="field mt-2" maxLength="120" value={filters.owner} onChange={(event) => setFilters({ ...filters, owner: event.target.value })} /></label>
+        <label className="label">Responsavel legado<input className="field mt-2" maxLength="120" value={filters.owner} onChange={(event) => setFilters({ ...filters, owner: event.target.value })} /></label>
         <label className="label md:col-span-2">Texto livre<input className="field mt-2" maxLength="120" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} /></label>
       </section>
 
       {items.length === 0 ? <EmptyState title="Nenhum chamado critico encontrado" description="Ajuste os filtros ou cadastre o primeiro registro do periodo." /> : (
         <section className="card table-wrap">
           <table className="data-table min-w-[1250px]">
-            <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descricao</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Setor</th><th>Acoes</th></tr></thead>
+            <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descricao</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Carteira - CC</th><th>Acoes</th></tr></thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
@@ -501,7 +491,7 @@ export function CriticalIncidentsPage({ session, notify }) {
                   <td><strong>Abertura: {minutesLabel(item.room_opening_duration_minutes)}</strong><small>Sala: {minutesLabel(item.room_duration_minutes)}</small></td>
                   <td><IncidentBadge value={item.severity} /></td>
                   <td><IncidentBadge value={item.status} /></td>
-                  <td><strong>{item.sector || item.responsible_area || 'Nao informado'}</strong><small>{item.owner_name || 'Sem responsavel'}</small></td>
+                  <td><strong>{item.sector || 'Nao informado'}</strong><small>{item.responsible_area || 'Sem area responsavel'}</small></td>
                   <td>
                     <div className="flex flex-wrap gap-1">
                       <button className="table-action" disabled={loadingItemId === item.id} onClick={() => openItem(item.id, 'view')} type="button">{loadingItemId === item.id ? 'Carregando' : 'Visualizar'}</button>
@@ -517,7 +507,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         </section>
       )}
 
-      {formItem && <IncidentForm initial={formItem.id ? formItem : null} onClose={() => setFormItem(null)} onSave={save} submitting={submitting} />}
+      {formItem && <IncidentForm canManage={canManage} initial={formItem.id ? formItem : null} onClose={() => setFormItem(null)} onSave={save} submitting={submitting} />}
       {viewItem && <IncidentDetails item={viewItem} onClose={() => setViewItem(null)} />}
       {importOpen && <ImportPanel onClose={() => setImportOpen(false)} onImported={async (message) => { notify(message); await resource.refresh() }} />}
     </div>

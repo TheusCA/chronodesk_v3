@@ -931,7 +931,7 @@ final class OperationalService {
             $params[':id'] = (int)($row['id'] ?? $row['employee_id']);
         }
         $login = strtolower(trim((string)($row['login_ad'] ?? $row['ad_login'] ?? $row['email'] ?? '')));
-        if (str_contains($login, '@')) {
+        if (strpos($login, '@') !== false) {
             $login = explode('@', $login, 2)[0];
         }
         if ($login !== '') {

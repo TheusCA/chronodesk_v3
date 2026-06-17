@@ -57,11 +57,17 @@ final class SpreadsheetImportService {
         }
         try {
             $sample = fread($handle, 4096);
-            if ($sample === false || str_contains($sample, "\0")) {
+            if ($sample === false || strpos($sample, "\0") !== false) {
                 throw new InvalidArgumentException('CSV invalido ou binario.');
             }
             rewind($handle);
-            $delimiter = substr_count($sample, ';') >= substr_count($sample, ',') ? ';' : ',';
+            $delimiters = [
+                ';' => substr_count($sample, ';'),
+                ',' => substr_count($sample, ','),
+                "\t" => substr_count($sample, "\t"),
+            ];
+            arsort($delimiters);
+            $delimiter = (string)array_key_first($delimiters);
             $matrix = [];
             while (($row = fgetcsv($handle, 0, $delimiter, '"', '\\')) !== false) {
                 if (count($matrix) > $maxRows) {
@@ -140,20 +146,20 @@ final class SpreadsheetImportService {
             $normalized = str_replace('\\', '/', $name);
             if (
                 $normalized === ''
-                || str_contains($normalized, "\0")
-                || str_starts_with($normalized, '/')
+                || strpos($normalized, "\0") !== false
+                || strpos($normalized, '/') === 0
                 || preg_match('#(^|/)\.\.(?:/|$)#', $normalized)
             ) {
                 throw new InvalidArgumentException('Pacote XLSX contem caminho inseguro.');
             }
             $lower = strtolower($normalized);
             if (
-                str_contains($lower, 'vbaproject')
-                || str_contains($lower, '/macros/')
-                || str_contains($lower, '/externallinks/')
-                || str_contains($lower, '/embeddings/')
-                || str_contains($lower, '/activex/')
-                || str_ends_with($lower, '.bin')
+                strpos($lower, 'vbaproject') !== false
+                || strpos($lower, '/macros/') !== false
+                || strpos($lower, '/externallinks/') !== false
+                || strpos($lower, '/embeddings/') !== false
+                || strpos($lower, '/activex/') !== false
+                || substr($lower, -4) === '.bin'
             ) {
                 throw new InvalidArgumentException('Planilhas com macros ou conteudo externo nao sao permitidas.');
             }
@@ -206,21 +212,32 @@ final class SpreadsheetImportService {
     }
 
     private function matrixToRows(array $matrix, int $maxRows, int $maxColumns, int $maxCellChars): array {
-        while ($matrix && !array_filter(end($matrix), static fn($value): bool => trim((string)$value) !== '')) {
+        while ($matrix && !$this->rowHasData(end($matrix))) {
             array_pop($matrix);
         }
-        if (count($matrix) < 2) {
-            throw new InvalidArgumentException('A planilha deve conter cabecalho e ao menos uma linha.');
+        while ($matrix && !$this->rowHasData($matrix[0])) {
+            array_shift($matrix);
+        }
+        if ($matrix === []) {
+            throw new InvalidArgumentException('A planilha deve conter cabecalho e ao menos uma linha com dados. Cabecalhos detectados: nenhum.');
         }
         $headers = array_map(
-            static fn($value): string => strtolower(trim((string)$value)),
+            static function ($value): string {
+                return strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string)$value)));
+            },
             array_shift($matrix)
         );
+        $detectedHeaders = implode(', ', array_filter($headers, static fn(string $header): bool => $header !== ''));
+        $detectedHeaders = $detectedHeaders !== '' ? $detectedHeaders : 'nenhum';
         if (count($headers) > $maxColumns || in_array('', $headers, true)) {
-            throw new InvalidArgumentException('Cabecalho vazio ou acima do limite de colunas.');
+            throw new InvalidArgumentException('Cabecalho vazio ou acima do limite de colunas. Cabecalhos detectados: ' . $detectedHeaders . '.');
         }
         if (count(array_unique($headers)) !== count($headers)) {
-            throw new InvalidArgumentException('A planilha possui cabecalhos duplicados.');
+            throw new InvalidArgumentException('A planilha possui cabecalhos duplicados. Cabecalhos detectados: ' . $detectedHeaders . '.');
+        }
+        $matrix = array_values(array_filter($matrix, fn(array $row): bool => $this->rowHasData($row)));
+        if ($matrix === []) {
+            throw new InvalidArgumentException('A planilha deve conter cabecalho e ao menos uma linha com dados. Cabecalhos detectados: ' . $detectedHeaders . '.');
         }
         if (count($matrix) > $maxRows) {
             throw new LengthException("A planilha excede {$maxRows} linhas.");
@@ -243,6 +260,15 @@ final class SpreadsheetImportService {
         return $rows;
     }
 
+    private function rowHasData(array $row): bool {
+        foreach ($row as $value) {
+            if (trim((string)$value) !== '') {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private function validateUploadArray(array $file): void {
         foreach (['name', 'tmp_name', 'error', 'size'] as $key) {
             if (!array_key_exists($key, $file) || is_array($file[$key])) {
@@ -258,8 +284,8 @@ final class SpreadsheetImportService {
         if (
             $name === ''
             || strlen($name) > 180
-            || str_contains($name, '/')
-            || str_contains($name, '\\')
+            || strpos($name, '/') !== false
+            || strpos($name, '\\') !== false
             || preg_match('/\.(php|phtml|phar|js|html?|svg|exe|bat|cmd|ps1|sh|jar|msi|dll|zip|rar|7z)(?:\.|$)/i', $name)
         ) {
             throw new InvalidArgumentException('Nome ou extensao de arquivo invalida.');

@@ -226,6 +226,15 @@ $normalizedCriticalDurations = $normalizeCritical->invoke($criticalService, [
 assert_same(12, $normalizedCriticalDurations[':room_opening_duration_minutes'], 'aceita tempo de abertura HH:MM');
 assert_same(143, $normalizedCriticalDurations[':room_duration_minutes'], 'aceita tempo de sala HH:MM');
 
+$normalizedPartialCritical = $normalizeCritical->invoke($criticalService, [
+    'incident_number' => 'INC-PARCIAL',
+    'room_date' => '2026-06-15',
+]);
+assert_same('INC-PARCIAL', $normalizedPartialCritical[':incident_number'], 'aceita chamado critico parcial');
+assert_same(null, $normalizedPartialCritical[':incident_opened_at'], 'chamado parcial nao exige hora de abertura');
+assert_same(null, $normalizedPartialCritical[':room_opening_duration_minutes'], 'chamado parcial nao calcula abertura sem horarios');
+assert_same(null, $normalizedPartialCritical[':room_duration_minutes'], 'chamado parcial nao calcula sala sem horarios');
+
 $normalizedExcelCritical = $normalizeCritical->invoke($criticalService, [
     'incident_number' => 'INC-EXCEL',
     'room_date' => '46188',
@@ -247,6 +256,24 @@ $parseSpreadsheetCsv = new ReflectionMethod(SpreadsheetImportService::class, 'pa
 $parseSpreadsheetCsv->setAccessible(true);
 $spreadsheetRows = $parseSpreadsheetCsv->invoke($spreadsheetService, $spreadsheetCsv, 500, 39, 4000);
 assert_same('INC003', $spreadsheetRows[0]['incident_number'], 'parser seguro le CSV');
+
+$warRoomCsv = tempnam(sys_get_temp_dir(), 'chronodesk_war_room_');
+file_put_contents(
+    $warRoomCsv,
+    "\n\xEF\xBB\xBFINCIDENTE\tData da Sala\tCarteira - CC\tArea responsavel\tUsuarios afetados\tLink da sala\tHora de abertura Incidente\tHora abertura sala\tHora de normalizacao\n"
+    . "INC004\t2026-06-15\tCC-01/SRE\tSRE - Netsec\t25\thttps://teams.example/sala\t08:59\t09:01\t11:24\n\n"
+);
+$warRoomRows = $parseSpreadsheetCsv->invoke($spreadsheetService, $warRoomCsv, 500, 39, 4000);
+assert_same('INC004', $warRoomRows[0]['incidente'], 'parser remove BOM e ignora linhas vazias antes do cabecalho');
+CriticalIncidentService::assertImportRowsShape($warRoomRows);
+$normalizeCriticalImportRow = new ReflectionMethod(CriticalIncidentService::class, 'normalizeImportRow');
+$normalizeCriticalImportRow->setAccessible(true);
+$warRoomCanonical = $normalizeCriticalImportRow->invoke(null, $warRoomRows[0]);
+$normalizedWarRoom = $normalizeCritical->invoke($criticalService, $warRoomCanonical);
+assert_same('CC-01/SRE', $normalizedWarRoom[':sector'], 'importacao mapeia Carteira - CC');
+assert_same('SRE - Netsec', $normalizedWarRoom[':responsible_area'], 'importacao mapeia Area responsavel');
+assert_same(2, $normalizedWarRoom[':room_opening_duration_minutes'], 'importacao calcula abertura pelos horarios');
+assert_same(143, $normalizedWarRoom[':room_duration_minutes'], 'importacao calcula tempo de sala pelos horarios');
 
 $legacyXlsRejected = false;
 try {
@@ -328,6 +355,28 @@ CriticalIncidentService::assertImportRowsShape([[
     'Hora abertura sala' => '10:12',
     'Tempo de Sala' => '00:50',
 ]]);
+
+$criticalApiSource = file_get_contents(__DIR__ . '/../api/portal/critical_incidents.php');
+assert_same(true, is_string($criticalApiSource), 'le endpoint de chamados criticos');
+assert_same(
+    true,
+    strpos($criticalApiSource, "\$data['status'] = 'open';") !== false,
+    'tecnico nao consegue forcar status administrativo na criacao'
+);
+
+$loginCiSource = file_get_contents(__DIR__ . '/../api/login_ci.php');
+assert_same(true, is_string($loginCiSource), 'le endpoint de login CI');
+assert_same(
+    true,
+    strpos($loginCiSource, 'ci_elevated_session') !== false && strpos($loginCiSource, 'portal_role') !== false,
+    'login unico eleva admin ou gestor por access_role'
+);
+
+$appSource = file_get_contents(__DIR__ . '/../frontend/src/App.jsx');
+$loginPageSource = file_get_contents(__DIR__ . '/../frontend/src/pages/LoginPage.jsx');
+assert_same(true, is_string($appSource) && is_string($loginPageSource), 'le frontend de login');
+assert_same(false, strpos($appSource, "post('login_admin.php'") !== false, 'frontend nao chama login administrativo duplicado');
+assert_same(false, strpos($loginPageSource, 'LoginAdmin') !== false, 'tela de login nao renderiza card administrativo duplicado');
 
 $documentService = new DocumentService(
     new QaTransactionPdo(),
@@ -427,6 +476,7 @@ assert_same(true, $traversalRejected, 'rejeita path traversal em chave de docume
 @unlink($macroLegacyWordDocument);
 @unlink($fakeOfficePackage);
 @unlink($spreadsheetCsv);
+@unlink($warRoomCsv);
 
 $ownPdo = new QaTransactionPdo();
 $ownService = new OperationalService($ownPdo);
