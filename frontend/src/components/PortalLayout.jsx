@@ -4,6 +4,7 @@ import { navigation, pageMetadata } from '../lib/navigation'
 import { useResource } from '../hooks/useResource'
 import { Icon } from './ui/Icon'
 import { BrandMark } from './BrandMark'
+import { StatusDot } from './ui/Primitives'
 
 function userLabel(session) {
   return session.ci.autenticado
@@ -61,10 +62,12 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
   const navContent = (
     <>
       <div className="flex h-20 items-center gap-3 border-b border-white/5 px-5">
-        <BrandMark className="h-11 w-11 shrink-0 drop-shadow-[0_8px_18px_rgba(37,99,235,0.25)]" />
-        <div>
-          <p className="font-bold tracking-tight text-white">Portal SDK</p>
-          <p className="text-xs text-slate-500">Portal Operacional SDK</p>
+        <div className="rounded-card border border-cyan-400/15 bg-cyan-500/10 p-1.5">
+          <BrandMark className="h-10 w-10 shrink-0 drop-shadow-[0_8px_18px_rgba(14,165,233,0.18)]" />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate font-bold tracking-tight text-white">Portal SDK</p>
+          <p className="truncate text-xs text-slate-500">Centro Operacional de TI</p>
         </div>
       </div>
       <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Módulos do portal">
@@ -81,14 +84,17 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
               onClick={() => goTo(item.path)}
               type="button"
             >
-              <Icon name={item.icon} className="h-[18px] w-[18px]" />
-              <span>{item.label}</span>
+              <span className={`grid h-8 w-8 place-items-center rounded-lg border ${active ? 'border-cyan-400/20 bg-cyan-500/10 text-cyan-200' : 'border-white/5 bg-slate-950/30 text-slate-500'}`}>
+                <Icon name={item.icon} className="h-[17px] w-[17px]" />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {active && <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden="true" />}
             </button>
           )
         })}
       </nav>
       <div className="border-t border-white/5 p-4">
-        <div className="rounded-xl bg-slate-900/80 p-3">
+        <div className="rounded-card border border-white/5 bg-slate-900/80 p-3">
           <p className="truncate text-sm font-semibold text-slate-200">{userLabel(session)}</p>
           <p className="mt-0.5 text-xs capitalize text-slate-500">{session.role?.replace('_', ' ')}</p>
         </div>
@@ -114,30 +120,28 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
       )}
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 border-b border-white/5 bg-chrono-bg/90 backdrop-blur-xl">
+        <header className="sticky top-0 z-30 border-b border-white/5 bg-chrono-bg/95 backdrop-blur-xl">
           <div className="flex min-h-20 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
-              <button className="rounded-lg border border-white/10 p-2 text-slate-300 lg:hidden" onClick={() => setMobileOpen(true)} type="button" aria-label="Abrir menu">
+              <button className="rounded-lg border border-white/10 bg-slate-900/70 p-2 text-slate-300 lg:hidden" onClick={() => setMobileOpen(true)} type="button" aria-label="Abrir menu">
                 <Icon name="menu" />
               </button>
               <div className="min-w-0">
+                <p className="hidden text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300/70 sm:block">Portal SDK</p>
                 <h1 className="truncate text-lg font-bold text-white sm:text-xl">{metadata[0]}</h1>
                 <p className="hidden truncate text-xs text-slate-500 sm:block">{metadata[1]}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="hidden items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-xs text-emerald-300 md:flex">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                Sistema operacional
-              </div>
+              <div className="hidden md:block"><StatusDot tone="success" label="Operação online" /></div>
               <Clock />
               <div className="relative">
-                <button aria-expanded={notificationsOpen} className="relative rounded-xl border border-white/10 bg-slate-900/60 p-2.5 text-slate-300 hover:bg-slate-800" onClick={() => setNotificationsOpen((open) => !open)} type="button" aria-label="Notificações">
+                <button aria-expanded={notificationsOpen} className="relative rounded-lg border border-white/10 bg-slate-900/70 p-2.5 text-slate-300 hover:border-cyan-400/20 hover:bg-slate-800" onClick={() => setNotificationsOpen((open) => !open)} type="button" aria-label="Notificações">
                   <Icon name="bell" />
                   {(notificationResource.data?.unread || 0) > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-chrono-bg" />}
                 </button>
                 {notificationsOpen && (
-                  <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-slate-900 p-2 shadow-2xl">
+                  <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-white/10 bg-slate-900 p-2 shadow-2xl">
                     <p className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-500">Notificações</p>
                     {(notificationResource.data?.items || []).length === 0 && <p className="px-3 py-6 text-center text-sm text-slate-500">Nenhuma notificação.</p>}
                     {(notificationResource.data?.items || []).slice(0, 6).map((notification) => (
@@ -149,7 +153,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
                   </div>
                 )}
               </div>
-              <button className="rounded-xl border border-white/10 bg-slate-900/60 p-2.5 text-slate-300 hover:bg-red-500/10 hover:text-red-300" onClick={onLogout} type="button" aria-label="Sair">
+              <button className="rounded-lg border border-white/10 bg-slate-900/70 p-2.5 text-slate-300 hover:bg-red-500/10 hover:text-red-300" onClick={onLogout} type="button" aria-label="Sair">
                 <Icon name="logout" />
               </button>
             </div>

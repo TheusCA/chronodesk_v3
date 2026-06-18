@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { formatDuration } from '../lib/format'
+import { Icon } from '../components/ui/Icon'
+import { SectionHeader, StatusDot, UserAvatar } from '../components/ui/Primitives'
 
 const reasons = ['Café', 'Pessoal', 'Reunião']
 
@@ -26,25 +28,29 @@ function ActivePauseCard({ current, elapsed, loading, onFinish }) {
   return (
     <section className="card border-amber-500/20">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-500">Pausa ativa</p>
-          <h2 className="mt-1 text-xl font-bold text-white">{current.motivo_pausa}</h2>
+        <div className="flex items-start gap-3">
+          <UserAvatar name={current.nome} />
+          <div>
+            <p className="section-eyebrow">Pausa ativa</p>
+            <h2 className="mt-1 text-xl font-bold text-white">{current.motivo_pausa}</h2>
+            <p className="mt-1 text-xs text-slate-500">{current.nome}</p>
+          </div>
         </div>
         <span className={`status-badge ${statusClass}`}>{status}</span>
       </div>
-      <div className="my-7 text-center">
+      <div className="my-7 rounded-card border border-white/10 bg-slate-950/45 p-5 text-center">
         <p className="font-mono text-4xl font-black tracking-tight text-white sm:text-5xl">{formatDuration(elapsed)}</p>
         <p className="mt-2 text-sm text-slate-500">
-          {unlimited ? 'Timer ativo sem limite automatico' : `Limite ${formatDuration(limit)} · ${remaining >= 0 ? `${formatDuration(remaining)} restantes` : `${formatDuration(Math.abs(remaining))} excedidos`}`}
+          {unlimited ? 'Timer ativo sem limite automático' : `Limite ${formatDuration(limit)} · ${remaining >= 0 ? `${formatDuration(remaining)} restantes` : `${formatDuration(Math.abs(remaining))} excedidos`}`}
         </p>
       </div>
       {!unlimited && <PauseProgress elapsed={elapsed} limit={limit} />}
       {pauseReason.startsWith('reuni') && (
         <p
           className="mt-5 line-clamp-3 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400"
-          title={current.observacao_reuniao || 'Sem observacao informada'}
+          title={current.observacao_reuniao || 'Sem observação informada'}
         >
-          {current.observacao_reuniao || 'Sem observacao informada'}
+          {current.observacao_reuniao || 'Sem observação informada'}
         </p>
       )}
       <button className="btn-danger mt-6 w-full" disabled={loading} onClick={onFinish} type="button">
@@ -70,10 +76,11 @@ function StartPauseCard({ loading, onStart, onRequest }) {
 
   return (
     <form className="card space-y-5" onSubmit={submit}>
-      <div>
-        <p className="text-sm text-slate-500">Nova pausa</p>
-        <h2 className="mt-1 text-xl font-bold text-white">Iniciar pausa</h2>
-      </div>
+      <SectionHeader
+        description="Café usa limite próprio; reunião segue o fluxo de aprovação configurado."
+        eyebrow="Nova pausa"
+        title="Iniciar pausa"
+      />
       <label className="label">
         Motivo
         <select className="field mt-2" value={reason} onChange={(event) => setReason(event.target.value)} required>
@@ -89,36 +96,56 @@ function StartPauseCard({ loading, onStart, onRequest }) {
         </label>
       )}
       <button className="btn-primary w-full" disabled={loading || !reason} type="submit">
+        <Icon className="h-4 w-4" name={meeting ? 'bell' : 'pause'} />
         {loading ? 'Processando...' : meeting ? 'Solicitar aprovação' : 'Iniciar pausa'}
       </button>
     </form>
   )
 }
 
+function operatorState(item) {
+  if (item.status_aprovacao === 'pendente') return ['pending', 'Aguardando aprovação', 'status-warning']
+  if (item.em_pausa) return ['paused', 'Em pausa', 'status-warning']
+  if (item.disponibilidade?.status === 'disponivel') return ['available', item.disponibilidade?.label || 'Disponível', 'status-success']
+  return ['offline', item.disponibilidade?.label || 'Indisponível', 'status-neutral']
+}
+
 function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loading = false, onForceEndBreak }) {
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{title}</h2>
-        <span className="text-xs text-slate-600">{items.length} técnicos</span>
-      </div>
+      <SectionHeader
+        meta={<span className="status-badge status-neutral">{items.length} técnicos</span>}
+        title={title}
+      />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => {
-          const pending = item.status_aprovacao === 'pendente'
-          const label = pending ? 'Aguardando aprovação' : item.em_pausa ? 'Em pausa' : item.disponibilidade?.label
+          const [state, label, badgeClass] = operatorState(item)
           return (
-            <article className="card card-interactive" key={item.id}>
+            <article className={`operator-card operator-card-${state}`} key={item.id}>
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-semibold text-slate-200">{item.nome}</h3>
-                  <p className="mt-1 text-xs text-slate-600">{item.jornada_entrada} - {item.jornada_saida}</p>
+                <div className="flex min-w-0 items-start gap-3">
+                  <UserAvatar name={item.nome} />
+                  <div className="min-w-0">
+                    <h3 className="truncate font-semibold text-slate-200">{item.nome}</h3>
+                    <p className="mt-1 text-xs text-slate-600">Jornada {item.jornada_entrada} - {item.jornada_saida}</p>
+                  </div>
                 </div>
-                <span className={`status-badge ${item.em_pausa || pending ? 'status-warning' : item.disponibilidade?.status === 'disponivel' ? 'status-success' : 'status-neutral'}`}>{label}</span>
+                <span className={`status-badge ${badgeClass}`}>{label}</span>
               </div>
-              {item.em_pausa && <p className="mt-4 font-mono text-sm text-amber-300">{item.motivo_pausa} · {formatDuration(elapsedFor(item))}</p>}
+              {item.em_pausa && (
+                <div className="mt-4 rounded-card border border-amber-400/15 bg-amber-500/5 px-3 py-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">{item.motivo_pausa}</p>
+                  <p className="mt-1 font-mono text-lg font-bold text-amber-100">{formatDuration(elapsedFor(item))}</p>
+                </div>
+              )}
+              {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && item.observacao_reuniao && (
+                <p className="mt-3 line-clamp-2 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-xs leading-5 text-slate-400" title={item.observacao_reuniao}>
+                  {item.observacao_reuniao}
+                </p>
+              )}
               {canForceEndBreak && item.em_pausa && (
                 <button
-                  className="table-action mt-4 border border-red-500/20 text-red-300 hover:bg-red-500/10"
+                  className="btn-danger mt-4 min-h-9 px-3 py-1.5 text-xs"
                   disabled={loading}
                   onClick={() => onForceEndBreak(item)}
                   title="Derrubar pausa do CI"
@@ -148,9 +175,14 @@ export function PausasPage({ session, status, livePauses, loading, onStart, onRe
             ? <ActivePauseCard current={current} elapsed={livePauses.elapsedFor(current)} loading={loading} onFinish={onFinish} />
             : <StartPauseCard loading={loading} onStart={onStart} onRequest={onRequest} />}
           <section className="card flex flex-col justify-center">
-            <p className="text-sm text-slate-500">Sessão do colaborador</p>
-            <h2 className="mt-2 text-2xl font-bold text-white">{session.ci.nome}</h2>
-            <p className="mt-1 text-sm text-slate-400">{session.ci.username}</p>
+            <div className="flex items-center gap-3">
+              <UserAvatar name={session.ci.nome} />
+              <div>
+                <p className="section-eyebrow">Sessão do colaborador</p>
+                <h2 className="mt-1 text-2xl font-bold text-white">{session.ci.nome}</h2>
+                <p className="mt-1 text-sm text-slate-400">{session.ci.username}</p>
+              </div>
+            </div>
             {current?.status_aprovacao === 'pendente' && (
               <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">
                 Sua solicitação de reunião está aguardando aprovação.
@@ -163,9 +195,7 @@ export function PausasPage({ session, status, livePauses, loading, onStart, onRe
           A sessão administrativa permite monitoramento. Entre como CI para iniciar ou finalizar sua própria pausa.
         </div>
       )}
-      <div className={`text-xs ${livePauses.connection === 'online' ? 'text-emerald-400' : 'text-amber-400'}`}>
-        {livePauses.connection === 'online' ? 'Atualizacao em tempo real ativa' : 'Conexao instavel; exibindo o ultimo estado recebido'}
-      </div>
+      <StatusDot tone={livePauses.connection === 'online' ? 'success' : 'warning'} label={livePauses.connection === 'online' ? 'Atualização em tempo real ativa' : 'Conexão instável; exibindo o último estado recebido'} />
       <TeamStatus title="Equipe N1" items={status.n1 || []} elapsedFor={livePauses.elapsedFor} canForceEndBreak={canForceEndBreak} loading={loading} onForceEndBreak={onForceEndBreak} />
       <TeamStatus title="Equipe N2" items={status.n2 || []} elapsedFor={livePauses.elapsedFor} canForceEndBreak={canForceEndBreak} loading={loading} onForceEndBreak={onForceEndBreak} />
     </div>
