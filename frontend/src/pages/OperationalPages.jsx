@@ -5,6 +5,15 @@ import { useResource } from '../hooks/useResource'
 import { apiUrl, post, postForm } from '../lib/api'
 import { formatDate, formatDateTime } from '../lib/format'
 import {
+  DetailPill,
+  FilterBar,
+  FormSection,
+  InlineAlert,
+  MetricCard,
+  SectionHeader,
+  UserAvatar,
+} from '../components/ui/Primitives'
+import {
   competencyFor,
   IMPORT_LIMITS,
   localDate,
@@ -70,6 +79,16 @@ function scheduleRuleLabel(value) {
     || String(value || 'Nao informado').replaceAll('_', ' ')
 }
 
+function scheduleRuleTone(value) {
+  return {
+    always_onsite: 'status-success',
+    always_remote: 'status-info',
+    even_days: 'status-warning',
+    odd_days: 'status-warning',
+    undefined: 'status-neutral',
+  }[value] || 'status-neutral'
+}
+
 function EmployeeSelect({ employees, value, onChange, disabled = false }) {
   return (
     <select className="field mt-2" disabled={disabled} required value={value} onChange={onChange}>
@@ -105,12 +124,12 @@ async function submit(action, refresh, notify) {
 
 function PeriodFilters({ filters, setFilters, extra = null }) {
   return (
-    <section className="card grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+    <FilterBar>
       <label className="label">Inicio<input className="field mt-2" type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
       <label className="label">Fim<input className="field mt-2" min={filters.from} type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
       <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
       {extra}
-    </section>
+    </FilterBar>
   )
 }
 
@@ -266,14 +285,25 @@ export function SchedulePage({ session, notify }) {
       {canManage && (
         <div className="grid gap-5 xl:grid-cols-2">
           <form className="card space-y-4" onSubmit={saveRule}>
-            <h2 className="font-bold text-white">Regra fixa por colaborador</h2>
+            <SectionHeader
+              description="Valores canônicos preservados: par/ímpar, sempre presencial, sempre remoto ou sem escala."
+              eyebrow="Escala fixa"
+              title="Regra por colaborador"
+            />
             <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={rule.employee_id} onChange={(event) => setRule({ ...rule, employee_id: event.target.value })} /></label>
             <label className="label">Regra<select className="field mt-2" value={rule.rule_type} onChange={(event) => setRule({ ...rule, rule_type: event.target.value })}>{SCHEDULE_RULE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label className="label">Vigencia<input className="field mt-2" required type="date" value={rule.effective_from} onChange={(event) => setRule({ ...rule, effective_from: event.target.value })} /></label>
+            <InlineAlert tone="info" title="Contrato preservado">
+              O frontend envia `rule_type` com o valor canônico selecionado. Não há fallback silencioso para “Sem escala definida”.
+            </InlineAlert>
             <button className="btn-primary" type="submit">Salvar regra</button>
           </form>
           <form className="card space-y-4" onSubmit={saveException}>
-            <h2 className="font-bold text-white">Excecao por data</h2>
+            <SectionHeader
+              description="Use exceções para alterar a presença de uma data específica sem mudar a regra fixa."
+              eyebrow="Ajuste pontual"
+              title="Exceção por data"
+            />
             <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={exception.employee_id} onChange={(event) => setException({ ...exception, employee_id: event.target.value })} /></label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="label">Data<input className="field mt-2" required type="date" value={exception.exception_date} onChange={(event) => setException({ ...exception, exception_date: event.target.value })} /></label>
@@ -283,7 +313,11 @@ export function SchedulePage({ session, notify }) {
             <button className="btn-primary" type="submit">Salvar excecao</button>
           </form>
           <section className="card space-y-4 xl:col-span-2">
-            <div><h2 className="font-bold text-white">Importar planilha de regras</h2><p className="mt-1 text-sm text-slate-500">CSV ou XLSX. Cabecalhos: id, login_ad, email, nome, equipe, regra.</p></div>
+            <SectionHeader
+              description="CSV ou XLSX. Cabeçalhos aceitos: id, login_ad, email, nome, equipe, regra."
+              eyebrow="Importação assistida"
+              title="Importar planilha de regras"
+            />
             <button
               className={`drop-zone ${dragging ? 'drop-zone-active' : ''}`}
               onClick={() => importInputRef.current?.click()}
@@ -294,7 +328,7 @@ export function SchedulePage({ session, notify }) {
               type="button"
             >
               <strong className="text-sm text-slate-200">{importLoading ? 'Validando planilha...' : 'Clique ou arraste a planilha'}</strong>
-              <span className="mt-1 text-xs text-slate-500">CSV ou XLSX; preview obrigatorio</span>
+              <span className="mt-1 text-xs text-slate-500">CSV ou XLSX; preview obrigatório</span>
             </button>
             <input ref={importInputRef} accept={IMPORT_LIMITS.acceptedExtensions.join(',')} className="hidden" type="file" onChange={(event) => { readSpreadsheet(event.target.files?.[0]); event.target.value = '' }} />
             {preview && (
@@ -314,12 +348,12 @@ export function SchedulePage({ session, notify }) {
           <section className="card table-wrap">
             <h2 className="mb-4 font-bold text-white">Regras ativas por colaborador</h2>
             <table className="data-table">
-              <thead><tr><th>Colaborador</th><th>Equipe</th><th>Regra</th><th>Vigencia</th><th>Acoes</th></tr></thead>
+              <thead><tr><th>Colaborador</th><th>Equipe</th><th>Regra</th><th>Vigência</th><th>Ações</th></tr></thead>
               <tbody>{(resource.data?.rules || []).filter((item) => !item.effective_until).map((item) => (
                 <tr key={item.id}>
-                  <td><strong>{item.employee_name}</strong><small>{item.ad_login || 'Sem login AD'}</small></td>
+                  <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>{item.ad_login || 'Sem login AD'}</small></div></div></td>
                   <td>{item.team.toUpperCase()}</td>
-                  <td>{scheduleRuleLabel(item.rule_type)}</td>
+                  <td><span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{scheduleRuleLabel(item.rule_type)}</span></td>
                   <td>{formatDate(item.effective_from)}</td>
                   <td>{canRemoveRule ? <button className="table-action text-red-300" onClick={() => removeRule(item)} type="button">Remover regra</button> : 'Restrito a admin'}</td>
                 </tr>
@@ -331,7 +365,7 @@ export function SchedulePage({ session, notify }) {
           <section className="card table-wrap">
             <table className="data-table">
               <thead><tr><th>Data</th><th>Colaborador</th><th>Equipe</th><th>Modalidade</th><th>Origem</th></tr></thead>
-              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{scheduleRuleLabel(item.rule_type)}</small></td><td>{item.team.toUpperCase()}</td><td><Status value={item.presence_type} /></td><td>{item.source === 'exception' ? `Excecao: ${item.label}` : 'Regra fixa'}</td></tr>)}</tbody>
+              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{scheduleRuleLabel(item.rule_type)}</small></td><td>{item.team.toUpperCase()}</td><td><Status value={item.presence_type} /></td><td>{item.source === 'exception' ? `Exceção: ${item.label}` : 'Regra fixa'}</td></tr>)}</tbody>
             </table>
           </section>
         )}
@@ -383,23 +417,30 @@ function WorkflowPage({ kind, session, notify }) {
   const items = resource.data?.items || []
   const pending = items.filter((item) => item.status === 'pending')
   const history = items.filter((item) => item.status !== 'pending')
-  const title = overtime ? 'Horas extras' : 'Correcao de ponto'
+  const title = overtime ? 'Horas extras' : 'Correção de ponto'
+  const noun = overtime ? 'hora extra' : 'ajuste de ponto'
 
   function renderRows(rows) {
     return rows.map((item) => (
       <tr key={item.id}>
         <td>{formatDate(overtime ? item.work_date : item.adjustment_date)}</td>
-        <td><strong>{item.employee_name}</strong><small>Equipe {item.team.toUpperCase()}</small></td>
+        <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>Equipe {item.team.toUpperCase()}</small></div></div></td>
         {overtime ? (
           <td>
-            <strong>{item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}</strong>
-            <small>{minutesLabel(item.total_minutes)} - {item.reason}</small>
+            <div className="flex flex-wrap gap-2">
+              <DetailPill label="Período" value={`${item.start_time.slice(0, 5)} - ${item.end_time.slice(0, 5)}`} />
+              <DetailPill label="Total" value={minutesLabel(item.total_minutes)} tone="warning" />
+            </div>
+            <small>{item.reason}</small>
             <small>{item.justification}</small>
           </td>
         ) : (
           <td>
-            <strong>{adjustmentTypeLabel(item.adjustment_type)}</strong>
-            <small>Registrado: {item.recorded_time?.slice(0, 5) || 'Nao informado'} | Correto: {item.correct_time?.slice(0, 5) || 'Sem horario'}</small>
+            <div className="flex flex-wrap gap-2">
+              <DetailPill label="Tipo" value={adjustmentTypeLabel(item.adjustment_type)} tone="warning" />
+              <DetailPill label="Registrado" value={item.recorded_time?.slice(0, 5) || 'Não informado'} />
+              <DetailPill label="Correto" value={item.correct_time?.slice(0, 5) || 'Sem horário'} />
+            </div>
             <small>{item.justification}</small>
           </td>
         )}
@@ -412,7 +453,7 @@ function WorkflowPage({ kind, session, notify }) {
             </div>
           ) : (
             <>
-              <strong>{item.approved_by || 'Aguardando decisao'}</strong>
+              <strong>{item.approved_by || 'Aguardando decisão'}</strong>
               <small>{item.approved_at ? formatDateTime(item.approved_at) : statusLabel(item.status)}</small>
             </>
           )}
@@ -429,17 +470,26 @@ function WorkflowPage({ kind, session, notify }) {
           <label className="label">Status<select className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="rejected">Rejeitado</option><option value="synced">Sincronizado</option><option value="sync_error">Erro de sincronizacao</option></select></label>
         </>
       )} />
-      <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-xl font-bold text-white">{title}</h2>
-          <p className="text-sm text-slate-500">{formatDate(filters.from)} a {formatDate(filters.to)}</p>
-        </div>
-        <a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha</a>
+      <SectionHeader
+        action={<a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha</a>}
+        description={`${formatDate(filters.from)} a ${formatDate(filters.to)}. Filtros, criação, aprovação e exportação CSV preservados.`}
+        eyebrow="Workflow operacional"
+        title={title}
+      />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard detail={`Total de ${noun}s nos filtros`} icon={overtime ? 'timer' : 'edit'} label="Registros" value={items.length} />
+        <MetricCard detail="Aguardam decisão de gestor/admin" icon="bell" label="Pendentes" tone="warning" value={pending.length} />
+        <MetricCard detail="Itens aprovados ou rejeitados" icon="file" label="Histórico" value={history.length} />
+        <MetricCard detail={overtime ? 'Soma de horas extras listadas' : 'Ajustes de ponto listados'} icon="chart" label={overtime ? 'Total calculado' : 'Total filtrado'} tone="info" value={overtime ? minutesLabel(items.reduce((total, item) => total + Number(item.total_minutes || 0), 0)) : items.length} />
       </section>
-      {!canCreate && <div className="card border-blue-500/20 text-sm text-slate-400">Seu perfil possui acesso somente para leitura. Novos lancamentos e decisoes estao desabilitados.</div>}
-      <form className={`card space-y-4 ${canCreate ? '' : 'hidden'}`} onSubmit={create}>
-        <div><h2 className="font-bold text-white">{overtime ? 'Nova hora extra' : 'Novo ajuste de ponto'}</h2><p className="mt-1 text-sm text-slate-500">Competencia atual: {currentCompetency.label}, de {formatDate(currentCompetency.start)} a {formatDate(currentCompetency.end)}.</p></div>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {!canCreate && <InlineAlert tone="info" title="Acesso somente leitura">Novos lançamentos e decisões estão desabilitados para seu perfil.</InlineAlert>}
+      <form className={canCreate ? '' : 'hidden'} onSubmit={create}>
+        <FormSection
+          description={`Competência atual: ${currentCompetency.label}, de ${formatDate(currentCompetency.start)} a ${formatDate(currentCompetency.end)}.`}
+          eyebrow="Nova solicitação"
+          title={overtime ? 'Nova hora extra' : 'Novo ajuste de ponto'}
+        >
+        <div className="form-grid">
           <label className="label">Colaborador<EmployeeSelect disabled={!canApprove} employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>
           {overtime ? (
             <>
@@ -450,7 +500,7 @@ function WorkflowPage({ kind, session, notify }) {
               <div className="rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-300">
                 <span className="block text-xs font-bold uppercase tracking-wider text-slate-600">Total calculado</span>
                 <strong className="mt-1 block text-white">{minutesLabel(preview.minutes)}</strong>
-                {preview.overnight && <small className="mt-1 block text-amber-300">Virada de dia considerada no calculo.</small>}
+                {preview.overnight && <small className="mt-1 block text-amber-300">Virada de dia considerada no cálculo.</small>}
               </div>
             </>
           ) : (
@@ -463,27 +513,34 @@ function WorkflowPage({ kind, session, notify }) {
           )}
           <label className="label xl:col-span-2">Justificativa<textarea className="field mt-2 min-h-24" maxLength="2000" required value={form.justification} onChange={(event) => setForm({ ...form, justification: event.target.value })} /></label>
         </div>
-        <button className="btn-primary" type="submit">Enviar para aprovacao</button>
+          <div className="form-actions">
+            <button className="btn-primary" type="submit">Enviar para aprovação</button>
+          </div>
+        </FormSection>
       </form>
       <OperationalShell resource={resource}>
-        {items.length === 0 ? <EmptyState title="Nenhum lancamento encontrado" description="Os lancamentos do periodo aparecerao aqui." /> : (
+        {items.length === 0 ? <EmptyState title={`Nenhum ${noun} encontrado`} description="Ajuste os filtros para consultar outro período ou crie uma nova solicitação." /> : (
           <>
             <section className="card table-wrap">
-              <h2 className="mb-4 font-bold text-white">Pendentes de aprovacao</h2>
-              {pending.length === 0 ? <p className="text-sm text-slate-500">Nao ha pendencias nos filtros atuais.</p> : (
+              <SectionHeader meta={<span className="status-badge status-warning">{pending.length} pendente(s)</span>} title="Pendentes de aprovação" />
+              {pending.length === 0 ? <div className="mt-5"><InlineAlert tone="info" title="Nenhuma pendência neste filtro">Itens pendentes aparecerão aqui para decisão.</InlineAlert></div> : (
+                <div className="mt-5">
                 <table className="data-table">
-                  <thead><tr><th>Data</th><th>Colaborador</th><th>Detalhe</th><th>Status</th><th>Aprovacao</th></tr></thead>
+                  <thead><tr><th>Data</th><th>Colaborador</th><th>Detalhe</th><th>Status</th><th>Aprovação</th></tr></thead>
                   <tbody>{renderRows(pending)}</tbody>
                 </table>
+                </div>
               )}
             </section>
             <section className="card table-wrap">
-              <h2 className="mb-4 font-bold text-white">Historico</h2>
-              {history.length === 0 ? <p className="text-sm text-slate-500">Aprovados e rejeitados aparecerao aqui.</p> : (
+              <SectionHeader meta={<span className="status-badge status-neutral">{history.length} registro(s)</span>} title="Histórico" />
+              {history.length === 0 ? <div className="mt-5"><InlineAlert tone="info" title="Nenhum histórico neste filtro">Aprovados e rejeitados aparecerão aqui.</InlineAlert></div> : (
+                <div className="mt-5">
                 <table className="data-table">
-                  <thead><tr><th>Data</th><th>Colaborador</th><th>Detalhe</th><th>Status</th><th>Aprovacao</th></tr></thead>
+                  <thead><tr><th>Data</th><th>Colaborador</th><th>Detalhe</th><th>Status</th><th>Aprovação</th></tr></thead>
                   <tbody>{renderRows(history)}</tbody>
                 </table>
+                </div>
               )}
             </section>
           </>

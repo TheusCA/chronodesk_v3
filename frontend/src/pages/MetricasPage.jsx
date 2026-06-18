@@ -3,6 +3,7 @@ import { useResource } from '../hooks/useResource'
 import { apiUrl } from '../lib/api'
 import { formatDateTime, formatDuration, parseDate } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
+import { FilterBar, MetricCard, SectionHeader } from '../components/ui/Primitives'
 
 function periodStart(period) {
   const now = new Date()
@@ -14,7 +15,8 @@ function periodStart(period) {
 }
 
 function Indicator({ label, value, tone = 'text-white' }) {
-  return <article className="card"><p className="text-sm text-slate-500">{label}</p><p className={`mt-3 text-2xl font-black ${tone}`}>{value}</p></article>
+  const metricTone = tone.includes('red') ? 'danger' : tone.includes('amber') ? 'warning' : tone.includes('emerald') ? 'success' : 'info'
+  return <MetricCard detail="Indicador filtrado do período selecionado" label={label} tone={metricTone} value={value} />
 }
 
 function Ranking({ title, values, formatter = (value) => value }) {
@@ -137,8 +139,7 @@ export function MetricasPage() {
           A análise está limitada aos {resource.data.limite_registros} registros mais recentes. Use um período menor para resultados precisos.
         </div>
       )}
-      <section className="card">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+      <FilterBar>
           <select className="field" value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value })}>
             <option value="today">Hoje</option><option value="7d">Últimos 7 dias</option><option value="30d">Últimos 30 dias</option><option value="month">Mês atual</option><option value="custom">Intervalo personalizado</option><option value="all">Todo o histórico</option>
           </select>
@@ -147,14 +148,13 @@ export function MetricasPage() {
           <select className="field" value={filters.reason} onChange={(event) => setFilters({ ...filters, reason: event.target.value })}><option value="">Todos os motivos</option>{reasons.map((reason) => <option key={reason}>{reason}</option>)}</select>
           <select className="field" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos os status</option><option value="within">Dentro do tempo</option><option value="exceeded">Excedidas</option><option value="pendente">Pendentes</option><option value="aprovado">Aprovadas</option><option value="rejeitado">Rejeitadas</option></select>
           <input className="field" placeholder="Buscar" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
-        </div>
+        </FilterBar>
         {filters.period === 'custom' && (
-          <div className="mt-3 grid gap-3 sm:max-w-xl sm:grid-cols-2">
+          <div className="card mt-3 grid gap-3 sm:max-w-xl sm:grid-cols-2">
             <label className="label">Data inicial<input className="field mt-2" type="date" value={filters.customFrom} onChange={(event) => setFilters({ ...filters, customFrom: event.target.value })} /></label>
             <label className="label">Data final<input className="field mt-2" min={filters.customFrom} type="date" value={filters.customTo} onChange={(event) => setFilters({ ...filters, customTo: event.target.value })} /></label>
           </div>
         )}
-      </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Indicator label="Total de pausas" value={summary.total} tone="text-blue-300" />
@@ -177,7 +177,10 @@ export function MetricasPage() {
 
       <section className="card">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="font-bold text-white">Histórico detalhado</h2><p className="text-sm text-slate-500">Ordene pelas colunas de data ou duração.</p></div>
+          <SectionHeader
+            description="Ordene pelas colunas de data ou duração. A exportação existente permanece disponível."
+            title="Histórico detalhado"
+          />
           <a className="btn-secondary" href={apiUrl('download_relatorio.php')}>Exportar relatório</a>
         </div>
         {rows.length === 0 ? <EmptyState title="Nenhuma pausa encontrada" description="Ajuste os filtros para consultar outro período." /> : (

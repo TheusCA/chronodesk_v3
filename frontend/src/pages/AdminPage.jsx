@@ -4,6 +4,15 @@ import { post } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
+import {
+  DetailPill,
+  FilterBar,
+  FormSection,
+  InlineAlert,
+  MetricCard,
+  SectionHeader,
+  UserAvatar,
+} from '../components/ui/Primitives'
 
 const tabs = [
   ['aprovacoes', 'Aprovações'],
@@ -53,9 +62,13 @@ function adjustmentTypeLabel(value) {
 
 function ApprovalActions({ onApprove, onReject }) {
   return (
-    <div className="flex gap-2">
-      <button className="btn-primary" onClick={onApprove} type="button">Aprovar</button>
-      <button className="btn-danger" onClick={onReject} type="button">Reprovar</button>
+    <div className="flex flex-wrap gap-2 lg:justify-end">
+      <button className="btn-primary min-h-9 px-3 py-1.5 text-xs" onClick={onApprove} type="button">
+        <Icon className="h-4 w-4" name="shield" /> Aprovar
+      </button>
+      <button className="btn-danger min-h-9 px-3 py-1.5 text-xs" onClick={onReject} type="button">
+        <Icon className="h-4 w-4" name="alert" /> Rejeitar
+      </button>
     </div>
   )
 }
@@ -63,11 +76,11 @@ function ApprovalActions({ onApprove, onReject }) {
 function ApprovalSection({ title, count, children }) {
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">{title}</h3>
-        <span className="status-badge status-warning">{count} pendente(s)</span>
-      </div>
-      {count === 0 ? <div className="card py-6 text-sm text-slate-500">Nenhuma pendencia neste grupo.</div> : children}
+      <SectionHeader
+        meta={<span className="status-badge status-warning">{count} pendente(s)</span>}
+        title={title}
+      />
+      {count === 0 ? <EmptyState title="Nenhuma aprovação pendente" description="Não há itens desta categoria para decisão agora." /> : children}
     </section>
   )
 }
@@ -98,24 +111,37 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">Decisoes operacionais pendentes centralizadas.</p>
-        <span className="status-badge status-warning">{total} pendente(s)</span>
-      </div>
-      {total === 0 && <EmptyState title="Nenhuma aprovacao pendente" description="Novas solicitacoes operacionais aparecerao automaticamente nesta area." />}
+      <SectionHeader
+        description="Decisões operacionais pendentes, separadas por tipo para reduzir erro e acelerar a triagem."
+        eyebrow="Central operacional"
+        meta={<span className="status-badge status-warning">{total} pendente(s)</span>}
+        title="Aprovações"
+      />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard detail="Reuniões e pausas que aguardam decisão" icon="pause" label="Pausas/Reuniões" tone="warning" value={pauses.length} />
+        <MetricCard detail="Solicitações de horas adicionais" icon="timer" label="Horas extras" tone="warning" value={overtime.length} />
+        <MetricCard detail="Ajustes de marcação pendentes" icon="edit" label="Correção de ponto" tone="warning" value={adjustments.length} />
+        <MetricCard detail="Fila completa da central" icon="bell" label="Total pendente" tone={total > 0 ? 'warning' : 'success'} value={total} />
+      </section>
+      {total === 0 && <EmptyState title="Nenhuma aprovação pendente" description="Novas solicitações operacionais aparecerão automaticamente nesta área." />}
 
-      <ApprovalSection count={pauses.length} title="Pausas/Reunioes pendentes">
+      {total > 0 && (
+        <>
+      <ApprovalSection count={pauses.length} title="Pausas/Reuniões pendentes">
         {pauses.map((request) => (
-          <article className="card flex flex-col justify-between gap-5 lg:flex-row lg:items-center" key={`pause-${request.id}`}>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
+          <article className="approval-card" key={`pause-${request.id}`}>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <UserAvatar name={request.nome} />
                 <h4 className="font-semibold text-white">{request.nome}</h4>
                 <span className="status-badge status-neutral">Equipe {request.equipe?.toUpperCase()}</span>
                 <span className="status-badge status-warning">Pendente</span>
               </div>
-              <p className="mt-2 text-sm text-slate-300">{request.motivo}</p>
-              <p className="mt-1 text-sm text-slate-500">{request.observacao || 'Sem observacao.'}</p>
-              <p className="mt-3 text-xs text-slate-600">Solicitado em {formatDateTime(request.solicitacao_timestamp)}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <DetailPill label="Tipo" value={request.motivo} tone="warning" />
+                <DetailPill label="Solicitado" value={formatDateTime(request.solicitacao_timestamp)} />
+              </div>
+              <p className="mt-3 rounded-card border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400">{request.observacao || 'Sem observação.'}</p>
             </div>
             <ApprovalActions onApprove={() => decidePause(request.id, 'aprovar')} onReject={() => decidePause(request.id, 'rejeitar')} />
           </article>
@@ -124,16 +150,21 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
 
       <ApprovalSection count={overtime.length} title="Horas extras pendentes">
         {overtime.map((item) => (
-          <article className="card flex flex-col justify-between gap-5 lg:flex-row lg:items-center" key={`overtime-${item.id}`}>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
+          <article className="approval-card" key={`overtime-${item.id}`}>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <UserAvatar name={item.employee_name} />
                 <h4 className="font-semibold text-white">{item.employee_name}</h4>
                 <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
                 <span className="status-badge status-warning">{workflowStatusLabel(item.status)}</span>
               </div>
-              <p className="mt-2 text-sm text-slate-300">Hora extra em {item.work_date} das {String(item.start_time).slice(0, 5)} as {String(item.end_time).slice(0, 5)} ({approvalMinutes(item.total_minutes)})</p>
-              <p className="mt-1 text-sm text-slate-500">{item.reason} - {item.justification}</p>
-              <p className="mt-3 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <DetailPill label="Data" value={item.work_date} />
+                <DetailPill label="Período" value={`${String(item.start_time).slice(0, 5)} - ${String(item.end_time).slice(0, 5)}`} />
+                <DetailPill label="Total" value={approvalMinutes(item.total_minutes)} tone="warning" />
+              </div>
+              <p className="mt-3 rounded-card border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400">{item.reason} - {item.justification}</p>
+              <p className="mt-2 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
             </div>
             <ApprovalActions onApprove={() => decideWorkflow('portal/overtime.php', item.id, 'approved')} onReject={() => decideWorkflow('portal/overtime.php', item.id, 'rejected')} />
           </article>
@@ -142,21 +173,28 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
 
       <ApprovalSection count={adjustments.length} title="Ajustes de ponto pendentes">
         {adjustments.map((item) => (
-          <article className="card flex flex-col justify-between gap-5 lg:flex-row lg:items-center" key={`adjustment-${item.id}`}>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
+          <article className="approval-card" key={`adjustment-${item.id}`}>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3">
+                <UserAvatar name={item.employee_name} />
                 <h4 className="font-semibold text-white">{item.employee_name}</h4>
                 <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
                 <span className="status-badge status-warning">{workflowStatusLabel(item.status)}</span>
               </div>
-              <p className="mt-2 text-sm text-slate-300">Ajuste em {item.adjustment_date}: {adjustmentTypeLabel(item.adjustment_type)} {item.correct_time ? `- ${String(item.correct_time).slice(0, 5)}` : ''}</p>
-              <p className="mt-1 text-sm text-slate-500">{item.justification}</p>
-              <p className="mt-3 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <DetailPill label="Data" value={item.adjustment_date} />
+                <DetailPill label="Tipo" value={adjustmentTypeLabel(item.adjustment_type)} tone="warning" />
+                <DetailPill label="Horário correto" value={item.correct_time ? String(item.correct_time).slice(0, 5) : 'Sem horário'} />
+              </div>
+              <p className="mt-3 rounded-card border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400">{item.justification}</p>
+              <p className="mt-2 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
             </div>
             <ApprovalActions onApprove={() => decideWorkflow('portal/time_corrections.php', item.id, 'approved')} onReject={() => decideWorkflow('portal/time_corrections.php', item.id, 'rejected')} />
           </article>
         ))}
       </ApprovalSection>
+        </>
+      )}
     </div>
   )
 }
@@ -175,7 +213,13 @@ function SettingsTab({ resource, notify }) {
   }
 
   return (
-    <form className="card max-w-3xl space-y-6" onSubmit={submit}>
+    <form className="max-w-3xl" onSubmit={submit}>
+      <FormSection
+        description="Ajustes operacionais aplicados pelo backend e auditados no fluxo administrativo."
+        eyebrow="Parâmetros"
+        title="Configurações de pausas"
+      >
+        <div className="space-y-5">
       <div className="grid gap-5 md:grid-cols-2">
         <label className="label">Limite por equipe
           <input className="field mt-2" min="1" max="10" type="number" value={form.limite_pausa_por_equipe} onChange={(event) => setForm({ ...form, limite_pausa_por_equipe: Number(event.target.value) })} />
@@ -192,7 +236,14 @@ function SettingsTab({ resource, notify }) {
         <input checked={form.alerta_20minutos} onChange={(event) => setForm({ ...form, alerta_20minutos: event.target.checked })} type="checkbox" />
         <span><strong>Alerta aos 20 minutos</strong><small>Marca pausas críticas e excedidas.</small></span>
       </label>
-      <button className="btn-primary" type="submit">Salvar configurações</button>
+        <InlineAlert tone="info" title="Segurança operacional">
+          Esta tela não altera regras de autenticação, permissões ou auditoria. O backend continua validando os limites recebidos.
+        </InlineAlert>
+        <div className="form-actions">
+          <button className="btn-primary" type="submit">Salvar configurações</button>
+        </div>
+        </div>
+      </FormSection>
     </form>
   )
 }
@@ -375,31 +426,55 @@ function EmployeesTab({ resource, notify }) {
 
   return (
     <div className="space-y-5">
-      <form className="card space-y-5" onSubmit={create}>
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Novo cadastro</p>
-          <h3 className="mt-2 font-bold text-white">Adicionar funcionário</h3>
-          <p className="mt-1 text-sm text-slate-500">Equipe Liderança aplica automaticamente o perfil Admin.</p>
-        </div>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard detail="Funcionários visíveis nesta consulta" icon="users" label="Listados" value={filtered.length} />
+        <MetricCard detail="Ativos podem autenticar e operar" icon="shield" label="Ativos" tone="success" value={filtered.filter((item) => item.ativo).length} />
+        <MetricCard detail="Perfis com permissão administrativa" icon="settings" label="Admins" tone="warning" value={filtered.filter((item) => item.access_role === 'admin').length} />
+        <MetricCard detail="Filtragem por nome, login, equipe e perfil" icon="chart" label="Filtros aplicados" value={[search, team, role, active].filter(Boolean).length} />
+      </section>
+
+      <form onSubmit={create}>
+        <FormSection
+          description="Equipe Liderança aplica automaticamente o perfil Admin. Revise login AD e jornada antes de salvar."
+          eyebrow="Novo cadastro"
+          title="Adicionar funcionário"
+        >
         <EmployeeFields form={createForm} setForm={setCreateForm} />
-        <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Adicionando...' : 'Adicionar funcionário'}</button>
+          <div className="form-actions">
+            <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Adicionando...' : 'Adicionar funcionário'}</button>
+          </div>
+        </FormSection>
       </form>
 
-      <div className="card">
-        <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="space-y-4">
+        <FilterBar>
           <input className="field" placeholder="Buscar nome, login ou equipe" value={search} onChange={(event) => setSearch(event.target.value)} />
           <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select>
           <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="admin">Admin</option><option value="somente_leitura">Somente leitura</option></select>
           <select className="field" value={active} onChange={(event) => setActive(event.target.value)}><option value="">Ativos e inativos</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
-        </div>
-        <div className="table-wrap">
+        </FilterBar>
+        <section className="card table-wrap">
+          <SectionHeader
+            description="Ações de edição e desativação continuam restritas e auditadas pelo backend."
+            meta={<span className="status-badge status-neutral">{filtered.length} resultado(s)</span>}
+            title="Funcionários"
+          />
+          <div className="mt-5">
           <table className="data-table">
             <thead><tr><th>Funcionário</th><th>Equipe</th><th>Perfil</th><th>Jornada</th><th>Status</th><th>Ações</th></tr></thead>
             <tbody>
               {filtered.map((item) => (
                 <tr key={item.id}>
-                  <td><strong>{item.nome}</strong><small>ID {item.id} · {item.ad_login || 'Sem login AD'}</small></td>
-                  <td>{teamLabel(item.equipe)}</td>
+                  <td>
+                    <div className="flex min-w-0 items-start gap-3">
+                      <UserAvatar name={item.nome} />
+                      <div className="min-w-0">
+                        <strong>{item.nome}</strong>
+                        <small>ID {item.id} · {item.ad_login || 'Sem login AD'}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></td>
                   <td><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></td>
                   <td>{item.jornada_entrada} - {item.jornada_saida}</td>
                   <td><span className={`status-badge ${item.ativo ? 'status-success' : 'status-neutral'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>
@@ -408,17 +483,18 @@ function EmployeesTab({ resource, notify }) {
               ))}
             </tbody>
           </table>
-        </div>
+          </div>
         {filtered.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Nenhum funcionário corresponde aos filtros.</p>}
+        </section>
       </div>
 
       {editForm && (
         <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
           <button aria-label="Cancelar edição" className="absolute inset-0" onClick={() => setEditForm(null)} type="button" />
-          <form className="card relative w-full max-w-5xl space-y-5 border-blue-500/20" onSubmit={update}>
+          <form className="card relative w-full max-w-5xl space-y-5 border-cyan-500/20" onSubmit={update}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-400">Alteração auditada</p>
+                <p className="section-eyebrow">Alteração auditada</p>
                 <h3 className="mt-2 text-xl font-bold text-white">Editar funcionário</h3>
                 <p className="mt-1 text-sm text-slate-500">Dados atuais do CI carregados. Alterações de perfil são restritas a administradores e registradas em auditoria.</p>
               </div>

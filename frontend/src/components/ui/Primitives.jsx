@@ -55,3 +55,47 @@ export function StatusDot({ tone = 'info', label }) {
     </span>
   )
 }
+
+export function FilterBar({ children, actions = null }) {
+  return (
+    <section className="filter-bar">
+      <div className="filter-grid">{children}</div>
+      {actions && <div className="filter-actions">{actions}</div>}
+    </section>
+  )
+}
+
+export function FormSection({ eyebrow, title, description, children, actions = null, className = '' }) {
+  return (
+    <section className={`form-section ${className}`}>
+      <SectionHeader
+        action={actions}
+        description={description}
+        eyebrow={eyebrow}
+        title={title}
+      />
+      <div className="mt-5">{children}</div>
+    </section>
+  )
+}
+
+export function InlineAlert({ tone = 'info', title, children }) {
+  return (
+    <div className={`inline-alert inline-alert-${tone}`}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" name={tone === 'danger' ? 'alert' : tone === 'warning' ? 'bell' : 'shield'} />
+      <div>
+        {title && <strong className="block text-sm">{title}</strong>}
+        <div className="text-sm leading-6">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+export function DetailPill({ label, value, tone = 'neutral' }) {
+  return (
+    <span className={`detail-pill detail-pill-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </span>
+  )
+}
