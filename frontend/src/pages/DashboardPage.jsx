@@ -13,7 +13,7 @@ const cards = [
   ['sobreavisos_ativos', 'Sobreavisos ativos', 'text-cyan-300'],
 ]
 
-export function DashboardPage({ navigate, livePauses }) {
+export function DashboardPage({ navigate, session, livePauses, loading, onForceEndBreak }) {
   const resource = useResource('portal/dashboard.php', { intervalMs: 15000 })
   if (resource.loading) return <LoadingState />
   if (resource.error) return <ErrorState message={resource.error.message} onRetry={resource.refresh} />
@@ -25,6 +25,7 @@ export function DashboardPage({ navigate, livePauses }) {
     pausas_ativas: activePauses.length,
     solicitacoes_pendentes: Math.max(resource.data?.summary?.solicitacoes_pendentes || 0, pendingPauses),
   }
+  const canForceEndBreak = session.role === 'admin'
 
   return (
     <div className="space-y-6">
@@ -65,6 +66,17 @@ export function DashboardPage({ navigate, livePauses }) {
                     >
                       {item.observacao_reuniao || 'Sem observacao informada'}
                     </p>
+                  )}
+                  {canForceEndBreak && (
+                    <button
+                      className="table-action mt-4 border border-red-500/20 text-red-300 hover:bg-red-500/10"
+                      disabled={loading}
+                      onClick={() => onForceEndBreak(item)}
+                      title="Derrubar pausa do CI"
+                      type="button"
+                    >
+                      {loading ? 'Finalizando...' : 'Derrubar pausa'}
+                    </button>
                   )}
                 </article>
               ))}

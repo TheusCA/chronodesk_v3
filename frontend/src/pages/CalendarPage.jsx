@@ -27,6 +27,24 @@ const typeTones = {
   absence: 'border-orange-500/30 bg-orange-500/10 text-orange-200',
 }
 
+const statusLabels = {
+  active: 'Ativo',
+  pending: 'Pendente',
+  approved: 'Aprovado',
+  rejected: 'Rejeitado',
+  open: 'Aberto',
+  in_progress: 'Em andamento',
+  war_room: 'Sala aberta',
+  mitigated: 'Mitigado',
+  resolved: 'Resolvido',
+  completed: 'Concluido',
+  cancelled: 'Cancelado',
+  onsite: 'Presencial',
+  remote: 'Remoto',
+  absence: 'Ausencia',
+  day_off: 'Folga',
+}
+
 function dateKey(value) {
   return String(value || '').slice(0, 10)
 }
@@ -56,7 +74,6 @@ function asLocalDate(date) {
 function EventChip({ event }) {
   return (
     <div className={`truncate rounded-md border px-2 py-1 text-[11px] font-semibold ${typeTones[event.event_type] || typeTones.manual}`}>
-      {event.event_type === 'schedule' ? `${event.status === 'onsite' ? 'Presencial' : 'Remoto'}: ` : ''}
       {event.title}
     </div>
   )
@@ -166,7 +183,7 @@ export function CalendarPage({ session, notify }) {
           </select>
           <select className="field" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
             <option value="">Todos os status</option>
-            {['active', 'pending', 'approved', 'rejected', 'open', 'in_progress', 'war_room', 'mitigated', 'resolved', 'completed', 'cancelled'].map((status) => <option key={status} value={status}>{status.replaceAll('_', ' ')}</option>)}
+            {['active', 'pending', 'approved', 'rejected', 'open', 'in_progress', 'war_room', 'mitigated', 'resolved', 'completed', 'cancelled', 'onsite', 'remote', 'absence', 'day_off'].map((status) => <option key={status} value={status}>{statusLabels[status] || status.replaceAll('_', ' ')}</option>)}
           </select>
         </div>
       </section>
@@ -220,7 +237,7 @@ export function CalendarPage({ session, notify }) {
             {selectedEvents.map((event) => (
               <article className="rounded-xl border border-white/[0.07] bg-slate-950/30 p-3" key={event.id}>
                 <div className="flex items-start justify-between gap-2"><strong className="text-sm text-slate-200">{event.title}</strong><span className={`status-badge ${typeTones[event.event_type] || typeTones.manual}`}>{typeLabels[event.event_type] || event.event_type}</span></div>
-                <p className="mt-2 text-xs text-slate-500">{formatDateTime(event.starts_at)}</p>
+                <p className="mt-2 text-xs text-slate-500">{formatDateTime(event.starts_at)} - {statusLabels[event.status] || event.status}</p>
                 {event.description && <p className="mt-2 text-sm leading-5 text-slate-400">{event.description}</p>}
               </article>
             ))}

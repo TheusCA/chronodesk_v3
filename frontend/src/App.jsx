@@ -131,11 +131,21 @@ export default function App() {
   const allowed = !route?.permission || permissions.has(route.permission)
   const funcionarioId = session.ci.funcionario_id
 
+  async function forceEndBreak(employee) {
+    if (session.role !== 'admin' || !employee?.em_pausa) return null
+    if (!window.confirm(`Tem certeza que deseja derrubar a pausa de ${employee.nome}?`)) return null
+    const justificativa = window.prompt('Justificativa da derrubada (opcional):', '') || ''
+    return runAction(() => post('portal/admin_force_end_break.php', {
+      funcionario_id: Number(employee.id),
+      justificativa,
+    }))
+  }
+
   let content
   if (!allowed) {
     content = <AccessDenied navigate={router.navigate} />
   } else if (router.path === '/dashboard') {
-    content = <DashboardPage navigate={router.navigate} livePauses={livePauses} />
+    content = <DashboardPage navigate={router.navigate} session={session} livePauses={livePauses} loading={actionLoading} onForceEndBreak={forceEndBreak} />
   } else if (router.path === '/pausas') {
     content = (
       <PausasPage
@@ -146,6 +156,7 @@ export default function App() {
         onStart={(reason) => runAction(() => post('iniciar_pausa.php', { funcionario_id: funcionarioId, motivo_pausa: reason }))}
         onRequest={(reason, observation) => runAction(() => post('solicitar_pausa_com_aprovacao.php', { funcionario_id: funcionarioId, motivo_pausa: reason, observacao: observation }))}
         onFinish={() => runAction(() => post('finalizar_pausa.php', { funcionario_id: funcionarioId }))}
+        onForceEndBreak={forceEndBreak}
       />
     )
   } else if (router.path === '/admin') {

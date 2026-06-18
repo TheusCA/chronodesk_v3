@@ -70,12 +70,6 @@ class GerenciadorPausas {
             return ["sucesso" => false, "mensagem" => "Pausas de reunião devem ser solicitadas para aprovação."];
         }
 
-        // Verificar disponibilidade baseada em horários (jornada e almoço)
-        if (!$funcionario->esta_disponivel_para_pausa()) {
-            $status_disp = $funcionario->status_disponibilidade();
-            return ["sucesso" => false, "mensagem" => "{$funcionario->nome} não está disponível no momento. Status: {$status_disp['label']}. Jornada: {$funcionario->jornada_entrada} - {$funcionario->jornada_saida}. Almoço: {$funcionario->almoco_inicio} - {$funcionario->almoco_fim}."];
-        }
-
         if ($this->pausa_conta_para_limite($motivo)) {
             $pausas_ativas_equipe = 0;
             foreach ($this->funcionarios as $f) {
@@ -117,9 +111,6 @@ class GerenciadorPausas {
         }
         if ($funcionario->em_pausa || $funcionario->status_aprovacao === 'pendente') {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} já possui uma pausa ativa ou solicitação pendente."];
-        }
-        if (!$funcionario->esta_disponivel_para_pausa()) {
-            return ["sucesso" => false, "mensagem" => "{$funcionario->nome} não está disponível no momento."];
         }
 
         if ($this->equipe_normalizada($funcionario->equipe) === 'n2') {
@@ -186,7 +177,7 @@ class GerenciadorPausas {
         return ["sucesso" => true, "mensagem" => "Solicitação rejeitada para {$funcionario->nome}."];
     }
 
-    public function finalizar_pausa($funcionario_id) {
+    public function finalizar_pausa($funcionario_id, array $contexto = []) {
         if (!isset($this->funcionarios[$funcionario_id])) {
             return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];
         }
@@ -228,6 +219,7 @@ class GerenciadorPausas {
                 )";
                 
                 $stmt = $this->pdo->prepare($sql);
+                $observacaoHistorico = $this->observacao_historico_pausa($funcionario, $contexto);
                 $stmt->execute([
                     ':id_funcionario' => $funcionario->id,
                     ':nome_funcionario' => $funcionario->nome,
@@ -239,7 +231,7 @@ class GerenciadorPausas {
                     ':alerta_15min' => $alerta_15min ? 1 : 0,
                     ':alerta_20min' => $alerta_20min ? 1 : 0,
                     ':status_aprovacao' => $funcionario->status_aprovacao,
-                    ':observacao_reuniao' => $funcionario->observacao_reuniao ?? ''
+                    ':observacao_reuniao' => $observacaoHistorico
                 ]);
                 $persistido = true;
             } catch (PDOException $e) {
@@ -249,7 +241,8 @@ class GerenciadorPausas {
                     $fim_pausa,
                     $duracao_real,
                     $alerta_15min,
-                    $alerta_20min
+                    $alerta_20min,
+                    $contexto
                 );
             }
         } else {
@@ -259,7 +252,8 @@ class GerenciadorPausas {
                 $fim_pausa,
                 $duracao_real,
                 $alerta_15min,
-                $alerta_20min
+                $alerta_20min,
+                $contexto
             );
         }
 
@@ -270,6 +264,16 @@ class GerenciadorPausas {
                 "mensagem" => "Não foi possível registrar o histórico. A pausa continua ativa; tente novamente.",
             ];
         }
+
+        $detalhes = [
+            'funcionario_id' => (int)$funcionario->id,
+            'funcionario_nome' => $funcionario->nome,
+            'funcionario_equipe' => $funcionario->equipe,
+            'motivo_pausa' => $funcionario->motivo_pausa,
+            'inicio_pausa' => $funcionario->inicio_pausa->format('Y-m-d H:i:s'),
+            'fim_pausa' => $fim_pausa->format('Y-m-d H:i:s'),
+            'duracao_segundos' => $duracao_real,
+        ];
 
         // Limpar dados da pausa
         $funcionario->em_pausa = false;
@@ -294,10 +298,23 @@ class GerenciadorPausas {
             $mensagem .= " ⚠️ ATENÇÃO - Pausa excedeu 15 minutos!";
         }
 
-        return ["sucesso" => true, "mensagem" => $mensagem];
+        return ["sucesso" => true, "mensagem" => $mensagem, "detalhes" => $detalhes];
     }
 
-    private function salvar_csv_backup($funcionario, $fim_pausa, $duracao_real, $alerta_15min, $alerta_20min): bool {
+    private function observacao_historico_pausa($funcionario, array $contexto): string {
+        $observacao = trim((string)($funcionario->observacao_reuniao ?? ''));
+        if (($contexto['origem'] ?? '') !== 'admin_force_end') {
+            return $observacao;
+        }
+
+        $manual = 'Derrubada manual por admin: ' . ($contexto['admin'] ?? 'admin');
+        if (($contexto['justificativa'] ?? '') !== '') {
+            $manual .= ' | Justificativa: ' . $contexto['justificativa'];
+        }
+        return trim($observacao === '' ? $manual : $observacao . ' | ' . $manual);
+    }
+
+    private function salvar_csv_backup($funcionario, $fim_pausa, $duracao_real, $alerta_15min, $alerta_20min, array $contexto = []): bool {
         $file = @fopen(PAUSAS_CSV, 'a');
         if ($file === false || !flock($file, LOCK_EX)) {
             if (is_resource($file)) {
@@ -316,7 +333,7 @@ class GerenciadorPausas {
             'alerta_15min' => $alerta_15min ? 'True' : 'False',
             'alerta_20min' => $alerta_20min ? 'True' : 'False',
             'status_aprovacao' => $funcionario->status_aprovacao,
-            'observacao_reuniao' => $funcionario->observacao_reuniao ?? ''
+            'observacao_reuniao' => $this->observacao_historico_pausa($funcionario, $contexto)
         ];
         try {
             $written = fputcsv($file, $row);

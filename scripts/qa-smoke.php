@@ -163,6 +163,16 @@ foreach (['aprovar', 'rejeitar'] as $pauseDecision) {
 
 assert_same('lideranca', validate_funcionario_equipe('Liderança'), 'aceita equipe Lideranca');
 assert_same('lideranca', validate_funcionario_equipe('Não se aplica'), 'normaliza equipe legada como Lideranca');
+$forceEndBreakSource = file_get_contents(__DIR__ . '/../api/portal/admin_force_end_break.php');
+assert_same(true, is_string($forceEndBreakSource), 'le endpoint de derrubada manual de pausa');
+assert_same(true, strpos($forceEndBreakSource, 'require_portal_auth()') !== false, 'derrubada manual exige sessao');
+assert_same(true, strpos($forceEndBreakSource, "\$role !== 'admin'") !== false, 'derrubada manual exige admin exato');
+assert_same(true, strpos($forceEndBreakSource, 'portal_json_input()') !== false, 'derrubada manual exige CSRF e JSON');
+assert_same(true, strpos($forceEndBreakSource, 'with_pause_state_lock') !== false, 'derrubada manual usa lock de estado');
+assert_same(true, strpos($forceEndBreakSource, 'finalizar_pausa') !== false, 'derrubada manual reutiliza finalizacao segura');
+assert_same(true, strpos($forceEndBreakSource, 'BREAK_FORCE_END_DENIED') !== false, 'derrubada manual audita tentativa negada');
+assert_same(true, strpos($forceEndBreakSource, 'BREAK_FORCE_ENDED_BY_ADMIN') !== false, 'derrubada manual audita sucesso');
+
 assert_same(null, validate_funcionario_equipe('supervisao'), 'rejeita equipe desconhecida');
 assert_same('somente_leitura', validate_access_role('somente_leitura'), 'aceita perfil somente leitura');
 assert_same(null, validate_access_role('superadmin'), 'rejeita perfil desconhecido');

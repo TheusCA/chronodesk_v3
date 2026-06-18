@@ -8,6 +8,11 @@ $service = new OperationalService();
 
 try {
     if ($method === 'GET') {
+        if (($_GET['format'] ?? '') === 'csv') {
+            audit_log('OVERTIME_EXPORTED', 'Exportacao CSV de horas extras.', 'INFO');
+            $service->streamOvertimeCsv($_GET, $actor);
+            exit;
+        }
         json_response([
             'sucesso' => true,
             'items' => $service->listOvertime($_GET, $actor),

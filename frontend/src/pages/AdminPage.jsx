@@ -30,6 +30,27 @@ function approvalMinutes(value) {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}min`
 }
 
+function workflowStatusLabel(value) {
+  return {
+    pending: 'Pendente',
+    approved: 'Aprovado',
+    rejected: 'Rejeitado',
+    synced: 'Sincronizado',
+    sync_error: 'Erro de sincronizacao',
+  }[value] || String(value || 'Nao informado').replaceAll('_', ' ')
+}
+
+function adjustmentTypeLabel(value) {
+  return {
+    entry: 'Entrada',
+    lunch_out: 'Saida para almoco',
+    lunch_return: 'Retorno do almoco',
+    exit: 'Saida',
+    absence: 'Ausencia',
+    other: 'Outro',
+  }[value] || 'Ajuste'
+}
+
 function ApprovalActions({ onApprove, onReject }) {
   return (
     <div className="flex gap-2">
@@ -108,7 +129,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
               <div className="flex flex-wrap items-center gap-2">
                 <h4 className="font-semibold text-white">{item.employee_name}</h4>
                 <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
-                <span className="status-badge status-warning">{item.status}</span>
+                <span className="status-badge status-warning">{workflowStatusLabel(item.status)}</span>
               </div>
               <p className="mt-2 text-sm text-slate-300">Hora extra em {item.work_date} das {String(item.start_time).slice(0, 5)} as {String(item.end_time).slice(0, 5)} ({approvalMinutes(item.total_minutes)})</p>
               <p className="mt-1 text-sm text-slate-500">{item.reason} - {item.justification}</p>
@@ -126,9 +147,9 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
               <div className="flex flex-wrap items-center gap-2">
                 <h4 className="font-semibold text-white">{item.employee_name}</h4>
                 <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
-                <span className="status-badge status-warning">{item.status}</span>
+                <span className="status-badge status-warning">{workflowStatusLabel(item.status)}</span>
               </div>
-              <p className="mt-2 text-sm text-slate-300">Ajuste em {item.adjustment_date}: {item.adjustment_type} {item.correct_time ? `- ${String(item.correct_time).slice(0, 5)}` : ''}</p>
+              <p className="mt-2 text-sm text-slate-300">Ajuste em {item.adjustment_date}: {adjustmentTypeLabel(item.adjustment_type)} {item.correct_time ? `- ${String(item.correct_time).slice(0, 5)}` : ''}</p>
               <p className="mt-1 text-sm text-slate-500">{item.justification}</p>
               <p className="mt-3 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
             </div>

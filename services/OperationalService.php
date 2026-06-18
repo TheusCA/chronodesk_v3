@@ -213,8 +213,10 @@ final class OperationalService {
                 $events[] = [
                     'id' => 'schedule-' . $row['employee_id'] . '-' . $row['date'],
                     'event_type' => 'schedule',
-                    'title' => $row['employee_name'],
-                    'description' => $row['label'],
+                    'title' => $row['label'] . ': ' . $row['employee_name'],
+                    'description' => $row['source'] === 'exception'
+                        ? 'Excecao de escala'
+                        : $this->scheduleRuleLabel($row['rule_type']),
                     'starts_at' => $row['date'] . ' 00:00:00',
                     'ends_at' => $row['date'] . ' 23:59:59',
                     'team' => $row['team'],
@@ -290,8 +292,8 @@ final class OperationalService {
         $effectiveFrom = self::dateValue($data['effective_from'] ?? date('Y-m-d'), 'Inicio da vigencia');
         $existing = $this->activeScheduleRulesForEmployee((int)$employee['id']);
         $replaceExisting = filter_var($data['replace_existing'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        if (count($existing) > 1) {
-            throw new DomainException('Colaborador possui mais de uma regra ativa. Regularize as duplicidades antes de alterar.');
+        if (count($existing) > 1 && !$replaceExisting) {
+            throw new DomainException('Colaborador possui mais de uma regra ativa. Confirme a substituicao para regularizar.');
         }
         if (count($existing) === 1 && !$replaceExisting) {
             throw new DomainException('Colaborador ja possui regra de escala ativa. Confirme a substituicao ou remova a regra atual.');
@@ -306,7 +308,10 @@ final class OperationalService {
             ':created_by' => $actor,
             ':updated_by' => $actor,
         ];
-        $previous = count($existing) === 1 ? $existing[0] : $this->latestScheduleRuleForEmployee((int)$employee['id']);
+        if ($replaceExisting && count($existing) > 1) {
+            $this->closeScheduleRulesExcept((int)$employee['id'], (int)$existing[0]['id'], $actor, $effectiveFrom);
+        }
+        $previous = $existing !== [] ? $existing[0] : $this->latestScheduleRuleForEmployee((int)$employee['id']);
         if ($previous !== null) {
             $id = (int)$previous['id'];
             $stmt = $this->pdo->prepare(
@@ -781,6 +786,9 @@ final class OperationalService {
             $byTeam[$key]['oncall'] = ($byTeam[$key]['oncall'] ?? 0) + 1;
         }
         foreach ($schedule as $row) {
+            if (!in_array($row['presence_type'], ['onsite', 'remote'], true)) {
+                continue;
+            }
             $key = $row['presence_type'] === 'onsite' ? 'onsite_days' : 'remote_days';
             $byEmployee[$row['employee_name']][$key] = ($byEmployee[$row['employee_name']][$key] ?? 0) + 1;
             $teamKey = strtoupper($row['team']);
@@ -835,6 +843,86 @@ final class OperationalService {
         }
         foreach ($report['schedule'] as $row) {
             $this->csvRow($handle, ['escala', $row['employee_name'], strtoupper($row['team']), $row['date'], $row['label'], $row['presence_type']]);
+        }
+        fclose($handle);
+    }
+
+    public function streamOvertimeCsv(array $filters, array $actor): void {
+        $rows = $this->listOvertime($filters, $actor);
+        $totalsByEmployee = [];
+        foreach ($rows as $row) {
+            $employeeId = (int)$row['employee_id'];
+            $totalsByEmployee[$employeeId] = ($totalsByEmployee[$employeeId] ?? 0) + (int)$row['total_minutes'];
+        }
+
+        $filename = 'horas_extras_' . date('Ymd_His') . '.csv';
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+        $handle = fopen('php://output', 'wb');
+        fwrite($handle, "\xEF\xBB\xBF");
+        fputcsv($handle, [
+            'NC',
+            'Nome completo',
+            'Data da realizacao',
+            'Hora de entrada',
+            'Hora de saida',
+            'Descricao',
+            'Total de Horas',
+            'Total Realizado',
+        ], ';');
+        foreach ($rows as $row) {
+            $this->csvRow($handle, [
+                '',
+                $row['employee_name'],
+                $row['work_date'],
+                substr((string)$row['start_time'], 0, 5),
+                substr((string)$row['end_time'], 0, 5),
+                $row['reason'] ?: $row['justification'],
+                $this->minutesText((int)$row['total_minutes']),
+                $this->minutesText((int)($totalsByEmployee[(int)$row['employee_id']] ?? 0)),
+            ]);
+        }
+        fclose($handle);
+    }
+
+    public function streamTimeAdjustmentsCsv(array $filters, array $actor): void {
+        $rows = $this->listTimeAdjustments($filters, $actor);
+        $filename = 'correcao_ponto_' . date('Ymd_His') . '.csv';
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+        $handle = fopen('php://output', 'wb');
+        fwrite($handle, "\xEF\xBB\xBF");
+        fputcsv($handle, [
+            'NC',
+            'Nome completo',
+            'Equipe',
+            'Data',
+            'Tipo de ajuste',
+            'Horario registrado',
+            'Horario correto',
+            'Justificativa',
+            'Status',
+            'Aprovador',
+            'Data de aprovacao/rejeicao',
+        ], ';');
+        foreach ($rows as $row) {
+            $this->csvRow($handle, [
+                '',
+                $row['employee_name'],
+                strtoupper($row['team']),
+                $row['adjustment_date'],
+                $this->adjustmentTypeLabel($row['adjustment_type']),
+                $row['recorded_time'] ? substr((string)$row['recorded_time'], 0, 5) : '',
+                $row['correct_time'] ? substr((string)$row['correct_time'], 0, 5) : '',
+                $row['justification'],
+                $this->workflowStatusLabel($row['status']),
+                $row['approved_by'] ?? '',
+                $row['approved_at'] ?? '',
+            ]);
         }
         fclose($handle);
     }
@@ -1019,13 +1107,22 @@ final class OperationalService {
     }
 
     private function scheduleRules(?string $team, ?int $employeeId): array {
-        $sql = 'SELECT id, employee_id, employee_name, ad_login, team, rule_type,
-                       effective_from, effective_until, created_by, updated_by,
-                       created_at, updated_at
-                FROM portal_schedule_rules WHERE 1 = 1';
+        $sql = 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type,
+                       r.effective_from, r.effective_until, r.created_by, r.updated_by,
+                       r.created_at, r.updated_at
+                FROM portal_schedule_rules r
+                JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 1
+                WHERE LOWER(f.equipe) IN ("n1", "n2")';
         $params = [];
-        $this->appendEmployeeTeamFilters($sql, $params, $team, $employeeId);
-        $stmt = $this->pdo->prepare($sql . ' ORDER BY employee_name');
+        if ($team) {
+            $sql .= ' AND LOWER(f.equipe) = :team';
+            $params[':team'] = $team;
+        }
+        if ($employeeId) {
+            $sql .= ' AND r.employee_id = :employee_id';
+            $params[':employee_id'] = $employeeId;
+        }
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY employee_name, r.updated_at DESC, r.id DESC');
         $stmt->execute($params);
         return $stmt->fetchAll();
     }
@@ -1056,35 +1153,38 @@ final class OperationalService {
         foreach ($exceptions as $exception) {
             $exceptionMap[$exception['employee_id'] . ':' . $exception['exception_date']] = $exception;
         }
+        $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId);
         $items = [];
         $start = self::dateValue($from, 'Inicio');
         $end = self::dateValue($to, 'Fim');
         for ($date = $start; $date <= $end; $date = $date->modify('+1 day')) {
             foreach ($rules as $rule) {
-                if ($date->format('Y-m-d') < $rule['effective_from']) {
+                $dateKey = $date->format('Y-m-d');
+                if ($dateKey < $rule['effective_from']) {
                     continue;
                 }
-                if ($rule['effective_until'] && $date->format('Y-m-d') > $rule['effective_until']) {
+                if ($rule['effective_until'] && $dateKey > $rule['effective_until']) {
                     continue;
                 }
-                $key = $rule['employee_id'] . ':' . $date->format('Y-m-d');
+                $key = $rule['employee_id'] . ':' . $dateKey;
+                if (isset($absenceMap[$key])) {
+                    continue;
+                }
                 $exception = $exceptionMap[$key] ?? null;
                 if ($exception) {
-                    $presence = in_array($exception['exception_type'], ['onsite', 'oncall', 'training'], true)
-                        ? 'onsite'
-                        : 'remote';
-                    $label = $exception['exception_type'];
+                    $presence = $this->presenceForException($exception['exception_type']);
+                    $label = $this->scheduleStatusLabel($presence);
                     $source = 'exception';
                 } else {
-                    $presence = self::presenceForRule($rule['rule_type'], $date->format('Y-m-d'));
-                    $label = $presence;
+                    $presence = self::presenceForRule($rule['rule_type'], $dateKey);
+                    $label = $this->scheduleStatusLabel($presence);
                     $source = 'rule';
                 }
                 $items[] = [
                     'employee_id' => (int)$rule['employee_id'],
                     'employee_name' => $rule['employee_name'],
                     'team' => $rule['team'],
-                    'date' => $date->format('Y-m-d'),
+                    'date' => $dateKey,
                     'presence_type' => $presence,
                     'label' => $label,
                     'source' => $source,
@@ -1093,6 +1193,102 @@ final class OperationalService {
             }
         }
         return $items;
+    }
+
+    private function presenceForException(string $type): string {
+        return match ($type) {
+            'onsite', 'oncall', 'training' => 'onsite',
+            'remote' => 'remote',
+            'day_off' => 'day_off',
+            'absence', 'vacation', 'leave' => 'absence',
+            default => 'remote',
+        };
+    }
+
+    private function scheduleBlockingAbsences(string $from, string $to, ?string $team, ?int $employeeId): array {
+        $sql = 'SELECT a.employee_id, a.starts_on, a.ends_on
+                FROM portal_absences a
+                JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1
+                WHERE a.starts_on <= :date_to
+                  AND a.ends_on >= :date_from
+                  AND a.status = "approved"';
+        $params = [':date_from' => $from, ':date_to' => $to];
+        if ($team) {
+            $sql .= ' AND LOWER(f.equipe) = :team';
+            $params[':team'] = $team;
+        }
+        if ($employeeId) {
+            $sql .= ' AND a.employee_id = :employee_id';
+            $params[':employee_id'] = $employeeId;
+        }
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute($params);
+
+        $map = [];
+        $rangeStart = self::dateValue($from, 'Inicio');
+        $rangeEnd = self::dateValue($to, 'Fim');
+        foreach ($stmt->fetchAll() as $row) {
+            $start = self::dateValue($row['starts_on'], 'Inicio da ausencia');
+            $end = self::dateValue($row['ends_on'], 'Fim da ausencia');
+            if ($start < $rangeStart) {
+                $start = $rangeStart;
+            }
+            if ($end > $rangeEnd) {
+                $end = $rangeEnd;
+            }
+            for ($date = $start; $date <= $end; $date = $date->modify('+1 day')) {
+                $map[$row['employee_id'] . ':' . $date->format('Y-m-d')] = true;
+            }
+        }
+        return $map;
+    }
+
+    private function scheduleStatusLabel(string $status): string {
+        return match ($status) {
+            'onsite' => 'Presencial',
+            'remote' => 'Remoto',
+            'absence' => 'Ausencia',
+            'day_off' => 'Folga',
+            default => ucfirst(str_replace('_', ' ', $status)),
+        };
+    }
+
+    private function scheduleRuleLabel(string $rule): string {
+        return match ($rule) {
+            'even_days' => 'Dias pares',
+            'odd_days' => 'Dias impares',
+            'always_onsite' => 'Sempre presencial',
+            'always_remote' => 'Sempre remoto',
+            'undefined' => 'Sem escala definida',
+            default => 'Regra nao informada',
+        };
+    }
+
+    private function workflowStatusLabel(string $status): string {
+        return match ($status) {
+            'pending' => 'Pendente',
+            'approved' => 'Aprovado',
+            'rejected' => 'Rejeitado',
+            'synced' => 'Sincronizado',
+            'sync_error' => 'Erro de sincronizacao',
+            default => ucfirst(str_replace('_', ' ', $status)),
+        };
+    }
+
+    private function adjustmentTypeLabel(string $type): string {
+        return match ($type) {
+            'entry' => 'Entrada',
+            'lunch_out' => 'Saida para almoco',
+            'lunch_return' => 'Retorno do almoco',
+            'exit' => 'Saida',
+            'absence' => 'Ausencia',
+            'other' => 'Outro',
+            default => 'Ajuste',
+        };
+    }
+
+    private function minutesText(int $minutes): string {
+        return sprintf('%02d:%02d', intdiv(max(0, $minutes), 60), max(0, $minutes) % 60);
     }
 
     private function scheduleRuleId(int $employeeId): int {
@@ -1111,6 +1307,28 @@ final class OperationalService {
         );
         $stmt->execute([':employee_id' => $employeeId]);
         return $stmt->fetchAll();
+    }
+
+    private function closeScheduleRulesExcept(
+        int $employeeId,
+        int $keepId,
+        string $actor,
+        DateTimeImmutable $effectiveFrom
+    ): void {
+        $stmt = $this->pdo->prepare(
+            'UPDATE portal_schedule_rules
+             SET effective_until = DATE_SUB(:effective_from, INTERVAL 1 DAY),
+                 updated_by = :updated_by
+             WHERE employee_id = :employee_id
+               AND id <> :keep_id
+               AND effective_until IS NULL'
+        );
+        $stmt->execute([
+            ':effective_from' => $effectiveFrom->format('Y-m-d'),
+            ':updated_by' => $actor,
+            ':employee_id' => $employeeId,
+            ':keep_id' => $keepId,
+        ]);
     }
 
     private function latestScheduleRuleForEmployee(int $employeeId): ?array {

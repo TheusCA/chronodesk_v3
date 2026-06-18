@@ -8,6 +8,11 @@ $service = new OperationalService();
 
 try {
     if ($method === 'GET') {
+        if (($_GET['format'] ?? '') === 'csv') {
+            audit_log('TIME_ADJUSTMENT_EXPORTED', 'Exportacao CSV de correcao de ponto.', 'INFO');
+            $service->streamTimeAdjustmentsCsv($_GET, $actor);
+            exit;
+        }
         json_response([
             'sucesso' => true,
             'items' => $service->listTimeAdjustments($_GET, $actor),

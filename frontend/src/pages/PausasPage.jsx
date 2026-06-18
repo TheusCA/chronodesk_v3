@@ -95,7 +95,7 @@ function StartPauseCard({ loading, onStart, onRequest }) {
   )
 }
 
-function TeamStatus({ title, items, elapsedFor }) {
+function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loading = false, onForceEndBreak }) {
   return (
     <section>
       <div className="mb-3 flex items-center justify-between">
@@ -116,6 +116,17 @@ function TeamStatus({ title, items, elapsedFor }) {
                 <span className={`status-badge ${item.em_pausa || pending ? 'status-warning' : item.disponibilidade?.status === 'disponivel' ? 'status-success' : 'status-neutral'}`}>{label}</span>
               </div>
               {item.em_pausa && <p className="mt-4 font-mono text-sm text-amber-300">{item.motivo_pausa} · {formatDuration(elapsedFor(item))}</p>}
+              {canForceEndBreak && item.em_pausa && (
+                <button
+                  className="table-action mt-4 border border-red-500/20 text-red-300 hover:bg-red-500/10"
+                  disabled={loading}
+                  onClick={() => onForceEndBreak(item)}
+                  title="Derrubar pausa do CI"
+                  type="button"
+                >
+                  {loading ? 'Finalizando...' : 'Derrubar pausa'}
+                </button>
+              )}
             </article>
           )
         })}
@@ -124,9 +135,10 @@ function TeamStatus({ title, items, elapsedFor }) {
   )
 }
 
-export function PausasPage({ session, status, livePauses, loading, onStart, onRequest, onFinish }) {
+export function PausasPage({ session, status, livePauses, loading, onStart, onRequest, onFinish, onForceEndBreak }) {
   const employees = useMemo(() => [...(status.n1 || []), ...(status.n2 || [])], [status])
   const current = employees.find((item) => Number(item.id) === Number(session.ci.funcionario_id))
+  const canForceEndBreak = session.role === 'admin'
 
   return (
     <div className="space-y-7">
@@ -154,8 +166,8 @@ export function PausasPage({ session, status, livePauses, loading, onStart, onRe
       <div className={`text-xs ${livePauses.connection === 'online' ? 'text-emerald-400' : 'text-amber-400'}`}>
         {livePauses.connection === 'online' ? 'Atualizacao em tempo real ativa' : 'Conexao instavel; exibindo o ultimo estado recebido'}
       </div>
-      <TeamStatus title="Equipe N1" items={status.n1 || []} elapsedFor={livePauses.elapsedFor} />
-      <TeamStatus title="Equipe N2" items={status.n2 || []} elapsedFor={livePauses.elapsedFor} />
+      <TeamStatus title="Equipe N1" items={status.n1 || []} elapsedFor={livePauses.elapsedFor} canForceEndBreak={canForceEndBreak} loading={loading} onForceEndBreak={onForceEndBreak} />
+      <TeamStatus title="Equipe N2" items={status.n2 || []} elapsedFor={livePauses.elapsedFor} canForceEndBreak={canForceEndBreak} loading={loading} onForceEndBreak={onForceEndBreak} />
     </div>
   )
 }
