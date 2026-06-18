@@ -363,6 +363,30 @@
     @apply border-amber-400/20 bg-amber-500/5 text-amber-200;
   }
 
+  .legend-panel {
+    @apply card flex flex-wrap items-center gap-x-4 gap-y-3 py-3;
+  }
+
+  .legend-item {
+    @apply inline-flex items-center gap-2 text-xs font-semibold text-slate-400;
+  }
+
+  .legend-dot {
+    @apply h-2.5 w-2.5 rounded-full bg-slate-500;
+  }
+
+  .pa-grid-shell {
+    @apply overflow-x-auto rounded-card border border-white/5 bg-slate-950/25 p-4;
+  }
+
+  .pa-cell {
+    @apply min-h-44 rounded-card border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-400/40;
+  }
+
+  .file-preview-panel {
+    @apply rounded-card border border-white/10 bg-slate-950/40 p-4;
+  }
+
   .metric-card {
     @apply rounded-card border bg-slate-900/80 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)];
     background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);

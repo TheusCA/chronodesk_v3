@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../components/ui/Icon'
+import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader } from '../components/ui/Primitives'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { useResource } from '../hooks/useResource'
 import { apiUrl, postForm } from '../lib/api'
@@ -55,7 +56,7 @@ function UploadPreview({ file, previewUrl, imageFailed, onImageError }) {
   const label = image ? 'Imagem selecionada' : extension === 'pdf' ? 'PDF selecionado' : spreadsheet ? 'Planilha selecionada' : 'Arquivo selecionado'
 
   return (
-    <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4">
+    <div className="file-preview-panel p-4">
       {image && previewUrl && !imageFailed ? (
         <img alt="Preview da escala selecionada" className="mb-3 max-h-72 w-full rounded-lg bg-slate-950 object-contain" onError={onImageError} src={previewUrl} />
       ) : (
@@ -69,7 +70,10 @@ function UploadPreview({ file, previewUrl, imageFailed, onImageError }) {
           </div>
         </div>
       )}
-      <p className="truncate text-sm font-semibold text-slate-200">{file.name}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="truncate text-sm font-semibold text-slate-200">{file.name}</p>
+        <FileTypeBadge extension={extension} />
+      </div>
       <p className="mt-1 text-xs text-slate-500">{formatBytes(file.size)}</p>
     </div>
   )
@@ -164,7 +168,7 @@ function UploadShift({ limits, onClose, onUploaded }) {
           <label className="label">Mês de referência<input className="field mt-2" required type="month" value={metadata.reference_month} onChange={(event) => setMetadata({ ...metadata, reference_month: event.target.value })} /></label>
           <label className="label sm:col-span-2">Observação<textarea className="field mt-2 min-h-24 resize-y" maxLength="2000" value={metadata.notes} onChange={(event) => setMetadata({ ...metadata, notes: event.target.value })} /></label>
         </div>
-        {error && <p className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
+        {error && <InlineAlert tone="danger" title="Falha no upload">{error}</InlineAlert>}
         <div className="flex justify-end gap-2"><button className="btn-secondary" onClick={onClose} type="button">Cancelar</button><button className="btn-primary" disabled={loading || !file} type="submit">{loading ? 'Publicando...' : 'Publicar escala'}</button></div>
       </form>
     </div>
@@ -181,7 +185,10 @@ function AttachmentCard({ item, download, preview }) {
           <Icon name={spreadsheet ? 'file' : 'download'} />
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-slate-100">{item.original_name}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-sm font-semibold text-slate-100">{item.original_name}</p>
+            <FileTypeBadge extension={extension} />
+          </div>
           <p className="mt-1 text-xs text-slate-500">{attachmentLabel(extension)} · {formatBytes(item.size_bytes)}</p>
         </div>
       </div>
@@ -202,19 +209,24 @@ export function ShiftSchedulesPage({ notify }) {
 
   return (
     <div className="space-y-5">
-      <section className="card flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-400">Feed operacional</p>
-          <h2 className="mt-2 text-2xl font-black text-white">Escalas de Sábado</h2>
-          <p className="mt-2 text-sm text-slate-400">As publicações ficam disponíveis para consulta da equipe.</p>
-        </div>
-        {resource.data?.can_upload && <button className="btn-primary gap-2" onClick={() => setUploadOpen(true)} type="button"><Icon name="upload" /> Publicar escala</button>}
+      <section className="card">
+        <SectionHeader
+          eyebrow="Feed operacional"
+          title="Escalas de Sábado"
+          description="Publicações disponíveis para consulta da equipe, com anexos protegidos por endpoint autenticado."
+          action={resource.data?.can_upload && <button className="btn-primary gap-2" onClick={() => setUploadOpen(true)} type="button"><Icon name="upload" /> Publicar escala</button>}
+        />
       </section>
-      <section className="card grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-4 sm:grid-cols-3">
+        <MetricCard detail="Publicações retornadas pelos filtros atuais." icon="file" label="Publicações" value={items.length} />
+        <MetricCard detail="Imagens com preview direto no feed." icon="download" label="Imagens" tone="info" value={items.filter((item) => isImageExtension(item.extension)).length} />
+        <MetricCard detail="PDFs e planilhas para consulta ou download." icon="upload" label="Arquivos" value={items.filter((item) => !isImageExtension(item.extension)).length} />
+      </section>
+      <FilterBar>
         <input className="field" placeholder="Buscar título, observação ou arquivo" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
         <input className="field" type="month" value={filters.month} onChange={(event) => setFilters({ ...filters, month: event.target.value })} />
         <select className="field" value={filters.extension} onChange={(event) => setFilters({ ...filters, extension: event.target.value })}><option value="">Todos os formatos</option><option value="png">Imagem PNG</option><option value="jpg">Imagem JPG</option><option value="jpeg">Imagem JPEG</option><option value="pdf">PDF</option><option value="csv">CSV</option><option value="xls">XLS</option><option value="xlsx">XLSX</option></select>
-      </section>
+      </FilterBar>
       {items.length === 0 ? <EmptyState title="Nenhuma escala publicada" description="As escalas publicadas pelos administradores aparecerão aqui." /> : (
         <section className="mx-auto max-w-4xl space-y-4">
           <h3 className="sr-only">Escalas de Sábado publicadas</h3>
@@ -236,7 +248,7 @@ export function ShiftSchedulesPage({ notify }) {
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <span className="status-badge status-info">{monthLabel(item.reference_month)}</span>
-                      <span className="status-badge status-neutral">{extension.toUpperCase()}</span>
+                      <FileTypeBadge extension={extension} />
                     </div>
                     <h3 className="mt-3 text-xl font-bold text-white">{item.title}</h3>
                     {item.notes && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{item.notes}</p>}

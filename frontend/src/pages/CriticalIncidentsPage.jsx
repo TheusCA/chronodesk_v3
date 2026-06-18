@@ -5,6 +5,14 @@ import { useResource } from '../hooks/useResource'
 import { api, apiUrl, post, postForm } from '../lib/api'
 import { formatDateTime } from '../lib/format'
 import {
+  DetailPill,
+  FileTypeBadge,
+  FilterBar,
+  InlineAlert,
+  MetricCard,
+  SectionHeader,
+} from '../components/ui/Primitives'
+import {
   competencyFor,
   CRITICAL_INCIDENT_IMPORT_LIMITS,
   queryString,
@@ -131,12 +139,8 @@ function sourceLabel(value) {
 }
 
 function SummaryCard({ label, value, tone = 'text-white' }) {
-  return (
-    <article className="card">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">{label}</p>
-      <p className={`mt-3 text-2xl font-black ${tone}`}>{value}</p>
-    </article>
-  )
+  const metricTone = tone.includes('red') ? 'danger' : tone.includes('amber') ? 'warning' : tone.includes('emerald') ? 'success' : 'info'
+  return <MetricCard detail="Indicador operacional filtrado" icon="alert" label={label} tone={metricTone} value={value} />
 }
 
 function minutesLabel(value) {
@@ -196,22 +200,23 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
       <button aria-label="Fechar formulario" className="fixed inset-0" onClick={onClose} type="button" />
-      <form className="card relative mx-auto my-4 w-full max-w-6xl space-y-6 border-blue-500/20" onSubmit={submit}>
+      <form className="card relative mx-auto my-4 w-full max-w-6xl space-y-6 border-red-500/20" onSubmit={submit}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">
+            <p className="section-eyebrow">
               {editing ? `Registro #${initial.id}` : 'Novo registro'}
             </p>
             <h2 className="mt-2 text-xl font-bold text-white">
-              {editing ? 'Editar chamado critico' : 'Cadastrar chamado critico'}
+              {editing ? 'Editar chamado crítico' : 'Cadastrar chamado crítico'}
             </h2>
-            <p className="mt-1 text-sm text-slate-500">Alteracoes ficam vinculadas ao usuario autenticado e registradas em auditoria.</p>
+            <p className="mt-1 text-sm text-slate-500">Alterações ficam vinculadas ao usuário autenticado e registradas em auditoria.</p>
           </div>
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Cancelar</button>
         </div>
 
-        <section>
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-slate-500">Identificacao</h3>
+        <section className="rounded-card border border-white/5 bg-slate-950/20 p-4">
+          <SectionHeader description="Dados principais do incidente e estado atual da sala crítica." eyebrow="Identificação" title="Identificação" />
+          <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <label className="label">INCIDENTE *<input className="field mt-2" maxLength="100" required value={form.incident_number} onChange={(event) => update('incident_number', event.target.value)} /></label>
           <label className="label">Data da Sala *<input className="field mt-2" required type="date" value={form.room_date} onChange={(event) => update('room_date', event.target.value)} /></label>
@@ -223,10 +228,12 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
             <div className="label">Status<div className="field mt-2 flex items-center text-slate-300">Aberto</div></div>
           )}
           </div>
+          </div>
         </section>
 
-        <section>
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-slate-500">Linha do tempo</h3>
+        <section className="rounded-card border border-white/5 bg-slate-950/20 p-4">
+          <SectionHeader description="Tempos são calculados no cliente apenas para orientar o preenchimento; o backend continua validando e persistindo." eyebrow="Horários" title="Linha do tempo" />
+          <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label className="label">Hora de abertura Incidente<input className="field mt-2" type="datetime-local" value={form.incident_opened_at} onChange={(event) => update('incident_opened_at', event.target.value)} /></label>
             <label className="label">Hora report da operacao<input className="field mt-2" type="datetime-local" value={form.operation_reported_at} onChange={(event) => update('operation_reported_at', event.target.value)} /></label>
@@ -235,10 +242,12 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
             <CalculatedTimeField label="Tempo de abertura da sala" value={form.room_opening_duration_minutes} />
             <CalculatedTimeField label="Tempo de Sala" value={form.room_duration_minutes} />
           </div>
+          </div>
         </section>
 
-        <section>
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-slate-500">Detalhes operacionais</h3>
+        <section className="rounded-card border border-white/5 bg-slate-950/20 p-4">
+          <SectionHeader description="Impacto, sala, responsáveis e documentação operacional da tratativa." eyebrow="Impacto e tratativa" title="Detalhes operacionais" />
+          <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label className="label md:col-span-2">Descricao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_description} onChange={(event) => update('room_description', event.target.value)} /></label>
             <label className="label md:col-span-2">Descricao da finalizacao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_finalization_description} onChange={(event) => update('room_finalization_description', event.target.value)} /></label>
@@ -250,11 +259,12 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
             <label className="label md:col-span-2">Observacao<textarea className="field mt-2 min-h-24" maxLength="12000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             <label className="label md:col-span-2">Atividade SDK<textarea className="field mt-2 min-h-24" maxLength="12000" value={form.sdk_activity} onChange={(event) => update('sdk_activity', event.target.value)} /></label>
           </div>
+          </div>
         </section>
 
         <div className="flex justify-end gap-3">
           <button className="btn-secondary" disabled={submitting} onClick={onClose} type="button">Cancelar</button>
-          <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Salvando...' : editing ? 'Salvar alteracoes' : 'Cadastrar chamado'}</button>
+          <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Salvando...' : editing ? 'Salvar alterações' : 'Cadastrar chamado'}</button>
         </div>
       </form>
     </div>
@@ -271,7 +281,7 @@ function IncidentDetails({ item, onClose }) {
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
       <button aria-label="Fechar detalhes" className="fixed inset-0" onClick={onClose} type="button" />
-      <article className="card relative mx-auto my-6 max-w-4xl border-blue-500/20">
+      <article className="card relative mx-auto my-6 max-w-4xl border-red-500/20">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap gap-2"><IncidentBadge value={item.severity} /><IncidentBadge value={item.status} /></div>
@@ -281,11 +291,11 @@ function IncidentDetails({ item, onClose }) {
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
         </div>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Carteira - CC</small><p className="mt-1 text-sm text-slate-200">{item.sector || 'Nao informado'}</p></div>
-          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Técnico SDK</small><p className="mt-1 text-sm text-slate-200">{item.sdk_responsible_name || 'Nao definido'}</p>{item.sdk_responsible_login && <small className="mt-1 block text-slate-600">{item.sdk_responsible_login}</small>}</div>
-          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Area responsavel</small><p className="mt-1 text-sm text-slate-200">{item.responsible_area || 'Nao informado'}</p></div>
-          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Tempo para abrir sala</small><p className="mt-1 text-sm text-slate-200">{minutesLabel(item.room_opening_duration_minutes)}</p></div>
-          <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4"><small className="text-slate-600">Tempo de sala</small><p className="mt-1 text-sm text-slate-200">{minutesLabel(item.room_duration_minutes)}</p></div>
+          <DetailPill label="Carteira - CC" value={item.sector || 'Não informado'} />
+          <DetailPill label="Técnico SDK" value={item.sdk_responsible_name || 'Não definido'} tone="info" />
+          <DetailPill label="Área responsável" value={item.responsible_area || 'Não informado'} />
+          <DetailPill label="Tempo para abrir sala" value={minutesLabel(item.room_opening_duration_minutes)} tone="warning" />
+          <DetailPill label="Tempo de sala" value={minutesLabel(item.room_duration_minutes)} tone="warning" />
           {fields.map(([label, value]) => value && <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4 sm:col-span-2" key={label}><small className="text-slate-600">{label}</small><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{value}</p></div>)}
         </div>
         {item.meeting_url && <a className="btn-secondary mt-5" href={item.meeting_url} rel="noreferrer" target="_blank">Abrir sala de crise</a>}
@@ -352,7 +362,11 @@ function ImportPanel({ onClose, onImported }) {
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Preview obrigatorio</p><h2 className="mt-2 text-xl font-bold text-white">Importar planilha War Room</h2></div>
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
         </div>
-        <p className="mt-3 text-sm leading-6 text-slate-500">CSV ou XLSX com cabecalhos da planilha War Room, como INCIDENTE e Data da Sala. Campos incompletos podem ser ajustados depois. Limite de 500 linhas e 2 MB.</p>
+        <p className="mt-3 text-sm leading-6 text-slate-500">CSV ou XLSX com cabeçalhos da planilha War Room, como INCIDENTE e Data da Sala. Campos incompletos podem ser ajustados depois. Limite de 500 linhas e 2 MB.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <FileTypeBadge extension="csv" />
+          <FileTypeBadge extension="xlsx" />
+        </div>
         <button
           className={`mt-6 grid w-full place-items-center rounded-2xl border border-dashed px-5 py-10 ${dragging ? 'border-blue-400 bg-blue-500/10' : 'border-white/15 bg-slate-900/50'}`}
           onClick={() => inputRef.current?.click()}
@@ -366,8 +380,8 @@ function ImportPanel({ onClose, onImported }) {
           <strong className="mt-3 text-sm text-slate-200">Clique ou arraste CSV/XLSX</strong>
         </button>
         <input ref={inputRef} accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => choose(event.target.files)} type="file" />
-        {loading && <p className="mt-4 text-sm text-blue-300">Validando arquivo...</p>}
-        {error && <p className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200" role="alert">{error}</p>}
+        {loading && <InlineAlert title="Processando arquivo">Validando planilha antes da confirmação.</InlineAlert>}
+        {error && <InlineAlert tone="danger" title="Falha na importação">{error}</InlineAlert>}
         {preview && (
           <div className="mt-5 space-y-4">
             <p className="text-sm text-slate-300">{preview.valid_count} valida(s), {preview.invalid_count} invalida(s).</p>
@@ -380,7 +394,7 @@ function ImportPanel({ onClose, onImported }) {
                 </div>
               ))}
             </div>
-            <button className="btn-primary w-full" disabled={loading || preview.invalid_count > 0 || rows.length === 0} onClick={confirm} type="button">Confirmar importacao</button>
+            <button className="btn-primary w-full" disabled={loading || preview.invalid_count > 0 || rows.length === 0} onClick={confirm} type="button">Confirmar importação</button>
           </div>
         )}
       </aside>
@@ -462,8 +476,8 @@ export function CriticalIncidentsPage({ session, notify }) {
       <section className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-400">War room e sala de crise</p>
-          <h2 className="mt-2 text-2xl font-black text-white">Chamados criticos</h2>
-          <p className="mt-2 text-sm text-slate-500">Registro central de impacto, resposta, mitigacao, causa raiz e resolucao.</p>
+          <h2 className="mt-2 text-2xl font-black text-white">Chamados críticos</h2>
+          <p className="mt-2 text-sm text-slate-500">Registro central de impacto, resposta, mitigação, causa raiz e resolução.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha CSV</a>
@@ -483,7 +497,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         <SummaryCard label="Principal area responsavel" value={topAreas[0]?.responsible_area || 'Sem dados'} />
       </section>
 
-      <section className="card grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+      <FilterBar>
         <label className="label">Competencia 16-15<input className="field mt-2" type="month" value={filters.competency} onChange={(event) => setFilters({ ...filters, competency: event.target.value, from: '', to: '' })} /></label>
         <label className="label">Inicio<input className="field mt-2" type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, competency: '', from: event.target.value })} /></label>
         <label className="label">Fim<input className="field mt-2" min={filters.from} type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, competency: '', to: event.target.value })} /></label>
@@ -495,10 +509,16 @@ export function CriticalIncidentsPage({ session, notify }) {
         <label className="label">Equipe<input className="field mt-2" maxLength="120" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })} /></label>
         <label className="label">Responsavel legado<input className="field mt-2" maxLength="120" value={filters.owner} onChange={(event) => setFilters({ ...filters, owner: event.target.value })} /></label>
         <label className="label md:col-span-2">Texto livre<input className="field mt-2" maxLength="120" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} /></label>
-      </section>
+      </FilterBar>
 
       {items.length === 0 ? <EmptyState title="Nenhum chamado critico encontrado" description="Ajuste os filtros ou cadastre o primeiro registro do periodo." /> : (
         <section className="card table-wrap">
+          <SectionHeader
+            description="Priorize chamados críticos abertos, war rooms ativas e registros sem causa raiz."
+            meta={<span className="status-badge status-neutral">{items.length} registro(s)</span>}
+            title="Incidentes e salas críticas"
+          />
+          <div className="mt-5">
           <table className="data-table min-w-[1380px]">
             <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descricao</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Carteira - CC</th><th>Técnico SDK</th><th>Acoes</th></tr></thead>
             <tbody>
@@ -524,6 +544,7 @@ export function CriticalIncidentsPage({ session, notify }) {
               ))}
             </tbody>
           </table>
+          </div>
         </section>
       )}
 

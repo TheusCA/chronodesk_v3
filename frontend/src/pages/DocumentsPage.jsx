@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
+import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader } from '../components/ui/Primitives'
 import { useResource } from '../hooks/useResource'
 import { apiUrl, post, postForm } from '../lib/api'
 import { formatDateTime } from '../lib/format'
@@ -126,11 +127,14 @@ function UploadPanel({ limits, onClose, onUploaded }) {
         />
 
         {file && (
-          <div className="mt-4 rounded-xl border border-white/10 bg-slate-900/70 p-4">
+          <div className="file-preview-panel mt-4 p-4">
             <div className="flex items-start gap-3">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-500/10 text-blue-300"><Icon name="file" /></div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-200">{file.name}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-semibold text-slate-200">{file.name}</p>
+                  <FileTypeBadge extension={extensionOf(file.name)} />
+                </div>
                 <p className="mt-1 text-xs text-slate-500">{formatBytes(file.size)} · {file.type || 'MIME informado pelo navegador indisponível'}</p>
                 <span className={`status-badge mt-3 ${validation ? 'status-danger' : 'status-success'}`}>{validation || 'Validação inicial aprovada'}</span>
               </div>
@@ -156,7 +160,7 @@ function UploadPanel({ limits, onClose, onUploaded }) {
           </label>
         </div>
 
-        {error && <p className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200" role="alert">{error}</p>}
+        {error && <InlineAlert className="mt-4" tone="danger" title="Não foi possível enviar">{error}</InlineAlert>}
         <div className="mt-6 flex justify-end gap-3">
           <button className="btn-secondary" disabled={submitting} onClick={onClose} type="button">Cancelar</button>
           <button className="btn-primary" disabled={submitting || Boolean(validation)} type="submit">{submitting ? 'Enviando...' : 'Confirmar envio'}</button>
@@ -205,32 +209,34 @@ export function DocumentsPage({ notify }) {
   return (
     <div className="space-y-5">
       <section className="card overflow-hidden">
-        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-400">Conhecimento operacional</p>
-            <h2 className="mt-2 text-2xl font-black text-white">Biblioteca de documentos</h2>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">Procedimentos, manuais, evidências e instruções armazenados fora do webroot e acessados somente por endpoint autenticado.</p>
-          </div>
-          {resource.data?.can_upload && (
+        <SectionHeader
+          eyebrow="Conhecimento operacional"
+          title="Biblioteca de documentos"
+          description="Procedimentos, manuais, evidências e instruções armazenados fora do webroot e acessados somente por endpoint autenticado."
+          action={resource.data?.can_upload && (
             <button className="btn-primary gap-2" onClick={() => setUploadOpen(true)} type="button">
               <Icon name="upload" className="h-4 w-4" /> Adicionar arquivo
             </button>
           )}
-        </div>
+        />
       </section>
 
-      <section className="card">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <input className="field" placeholder="Nome ou título" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
-          <select className="field" value={filters.extension} onChange={(event) => setFilters({ ...filters, extension: event.target.value })}>
-            <option value="">Todos os tipos</option>
-            {(resource.data?.limits?.allowed_extensions || DEFAULT_EXTENSIONS).map((extension) => <option value={extension} key={extension}>{extension.toUpperCase()}</option>)}
-          </select>
-          <input className="field" placeholder="Categoria" value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })} />
-          <input className="field" placeholder="Responsável" value={filters.uploadedBy} onChange={(event) => setFilters({ ...filters, uploadedBy: event.target.value })} />
-          <input className="field" aria-label="Data de envio" type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} />
-        </div>
+      <section className="grid gap-4 md:grid-cols-3">
+        <MetricCard detail="Arquivos disponíveis após os filtros atuais." icon="file" label="Documentos" value={filtered.length} />
+        <MetricCard detail="Itens marcados para visibilidade de gestão." icon="shield" label="Gestão" tone="warning" value={filtered.filter((item) => item.visibility === 'management').length} />
+        <MetricCard detail="Formatos distintos presentes na biblioteca." icon="download" label="Formatos" tone="info" value={new Set(items.map((item) => item.extension)).size} />
       </section>
+
+      <FilterBar>
+        <input className="field" placeholder="Nome ou título" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+        <select className="field" value={filters.extension} onChange={(event) => setFilters({ ...filters, extension: event.target.value })}>
+          <option value="">Todos os tipos</option>
+          {(resource.data?.limits?.allowed_extensions || DEFAULT_EXTENSIONS).map((extension) => <option value={extension} key={extension}>{extension.toUpperCase()}</option>)}
+        </select>
+        <input className="field" placeholder="Categoria" value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })} />
+        <input className="field" placeholder="Responsável" value={filters.uploadedBy} onChange={(event) => setFilters({ ...filters, uploadedBy: event.target.value })} />
+        <input className="field" aria-label="Data de envio" type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} />
+      </FilterBar>
 
       {filtered.length === 0 ? (
         <EmptyState title="Nenhum documento encontrado" description={items.length ? 'Ajuste os filtros para localizar outros documentos.' : 'Use “Adicionar arquivo” para cadastrar o primeiro documento interno.'} />
@@ -241,7 +247,7 @@ export function DocumentsPage({ notify }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="grid h-11 w-11 place-items-center rounded-xl bg-blue-500/10 text-blue-300"><Icon name="file" /></div>
                 <div className="flex gap-2">
-                  <span className="status-badge status-info">{item.extension.toUpperCase()}</span>
+                  <FileTypeBadge extension={item.extension} />
                   {item.visibility === 'management' && <span className="status-badge status-warning">Gestão</span>}
                 </div>
               </div>

@@ -79,9 +79,9 @@ export function FormSection({ eyebrow, title, description, children, actions = n
   )
 }
 
-export function InlineAlert({ tone = 'info', title, children }) {
+export function InlineAlert({ tone = 'info', title, children, className = '' }) {
   return (
-    <div className={`inline-alert inline-alert-${tone}`}>
+    <div className={`inline-alert inline-alert-${tone} ${className}`}>
       <Icon className="mt-0.5 h-4 w-4 shrink-0" name={tone === 'danger' ? 'alert' : tone === 'warning' ? 'bell' : 'shield'} />
       <div>
         {title && <strong className="block text-sm">{title}</strong>}
@@ -97,5 +97,27 @@ export function DetailPill({ label, value, tone = 'neutral' }) {
       <span>{label}</span>
       <strong>{value}</strong>
     </span>
+  )
+}
+
+export function FileTypeBadge({ extension, label = null }) {
+  const ext = String(extension || 'file').toUpperCase()
+  const spreadsheet = ['CSV', 'XLS', 'XLSX'].includes(ext)
+  const image = ['PNG', 'JPG', 'JPEG'].includes(ext)
+  const tone = spreadsheet ? 'success' : image ? 'info' : ext === 'PDF' ? 'danger' : 'neutral'
+
+  return <span className={`status-badge status-${tone}`}>{label || ext}</span>
+}
+
+export function OperationalLegend({ items }) {
+  return (
+    <section className="legend-panel" aria-label="Legenda operacional">
+      {items.map((item) => (
+        <div className="legend-item" key={item.label}>
+          <span className={`legend-dot ${item.className || ''}`} aria-hidden="true" />
+          <span>{item.label}</span>
+        </div>
+      ))}
+    </section>
   )
 }

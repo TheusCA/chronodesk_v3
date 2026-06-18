@@ -3,6 +3,14 @@ import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { useResource } from '../hooks/useResource'
 import { post } from '../lib/api'
 import { queryString } from '../lib/operational'
+import {
+  FilterBar,
+  InlineAlert,
+  MetricCard,
+  OperationalLegend,
+  SectionHeader,
+  UserAvatar,
+} from '../components/ui/Primitives'
 
 const fallbackPas = [
   '1732', '1731', '1730', '1729', '1728', '1727', '1726', '1725',
@@ -64,6 +72,7 @@ function AssignmentChip({ item }) {
           {item.schedule_rule_label}
         </span>
       </div>
+      <p className="mt-1 text-[10px] uppercase tracking-[0.14em] opacity-75">Equipe {teamLabel(item.team)} {item.ad_login ? `· ${item.ad_login}` : ''}</p>
     </div>
   )
 }
@@ -73,13 +82,13 @@ function PaCard({ pa, canManage, onOpen }) {
   const activeCount = assignments.filter((item) => item.active_on_date).length
   return (
     <button
-      className={`min-h-44 rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:border-blue-400/40 ${assignments.length ? 'border-white/10 bg-slate-900/80' : 'border-dashed border-white/10 bg-slate-950/45'}`}
+      className={`pa-cell ${assignments.length ? 'border-white/10 bg-slate-900/80' : 'border-dashed border-white/10 bg-slate-950/45'}`}
       onClick={() => onOpen(pa)}
       type="button"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600">PA</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-300/70">PA</p>
           <strong className="mt-1 block text-2xl font-black text-white">{pa.pa_number}</strong>
         </div>
         <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${activeCount ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-slate-600/50 bg-slate-950/60 text-slate-500'}`}>
@@ -95,7 +104,7 @@ function PaCard({ pa, canManage, onOpen }) {
       ) : (
         <div className="mt-8 flex items-center justify-between gap-3 text-sm text-slate-500">
           <span>Livre</span>
-          {canManage && <span className="rounded-md border border-white/10 px-2 py-1 text-xs text-blue-300">Alocar</span>}
+          {canManage && <span className="rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-300">Alocar</span>}
         </div>
       )}
     </button>
@@ -104,7 +113,7 @@ function PaCard({ pa, canManage, onOpen }) {
 
 function AssignmentList({ assignments, canManage, onEdit, onRemove, saving }) {
   if (assignments.length === 0) {
-    return <p className="rounded-lg border border-dashed border-white/10 bg-slate-950/30 px-3 py-6 text-center text-sm text-slate-500">Nenhum colaborador vinculado a este PA.</p>
+    return <InlineAlert title="PA livre">Nenhum colaborador vinculado a este PA.</InlineAlert>
   }
   return (
     <div className="space-y-2">
@@ -112,8 +121,13 @@ function AssignmentList({ assignments, canManage, onEdit, onRemove, saving }) {
         <div className="rounded-lg border border-white/5 bg-slate-950/35 p-3" key={`${item.source}-${item.id}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-100">{item.employee_name}</p>
-              <p className="mt-1 text-xs uppercase tracking-wider text-slate-600">Equipe {teamLabel(item.team)}</p>
+              <div className="flex items-start gap-3">
+                <UserAvatar name={item.employee_name} />
+                <div>
+                  <p className="truncate text-sm font-semibold text-slate-100">{item.employee_name}</p>
+                  <p className="mt-1 text-xs uppercase tracking-wider text-slate-600">Equipe {teamLabel(item.team)} {item.ad_login ? `· ${item.ad_login}` : ''}</p>
+                </div>
+              </div>
             </div>
             <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${ruleTone[item.schedule_rule_type] || ruleTone.undefined}`}>
               {item.schedule_rule_label}
@@ -159,32 +173,32 @@ function PaModal({ pa, date, employees, canManage, onClose, onSave, onRemove, sa
       <form className="card relative mx-auto my-6 max-w-3xl border-blue-500/20" onSubmit={(event) => { event.preventDefault(); onSave(form, reset) }}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Mapa de PA</p>
+            <p className="section-eyebrow">Mapa de PA</p>
             <h2 className="mt-2 text-xl font-bold text-white">PA {pa.pa_number}</h2>
-            <p className="mt-1 text-sm text-slate-500">Vinculos recorrentes por regra de escala.</p>
+            <p className="mt-1 text-sm text-slate-500">Vínculos recorrentes por regra de escala.</p>
           </div>
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
         </div>
 
         <div className="mt-6">
-          <h3 className="mb-3 text-sm font-bold uppercase tracking-[0.14em] text-slate-500">Colaboradores vinculados</h3>
+          <SectionHeader title="Colaboradores vinculados" />
           <AssignmentList assignments={assignments} canManage={canManage} onEdit={edit} onRemove={onRemove} saving={saving} />
         </div>
 
         {canManage ? (
-          <div className="mt-6 rounded-lg border border-white/5 bg-slate-950/25 p-4">
+          <div className="mt-6 rounded-card border border-white/5 bg-slate-950/25 p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">{editing ? 'Editar vinculo' : 'Adicionar colaborador'}</h3>
-              {editing && <button className="table-action" onClick={reset} type="button">Novo vinculo</button>}
+              {editing && <button className="table-action" onClick={reset} type="button">Novo vínculo</button>}
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="label sm:col-span-2">Colaborador<select className="field mt-2" required value={form.employee_id} onChange={(event) => update('employee_id', event.target.value)}><option value="">Selecione</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} - {teamLabel(employee.team)} ({employee.schedule_rule_label})</option>)}</select></label>
               <label className="label">Inicio da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => update('valid_from', event.target.value)} /></label>
-              <label className="label sm:col-span-2">Observacao<textarea className="field mt-2 min-h-24" maxLength="1000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
+              <label className="label sm:col-span-2">Observação<textarea className="field mt-2 min-h-24" maxLength="1000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             </div>
             <div className="mt-5 flex justify-end gap-3">
               <button className="btn-secondary" disabled={saving} onClick={reset} type="button">Limpar</button>
-              <button className="btn-primary" disabled={saving || !form.employee_id} type="submit">{saving ? 'Salvando...' : 'Salvar vinculo'}</button>
+              <button className="btn-primary" disabled={saving || !form.employee_id} type="submit">{saving ? 'Salvando...' : 'Salvar vínculo'}</button>
             </div>
           </div>
         ) : (
@@ -242,32 +256,38 @@ export function PaMapPage({ notify }) {
 
   return (
     <div className="space-y-5">
-      <section className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-400">Mapa visual da operacao</p>
-          <h2 className="mt-2 text-2xl font-black text-white">Mapa de PA</h2>
-          <p className="mt-2 text-sm text-slate-500">Vinculos recorrentes por escala hibrida/home office, com destaque para a data filtrada.</p>
-        </div>
-        <div className="card grid gap-3 p-4 sm:grid-cols-2 lg:w-[520px]">
+      <SectionHeader
+        description="Vínculos recorrentes por escala híbrida/home office, com destaque para a data filtrada."
+        eyebrow="Mapa visual da operação"
+        title="Mapa de PA"
+      />
+      <FilterBar>
           <label className="label">Data<input className="field mt-2" type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} /></label>
           <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select></label>
-        </div>
-      </section>
+      </FilterBar>
 
       {assignments.length === 0 && <EmptyState title="Nenhum vinculo cadastrado" description="Todos os PAs continuam visiveis e livres para montagem do mapa." />}
 
-      <section className="overflow-x-auto rounded-lg border border-white/5 bg-slate-950/25 p-4">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard detail="PAs no inventário visual" icon="building" label="PAs" value={pas.length} />
+        <MetricCard detail="Vínculos recorrentes carregados" icon="users" label="Vínculos" value={assignments.length} />
+        <MetricCard detail="Alocações presenciais na data" icon="shield" label="Presenciais" tone="success" value={activeToday} />
+        <MetricCard detail={canManage ? 'Admin/Gestor pode editar' : 'Seu perfil é somente leitura'} icon="settings" label="Permissão" tone={canManage ? 'warning' : 'info'} value={canManage ? 'Edição' : 'Leitura'} />
+      </section>
+
+      <OperationalLegend items={[
+        { label: 'PA livre', className: 'bg-slate-500' },
+        { label: 'Ocupado/presencial', className: 'bg-emerald-400' },
+        { label: 'Regra par/ímpar', className: 'bg-amber-400' },
+        { label: 'Remoto ou sem escala na data', className: 'bg-slate-700' },
+      ]} />
+
+      <section className="pa-grid-shell">
         <div className="grid min-w-[760px] grid-cols-4 gap-3 lg:grid-cols-8">
           {pas.map((pa) => (
             <PaCard canManage={canManage} key={pa.pa_number} onOpen={(item) => setSelected(item)} pa={pa} />
           ))}
         </div>
-      </section>
-
-      <section className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-lg border border-white/5 bg-slate-950/30 p-4"><strong className="text-lg text-white">{pas.length}</strong><p className="text-xs text-slate-500">PAs no inventario</p></div>
-        <div className="rounded-lg border border-white/5 bg-slate-950/30 p-4"><strong className="text-lg text-blue-300">{assignments.length}</strong><p className="text-xs text-slate-500">Vinculos ativos</p></div>
-        <div className="rounded-lg border border-white/5 bg-slate-950/30 p-4"><strong className="text-lg text-emerald-300">{activeToday}</strong><p className="text-xs text-slate-500">Presenciais na data</p></div>
       </section>
 
       {selected && (
