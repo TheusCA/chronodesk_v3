@@ -494,6 +494,10 @@ assert_same(true, strpos($scheduleApiSource, "\$role !== 'admin'") !== false, 'r
 assert_same(true, strpos($operationalSource, 'ON DUPLICATE KEY UPDATE') !== false, 'salvar regra usa UPSERT por employee_id');
 assert_same(true, strpos($operationalSource, 'id = LAST_INSERT_ID(id)') !== false, 'UPSERT reaproveita id existente sem duplicar');
 assert_same(true, strpos($operationalSource, 'effective_until = NULL') !== false, 'UPSERT reativa regra removida');
+assert_same(true, strpos($operationalSource, "\$rule = (string)(\$data['rule_type'] ?? '');") !== false, 'salvar regra nao assume undefined quando rule_type esta ausente');
+assert_same(true, strpos($operationalSource, "['even_days', 'odd_days', 'always_remote', 'always_onsite', 'undefined']") !== false, 'salvar regra valida valores canonicos');
+assert_same(true, strpos($operationalSource, "throw new InvalidArgumentException('Regra de escala invalida.')") !== false, 'salvar regra rejeita regra invalida');
+assert_same(false, strpos($operationalSource, "\$data['rule_type'] ?? 'undefined'") !== false, 'backend nao converte rule_type ausente para undefined silenciosamente');
 assert_same(true, strpos($operationalSource, "SET rule_type = \"undefined\"") !== false, 'remocao marca regra como indefinida');
 assert_same(true, strpos($operationalSource, 'SCHEDULE_RULE_RECREATED') !== false, 'audita recriacao de regra');
 assert_same(true, strpos($operationalSource, 'SCHEDULE_RULE_IMPORTED') !== false, 'audita importacao de regra');

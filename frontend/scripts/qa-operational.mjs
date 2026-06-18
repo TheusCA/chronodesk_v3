@@ -61,4 +61,29 @@ const adminSource = readFileSync(new URL('../src/pages/AdminPage.jsx', import.me
 assert.match(adminSource, /availableTabs = isAdmin \? tabs : tabs\.filter/)
 assert.match(adminSource, /useResource\('configuracoes\.php', \{ enabled: isAdmin \}\)/)
 
+const operationalPagesSource = readFileSync(new URL('../src/pages/OperationalPages.jsx', import.meta.url), 'utf8')
+for (const [value, label] of [
+  ['even_days', 'Dias pares'],
+  ['odd_days', 'Dias ímpares'],
+  ['always_onsite', 'Sempre presencial'],
+  ['always_remote', 'Sempre remoto'],
+  ['undefined', 'Sem escala definida'],
+]) {
+  assert.match(
+    operationalPagesSource,
+    new RegExp(`\\{ value: '${value}', label: '${label}' \\}`),
+    `regra fixa exibe ${label} com value canonico ${value}`,
+  )
+}
+
+const saveRuleSource = operationalPagesSource.match(/async function saveRule\(event\) \{[\s\S]*?\n  \}/)?.[0] || ''
+assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/)
+assert.match(saveRuleSource, /notify\('Selecione uma regra de escala válida\.', 'error'\)/)
+assert.match(saveRuleSource, /post\('portal\/schedules\.php', \{\s*action: 'rule',\s*employee_id: employeeId,\s*rule_type: ruleType,\s*effective_from: rule\.effective_from,\s*\}/)
+assert.doesNotMatch(saveRuleSource, /\.\.\.rule/)
+assert.doesNotMatch(saveRuleSource, /\brule:\s*/)
+assert.doesNotMatch(saveRuleSource, /\bschedule_rule:\s*/)
+assert.doesNotMatch(saveRuleSource, /\bstatus:\s*/)
+assert.doesNotMatch(saveRuleSource, /rule_type:\s*['"]undefined['"]/)
+
 console.log('Operational frontend QA OK')

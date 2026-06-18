@@ -14,6 +14,14 @@ import {
 
 const today = localDate()
 const currentCompetency = competencyFor()
+const SCHEDULE_RULE_OPTIONS = [
+  { value: 'even_days', label: 'Dias pares' },
+  { value: 'odd_days', label: 'Dias ímpares' },
+  { value: 'always_onsite', label: 'Sempre presencial' },
+  { value: 'always_remote', label: 'Sempre remoto' },
+  { value: 'undefined', label: 'Sem escala definida' },
+]
+const SCHEDULE_RULE_VALUES = new Set(SCHEDULE_RULE_OPTIONS.map((option) => option.value))
 
 function Status({ value }) {
   const tone = {
@@ -58,13 +66,8 @@ function adjustmentTypeLabel(value) {
 }
 
 function scheduleRuleLabel(value) {
-  return {
-    always_onsite: 'Sempre presencial',
-    always_remote: 'Sempre remoto',
-    even_days: 'Dias pares',
-    odd_days: 'Dias impares',
-    undefined: 'Sem escala definida',
-  }[value] || String(value || 'Nao informado').replaceAll('_', ' ')
+  return SCHEDULE_RULE_OPTIONS.find((option) => option.value === value)?.label
+    || String(value || 'Nao informado').replaceAll('_', ' ')
 }
 
 function EmployeeSelect({ employees, value, onChange, disabled = false }) {
@@ -182,11 +185,17 @@ export function SchedulePage({ session, notify }) {
   async function saveRule(event) {
     event.preventDefault()
     const employeeId = Number(rule.employee_id)
+    const ruleType = String(rule.rule_type || '')
+    if (!SCHEDULE_RULE_VALUES.has(ruleType)) {
+      notify('Selecione uma regra de escala válida.', 'error')
+      return
+    }
     await submit(
       () => post('portal/schedules.php', {
         action: 'rule',
-        ...rule,
         employee_id: employeeId,
+        rule_type: ruleType,
+        effective_from: rule.effective_from,
       }),
       resource.refresh,
       notify,
@@ -259,7 +268,7 @@ export function SchedulePage({ session, notify }) {
           <form className="card space-y-4" onSubmit={saveRule}>
             <h2 className="font-bold text-white">Regra fixa por colaborador</h2>
             <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={rule.employee_id} onChange={(event) => setRule({ ...rule, employee_id: event.target.value })} /></label>
-            <label className="label">Regra<select className="field mt-2" value={rule.rule_type} onChange={(event) => setRule({ ...rule, rule_type: event.target.value })}><option value="even_days">Dias pares</option><option value="odd_days">Dias impares</option><option value="always_remote">Sempre remoto</option><option value="always_onsite">Sempre presencial</option></select></label>
+            <label className="label">Regra<select className="field mt-2" value={rule.rule_type} onChange={(event) => setRule({ ...rule, rule_type: event.target.value })}>{SCHEDULE_RULE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             <label className="label">Vigencia<input className="field mt-2" required type="date" value={rule.effective_from} onChange={(event) => setRule({ ...rule, effective_from: event.target.value })} /></label>
             <button className="btn-primary" type="submit">Salvar regra</button>
           </form>
