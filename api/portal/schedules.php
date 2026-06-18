@@ -53,8 +53,12 @@ try {
             audit_log('SCHEDULE_RULE_REMOVE_DENIED', 'Perfil sem permissao tentou remover regra de escala.', 'WARNING');
             json_response(['sucesso' => false, 'mensagem' => 'Apenas administradores podem remover regras de escala.'], 403);
         }
+        $rawEmployeeId = $data['employee_id'] ?? null;
+        if (!is_scalar($rawEmployeeId)) {
+            throw new InvalidArgumentException('Colaborador invalido.');
+        }
         $employeeId = filter_var(
-            $data['employee_id'] ?? null,
+            $rawEmployeeId,
             FILTER_VALIDATE_INT,
             ['options' => ['min_range' => 1]]
         );

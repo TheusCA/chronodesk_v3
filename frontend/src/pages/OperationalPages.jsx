@@ -182,17 +182,11 @@ export function SchedulePage({ session, notify }) {
   async function saveRule(event) {
     event.preventDefault()
     const employeeId = Number(rule.employee_id)
-    const activeRule = (resource.data?.rules || []).find((item) => (
-      Number(item.employee_id) === employeeId && !item.effective_until
-    ))
-    const replaceExisting = Boolean(activeRule)
-    if (replaceExisting && !window.confirm('Este colaborador ja possui regra ativa. Deseja substituir a regra de escala atual?')) return
     await submit(
       () => post('portal/schedules.php', {
         action: 'rule',
         ...rule,
         employee_id: employeeId,
-        replace_existing: replaceExisting,
       }),
       resource.refresh,
       notify,

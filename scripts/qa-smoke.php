@@ -491,8 +491,13 @@ $operationalSource = file_get_contents(__DIR__ . '/../services/OperationalServic
 assert_same(true, is_string($scheduleApiSource) && is_string($operationalSource), 'le backend de escala presencial');
 assert_same(true, strpos($scheduleApiSource, "\$action === 'remove_rule'") !== false, 'endpoint possui acao para remover regra de escala');
 assert_same(true, strpos($scheduleApiSource, "\$role !== 'admin'") !== false, 'remocao de regra exige admin');
-assert_same(true, strpos($operationalSource, 'replace_existing') !== false, 'substituicao de regra exige confirmacao explicita');
-assert_same(true, strpos($operationalSource, 'activeScheduleRulesForEmployee') !== false, 'backend verifica regra ativa por colaborador');
+assert_same(true, strpos($operationalSource, 'ON DUPLICATE KEY UPDATE') !== false, 'salvar regra usa UPSERT por employee_id');
+assert_same(true, strpos($operationalSource, 'id = LAST_INSERT_ID(id)') !== false, 'UPSERT reaproveita id existente sem duplicar');
+assert_same(true, strpos($operationalSource, 'effective_until = NULL') !== false, 'UPSERT reativa regra removida');
+assert_same(true, strpos($operationalSource, "SET rule_type = \"undefined\"") !== false, 'remocao marca regra como indefinida');
+assert_same(true, strpos($operationalSource, 'SCHEDULE_RULE_RECREATED') !== false, 'audita recriacao de regra');
+assert_same(true, strpos($operationalSource, 'SCHEDULE_RULE_IMPORTED') !== false, 'audita importacao de regra');
+assert_same(false, strpos($operationalSource, 'Colaborador ja possui regra de escala ativa.') !== false, 'importacao nao rejeita regra existente');
 
 $documentService = new DocumentService(
     new QaTransactionPdo(),

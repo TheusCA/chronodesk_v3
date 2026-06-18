@@ -283,21 +283,14 @@ final class OperationalService {
         return $this->atomic(fn(): int => $this->saveScheduleRuleUnsafe($data, $actor));
     }
 
-    private function saveScheduleRuleUnsafe(array $data, string $actor): int {
+    private function saveScheduleRuleUnsafe(array $data, string $actor, string $origin = 'manual'): int {
         $employee = $this->employee($data['employee_id'] ?? null);
         $rule = (string)($data['rule_type'] ?? '');
         if (!in_array($rule, ['even_days', 'odd_days', 'always_remote', 'always_onsite', 'undefined'], true)) {
             throw new InvalidArgumentException('Regra de escala invalida.');
         }
         $effectiveFrom = self::dateValue($data['effective_from'] ?? date('Y-m-d'), 'Inicio da vigencia');
-        $existing = $this->activeScheduleRulesForEmployee((int)$employee['id']);
-        $replaceExisting = filter_var($data['replace_existing'] ?? false, FILTER_VALIDATE_BOOLEAN);
-        if (count($existing) > 1 && !$replaceExisting) {
-            throw new DomainException('Colaborador possui mais de uma regra ativa. Confirme a substituicao para regularizar.');
-        }
-        if (count($existing) === 1 && !$replaceExisting) {
-            throw new DomainException('Colaborador ja possui regra de escala ativa. Confirme a substituicao ou remova a regra atual.');
-        }
+        $previous = $this->latestScheduleRuleForEmployee((int)$employee['id']);
         $params = [
             ':employee_id' => $employee['id'],
             ':employee_name' => $employee['name'],
@@ -308,34 +301,37 @@ final class OperationalService {
             ':created_by' => $actor,
             ':updated_by' => $actor,
         ];
-        if ($replaceExisting && count($existing) > 1) {
-            $this->closeScheduleRulesExcept((int)$employee['id'], (int)$existing[0]['id'], $actor, $effectiveFrom);
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO portal_schedule_rules
+                (employee_id, employee_name, ad_login, team, rule_type, effective_from, effective_until, created_by, updated_by)
+             VALUES
+                (:employee_id, :employee_name, :ad_login, :team, :rule_type, :effective_from, NULL, :created_by, :updated_by)
+             ON DUPLICATE KEY UPDATE
+                id = LAST_INSERT_ID(id),
+                employee_name = VALUES(employee_name),
+                ad_login = VALUES(ad_login),
+                team = VALUES(team),
+                rule_type = VALUES(rule_type),
+                effective_from = VALUES(effective_from),
+                effective_until = NULL,
+                updated_by = VALUES(updated_by),
+                updated_at = CURRENT_TIMESTAMP'
+        );
+        $stmt->execute($params);
+        $id = (int)$this->pdo->lastInsertId();
+        if ($id <= 0) {
+            $id = $this->scheduleRuleId((int)$employee['id']);
         }
-        $previous = $existing !== [] ? $existing[0] : $this->latestScheduleRuleForEmployee((int)$employee['id']);
-        if ($previous !== null) {
-            $id = (int)$previous['id'];
-            $stmt = $this->pdo->prepare(
-                'UPDATE portal_schedule_rules
-                 SET employee_name = :employee_name,
-                     ad_login = :ad_login,
-                     team = :team,
-                     rule_type = :rule_type,
-                     effective_from = :effective_from,
-                     effective_until = NULL,
-                     updated_by = :updated_by
-                 WHERE id = :id'
-            );
-            $stmt->execute($params + [':id' => $id]);
-        } else {
-            $stmt = $this->pdo->prepare(
-                'INSERT INTO portal_schedule_rules
-                    (employee_id, employee_name, ad_login, team, rule_type, effective_from, created_by, updated_by)
-                 VALUES
-                    (:employee_id, :employee_name, :ad_login, :team, :rule_type, :effective_from, :created_by, :updated_by)'
-            );
-            $stmt->execute($params);
-            $id = (int)$this->pdo->lastInsertId();
-        }
+        $this->auditScheduleRuleChange($origin, $previous, [
+            'id' => $id,
+            'employee_id' => (int)$employee['id'],
+            'employee_name' => $employee['name'],
+            'ad_login' => $employee['ad_login'],
+            'team' => $employee['team'],
+            'rule_type' => $rule,
+            'effective_from' => $effectiveFrom->format('Y-m-d'),
+            'effective_until' => null,
+        ], $actor);
         $this->sync->enqueue($this->pdo, 'schedule', $id, [
             'employee_id' => (int)$employee['id'],
             'employee_name' => $employee['name'],
@@ -349,14 +345,16 @@ final class OperationalService {
     public function removeScheduleRule(int $employeeId, string $actor): int {
         return $this->atomic(function () use ($employeeId, $actor): int {
             $employee = $this->employee($employeeId);
-            $existing = $this->activeScheduleRulesForEmployee((int)$employee['id']);
-            if ($existing === []) {
+            $existing = $this->latestScheduleRuleForEmployee((int)$employee['id']);
+            if ($existing === null || $existing['effective_until'] !== null) {
                 throw new DomainException('Colaborador nao possui regra de escala ativa.');
             }
             $stmt = $this->pdo->prepare(
                 'UPDATE portal_schedule_rules
-                 SET effective_until = DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
-                     updated_by = :updated_by
+                 SET rule_type = "undefined",
+                     effective_until = DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
+                     updated_by = :updated_by,
+                     updated_at = CURRENT_TIMESTAMP
                  WHERE employee_id = :employee_id
                    AND effective_until IS NULL'
             );
@@ -364,15 +362,14 @@ final class OperationalService {
                 ':updated_by' => $actor,
                 ':employee_id' => (int)$employee['id'],
             ]);
-            foreach ($existing as $rule) {
-                $this->sync->enqueue($this->pdo, 'schedule', (int)$rule['id'], [
-                    'kind' => 'rule_removed',
-                    'employee_id' => (int)$employee['id'],
-                    'employee_name' => $employee['name'],
-                    'rule_type' => $rule['rule_type'],
-                ], $actor);
-            }
-            return count($existing);
+            $this->auditScheduleRuleRemoval($existing, $employee, $actor);
+            $this->sync->enqueue($this->pdo, 'schedule', (int)$existing['id'], [
+                'kind' => 'rule_removed',
+                'employee_id' => (int)$employee['id'],
+                'employee_name' => $employee['name'],
+                'rule_type' => $existing['rule_type'],
+            ], $actor);
+            return $stmt->rowCount() > 0 ? 1 : 0;
         });
     }
 
@@ -513,9 +510,6 @@ final class OperationalService {
             if ($employee && isset($seen[$employee['id']])) {
                 $errors[] = 'Colaborador duplicado no arquivo.';
             }
-            if ($employee && $this->activeScheduleRulesForEmployee((int)$employee['id']) !== []) {
-                $errors[] = 'Colaborador ja possui regra de escala ativa.';
-            }
             if ($employee) {
                 $seen[$employee['id']] = true;
             }
@@ -548,7 +542,7 @@ final class OperationalService {
                     'employee_id' => $row['employee_id'],
                     'rule_type' => $row['rule_type'],
                     'effective_from' => date('Y-m-d'),
-                ], $actor);
+                ], $actor, 'import');
             }
             return $preview['valid_count'];
         });
@@ -1057,7 +1051,7 @@ final class OperationalService {
         $stmt->execute([':id' => $employeeId]);
         $employee = $stmt->fetch();
         if (!$employee || !in_array($employee['team'], ['n1', 'n2'], true)) {
-            throw new InvalidArgumentException('Colaborador ativo invalido.');
+            throw new InvalidArgumentException('Colaborador nao encontrado ou inativo.');
         }
         return $employee;
     }
@@ -1264,6 +1258,55 @@ final class OperationalService {
         };
     }
 
+    private function auditScheduleRuleChange(string $origin, ?array $previous, array $current, string $actor): void {
+        if (!function_exists('audit_log')) {
+            return;
+        }
+        $wasRemoved = $previous !== null
+            && ($previous['effective_until'] !== null || ($previous['rule_type'] ?? '') === 'undefined');
+        $action = match (true) {
+            $origin === 'import' => 'SCHEDULE_RULE_IMPORTED',
+            $previous === null => 'SCHEDULE_RULE_CREATED',
+            $wasRemoved => 'SCHEDULE_RULE_RECREATED',
+            default => 'SCHEDULE_RULE_UPDATED',
+        };
+        audit_log(
+            $action,
+            'Usuario=' . $actor
+                . '; origem=' . $origin
+                . '; employee_id=' . (int)$current['employee_id']
+                . '; employee_name=' . ($current['employee_name'] ?? '')
+                . '; ad_login=' . ($current['ad_login'] ?? '')
+                . '; team=' . ($current['team'] ?? '')
+                . '; regra_anterior=' . ($previous['rule_type'] ?? 'none')
+                . '; vigencia_anterior=' . ($previous['effective_from'] ?? 'none')
+                . '..' . ($previous['effective_until'] ?? 'NULL')
+                . '; regra_nova=' . ($current['rule_type'] ?? '')
+                . '; vigencia_nova=' . ($current['effective_from'] ?? '')
+                . '..' . ($current['effective_until'] ?? 'NULL'),
+            'WARNING'
+        );
+    }
+
+    private function auditScheduleRuleRemoval(array $previous, array $employee, string $actor): void {
+        if (!function_exists('audit_log')) {
+            return;
+        }
+        audit_log(
+            'SCHEDULE_RULE_REMOVED',
+            'Usuario=' . $actor
+                . '; origem=manual'
+                . '; employee_id=' . (int)$employee['id']
+                . '; employee_name=' . ($employee['name'] ?? '')
+                . '; ad_login=' . ($employee['ad_login'] ?? '')
+                . '; team=' . ($employee['team'] ?? '')
+                . '; regra_anterior=' . ($previous['rule_type'] ?? 'none')
+                . '; regra_nova=undefined'
+                . '; effective_until=DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY)',
+            'WARNING'
+        );
+    }
+
     private function workflowStatusLabel(string $status): string {
         return match ($status) {
             'pending' => 'Pendente',
@@ -1295,40 +1338,6 @@ final class OperationalService {
         $stmt = $this->pdo->prepare('SELECT id FROM portal_schedule_rules WHERE employee_id = :employee_id');
         $stmt->execute([':employee_id' => $employeeId]);
         return (int)$stmt->fetchColumn();
-    }
-
-    private function activeScheduleRulesForEmployee(int $employeeId): array {
-        $stmt = $this->pdo->prepare(
-            'SELECT id, employee_id, employee_name, team, rule_type, effective_from, effective_until
-             FROM portal_schedule_rules
-             WHERE employee_id = :employee_id
-               AND effective_until IS NULL
-             ORDER BY updated_at DESC, id DESC'
-        );
-        $stmt->execute([':employee_id' => $employeeId]);
-        return $stmt->fetchAll();
-    }
-
-    private function closeScheduleRulesExcept(
-        int $employeeId,
-        int $keepId,
-        string $actor,
-        DateTimeImmutable $effectiveFrom
-    ): void {
-        $stmt = $this->pdo->prepare(
-            'UPDATE portal_schedule_rules
-             SET effective_until = DATE_SUB(:effective_from, INTERVAL 1 DAY),
-                 updated_by = :updated_by
-             WHERE employee_id = :employee_id
-               AND id <> :keep_id
-               AND effective_until IS NULL'
-        );
-        $stmt->execute([
-            ':effective_from' => $effectiveFrom->format('Y-m-d'),
-            ':updated_by' => $actor,
-            ':employee_id' => $employeeId,
-            ':keep_id' => $keepId,
-        ]);
     }
 
     private function latestScheduleRuleForEmployee(int $employeeId): ?array {
@@ -1481,6 +1490,9 @@ final class OperationalService {
     private function positiveInt($value, bool $nullable = false): ?int {
         if (($value === null || $value === '') && $nullable) {
             return null;
+        }
+        if (!is_scalar($value)) {
+            throw new InvalidArgumentException('Identificador invalido.');
         }
         $result = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if ($result === false) {
