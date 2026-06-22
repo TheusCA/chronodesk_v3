@@ -156,7 +156,7 @@ export function CalendarPage({ session, notify }) {
             setFilters({ ...filters, from: competency.start, to: competency.end })
           }} /></label>
           <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>
-          <label className="label">Tipo<select className="field mt-2" value={filters.type} onChange={(event) => setFilters({ ...filters, type: event.target.value })}><option value="">Todos</option><option value="manual">Manual</option><option value="pause">Pausa</option><option value="schedule">Escala</option><option value="overtime">Hora extra</option><option value="time_adjustment">Ajuste</option><option value="oncall">Plantao</option></select></label>
+          <label className="label">Tipo<select className="field mt-2" value={filters.type} onChange={(event) => setFilters({ ...filters, type: event.target.value })}><option value="">Todos</option><option value="manual">Manual</option><option value="pause">Pausa</option><option value="schedule">Escala</option><option value="overtime">Hora extra</option><option value="time_adjustment">Ajuste</option><option value="oncall">Plantão</option></select></label>
           <label className="label">Status<input className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })} /></label>
         </>
       )} />

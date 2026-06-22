@@ -16,8 +16,8 @@ export function LoadingState({ label = 'Carregando dados...' }) {
 
 export function EmptyState({ title = 'Nenhum dado disponível', description = 'Os registros aparecerão aqui quando forem cadastrados.' }) {
   return (
-    <div className="card border-dashed border-white/10 bg-slate-950/30 py-12 text-center">
-      <span className="mx-auto grid h-12 w-12 place-items-center rounded-card border border-white/10 bg-slate-900 text-slate-400">
+    <div className="card break-words border-dashed border-white/10 bg-slate-950/30 py-12 text-center">
+      <span className="mx-auto grid h-12 w-12 place-items-center rounded-card border border-white/10 bg-slate-900 text-slate-400" aria-hidden="true">
         <Icon className="h-5 w-5" name="file" />
       </span>
       <h3 className="mt-4 font-semibold text-slate-200">{title}</h3>
@@ -28,9 +28,9 @@ export function EmptyState({ title = 'Nenhum dado disponível', description = 'O
 
 export function ErrorState({ message, onRetry }) {
   return (
-    <div className="card border-red-500/40 bg-red-500/5">
+    <div className="card break-words border-red-500/40 bg-red-500/5" role="alert">
       <div className="flex items-start gap-3">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card border border-red-400/20 bg-red-500/10 text-red-200">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-card border border-red-400/20 bg-red-500/10 text-red-200" aria-hidden="true">
           <Icon className="h-5 w-5" name="alert" />
         </span>
         <div>

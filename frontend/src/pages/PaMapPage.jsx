@@ -144,7 +144,7 @@ function AssignmentList({ assignments, canManage, onEdit, onRemove, saving }) {
               <button className="table-action text-red-300" disabled={saving} onClick={() => onRemove(item.id)} type="button">Remover</button>
             </div>
           )}
-          {item.source !== 'assignment' && <p className="mt-2 text-xs text-slate-600">Vinculo legado por data.</p>}
+          {item.source !== 'assignment' && <p className="mt-2 text-xs text-slate-600">Vínculo legado por data.</p>}
         </div>
       ))}
     </div>

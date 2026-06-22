@@ -41,7 +41,7 @@ export const pageMetadata = {
   '/avisos': ['Avisos', 'Comunicados operacionais e de segurança.'],
   '/plantonistas': ['Plantonistas', 'Contatos e horários dos plantões ativos.'],
   '/sobreavisos': ['Sobreavisos', 'Cobertura de sobreaviso ativa e planejada.'],
-  '/mapa-pa': ['Mapa de PA', 'Alocacao visual de posicoes fisicas por data.'],
+  '/mapa-pa': ['Mapa de PA', 'Alocação visual de posições físicas por data.'],
   '/chamados-criticos': ['Chamados críticos', 'War rooms, impacto, mitigação e resolução de crises.'],
   '/documentacao': ['Documentação', 'WIs, IOPs, runbooks e checklists.'],
   '/relatorios': ['Relatórios', 'Relatórios operacionais e auditoria.'],

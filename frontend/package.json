@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "qa:operational": "node scripts/qa-operational.mjs"
+    "qa:operational": "node scripts/qa-operational.mjs",
+    "qa:visual": "node scripts/qa-visual.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

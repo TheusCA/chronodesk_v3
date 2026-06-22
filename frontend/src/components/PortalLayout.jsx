@@ -28,6 +28,7 @@ function Clock() {
 export function PortalLayout({ session, path, navigate, onLogout, children }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const notificationsPanelId = 'portal-notifications-panel'
   const notificationResource = useResource('portal/notifications.php')
   const refreshNotifications = notificationResource.refresh
   const permissions = useMemo(() => new Set(session.permissions || []), [session.permissions])
@@ -110,7 +111,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button className="absolute inset-0 bg-black/70" aria-label="Fechar menu" onClick={() => setMobileOpen(false)} type="button" />
-          <aside className="relative flex h-full w-72 flex-col border-r border-white/10 bg-chrono-sidebar">
+          <aside className="relative flex h-full w-72 flex-col border-r border-white/10 bg-chrono-sidebar" role="dialog" aria-label="Menu principal" aria-modal="true">
             <button className="absolute right-3 top-3 rounded-lg p-2 text-slate-400" onClick={() => setMobileOpen(false)} type="button" aria-label="Fechar menu">
               <Icon name="close" />
             </button>
@@ -136,12 +137,12 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
               <div className="hidden md:block"><StatusDot tone="success" label="Operação online" /></div>
               <Clock />
               <div className="relative">
-                <button aria-expanded={notificationsOpen} className="relative rounded-lg border border-white/10 bg-slate-900/70 p-2.5 text-slate-300 hover:border-cyan-400/20 hover:bg-slate-800" onClick={() => setNotificationsOpen((open) => !open)} type="button" aria-label="Notificações">
+                <button aria-controls={notificationsPanelId} aria-expanded={notificationsOpen} aria-haspopup="dialog" className="relative rounded-lg border border-white/10 bg-slate-900/70 p-2.5 text-slate-300 hover:border-cyan-400/20 hover:bg-slate-800" onClick={() => setNotificationsOpen((open) => !open)} type="button" aria-label="Notificações">
                   <Icon name="bell" />
                   {(notificationResource.data?.unread || 0) > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-amber-400 ring-2 ring-chrono-bg" />}
                 </button>
                 {notificationsOpen && (
-                  <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-white/10 bg-slate-900 p-2 shadow-2xl">
+                  <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-white/10 bg-slate-900 p-2 shadow-2xl" id={notificationsPanelId} role="dialog" aria-label="Notificações recentes">
                     <p className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-slate-500">Notificações</p>
                     {(notificationResource.data?.items || []).length === 0 && <p className="px-3 py-6 text-center text-sm text-slate-500">Nenhuma notificação.</p>}
                     {(notificationResource.data?.items || []).slice(0, 6).map((notification) => (
