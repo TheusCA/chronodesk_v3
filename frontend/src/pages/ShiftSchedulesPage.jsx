@@ -223,9 +223,9 @@ export function ShiftSchedulesPage({ notify }) {
         <MetricCard detail="PDFs e planilhas para consulta ou download." icon="upload" label="Arquivos" value={items.filter((item) => !isImageExtension(item.extension)).length} />
       </section>
       <FilterBar>
-        <input className="field" placeholder="Buscar título, observação ou arquivo" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
-        <input className="field" type="month" value={filters.month} onChange={(event) => setFilters({ ...filters, month: event.target.value })} />
-        <select className="field" value={filters.extension} onChange={(event) => setFilters({ ...filters, extension: event.target.value })}><option value="">Todos os formatos</option><option value="png">Imagem PNG</option><option value="jpg">Imagem JPG</option><option value="jpeg">Imagem JPEG</option><option value="pdf">PDF</option><option value="csv">CSV</option><option value="xls">XLS</option><option value="xlsx">XLSX</option></select>
+        <input aria-label="Buscar título, observação ou arquivo" className="field" placeholder="Buscar título, observação ou arquivo" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+        <input aria-label="Filtrar por mês de referência" className="field" type="month" value={filters.month} onChange={(event) => setFilters({ ...filters, month: event.target.value })} />
+        <select aria-label="Filtrar por formato" className="field" value={filters.extension} onChange={(event) => setFilters({ ...filters, extension: event.target.value })}><option value="">Todos os formatos</option><option value="png">Imagem PNG</option><option value="jpg">Imagem JPG</option><option value="jpeg">Imagem JPEG</option><option value="pdf">PDF</option><option value="csv">CSV</option><option value="xls">XLS</option><option value="xlsx">XLSX</option></select>
       </FilterBar>
       {items.length === 0 ? <EmptyState title="Nenhuma escala publicada" description="As escalas publicadas pelos administradores aparecerão aqui." /> : (
         <section className="mx-auto max-w-4xl space-y-4">

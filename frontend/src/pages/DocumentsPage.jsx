@@ -228,13 +228,13 @@ export function DocumentsPage({ notify }) {
       </section>
 
       <FilterBar>
-        <input className="field" placeholder="Nome ou título" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
-        <select className="field" value={filters.extension} onChange={(event) => setFilters({ ...filters, extension: event.target.value })}>
+        <input aria-label="Buscar por nome ou título" className="field" placeholder="Nome ou título" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
+        <select aria-label="Filtrar por tipo de arquivo" className="field" value={filters.extension} onChange={(event) => setFilters({ ...filters, extension: event.target.value })}>
           <option value="">Todos os tipos</option>
           {(resource.data?.limits?.allowed_extensions || DEFAULT_EXTENSIONS).map((extension) => <option value={extension} key={extension}>{extension.toUpperCase()}</option>)}
         </select>
-        <input className="field" placeholder="Categoria" value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })} />
-        <input className="field" placeholder="Responsável" value={filters.uploadedBy} onChange={(event) => setFilters({ ...filters, uploadedBy: event.target.value })} />
+        <input aria-label="Filtrar por categoria" className="field" placeholder="Categoria" value={filters.category} onChange={(event) => setFilters({ ...filters, category: event.target.value })} />
+        <input aria-label="Filtrar por responsável" className="field" placeholder="Responsável" value={filters.uploadedBy} onChange={(event) => setFilters({ ...filters, uploadedBy: event.target.value })} />
         <input className="field" aria-label="Data de envio" type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} />
       </FilterBar>
 

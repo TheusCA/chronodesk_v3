@@ -99,7 +99,7 @@ function PaCard({ pa, canManage, onOpen }) {
       {assignments.length ? (
         <div className="mt-4 space-y-2">
           {assignments.slice(0, 3).map((item) => <AssignmentChip item={item} key={`${item.source}-${item.id}`} />)}
-          {assignments.length > 3 && <p className="text-xs text-slate-500">+{assignments.length - 3} vinculo(s)</p>}
+          {assignments.length > 3 && <p className="text-xs text-slate-500">+{assignments.length - 3} vínculo(s)</p>}
         </div>
       ) : (
         <div className="mt-8 flex items-center justify-between gap-3 text-sm text-slate-500">
@@ -188,12 +188,12 @@ function PaModal({ pa, date, employees, canManage, onClose, onSave, onRemove, sa
         {canManage ? (
           <div className="mt-6 rounded-card border border-white/5 bg-slate-950/25 p-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">{editing ? 'Editar vinculo' : 'Adicionar colaborador'}</h3>
+              <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">{editing ? 'Editar vínculo' : 'Adicionar colaborador'}</h3>
               {editing && <button className="table-action" onClick={reset} type="button">Novo vínculo</button>}
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="label sm:col-span-2">Colaborador<select className="field mt-2" required value={form.employee_id} onChange={(event) => update('employee_id', event.target.value)}><option value="">Selecione</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} - {teamLabel(employee.team)} ({employee.schedule_rule_label})</option>)}</select></label>
-              <label className="label">Inicio da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => update('valid_from', event.target.value)} /></label>
+              <label className="label">Início da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => update('valid_from', event.target.value)} /></label>
               <label className="label sm:col-span-2">Observação<textarea className="field mt-2 min-h-24" maxLength="1000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             </div>
             <div className="mt-5 flex justify-end gap-3">
@@ -266,7 +266,7 @@ export function PaMapPage({ notify }) {
           <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select></label>
       </FilterBar>
 
-      {assignments.length === 0 && <EmptyState title="Nenhum vinculo cadastrado" description="Todos os PAs continuam visiveis e livres para montagem do mapa." />}
+      {assignments.length === 0 && <EmptyState title="Nenhum vínculo cadastrado" description="Todos os PAs continuam visíveis e livres para montagem do mapa." />}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard detail="PAs no inventário visual" icon="building" label="PAs" value={pas.length} />

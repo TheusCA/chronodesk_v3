@@ -70,9 +70,9 @@ const emptyIncident = {
 
 const labels = {
   low: 'Baixa',
-  medium: 'Media',
+  medium: 'Média',
   high: 'Alta',
-  critical: 'Critica',
+  critical: 'Crítica',
   open: 'Aberto',
   in_progress: 'Em andamento',
   war_room: 'Em war room',
@@ -144,7 +144,7 @@ function SummaryCard({ label, value, tone = 'text-white' }) {
 }
 
 function minutesLabel(value) {
-  if (value === null || value === undefined || value === '') return 'Nao calculado'
+  if (value === null || value === undefined || value === '') return 'Não calculado'
   const minutes = Number(value)
   if (!Number.isFinite(minutes) || minutes < 0) return 'Sem dados'
   return minutesToClock(minutes)
@@ -199,7 +199,7 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
-      <button aria-label="Fechar formulario" className="fixed inset-0" onClick={onClose} type="button" />
+      <button aria-label="Fechar formulário" className="fixed inset-0" onClick={onClose} type="button" />
       <form className="card relative mx-auto my-4 w-full max-w-6xl space-y-6 border-red-500/20" onSubmit={submit}>
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -236,9 +236,9 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
           <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label className="label">Hora de abertura Incidente<input className="field mt-2" type="datetime-local" value={form.incident_opened_at} onChange={(event) => update('incident_opened_at', event.target.value)} /></label>
-            <label className="label">Hora report da operacao<input className="field mt-2" type="datetime-local" value={form.operation_reported_at} onChange={(event) => update('operation_reported_at', event.target.value)} /></label>
+            <label className="label">Hora report da operação<input className="field mt-2" type="datetime-local" value={form.operation_reported_at} onChange={(event) => update('operation_reported_at', event.target.value)} /></label>
             <label className="label">Hora abertura sala<input className="field mt-2" type="datetime-local" value={form.room_opened_at} onChange={(event) => update('room_opened_at', event.target.value)} /></label>
-            <label className="label">Hora de normalizacao<input className="field mt-2" type="datetime-local" value={form.normalized_at} onChange={(event) => update('normalized_at', event.target.value)} /></label>
+            <label className="label">Hora de normalização<input className="field mt-2" type="datetime-local" value={form.normalized_at} onChange={(event) => update('normalized_at', event.target.value)} /></label>
             <CalculatedTimeField label="Tempo de abertura da sala" value={form.room_opening_duration_minutes} />
             <CalculatedTimeField label="Tempo de Sala" value={form.room_duration_minutes} />
           </div>
@@ -249,14 +249,14 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
           <SectionHeader description="Impacto, sala, responsáveis e documentação operacional da tratativa." eyebrow="Impacto e tratativa" title="Detalhes operacionais" />
           <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <label className="label md:col-span-2">Descricao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_description} onChange={(event) => update('room_description', event.target.value)} /></label>
-            <label className="label md:col-span-2">Descricao da finalizacao da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_finalization_description} onChange={(event) => update('room_finalization_description', event.target.value)} /></label>
+            <label className="label md:col-span-2">Descrição da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_description} onChange={(event) => update('room_description', event.target.value)} /></label>
+            <label className="label md:col-span-2">Descrição da finalização da sala<textarea className="field mt-2 min-h-24" maxLength="4000" value={form.room_finalization_description} onChange={(event) => update('room_finalization_description', event.target.value)} /></label>
             <label className="label">Carteira - CC<input className="field mt-2" maxLength="160" value={form.sector} onChange={(event) => update('sector', event.target.value)} /></label>
             <label className="label">Técnico SDK responsável<select className="field mt-2" value={form.sdk_responsible_employee_id} onChange={(event) => update('sdk_responsible_employee_id', event.target.value)}><option value="">Não definido</option>{sdkResponsibles.map((item) => <option key={item.id} value={item.id}>{item.name}{item.ad_login ? ` (${item.ad_login})` : ''}</option>)}</select></label>
-            <label className="label">Area responsavel<input className="field mt-2" maxLength="120" placeholder="Telecom, SRE - Netsec, DBA" value={form.responsible_area} onChange={(event) => update('responsible_area', event.target.value)} /></label>
-            <label className="label">Usuarios afetados<input className="field mt-2" min="0" type="number" value={form.affected_users} onChange={(event) => update('affected_users', event.target.value)} /></label>
+            <label className="label">Área responsável<input className="field mt-2" maxLength="120" placeholder="Telecom, SRE - Netsec, DBA" value={form.responsible_area} onChange={(event) => update('responsible_area', event.target.value)} /></label>
+            <label className="label">Usuários afetados<input className="field mt-2" min="0" type="number" value={form.affected_users} onChange={(event) => update('affected_users', event.target.value)} /></label>
             <label className="label">Link da sala<input className="field mt-2" maxLength="1000" placeholder="https://..." type="url" value={form.meeting_url} onChange={(event) => update('meeting_url', event.target.value)} /></label>
-            <label className="label md:col-span-2">Observacao<textarea className="field mt-2 min-h-24" maxLength="12000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
+            <label className="label md:col-span-2">Observação<textarea className="field mt-2 min-h-24" maxLength="12000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             <label className="label md:col-span-2">Atividade SDK<textarea className="field mt-2 min-h-24" maxLength="12000" value={form.sdk_activity} onChange={(event) => update('sdk_activity', event.target.value)} /></label>
           </div>
           </div>
@@ -273,10 +273,10 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
 
 function IncidentDetails({ item, onClose }) {
   const fields = [
-    ['Descricao da sala', item.room_description || item.summary],
-    ['Descricao da finalizacao da sala', item.room_finalization_description],
+    ['Descrição da sala', item.room_description || item.summary],
+    ['Descrição da finalização da sala', item.room_finalization_description],
     ['Atividade SDK', item.sdk_activity],
-    ['Observacoes', item.notes],
+    ['Observações', item.notes],
   ]
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
@@ -356,10 +356,10 @@ function ImportPanel({ onClose, onImported }) {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm">
-      <button aria-label="Fechar importacao" className="absolute inset-0" onClick={onClose} type="button" />
+      <button aria-label="Fechar importação" className="absolute inset-0" onClick={onClose} type="button" />
       <aside className="relative h-full w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-slate-950 p-6">
         <div className="flex items-start justify-between gap-4">
-          <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Preview obrigatorio</p><h2 className="mt-2 text-xl font-bold text-white">Importar planilha War Room</h2></div>
+          <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Preview obrigatório</p><h2 className="mt-2 text-xl font-bold text-white">Importar planilha War Room</h2></div>
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
         </div>
         <p className="mt-3 text-sm leading-6 text-slate-500">CSV ou XLSX com cabeçalhos da planilha War Room, como INCIDENTE e Data da Sala. Campos incompletos podem ser ajustados depois. Limite de 500 linhas e 2 MB.</p>
@@ -384,12 +384,12 @@ function ImportPanel({ onClose, onImported }) {
         {error && <InlineAlert tone="danger" title="Falha na importação">{error}</InlineAlert>}
         {preview && (
           <div className="mt-5 space-y-4">
-            <p className="text-sm text-slate-300">{preview.valid_count} valida(s), {preview.invalid_count} invalida(s).</p>
+            <p className="text-sm text-slate-300">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s).</p>
             <div className="max-h-80 overflow-auto rounded-xl border border-white/5">
               {preview.rows.map((row) => (
                 <div className="border-b border-white/5 px-3 py-3 text-sm" key={row.line}>
                   <span className={row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span>
-                  <p className="mt-1 text-slate-400">{row.ticket_number || 'Sem chamado'} / {row.title || 'Sem titulo'}</p>
+                  <p className="mt-1 text-slate-400">{row.ticket_number || 'Sem chamado'} / {row.title || 'Sem título'}</p>
                   {row.errors.length > 0 && <p className="mt-1 text-xs text-red-300">{row.errors.join(' ')}</p>}
                 </div>
               ))}
@@ -467,7 +467,7 @@ export function CriticalIncidentsPage({ session, notify }) {
     }
   }
 
-  if (resource.loading) return <LoadingState label="Carregando chamados criticos" />
+  if (resource.loading) return <LoadingState label="Carregando chamados críticos" />
   if (resource.error) return <ErrorState message={resource.error.message} onRetry={resource.refresh} />
   const items = resource.data?.items || []
 
@@ -487,31 +487,31 @@ export function CriticalIncidentsPage({ session, notify }) {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Criticos abertos" tone="text-red-300" value={summary.open_count || 0} />
+        <SummaryCard label="Críticos abertos" tone="text-red-300" value={summary.open_count || 0} />
         <SummaryCard label="Em war room" tone="text-amber-300" value={summary.war_room_count || 0} />
-        <SummaryCard label="Resolvidos no periodo" tone="text-emerald-300" value={summary.resolved_count || 0} />
-        <SummaryCard label="Alta / critica" value={summary.high_critical_count || 0} />
-        <SummaryCard label="Tempo medio para mitigar" value={minutesLabel(summary.avg_mitigation_minutes)} />
-        <SummaryCard label="Tempo medio para resolver" value={minutesLabel(summary.avg_resolution_minutes)} />
+        <SummaryCard label="Resolvidos no período" tone="text-emerald-300" value={summary.resolved_count || 0} />
+        <SummaryCard label="Alta / crítica" value={summary.high_critical_count || 0} />
+        <SummaryCard label="Tempo médio para mitigar" value={minutesLabel(summary.avg_mitigation_minutes)} />
+        <SummaryCard label="Tempo médio para resolver" value={minutesLabel(summary.avg_resolution_minutes)} />
         <SummaryCard label="Sem causa raiz" tone="text-amber-300" value={summary.missing_root_cause_count || 0} />
-        <SummaryCard label="Principal area responsavel" value={topAreas[0]?.responsible_area || 'Sem dados'} />
+        <SummaryCard label="Principal área responsável" value={topAreas[0]?.responsible_area || 'Sem dados'} />
       </section>
 
       <FilterBar>
-        <label className="label">Competencia 16-15<input className="field mt-2" type="month" value={filters.competency} onChange={(event) => setFilters({ ...filters, competency: event.target.value, from: '', to: '' })} /></label>
-        <label className="label">Inicio<input className="field mt-2" type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, competency: '', from: event.target.value })} /></label>
+        <label className="label">Competência 16-15<input className="field mt-2" type="month" value={filters.competency} onChange={(event) => setFilters({ ...filters, competency: event.target.value, from: '', to: '' })} /></label>
+        <label className="label">Início<input className="field mt-2" type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, competency: '', from: event.target.value })} /></label>
         <label className="label">Fim<input className="field mt-2" min={filters.from} type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, competency: '', to: event.target.value })} /></label>
         <label className="label">Status<select className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option>{statusOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
         <label className="label">Criticidade<select className="field mt-2" value={filters.severity} onChange={(event) => setFilters({ ...filters, severity: event.target.value })}><option value="">Todas</option>{severityOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
         <label className="label">Origem<select className="field mt-2" value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Todas</option>{sourceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
         <label className="label">Chamado<input className="field mt-2" maxLength="100" value={filters.ticket_number} onChange={(event) => setFilters({ ...filters, ticket_number: event.target.value })} /></label>
-        <label className="label">Area responsavel<input className="field mt-2" maxLength="120" value={filters.responsible_area} onChange={(event) => setFilters({ ...filters, responsible_area: event.target.value })} /></label>
+        <label className="label">Área responsável<input className="field mt-2" maxLength="120" value={filters.responsible_area} onChange={(event) => setFilters({ ...filters, responsible_area: event.target.value })} /></label>
         <label className="label">Equipe<input className="field mt-2" maxLength="120" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })} /></label>
-        <label className="label">Responsavel legado<input className="field mt-2" maxLength="120" value={filters.owner} onChange={(event) => setFilters({ ...filters, owner: event.target.value })} /></label>
+        <label className="label">Responsável legado<input className="field mt-2" maxLength="120" value={filters.owner} onChange={(event) => setFilters({ ...filters, owner: event.target.value })} /></label>
         <label className="label md:col-span-2">Texto livre<input className="field mt-2" maxLength="120" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} /></label>
       </FilterBar>
 
-      {items.length === 0 ? <EmptyState title="Nenhum chamado critico encontrado" description="Ajuste os filtros ou cadastre o primeiro registro do periodo." /> : (
+      {items.length === 0 ? <EmptyState title="Nenhum chamado crítico encontrado" description="Ajuste os filtros ou cadastre o primeiro registro do período." /> : (
         <section className="card table-wrap">
           <SectionHeader
             description="Priorize chamados críticos abertos, war rooms ativas e registros sem causa raiz."
@@ -520,7 +520,7 @@ export function CriticalIncidentsPage({ session, notify }) {
           />
           <div className="mt-5">
           <table className="data-table min-w-[1380px]">
-            <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descricao</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Carteira - CC</th><th>Técnico SDK</th><th>Acoes</th></tr></thead>
+            <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descrição</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Carteira - CC</th><th>Técnico SDK</th><th>Ações</th></tr></thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
@@ -530,8 +530,8 @@ export function CriticalIncidentsPage({ session, notify }) {
                   <td><strong>Abertura: {minutesLabel(item.room_opening_duration_minutes)}</strong><small>Sala: {minutesLabel(item.room_duration_minutes)}</small></td>
                   <td><IncidentBadge value={item.severity} /></td>
                   <td><IncidentBadge value={item.status} /></td>
-                  <td><strong>{item.sector || 'Nao informado'}</strong><small>{item.responsible_area || 'Sem area responsavel'}</small></td>
-                  <td><strong>{item.sdk_responsible_name || 'Nao definido'}</strong><small>{item.sdk_responsible_login || 'Sem login'}</small></td>
+                  <td><strong>{item.sector || 'Não informado'}</strong><small>{item.responsible_area || 'Sem área responsável'}</small></td>
+                  <td><strong>{item.sdk_responsible_name || 'Não definido'}</strong><small>{item.sdk_responsible_login || 'Sem login'}</small></td>
                   <td>
                     <div className="flex flex-wrap gap-1">
                       <button className="table-action" disabled={loadingItemId === item.id} onClick={() => openItem(item.id, 'view')} type="button">{loadingItemId === item.id ? 'Carregando' : 'Visualizar'}</button>

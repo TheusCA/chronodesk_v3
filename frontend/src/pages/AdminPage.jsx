@@ -45,17 +45,17 @@ function workflowStatusLabel(value) {
     approved: 'Aprovado',
     rejected: 'Rejeitado',
     synced: 'Sincronizado',
-    sync_error: 'Erro de sincronizacao',
-  }[value] || String(value || 'Nao informado').replaceAll('_', ' ')
+    sync_error: 'Erro de sincronização',
+  }[value] || String(value || 'Não informado').replaceAll('_', ' ')
 }
 
 function adjustmentTypeLabel(value) {
   return {
     entry: 'Entrada',
-    lunch_out: 'Saida para almoco',
-    lunch_return: 'Retorno do almoco',
-    exit: 'Saida',
-    absence: 'Ausencia',
+    lunch_out: 'Saída para almoço',
+    lunch_return: 'Retorno do almoço',
+    exit: 'Saída',
+    absence: 'Ausência',
     other: 'Outro',
   }[value] || 'Ajuste'
 }

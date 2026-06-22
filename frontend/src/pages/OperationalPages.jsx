@@ -56,27 +56,27 @@ function statusLabel(value) {
     pending: 'Pendente',
     remote: 'Remoto',
     rejected: 'Rejeitado',
-    sync_error: 'Erro de sincronizacao',
+    sync_error: 'Erro de sincronização',
     cancelled: 'Cancelado',
     day_off: 'Folga',
-    absence: 'Ausencia',
-  }[value] || String(value || 'Nao informado').replaceAll('_', ' ')
+    absence: 'Ausência',
+  }[value] || String(value || 'Não informado').replaceAll('_', ' ')
 }
 
 function adjustmentTypeLabel(value) {
   return {
     entry: 'Entrada',
-    lunch_out: 'Saida para almoco',
-    lunch_return: 'Retorno do almoco',
-    exit: 'Saida',
-    absence: 'Ausencia',
+    lunch_out: 'Saída para almoço',
+    lunch_return: 'Retorno do almoço',
+    exit: 'Saída',
+    absence: 'Ausência',
     other: 'Outro',
   }[value] || 'Ajuste'
 }
 
 function scheduleRuleLabel(value) {
   return SCHEDULE_RULE_OPTIONS.find((option) => option.value === value)?.label
-    || String(value || 'Nao informado').replaceAll('_', ' ')
+    || String(value || 'Não informado').replaceAll('_', ' ')
 }
 
 function scheduleRuleTone(value) {
@@ -113,7 +113,7 @@ function useEmployees() {
 async function submit(action, refresh, notify) {
   try {
     const result = await action()
-    notify(result.mensagem || 'Operacao concluida.')
+    notify(result.mensagem || 'Operação concluída.')
     await refresh()
     return result
   } catch (error) {
@@ -125,7 +125,7 @@ async function submit(action, refresh, notify) {
 function PeriodFilters({ filters, setFilters, extra = null }) {
   return (
     <FilterBar>
-      <label className="label">Inicio<input className="field mt-2" type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
+      <label className="label">Início<input className="field mt-2" type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
       <label className="label">Fim<input className="field mt-2" min={filters.from} type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
       <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
       {extra}
@@ -150,7 +150,7 @@ export function CalendarPage({ session, notify }) {
     <div className="space-y-5">
       <PeriodFilters filters={filters} setFilters={setFilters} extra={(
         <>
-          <label className="label">Competencia<input className="field mt-2" type="month" value={filters.to ? competencyFor(`${filters.to}T12:00:00`).key : ''} onChange={(event) => {
+          <label className="label">Competência<input className="field mt-2" type="month" value={filters.to ? competencyFor(`${filters.to}T12:00:00`).key : ''} onChange={(event) => {
             if (!event.target.value) return
             const competency = competencyFor(`${event.target.value}-01T12:00:00`)
             setFilters({ ...filters, from: competency.start, to: competency.end })
@@ -164,21 +164,21 @@ export function CalendarPage({ session, notify }) {
         <form className="card space-y-4" onSubmit={create}>
           <h2 className="font-bold text-white">Novo evento operacional</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <label className="label xl:col-span-2">Titulo<input className="field mt-2" maxLength="160" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-            <label className="label">Inicio<input className="field mt-2" required type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
+            <label className="label xl:col-span-2">Título<input className="field mt-2" maxLength="160" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
+            <label className="label">Início<input className="field mt-2" required type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
             <label className="label">Fim<input className="field mt-2" type="datetime-local" value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
             <label className="label">Equipe<select className="field mt-2" value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
-            <label className="label xl:col-span-3">Descricao<input className="field mt-2" maxLength="1000" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+            <label className="label xl:col-span-3">Descrição<input className="field mt-2" maxLength="1000" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           </div>
           <button className="btn-primary" type="submit">Cadastrar evento</button>
         </form>
       )}
       <OperationalShell resource={resource}>
-        {(resource.data?.items || []).length === 0 ? <EmptyState title="Nenhum evento no periodo" description="Ajuste os filtros ou cadastre um evento operacional." /> : (
+        {(resource.data?.items || []).length === 0 ? <EmptyState title="Nenhum evento no período" description="Ajuste os filtros ou cadastre um evento operacional." /> : (
           <section className="card table-wrap">
             <table className="data-table">
               <thead><tr><th>Data</th><th>Evento</th><th>Tipo</th><th>Equipe</th><th>Status</th></tr></thead>
-              <tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDateTime(item.starts_at)}</td><td><strong>{item.title}</strong><small>{item.description || 'Sem descricao'}</small></td><td>{item.event_type}</td><td>{item.team?.toUpperCase() || 'Todas'}</td><td><Status value={item.status} /></td></tr>)}</tbody>
+              <tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDateTime(item.starts_at)}</td><td><strong>{item.title}</strong><small>{item.description || 'Sem descrição'}</small></td><td>{item.event_type}</td><td>{item.team?.toUpperCase() || 'Todas'}</td><td><Status value={item.status} /></td></tr>)}</tbody>
             </table>
           </section>
         )}
@@ -292,7 +292,7 @@ export function SchedulePage({ session, notify }) {
             />
             <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={rule.employee_id} onChange={(event) => setRule({ ...rule, employee_id: event.target.value })} /></label>
             <label className="label">Regra<select className="field mt-2" value={rule.rule_type} onChange={(event) => setRule({ ...rule, rule_type: event.target.value })}>{SCHEDULE_RULE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="label">Vigencia<input className="field mt-2" required type="date" value={rule.effective_from} onChange={(event) => setRule({ ...rule, effective_from: event.target.value })} /></label>
+            <label className="label">Vigência<input className="field mt-2" required type="date" value={rule.effective_from} onChange={(event) => setRule({ ...rule, effective_from: event.target.value })} /></label>
             <InlineAlert tone="info" title="Contrato preservado">
               O frontend envia `rule_type` com o valor canônico selecionado. Não há fallback silencioso para “Sem escala definida”.
             </InlineAlert>
@@ -307,10 +307,10 @@ export function SchedulePage({ session, notify }) {
             <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={exception.employee_id} onChange={(event) => setException({ ...exception, employee_id: event.target.value })} /></label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="label">Data<input className="field mt-2" required type="date" value={exception.exception_date} onChange={(event) => setException({ ...exception, exception_date: event.target.value })} /></label>
-              <label className="label">Tipo<select className="field mt-2" value={exception.exception_type} onChange={(event) => setException({ ...exception, exception_type: event.target.value })}><option value="remote">Remoto excepcional</option><option value="onsite">Presencial excepcional</option><option value="day_off">Folga</option><option value="absence">Ausencia</option><option value="training">Treinamento</option><option value="oncall">Plantao</option><option value="vacation">Ferias</option><option value="leave">Licenca</option></select></label>
+              <label className="label">Tipo<select className="field mt-2" value={exception.exception_type} onChange={(event) => setException({ ...exception, exception_type: event.target.value })}><option value="remote">Remoto excepcional</option><option value="onsite">Presencial excepcional</option><option value="day_off">Folga</option><option value="absence">Ausência</option><option value="training">Treinamento</option><option value="oncall">Plantão</option><option value="vacation">Férias</option><option value="leave">Licença</option></select></label>
             </div>
-            <label className="label">Observacao<input className="field mt-2" maxLength="1000" value={exception.note} onChange={(event) => setException({ ...exception, note: event.target.value })} /></label>
-            <button className="btn-primary" type="submit">Salvar excecao</button>
+            <label className="label">Observação<input className="field mt-2" maxLength="1000" value={exception.note} onChange={(event) => setException({ ...exception, note: event.target.value })} /></label>
+            <button className="btn-primary" type="submit">Salvar exceção</button>
           </form>
           <section className="card space-y-4 xl:col-span-2">
             <SectionHeader
@@ -333,11 +333,11 @@ export function SchedulePage({ session, notify }) {
             <input ref={importInputRef} accept={IMPORT_LIMITS.acceptedExtensions.join(',')} className="hidden" type="file" onChange={(event) => { readSpreadsheet(event.target.files?.[0]); event.target.value = '' }} />
             {preview && (
               <div className="space-y-3">
-                <p className="text-sm text-slate-300">{preview.valid_count} valida(s), {preview.invalid_count} invalida(s).</p>
+                <p className="text-sm text-slate-300">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s).</p>
                 <div className="max-h-56 overflow-auto rounded-lg border border-white/5">
-                  {preview.rows.map((row) => <div className="border-b border-white/5 px-3 py-2 text-sm" key={row.line}><span className={row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span> - {row.employee_name || row.ad_login || 'Nao identificado'} - {row.rule_type || row.errors.join(' ')}</div>)}
+                  {preview.rows.map((row) => <div className="border-b border-white/5 px-3 py-2 text-sm" key={row.line}><span className={row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span> - {row.employee_name || row.ad_login || 'Não identificado'} - {row.rule_type || row.errors.join(' ')}</div>)}
                 </div>
-                <button className="btn-primary" disabled={preview.invalid_count > 0} onClick={confirmImport} type="button">Confirmar importacao</button>
+                <button className="btn-primary" disabled={preview.invalid_count > 0} onClick={confirmImport} type="button">Confirmar importação</button>
               </div>
             )}
           </section>
@@ -467,7 +467,7 @@ function WorkflowPage({ kind, session, notify }) {
       <PeriodFilters filters={filters} setFilters={setFilters} extra={(
         <>
           <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>
-          <label className="label">Status<select className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="rejected">Rejeitado</option><option value="synced">Sincronizado</option><option value="sync_error">Erro de sincronizacao</option></select></label>
+          <label className="label">Status<select className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos</option><option value="pending">Pendente</option><option value="approved">Aprovado</option><option value="rejected">Rejeitado</option><option value="synced">Sincronizado</option><option value="sync_error">Erro de sincronização</option></select></label>
         </>
       )} />
       <SectionHeader
@@ -493,10 +493,10 @@ function WorkflowPage({ kind, session, notify }) {
           <label className="label">Colaborador<EmployeeSelect disabled={!canApprove} employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>
           {overtime ? (
             <>
-              <label className="label">Data da realizacao<input className="field mt-2" required type="date" value={form.work_date} onChange={(event) => setForm({ ...form, work_date: event.target.value })} /></label>
+              <label className="label">Data da realização<input className="field mt-2" required type="date" value={form.work_date} onChange={(event) => setForm({ ...form, work_date: event.target.value })} /></label>
               <label className="label">Hora de entrada<input className="field mt-2" required type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} /></label>
-              <label className="label">Hora de saida<input className="field mt-2" required type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} /></label>
-              <label className="label xl:col-span-2">Descricao/Motivo<input className="field mt-2" maxLength="500" required value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
+              <label className="label">Hora de saída<input className="field mt-2" required type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} /></label>
+              <label className="label xl:col-span-2">Descrição/Motivo<input className="field mt-2" maxLength="500" required value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
               <div className="rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-300">
                 <span className="block text-xs font-bold uppercase tracking-wider text-slate-600">Total calculado</span>
                 <strong className="mt-1 block text-white">{minutesLabel(preview.minutes)}</strong>
@@ -506,9 +506,9 @@ function WorkflowPage({ kind, session, notify }) {
           ) : (
             <>
               <label className="label">Data<input className="field mt-2" required type="date" value={form.adjustment_date} onChange={(event) => setForm({ ...form, adjustment_date: event.target.value })} /></label>
-              <label className="label">Tipo de ajuste<select className="field mt-2" value={form.adjustment_type} onChange={(event) => setForm({ ...form, adjustment_type: event.target.value })}><option value="entry">Entrada</option><option value="lunch_out">Saida para almoco</option><option value="lunch_return">Retorno do almoco</option><option value="exit">Saida</option><option value="absence">Ausencia</option><option value="other">Outro</option></select></label>
-              <label className="label">Horario correto<input className="field mt-2" disabled={form.adjustment_type === 'absence'} required={form.adjustment_type !== 'absence'} type="time" value={form.correct_time} onChange={(event) => setForm({ ...form, correct_time: event.target.value })} /></label>
-              <label className="label">Horario registrado<input className="field mt-2" type="time" value={form.recorded_time} onChange={(event) => setForm({ ...form, recorded_time: event.target.value })} /></label>
+              <label className="label">Tipo de ajuste<select className="field mt-2" value={form.adjustment_type} onChange={(event) => setForm({ ...form, adjustment_type: event.target.value })}><option value="entry">Entrada</option><option value="lunch_out">Saída para almoço</option><option value="lunch_return">Retorno do almoço</option><option value="exit">Saída</option><option value="absence">Ausência</option><option value="other">Outro</option></select></label>
+              <label className="label">Horário correto<input className="field mt-2" disabled={form.adjustment_type === 'absence'} required={form.adjustment_type !== 'absence'} type="time" value={form.correct_time} onChange={(event) => setForm({ ...form, correct_time: event.target.value })} /></label>
+              <label className="label">Horário registrado<input className="field mt-2" type="time" value={form.recorded_time} onChange={(event) => setForm({ ...form, recorded_time: event.target.value })} /></label>
             </>
           )}
           <label className="label xl:col-span-2">Justificativa<textarea className="field mt-2 min-h-24" maxLength="2000" required value={form.justification} onChange={(event) => setForm({ ...form, justification: event.target.value })} /></label>
@@ -574,23 +574,23 @@ export function OncallPage({ session, notify }) {
       <PeriodFilters filters={filters} setFilters={setFilters} />
       {canManage && (
         <form className="card space-y-4" onSubmit={create}>
-          <h2 className="font-bold text-white">Cadastrar plantao</h2>
+          <h2 className="font-bold text-white">Cadastrar plantão</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label className="label xl:col-span-2">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>
             <label className="label">Data inicial<input className="field mt-2" required type="date" value={form.starts_on} onChange={(event) => setForm({ ...form, starts_on: event.target.value })} /></label>
             <label className="label">Data final<input className="field mt-2" min={form.starts_on} required type="date" value={form.ends_on} onChange={(event) => setForm({ ...form, ends_on: event.target.value })} /></label>
             <label className="label">Hora inicial<input className="field mt-2" required type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} /></label>
             <label className="label">Hora final<input className="field mt-2" required type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} /></label>
-            <label className="label">Tipo<select className="field mt-2" value={form.shift_type} onChange={(event) => setForm({ ...form, shift_type: event.target.value })}><option value="oncall">Plantao</option><option value="standby">Sobreaviso</option><option value="emergency">Emergencia</option><option value="weekend">Fim de semana</option><option value="holiday">Feriado</option></select></label>
-            <label className="label">Observacao<input className="field mt-2" maxLength="1000" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
+            <label className="label">Tipo<select className="field mt-2" value={form.shift_type} onChange={(event) => setForm({ ...form, shift_type: event.target.value })}><option value="oncall">Plantão</option><option value="standby">Sobreaviso</option><option value="emergency">Emergência</option><option value="weekend">Fim de semana</option><option value="holiday">Feriado</option></select></label>
+            <label className="label">Observação<input className="field mt-2" maxLength="1000" value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} /></label>
           </div>
-          <button className="btn-primary" type="submit">Cadastrar plantao</button>
+          <button className="btn-primary" type="submit">Cadastrar plantão</button>
         </form>
       )}
       <OperationalShell resource={resource}>
-        {(resource.data?.items || []).length === 0 ? <EmptyState title="Nenhum plantao no periodo" /> : (
+        {(resource.data?.items || []).length === 0 ? <EmptyState title="Nenhum plantão no período" description="Ajuste os filtros ou cadastre um novo plantão para esta competência." /> : (
           <section className="card table-wrap">
-            <table className="data-table"><thead><tr><th>Periodo</th><th>Colaborador</th><th>Horario</th><th>Tipo</th><th>Status</th></tr></thead><tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDate(item.starts_on)} a {formatDate(item.ends_on)}</td><td><strong>{item.employee_name}</strong><small>{item.team.toUpperCase()}</small></td><td>{item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}</td><td>{item.shift_type}</td><td><Status value={item.status} /></td></tr>)}</tbody></table>
+            <table className="data-table"><thead><tr><th>Período</th><th>Colaborador</th><th>Horário</th><th>Tipo</th><th>Status</th></tr></thead><tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDate(item.starts_on)} a {formatDate(item.ends_on)}</td><td><strong>{item.employee_name}</strong><small>{item.team.toUpperCase()}</small></td><td>{item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}</td><td>{item.shift_type}</td><td><Status value={item.status} /></td></tr>)}</tbody></table>
           </section>
         )}
       </OperationalShell>
@@ -607,10 +607,10 @@ export function OperationalReportsPage() {
     return [
       ['Horas extras', minutesLabel(summary.overtime_minutes)],
       ['Ajustes de ponto', summary.adjustments_count || 0],
-      ['Plantoes', summary.oncall_count || 0],
+      ['Plantões', summary.oncall_count || 0],
       ['Dias presenciais', summary.onsite_days || 0],
       ['Dias remotos', summary.remote_days || 0],
-      ['Pendencias', summary.pending || 0],
+      ['Pendências', summary.pending || 0],
       ['Rejeitados', summary.rejected || 0],
       ['Erros de sync', summary.sync_errors || 0],
     ]
@@ -619,7 +619,7 @@ export function OperationalReportsPage() {
   return (
     <div className="space-y-5">
       <section className="card grid gap-3 md:grid-cols-3">
-        <label className="label">Competencia<input className="field mt-2" type="month" value={filters.competency} onChange={(event) => setFilters({ ...filters, competency: event.target.value })} /></label>
+        <label className="label">Competência<input className="field mt-2" type="month" value={filters.competency} onChange={(event) => setFilters({ ...filters, competency: event.target.value })} /></label>
         <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
         <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>
       </section>
@@ -627,7 +627,7 @@ export function OperationalReportsPage() {
         <>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-2xl font-black text-white">{value}</p></article>)}</section>
           <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div><h2 className="font-bold text-white">Competencia {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-slate-500">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>
+            <div><h2 className="font-bold text-white">Competência {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-slate-500">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>
             <a className="btn-primary" href={apiUrl(`portal/reports.php${queryString({ ...filters, format: 'csv' })}`)}>Exportar CSV</a>
           </section>
           <section className="grid gap-5 lg:grid-cols-2">
@@ -645,10 +645,10 @@ function SummaryTable({ title, values }) {
   return (
     <section className="card">
       <h2 className="mb-4 font-bold text-white">{title}</h2>
-      {entries.length === 0 ? <p className="text-sm text-slate-500">Sem dados no periodo.</p> : entries.map(([label, value]) => (
+      {entries.length === 0 ? <p className="text-sm text-slate-500">Sem dados no período.</p> : entries.map(([label, value]) => (
         <div className="flex items-center justify-between gap-3 border-b border-white/5 py-3 text-sm" key={label}>
           <strong className="text-slate-200">{label}</strong>
-          <span className="text-right text-slate-500">{minutesLabel(value.overtime_minutes)} HE, {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantao(oes), {value.onsite_days || 0} presencial(is)</span>
+          <span className="text-right text-slate-500">{minutesLabel(value.overtime_minutes)} HE, {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantão(ões), {value.onsite_days || 0} presencial(is)</span>
         </div>
       ))}
     </section>
