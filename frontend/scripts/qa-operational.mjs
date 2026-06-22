@@ -54,7 +54,7 @@ const oversizedCriticalCell = [
 ].join('\n')
 assert.throws(() => parseCriticalIncidentCsv(oversizedCriticalCell))
 
-const navigationSource = readFileSync(new URL('../src/lib/navigation.js', import.meta.url), 'utf8')
+const navigationSource = readFileSync(new URL('../src/lib/navigation.ts', import.meta.url), 'utf8')
 assert.match(navigationSource, /path: '\/admin'.*permission: 'operacao\.approve'/)
 
 const adminSource = readFileSync(new URL('../src/pages/AdminPage.jsx', import.meta.url), 'utf8')

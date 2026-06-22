@@ -24,9 +24,47 @@ Objetivo: adotar TypeScript gradualmente sem bloquear deploy e sem migrar telas 
 9. Paginas densas.
 10. `App.jsx` por ultimo.
 
-## Dependencias futuras recomendadas
+## Status da Fase 7
+
+Concluido nesta fase:
+
+- `typescript` instalado somente como `devDependency`.
+- `frontend/tsconfig.json` criado com perfil permissivo.
+- Script `npm run typecheck` adicionado.
+- `frontend/src/lib/format.js` migrado para `frontend/src/lib/format.ts`.
+- `frontend/src/lib/navigation.js` migrado para `frontend/src/lib/navigation.ts`.
+- POC em `frontend/poc` continua isolada e fora do runtime.
+
+Nao migrado nesta fase:
+
+- `App.jsx`.
+- `frontend/src/pages/*.jsx`.
+- Componentes compartilhados complexos.
+- Hooks.
+- Formularios.
+- Tabelas.
+- Payloads de APIs.
+
+## Dependencias
+
+Instalada na Fase 7:
+
+```bash
+cd frontend
+npm install -D typescript
+```
 
 Nao instaladas nesta fase:
+
+- `@tanstack/react-query`.
+- `@tanstack/react-table`.
+- `react-hook-form`.
+- `zod`.
+- Playwright/Cypress.
+
+## Dependencias futuras recomendadas
+
+Ja instalada na Fase 7:
 
 ```bash
 cd frontend
@@ -37,7 +75,7 @@ O projeto ja possui `@types/react` e `@types/react-dom`, entao a primeira instal
 
 ## Configuracao futura sugerida
 
-`tsconfig.json` inicial permissivo:
+`tsconfig.json` inicial permissivo, aplicado na Fase 7:
 
 ```json
 {
@@ -51,7 +89,7 @@ O projeto ja possui `@types/react` e `@types/react-dom`, entao a primeira instal
     "strict": false,
     "target": "ES2020"
   },
-  "include": ["src"]
+  "include": ["src", "scripts", "poc"]
 }
 ```
 
@@ -98,3 +136,4 @@ Evolucao depois:
 - Reverter arquivos `.ts/.tsx` criados e `tsconfig.json`.
 - Manter `.jsx` originais ate cada migracao estar aprovada.
 - Nao misturar migracao TS com alteracao funcional.
+- Para a Fase 7 especificamente, rollback e remover `typescript`, restaurar `format.js`/`navigation.js` e remover `typecheck`.

@@ -7,6 +7,7 @@ const root = dirname(fileURLToPath(import.meta.url))
 const frontendRoot = join(root, '..')
 const srcRoot = join(frontendRoot, 'src')
 const pocRoot = join(frontendRoot, 'poc')
+const projectRoot = join(frontendRoot, '..')
 
 function read(relativePath) {
   return readFileSync(join(frontendRoot, relativePath), 'utf8')
@@ -20,14 +21,15 @@ function walk(dir) {
   })
 }
 
-const sourceFiles = walk(srcRoot).filter((path) => /\.(jsx?|css)$/.test(path))
+const sourceFiles = walk(srcRoot).filter((path) => /\.(jsx?|tsx?|css)$/.test(path))
 const sourceText = sourceFiles.map((path) => readFileSync(path, 'utf8')).join('\n')
 const appSource = read('src/App.jsx')
-const navigationSource = read('src/lib/navigation.js')
+const navigationSource = read('src/lib/navigation.ts')
 const operationalSource = read('src/pages/OperationalPages.jsx')
 const cssSource = read('src/index.css')
 const statesSource = read('src/components/ui/States.jsx')
 const packageJson = JSON.parse(read('package.json'))
+const tsconfig = JSON.parse(read('tsconfig.json'))
 const installedDependencies = {
   ...packageJson.dependencies,
   ...packageJson.devDependencies,
@@ -148,13 +150,19 @@ for (const cssInvariant of [
 assert.match(statesSource, /role="alert"/, 'Estado de erro e anunciado como alerta')
 assert.equal(packageJson.scripts['qa:operational'], 'node scripts/qa-operational.mjs')
 assert.equal(packageJson.scripts['qa:visual'], 'node scripts/qa-visual.mjs')
+assert.equal(packageJson.scripts.typecheck, 'tsc --noEmit')
+assert.equal(packageJson.devDependencies.typescript?.startsWith('^'), true, 'TypeScript deve estar em devDependencies')
+assert.equal(tsconfig.compilerOptions.strict, false, 'TypeScript deve iniciar permissivo com strict=false')
+assert.equal(tsconfig.compilerOptions.allowJs, true, 'TypeScript deve manter allowJs=true')
+assert.equal(tsconfig.compilerOptions.checkJs, false, 'TypeScript deve manter checkJs=false')
+assert.equal(tsconfig.compilerOptions.noEmit, true, 'TypeScript deve manter noEmit=true')
+assert.equal(statSync(join(frontendRoot, 'src/App.jsx')).isFile(), true, 'App.jsx deve continuar existindo')
 
 for (const blockedDependency of [
   '@tanstack/react-query',
   '@tanstack/react-table',
   'react-hook-form',
   'zod',
-  'typescript',
   '@playwright/test',
   'cypress',
 ]) {
@@ -182,5 +190,27 @@ for (const file of pocFiles) {
   assert.match(file, /frontend\/poc\/|\/poc\//, `Arquivo POC deve permanecer em frontend/poc: ${file}`)
   assert.match(file, /\.(md|example\.tsx?|example\.ts)$/, `POC deve ser documentacao ou exemplo: ${file}`)
 }
+
+const runtimeTsxFiles = walk(srcRoot).filter((path) => path.endsWith('.tsx'))
+assert.deepEqual(runtimeTsxFiles, [], 'Nenhum TSX de runtime deve ser criado nesta fase')
+
+const pageTsFiles = walk(join(srcRoot, 'pages')).filter((path) => /\.(tsx?|ts)$/.test(path))
+assert.deepEqual(pageTsFiles, [], 'Nenhuma pagina deve ser migrada para TypeScript nesta fase')
+
+for (const runtimeFile of [
+  'src/lib/format.ts',
+  'src/lib/navigation.ts',
+]) {
+  assert.equal(statSync(join(frontendRoot, runtimeFile)).isFile(), true, `${runtimeFile} deve existir`)
+}
+
+for (const removedJsFile of [
+  'src/lib/format.js',
+  'src/lib/navigation.js',
+]) {
+  assert.throws(() => statSync(join(frontendRoot, removedJsFile)), `${removedJsFile} deve ter sido migrado para .ts`)
+}
+
+assert.equal(statSync(join(projectRoot, 'app/index.html')).isFile(), true, '/app/index.html deve existir apos build')
 
 console.log('Visual frontend QA OK')

@@ -1,13 +1,22 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documenta uma evolucao gradual do frontend sem migrar telas criticas agora. Nao instala dependencias, nao altera contratos de API e nao muda runtime de producao.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra.
+
+## Status da Fase 7
+
+- TypeScript instalado como `devDependency`.
+- `frontend/tsconfig.json` criado com `allowJs=true`, `checkJs=false`, `strict=false` e `noEmit=true`.
+- `npm run typecheck` adicionado.
+- Migrados: `src/lib/format.ts` e `src/lib/navigation.ts`.
+- Nao migrados: `App.jsx`, paginas, hooks, formularios, tabelas e componentes complexos.
+- TanStack Query/Table, React Hook Form, Zod, Playwright e Cypress continuam nao instalados.
 
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `src/lib/format.js` | Datas, parse e formatacao | Baixa | Baixo | Sim, primeiro | Nao | Nao | Nao | P1 |
-| `src/lib/navigation.js` | Rotas, labels e permissoes visuais | Baixa | Medio | Sim | Nao | Nao | Nao | P1 |
+| `src/lib/format.ts` | Datas, parse e formatacao | Baixa | Baixo | Migrado na Fase 7 | Nao | Nao | Nao | Concluido |
+| `src/lib/navigation.ts` | Rotas, labels e permissoes visuais | Baixa | Medio | Migrado na Fase 7 | Nao | Nao | Nao | Concluido |
 | `src/lib/operational.js` | CSV, limites, competencia e query string | Media | Alto em imports | Sim | Nao | Nao | Parcial | P1 |
 | `src/lib/api.js` | Fetch, CSRF, 401 e payload JSON/FormData | Media | Alto | Sim, apos tipos base | Sim, manter como transporte | Nao | Nao | P2 |
 | `src/hooks/useResource.js` | Fetch GET, loading/error/refetch | Media | Medio | Sim | Migrar gradualmente | Nao | Nao | P2 |
@@ -57,8 +66,8 @@ Fase 6 documenta uma evolucao gradual do frontend sem migrar telas criticas agor
 
 ## Roadmap recomendado
 
-1. Fase 7: instalar TypeScript em modo permissivo e migrar apenas `lib/format`, `lib/navigation`, exemplos de tipos e QA estatico.
-2. Fase 8: migrar `lib/operational`, componentes puros e `States/Primitives`.
+1. Fase 7: instalar TypeScript em modo permissivo e migrar apenas `lib/format`, `lib/navigation`, exemplos de tipos e QA estatico. Concluido.
+2. Fase 8: migrar `lib/operational`, componentes puros e `States/Primitives`, mantendo `strict=false`.
 3. Fase 9: tipar transporte API e criar tipos de resposta/payload sem mudar endpoints.
 4. Fase 10: introduzir TanStack Query em uma tela de baixo risco, mantendo `api()` e `post()`.
 5. Fase 11: introduzir TanStack Table em uma tabela nao critica ou somente leitura.

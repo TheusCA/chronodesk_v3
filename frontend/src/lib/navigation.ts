@@ -1,4 +1,26 @@
-export const navigation = [
+export type Permission =
+  | 'pausas.use'
+  | 'metricas.read'
+  | 'operacao.approve'
+  | 'relatorios.read'
+  | 'configuracoes.manage'
+  | 'integracoes.manage'
+
+export type NavigationSection = {
+  section: string
+}
+
+export type NavigationRoute = {
+  path: string
+  label: string
+  icon: string
+  permission?: Permission
+}
+
+export type NavigationItem = NavigationSection | NavigationRoute
+export type PageMetadata = Record<string, [title: string, description: string]>
+
+export const navigation: NavigationItem[] = [
   { section: 'Centro operacional' },
   { path: '/dashboard', label: 'Visão operacional', icon: 'dashboard' },
   { path: '/calendario', label: 'Calendário', icon: 'calendar' },
@@ -26,7 +48,7 @@ export const navigation = [
   { path: '/integracoes', label: 'Integrações', icon: 'plug', permission: 'integracoes.manage' },
 ]
 
-export const pageMetadata = {
+export const pageMetadata: PageMetadata = {
   '/dashboard': ['Visão operacional', 'Acompanhe o estado do portal e da equipe.'],
   '/pausas': ['Pausas', 'Controle de pausas e disponibilidade em tempo real.'],
   '/admin': ['Administração', 'Aprovações, funcionários, usuários e segurança.'],

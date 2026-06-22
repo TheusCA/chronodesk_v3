@@ -417,7 +417,7 @@ assert_same(true, $projectStorageRejected, 'feed de escalas rejeita storage dent
 
 $shiftApiSource = file_get_contents(__DIR__ . '/../api/portal/shift_attachments.php');
 $shiftPageSource = file_get_contents(__DIR__ . '/../frontend/src/pages/ShiftSchedulesPage.jsx');
-$navigationSource = file_get_contents(__DIR__ . '/../frontend/src/lib/navigation.js');
+$navigationSource = file_get_contents(__DIR__ . '/../frontend/src/lib/navigation.ts');
 assert_same(true, is_string($shiftApiSource) && is_string($shiftPageSource) && is_string($navigationSource), 'le feed de escalas');
 assert_same(true, strpos($shiftApiSource, "\$role === 'admin'") !== false, 'endpoint de escalas mostra upload apenas para admin');
 assert_same(true, strpos($shiftPageSource, 'Escalas de Sábado') !== false, 'feed foi renomeado para Escalas de Sabado');

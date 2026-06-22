@@ -12,6 +12,8 @@
 | Erro tecnico vazar SQL/path/stack | AppSec | Baixa | Alto | QA estatico e sanitizacao backend preservada | AppSec |
 | POC ser importada acidentalmente | Fase 6 | Baixa | Medio | Script `qa:visual` valida que `frontend/poc` nao e importado | DevSecOps |
 | Dependencia nova entrar sem plano | Supply chain | Media | Medio | QA estatico valida dependencias proibidas nesta fase | DevSecOps |
+| TS permissivo nao capturar erro em JSX | TypeScript | Media | Medio | `allowJs` preserva convivencia; migrar arquivos por prioridade e manter QA/build | Frontend |
+| Import futuro usar extensao `.js` para utilitario migrado | TypeScript | Baixa | Medio | QA/build detectam; manter imports sem extensao | Frontend |
 
 ## Pendencias antes de migracoes reais
 
@@ -20,3 +22,4 @@
 - Aprovar dependencias e versoes antes de instalar.
 - Definir politica de cache por tela.
 - Definir padrao de erro exibido para usuario.
+- Na Fase 8, migrar `lib/operational.js` com fixtures de CSV antes de componentes.
