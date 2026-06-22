@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const root = dirname(fileURLToPath(import.meta.url))
 const frontendRoot = join(root, '..')
 const srcRoot = join(frontendRoot, 'src')
+const pocRoot = join(frontendRoot, 'poc')
 
 function read(relativePath) {
   return readFileSync(join(frontendRoot, relativePath), 'utf8')
@@ -27,6 +28,10 @@ const operationalSource = read('src/pages/OperationalPages.jsx')
 const cssSource = read('src/index.css')
 const statesSource = read('src/components/ui/States.jsx')
 const packageJson = JSON.parse(read('package.json'))
+const installedDependencies = {
+  ...packageJson.dependencies,
+  ...packageJson.devDependencies,
+}
 
 for (const forbidden of [
   'dangerouslySetInnerHTML',
@@ -143,5 +148,39 @@ for (const cssInvariant of [
 assert.match(statesSource, /role="alert"/, 'Estado de erro e anunciado como alerta')
 assert.equal(packageJson.scripts['qa:operational'], 'node scripts/qa-operational.mjs')
 assert.equal(packageJson.scripts['qa:visual'], 'node scripts/qa-visual.mjs')
+
+for (const blockedDependency of [
+  '@tanstack/react-query',
+  '@tanstack/react-table',
+  'react-hook-form',
+  'zod',
+  'typescript',
+  '@playwright/test',
+  'cypress',
+]) {
+  assert.equal(
+    installedDependencies[blockedDependency],
+    undefined,
+    `Dependencia nao autorizada nesta fase: ${blockedDependency}`,
+  )
+}
+
+for (const forbiddenImport of [
+  '../poc',
+  './poc',
+  'frontend/poc',
+  'poc/',
+  '.example.ts',
+  '.example.tsx',
+]) {
+  assert.doesNotMatch(sourceText, new RegExp(forbiddenImport.replaceAll('.', '\\.')), `POC nao deve ser importada no runtime: ${forbiddenImport}`)
+}
+
+const pocFiles = walk(pocRoot).map((path) => path.replaceAll('\\', '/'))
+assert.ok(pocFiles.length > 0, 'POC isolada deve existir apenas como exemplo')
+for (const file of pocFiles) {
+  assert.match(file, /frontend\/poc\/|\/poc\//, `Arquivo POC deve permanecer em frontend/poc: ${file}`)
+  assert.match(file, /\.(md|example\.tsx?|example\.ts)$/, `POC deve ser documentacao ou exemplo: ${file}`)
+}
 
 console.log('Visual frontend QA OK')
