@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript.
 
 ## Status da Fase 7
 
@@ -11,13 +11,21 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Nao migrados: `App.jsx`, paginas, hooks, formularios, tabelas e componentes complexos.
 - TanStack Query/Table, React Hook Form, Zod, Playwright e Cypress continuam nao instalados.
 
+## Status da Fase 8
+
+- Migrado: `src/lib/operational.ts`.
+- Removido: `src/lib/operational.js`.
+- Mantidos sem migracao: `App.jsx`, paginas, hooks, formularios, tabelas e componentes.
+- `qa:operational` passou a validar invariantes do utilitario operacional, incluindo limites de importacao, parser CSV, query string, valores canonicos de escala, ausencia de TS/TSX em paginas e POC isolada.
+- Nenhuma dependencia nova foi instalada.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `src/lib/format.ts` | Datas, parse e formatacao | Baixa | Baixo | Migrado na Fase 7 | Nao | Nao | Nao | Concluido |
 | `src/lib/navigation.ts` | Rotas, labels e permissoes visuais | Baixa | Medio | Migrado na Fase 7 | Nao | Nao | Nao | Concluido |
-| `src/lib/operational.js` | CSV, limites, competencia e query string | Media | Alto em imports | Sim | Nao | Nao | Parcial | P1 |
+| `src/lib/operational.ts` | CSV, limites, competencia e query string | Media | Alto em imports | Migrado na Fase 8 | Nao | Nao | Parcial | Concluido |
 | `src/lib/api.js` | Fetch, CSRF, 401 e payload JSON/FormData | Media | Alto | Sim, apos tipos base | Sim, manter como transporte | Nao | Nao | P2 |
 | `src/hooks/useResource.js` | Fetch GET, loading/error/refetch | Media | Medio | Sim | Migrar gradualmente | Nao | Nao | P2 |
 | `src/hooks/useLivePauses.js` | Polling de pausas e timers | Media | Alto | Sim tardio | Sim, com cuidado | Nao | Nao | P3 |
@@ -67,8 +75,8 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 ## Roadmap recomendado
 
 1. Fase 7: instalar TypeScript em modo permissivo e migrar apenas `lib/format`, `lib/navigation`, exemplos de tipos e QA estatico. Concluido.
-2. Fase 8: migrar `lib/operational`, componentes puros e `States/Primitives`, mantendo `strict=false`.
-3. Fase 9: tipar transporte API e criar tipos de resposta/payload sem mudar endpoints.
+2. Fase 8: migrar `lib/operational`, mantendo `strict=false`. Concluido.
+3. Fase 9: migrar componentes puros de UI de baixo risco ou tipar transporte API sem mudar endpoints.
 4. Fase 10: introduzir TanStack Query em uma tela de baixo risco, mantendo `api()` e `post()`.
 5. Fase 11: introduzir TanStack Table em uma tabela nao critica ou somente leitura.
 6. Fase 12: introduzir React Hook Form + Zod em formulario pequeno, sem alterar payload final.

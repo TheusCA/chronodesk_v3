@@ -200,6 +200,7 @@ assert.deepEqual(pageTsFiles, [], 'Nenhuma pagina deve ser migrada para TypeScri
 for (const runtimeFile of [
   'src/lib/format.ts',
   'src/lib/navigation.ts',
+  'src/lib/operational.ts',
 ]) {
   assert.equal(statSync(join(frontendRoot, runtimeFile)).isFile(), true, `${runtimeFile} deve existir`)
 }
@@ -207,6 +208,7 @@ for (const runtimeFile of [
 for (const removedJsFile of [
   'src/lib/format.js',
   'src/lib/navigation.js',
+  'src/lib/operational.js',
 ]) {
   assert.throws(() => statSync(join(frontendRoot, removedJsFile)), `${removedJsFile} deve ter sido migrado para .ts`)
 }

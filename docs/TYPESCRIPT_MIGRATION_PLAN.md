@@ -15,7 +15,7 @@ Objetivo: adotar TypeScript gradualmente sem bloquear deploy e sem migrar telas 
 
 1. `frontend/src/lib/format.js`.
 2. `frontend/src/lib/navigation.js`.
-3. `frontend/src/lib/operational.js`.
+3. `frontend/src/lib/operational.ts`.
 4. Componentes puros de UI.
 5. `States.jsx`.
 6. `Primitives.jsx`.
@@ -137,3 +137,26 @@ Evolucao depois:
 - Manter `.jsx` originais ate cada migracao estar aprovada.
 - Nao misturar migracao TS com alteracao funcional.
 - Para a Fase 7 especificamente, rollback e remover `typescript`, restaurar `format.js`/`navigation.js` e remover `typecheck`.
+
+## Status da Fase 8
+
+Concluido nesta fase:
+
+- `frontend/src/lib/operational.js` migrado para `frontend/src/lib/operational.ts`.
+- Exports publicos preservados: `IMPORT_LIMITS`, `CRITICAL_INCIDENT_IMPORT_LIMITS`, `competencyFor`, `localDate`, `queryString`, `parseCsv`, `parseCriticalIncidentCsv` e `minutesLabel`.
+- Tipos permissivos adicionados para limites de importacao, linhas CSV, query string, competencia e valores canonicos de escala.
+- `qa:operational` atualizado para carregar o modulo TypeScript em memoria e validar invariantes de importacao, CSV, query string, POC isolada, paginas nao migradas e dependencias proibidas.
+- `qa:visual` atualizado para exigir `operational.ts` e a remocao de `operational.js`.
+
+Nao migrado nesta fase:
+
+- `App.jsx`.
+- `frontend/src/pages/*.jsx`.
+- Componentes, hooks, formularios e tabelas.
+- Nenhum `.tsx` de runtime.
+
+Rollback da Fase 8:
+
+- Restaurar `frontend/src/lib/operational.js`.
+- Remover `frontend/src/lib/operational.ts`.
+- Reverter ajustes em `frontend/scripts/qa-operational.mjs` e `frontend/scripts/qa-visual.mjs`.

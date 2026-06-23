@@ -1,12 +1,51 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import {
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
+
+const srcRoot = new URL('../src/', import.meta.url)
+const operationalTsUrl = new URL('../src/lib/operational.ts', import.meta.url)
+const operationalJsUrl = new URL('../src/lib/operational.js', import.meta.url)
+
+function walk(dirUrl) {
+  return readdirSync(dirUrl).flatMap((entry) => {
+    const path = join(fileURLToPath(dirUrl), entry)
+    if (statSync(path).isDirectory()) return walk(new URL(`${entry}/`, dirUrl))
+    return path
+  })
+}
+
+async function importTypeScriptModule(moduleUrl) {
+  const source = readFileSync(moduleUrl, 'utf8')
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      isolatedModules: true,
+      module: ts.ModuleKind.ES2020,
+      target: ts.ScriptTarget.ES2020,
+    },
+  }).outputText
+  const encoded = Buffer.from(transpiled, 'utf8').toString('base64')
+  return import(`data:text/javascript;base64,${encoded}`)
+}
+
+assert.equal(existsSync(operationalTsUrl), true, 'src/lib/operational.ts deve existir')
+assert.equal(existsSync(operationalJsUrl), false, 'src/lib/operational.js deve ter sido migrado')
+
+const {
   competencyFor,
   CRITICAL_INCIDENT_IMPORT_LIMITS,
   IMPORT_LIMITS,
   parseCriticalIncidentCsv,
   parseCsv,
-} from '../src/lib/operational.js'
+  queryString,
+} = await importTypeScriptModule(operationalTsUrl)
+
+assert.equal(IMPORT_LIMITS.maxFileBytes, 2097152)
+assert.deepEqual(IMPORT_LIMITS.acceptedExtensions, ['.csv', '.xlsx'])
+assert.equal(CRITICAL_INCIDENT_IMPORT_LIMITS.maxFileBytes, 2097152)
+assert.deepEqual(CRITICAL_INCIDENT_IMPORT_LIMITS.acceptedExtensions, ['.csv', '.xlsx'])
+assert.equal(queryString({ a: '1', empty: '', missing: null, absent: undefined, zero: 0 }), '?a=1&zero=0')
 
 const rows = parseCsv('id;equipe;regra\n1;n1;par')
 assert.equal(rows.length, 1)
@@ -64,7 +103,7 @@ assert.match(adminSource, /useResource\('configuracoes\.php', \{ enabled: isAdmi
 const operationalPagesSource = readFileSync(new URL('../src/pages/OperationalPages.jsx', import.meta.url), 'utf8')
 for (const [value, label] of [
   ['even_days', 'Dias pares'],
-  ['odd_days', 'Dias ímpares'],
+  ['odd_days', 'Dias .mpares'],
   ['always_onsite', 'Sempre presencial'],
   ['always_remote', 'Sempre remoto'],
   ['undefined', 'Sem escala definida'],
@@ -78,12 +117,43 @@ for (const [value, label] of [
 
 const saveRuleSource = operationalPagesSource.match(/async function saveRule\(event\) \{[\s\S]*?\n  \}/)?.[0] || ''
 assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/)
-assert.match(saveRuleSource, /notify\('Selecione uma regra de escala válida\.', 'error'\)/)
+assert.match(saveRuleSource, /notify\('Selecione uma regra de escala v.lida\.', 'error'\)/)
 assert.match(saveRuleSource, /post\('portal\/schedules\.php', \{\s*action: 'rule',\s*employee_id: employeeId,\s*rule_type: ruleType,\s*effective_from: rule\.effective_from,\s*\}/)
 assert.doesNotMatch(saveRuleSource, /\.\.\.rule/)
 assert.doesNotMatch(saveRuleSource, /\brule:\s*/)
 assert.doesNotMatch(saveRuleSource, /\bschedule_rule:\s*/)
 assert.doesNotMatch(saveRuleSource, /\bstatus:\s*/)
 assert.doesNotMatch(saveRuleSource, /rule_type:\s*['"]undefined['"]/)
+
+const sourceFiles = walk(srcRoot).filter((path) => /\.(jsx?|tsx?|ts)$/.test(path))
+const sourceText = sourceFiles.map((path) => readFileSync(path, 'utf8')).join('\n')
+assert.doesNotMatch(sourceText, /frontend\/poc|\.example\.tsx?|from ['"][^'"]*\/poc/, 'POC deve continuar fora do runtime')
+
+const runtimeTsxFiles = sourceFiles.filter((path) => path.endsWith('.tsx'))
+assert.deepEqual(runtimeTsxFiles, [], 'Nenhum TSX de runtime deve ser criado nesta fase')
+
+const pageTsFiles = walk(new URL('../src/pages/', import.meta.url)).filter((path) => /\.(tsx?|ts)$/.test(path))
+assert.deepEqual(pageTsFiles, [], 'Nenhuma pagina deve ser migrada para TypeScript nesta fase')
+
+const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+const installedDependencies = {
+  ...packageJson.dependencies,
+  ...packageJson.devDependencies,
+}
+
+for (const blockedDependency of [
+  '@tanstack/react-query',
+  '@tanstack/react-table',
+  'react-hook-form',
+  'zod',
+  '@playwright/test',
+  'cypress',
+]) {
+  assert.equal(
+    installedDependencies[blockedDependency],
+    undefined,
+    `Dependencia nao autorizada nesta fase: ${blockedDependency}`,
+  )
+}
 
 console.log('Operational frontend QA OK')

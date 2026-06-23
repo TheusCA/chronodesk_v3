@@ -1,4 +1,37 @@
-export const IMPORT_LIMITS = Object.freeze({
+export type ImportLimits = Readonly<{
+  maxFileBytes: number
+  maxPayloadBytes: number
+  maxRows: number
+  maxColumns: number
+  maxCellChars: number
+  acceptedExtensions: readonly string[]
+  acceptedHeaders: readonly string[]
+}>
+
+type CriticalIncidentImportLimits = ImportLimits & Readonly<{
+  requiredHeaders: readonly string[]
+}>
+
+export type CsvRow = Record<string, string>
+export type HeaderAliasMap = Readonly<Record<string, string>>
+export type QueryValue = string | number | boolean | null | undefined
+export type QueryParams = Record<string, QueryValue>
+export type CompetencyPeriod = {
+  start: string
+  end: string
+  key: string
+  label: string
+}
+export type ScheduleRuleType =
+  | 'even_days'
+  | 'odd_days'
+  | 'always_onsite'
+  | 'always_remote'
+  | 'undefined'
+
+type DateInput = string | number | Date
+
+export const IMPORT_LIMITS: ImportLimits = Object.freeze({
   maxFileBytes: 2097152,
   maxPayloadBytes: 1048576,
   maxRows: 500,
@@ -14,7 +47,7 @@ export const IMPORT_LIMITS = Object.freeze({
   ]),
 })
 
-export const CRITICAL_INCIDENT_IMPORT_LIMITS = Object.freeze({
+export const CRITICAL_INCIDENT_IMPORT_LIMITS: CriticalIncidentImportLimits = Object.freeze({
   maxFileBytes: 2097152,
   maxPayloadBytes: 2097152,
   maxRows: 500,
@@ -43,7 +76,7 @@ export const CRITICAL_INCIDENT_IMPORT_LIMITS = Object.freeze({
   requiredHeaders: Object.freeze(['incident_number', 'room_date']),
 })
 
-const CRITICAL_INCIDENT_HEADER_ALIASES = Object.freeze({
+const CRITICAL_INCIDENT_HEADER_ALIASES: HeaderAliasMap = Object.freeze({
   incidente: 'incident_number',
   'data da sala': 'room_date',
   'hora de abertura incidente': 'incident_opened_at',
@@ -63,7 +96,7 @@ const CRITICAL_INCIDENT_HEADER_ALIASES = Object.freeze({
   'atividade sdk': 'sdk_activity',
 })
 
-function normalizeCriticalIncidentHeader(header) {
+function normalizeCriticalIncidentHeader(header: unknown): string {
   return String(header)
     .replace(/^\uFEFF/, '')
     .normalize('NFD')
@@ -72,7 +105,7 @@ function normalizeCriticalIncidentHeader(header) {
     .trim()
 }
 
-export function competencyFor(reference = new Date()) {
+export function competencyFor(reference: DateInput = new Date()): CompetencyPeriod {
   const date = new Date(reference)
   const start = date.getDate() >= 16
     ? new Date(date.getFullYear(), date.getMonth(), 16)
@@ -87,23 +120,23 @@ export function competencyFor(reference = new Date()) {
   }
 }
 
-export function localDate(date = new Date()) {
+export function localDate(date: Date = new Date()): string {
   const offset = date.getTimezoneOffset() * 60000
   return new Date(date.getTime() - offset).toISOString().slice(0, 10)
 }
 
-export function queryString(filters) {
+export function queryString(filters: QueryParams): string {
   const params = new URLSearchParams()
   Object.entries(filters).forEach(([key, value]) => {
-    if (value !== '' && value !== null && value !== undefined) params.set(key, value)
+    if (value !== '' && value !== null && value !== undefined) params.set(key, value as string)
   })
   const query = params.toString()
   return query ? `?${query}` : ''
 }
 
-export function parseCsv(text) {
-  const rows = []
-  let row = []
+export function parseCsv(text: unknown): CsvRow[] {
+  const rows: string[][] = []
+  let row: string[] = []
   let field = ''
   let quoted = false
   const input = String(text).replace(/^\uFEFF/, '')
@@ -171,10 +204,10 @@ export function parseCsv(text) {
   ))
 }
 
-export function parseCriticalIncidentCsv(text) {
+export function parseCriticalIncidentCsv(text: unknown): CsvRow[] {
   const limits = CRITICAL_INCIDENT_IMPORT_LIMITS
-  const rows = []
-  let row = []
+  const rows: string[][] = []
+  let row: string[] = []
   let field = ''
   let quoted = false
   const input = String(text).replace(/^\uFEFF/, '')
@@ -244,7 +277,7 @@ export function parseCriticalIncidentCsv(text) {
   ))
 }
 
-export function minutesLabel(value) {
+export function minutesLabel(value: unknown): string {
   const minutes = Number(value || 0)
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}min`
 }
