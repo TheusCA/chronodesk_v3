@@ -1,7 +1,12 @@
 // EXAMPLE ONLY. Not imported by production runtime.
 // Requires future dependency: @tanstack/react-table.
 
-import type { ColumnDef } from '@tanstack/react-table'
+type ColumnDef<TRow> = {
+  accessorFn?: (row: TRow) => string
+  accessorKey?: keyof TRow
+  id?: string
+  header: string
+}
 
 type CriticalIncidentRow = {
   id: number
