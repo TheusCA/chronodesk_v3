@@ -14,6 +14,8 @@
 | Dependencia nova entrar sem plano | Supply chain | Media | Medio | QA estatico valida dependencias proibidas nesta fase | DevSecOps |
 | TS permissivo nao capturar erro em JSX | TypeScript | Media | Medio | `allowJs` preserva convivencia; migrar arquivos por prioridade e manter QA/build | Frontend |
 | Import futuro usar extensao `.js` para utilitario migrado | TypeScript | Baixa | Medio | `qa:operational` e `qa:visual` exigem `operational.ts` e ausencia de `operational.js` | Frontend |
+| Migracao do transporte API remover CSRF ou cookies | API/AppSec | Baixa | Muito alto | `qa:api` valida CSRF, `credentials: same-origin`, JSON e FormData | Frontend/AppSec |
+| 401 deixar de disparar evento global | Sessao | Baixa | Alto | `qa:api` valida `chronodesk:unauthorized` exceto em `session.php` | Frontend/QA |
 
 ## Pendencias antes de migracoes reais
 
@@ -23,3 +25,4 @@
 - Definir politica de cache por tela.
 - Definir padrao de erro exibido para usuario.
 - Fase 8 concluiu a migracao de `lib/operational.ts`; proximas migracoes devem continuar pequenas e sem paginas densas.
+- Fase 9 concluiu a migracao de `lib/api.ts`; introducao de TanStack Query deve manter `api()` como transporte base.

@@ -16,6 +16,7 @@ $_SERVER['SERVER_PORT'] = '80';
 $_SERVER['HTTP_HOST'] = "attacker.example\r\nX-Test: injected";
 
 require_once __DIR__ . '/../config.php';
+putenv('APP_BASE_URL');
 require_once __DIR__ . '/../auth_ldap.php';
 require_once __DIR__ . '/../services/MailerService.php';
 require_once __DIR__ . '/../services/OperationalService.php';

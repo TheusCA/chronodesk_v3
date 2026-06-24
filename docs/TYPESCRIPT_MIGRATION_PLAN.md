@@ -16,13 +16,14 @@ Objetivo: adotar TypeScript gradualmente sem bloquear deploy e sem migrar telas 
 1. `frontend/src/lib/format.js`.
 2. `frontend/src/lib/navigation.js`.
 3. `frontend/src/lib/operational.ts`.
-4. Componentes puros de UI.
-5. `States.jsx`.
-6. `Primitives.jsx`.
-7. Hooks como `useResource`.
-8. Paginas pequenas ou somente leitura.
-9. Paginas densas.
-10. `App.jsx` por ultimo.
+4. `frontend/src/lib/api.ts`.
+5. Componentes puros de UI.
+6. `States.jsx`.
+7. `Primitives.jsx`.
+8. Hooks como `useResource`.
+9. Paginas pequenas ou somente leitura.
+10. Paginas densas.
+11. `App.jsx` por ultimo.
 
 ## Status da Fase 7
 
@@ -160,3 +161,28 @@ Rollback da Fase 8:
 - Restaurar `frontend/src/lib/operational.js`.
 - Remover `frontend/src/lib/operational.ts`.
 - Reverter ajustes em `frontend/scripts/qa-operational.mjs` e `frontend/scripts/qa-visual.mjs`.
+
+## Status da Fase 9
+
+Concluido nesta fase:
+
+- Hotfix em `scripts/qa-smoke.php` para limpar `APP_BASE_URL` imediatamente apos carregar `config.php`.
+- `frontend/src/lib/api.js` migrado para `frontend/src/lib/api.ts`.
+- Exports publicos preservados: `setCsrfToken`, `apiUrl`, `api`, `post` e `postForm`.
+- Tipos permissivos adicionados para metodo HTTP, payload JSON/FormData, opcoes de request, resposta de API, erro de API e CSRF token.
+- `qa:api` criado para validar CSRF, `credentials: same-origin`, JSON, FormData sem `Content-Type` manual, erro 401 e evento `chronodesk:unauthorized`.
+- `qa:visual` atualizado para exigir `api.ts`, remocao de `api.js` e script `qa:api`.
+
+Nao migrado nesta fase:
+
+- `App.jsx`.
+- `frontend/src/pages/*.jsx`.
+- Componentes, hooks, formularios e tabelas.
+- Nenhum `.tsx` de runtime.
+
+Rollback da Fase 9:
+
+- Restaurar `frontend/src/lib/api.js`.
+- Remover `frontend/src/lib/api.ts`.
+- Reverter `frontend/scripts/qa-api.mjs`, `frontend/package.json` e ajustes em `frontend/scripts/qa-visual.mjs`.
+- Reverter o hotfix em `scripts/qa-smoke.php` somente se o ambiente de smoke nao depender mais da limpeza de `APP_BASE_URL`.

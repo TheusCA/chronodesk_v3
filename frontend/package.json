@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "qa:api": "node scripts/qa-api.mjs",
     "qa:operational": "node scripts/qa-operational.mjs",
     "qa:visual": "node scripts/qa-visual.mjs"
   },
