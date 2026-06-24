@@ -20,7 +20,7 @@ Objetivo: adotar TypeScript gradualmente sem bloquear deploy e sem migrar telas 
 5. Componentes puros de UI.
 6. `States.jsx`.
 7. `Primitives.jsx`.
-8. Hooks como `useResource`.
+8. `frontend/src/hooks/useResource.ts`.
 9. Paginas pequenas ou somente leitura.
 10. Paginas densas.
 11. `App.jsx` por ultimo.
@@ -213,3 +213,31 @@ Rollback da Fase 10:
 - Remover `QueryClientProvider` de `frontend/src/main.jsx`.
 - Restaurar `OperationalReportsPage` para `useResource`.
 - Reverter ajustes em `frontend/package.json`, `frontend/scripts/qa-api.mjs`, `frontend/scripts/qa-operational.mjs` e `frontend/scripts/qa-visual.mjs`.
+
+## Status da Fase 11
+
+Concluido nesta fase:
+
+- `frontend/src/hooks/useResource.js` migrado para `frontend/src/hooks/useResource.ts`.
+- Export `useResource` preservado.
+- Tipos permissivos adicionados para opcoes, erro, resposta e retorno.
+- Comportamento preservado: `enabled`, `initialData`, `intervalMs`, `pauseWhenHidden`, `refresh`, controle de request obsoleto, cleanup de intervalo e listener de visibilidade.
+- `api()` continua sendo o transporte.
+- `qa:resource` criado para validar a migracao do hook e o escopo da fase.
+- `qa:visual` atualizado para exigir `useResource.ts` e ausencia de `useResource.js`.
+
+Nao migrado nesta fase:
+
+- Consumidores JSX do hook.
+- `useLivePauses`.
+- Paginas.
+- Componentes.
+- Mutacoes.
+- Nenhum `.tsx` de runtime.
+
+Rollback da Fase 11:
+
+- Restaurar `frontend/src/hooks/useResource.js`.
+- Remover `frontend/src/hooks/useResource.ts`.
+- Remover `frontend/scripts/qa-resource.mjs`.
+- Reverter ajustes em `frontend/package.json` e `frontend/scripts/qa-visual.mjs`.

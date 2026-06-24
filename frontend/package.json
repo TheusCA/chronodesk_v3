@@ -12,6 +12,7 @@
     "qa:api": "node scripts/qa-api.mjs",
     "qa:operational": "node scripts/qa-operational.mjs",
     "qa:query": "node scripts/qa-query.mjs",
+    "qa:resource": "node scripts/qa-resource.mjs",
     "qa:visual": "node scripts/qa-visual.mjs"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores.
 
 ## Status da Fase 7
 
@@ -38,6 +38,17 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Nao migrados: mutacoes, uploads, aprovacoes, pausas em tempo real, `useLivePauses`, Admin, Dashboard, PA Map, chamados criticos e escalas.
 - `qa:query` valida provider, query client, query keys, dependencia permitida, ausencia de mutacoes e ausencia de fetch direto fora de `api.ts`.
 
+## Status da Fase 11
+
+- Migrado: `src/hooks/useResource.ts`.
+- Removido: `src/hooks/useResource.js`.
+- Preservados: `data`, `loading`, `error`, `refresh`, `setData`, `enabled`, `initialData`, `intervalMs`, `pauseWhenHidden`, controle de request obsoleto e cleanup de polling.
+- `api()` continua sendo o transporte.
+- Consumidores JSX nao foram migrados.
+- `useLivePauses` nao foi alterado.
+- Nenhuma dependencia nova foi instalada.
+- `qa:resource` valida invariantes do hook, ausencia de `fetch()` fora de `api.ts`, POC isolada, ausencia de paginas TS/TSX e ausencia de mutacoes TanStack Query.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
@@ -48,7 +59,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 | `src/lib/api.ts` | Fetch, CSRF, 401 e payload JSON/FormData | Media | Alto | Migrado na Fase 9 | Transporte base na Fase 10 | Nao | Nao | Concluido |
 | `src/lib/queryClient.ts` | Cliente TanStack Query | Baixa | Medio | Criado na Fase 10 | Base configurada | Nao | Nao | Concluido |
 | `src/lib/queryKeys.ts` | Chaves de cache | Baixa | Medio | Criado na Fase 10 | Base configurada | Nao | Nao | Concluido |
-| `src/hooks/useResource.js` | Fetch GET, loading/error/refetch | Media | Medio | Sim | Migrar gradualmente | Nao | Nao | P2 |
+| `src/hooks/useResource.ts` | Fetch GET, loading/error/refetch | Media | Medio | Migrado na Fase 11 | Legado preservado | Nao | Nao | Concluido |
 | `src/hooks/useLivePauses.js` | Polling de pausas e timers | Media | Alto | Sim tardio | Sim, com cuidado | Nao | Nao | P3 |
 | `src/components/ui/States.jsx` | Loading, empty e error | Baixa | Baixo | Sim | Nao | Nao | Nao | P1 |
 | `src/components/ui/Primitives.jsx` | UI compartilhada | Media | Baixo | Sim | Nao | Nao | Nao | P1 |
@@ -69,7 +80,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 
 - Fetch central passa por `api()`, `post()` e `postForm()` em `src/lib/api.ts`.
 - CSRF e `credentials: same-origin` estao centralizados no transporte atual.
-- GETs ainda usam majoritariamente `useResource()` com `loading`, `error`, `refresh`, `intervalMs` e cancelamento por request id.
+- GETs ainda usam majoritariamente `useResource()` com `loading`, `error`, `refresh`, `intervalMs` e cancelamento por request id; o hook foi tipado na Fase 11.
 - `/relatorios` usa TanStack Query desde a Fase 10, sempre via `api()`.
 - Pausas usam hook proprio `useLivePauses()` com polling e timer local.
 - Tabelas usam `data-table` e `table-wrap`, sem modelo unico de colunas.
@@ -100,9 +111,10 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 2. Fase 8: migrar `lib/operational`, mantendo `strict=false`. Concluido.
 3. Fase 9: tipar transporte API sem mudar endpoints. Concluido.
 4. Fase 10: introduzir TanStack Query em uma tela de baixo risco, mantendo `api()` e `post()`. Concluido em `/relatorios`.
-5. Fase 11: introduzir TanStack Table em uma tabela nao critica ou somente leitura.
-6. Fase 12: introduzir React Hook Form + Zod em formulario pequeno, sem alterar payload final.
-7. Fase 13: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
+5. Fase 11: tipar `useResource` sem trocar consumidores por TanStack Query. Concluido.
+6. Fase 12: introduzir TanStack Table em uma tabela nao critica ou somente leitura.
+7. Fase 13: introduzir React Hook Form + Zod em formulario pequeno, sem alterar payload final.
+8. Fase 14: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
 
 ## Criterios para cada passo futuro
 

@@ -1,10 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '../lib/api'
 
-export function useResource(path, { enabled = true, initialData = null, intervalMs = 0, pauseWhenHidden = true } = {}) {
-  const [data, setData] = useState(initialData)
+export type UseResourceOptions<T = unknown> = {
+  enabled?: boolean
+  initialData?: T | null
+  intervalMs?: number
+  pauseWhenHidden?: boolean
+}
+
+export type UseResourceResult<T = unknown> = {
+  data: T | null
+  loading: boolean
+  error: Error | null
+  refresh: () => Promise<T | null>
+  setData: React.Dispatch<React.SetStateAction<T | null>>
+}
+
+export function useResource<T = unknown>(
+  path: string,
+  {
+    enabled = true,
+    initialData = null,
+    intervalMs = 0,
+    pauseWhenHidden = true,
+  }: UseResourceOptions<T> = {},
+): UseResourceResult<T> {
+  const [data, setData] = useState<T | null>(initialData)
   const [loading, setLoading] = useState(enabled)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<Error | null>(null)
   const loadedRef = useRef(initialData !== null)
   const requestRef = useRef(0)
 
@@ -14,14 +37,14 @@ export function useResource(path, { enabled = true, initialData = null, interval
     if (!loadedRef.current) setLoading(true)
     setError(null)
     try {
-      const response = await api(path)
+      const response = await api<T>(path)
       if (requestRef.current !== requestId) return null
       loadedRef.current = true
       setData(response)
       return response
     } catch (requestError) {
       if (requestRef.current !== requestId) return null
-      setError(requestError)
+      setError(requestError instanceof Error ? requestError : new Error(String(requestError)))
       return null
     } finally {
       if (requestRef.current === requestId) setLoading(false)

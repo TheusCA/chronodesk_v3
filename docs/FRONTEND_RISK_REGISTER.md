@@ -18,6 +18,7 @@
 | 401 deixar de disparar evento global | Sessao | Baixa | Alto | `qa:api` valida `chronodesk:unauthorized` exceto em `session.php` | Frontend/QA |
 | Cache de dados operacionais sensiveis ficar agressivo | TanStack Query | Media | Alto | Fase 10 usa `retry=false`, `refetchOnWindowFocus=false`, `staleTime=30_000` e apenas `/relatorios` | Frontend/AppSec |
 | Mutacoes entrarem em TanStack Query cedo demais | TanStack Query | Media | Alto | `qa:query` bloqueia `useMutation` nesta fase | Frontend/QA |
+| Hook legado perder cleanup ou controle de request obsoleto | TypeScript | Baixa | Alto | `qa:resource` valida `requestRef`, interval cleanup e listener de visibilidade | Frontend/QA |
 
 ## Pendencias antes de migracoes reais
 
@@ -29,3 +30,4 @@
 - Fase 8 concluiu a migracao de `lib/operational.ts`; proximas migracoes devem continuar pequenas e sem paginas densas.
 - Fase 9 concluiu a migracao de `lib/api.ts`; introducao de TanStack Query deve manter `api()` como transporte base.
 - Fase 10 iniciou TanStack Query apenas em `/relatorios`; proximos passos devem manter uma tela por vez e evitar mutacoes ate definir invalidacao.
+- Fase 11 concluiu a migracao de `useResource.ts`; consumidores continuam JSX e devem ser migrados apenas em fases pequenas.

@@ -152,6 +152,7 @@ assert.equal(packageJson.scripts['qa:operational'], 'node scripts/qa-operational
 assert.equal(packageJson.scripts['qa:visual'], 'node scripts/qa-visual.mjs')
 assert.equal(packageJson.scripts['qa:api'], 'node scripts/qa-api.mjs')
 assert.equal(packageJson.scripts['qa:query'], 'node scripts/qa-query.mjs')
+assert.equal(packageJson.scripts['qa:resource'], 'node scripts/qa-resource.mjs')
 assert.equal(packageJson.scripts.typecheck, 'tsc --noEmit')
 assert.equal(packageJson.devDependencies.typescript?.startsWith('^'), true, 'TypeScript deve estar em devDependencies')
 assert.equal(tsconfig.compilerOptions.strict, false, 'TypeScript deve iniciar permissivo com strict=false')
@@ -199,6 +200,7 @@ const pageTsFiles = walk(join(srcRoot, 'pages')).filter((path) => /\.(tsx?|ts)$/
 assert.deepEqual(pageTsFiles, [], 'Nenhuma pagina deve ser migrada para TypeScript nesta fase')
 
 for (const runtimeFile of [
+  'src/hooks/useResource.ts',
   'src/lib/api.ts',
   'src/lib/format.ts',
   'src/lib/navigation.ts',
@@ -210,6 +212,7 @@ for (const runtimeFile of [
 }
 
 for (const removedJsFile of [
+  'src/hooks/useResource.js',
   'src/lib/api.js',
   'src/lib/format.js',
   'src/lib/navigation.js',
