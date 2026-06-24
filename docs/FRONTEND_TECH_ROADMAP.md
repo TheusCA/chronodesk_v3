@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`.
 
 ## Status da Fase 7
 
@@ -49,6 +49,15 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Nenhuma dependencia nova foi instalada.
 - `qa:resource` valida invariantes do hook, ausencia de `fetch()` fora de `api.ts`, POC isolada, ausencia de paginas TS/TSX e ausencia de mutacoes TanStack Query.
 
+## Status da Fase 12
+
+- Dependencia adicionada: `@tanstack/react-table`.
+- Primeiro uso: componente `ReportsSummaryTable` do fluxo `/relatorios`, somente leitura.
+- Dados continuam vindo do `useQuery` da Fase 10, que usa `api()` como transporte.
+- Export CSV, filtros, endpoints e payloads foram preservados.
+- Nao migrados: mutacoes, uploads, aprovacoes, pausas, Dashboard, Admin, PA Map, chamados criticos, escalas e formularios.
+- `qa:table` valida dependencia permitida, escopo unico, ausencia de `useMutation`, ausencia de `fetch()` direto fora de `api.ts`, POC isolada e ausencia de paginas TS/TSX.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
@@ -68,7 +77,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 | `src/pages/DashboardPage.jsx` | Dashboard e pausas ativas | Media | Medio | Depois dos hooks | Sim | Nao | Nao | P3 |
 | `src/pages/PausasPage.jsx` | Pausas, timers e acoes | Alta | Alto | Tardio | Parcial | Nao | Reuniao | P4 |
 | `src/pages/AdminPage.jsx` | Aprovacoes, funcionarios, config, usuarios | Alta | Alto | Tardio | Sim | Sim | Sim | P4 |
-| `src/pages/OperationalPages.jsx` | Calendario, escala, workflows, relatorios | Muito alta | Muito alto | Ultimas telas | Somente `/relatorios` na Fase 10 | Sim | Sim | P5 |
+| `src/pages/OperationalPages.jsx` | Calendario, escala, workflows, relatorios | Muito alta | Muito alto | Ultimas telas | Somente `/relatorios` na Fase 10 | Somente resumo de `/relatorios` na Fase 12 | Sim | P5 |
 | `src/pages/CriticalIncidentsPage.jsx` | War room, import, detalhe e tabela grande | Muito alta | Muito alto | Tardio | Sim | Sim | Sim | P4 |
 | `src/pages/PaMapPage.jsx` | Mapa de PA e vinculos | Alta | Alto | Tardio | Sim | Nao | Sim | P4 |
 | `src/pages/DocumentsPage.jsx` | Biblioteca, upload e filtros | Media | Alto em upload | Sim depois | Sim | Parcial | Sim | P3 |
@@ -82,6 +91,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - CSRF e `credentials: same-origin` estao centralizados no transporte atual.
 - GETs ainda usam majoritariamente `useResource()` com `loading`, `error`, `refresh`, `intervalMs` e cancelamento por request id; o hook foi tipado na Fase 11.
 - `/relatorios` usa TanStack Query desde a Fase 10, sempre via `api()`.
+- O resumo de `/relatorios` usa TanStack Table desde a Fase 12 apenas como motor de tabela client-side.
 - Pausas usam hook proprio `useLivePauses()` com polling e timer local.
 - Tabelas usam `data-table` e `table-wrap`, sem modelo unico de colunas.
 - Formularios usam `useState` local, `required`, `maxLength`, conversoes manuais para `Number()` e `FormData`.
@@ -112,7 +122,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 3. Fase 9: tipar transporte API sem mudar endpoints. Concluido.
 4. Fase 10: introduzir TanStack Query em uma tela de baixo risco, mantendo `api()` e `post()`. Concluido em `/relatorios`.
 5. Fase 11: tipar `useResource` sem trocar consumidores por TanStack Query. Concluido.
-6. Fase 12: introduzir TanStack Table em uma tabela nao critica ou somente leitura.
+6. Fase 12: introduzir TanStack Table em uma tabela nao critica ou somente leitura. Concluido em `/relatorios`.
 7. Fase 13: introduzir React Hook Form + Zod em formulario pequeno, sem alterar payload final.
 8. Fase 14: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
 

@@ -13,10 +13,12 @@
     "qa:operational": "node scripts/qa-operational.mjs",
     "qa:query": "node scripts/qa-query.mjs",
     "qa:resource": "node scripts/qa-resource.mjs",
+    "qa:table": "node scripts/qa-table.mjs",
     "qa:visual": "node scripts/qa-visual.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.1",
+    "@tanstack/react-table": "^8.21.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

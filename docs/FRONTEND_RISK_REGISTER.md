@@ -19,6 +19,8 @@
 | Cache de dados operacionais sensiveis ficar agressivo | TanStack Query | Media | Alto | Fase 10 usa `retry=false`, `refetchOnWindowFocus=false`, `staleTime=30_000` e apenas `/relatorios` | Frontend/AppSec |
 | Mutacoes entrarem em TanStack Query cedo demais | TanStack Query | Media | Alto | `qa:query` bloqueia `useMutation` nesta fase | Frontend/QA |
 | Hook legado perder cleanup ou controle de request obsoleto | TypeScript | Baixa | Alto | `qa:resource` valida `requestRef`, interval cleanup e listener de visibilidade | Frontend/QA |
+| TanStack Table virar migracao ampla de tabelas criticas | Tables | Media | Alto | Fase 12 limita `useReactTable` a um componente somente leitura e `qa:table` valida escopo unico | Frontend/QA |
+| Tabela client-side alterar contrato ou busca de dados | Tables/API | Baixa | Alto | TanStack Table usa dados ja carregados por `api()`/Query e nao busca dados diretamente | Frontend/AppSec |
 
 ## Pendencias antes de migracoes reais
 
@@ -31,3 +33,4 @@
 - Fase 9 concluiu a migracao de `lib/api.ts`; introducao de TanStack Query deve manter `api()` como transporte base.
 - Fase 10 iniciou TanStack Query apenas em `/relatorios`; proximos passos devem manter uma tela por vez e evitar mutacoes ate definir invalidacao.
 - Fase 11 concluiu a migracao de `useResource.ts`; consumidores continuam JSX e devem ser migrados apenas em fases pequenas.
+- Fase 12 iniciou TanStack Table apenas no resumo de `/relatorios`; proximas tabelas devem continuar somente leitura ate existir padrao aprovado para acoes e coluna de operacao.

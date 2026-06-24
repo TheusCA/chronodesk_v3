@@ -1,15 +1,17 @@
 # Portal SDK - TanStack Adoption Plan
 
-Este plano cobre TanStack Query e TanStack Table para fases futuras. Nenhuma dependencia foi instalada nesta fase.
+Este plano cobre TanStack Query e TanStack Table. As dependencias devem entrar por fases pequenas, com uma tela ou tabela por vez.
 
 ## TanStack Query
 
-### Dependencia futura
+### Dependencia
 
 ```bash
 cd frontend
 npm install @tanstack/react-query
 ```
+
+Status: instalada na Fase 10.
 
 ### Padrao inicial
 
@@ -57,12 +59,14 @@ npm install @tanstack/react-query
 
 ## TanStack Table
 
-### Dependencia futura
+### Dependencia
 
 ```bash
 cd frontend
 npm install @tanstack/react-table
 ```
+
+Status: instalada na Fase 12.
 
 ### Tabelas candidatas
 
@@ -77,6 +81,8 @@ npm install @tanstack/react-table
 | Documentacao | Sim | Opcional | Sim | Opcional | Cards podem continuar |
 | Metricas | Sim | Sim | Sim | Nao | Medio ganho |
 | Relatorios | Sim | Nao | Sim | Nao | Baixo risco |
+
+Primeira adocao concluida na Fase 12: resumo de `/relatorios`, usando `ReportsSummaryTable` apenas como camada de renderizacao sobre dados ja obtidos por TanStack Query e `api()`.
 
 ### O que deve permanecer simples
 

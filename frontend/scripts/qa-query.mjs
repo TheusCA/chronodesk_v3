@@ -30,7 +30,6 @@ assert.equal(
 )
 
 for (const blockedDependency of [
-  '@tanstack/react-table',
   'react-hook-form',
   'zod',
   '@playwright/test',
@@ -61,7 +60,7 @@ assert.match(queryKeysSource, /reports:\s*\(filters/, 'queryKeys deve centraliza
 assert.match(queryKeysSource, /\['reports', filters\] as const/, 'Chave de relatorios deve incluir filtros')
 
 const operationalPagesSource = read('src/pages/OperationalPages.jsx')
-const reportsPageSource = operationalPagesSource.match(/export function OperationalReportsPage\(\) \{[\s\S]*?\n\}\r?\n\r?\nfunction SummaryTable/)?.[0] || ''
+const reportsPageSource = operationalPagesSource.match(/export function OperationalReportsPage\(\) \{[\s\S]*?\n\}\r?\n\r?\nfunction ReportsSummaryTable/)?.[0] || ''
 assert.match(reportsPageSource, /useQuery\(\{/, 'Apenas relatorios deve usar useQuery nesta fase')
 assert.match(reportsPageSource, /queryKey:\s*queryKeys\.reports\(filters\)/, 'Relatorios deve usar query key centralizada')
 assert.match(reportsPageSource, /queryFn:\s*\(\) => api\(`portal\/reports\.php\$\{queryString\(filters\)\}`\)/, 'Relatorios deve usar api() como transporte')

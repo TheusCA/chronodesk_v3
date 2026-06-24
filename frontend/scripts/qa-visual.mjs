@@ -153,6 +153,7 @@ assert.equal(packageJson.scripts['qa:visual'], 'node scripts/qa-visual.mjs')
 assert.equal(packageJson.scripts['qa:api'], 'node scripts/qa-api.mjs')
 assert.equal(packageJson.scripts['qa:query'], 'node scripts/qa-query.mjs')
 assert.equal(packageJson.scripts['qa:resource'], 'node scripts/qa-resource.mjs')
+assert.equal(packageJson.scripts['qa:table'], 'node scripts/qa-table.mjs')
 assert.equal(packageJson.scripts.typecheck, 'tsc --noEmit')
 assert.equal(packageJson.devDependencies.typescript?.startsWith('^'), true, 'TypeScript deve estar em devDependencies')
 assert.equal(tsconfig.compilerOptions.strict, false, 'TypeScript deve iniciar permissivo com strict=false')
@@ -162,7 +163,6 @@ assert.equal(tsconfig.compilerOptions.noEmit, true, 'TypeScript deve manter noEm
 assert.equal(statSync(join(frontendRoot, 'src/App.jsx')).isFile(), true, 'App.jsx deve continuar existindo')
 
 for (const blockedDependency of [
-  '@tanstack/react-table',
   'react-hook-form',
   'zod',
   '@playwright/test',

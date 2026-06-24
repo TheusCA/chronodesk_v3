@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { useResource } from '../hooks/useResource'
@@ -645,8 +646,8 @@ export function OperationalReportsPage() {
             <a className="btn-primary" href={apiUrl(`portal/reports.php${queryString({ ...filters, format: 'csv' })}`)}>Exportar CSV</a>
           </section>
           <section className="grid gap-5 lg:grid-cols-2">
-            <SummaryTable title="Resumo por colaborador" values={resource.data?.by_employee} />
-            <SummaryTable title="Resumo por equipe" values={resource.data?.by_team} />
+            <ReportsSummaryTable title="Resumo por colaborador" values={resource.data?.by_employee} />
+            <ReportsSummaryTable title="Resumo por equipe" values={resource.data?.by_team} />
           </section>
         </>
       </OperationalShell>
@@ -654,17 +655,63 @@ export function OperationalReportsPage() {
   )
 }
 
-function SummaryTable({ title, values }) {
-  const entries = Object.entries(values || {})
+function ReportsSummaryTable({ title, values }) {
+  const data = useMemo(
+    () => Object.entries(values || {}).map(([label, value]) => ({ label, value })),
+    [values],
+  )
+  const columns = useMemo(() => [
+    {
+      accessorKey: 'label',
+      header: title,
+      cell: ({ getValue }) => <strong className="text-slate-200">{getValue()}</strong>,
+    },
+    {
+      accessorKey: 'value',
+      header: 'Resumo',
+      cell: ({ getValue }) => {
+        const value = getValue() || {}
+        return (
+          <span className="text-right text-slate-500">
+            {minutesLabel(value.overtime_minutes)} HE, {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantão(ões), {value.onsite_days || 0} presencial(is)
+          </span>
+        )
+      },
+    },
+  ], [title])
+  const table = useReactTable({
+    data,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+  })
+
   return (
     <section className="card">
       <h2 className="mb-4 font-bold text-white">{title}</h2>
-      {entries.length === 0 ? <p className="text-sm text-slate-500">Sem dados no período.</p> : entries.map(([label, value]) => (
-        <div className="flex items-center justify-between gap-3 border-b border-white/5 py-3 text-sm" key={label}>
-          <strong className="text-slate-200">{label}</strong>
-          <span className="text-right text-slate-500">{minutesLabel(value.overtime_minutes)} HE, {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantão(ões), {value.onsite_days || 0} presencial(is)</span>
+      {data.length === 0 ? <p className="text-sm text-slate-500">Sem dados no período.</p> : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th key={header.id}>{flexRender(header.column.columnDef.header, header.getContext())}</th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody>
+              {table.getRowModel().rows.map((row) => (
+                <tr key={row.id}>
+                  {row.getVisibleCells().map((cell) => (
+                    <td key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      ))}
+      )}
     </section>
   )
 }

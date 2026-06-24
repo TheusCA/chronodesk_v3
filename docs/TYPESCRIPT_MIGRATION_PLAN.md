@@ -241,3 +241,30 @@ Rollback da Fase 11:
 - Remover `frontend/src/hooks/useResource.ts`.
 - Remover `frontend/scripts/qa-resource.mjs`.
 - Reverter ajustes em `frontend/package.json` e `frontend/scripts/qa-visual.mjs`.
+
+## Status da Fase 12
+
+Concluido nesta fase:
+
+- `@tanstack/react-table` instalado como dependencia de runtime.
+- `ReportsSummaryTable` em `frontend/src/pages/OperationalPages.jsx` passou a usar `useReactTable`, `getCoreRowModel` e `flexRender`.
+- Uso limitado ao fluxo `/relatorios`, em resumo somente leitura alimentado pelo `useQuery` da Fase 10.
+- `api()` continua sendo o transporte base por meio da query existente.
+- `qa:table` criado para validar dependencia permitida, escopo unico, ausencia de mutacoes, ausencia de `fetch()` direto fora de `api.ts` e POC isolada.
+
+Nao migrado nesta fase:
+
+- Paginas para TypeScript.
+- Componentes para TypeScript.
+- Mutacoes.
+- Uploads.
+- Aprovacoes.
+- Telas criticas.
+- Nenhum `.tsx` de runtime.
+
+Rollback da Fase 12:
+
+- Remover `@tanstack/react-table` de `frontend/package.json` e `frontend/package-lock.json`.
+- Restaurar `ReportsSummaryTable` para renderizacao JSX simples.
+- Remover `frontend/scripts/qa-table.mjs`.
+- Reverter ajustes em `frontend/package.json`, `frontend/scripts/qa-api.mjs`, `frontend/scripts/qa-operational.mjs`, `frontend/scripts/qa-query.mjs`, `frontend/scripts/qa-resource.mjs` e `frontend/scripts/qa-visual.mjs`.

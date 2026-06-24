@@ -142,7 +142,6 @@ const installedDependencies = {
 }
 
 for (const blockedDependency of [
-  '@tanstack/react-table',
   'react-hook-form',
   'zod',
   '@playwright/test',
