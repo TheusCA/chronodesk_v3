@@ -151,6 +151,7 @@ assert.match(statesSource, /role="alert"/, 'Estado de erro e anunciado como aler
 assert.equal(packageJson.scripts['qa:operational'], 'node scripts/qa-operational.mjs')
 assert.equal(packageJson.scripts['qa:visual'], 'node scripts/qa-visual.mjs')
 assert.equal(packageJson.scripts['qa:api'], 'node scripts/qa-api.mjs')
+assert.equal(packageJson.scripts['qa:query'], 'node scripts/qa-query.mjs')
 assert.equal(packageJson.scripts.typecheck, 'tsc --noEmit')
 assert.equal(packageJson.devDependencies.typescript?.startsWith('^'), true, 'TypeScript deve estar em devDependencies')
 assert.equal(tsconfig.compilerOptions.strict, false, 'TypeScript deve iniciar permissivo com strict=false')
@@ -160,7 +161,6 @@ assert.equal(tsconfig.compilerOptions.noEmit, true, 'TypeScript deve manter noEm
 assert.equal(statSync(join(frontendRoot, 'src/App.jsx')).isFile(), true, 'App.jsx deve continuar existindo')
 
 for (const blockedDependency of [
-  '@tanstack/react-query',
   '@tanstack/react-table',
   'react-hook-form',
   'zod',
@@ -203,6 +203,8 @@ for (const runtimeFile of [
   'src/lib/format.ts',
   'src/lib/navigation.ts',
   'src/lib/operational.ts',
+  'src/lib/queryClient.ts',
+  'src/lib/queryKeys.ts',
 ]) {
   assert.equal(statSync(join(frontendRoot, runtimeFile)).isFile(), true, `${runtimeFile} deve existir`)
 }

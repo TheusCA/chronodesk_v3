@@ -57,7 +57,6 @@ npm install -D typescript
 
 Nao instaladas nesta fase:
 
-- `@tanstack/react-query`.
 - `@tanstack/react-table`.
 - `react-hook-form`.
 - `zod`.
@@ -186,3 +185,31 @@ Rollback da Fase 9:
 - Remover `frontend/src/lib/api.ts`.
 - Reverter `frontend/scripts/qa-api.mjs`, `frontend/package.json` e ajustes em `frontend/scripts/qa-visual.mjs`.
 - Reverter o hotfix em `scripts/qa-smoke.php` somente se o ambiente de smoke nao depender mais da limpeza de `APP_BASE_URL`.
+
+## Status da Fase 10
+
+Concluido nesta fase:
+
+- `@tanstack/react-query` instalado como dependencia de runtime.
+- `frontend/src/lib/queryClient.ts` criado com configuracao conservadora.
+- `frontend/src/lib/queryKeys.ts` criado com chaves centralizadas simples.
+- `QueryClientProvider` adicionado em `frontend/src/main.jsx`.
+- `OperationalReportsPage` passou a usar `useQuery` apenas para o GET de `portal/reports.php`.
+- `api()` continua sendo o transporte base.
+- `qa:query` criado para validar escopo, provider, query client, query keys, ausencia de mutacoes e dependencias proibidas.
+
+Nao migrado nesta fase:
+
+- Mutacoes.
+- `useLivePauses`.
+- Pausas, Dashboard, Admin, PA Map, Critical Incidents, uploads e aprovacoes.
+- Paginas para TypeScript.
+- Nenhum `.tsx` de runtime.
+
+Rollback da Fase 10:
+
+- Remover `@tanstack/react-query` de `package.json` e `package-lock.json`.
+- Remover `frontend/src/lib/queryClient.ts`, `frontend/src/lib/queryKeys.ts` e `frontend/scripts/qa-query.mjs`.
+- Remover `QueryClientProvider` de `frontend/src/main.jsx`.
+- Restaurar `OperationalReportsPage` para `useResource`.
+- Reverter ajustes em `frontend/package.json`, `frontend/scripts/qa-api.mjs`, `frontend/scripts/qa-operational.mjs` e `frontend/scripts/qa-visual.mjs`.

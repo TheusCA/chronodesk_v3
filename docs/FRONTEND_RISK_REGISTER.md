@@ -16,6 +16,8 @@
 | Import futuro usar extensao `.js` para utilitario migrado | TypeScript | Baixa | Medio | `qa:operational` e `qa:visual` exigem `operational.ts` e ausencia de `operational.js` | Frontend |
 | Migracao do transporte API remover CSRF ou cookies | API/AppSec | Baixa | Muito alto | `qa:api` valida CSRF, `credentials: same-origin`, JSON e FormData | Frontend/AppSec |
 | 401 deixar de disparar evento global | Sessao | Baixa | Alto | `qa:api` valida `chronodesk:unauthorized` exceto em `session.php` | Frontend/QA |
+| Cache de dados operacionais sensiveis ficar agressivo | TanStack Query | Media | Alto | Fase 10 usa `retry=false`, `refetchOnWindowFocus=false`, `staleTime=30_000` e apenas `/relatorios` | Frontend/AppSec |
+| Mutacoes entrarem em TanStack Query cedo demais | TanStack Query | Media | Alto | `qa:query` bloqueia `useMutation` nesta fase | Frontend/QA |
 
 ## Pendencias antes de migracoes reais
 
@@ -26,3 +28,4 @@
 - Definir padrao de erro exibido para usuario.
 - Fase 8 concluiu a migracao de `lib/operational.ts`; proximas migracoes devem continuar pequenas e sem paginas densas.
 - Fase 9 concluiu a migracao de `lib/api.ts`; introducao de TanStack Query deve manter `api()` como transporte base.
+- Fase 10 iniciou TanStack Query apenas em `/relatorios`; proximos passos devem manter uma tela por vez e evitar mutacoes ate definir invalidacao.

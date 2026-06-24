@@ -11,9 +11,11 @@
     "typecheck": "tsc --noEmit",
     "qa:api": "node scripts/qa-api.mjs",
     "qa:operational": "node scripts/qa-operational.mjs",
+    "qa:query": "node scripts/qa-query.mjs",
     "qa:visual": "node scripts/qa-visual.mjs"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

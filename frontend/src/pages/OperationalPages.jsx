@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { useResource } from '../hooks/useResource'
-import { apiUrl, post, postForm } from '../lib/api'
+import { api, apiUrl, post, postForm } from '../lib/api'
 import { formatDate, formatDateTime } from '../lib/format'
+import { queryKeys } from '../lib/queryKeys'
 import {
   DetailPill,
   FilterBar,
@@ -600,7 +602,19 @@ export function OncallPage({ session, notify }) {
 
 export function OperationalReportsPage() {
   const [filters, setFilters] = useState({ competency: currentCompetency.key, team: '', employee_id: '' })
-  const resource = useResource(`portal/reports.php${queryString(filters)}`)
+  const reportsQuery = useQuery({
+    queryKey: queryKeys.reports(filters),
+    queryFn: () => api(`portal/reports.php${queryString(filters)}`),
+  })
+  const resource = {
+    data: reportsQuery.data,
+    loading: reportsQuery.isLoading,
+    error: reportsQuery.error,
+    refresh: async () => {
+      const result = await reportsQuery.refetch()
+      return result.data ?? null
+    },
+  }
   const employees = useEmployees()
   const indicators = useMemo(() => {
     const summary = resource.data?.summary || {}

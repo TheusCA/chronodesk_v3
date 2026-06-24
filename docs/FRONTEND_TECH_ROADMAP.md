@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios.
 
 ## Status da Fase 7
 
@@ -28,6 +28,16 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - `qa:api` valida CSRF, cookies/credentials, JSON, FormData, 401 e evento `chronodesk:unauthorized`.
 - Nenhuma dependencia nova foi instalada.
 
+## Status da Fase 10
+
+- Dependencia adicionada: `@tanstack/react-query`.
+- Criado `src/lib/queryClient.ts` com `retry=false`, `refetchOnWindowFocus=false` e `staleTime=30_000`.
+- Criado `src/lib/queryKeys.ts` com chaves centralizadas simples.
+- `QueryClientProvider` configurado em `src/main.jsx`.
+- Primeiro fluxo com `useQuery`: `/relatorios`, usando `api()` como transporte e mantendo export CSV por link.
+- Nao migrados: mutacoes, uploads, aprovacoes, pausas em tempo real, `useLivePauses`, Admin, Dashboard, PA Map, chamados criticos e escalas.
+- `qa:query` valida provider, query client, query keys, dependencia permitida, ausencia de mutacoes e ausencia de fetch direto fora de `api.ts`.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
@@ -35,7 +45,9 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 | `src/lib/format.ts` | Datas, parse e formatacao | Baixa | Baixo | Migrado na Fase 7 | Nao | Nao | Nao | Concluido |
 | `src/lib/navigation.ts` | Rotas, labels e permissoes visuais | Baixa | Medio | Migrado na Fase 7 | Nao | Nao | Nao | Concluido |
 | `src/lib/operational.ts` | CSV, limites, competencia e query string | Media | Alto em imports | Migrado na Fase 8 | Nao | Nao | Parcial | Concluido |
-| `src/lib/api.ts` | Fetch, CSRF, 401 e payload JSON/FormData | Media | Alto | Migrado na Fase 9 | Sim, manter como transporte | Nao | Nao | Concluido |
+| `src/lib/api.ts` | Fetch, CSRF, 401 e payload JSON/FormData | Media | Alto | Migrado na Fase 9 | Transporte base na Fase 10 | Nao | Nao | Concluido |
+| `src/lib/queryClient.ts` | Cliente TanStack Query | Baixa | Medio | Criado na Fase 10 | Base configurada | Nao | Nao | Concluido |
+| `src/lib/queryKeys.ts` | Chaves de cache | Baixa | Medio | Criado na Fase 10 | Base configurada | Nao | Nao | Concluido |
 | `src/hooks/useResource.js` | Fetch GET, loading/error/refetch | Media | Medio | Sim | Migrar gradualmente | Nao | Nao | P2 |
 | `src/hooks/useLivePauses.js` | Polling de pausas e timers | Media | Alto | Sim tardio | Sim, com cuidado | Nao | Nao | P3 |
 | `src/components/ui/States.jsx` | Loading, empty e error | Baixa | Baixo | Sim | Nao | Nao | Nao | P1 |
@@ -45,7 +57,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 | `src/pages/DashboardPage.jsx` | Dashboard e pausas ativas | Media | Medio | Depois dos hooks | Sim | Nao | Nao | P3 |
 | `src/pages/PausasPage.jsx` | Pausas, timers e acoes | Alta | Alto | Tardio | Parcial | Nao | Reuniao | P4 |
 | `src/pages/AdminPage.jsx` | Aprovacoes, funcionarios, config, usuarios | Alta | Alto | Tardio | Sim | Sim | Sim | P4 |
-| `src/pages/OperationalPages.jsx` | Calendario, escala, workflows, relatorios | Muito alta | Muito alto | Ultimas telas | Sim | Sim | Sim | P5 |
+| `src/pages/OperationalPages.jsx` | Calendario, escala, workflows, relatorios | Muito alta | Muito alto | Ultimas telas | Somente `/relatorios` na Fase 10 | Sim | Sim | P5 |
 | `src/pages/CriticalIncidentsPage.jsx` | War room, import, detalhe e tabela grande | Muito alta | Muito alto | Tardio | Sim | Sim | Sim | P4 |
 | `src/pages/PaMapPage.jsx` | Mapa de PA e vinculos | Alta | Alto | Tardio | Sim | Nao | Sim | P4 |
 | `src/pages/DocumentsPage.jsx` | Biblioteca, upload e filtros | Media | Alto em upload | Sim depois | Sim | Parcial | Sim | P3 |
@@ -57,7 +69,8 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 
 - Fetch central passa por `api()`, `post()` e `postForm()` em `src/lib/api.ts`.
 - CSRF e `credentials: same-origin` estao centralizados no transporte atual.
-- GETs usam `useResource()` com `loading`, `error`, `refresh`, `intervalMs` e cancelamento por request id.
+- GETs ainda usam majoritariamente `useResource()` com `loading`, `error`, `refresh`, `intervalMs` e cancelamento por request id.
+- `/relatorios` usa TanStack Query desde a Fase 10, sempre via `api()`.
 - Pausas usam hook proprio `useLivePauses()` com polling e timer local.
 - Tabelas usam `data-table` e `table-wrap`, sem modelo unico de colunas.
 - Formularios usam `useState` local, `required`, `maxLength`, conversoes manuais para `Number()` e `FormData`.
@@ -86,7 +99,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 1. Fase 7: instalar TypeScript em modo permissivo e migrar apenas `lib/format`, `lib/navigation`, exemplos de tipos e QA estatico. Concluido.
 2. Fase 8: migrar `lib/operational`, mantendo `strict=false`. Concluido.
 3. Fase 9: tipar transporte API sem mudar endpoints. Concluido.
-4. Fase 10: introduzir TanStack Query em uma tela de baixo risco, mantendo `api()` e `post()`.
+4. Fase 10: introduzir TanStack Query em uma tela de baixo risco, mantendo `api()` e `post()`. Concluido em `/relatorios`.
 5. Fase 11: introduzir TanStack Table em uma tabela nao critica ou somente leitura.
 6. Fase 12: introduzir React Hook Form + Zod em formulario pequeno, sem alterar payload final.
 7. Fase 13: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
