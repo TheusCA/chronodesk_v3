@@ -425,3 +425,30 @@ Rollback da Fase 18:
 - Restaurar os helpers locais `perform` e `submit` para o try/catch anterior.
 - Remover `frontend/scripts/qa-action-runner.mjs` e script `qa:action-runner`.
 - Reverter ajustes em `frontend/scripts/qa-visual.mjs` e docs.
+
+## Status da Fase 19
+
+Concluido nesta fase:
+
+- `CriticalIncidentsPage.jsx` passou a importar `runAction`.
+- Criar e editar chamados criticos usam `runAction` com o mesmo endpoint e o mesmo payload.
+- Alterar status de chamado critico usa `runAction` com o mesmo endpoint e o mesmo payload.
+- Importacao de chamados criticos ficou fora do runner.
+- `qa:action-runner` foi ampliado para cobrir Chamados Criticos.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+- Nenhuma dependencia nova foi instalada.
+
+Fora da trilha TypeScript, mas registrado aqui por contrato:
+
+- `actionRunner.ts` nao foi alterado.
+- `actionFeedback.ts` nao foi alterado.
+- `api.ts`, `useResource.ts`, `useLivePauses.js`, `queryClient.ts`, `queryKeys.ts` e `operational.ts` nao foram alterados.
+- Contratos de API, endpoints, payloads, querystrings, RBAC, CSRF e autenticacao foram preservados.
+
+Rollback da Fase 19:
+
+- Remover o import de `runAction` em `CriticalIncidentsPage.jsx`.
+- Restaurar os `try/catch` locais de `save` e `changeStatus`.
+- Reverter os ajustes de cobertura em `frontend/scripts/qa-action-runner.mjs`.
+- Reverter docs da Fase 19.

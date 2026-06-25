@@ -34,6 +34,7 @@
 | Mensagem padronizada esconder erro parcial de importacao | Uploads/Importacao | Media | Alto | Backend continua retornando erro; helper de importacao mostra resumo quando ha contagem e fluxos mantem tratamento de erro existente | Frontend/AppSec |
 | Action runner virar abstracao ampla demais | Frontend/Arquitetura | Media | Medio | Fase 18 limita uso a Admin e Operacional, sem tocar telas de upload/PA Map/pausas; QA valida escopo e arquivos protegidos | Frontend/QA |
 | Runner alterar ordem de sucesso | UX/Operacao | Baixa | Medio | Runner executa action, refresh, onSuccess e notify nesta ordem; documentado e validado por QA estatico | Frontend/QA |
+| Migrar importacao de chamados para runner perder preview/erro parcial | Critical Incidents | Media | Alto | Fase 19 migra apenas criar/editar/status; importacao permanece local com `postForm`, preview, linhas e limpeza de input | Frontend/QA |
 
 ## Pendencias antes de migracoes reais
 
@@ -53,3 +54,4 @@
 - Fase 16 adicionou `RouteErrorBoundary` e credito discreto; simular falha de chunk em ambiente controlado antes de considerar telemetria externa.
 - Fase 17 padronizou feedback pos-acao; validar manualmente fluxos de criar/editar/remover/importar com dados de teste antes de deploy amplo.
 - Fase 18 adicionou action runner em Admin e Operacional; validar manualmente criar/editar funcionario, salvar escala, salvar fixed_weekdays e salvar excecao.
+- Fase 19 adicionou action runner em criar/editar/status de Chamados Criticos; validar manualmente esses fluxos e apenas conferir que importacao segue igual.

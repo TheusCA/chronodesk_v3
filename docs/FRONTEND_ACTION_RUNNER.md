@@ -60,17 +60,22 @@ Essa ordem evita mostrar sucesso antes de a lista atualizar e preserva os resets
   - aprovar/rejeitar workflow;
   - cadastrar plantao.
 
+- `CriticalIncidentsPage.jsx`
+  - criar chamado critico;
+  - editar chamado critico;
+  - alterar status do chamado critico.
+
 ## Fluxos fora do escopo
 
 Mantidos no padrao local da Fase 17:
 
 - PA Map;
-- chamados criticos;
+- importacao de chamados criticos;
 - documentos;
 - escala de sabado;
 - pausas em tempo real.
 
-Esses fluxos envolvem warnings condicionais, upload, detalhes ou interacao em tempo real. A migracao pode ser considerada em fases futuras, uma tela por vez.
+Esses fluxos envolvem warnings condicionais, upload, preview, detalhes ou interacao em tempo real. A migracao pode ser considerada em fases futuras, uma tela por vez.
 
 ## Contratos preservados
 
@@ -93,6 +98,8 @@ O QA valida:
 
 - existencia e assinatura do runner;
 - uso em Admin e Operacional;
+- uso nos fluxos simples de Chamados Criticos;
+- importacao de Chamados Criticos preservada fora do runner;
 - ausencia de `fetch`, `post`, `postForm`, `innerHTML`, `localStorage` e `dangerouslySetInnerHTML` no runner;
 - resets e mensagens da Fase 17 preservados;
 - `fixed_weekdays` continua limpando `weekdays`;
@@ -109,7 +116,7 @@ O QA valida:
 
 ## Riscos residuais
 
-- O runner ainda nao cobre uploads, PA Map, chamados criticos ou pausas.
+- O runner ainda nao cobre uploads, importacao de chamados criticos, PA Map ou pausas.
 - Validacao manual por perfil continua necessaria.
 - O helper centraliza ordem de execucao; alteracoes futuras nele devem passar por QA completo porque afetam multiplos fluxos.
 

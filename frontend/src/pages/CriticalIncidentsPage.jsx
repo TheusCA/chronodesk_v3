@@ -4,6 +4,7 @@ import { Icon } from '../components/ui/Icon'
 import { useResource } from '../hooks/useResource'
 import { api, apiUrl, post, postForm } from '../lib/api'
 import { ACTION_FEEDBACK, importFeedback } from '../lib/actionFeedback'
+import { runAction } from '../lib/actionRunner'
 import { formatDateTime } from '../lib/format'
 import {
   DetailPill,
@@ -437,25 +438,27 @@ export function CriticalIncidentsPage({ session, notify }) {
   async function save(data) {
     setSubmitting(true)
     try {
-      await post('portal/critical_incidents.php', data)
-      notify(data.action === 'update' ? ACTION_FEEDBACK.criticalUpdated : ACTION_FEEDBACK.criticalCreated)
-      setFormItem(null)
-      await resource.refresh()
-    } catch (error) {
-      notify(error.message, 'error')
+      await runAction({
+        action: () => post('portal/critical_incidents.php', data),
+        refresh: resource.refresh,
+        notify,
+        successMessage: data.action === 'update'
+          ? ACTION_FEEDBACK.criticalUpdated
+          : ACTION_FEEDBACK.criticalCreated,
+        onSuccess: () => setFormItem(null),
+      })
     } finally {
       setSubmitting(false)
     }
   }
 
   async function changeStatus(id, status) {
-    try {
-      await post('portal/critical_incidents.php', { action: 'status', id, status })
-      notify(ACTION_FEEDBACK.criticalStatusUpdated)
-      await resource.refresh()
-    } catch (error) {
-      notify(error.message, 'error')
-    }
+    await runAction({
+      action: () => post('portal/critical_incidents.php', { action: 'status', id, status }),
+      refresh: resource.refresh,
+      notify,
+      successMessage: ACTION_FEEDBACK.criticalStatusUpdated,
+    })
   }
 
   async function openItem(id, mode) {

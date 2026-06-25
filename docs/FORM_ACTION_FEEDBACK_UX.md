@@ -129,3 +129,10 @@ O QA valida:
 - `AdminPage.jsx` e `OperationalPages.jsx` agora usam wrappers locais que delegam para `runAction`.
 - Resets foram movidos para `onSuccess` em fluxos representativos.
 - Telas com upload, PA Map, chamados criticos e pausas foram mantidas fora da refatoracao para reduzir risco.
+
+## Evolucao na Fase 19
+
+- `CriticalIncidentsPage.jsx` passou a usar `runAction` apenas em criar, editar e alterar status.
+- O formulario de chamado continua fechando via `setFormItem(null)` apos sucesso.
+- As mensagens `criticalCreated`, `criticalUpdated` e `criticalStatusUpdated` foram preservadas.
+- A importacao de chamados criticos continua com fluxo local, preview e limpeza de input da Fase 17.
