@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "qa:api": "node scripts/qa-api.mjs",
+    "qa:bundle": "node scripts/qa-bundle.mjs",
     "qa:forms": "node scripts/qa-forms.mjs",
     "qa:operational": "node scripts/qa-operational.mjs",
     "qa:query": "node scripts/qa-query.mjs",

@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana. Fase 14 introduziu React Hook Form + Zod somente nos filtros de `/relatorios`.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana. Fase 14 introduziu React Hook Form + Zod somente nos filtros de `/relatorios`. Fase 15 adicionou code splitting controlado com `React.lazy` e `Suspense`.
 
 ## Status da Fase 7
 
@@ -79,6 +79,17 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Nao migrados: POSTs, mutations, uploads, aprovacoes, Pausas, Admin, PA Map, Critical Incidents, Escalas e paginas TypeScript.
 - `qa:forms` valida dependencias, escopo, ausencia de dependencias proibidas, ausencia de mutation/POST novo, `fetch()` centralizado e POC isolada.
 
+## Status da Fase 15
+
+- `App.jsx` passou a carregar paginas autenticadas com `React.lazy`.
+- `Suspense` envolve o conteudo renderizado dentro do `PortalLayout`.
+- Fallback usa `LoadingState`, sem criar biblioteca nova.
+- Login, sessao, logout, layout, feedback, router e `useLivePauses` continuam carregados diretamente.
+- `vite.config.js` nao foi alterado e `chunkSizeWarningLimit` nao foi usado.
+- JS principal reduziu de `500.74 kB` para `199.16 kB`.
+- O warning de chunk acima de 500 kB foi eliminado.
+- `qa:bundle` valida lazy loading, Suspense, ausencia de dependencia nova, POC isolada, ausencia de mutation e `fetch()` centralizado.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
@@ -94,7 +105,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 | `src/components/ui/States.jsx` | Loading, empty e error | Baixa | Baixo | Sim | Nao | Nao | Nao | P1 |
 | `src/components/ui/Primitives.jsx` | UI compartilhada | Media | Baixo | Sim | Nao | Nao | Nao | P1 |
 | `src/components/PortalLayout.jsx` | Shell, nav, notificacoes | Media | Medio | Sim tardio | Notificacoes | Nao | Nao | P3 |
-| `src/App.jsx` | Sessao, roteamento e acoes globais | Alta | Alto | Ultimo | Query provider futuro | Nao | Nao | P5 |
+| `src/App.jsx` | Sessao, roteamento, lazy loading e acoes globais | Alta | Alto | Ultimo | Query provider futuro | Nao | Nao | P5 |
 | `src/pages/DashboardPage.jsx` | Dashboard e pausas ativas | Media | Medio | Depois dos hooks | Sim | Nao | Nao | P3 |
 | `src/pages/PausasPage.jsx` | Pausas, timers e acoes | Alta | Alto | Tardio | Parcial | Nao | Reuniao | P4 |
 | `src/pages/AdminPage.jsx` | Aprovacoes, funcionarios, config, usuarios | Alta | Alto | Tardio | Sim | Sim | Sim | P4 |
@@ -113,6 +124,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - GETs ainda usam majoritariamente `useResource()` com `loading`, `error`, `refresh`, `intervalMs` e cancelamento por request id; o hook foi tipado na Fase 11.
 - `/relatorios` usa TanStack Query desde a Fase 10, sempre via `api()`.
 - O resumo de `/relatorios` usa TanStack Table desde a Fase 12 apenas como motor de tabela client-side.
+- Paginas autenticadas sao carregadas sob demanda com `React.lazy` desde a Fase 15.
 - Pausas usam hook proprio `useLivePauses()` com polling e timer local.
 - Tabelas usam `data-table` e `table-wrap`, sem modelo unico de colunas.
 - Formularios ainda usam majoritariamente `useState` local; excecao controlada: filtros de `/relatorios` usam React Hook Form + Zod desde a Fase 14.
@@ -146,7 +158,8 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 6. Fase 12: introduzir TanStack Table em uma tabela nao critica ou somente leitura. Concluido em `/relatorios`.
 7. Fase 13: adicionar `fixed_weekdays` com QA dedicado. Concluido.
 8. Fase 14: introduzir React Hook Form + Zod em formulario pequeno, sem alterar querystring final. Concluido em `/relatorios`.
-9. Fase 15: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
+9. Fase 15: reduzir bundle inicial com code splitting nativo. Concluido.
+10. Fase 16: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
 
 ## Criterios para cada passo futuro
 

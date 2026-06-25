@@ -323,3 +323,27 @@ Rollback da Fase 14:
 - Restaurar filtros de `/relatorios` para `useState` direto.
 - Remover `frontend/scripts/qa-forms.mjs` e o script `qa:forms`.
 - Reverter ajustes nos QAs que passaram a aceitar as dependencias autorizadas.
+
+## Status da Fase 15
+
+Concluido nesta fase:
+
+- `App.jsx` passou a usar `React.lazy` e `Suspense` para paginas autenticadas.
+- O fallback reutiliza `LoadingState`.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+- Nenhuma dependencia nova foi instalada.
+- Criado `qa:bundle`.
+
+Fora da trilha TypeScript, mas registrado aqui por contrato:
+
+- Code splitting reduziu o JS principal de `500.74 kB` para `199.16 kB`.
+- O warning de chunk acima de 500 kB foi eliminado sem `chunkSizeWarningLimit`.
+- `useLivePauses`, `api.ts`, `useResource.ts`, `queryClient.ts`, `queryKeys.ts` e `operational.ts` nao foram alterados.
+
+Rollback da Fase 15:
+
+- Restaurar imports estaticos das paginas em `App.jsx`.
+- Remover helper `lazyPage` e `Suspense` do conteudo autenticado.
+- Remover `frontend/scripts/qa-bundle.mjs` e script `qa:bundle`.
+- Reverter ajustes em `frontend/scripts/qa-visual.mjs` e docs.

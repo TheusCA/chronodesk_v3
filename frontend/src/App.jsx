@@ -1,28 +1,31 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Feedback } from './components/Feedback'
 import { PortalLayout } from './components/PortalLayout'
-import { AdminPage } from './pages/AdminPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { DocumentsPage } from './pages/DocumentsPage'
-import { CriticalIncidentsPage } from './pages/CriticalIncidentsPage'
-import { CalendarPage } from './pages/CalendarPage'
-import { ShiftSchedulesPage } from './pages/ShiftSchedulesPage'
+import { LoadingState } from './components/ui/States'
 import { LoginPage } from './pages/LoginPage'
-import { MetricasPage } from './pages/MetricasPage'
-import { ModulePage, SettingsPage } from './pages/ModulePage'
-import { PaMapPage } from './pages/PaMapPage'
-import {
-  OncallPage,
-  OperationalReportsPage,
-  OvertimePage,
-  SchedulePage,
-  TimeCorrectionPage,
-} from './pages/OperationalPages'
-import { PausasPage } from './pages/PausasPage'
 import { api, post, setCsrfToken } from './lib/api'
 import { navigation } from './lib/navigation'
 import { useRouter } from './lib/router'
 import { useLivePauses } from './hooks/useLivePauses'
+
+const lazyPage = (loader, exportName) => lazy(() => loader().then((module) => ({ default: module[exportName] })))
+
+const AdminPage = lazyPage(() => import('./pages/AdminPage'), 'AdminPage')
+const DashboardPage = lazyPage(() => import('./pages/DashboardPage'), 'DashboardPage')
+const DocumentsPage = lazyPage(() => import('./pages/DocumentsPage'), 'DocumentsPage')
+const CriticalIncidentsPage = lazyPage(() => import('./pages/CriticalIncidentsPage'), 'CriticalIncidentsPage')
+const CalendarPage = lazyPage(() => import('./pages/CalendarPage'), 'CalendarPage')
+const ShiftSchedulesPage = lazyPage(() => import('./pages/ShiftSchedulesPage'), 'ShiftSchedulesPage')
+const MetricasPage = lazyPage(() => import('./pages/MetricasPage'), 'MetricasPage')
+const ModulePage = lazyPage(() => import('./pages/ModulePage'), 'ModulePage')
+const SettingsPage = lazyPage(() => import('./pages/ModulePage'), 'SettingsPage')
+const PaMapPage = lazyPage(() => import('./pages/PaMapPage'), 'PaMapPage')
+const OncallPage = lazyPage(() => import('./pages/OperationalPages'), 'OncallPage')
+const OperationalReportsPage = lazyPage(() => import('./pages/OperationalPages'), 'OperationalReportsPage')
+const OvertimePage = lazyPage(() => import('./pages/OperationalPages'), 'OvertimePage')
+const SchedulePage = lazyPage(() => import('./pages/OperationalPages'), 'SchedulePage')
+const TimeCorrectionPage = lazyPage(() => import('./pages/OperationalPages'), 'TimeCorrectionPage')
+const PausasPage = lazyPage(() => import('./pages/PausasPage'), 'PausasPage')
 
 const emptySession = {
   role: null,
@@ -206,7 +209,9 @@ export default function App() {
 
   return (
     <PortalLayout session={session} path={router.path} navigate={router.navigate} onLogout={logout}>
-      {content}
+      <Suspense fallback={<LoadingState label="Carregando mÃ³dulo..." />}>
+        {content}
+      </Suspense>
       <Feedback feedback={feedback} />
     </PortalLayout>
   )
