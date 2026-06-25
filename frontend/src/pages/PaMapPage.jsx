@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { useResource } from '../hooks/useResource'
 import { post } from '../lib/api'
+import { ACTION_FEEDBACK } from '../lib/actionFeedback'
 import { queryString } from '../lib/operational'
 import {
   FilterBar,
@@ -225,7 +226,8 @@ export function PaMapPage({ notify }) {
     setSaving(true)
     try {
       const result = await post('portal/pa_map.php', { ...form, action: 'save', confirm_remote_allocation: confirmed })
-      notify(result.warnings?.[0] || result.mensagem)
+      if (result.warnings?.[0]) notify(result.warnings[0], 'warning')
+      else notify(ACTION_FEEDBACK.paLinked)
       resetForm?.()
       await resource.refresh()
     } catch (error) {
@@ -242,8 +244,8 @@ export function PaMapPage({ notify }) {
   async function remove(id) {
     setSaving(true)
     try {
-      const result = await post('portal/pa_map.php', { action: 'remove', id })
-      notify(result.mensagem)
+      await post('portal/pa_map.php', { action: 'remove', id })
+      notify(ACTION_FEEDBACK.paUnlinked)
       await resource.refresh()
     } catch (error) {
       notify(error.message, 'error')

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useResource } from '../hooks/useResource'
 import { post } from '../lib/api'
+import { ACTION_FEEDBACK, decisionFeedback } from '../lib/actionFeedback'
 import { formatDateTime } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
@@ -22,11 +23,11 @@ const tabs = [
   ['seguranca', 'Segurança'],
 ]
 
-async function perform(action, refreshers, notify) {
+async function perform(action, refreshers, notify, successMessage = ACTION_FEEDBACK.changesSaved) {
   try {
     const result = await action()
-    notify(result.mensagem || result.message || 'Operação concluída.')
     await Promise.all(refreshers.map((refresh) => refresh()))
+    notify(successMessage || result.mensagem || result.message || ACTION_FEEDBACK.changesSaved)
     return true
   } catch (error) {
     notify(error.message, 'error')
@@ -91,6 +92,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
       () => post(`${action}_pausa.php`, { funcionario_id: id }),
       [refresh, refreshStatus],
       notify,
+      action === 'aprovar' ? ACTION_FEEDBACK.requestApproved : ACTION_FEEDBACK.requestRejected,
     )
   }
 
@@ -99,6 +101,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
       () => post(endpoint, { action: 'decision', id, decision }),
       [refresh, refreshStatus],
       notify,
+      decisionFeedback(decision),
     )
   }
 
@@ -209,7 +212,7 @@ function SettingsTab({ resource, notify }) {
 
   async function submit(event) {
     event.preventDefault()
-    await perform(() => post('salvar_configuracao.php', form), [resource.refresh], notify)
+    await perform(() => post('salvar_configuracao.php', form), [resource.refresh], notify, ACTION_FEEDBACK.changesSaved)
   }
 
   return (
@@ -397,6 +400,7 @@ function EmployeesTab({ resource, notify }) {
       () => post('adicionar_funcionario.php', { ...createForm, id: Number(createForm.id) }),
       [resource.refresh],
       notify,
+      ACTION_FEEDBACK.employeeCreated,
     )
     setSubmitting(false)
     if (success) setCreateForm(emptyEmployee)
@@ -414,6 +418,7 @@ function EmployeesTab({ resource, notify }) {
       () => post('atualizar_funcionario.php', { ...editForm, funcionario_id: Number(editForm.id) }),
       [resource.refresh],
       notify,
+      ACTION_FEEDBACK.employeeUpdated,
     )
     setSubmitting(false)
     if (success) setEditForm(null)
@@ -421,7 +426,13 @@ function EmployeesTab({ resource, notify }) {
 
   async function deactivate(id) {
     if (!window.confirm('Confirma a desativação deste funcionário?')) return
-    await perform(() => post('remover_funcionario.php', { funcionario_id: id }), [resource.refresh], notify)
+    const success = await perform(
+      () => post('remover_funcionario.php', { funcionario_id: id }),
+      [resource.refresh],
+      notify,
+      ACTION_FEEDBACK.employeeRemoved,
+    )
+    if (success && editForm && Number(editForm.id) === Number(id)) setEditForm(null)
   }
 
   return (
@@ -521,18 +532,18 @@ function UsersTab({ enabled, resource, notify }) {
 
   async function create(event) {
     event.preventDefault()
-    const success = await perform(() => post('usuarios.php?action=criar', form), [resource.refresh], notify)
+    const success = await perform(() => post('usuarios.php?action=criar', form), [resource.refresh], notify, ACTION_FEEDBACK.userCreated)
     if (success) setForm({ username: '', password: '', role: 'gestor' })
   }
 
   async function updateRole(id, role) {
     if (!window.confirm(`Confirma a alteração do perfil para ${role}?`)) return
-    await perform(() => post('usuarios.php?action=atualizar_role', { id, role }), [resource.refresh], notify)
+    await perform(() => post('usuarios.php?action=atualizar_role', { id, role }), [resource.refresh], notify, ACTION_FEEDBACK.userUpdated)
   }
 
   async function remove(id) {
     if (!window.confirm('Confirma a remoção deste usuário local?')) return
-    await perform(() => post('usuarios.php?action=deletar', { id }), [resource.refresh], notify)
+    await perform(() => post('usuarios.php?action=deletar', { id }), [resource.refresh], notify, ACTION_FEEDBACK.userRemoved)
   }
 
   return (
@@ -633,6 +644,7 @@ function SecurityTab({ config, notify }) {
       () => post('alterar_senha_admin.php', { nova_senha: password }),
       [],
       notify,
+      ACTION_FEEDBACK.changesSaved,
     )
     if (success) {
       setPassword('')

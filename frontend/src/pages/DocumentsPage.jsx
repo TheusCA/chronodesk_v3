@@ -4,6 +4,7 @@ import { Icon } from '../components/ui/Icon'
 import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader } from '../components/ui/Primitives'
 import { useResource } from '../hooks/useResource'
 import { apiUrl, post, postForm } from '../lib/api'
+import { ACTION_FEEDBACK } from '../lib/actionFeedback'
 import { formatDateTime } from '../lib/format'
 
 const DEFAULT_MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -76,8 +77,11 @@ function UploadPanel({ limits, onClose, onUploaded }) {
     setSubmitting(true)
     setError('')
     try {
-      const result = await postForm('portal/documents.php', body)
-      await onUploaded(result.mensagem)
+      await postForm('portal/documents.php', body)
+      setFile(null)
+      setMetadata({ title: '', category: 'Procedimento', description: '', visibility: 'internal' })
+      if (inputRef.current) inputRef.current.value = ''
+      await onUploaded(ACTION_FEEDBACK.documentUploaded)
       onClose()
     } catch (requestError) {
       setError(requestError.message)
@@ -193,8 +197,8 @@ export function DocumentsPage({ notify }) {
     if (!window.confirm(`Remover "${item.title}" da listagem? O evento ficará registrado em auditoria.`)) return
     setDeletingId(item.id)
     try {
-      const result = await post('portal/documents_delete.php', { id: item.id })
-      notify(result.mensagem)
+      await post('portal/documents_delete.php', { id: item.id })
+      notify(ACTION_FEEDBACK.documentRemoved)
       await resource.refresh()
     } catch (error) {
       notify(error.message, 'error')

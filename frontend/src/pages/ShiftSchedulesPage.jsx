@@ -4,6 +4,7 @@ import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader } from
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { useResource } from '../hooks/useResource'
 import { apiUrl, postForm } from '../lib/api'
+import { ACTION_FEEDBACK } from '../lib/actionFeedback'
 import { formatDateTime } from '../lib/format'
 import { localDate, queryString } from '../lib/operational'
 
@@ -126,8 +127,12 @@ function UploadShift({ limits, onClose, onUploaded }) {
       const body = new FormData()
       body.append('attachment', file)
       Object.entries(metadata).forEach(([key, value]) => body.append(key, value))
-      const result = await postForm('portal/shift_attachments.php', body)
-      await onUploaded(result.mensagem || 'Escala publicada com sucesso.')
+      await postForm('portal/shift_attachments.php', body)
+      setFile(null)
+      setImageFailed(false)
+      setMetadata({ title: '', reference_month: metadata.reference_month, notes: '' })
+      if (inputRef.current) inputRef.current.value = ''
+      await onUploaded(ACTION_FEEDBACK.shiftUploaded)
       onClose()
     } catch (requestError) {
       setError(requestError.message)

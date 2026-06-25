@@ -372,3 +372,29 @@ Rollback da Fase 16:
 - Remover o credito de `LoginPage.jsx` e `PortalLayout.jsx`.
 - Remover `frontend/scripts/qa-ux-hardening.mjs` e script `qa:ux-hardening`.
 - Reverter ajustes em `frontend/scripts/qa-visual.mjs` e docs.
+
+## Status da Fase 17
+
+Concluido nesta fase:
+
+- Criado `frontend/src/lib/actionFeedback.ts` para padronizar mensagens de sucesso e importacao.
+- `Feedback.jsx` evoluido sem dependencia externa, com tipos `success`, `error`, `warning` e `info`.
+- Fluxos transacionais em paginas JSX receberam resets locais e mensagens especificas.
+- Criado `qa:action-feedback`.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+- Nenhuma dependencia nova foi instalada.
+
+Fora da trilha TypeScript, mas registrado aqui por contrato:
+
+- `api.ts`, `useResource.ts`, `useLivePauses.js`, `queryClient.ts`, `queryKeys.ts` e `operational.ts` nao foram alterados.
+- Contratos de API, endpoints, payloads, querystrings, RBAC, CSRF e autenticacao foram preservados.
+- React Hook Form + Zod continuam restritos aos filtros de `/relatorios`.
+
+Rollback da Fase 17:
+
+- Remover `frontend/src/lib/actionFeedback.ts`.
+- Restaurar `Feedback.jsx` para o toast simples anterior.
+- Reverter os resets/mensagens nas paginas alteradas.
+- Remover `frontend/scripts/qa-action-feedback.mjs` e script `qa:action-feedback`.
+- Reverter ajustes em `frontend/scripts/qa-visual.mjs` e docs.

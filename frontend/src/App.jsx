@@ -145,6 +145,14 @@ export default function App() {
     }))
   }
 
+  const closeFeedback = useCallback(() => {
+    if (feedbackTimer.current) {
+      window.clearTimeout(feedbackTimer.current)
+      feedbackTimer.current = null
+    }
+    setFeedback(null)
+  }, [])
+
   let content
   if (!allowed) {
     content = <AccessDenied navigate={router.navigate} />
@@ -203,7 +211,7 @@ export default function App() {
     return (
       <>
         <LoginPage onLoginCI={loginCI} loading={actionLoading} />
-        <Feedback feedback={feedback} />
+        <Feedback feedback={feedback} onClose={closeFeedback} />
       </>
     )
   }
@@ -215,7 +223,7 @@ export default function App() {
           {content}
         </Suspense>
       </RouteErrorBoundary>
-      <Feedback feedback={feedback} />
+      <Feedback feedback={feedback} onClose={closeFeedback} />
     </PortalLayout>
   )
 }
