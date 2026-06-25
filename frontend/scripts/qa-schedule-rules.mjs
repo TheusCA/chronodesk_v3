@@ -107,8 +107,10 @@ const pageTsFiles = walk(join(srcRoot, 'pages')).filter((path) => /\.(tsx?|ts)$/
 assert.deepEqual(pageTsFiles, [], 'Nenhuma pagina deve ser migrada para TypeScript')
 
 for (const blockedDependency of [
-  'react-hook-form',
-  'zod',
+  '@hookform/resolvers',
+  'formik',
+  'yup',
+  'joi',
   '@playwright/test',
   'cypress',
 ]) {

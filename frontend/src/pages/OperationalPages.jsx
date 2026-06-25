@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
+import { useForm } from 'react-hook-form'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { useResource } from '../hooks/useResource'
 import { api, apiUrl, post, postForm } from '../lib/api'
 import { formatDate, formatDateTime } from '../lib/format'
+import { reportFiltersSchema } from '../lib/formSchemas'
 import { queryKeys } from '../lib/queryKeys'
 import {
   DetailPill,
@@ -683,6 +685,16 @@ export function OncallPage({ session, notify }) {
 
 export function OperationalReportsPage() {
   const [filters, setFilters] = useState({ competency: currentCompetency.key, team: '', employee_id: '' })
+  const {
+    clearErrors,
+    formState: { errors },
+    handleSubmit,
+    register,
+    setError,
+    setFocus,
+  } = useForm({
+    defaultValues: filters,
+  })
   const reportsQuery = useQuery({
     queryKey: queryKeys.reports(filters),
     queryFn: () => api(`portal/reports.php${queryString(filters)}`),
@@ -710,14 +722,46 @@ export function OperationalReportsPage() {
       ['Erros de sync', summary.sync_errors || 0],
     ]
   }, [resource.data?.summary])
+  function applyReportFilters(values) {
+    const parsed = reportFiltersSchema.safeParse(values)
+    if (!parsed.success) {
+      clearErrors()
+      const issue = parsed.error.issues[0]
+      const field = issue?.path?.[0] || 'competency'
+      setError(field, { type: 'zod', message: issue?.message || 'Filtro invalido.' })
+      setFocus(field)
+      return
+    }
+    clearErrors()
+    setFilters(parsed.data)
+  }
 
   return (
     <div className="space-y-5">
-      <section className="card grid gap-3 md:grid-cols-3">
-        <label className="label">Competência<input className="field mt-2" type="month" value={filters.competency} onChange={(event) => setFilters({ ...filters, competency: event.target.value })} /></label>
-        <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
-        <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>
-      </section>
+      <form className="card grid gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))_auto] md:items-start" onSubmit={handleSubmit(applyReportFilters)}>
+        <label className="label">Competência
+          <input aria-invalid={Boolean(errors.competency)} className="field mt-2" required type="month" {...register('competency')} />
+          {errors.competency && <span className="mt-1 block text-xs text-red-300">{errors.competency.message}</span>}
+        </label>
+        <label className="label">Equipe
+          <select aria-invalid={Boolean(errors.team)} className="field mt-2" {...register('team')}>
+            <option value="">Todas</option>
+            <option value="n1">N1</option>
+            <option value="n2">N2</option>
+          </select>
+          {errors.team && <span className="mt-1 block text-xs text-red-300">{errors.team.message}</span>}
+        </label>
+        <label className="label">Colaborador
+          <select aria-invalid={Boolean(errors.employee_id)} className="field mt-2" {...register('employee_id')}>
+            <option value="">Selecione</option>
+            {(employees.data?.funcionarios || []).map((employee) => (
+              <option key={employee.id} value={employee.id}>{employee.nome} - {employee.equipe.toUpperCase()}</option>
+            ))}
+          </select>
+          {errors.employee_id && <span className="mt-1 block text-xs text-red-300">{errors.employee_id.message}</span>}
+        </label>
+        <button className="btn-secondary mt-7" type="submit">Aplicar filtros</button>
+      </form>
       <OperationalShell resource={resource}>
         <>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-2xl font-black text-white">{value}</p></article>)}</section>

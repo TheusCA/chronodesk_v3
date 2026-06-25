@@ -152,6 +152,7 @@ assert.match(statesSource, /role="alert"/, 'Estado de erro e anunciado como aler
 assert.equal(packageJson.scripts['qa:operational'], 'node scripts/qa-operational.mjs')
 assert.equal(packageJson.scripts['qa:visual'], 'node scripts/qa-visual.mjs')
 assert.equal(packageJson.scripts['qa:api'], 'node scripts/qa-api.mjs')
+assert.equal(packageJson.scripts['qa:forms'], 'node scripts/qa-forms.mjs')
 assert.equal(packageJson.scripts['qa:query'], 'node scripts/qa-query.mjs')
 assert.equal(packageJson.scripts['qa:resource'], 'node scripts/qa-resource.mjs')
 assert.equal(packageJson.scripts['qa:schedule-rules'], 'node scripts/qa-schedule-rules.mjs')
@@ -165,8 +166,10 @@ assert.equal(tsconfig.compilerOptions.noEmit, true, 'TypeScript deve manter noEm
 assert.equal(statSync(join(frontendRoot, 'src/App.jsx')).isFile(), true, 'App.jsx deve continuar existindo')
 
 for (const blockedDependency of [
-  'react-hook-form',
-  'zod',
+  '@hookform/resolvers',
+  'formik',
+  'yup',
+  'joi',
   '@playwright/test',
   'cypress',
 ]) {

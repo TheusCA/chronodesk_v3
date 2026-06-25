@@ -291,3 +291,35 @@ Rollback da Fase 13:
 - Reverter UI de dias fixos em `OperationalPages.jsx`.
 - Reverter `qa:schedule-rules` e ajustes de QA.
 - Aplicar rollback de banco apenas se necessario em janela controlada, removendo `fixed_weekdays` de registros antes de alterar ENUM/colunas.
+
+## Status da Fase 14
+
+Concluido nesta fase:
+
+- `react-hook-form` e `zod` instalados como dependencias de runtime.
+- Criado `frontend/src/lib/formSchemas.ts` com schema permissivo e pequeno para filtros de relatorios.
+- `OperationalReportsPage` usa React Hook Form apenas em `competency`, `team` e `employee_id`.
+- Zod valida manualmente via `safeParse`, sem `@hookform/resolvers`.
+- Querystring e export CSV preservados.
+- Criado `qa:forms`.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+
+Nao migrado nesta fase:
+
+- Formularios com POST.
+- Uploads.
+- Pausas.
+- Admin.
+- PA Map.
+- Escalas.
+- Critical Incidents.
+- Mutations.
+
+Rollback da Fase 14:
+
+- Remover `react-hook-form` e `zod` de `frontend/package.json` e `frontend/package-lock.json`.
+- Remover `frontend/src/lib/formSchemas.ts`.
+- Restaurar filtros de `/relatorios` para `useState` direto.
+- Remover `frontend/scripts/qa-forms.mjs` e o script `qa:forms`.
+- Reverter ajustes nos QAs que passaram a aceitar as dependencias autorizadas.

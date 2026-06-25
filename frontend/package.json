@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "qa:api": "node scripts/qa-api.mjs",
+    "qa:forms": "node scripts/qa-forms.mjs",
     "qa:operational": "node scripts/qa-operational.mjs",
     "qa:query": "node scripts/qa-query.mjs",
     "qa:resource": "node scripts/qa-resource.mjs",
@@ -21,7 +22,9 @@
     "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-table": "^8.21.3",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-hook-form": "^7.80.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",

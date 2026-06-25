@@ -23,6 +23,8 @@
 | Tabela client-side alterar contrato ou busca de dados | Tables/API | Baixa | Alto | TanStack Table usa dados ja carregados por `api()`/Query e nao busca dados diretamente | Frontend/AppSec |
 | `fixed_weekdays` salvar dias invalidos ou vazios | Escala presencial | Media | Alto | Frontend valida selecao, backend normaliza ordem, rejeita vazio, rejeita duplicado e rejeita dia fora da lista | Full Stack/QA |
 | Migration de ENUM falhar em ambiente divergente | Banco/MySQL | Baixa | Alto | Migration 010 usa `information_schema` e nao remove dados existentes; aplicar em janela controlada antes do deploy PHP | DevSecOps |
+| RHF/Zod expandir para formulario sensivel sem padrao | Forms | Media | Alto | Fase 14 limita uso a filtros GET de `/relatorios`; `qa:forms` bloqueia mutations, POST novo e dependencias alternativas | Frontend/AppSec |
+| Filtro de relatorios aplicar valor invalido | Forms/Zod | Baixa | Medio | `reportFiltersSchema` valida competencia, equipe e employee_id antes de atualizar `filters`; backend continua autoridade | Frontend/QA |
 
 ## Pendencias antes de migracoes reais
 
@@ -37,3 +39,4 @@
 - Fase 11 concluiu a migracao de `useResource.ts`; consumidores continuam JSX e devem ser migrados apenas em fases pequenas.
 - Fase 12 iniciou TanStack Table apenas no resumo de `/relatorios`; proximas tabelas devem continuar somente leitura ate existir padrao aprovado para acoes e coluna de operacao.
 - Fase 13 adicionou `fixed_weekdays`; validar manualmente um CI com segunda/quarta/sexta e outro com regra antiga antes do deploy amplo.
+- Fase 14 introduziu React Hook Form + Zod apenas nos filtros de `/relatorios`; proximos formularios devem continuar um por fase e evitar POST sensivel ate existir padrao aprovado.

@@ -148,8 +148,10 @@ const installedDependencies = {
 }
 
 for (const blockedDependency of [
-  'react-hook-form',
-  'zod',
+  '@hookform/resolvers',
+  'formik',
+  'yup',
+  'joi',
   '@playwright/test',
   'cypress',
 ]) {

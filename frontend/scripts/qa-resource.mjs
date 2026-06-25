@@ -70,8 +70,10 @@ const installedDependencies = {
 
 assert.equal(typeof packageJson.dependencies?.['@tanstack/react-query'], 'string', '@tanstack/react-query deve permanecer como unica dependencia autorizada da Fase 10')
 for (const blockedDependency of [
-  'react-hook-form',
-  'zod',
+  '@hookform/resolvers',
+  'formik',
+  'yup',
+  'joi',
   '@playwright/test',
   'cypress',
 ]) {

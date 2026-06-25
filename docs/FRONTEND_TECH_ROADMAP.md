@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana. Fase 14 introduziu React Hook Form + Zod somente nos filtros de `/relatorios`.
 
 ## Status da Fase 7
 
@@ -9,7 +9,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - `npm run typecheck` adicionado.
 - Migrados: `src/lib/format.ts` e `src/lib/navigation.ts`.
 - Nao migrados: `App.jsx`, paginas, hooks, formularios, tabelas e componentes complexos.
-- TanStack Query/Table, React Hook Form, Zod, Playwright e Cypress continuam nao instalados.
+- Nesta fase, TanStack Query/Table, React Hook Form, Zod, Playwright e Cypress ainda nao estavam instalados.
 
 ## Status da Fase 8
 
@@ -68,13 +68,24 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Calculo presencial/remoto preserva regras antigas e usa dias fixos para calendario, escala gerada e Mapa de PA.
 - `qa:schedule-rules` valida payload, validacao backend, migration, escopo e ausencia de novas dependencias.
 
+## Status da Fase 14
+
+- Dependencias adicionadas: `react-hook-form` e `zod`.
+- Primeiro uso restrito aos filtros de `/relatorios` em `OperationalReportsPage`.
+- Schema criado em `src/lib/formSchemas.ts` para `competency`, `team` e `employee_id`.
+- Validacao Zod e manual via `safeParse`, sem `@hookform/resolvers`.
+- Querystring preservada: `queryString(filters)` para consulta e `queryString({ ...filters, format: 'csv' })` para export CSV.
+- Transporte preservado: `api()` para GET e `apiUrl()` para exportacao.
+- Nao migrados: POSTs, mutations, uploads, aprovacoes, Pausas, Admin, PA Map, Critical Incidents, Escalas e paginas TypeScript.
+- `qa:forms` valida dependencias, escopo, ausencia de dependencias proibidas, ausencia de mutation/POST novo, `fetch()` centralizado e POC isolada.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `src/lib/format.ts` | Datas, parse e formatacao | Baixa | Baixo | Migrado na Fase 7 | Nao | Nao | Nao | Concluido |
 | `src/lib/navigation.ts` | Rotas, labels e permissoes visuais | Baixa | Medio | Migrado na Fase 7 | Nao | Nao | Nao | Concluido |
-| `src/lib/operational.ts` | CSV, limites, competencia e query string | Media | Alto em imports | Migrado na Fase 8 | Nao | Nao | Parcial | Concluido |
+| `src/lib/operational.ts` | CSV, limites, competencia e query string | Media | Alto em imports | Migrado na Fase 8 | Nao | Nao | Nao | Concluido |
 | `src/lib/api.ts` | Fetch, CSRF, 401 e payload JSON/FormData | Media | Alto | Migrado na Fase 9 | Transporte base na Fase 10 | Nao | Nao | Concluido |
 | `src/lib/queryClient.ts` | Cliente TanStack Query | Baixa | Medio | Criado na Fase 10 | Base configurada | Nao | Nao | Concluido |
 | `src/lib/queryKeys.ts` | Chaves de cache | Baixa | Medio | Criado na Fase 10 | Base configurada | Nao | Nao | Concluido |
@@ -87,7 +98,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 | `src/pages/DashboardPage.jsx` | Dashboard e pausas ativas | Media | Medio | Depois dos hooks | Sim | Nao | Nao | P3 |
 | `src/pages/PausasPage.jsx` | Pausas, timers e acoes | Alta | Alto | Tardio | Parcial | Nao | Reuniao | P4 |
 | `src/pages/AdminPage.jsx` | Aprovacoes, funcionarios, config, usuarios | Alta | Alto | Tardio | Sim | Sim | Sim | P4 |
-| `src/pages/OperationalPages.jsx` | Calendario, escala, workflows, relatorios | Muito alta | Muito alto | Ultimas telas | Somente `/relatorios` na Fase 10 | Somente resumo de `/relatorios` na Fase 12 | Sim | P5 |
+| `src/pages/OperationalPages.jsx` | Calendario, escala, workflows, relatorios | Muito alta | Muito alto | Ultimas telas | Somente `/relatorios` na Fase 10 | Somente resumo de `/relatorios` na Fase 12 | Somente filtros de `/relatorios` na Fase 14 | P5 |
 | `src/pages/CriticalIncidentsPage.jsx` | War room, import, detalhe e tabela grande | Muito alta | Muito alto | Tardio | Sim | Sim | Sim | P4 |
 | `src/pages/PaMapPage.jsx` | Mapa de PA e vinculos | Alta | Alto | Tardio | Sim | Nao | Sim | P4 |
 | `src/pages/DocumentsPage.jsx` | Biblioteca, upload e filtros | Media | Alto em upload | Sim depois | Sim | Parcial | Sim | P3 |
@@ -104,7 +115,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - O resumo de `/relatorios` usa TanStack Table desde a Fase 12 apenas como motor de tabela client-side.
 - Pausas usam hook proprio `useLivePauses()` com polling e timer local.
 - Tabelas usam `data-table` e `table-wrap`, sem modelo unico de colunas.
-- Formularios usam `useState` local, `required`, `maxLength`, conversoes manuais para `Number()` e `FormData`.
+- Formularios ainda usam majoritariamente `useState` local; excecao controlada: filtros de `/relatorios` usam React Hook Form + Zod desde a Fase 14.
 - Payloads criticos sao montados inline nas paginas, especialmente escala presencial, mapa de PA, chamados criticos, horas extras e correcao de ponto.
 
 ## Principais duplicacoes
@@ -133,8 +144,9 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 4. Fase 10: introduzir TanStack Query em uma tela de baixo risco, mantendo `api()` e `post()`. Concluido em `/relatorios`.
 5. Fase 11: tipar `useResource` sem trocar consumidores por TanStack Query. Concluido.
 6. Fase 12: introduzir TanStack Table em uma tabela nao critica ou somente leitura. Concluido em `/relatorios`.
-7. Fase 13: introduzir React Hook Form + Zod em formulario pequeno, sem alterar payload final.
-8. Fase 14: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
+7. Fase 13: adicionar `fixed_weekdays` com QA dedicado. Concluido.
+8. Fase 14: introduzir React Hook Form + Zod em formulario pequeno, sem alterar querystring final. Concluido em `/relatorios`.
+9. Fase 15: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
 
 ## Criterios para cada passo futuro
 
