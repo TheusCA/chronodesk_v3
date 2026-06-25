@@ -106,6 +106,7 @@ for (const [value, label] of [
   ['odd_days', 'Dias .mpares'],
   ['always_onsite', 'Sempre presencial'],
   ['always_remote', 'Sempre remoto'],
+  ['fixed_weekdays', 'Dias fixos da semana'],
   ['undefined', 'Sem escala definida'],
 ]) {
   assert.match(
@@ -118,7 +119,9 @@ for (const [value, label] of [
 const saveRuleSource = operationalPagesSource.match(/async function saveRule\(event\) \{[\s\S]*?\n  \}/)?.[0] || ''
 assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/)
 assert.match(saveRuleSource, /notify\('Selecione uma regra de escala v.lida\.', 'error'\)/)
-assert.match(saveRuleSource, /post\('portal\/schedules\.php', \{\s*action: 'rule',\s*employee_id: employeeId,\s*rule_type: ruleType,\s*effective_from: rule\.effective_from,\s*\}/)
+assert.match(saveRuleSource, /ruleType === 'fixed_weekdays' && rule\.weekdays\.length === 0/)
+assert.match(saveRuleSource, /payload\.weekdays = rule\.weekdays/)
+assert.match(saveRuleSource, /post\('portal\/schedules\.php', payload\)/)
 assert.doesNotMatch(saveRuleSource, /\.\.\.rule/)
 assert.doesNotMatch(saveRuleSource, /\brule:\s*/)
 assert.doesNotMatch(saveRuleSource, /\bschedule_rule:\s*/)

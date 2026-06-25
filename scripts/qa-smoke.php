@@ -206,6 +206,8 @@ assert_same('2026-04-15', $aprilCompetency['end'], 'competencia abril termina em
 assert_same('onsite', OperationalService::presenceForRule('even_days', '2026-04-16'), 'regra par gera presencial');
 assert_same('remote', OperationalService::presenceForRule('even_days', '2026-04-17'), 'regra par gera remoto em dia impar');
 assert_same('onsite', OperationalService::presenceForRule('odd_days', '2026-04-17'), 'regra impar gera presencial');
+assert_same('onsite', OperationalService::presenceForRule('fixed_weekdays', '2026-06-22', ['mon', 'wed', 'fri']), 'regra fixa semanal gera presencial em segunda');
+assert_same('remote', OperationalService::presenceForRule('fixed_weekdays', '2026-06-23', ['mon', 'wed', 'fri']), 'regra fixa semanal gera remoto em terca');
 assert_same(500, OperationalService::MAX_IMPORT_ROWS, 'limite de linhas da importacao');
 assert_same(6, OperationalService::MAX_IMPORT_COLUMNS, 'limite de colunas da importacao');
 
@@ -496,7 +498,9 @@ assert_same(true, strpos($operationalSource, 'ON DUPLICATE KEY UPDATE') !== fals
 assert_same(true, strpos($operationalSource, 'id = LAST_INSERT_ID(id)') !== false, 'UPSERT reaproveita id existente sem duplicar');
 assert_same(true, strpos($operationalSource, 'effective_until = NULL') !== false, 'UPSERT reativa regra removida');
 assert_same(true, strpos($operationalSource, "\$rule = (string)(\$data['rule_type'] ?? '');") !== false, 'salvar regra nao assume undefined quando rule_type esta ausente');
-assert_same(true, strpos($operationalSource, "['even_days', 'odd_days', 'always_remote', 'always_onsite', 'undefined']") !== false, 'salvar regra valida valores canonicos');
+assert_same(true, strpos($operationalSource, "'fixed_weekdays'") !== false, 'salvar regra valida valores canonicos incluindo fixed_weekdays');
+assert_same(true, strpos($operationalSource, 'rule_config = VALUES(rule_config)') !== false, 'salvar regra persiste configuracao de dias fixos');
+assert_same(true, strpos($operationalSource, "throw new InvalidArgumentException('Selecione ao menos um dia presencial.')") !== false, 'backend rejeita fixed_weekdays sem dias');
 assert_same(true, strpos($operationalSource, "throw new InvalidArgumentException('Regra de escala invalida.')") !== false, 'salvar regra rejeita regra invalida');
 assert_same(false, strpos($operationalSource, "\$data['rule_type'] ?? 'undefined'") !== false, 'backend nao converte rule_type ausente para undefined silenciosamente');
 assert_same(true, strpos($operationalSource, "SET rule_type = \"undefined\"") !== false, 'remocao marca regra como indefinida');

@@ -31,9 +31,17 @@ const SCHEDULE_RULE_OPTIONS = [
   { value: 'odd_days', label: 'Dias ímpares' },
   { value: 'always_onsite', label: 'Sempre presencial' },
   { value: 'always_remote', label: 'Sempre remoto' },
+  { value: 'fixed_weekdays', label: 'Dias fixos da semana' },
   { value: 'undefined', label: 'Sem escala definida' },
 ]
 const SCHEDULE_RULE_VALUES = new Set(SCHEDULE_RULE_OPTIONS.map((option) => option.value))
+const WEEKDAY_OPTIONS = [
+  { value: 'mon', label: 'Segunda', short: 'seg' },
+  { value: 'tue', label: 'Terça', short: 'ter' },
+  { value: 'wed', label: 'Quarta', short: 'qua' },
+  { value: 'thu', label: 'Quinta', short: 'qui' },
+  { value: 'fri', label: 'Sexta', short: 'sex' },
+]
 
 function Status({ value }) {
   const tone = {
@@ -77,7 +85,18 @@ function adjustmentTypeLabel(value) {
   }[value] || 'Ajuste'
 }
 
-function scheduleRuleLabel(value) {
+function weekdaySummary(weekdays = []) {
+  const labels = WEEKDAY_OPTIONS
+    .filter((option) => weekdays.includes(option.value))
+    .map((option) => option.short)
+  if (labels.length === 0) return 'dias não definidos'
+  if (labels.length === 1) return labels[0]
+  const last = labels.at(-1)
+  return `${labels.slice(0, -1).join(', ')} e ${last}`
+}
+
+function scheduleRuleLabel(value, weekdays = []) {
+  if (value === 'fixed_weekdays') return `Presencial: ${weekdaySummary(weekdays)}`
   return SCHEDULE_RULE_OPTIONS.find((option) => option.value === value)?.label
     || String(value || 'Não informado').replaceAll('_', ' ')
 }
@@ -88,6 +107,7 @@ function scheduleRuleTone(value) {
     always_remote: 'status-info',
     even_days: 'status-warning',
     odd_days: 'status-warning',
+    fixed_weekdays: 'status-info',
     undefined: 'status-neutral',
   }[value] || 'status-neutral'
 }
@@ -196,7 +216,7 @@ export function SchedulePage({ session, notify }) {
   const employees = useEmployees()
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '' })
   const resource = useResource(`portal/schedules.php${queryString(filters)}`)
-  const [rule, setRule] = useState({ employee_id: '', rule_type: 'undefined', effective_from: today })
+  const [rule, setRule] = useState({ employee_id: '', rule_type: 'undefined', effective_from: today, weekdays: [] })
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
   const [importRows, setImportRows] = useState([])
   const [preview, setPreview] = useState(null)
@@ -212,16 +232,46 @@ export function SchedulePage({ session, notify }) {
       notify('Selecione uma regra de escala válida.', 'error')
       return
     }
+    if (ruleType === 'fixed_weekdays' && rule.weekdays.length === 0) {
+      notify('Selecione ao menos um dia presencial.', 'error')
+      return
+    }
+    const payload = {
+      action: 'rule',
+      employee_id: employeeId,
+      rule_type: ruleType,
+      effective_from: rule.effective_from,
+    }
+    if (ruleType === 'fixed_weekdays') {
+      payload.weekdays = rule.weekdays
+    }
     await submit(
-      () => post('portal/schedules.php', {
-        action: 'rule',
-        employee_id: employeeId,
-        rule_type: ruleType,
-        effective_from: rule.effective_from,
-      }),
+      () => post('portal/schedules.php', payload),
       resource.refresh,
       notify,
     )
+  }
+
+  function toggleRuleWeekday(weekday) {
+    setRule((current) => {
+      const enabled = current.weekdays.includes(weekday)
+      const selected = enabled
+        ? current.weekdays.filter((value) => value !== weekday)
+        : [...current.weekdays, weekday]
+      const ordered = WEEKDAY_OPTIONS
+        .map((option) => option.value)
+        .filter((value) => selected.includes(value))
+      return { ...current, weekdays: ordered }
+    })
+  }
+
+  function editRule(item) {
+    setRule({
+      employee_id: String(item.employee_id),
+      rule_type: item.rule_type || 'undefined',
+      effective_from: item.effective_from || today,
+      weekdays: item.weekdays || [],
+    })
   }
 
   async function removeRule(item) {
@@ -294,7 +344,32 @@ export function SchedulePage({ session, notify }) {
               title="Regra por colaborador"
             />
             <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={rule.employee_id} onChange={(event) => setRule({ ...rule, employee_id: event.target.value })} /></label>
-            <label className="label">Regra<select className="field mt-2" value={rule.rule_type} onChange={(event) => setRule({ ...rule, rule_type: event.target.value })}>{SCHEDULE_RULE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="label">Regra<select className="field mt-2" value={rule.rule_type} onChange={(event) => {
+              const ruleType = event.target.value
+              setRule({ ...rule, rule_type: ruleType, weekdays: ruleType === 'fixed_weekdays' ? rule.weekdays : [] })
+            }}>{SCHEDULE_RULE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            {rule.rule_type === 'fixed_weekdays' && (
+              <div className="space-y-3 rounded-lg border border-white/10 bg-slate-950/35 p-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Dias presenciais</p>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAY_OPTIONS.map((option) => {
+                    const selected = rule.weekdays.includes(option.value)
+                    return (
+                      <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${selected ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200' : 'border-white/10 bg-slate-900/60 text-slate-400 hover:border-white/20'}`} key={option.value}>
+                        <input
+                          checked={selected}
+                          className="sr-only"
+                          onChange={() => toggleRuleWeekday(option.value)}
+                          type="checkbox"
+                        />
+                        {option.label}
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-slate-500">Presencial: {weekdaySummary(rule.weekdays)}.</p>
+              </div>
+            )}
             <label className="label">Vigência<input className="field mt-2" required type="date" value={rule.effective_from} onChange={(event) => setRule({ ...rule, effective_from: event.target.value })} /></label>
             <InlineAlert tone="info" title="Contrato preservado">
               O frontend envia `rule_type` com o valor canônico selecionado. Não há fallback silencioso para “Sem escala definida”.
@@ -356,9 +431,14 @@ export function SchedulePage({ session, notify }) {
                 <tr key={item.id}>
                   <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>{item.ad_login || 'Sem login AD'}</small></div></div></td>
                   <td>{item.team.toUpperCase()}</td>
-                  <td><span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{scheduleRuleLabel(item.rule_type)}</span></td>
+                  <td><span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span></td>
                   <td>{formatDate(item.effective_from)}</td>
-                  <td>{canRemoveRule ? <button className="table-action text-red-300" onClick={() => removeRule(item)} type="button">Remover regra</button> : 'Restrito a admin'}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      {canManage && <button className="table-action" onClick={() => editRule(item)} type="button">Editar</button>}
+                      {canRemoveRule ? <button className="table-action text-red-300" onClick={() => removeRule(item)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
+                    </div>
+                  </td>
                 </tr>
               ))}</tbody>
             </table>
@@ -368,7 +448,7 @@ export function SchedulePage({ session, notify }) {
           <section className="card table-wrap">
             <table className="data-table">
               <thead><tr><th>Data</th><th>Colaborador</th><th>Equipe</th><th>Modalidade</th><th>Origem</th></tr></thead>
-              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{scheduleRuleLabel(item.rule_type)}</small></td><td>{item.team.toUpperCase()}</td><td><Status value={item.presence_type} /></td><td>{item.source === 'exception' ? `Exceção: ${item.label}` : 'Regra fixa'}</td></tr>)}</tbody>
+              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td>{item.team.toUpperCase()}</td><td><Status value={item.presence_type} /></td><td>{item.source === 'exception' ? `Exceção: ${item.label}` : 'Regra fixa'}</td></tr>)}</tbody>
             </table>
           </section>
         )}

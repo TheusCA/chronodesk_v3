@@ -22,6 +22,7 @@ const ruleTone = {
   odd_days: 'border-violet-500/25 bg-violet-500/10 text-violet-300',
   always_onsite: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
   always_remote: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
+  fixed_weekdays: 'border-cyan-500/25 bg-cyan-500/10 text-cyan-300',
   undefined: 'border-slate-600/50 bg-slate-800 text-slate-400',
 }
 
@@ -65,8 +66,8 @@ function teamLabel(team) {
 function AssignmentChip({ item }) {
   const tone = ruleTone[item.schedule_rule_type] || ruleTone.undefined
   return (
-    <div className={`rounded-lg border px-2.5 py-2 ${item.active_on_date ? 'bg-opacity-100 ring-1 ring-white/10' : 'opacity-55'} ${tone}`}>
-      <div className="flex items-center justify-between gap-2">
+    <div className={`min-w-0 rounded-lg border px-2.5 py-2 ${item.active_on_date ? 'bg-opacity-100 ring-1 ring-white/10' : 'opacity-55'} ${tone}`}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
         <span className="min-w-0 truncate text-xs font-semibold">{item.employee_name}</span>
         <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-bold">
           {item.schedule_rule_label}
@@ -86,12 +87,12 @@ function PaCard({ pa, canManage, onOpen }) {
       onClick={() => onOpen(pa)}
       type="button"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-300/70">PA</p>
           <strong className="mt-1 block text-2xl font-black text-white">{pa.pa_number}</strong>
         </div>
-        <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${activeCount ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-slate-600/50 bg-slate-950/60 text-slate-500'}`}>
+        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${activeCount ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-slate-600/50 bg-slate-950/60 text-slate-500'}`}>
           {assignments.length ? `${activeCount}/${assignments.length} hoje` : 'Livre'}
         </span>
       </div>
@@ -255,7 +256,7 @@ export function PaMapPage({ notify }) {
   if (resource.error) return <ErrorState message={resource.error.message} onRetry={resource.refresh} />
 
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       <SectionHeader
         description="Vínculos recorrentes por escala híbrida/home office, com destaque para a data filtrada."
         eyebrow="Mapa visual da operação"
@@ -268,7 +269,7 @@ export function PaMapPage({ notify }) {
 
       {assignments.length === 0 && <EmptyState title="Nenhum vínculo cadastrado" description="Todos os PAs continuam visíveis e livres para montagem do mapa." />}
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard detail="PAs no inventário visual" icon="building" label="PAs" value={pas.length} />
         <MetricCard detail="Vínculos recorrentes carregados" icon="users" label="Vínculos" value={assignments.length} />
         <MetricCard detail="Alocações presenciais na data" icon="shield" label="Presenciais" tone="success" value={activeToday} />
@@ -283,7 +284,7 @@ export function PaMapPage({ notify }) {
       ]} />
 
       <section className="pa-grid-shell">
-        <div className="grid min-w-[760px] grid-cols-4 gap-3 lg:grid-cols-8">
+        <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
           {pas.map((pa) => (
             <PaCard canManage={canManage} key={pa.pa_number} onOpen={(item) => setSelected(item)} pa={pa} />
           ))}

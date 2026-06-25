@@ -28,10 +28,13 @@ function Clock() {
 export function PortalLayout({ session, path, navigate, onLogout, children }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const notificationsPanelId = 'portal-notifications-panel'
   const notificationResource = useResource('portal/notifications.php')
   const refreshNotifications = notificationResource.refresh
   const permissions = useMemo(() => new Set(session.permissions || []), [session.permissions])
+  const currentUserLabel = userLabel(session)
+  const userInitial = currentUserLabel.trim().slice(0, 1).toUpperCase() || 'S'
   const metadata = pageMetadata[path] || ['Portal Operacional', 'Módulo do Portal SDK.']
 
   useEffect(() => {
@@ -60,53 +63,77 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
     setNotificationsOpen(false)
   }
 
-  const navContent = (
+  function navContent(compact = false, showCollapseToggle = false) {
+    return (
     <>
-      <div className="flex h-20 items-center gap-3 border-b border-white/5 px-5">
+      <div className={`relative flex items-center border-b border-white/5 ${compact ? 'h-24 flex-col justify-center gap-2 px-2' : 'h-20 gap-3 px-5'}`}>
         <div className="rounded-card border border-cyan-400/15 bg-cyan-500/10 p-1.5">
           <BrandMark className="h-10 w-10 shrink-0 drop-shadow-[0_8px_18px_rgba(14,165,233,0.18)]" />
         </div>
-        <div className="min-w-0">
+        {!compact && <div className="min-w-0">
           <p className="truncate font-bold tracking-tight text-white">Portal SDK</p>
           <p className="truncate text-xs text-slate-500">Centro Operacional de TI</p>
-        </div>
+        </div>}
+        {showCollapseToggle && (
+          <button
+            aria-expanded={!compact}
+            aria-label={compact ? 'Expandir menu lateral' : 'Minimizar menu lateral'}
+            className={`rounded-lg border border-white/10 bg-slate-900/70 p-2 text-slate-400 transition hover:border-cyan-400/20 hover:bg-slate-800 hover:text-slate-100 ${compact ? '' : 'ml-auto'}`}
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            title={compact ? 'Expandir menu' : 'Minimizar menu'}
+            type="button"
+          >
+            <Icon name="menu" className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Módulos do portal">
         {navigation.map((item, index) => {
           if (item.section) {
+            if (compact) {
+              return <div className="my-3 h-px bg-white/5" key={`${item.section}-${index}`} aria-hidden="true" />
+            }
             return <p className="px-3 pb-2 pt-5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600" key={`${item.section}-${index}`}>{item.section}</p>
           }
           if (item.permission && !permissions.has(item.permission)) return null
           const active = path === item.path
           return (
             <button
-              className={`sidebar-link ${active ? 'sidebar-link-active' : ''}`}
+              className={`sidebar-link ${compact ? 'justify-center px-2' : ''} ${active ? 'sidebar-link-active' : ''}`}
               key={item.path}
               onClick={() => goTo(item.path)}
+              title={compact ? item.label : undefined}
               type="button"
             >
               <span className={`grid h-8 w-8 place-items-center rounded-lg border ${active ? 'border-cyan-400/20 bg-cyan-500/10 text-cyan-200' : 'border-white/5 bg-slate-950/30 text-slate-500'}`}>
                 <Icon name={item.icon} className="h-[17px] w-[17px]" />
               </span>
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              {active && <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden="true" />}
+              {!compact && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+              {active && !compact && <span className="h-1.5 w-1.5 rounded-full bg-cyan-300" aria-hidden="true" />}
             </button>
           )
         })}
       </nav>
-      <div className="border-t border-white/5 p-4">
-        <div className="rounded-card border border-white/5 bg-slate-900/80 p-3">
-          <p className="truncate text-sm font-semibold text-slate-200">{userLabel(session)}</p>
-          <p className="mt-0.5 text-xs capitalize text-slate-500">{session.role?.replace('_', ' ')}</p>
+      <div className={`border-t border-white/5 ${compact ? 'p-2' : 'p-4'}`}>
+        <div className={`rounded-card border border-white/5 bg-slate-900/80 ${compact ? 'grid place-items-center p-2' : 'p-3'}`} title={compact ? currentUserLabel : undefined}>
+          {compact ? (
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500/10 text-sm font-black text-cyan-100">{userInitial}</span>
+          ) : (
+            <>
+              <p className="truncate text-sm font-semibold text-slate-200">{currentUserLabel}</p>
+              <p className="mt-0.5 text-xs capitalize text-slate-500">{session.role?.replace('_', ' ')}</p>
+            </>
+          )}
         </div>
       </div>
     </>
-  )
+    )
+  }
 
   return (
     <div className="portal-tech-shell min-h-screen bg-chrono-bg">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-white/5 bg-chrono-sidebar lg:flex lg:flex-col">
-        {navContent}
+      <aside className={`fixed inset-y-0 left-0 z-40 hidden border-r border-white/5 bg-chrono-sidebar transition-[width] duration-200 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        {navContent(sidebarCollapsed, true)}
       </aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
@@ -115,12 +142,12 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
             <button className="absolute right-3 top-3 rounded-lg p-2 text-slate-400" onClick={() => setMobileOpen(false)} type="button" aria-label="Fechar menu">
               <Icon name="close" />
             </button>
-            {navContent}
+            {navContent()}
           </aside>
         </div>
       )}
 
-      <div className="lg:pl-64">
+      <div className={`min-w-0 transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
         <header className="sticky top-0 z-30 border-b border-white/5 bg-chrono-bg/95 backdrop-blur-xl">
           <div className="flex min-h-20 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
@@ -160,7 +187,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="mx-auto w-full min-w-0 max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>
   )

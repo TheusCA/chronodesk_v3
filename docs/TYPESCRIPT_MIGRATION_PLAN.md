@@ -268,3 +268,26 @@ Rollback da Fase 12:
 - Restaurar `ReportsSummaryTable` para renderizacao JSX simples.
 - Remover `frontend/scripts/qa-table.mjs`.
 - Reverter ajustes em `frontend/package.json`, `frontend/scripts/qa-api.mjs`, `frontend/scripts/qa-operational.mjs`, `frontend/scripts/qa-query.mjs`, `frontend/scripts/qa-resource.mjs` e `frontend/scripts/qa-visual.mjs`.
+
+## Status da Fase 13
+
+Concluido nesta fase:
+
+- Tipo `ScheduleRuleType` atualizado para incluir `fixed_weekdays`.
+- Exemplos POC de tipos/formulario atualizados, mantendo POC isolada.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+- Nenhuma dependencia nova foi instalada.
+
+Fora da trilha TypeScript, mas registrado aqui por contrato:
+
+- `fixed_weekdays` usa payload `weekdays: ['mon', 'wed', 'fri']`.
+- A UI continua em JSX e valida a selecao antes de chamar `post('portal/schedules.php', payload)`.
+- Backend valida dias permitidos, rejeita lista vazia, rejeita duplicidade e persiste configuracao em JSON serializado.
+
+Rollback da Fase 13:
+
+- Reverter `ScheduleRuleType` para remover `fixed_weekdays`.
+- Reverter UI de dias fixos em `OperationalPages.jsx`.
+- Reverter `qa:schedule-rules` e ajustes de QA.
+- Aplicar rollback de banco apenas se necessario em janela controlada, removendo `fixed_weekdays` de registros antes de alterar ENUM/colunas.

@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana.
 
 ## Status da Fase 7
 
@@ -58,6 +58,16 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Nao migrados: mutacoes, uploads, aprovacoes, pausas, Dashboard, Admin, PA Map, chamados criticos, escalas e formularios.
 - `qa:table` valida dependencia permitida, escopo unico, ausencia de `useMutation`, ausencia de `fetch()` direto fora de `api.ts`, POC isolada e ausencia de paginas TS/TSX.
 
+## Status da Fase 13
+
+- Novo `rule_type`: `fixed_weekdays`.
+- Dias aceitos inicialmente: `mon`, `tue`, `wed`, `thu`, `fri`.
+- Persistencia: `portal_schedule_rules.rule_config` com JSON serializado, por exemplo `{"weekdays":["mon","wed","fri"]}`.
+- Mapa de PA guarda snapshot em `portal_pa_assignments.schedule_rule_config`.
+- UI de escala presencial ganhou seletor "Dias fixos da semana" e checkboxes de segunda a sexta.
+- Calculo presencial/remoto preserva regras antigas e usa dias fixos para calendario, escala gerada e Mapa de PA.
+- `qa:schedule-rules` valida payload, validacao backend, migration, escopo e ausencia de novas dependencias.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
@@ -108,7 +118,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 
 ## Payloads de maior risco
 
-- `portal/schedules.php`: `rule_type` deve preservar `even_days`, `odd_days`, `always_onsite`, `always_remote`, `undefined`.
+- `portal/schedules.php`: `rule_type` deve preservar `even_days`, `odd_days`, `always_onsite`, `always_remote`, `undefined` e `fixed_weekdays`.
 - `portal/pa_map.php`: `action`, `employee_id`, `pa_number`, `valid_from`, `confirm_remote_allocation`.
 - `portal/critical_incidents.php`: muitos campos, aliases e acoes `create`, `update`, `status`.
 - `portal/overtime.php` e `portal/time_corrections.php`: `action=create`, `action=decision`, horas, datas e status.

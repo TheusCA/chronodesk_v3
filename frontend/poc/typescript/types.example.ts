@@ -7,6 +7,7 @@ export type ScheduleRuleType =
   | 'odd_days'
   | 'always_onsite'
   | 'always_remote'
+  | 'fixed_weekdays'
   | 'undefined'
 
 export type WorkflowStatus = 'pending' | 'approved' | 'rejected' | 'synced' | 'sync_error'

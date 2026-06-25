@@ -7,6 +7,17 @@ final class OperationalService {
     public const MAX_IMPORT_COLUMNS = 6;
     public const MAX_IMPORT_CELL_CHARS = 500;
     public const MAX_IMPORT_PAYLOAD_BYTES = 1048576;
+    private const RULE_TYPES = [
+        'even_days', 'odd_days', 'always_remote', 'always_onsite', 'undefined', 'fixed_weekdays',
+    ];
+    private const WEEKDAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri'];
+    private const WEEKDAY_LABELS = [
+        'mon' => 'seg',
+        'tue' => 'ter',
+        'wed' => 'qua',
+        'thu' => 'qui',
+        'fri' => 'sex',
+    ];
     public const ALLOWED_IMPORT_HEADERS = [
         'id', 'employee_id',
         'login_ad', 'ad_login', 'email',
@@ -60,13 +71,15 @@ final class OperationalService {
         ];
     }
 
-    public static function presenceForRule(string $rule, string $date): string {
-        $day = (int)self::dateValue($date, 'Data')->format('d');
+    public static function presenceForRule(string $rule, string $date, array $weekdays = []): string {
+        $dateValue = self::dateValue($date, 'Data');
+        $day = (int)$dateValue->format('d');
         return match ($rule) {
             'always_onsite' => 'onsite',
             'always_remote', 'undefined' => 'remote',
             'even_days' => $day % 2 === 0 ? 'onsite' : 'remote',
             'odd_days' => $day % 2 === 1 ? 'onsite' : 'remote',
+            'fixed_weekdays' => in_array(strtolower($dateValue->format('D')), $weekdays, true) ? 'onsite' : 'remote',
             default => throw new InvalidArgumentException('Regra de escala invalida.'),
         };
     }
@@ -216,7 +229,7 @@ final class OperationalService {
                     'title' => $row['label'] . ': ' . $row['employee_name'],
                     'description' => $row['source'] === 'exception'
                         ? 'Excecao de escala'
-                        : $this->scheduleRuleLabel($row['rule_type']),
+                        : ($row['rule_label'] ?? $this->scheduleRuleLabel($row['rule_type'])),
                     'starts_at' => $row['date'] . ' 00:00:00',
                     'ends_at' => $row['date'] . ' 23:59:59',
                     'team' => $row['team'],
@@ -286,9 +299,11 @@ final class OperationalService {
     private function saveScheduleRuleUnsafe(array $data, string $actor, string $origin = 'manual'): int {
         $employee = $this->employee($data['employee_id'] ?? null);
         $rule = (string)($data['rule_type'] ?? '');
-        if (!in_array($rule, ['even_days', 'odd_days', 'always_remote', 'always_onsite', 'undefined'], true)) {
+        if (!in_array($rule, self::RULE_TYPES, true)) {
             throw new InvalidArgumentException('Regra de escala invalida.');
         }
+        $weekdays = $this->weekdaysForRulePayload($rule, $data['weekdays'] ?? null);
+        $ruleConfig = $weekdays === [] ? null : json_encode(['weekdays' => $weekdays], JSON_UNESCAPED_SLASHES);
         $effectiveFrom = self::dateValue($data['effective_from'] ?? date('Y-m-d'), 'Inicio da vigencia');
         $previous = $this->latestScheduleRuleForEmployee((int)$employee['id']);
         $params = [
@@ -297,21 +312,23 @@ final class OperationalService {
             ':ad_login' => $employee['ad_login'],
             ':team' => $employee['team'],
             ':rule_type' => $rule,
+            ':rule_config' => $ruleConfig,
             ':effective_from' => $effectiveFrom->format('Y-m-d'),
             ':created_by' => $actor,
             ':updated_by' => $actor,
         ];
         $stmt = $this->pdo->prepare(
             'INSERT INTO portal_schedule_rules
-                (employee_id, employee_name, ad_login, team, rule_type, effective_from, effective_until, created_by, updated_by)
+                (employee_id, employee_name, ad_login, team, rule_type, rule_config, effective_from, effective_until, created_by, updated_by)
              VALUES
-                (:employee_id, :employee_name, :ad_login, :team, :rule_type, :effective_from, NULL, :created_by, :updated_by)
+                (:employee_id, :employee_name, :ad_login, :team, :rule_type, :rule_config, :effective_from, NULL, :created_by, :updated_by)
              ON DUPLICATE KEY UPDATE
                 id = LAST_INSERT_ID(id),
                 employee_name = VALUES(employee_name),
                 ad_login = VALUES(ad_login),
                 team = VALUES(team),
                 rule_type = VALUES(rule_type),
+                rule_config = VALUES(rule_config),
                 effective_from = VALUES(effective_from),
                 effective_until = NULL,
                 updated_by = VALUES(updated_by),
@@ -329,6 +346,8 @@ final class OperationalService {
             'ad_login' => $employee['ad_login'],
             'team' => $employee['team'],
             'rule_type' => $rule,
+            'rule_config' => $ruleConfig,
+            'weekdays' => $weekdays,
             'effective_from' => $effectiveFrom->format('Y-m-d'),
             'effective_until' => null,
         ], $actor);
@@ -337,6 +356,7 @@ final class OperationalService {
             'employee_name' => $employee['name'],
             'team' => $employee['team'],
             'rule_type' => $rule,
+            'weekdays' => $weekdays,
             'effective_from' => $effectiveFrom->format('Y-m-d'),
         ], $actor);
         return $id;
@@ -352,6 +372,7 @@ final class OperationalService {
             $stmt = $this->pdo->prepare(
                 'UPDATE portal_schedule_rules
                  SET rule_type = "undefined",
+                     rule_config = NULL,
                      effective_until = DATE_SUB(CURRENT_DATE, INTERVAL 1 DAY),
                      updated_by = :updated_by,
                      updated_at = CURRENT_TIMESTAMP
@@ -1101,7 +1122,7 @@ final class OperationalService {
     }
 
     private function scheduleRules(?string $team, ?int $employeeId): array {
-        $sql = 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type,
+        $sql = 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type, r.rule_config,
                        r.effective_from, r.effective_until, r.created_by, r.updated_by,
                        r.created_at, r.updated_at
                 FROM portal_schedule_rules r
@@ -1118,7 +1139,7 @@ final class OperationalService {
         }
         $stmt = $this->pdo->prepare($sql . ' ORDER BY employee_name, r.updated_at DESC, r.id DESC');
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        return array_map(fn(array $row): array => $this->scheduleRuleView($row), $stmt->fetchAll());
     }
 
     private function scheduleExceptions(string $from, string $to, ?string $team, ?int $employeeId): array {
@@ -1170,10 +1191,11 @@ final class OperationalService {
                     $label = $this->scheduleStatusLabel($presence);
                     $source = 'exception';
                 } else {
-                    $presence = self::presenceForRule($rule['rule_type'], $dateKey);
+                    $presence = self::presenceForRule($rule['rule_type'], $dateKey, $rule['weekdays'] ?? []);
                     $label = $this->scheduleStatusLabel($presence);
                     $source = 'rule';
                 }
+                $ruleLabel = $this->scheduleRuleLabel($rule['rule_type'], $rule['weekdays'] ?? []);
                 $items[] = [
                     'employee_id' => (int)$rule['employee_id'],
                     'employee_name' => $rule['employee_name'],
@@ -1183,6 +1205,8 @@ final class OperationalService {
                     'label' => $label,
                     'source' => $source,
                     'rule_type' => $rule['rule_type'],
+                    'weekdays' => $rule['weekdays'] ?? [],
+                    'rule_label' => $ruleLabel,
                 ];
             }
         }
@@ -1247,13 +1271,104 @@ final class OperationalService {
         };
     }
 
-    private function scheduleRuleLabel(string $rule): string {
+    public static function normalizeScheduleWeekdays($value, bool $strict = true): array {
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            if (json_last_error() === JSON_ERROR_NONE) {
+                $value = $decoded;
+            }
+        }
+        if (!is_array($value) || self::isList($value) === false) {
+            if ($strict) {
+                throw new InvalidArgumentException('Dias da semana invalidos.');
+            }
+            return [];
+        }
+        $seen = [];
+        $normalized = [];
+        foreach ($value as $item) {
+            if (!is_string($item)) {
+                if ($strict) {
+                    throw new InvalidArgumentException('Dias da semana invalidos.');
+                }
+                return [];
+            }
+            $weekday = strtolower(trim($item));
+            if (!in_array($weekday, self::WEEKDAY_ORDER, true)) {
+                if ($strict) {
+                    throw new InvalidArgumentException('Dia da semana invalido.');
+                }
+                return [];
+            }
+            if (isset($seen[$weekday])) {
+                if ($strict) {
+                    throw new InvalidArgumentException('Dias da semana duplicados.');
+                }
+                return [];
+            }
+            $seen[$weekday] = true;
+            $normalized[] = $weekday;
+        }
+        return array_values(array_filter(
+            self::WEEKDAY_ORDER,
+            static fn(string $weekday): bool => isset($seen[$weekday])
+        ));
+    }
+
+    public static function scheduleRuleConfigWeekdays($config): array {
+        if (!is_string($config) || trim($config) === '') {
+            return [];
+        }
+        $decoded = json_decode($config, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+        return self::normalizeScheduleWeekdays($decoded['weekdays'] ?? [], false);
+    }
+
+    public static function weekdayListLabel(array $weekdays): string {
+        $labels = array_values(array_filter(array_map(
+            static fn(string $weekday): ?string => self::WEEKDAY_LABELS[$weekday] ?? null,
+            $weekdays
+        )));
+        if ($labels === []) {
+            return 'dias nao definidos';
+        }
+        if (count($labels) === 1) {
+            return $labels[0];
+        }
+        $last = array_pop($labels);
+        return implode(', ', $labels) . ' e ' . $last;
+    }
+
+    private function weekdaysForRulePayload(string $rule, $value): array {
+        if ($rule !== 'fixed_weekdays') {
+            return [];
+        }
+        $weekdays = self::normalizeScheduleWeekdays($value);
+        if ($weekdays === []) {
+            throw new InvalidArgumentException('Selecione ao menos um dia presencial.');
+        }
+        return $weekdays;
+    }
+
+    private function scheduleRuleView(array $row): array {
+        $weekdays = $row['rule_type'] === 'fixed_weekdays'
+            ? self::scheduleRuleConfigWeekdays($row['rule_config'] ?? null)
+            : [];
+        $row['weekdays'] = $weekdays;
+        $row['rule_label'] = $this->scheduleRuleLabel((string)$row['rule_type'], $weekdays);
+        return $row;
+    }
+
+    private function scheduleRuleLabel(string $rule, array $weekdays = []): string {
         return match ($rule) {
             'even_days' => 'Dias pares',
             'odd_days' => 'Dias impares',
             'always_onsite' => 'Sempre presencial',
             'always_remote' => 'Sempre remoto',
             'undefined' => 'Sem escala definida',
+            'fixed_weekdays' => 'Presencial: ' . self::weekdayListLabel($weekdays),
             default => 'Regra nao informada',
         };
     }
@@ -1342,7 +1457,7 @@ final class OperationalService {
 
     private function latestScheduleRuleForEmployee(int $employeeId): ?array {
         $stmt = $this->pdo->prepare(
-            'SELECT id, employee_id, employee_name, team, rule_type, effective_from, effective_until
+            'SELECT id, employee_id, employee_name, team, rule_type, rule_config, effective_from, effective_until
              FROM portal_schedule_rules
              WHERE employee_id = :employee_id
              ORDER BY updated_at DESC, id DESC
@@ -1350,7 +1465,7 @@ final class OperationalService {
         );
         $stmt->execute([':employee_id' => $employeeId]);
         $rule = $stmt->fetch();
-        return $rule ?: null;
+        return $rule ? $this->scheduleRuleView($rule) : null;
     }
 
     private function reportRows(string $table, string $dateColumn, string $from, string $to, ?string $team, ?int $employeeId): array {

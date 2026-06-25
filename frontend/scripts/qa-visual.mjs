@@ -122,6 +122,7 @@ for (const [value, label] of [
   ['odd_days', 'Dias ímpares'],
   ['always_onsite', 'Sempre presencial'],
   ['always_remote', 'Sempre remoto'],
+  ['fixed_weekdays', 'Dias fixos da semana'],
   ['undefined', 'Sem escala definida'],
 ]) {
   assert.match(
@@ -153,6 +154,7 @@ assert.equal(packageJson.scripts['qa:visual'], 'node scripts/qa-visual.mjs')
 assert.equal(packageJson.scripts['qa:api'], 'node scripts/qa-api.mjs')
 assert.equal(packageJson.scripts['qa:query'], 'node scripts/qa-query.mjs')
 assert.equal(packageJson.scripts['qa:resource'], 'node scripts/qa-resource.mjs')
+assert.equal(packageJson.scripts['qa:schedule-rules'], 'node scripts/qa-schedule-rules.mjs')
 assert.equal(packageJson.scripts['qa:table'], 'node scripts/qa-table.mjs')
 assert.equal(packageJson.scripts.typecheck, 'tsc --noEmit')
 assert.equal(packageJson.devDependencies.typescript?.startsWith('^'), true, 'TypeScript deve estar em devDependencies')

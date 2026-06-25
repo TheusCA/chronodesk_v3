@@ -10,7 +10,7 @@ final class PaMapService {
         '1724', '1723', '1722', '1721', '1720', '1719', '1718', '1717',
     ];
     private const RULE_TYPES = [
-        'even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined',
+        'even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined', 'fixed_weekdays',
     ];
 
     private PDO $pdo;
@@ -123,6 +123,7 @@ final class PaMapService {
                 ':employee_login' => $employee['ad_login'],
                 ':team' => $employee['team'],
                 ':schedule_rule_type' => $schedule['rule_type'],
+                ':schedule_rule_config' => $schedule['rule_config'] ?? null,
                 ':valid_from' => $validFrom,
                 ':valid_until' => $validUntil,
                 ':notes' => $notes ?: null,
@@ -138,6 +139,7 @@ final class PaMapService {
                          employee_login = :employee_login,
                          team = :team,
                          schedule_rule_type = :schedule_rule_type,
+                         schedule_rule_config = :schedule_rule_config,
                          valid_from = :valid_from,
                          valid_until = :valid_until,
                          notes = :notes,
@@ -152,10 +154,10 @@ final class PaMapService {
                 $stmt = $this->pdo->prepare(
                     'INSERT INTO portal_pa_assignments
                         (pa_number, employee_id, employee_name, employee_login, team,
-                         schedule_rule_type, valid_from, valid_until, notes, created_by, updated_by)
+                         schedule_rule_type, schedule_rule_config, valid_from, valid_until, notes, created_by, updated_by)
                      VALUES
                         (:pa_number, :employee_id, :employee_name, :employee_login, :team,
-                         :schedule_rule_type, :valid_from, :valid_until, :notes, :created_by, :updated_by)'
+                         :schedule_rule_type, :schedule_rule_config, :valid_from, :valid_until, :notes, :created_by, :updated_by)'
                 );
                 $stmt->execute($params + [':created_by' => $actor]);
                 $id = (int)$this->pdo->lastInsertId();
@@ -216,7 +218,7 @@ final class PaMapService {
             return [];
         }
         $sql = 'SELECT id, pa_number, employee_id, employee_name, employee_login,
-                       team, schedule_rule_type, valid_from, valid_until, notes,
+                       team, schedule_rule_type, schedule_rule_config, valid_from, valid_until, notes,
                        created_by, updated_by, created_at, updated_at
                 FROM portal_pa_assignments
                 WHERE active = 1
@@ -268,6 +270,7 @@ final class PaMapService {
                 'employee_login' => $row['employee_login'],
                 'team' => $row['team'],
                 'schedule_rule_type' => $ruleType,
+                'schedule_rule_config' => $this->scheduleForEmployee((int)$row['employee_id'], $date)['rule_config'] ?? null,
                 'valid_from' => $date,
                 'valid_until' => $date,
                 'notes' => $row['notes'],
@@ -282,13 +285,17 @@ final class PaMapService {
 
     private function assignmentView(array $row, string $date, string $source): array {
         $ruleType = $this->ruleType($row['schedule_rule_type'] ?? 'undefined');
-        $activeOnDate = $this->ruleActiveOnDate($ruleType, $date);
+        $weekdays = $ruleType === 'fixed_weekdays'
+            ? OperationalService::scheduleRuleConfigWeekdays($row['schedule_rule_config'] ?? null)
+            : [];
+        $activeOnDate = $this->ruleActiveOnDate($ruleType, $date, $weekdays);
         return $row + [
             'source' => $source,
             'schedule_rule_type' => $ruleType,
-            'schedule_rule_label' => $this->ruleLabel($ruleType),
+            'schedule_rule_label' => $this->ruleLabel($ruleType, $weekdays),
+            'schedule_weekdays' => $weekdays,
             'active_on_date' => $activeOnDate,
-            'presence_status' => $activeOnDate ? 'onsite' : ($ruleType === 'always_remote' ? 'remote' : 'offsite'),
+            'presence_status' => $activeOnDate ? 'onsite' : (in_array($ruleType, ['always_remote', 'fixed_weekdays'], true) ? 'remote' : 'offsite'),
         ];
     }
 
@@ -387,6 +394,8 @@ final class PaMapService {
             if (in_array($type, ['vacation', 'leave', 'absence', 'day_off'], true)) {
                 return [
                     'rule_type' => 'undefined',
+                    'rule_config' => null,
+                    'weekdays' => [],
                     'status' => $type,
                     'label' => $type,
                     'source' => 'exception',
@@ -399,6 +408,8 @@ final class PaMapService {
         if (!$this->tableExists('portal_schedule_rules')) {
             return [
                 'rule_type' => 'undefined',
+                'rule_config' => null,
+                'weekdays' => [],
                 'status' => 'no_schedule',
                 'label' => 'Sem escala definida',
                 'source' => 'none',
@@ -408,7 +419,7 @@ final class PaMapService {
         }
 
         $stmt = $this->pdo->prepare(
-            'SELECT rule_type
+            'SELECT rule_type, rule_config
              FROM portal_schedule_rules
              WHERE employee_id = :employee_id
                AND effective_from <= :work_date_from
@@ -421,10 +432,12 @@ final class PaMapService {
             ':work_date_from' => $date,
             ':work_date_until' => $date,
         ]);
-        $rule = $stmt->fetchColumn();
+        $rule = $stmt->fetch();
         if (!$rule) {
             return [
                 'rule_type' => 'undefined',
+                'rule_config' => null,
+                'weekdays' => [],
                 'status' => 'no_schedule',
                 'label' => 'Sem escala definida',
                 'source' => 'none',
@@ -432,14 +445,21 @@ final class PaMapService {
                 'message' => null,
             ];
         }
-        $ruleType = $this->ruleType((string)$rule);
+        $ruleType = $this->ruleType((string)$rule['rule_type']);
+        $weekdays = $ruleType === 'fixed_weekdays'
+            ? OperationalService::scheduleRuleConfigWeekdays($rule['rule_config'] ?? null)
+            : [];
         $presence = $ruleType === 'undefined'
             ? 'no_schedule'
-            : OperationalService::presenceForRule($ruleType, $date);
+            : OperationalService::presenceForRule($ruleType, $date, $weekdays);
         return [
             'rule_type' => $ruleType,
+            'rule_config' => $ruleType === 'fixed_weekdays' && $weekdays !== []
+                ? json_encode(['weekdays' => $weekdays], JSON_UNESCAPED_SLASHES)
+                : null,
+            'weekdays' => $weekdays,
             'status' => $presence,
-            'label' => $this->ruleLabel($ruleType),
+            'label' => $this->ruleLabel($ruleType, $weekdays),
             'source' => 'rule',
             'block' => false,
             'message' => null,
@@ -471,7 +491,7 @@ final class PaMapService {
         return [];
     }
 
-    private function ruleActiveOnDate(string $ruleType, string $date): bool {
+    private function ruleActiveOnDate(string $ruleType, string $date, array $weekdays = []): bool {
         $ruleType = $this->ruleType($ruleType);
         if ($ruleType === 'always_onsite') {
             return true;
@@ -486,16 +506,20 @@ final class PaMapService {
         if ($ruleType === 'odd_days') {
             return $day % 2 === 1;
         }
+        if ($ruleType === 'fixed_weekdays') {
+            return OperationalService::presenceForRule($ruleType, $date, $weekdays) === 'onsite';
+        }
         return false;
     }
 
-    private function ruleLabel(string $ruleType): string {
+    private function ruleLabel(string $ruleType, array $weekdays = []): string {
         $labels = [
             'even_days' => 'Dias pares',
             'odd_days' => 'Dias impares',
             'always_onsite' => 'Sempre presencial',
             'always_remote' => 'Remoto',
             'undefined' => 'Sem escala',
+            'fixed_weekdays' => 'Presencial: ' . OperationalService::weekdayListLabel($weekdays),
         ];
         return $labels[$this->ruleType($ruleType)];
     }

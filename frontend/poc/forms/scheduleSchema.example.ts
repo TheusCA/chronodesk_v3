@@ -6,6 +6,7 @@ type ScheduleRuleType =
   | 'odd_days'
   | 'always_onsite'
   | 'always_remote'
+  | 'fixed_weekdays'
   | 'undefined'
 
 type ScheduleRuleInput = {
@@ -17,7 +18,7 @@ type ScheduleRuleInput = {
 // Future Zod shape:
 // z.object({
 //   employee_id: z.coerce.number().int().positive(),
-//   rule_type: z.enum(['even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined']),
+//   rule_type: z.enum(['even_days', 'odd_days', 'always_onsite', 'always_remote', 'fixed_weekdays', 'undefined']),
 //   effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 // })
 

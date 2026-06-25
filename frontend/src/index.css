@@ -284,7 +284,7 @@
   }
 
   .section-header {
-    @apply flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between;
+    @apply flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between;
   }
 
   .section-eyebrow {
@@ -302,11 +302,11 @@
   }
 
   .filter-bar {
-    @apply card flex flex-col gap-4;
+    @apply card flex w-full min-w-0 flex-col gap-4;
   }
 
   .filter-grid {
-    @apply grid gap-3 md:grid-cols-2 xl:grid-cols-4;
+    @apply grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4;
   }
 
   .filter-actions {
@@ -367,7 +367,7 @@
   }
 
   .legend-panel {
-    @apply card flex flex-wrap items-center gap-x-4 gap-y-3 py-3;
+    @apply card flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-3 py-3;
   }
 
   .legend-item {
@@ -379,11 +379,11 @@
   }
 
   .pa-grid-shell {
-    @apply overflow-x-auto rounded-card border border-white/5 bg-slate-950/25 p-4;
+    @apply w-full min-w-0 overflow-x-auto rounded-card border border-white/5 bg-slate-950/25 p-4;
   }
 
   .pa-cell {
-    @apply min-h-44 min-w-0 rounded-card border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-400/40;
+    @apply min-h-44 w-full min-w-0 overflow-hidden rounded-card border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-400/40;
     overflow-wrap: anywhere;
   }
 
