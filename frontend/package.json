@@ -17,6 +17,7 @@
     "qa:resource": "node scripts/qa-resource.mjs",
     "qa:schedule-rules": "node scripts/qa-schedule-rules.mjs",
     "qa:table": "node scripts/qa-table.mjs",
+    "qa:ux-hardening": "node scripts/qa-ux-hardening.mjs",
     "qa:visual": "node scripts/qa-visual.mjs"
   },
   "dependencies": {

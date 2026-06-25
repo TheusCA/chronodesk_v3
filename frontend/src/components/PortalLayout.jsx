@@ -114,7 +114,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
           )
         })}
       </nav>
-      <div className={`border-t border-white/5 ${compact ? 'p-2' : 'p-4'}`}>
+      <div className={`border-t border-white/5 ${compact ? 'p-2' : 'p-4'}`} title={compact ? 'Desenvolvido por Matheus Camargo' : undefined}>
         <div className={`rounded-card border border-white/5 bg-slate-900/80 ${compact ? 'grid place-items-center p-2' : 'p-3'}`} title={compact ? currentUserLabel : undefined}>
           {compact ? (
             <span className="grid h-9 w-9 place-items-center rounded-lg bg-cyan-500/10 text-sm font-black text-cyan-100">{userInitial}</span>
@@ -125,6 +125,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
             </>
           )}
         </div>
+        {!compact && <p className="mt-3 text-center text-[11px] font-medium text-slate-600">Desenvolvido por Matheus Camargo</p>}
       </div>
     </>
     )

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Feedback } from './components/Feedback'
 import { PortalLayout } from './components/PortalLayout'
+import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { LoadingState } from './components/ui/States'
 import { LoginPage } from './pages/LoginPage'
 import { api, post, setCsrfToken } from './lib/api'
@@ -209,9 +210,11 @@ export default function App() {
 
   return (
     <PortalLayout session={session} path={router.path} navigate={router.navigate} onLogout={logout}>
-      <Suspense fallback={<LoadingState label="Carregando mÃ³dulo..." />}>
-        {content}
-      </Suspense>
+      <RouteErrorBoundary resetKey={router.path}>
+        <Suspense fallback={<LoadingState label="Carregando mÃ³dulo..." />}>
+          {content}
+        </Suspense>
+      </RouteErrorBoundary>
       <Feedback feedback={feedback} />
     </PortalLayout>
   )

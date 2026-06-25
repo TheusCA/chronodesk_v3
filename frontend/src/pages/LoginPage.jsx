@@ -19,6 +19,7 @@ export function LoginPage({ onLoginCI, loading }) {
         </div>
         <div className="mx-auto max-w-md">
           <LoginCI onSubmit={onLoginCI} loading={loading} />
+          <p className="mt-5 text-center text-xs font-medium text-slate-500">Desenvolvido por Matheus Camargo</p>
         </div>
       </div>
     </main>

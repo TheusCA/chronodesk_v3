@@ -347,3 +347,28 @@ Rollback da Fase 15:
 - Remover helper `lazyPage` e `Suspense` do conteudo autenticado.
 - Remover `frontend/scripts/qa-bundle.mjs` e script `qa:bundle`.
 - Reverter ajustes em `frontend/scripts/qa-visual.mjs` e docs.
+
+## Status da Fase 16
+
+Concluido nesta fase:
+
+- Criado `frontend/src/components/RouteErrorBoundary.jsx`.
+- `App.jsx` protege o conteudo lazy com `RouteErrorBoundary` e preserva `Suspense`.
+- Credito discreto adicionado em `LoginPage.jsx` e `PortalLayout.jsx`.
+- Criado `qa:ux-hardening`.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+- Nenhuma dependencia nova foi instalada.
+
+Fora da trilha TypeScript, mas registrado aqui por contrato:
+
+- O Error Boundary nao altera API, querystring, RBAC, CSRF, autenticacao ou regras de negocio.
+- `useLivePauses`, `api.ts`, `useResource.ts`, `queryClient.ts`, `queryKeys.ts` e `operational.ts` nao foram alterados.
+
+Rollback da Fase 16:
+
+- Remover `frontend/src/components/RouteErrorBoundary.jsx`.
+- Remover o wrapper `RouteErrorBoundary` de `App.jsx`.
+- Remover o credito de `LoginPage.jsx` e `PortalLayout.jsx`.
+- Remover `frontend/scripts/qa-ux-hardening.mjs` e script `qa:ux-hardening`.
+- Reverter ajustes em `frontend/scripts/qa-visual.mjs` e docs.

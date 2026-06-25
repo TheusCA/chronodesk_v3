@@ -27,6 +27,8 @@
 | Filtro de relatorios aplicar valor invalido | Forms/Zod | Baixa | Medio | `reportFiltersSchema` valida competencia, equipe e employee_id antes de atualizar `filters`; backend continua autoridade | Frontend/QA |
 | Falha ao carregar chunk lazy em rede instavel | Bundle | Baixa | Medio | `Suspense` usa fallback consistente; validar manualmente navegacao e considerar Error Boundary dedicado em fase futura | Frontend/QA |
 | Code splitting esconder regressao de rota | Routing | Baixa | Alto | `qa:bundle` valida lazy loading e QAs existentes validam rotas, RBAC visual, query, forms e tabelas | Frontend/QA |
+| Error Boundary esconder erro recuperavel de tela | UX hardening | Baixa | Medio | Boundary fica no nivel de rota, mostra feedback claro e permite retry por reload; paginas seguem tratando erro de API internamente | Frontend/QA |
+| Credito visual poluir sidebar ou login | UX | Baixa | Baixo | Texto pequeno, neutro, sem imagem/animacao; QA valida presenca e teste manual valida responsividade | Frontend/UX |
 
 ## Pendencias antes de migracoes reais
 
@@ -43,3 +45,4 @@
 - Fase 13 adicionou `fixed_weekdays`; validar manualmente um CI com segunda/quarta/sexta e outro com regra antiga antes do deploy amplo.
 - Fase 14 introduziu React Hook Form + Zod apenas nos filtros de `/relatorios`; proximos formularios devem continuar um por fase e evitar POST sensivel ate existir padrao aprovado.
 - Fase 15 adicionou code splitting com `React.lazy`/`Suspense`; validar manualmente navegacao inicial e primeiro acesso a paginas densas apos deploy.
+- Fase 16 adicionou `RouteErrorBoundary` e credito discreto; simular falha de chunk em ambiente controlado antes de considerar telemetria externa.
