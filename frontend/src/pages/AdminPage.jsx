@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useResource } from '../hooks/useResource'
 import { post } from '../lib/api'
 import { ACTION_FEEDBACK, decisionFeedback } from '../lib/actionFeedback'
+import { runAction } from '../lib/actionRunner'
 import { formatDateTime } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
@@ -23,16 +24,15 @@ const tabs = [
   ['seguranca', 'Segurança'],
 ]
 
-async function perform(action, refreshers, notify, successMessage = ACTION_FEEDBACK.changesSaved) {
-  try {
-    const result = await action()
-    await Promise.all(refreshers.map((refresh) => refresh()))
-    notify(successMessage || result.mensagem || result.message || ACTION_FEEDBACK.changesSaved)
-    return true
-  } catch (error) {
-    notify(error.message, 'error')
-    return false
-  }
+async function perform(action, refreshers, notify, successMessage = ACTION_FEEDBACK.changesSaved, onSuccess) {
+  const result = await runAction({
+    action,
+    refresh: refreshers,
+    notify,
+    successMessage,
+    onSuccess,
+  })
+  return result !== null
 }
 
 function approvalMinutes(value) {
@@ -396,14 +396,14 @@ function EmployeesTab({ resource, notify }) {
       return
     }
     setSubmitting(true)
-    const success = await perform(
+    await perform(
       () => post('adicionar_funcionario.php', { ...createForm, id: Number(createForm.id) }),
       [resource.refresh],
       notify,
       ACTION_FEEDBACK.employeeCreated,
+      () => setCreateForm(emptyEmployee),
     )
     setSubmitting(false)
-    if (success) setCreateForm(emptyEmployee)
   }
 
   async function update(event) {
@@ -414,25 +414,27 @@ function EmployeesTab({ resource, notify }) {
       return
     }
     setSubmitting(true)
-    const success = await perform(
+    await perform(
       () => post('atualizar_funcionario.php', { ...editForm, funcionario_id: Number(editForm.id) }),
       [resource.refresh],
       notify,
       ACTION_FEEDBACK.employeeUpdated,
+      () => setEditForm(null),
     )
     setSubmitting(false)
-    if (success) setEditForm(null)
   }
 
   async function deactivate(id) {
     if (!window.confirm('Confirma a desativação deste funcionário?')) return
-    const success = await perform(
+    await perform(
       () => post('remover_funcionario.php', { funcionario_id: id }),
       [resource.refresh],
       notify,
       ACTION_FEEDBACK.employeeRemoved,
+      () => {
+        if (editForm && Number(editForm.id) === Number(id)) setEditForm(null)
+      },
     )
-    if (success && editForm && Number(editForm.id) === Number(id)) setEditForm(null)
   }
 
   return (
@@ -532,8 +534,13 @@ function UsersTab({ enabled, resource, notify }) {
 
   async function create(event) {
     event.preventDefault()
-    const success = await perform(() => post('usuarios.php?action=criar', form), [resource.refresh], notify, ACTION_FEEDBACK.userCreated)
-    if (success) setForm({ username: '', password: '', role: 'gestor' })
+    await perform(
+      () => post('usuarios.php?action=criar', form),
+      [resource.refresh],
+      notify,
+      ACTION_FEEDBACK.userCreated,
+      () => setForm({ username: '', password: '', role: 'gestor' }),
+    )
   }
 
   async function updateRole(id, role) {
@@ -640,16 +647,16 @@ function SecurityTab({ config, notify }) {
       notify('A confirmação da senha não confere.', 'error')
       return
     }
-    const success = await perform(
+    await perform(
       () => post('alterar_senha_admin.php', { nova_senha: password }),
       [],
       notify,
       ACTION_FEEDBACK.changesSaved,
+      () => {
+        setPassword('')
+        setConfirmation('')
+      },
     )
-    if (success) {
-      setPassword('')
-      setConfirmation('')
-    }
   }
 
   return (

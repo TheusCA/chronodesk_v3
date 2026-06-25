@@ -153,6 +153,7 @@ assert.equal(packageJson.scripts['qa:operational'], 'node scripts/qa-operational
 assert.equal(packageJson.scripts['qa:visual'], 'node scripts/qa-visual.mjs')
 assert.equal(packageJson.scripts['qa:api'], 'node scripts/qa-api.mjs')
 assert.equal(packageJson.scripts['qa:action-feedback'], 'node scripts/qa-action-feedback.mjs')
+assert.equal(packageJson.scripts['qa:action-runner'], 'node scripts/qa-action-runner.mjs')
 assert.equal(packageJson.scripts['qa:bundle'], 'node scripts/qa-bundle.mjs')
 assert.equal(packageJson.scripts['qa:forms'], 'node scripts/qa-forms.mjs')
 assert.equal(packageJson.scripts['qa:query'], 'node scripts/qa-query.mjs')

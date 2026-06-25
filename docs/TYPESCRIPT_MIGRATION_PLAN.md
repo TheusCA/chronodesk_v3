@@ -398,3 +398,30 @@ Rollback da Fase 17:
 - Reverter os resets/mensagens nas paginas alteradas.
 - Remover `frontend/scripts/qa-action-feedback.mjs` e script `qa:action-feedback`.
 - Reverter ajustes em `frontend/scripts/qa-visual.mjs` e docs.
+
+## Status da Fase 18
+
+Concluido nesta fase:
+
+- Criado `frontend/src/lib/actionRunner.ts`.
+- O runner recebe `action`, `refresh`, `notify`, `successMessage`, `onSuccess` e `onError`.
+- `AdminPage.jsx` e `OperationalPages.jsx` passaram a usar o runner por meio de wrappers locais.
+- Resets da Fase 17 foram preservados e alguns foram movidos para `onSuccess`.
+- Criado `qa:action-runner`.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+- Nenhuma dependencia nova foi instalada.
+
+Fora da trilha TypeScript, mas registrado aqui por contrato:
+
+- `actionRunner.ts` nao importa `api.ts`, nao chama endpoint e nao cria `fetch`.
+- `api.ts`, `useResource.ts`, `useLivePauses.js`, `queryClient.ts`, `queryKeys.ts` e `operational.ts` nao foram alterados.
+- Contratos de API, endpoints, payloads, querystrings, RBAC, CSRF e autenticacao foram preservados.
+- React Hook Form + Zod continuam restritos aos filtros de `/relatorios`.
+
+Rollback da Fase 18:
+
+- Remover `frontend/src/lib/actionRunner.ts`.
+- Restaurar os helpers locais `perform` e `submit` para o try/catch anterior.
+- Remover `frontend/scripts/qa-action-runner.mjs` e script `qa:action-runner`.
+- Reverter ajustes em `frontend/scripts/qa-visual.mjs` e docs.

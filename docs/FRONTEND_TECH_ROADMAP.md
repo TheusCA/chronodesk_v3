@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana. Fase 14 introduziu React Hook Form + Zod somente nos filtros de `/relatorios`. Fase 15 adicionou code splitting controlado com `React.lazy` e `Suspense`. Fase 16 adicionou Error Boundary para chunks lazy e credito discreto do desenvolvedor. Fase 17 padronizou feedback pos-acao e limpeza de formularios transacionais.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana. Fase 14 introduziu React Hook Form + Zod somente nos filtros de `/relatorios`. Fase 15 adicionou code splitting controlado com `React.lazy` e `Suspense`. Fase 16 adicionou Error Boundary para chunks lazy e credito discreto do desenvolvedor. Fase 17 padronizou feedback pos-acao e limpeza de formularios transacionais. Fase 18 criou um action runner leve para reduzir duplicidade em fluxos transacionais selecionados.
 
 ## Status da Fase 7
 
@@ -112,6 +112,18 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Nenhum backend, endpoint, payload, querystring, RBAC, CSRF ou regra de negocio foi alterado.
 - `qa:action-feedback` valida mensagens, resets, refresh, ausencia de alert novo, AppSec, dependencias e hardenings anteriores.
 
+## Status da Fase 18
+
+- Criado `src/lib/actionRunner.ts` para centralizar execucao de `action`, `refresh`, `onSuccess`, feedback de sucesso e tratamento de erro.
+- `AdminPage.jsx` passou a delegar o helper local `perform` ao action runner.
+- `OperationalPages.jsx` passou a delegar o helper local `submit` ao action runner.
+- Resets representativos foram movidos para `onSuccess`: funcionarios, usuarios, senha, calendario, escala, excecao, importacao, workflows e plantao.
+- Ordem preservada: executar acao, atualizar dados/listas, limpar estado transacional e exibir feedback.
+- Fora do escopo nesta fase: PA Map, chamados criticos, documentos, escala de sabado e pausas em tempo real.
+- Nenhuma dependencia nova foi instalada.
+- Nenhum endpoint, payload, querystring, RBAC, CSRF, autenticacao ou regra de negocio foi alterado.
+- `qa:action-runner` valida assinatura, escopo, AppSec, arquivos protegidos, resets e preservacao dos hardenings anteriores.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
@@ -157,7 +169,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 
 - Loading/error/empty repetidos por pagina.
 - Filtros e `queryString(filters)` repetidos.
-- Acoes `post -> refresh -> notify` ainda existem por pagina, mas a Fase 17 centralizou mensagens em `actionFeedback.ts`.
+- Acoes `post -> refresh -> reset -> notify` passaram a ter runner compartilhado em Admin e Operacional; telas de maior risco ainda mantem fluxo local por escopo.
 - Conversao manual de `employee_id`, `id`, datas e status.
 - Tabelas com cabecalhos, celulas e acoes declaradas diretamente em JSX.
 - Validacoes de formulario misturam UI, payload e regra de negocio.
@@ -184,7 +196,8 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 9. Fase 15: reduzir bundle inicial com code splitting nativo. Concluido.
 10. Fase 16: adicionar UX hardening pos-code splitting. Concluido.
 11. Fase 17: padronizar feedback pos-acao e limpeza de formularios transacionais. Concluido.
-12. Fase 18: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
+12. Fase 18: criar action runner leve para fluxos transacionais selecionados. Concluido.
+13. Fase 19: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
 
 ## Criterios para cada passo futuro
 

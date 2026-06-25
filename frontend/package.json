@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "qa:api": "node scripts/qa-api.mjs",
     "qa:action-feedback": "node scripts/qa-action-feedback.mjs",
+    "qa:action-runner": "node scripts/qa-action-runner.mjs",
     "qa:bundle": "node scripts/qa-bundle.mjs",
     "qa:forms": "node scripts/qa-forms.mjs",
     "qa:operational": "node scripts/qa-operational.mjs",

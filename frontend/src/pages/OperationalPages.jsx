@@ -7,6 +7,7 @@ import { Icon } from '../components/ui/Icon'
 import { useResource } from '../hooks/useResource'
 import { api, apiUrl, post, postForm } from '../lib/api'
 import { ACTION_FEEDBACK, decisionFeedback, importFeedback } from '../lib/actionFeedback'
+import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { reportFiltersSchema } from '../lib/formSchemas'
 import { queryKeys } from '../lib/queryKeys'
@@ -140,18 +141,14 @@ function useEmployees() {
   return useResource('listar_funcionarios.php')
 }
 
-async function submit(action, refresh, notify, successMessage = ACTION_FEEDBACK.changesSaved) {
-  try {
-    const result = await action()
-    await refresh()
-    if (successMessage !== null) {
-      notify(successMessage || result.mensagem || ACTION_FEEDBACK.changesSaved)
-    }
-    return result
-  } catch (error) {
-    notify(error.message, 'error')
-    return null
-  }
+async function submit(action, refresh, notify, successMessage = ACTION_FEEDBACK.changesSaved, onSuccess) {
+  return runAction({
+    action,
+    refresh,
+    notify,
+    successMessage,
+    onSuccess,
+  })
 }
 
 function PeriodFilters({ filters, setFilters, extra = null }) {
@@ -174,8 +171,13 @@ export function CalendarPage({ session, notify }) {
 
   async function create(event) {
     event.preventDefault()
-    const result = await submit(() => post('portal/calendar.php', form), resource.refresh, notify, ACTION_FEEDBACK.calendarCreated)
-    if (result) setForm({ ...form, title: '', description: '' })
+    await submit(
+      () => post('portal/calendar.php', form),
+      resource.refresh,
+      notify,
+      ACTION_FEEDBACK.calendarCreated,
+      () => setForm({ ...form, title: '', description: '' }),
+    )
   }
 
   return (
@@ -254,13 +256,13 @@ export function SchedulePage({ session, notify }) {
     if (ruleType === 'fixed_weekdays') {
       payload.weekdays = rule.weekdays
     }
-    const result = await submit(
+    await submit(
       () => post('portal/schedules.php', payload),
       resource.refresh,
       notify,
       ACTION_FEEDBACK.scheduleSaved,
+      () => setRule(emptyScheduleRule(rule.effective_from || today)),
     )
-    if (result) setRule(emptyScheduleRule(rule.effective_from || today))
   }
 
   function toggleRuleWeekday(weekday) {
@@ -287,26 +289,26 @@ export function SchedulePage({ session, notify }) {
 
   async function removeRule(item) {
     if (!window.confirm('Deseja remover a regra de escala deste colaborador?')) return
-    const result = await submit(
+    await submit(
       () => post('portal/schedules.php', { action: 'remove_rule', employee_id: Number(item.employee_id) }),
       resource.refresh,
       notify,
       ACTION_FEEDBACK.scheduleRuleRemoved,
+      () => {
+        if (Number(rule.employee_id) === Number(item.employee_id)) setRule(emptyScheduleRule())
+      },
     )
-    if (result && Number(rule.employee_id) === Number(item.employee_id)) {
-      setRule(emptyScheduleRule())
-    }
   }
 
   async function saveException(event) {
     event.preventDefault()
-    const result = await submit(
+    await submit(
       () => post('portal/schedules.php', { action: 'exception', ...exception, employee_id: Number(exception.employee_id) }),
       resource.refresh,
       notify,
       ACTION_FEEDBACK.scheduleExceptionSaved,
+      () => setException({ employee_id: '', exception_date: exception.exception_date || today, exception_type: 'remote', note: '' }),
     )
-    if (result) setException({ employee_id: '', exception_date: exception.exception_date || today, exception_type: 'remote', note: '' })
   }
 
   async function readSpreadsheet(file) {
@@ -342,18 +344,18 @@ export function SchedulePage({ session, notify }) {
   }
 
   async function confirmImport() {
-    const result = await submit(
+    await submit(
       () => post('portal/schedules.php', { action: 'import_confirm', rows: importRows }),
       resource.refresh,
       notify,
       null,
+      (result) => {
+        setImportRows([])
+        setPreview(null)
+        if (importInputRef.current) importInputRef.current.value = ''
+        notify(importFeedback(result))
+      },
     )
-    if (result) {
-      notify(importFeedback(result))
-      setImportRows([])
-      setPreview(null)
-      if (importInputRef.current) importInputRef.current.value = ''
-    }
   }
 
   return (
@@ -509,12 +511,15 @@ function WorkflowPage({ kind, session, notify }) {
 
   async function create(event) {
     event.preventDefault()
-    const result = await submit(() => post(endpoint, { action: 'create', ...form, employee_id: Number(form.employee_id) }), resource.refresh, notify, ACTION_FEEDBACK.requestCreated)
-    if (result) {
-      setForm(overtime
+    await submit(
+      () => post(endpoint, { action: 'create', ...form, employee_id: Number(form.employee_id) }),
+      resource.refresh,
+      notify,
+      ACTION_FEEDBACK.requestCreated,
+      () => setForm(overtime
         ? { ...form, reason: '', justification: '' }
-        : { ...form, justification: '', recorded_time: '' })
-    }
+        : { ...form, justification: '', recorded_time: '' }),
+    )
   }
 
   async function decide(id, decision) {
@@ -673,8 +678,13 @@ export function OncallPage({ session, notify }) {
 
   async function create(event) {
     event.preventDefault()
-    const result = await submit(() => post('portal/oncall.php', { ...form, employee_id: Number(form.employee_id) }), resource.refresh, notify, ACTION_FEEDBACK.oncallCreated)
-    if (result) setForm({ ...form, employee_id: '', note: '' })
+    await submit(
+      () => post('portal/oncall.php', { ...form, employee_id: Number(form.employee_id) }),
+      resource.refresh,
+      notify,
+      ACTION_FEEDBACK.oncallCreated,
+      () => setForm({ ...form, employee_id: '', note: '' }),
+    )
   }
 
   return (

@@ -120,5 +120,12 @@ O QA valida:
 ## Proximos passos
 
 - Validar manualmente os fluxos com usuario de teste por perfil.
-- Considerar um hook leve para `post -> refresh -> notify` em fase futura, se a duplicidade continuar crescendo.
+- Fase 18 criou `actionRunner.ts` para centralizar `action -> refresh -> reset -> notify` em fluxos selecionados.
 - Definir um padrao aprovado antes de migrar formularios transacionais para React Hook Form + Zod.
+
+## Evolucao na Fase 18
+
+- O padrao de feedback visual da Fase 17 foi preservado.
+- `AdminPage.jsx` e `OperationalPages.jsx` agora usam wrappers locais que delegam para `runAction`.
+- Resets foram movidos para `onSuccess` em fluxos representativos.
+- Telas com upload, PA Map, chamados criticos e pausas foram mantidas fora da refatoracao para reduzir risco.
