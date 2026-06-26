@@ -132,7 +132,7 @@ for (const [value, label] of [
   )
 }
 
-const saveRuleSource = operationalSource.match(/async function saveRule\(event\) \{[\s\S]*?\n  \}/)?.[0] || ''
+const saveRuleSource = operationalSource.match(/async function saveRule\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
 assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/, 'Validacao canonica de rule_type preservada')
 assert.match(saveRuleSource, /rule_type: ruleType/, 'Payload de escala envia rule_type canonico')
 assert.doesNotMatch(saveRuleSource, /\.\.\.rule/, 'Payload de escala nao deve enviar objeto rule cru')
@@ -158,6 +158,7 @@ assert.equal(packageJson.scripts['qa:bundle'], 'node scripts/qa-bundle.mjs')
 assert.equal(packageJson.scripts['qa:forms'], 'node scripts/qa-forms.mjs')
 assert.equal(packageJson.scripts['qa:query'], 'node scripts/qa-query.mjs')
 assert.equal(packageJson.scripts['qa:resource'], 'node scripts/qa-resource.mjs')
+assert.equal(packageJson.scripts['qa:schedule-form'], 'node scripts/qa-schedule-form.mjs')
 assert.equal(packageJson.scripts['qa:schedule-rules'], 'node scripts/qa-schedule-rules.mjs')
 assert.equal(packageJson.scripts['qa:table'], 'node scripts/qa-table.mjs')
 assert.equal(packageJson.scripts['qa:ux-hardening'], 'node scripts/qa-ux-hardening.mjs')

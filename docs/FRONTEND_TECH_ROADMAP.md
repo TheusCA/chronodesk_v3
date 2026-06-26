@@ -1,6 +1,6 @@
 # Portal SDK - Frontend Technical Roadmap
 
-Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana. Fase 14 introduziu React Hook Form + Zod somente nos filtros de `/relatorios`. Fase 15 adicionou code splitting controlado com `React.lazy` e `Suspense`. Fase 16 adicionou Error Boundary para chunks lazy e credito discreto do desenvolvedor. Fase 17 padronizou feedback pos-acao e limpeza de formularios transacionais. Fase 18 criou um action runner leve para reduzir duplicidade em fluxos transacionais selecionados. Fase 19 expandiu o runner para acoes simples de Chamados Criticos.
+Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fase 7 iniciou TypeScript de forma permissiva, migrando apenas utilitarios pequenos e mantendo o runtime funcional sem mudancas de regra. Fase 8 migrou somente o utilitario operacional para TypeScript. Fase 9 migrou o transporte API base para TypeScript. Fase 10 iniciou TanStack Query de forma limitada em relatorios. Fase 11 migrou o hook legado `useResource` para TypeScript sem alterar consumidores. Fase 12 iniciou TanStack Table apenas no resumo somente leitura de `/relatorios`. Fase 13 adicionou a regra `fixed_weekdays` para escala fixa por dias da semana. Fase 14 introduziu React Hook Form + Zod somente nos filtros de `/relatorios`. Fase 15 adicionou code splitting controlado com `React.lazy` e `Suspense`. Fase 16 adicionou Error Boundary para chunks lazy e credito discreto do desenvolvedor. Fase 17 padronizou feedback pos-acao e limpeza de formularios transacionais. Fase 18 criou um action runner leve para reduzir duplicidade em fluxos transacionais selecionados. Fase 19 expandiu o runner para acoes simples de Chamados Criticos. Fase 20 aplicou React Hook Form + Zod somente ao formulario de regra da escala presencial.
 
 ## Status da Fase 7
 
@@ -136,6 +136,17 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Nenhum endpoint, payload, querystring, RBAC, CSRF, autenticacao ou regra de negocio foi alterado.
 - `qa:action-runner` foi ampliado para validar Chamados Criticos e preservar a importacao fora do escopo.
 
+## Status da Fase 20
+
+- Criado `scheduleRuleSchema` em `src/lib/formSchemas.ts` para `employee_id`, `rule_type`, `effective_from` e `weekdays`.
+- O formulario de regra em `SchedulePage` passou a usar React Hook Form com validacao manual via `scheduleRuleSchema.safeParse`.
+- `fixed_weekdays` continua exigindo ao menos um dia da semana; ao trocar para uma regra comum, `weekdays` e limpo no formulario.
+- Payload preservado: `action: 'rule'`, `employee_id` convertido com `Number`, `rule_type`, `effective_from` e `weekdays` somente para `fixed_weekdays`.
+- Reset pos-sucesso preserva a data de vigencia util e limpa colaborador, regra e weekdays por `resetRule(emptyScheduleRule(...))`.
+- Excecoes de escala, importacao, PA Map, chamados criticos, documentos, escala de sabado, pausas, Admin, backend e banco ficaram fora do escopo.
+- Criado `qa:schedule-form` para validar schema, RHF/Zod, payload, dependencia proibida, AppSec e arquivos protegidos.
+- Nenhuma dependencia nova foi instalada.
+
 ## Diagnostico atual
 
 | Arquivo | Responsabilidade | Complexidade | Risco | TypeScript | TanStack Query | TanStack Table | RHF/Zod | Prioridade |
@@ -155,7 +166,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 | `src/pages/DashboardPage.jsx` | Dashboard e pausas ativas | Media | Medio | Depois dos hooks | Sim | Nao | Nao | P3 |
 | `src/pages/PausasPage.jsx` | Pausas, timers e acoes | Alta | Alto | Tardio | Parcial | Nao | Reuniao | P4 |
 | `src/pages/AdminPage.jsx` | Aprovacoes, funcionarios, config, usuarios | Alta | Alto | Tardio | Sim | Sim | Sim | P4 |
-| `src/pages/OperationalPages.jsx` | Calendario, escala, workflows, relatorios | Muito alta | Muito alto | Ultimas telas | Somente `/relatorios` na Fase 10 | Somente resumo de `/relatorios` na Fase 12 | Somente filtros de `/relatorios` na Fase 14 | P5 |
+| `src/pages/OperationalPages.jsx` | Calendario, escala, workflows, relatorios | Muito alta | Muito alto | Ultimas telas | Somente `/relatorios` na Fase 10 | Somente resumo de `/relatorios` na Fase 12 | Filtros de `/relatorios` na Fase 14 e regra de escala na Fase 20 | P5 |
 | `src/pages/CriticalIncidentsPage.jsx` | War room, import, detalhe e tabela grande | Muito alta | Muito alto | Tardio | Sim | Sim | Sim | P4 |
 | `src/pages/PaMapPage.jsx` | Mapa de PA e vinculos | Alta | Alto | Tardio | Sim | Nao | Sim | P4 |
 | `src/pages/DocumentsPage.jsx` | Biblioteca, upload e filtros | Media | Alto em upload | Sim depois | Sim | Parcial | Sim | P3 |
@@ -174,7 +185,7 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 - Falhas de chunk lazy sao cobertas por `RouteErrorBoundary` desde a Fase 16.
 - Pausas usam hook proprio `useLivePauses()` com polling e timer local.
 - Tabelas usam `data-table` e `table-wrap`, sem modelo unico de colunas.
-- Formularios ainda usam majoritariamente `useState` local; excecao controlada: filtros de `/relatorios` usam React Hook Form + Zod desde a Fase 14.
+- Formularios ainda usam majoritariamente `useState` local; excecoes controladas: filtros de `/relatorios` usam React Hook Form + Zod desde a Fase 14 e regra de escala presencial desde a Fase 20.
 - Payloads criticos sao montados inline nas paginas, especialmente escala presencial, mapa de PA, chamados criticos, horas extras e correcao de ponto.
 
 ## Principais duplicacoes
@@ -210,7 +221,8 @@ Fase 6 documentou uma evolucao gradual do frontend sem migrar telas criticas. Fa
 11. Fase 17: padronizar feedback pos-acao e limpeza de formularios transacionais. Concluido.
 12. Fase 18: criar action runner leve para fluxos transacionais selecionados. Concluido.
 13. Fase 19: expandir action runner para acoes simples de Chamados Criticos. Concluido.
-14. Fase 20: migrar telas densas uma por vez com feature branch e smoke manual por perfil.
+14. Fase 20: migrar somente o formulario de regra de escala presencial para RHF/Zod, preservando payload e runner. Concluido.
+15. Proxima fase: continuar formularios um por vez com schema pequeno, QA dedicado e smoke manual por perfil.
 
 ## Criterios para cada passo futuro
 

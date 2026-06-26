@@ -452,3 +452,32 @@ Rollback da Fase 19:
 - Restaurar os `try/catch` locais de `save` e `changeStatus`.
 - Reverter os ajustes de cobertura em `frontend/scripts/qa-action-runner.mjs`.
 - Reverter docs da Fase 19.
+
+## Status da Fase 20
+
+Concluido nesta fase:
+
+- `frontend/src/lib/formSchemas.ts` foi expandido com `scheduleRuleSchema`.
+- `SchedulePage` continuou em JSX e passou a usar React Hook Form apenas no formulario de regra de escala presencial/home office.
+- A validacao usa `scheduleRuleSchema.safeParse`, sem `@hookform/resolvers`.
+- `employee_id` e validado como string obrigatoria e convertido para `Number` apenas no payload final.
+- `rule_type` continua limitado aos valores canonicos, incluindo `fixed_weekdays`.
+- `effective_from` continua `YYYY-MM-DD`.
+- `weekdays` e exigido somente para `fixed_weekdays` e removido/ignorado nas demais regras.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+- Nenhuma dependencia nova foi instalada.
+
+Fora da trilha TypeScript, mas registrado aqui por contrato:
+
+- `api.ts`, `actionRunner.ts`, `useResource.ts`, `useLivePauses.js`, `queryClient.ts`, `queryKeys.ts` e `operational.ts` nao foram alterados.
+- Endpoints, payloads, querystrings, RBAC, CSRF, autenticacao, auditoria e regras de negocio foram preservados.
+- `qa:schedule-form` valida o escopo da fase.
+
+Rollback da Fase 20:
+
+- Remover `scheduleRuleSchema` de `frontend/src/lib/formSchemas.ts`.
+- Restaurar o formulario de regra em `OperationalPages.jsx` para `useState` local com `setRule`.
+- Remover `frontend/scripts/qa-schedule-form.mjs` e o script `qa:schedule-form`.
+- Reverter ajustes nos QAs que passaram a reconhecer `resetRule`.
+- Reverter `docs/SCHEDULE_FORM_RHF_ZOD.md` e as notas de Fase 20.

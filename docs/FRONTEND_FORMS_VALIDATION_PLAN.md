@@ -1,8 +1,8 @@
 # Portal SDK - React Hook Form and Zod Plan
 
-Objetivo futuro: reduzir bugs de formulario e payload sem substituir a validacao do backend.
+Objetivo: reduzir bugs de formulario e payload sem substituir a validacao do backend.
 
-Nenhuma dependencia foi instalada nesta fase.
+React Hook Form e Zod foram instalados na Fase 14 e usados inicialmente apenas nos filtros de `/relatorios`. A Fase 20 aplicou o mesmo padrao, ainda sem `@hookform/resolvers`, somente ao formulario de regra de escala presencial/home office.
 
 ## Dependencias futuras recomendadas
 
@@ -28,7 +28,7 @@ npm install react-hook-form zod
 | Pausa/Reuniao | motivo e observacao | motivo permitido, tamanho da observacao | regras N1/N2, limites, jornada | Alto | P4 |
 | Funcionarios | required, min/max, horarios | formato de horarios, equipe/perfil, id numerico | unicidade, permissao admin | Alto | P3 |
 | Configuracoes | numeros, checkboxes | ranges e booleanos | regra operacional persistida | Alto | P3 |
-| Escala presencial regra | required, date, rule_type | `rule_type` enum, employee_id numerico, data ISO | UPSERT, permissao, regra canonica | Muito alto | P2 com fixture |
+| Escala presencial regra | required, date, rule_type | `rule_type` enum, employee_id numerico, data ISO, `weekdays` exigido para `fixed_weekdays` | UPSERT, permissao, regra canonica | Muito alto | Concluido na Fase 20 |
 | Excecao de escala | date, type, note | employee_id numerico, enum de tipo, data ISO | conflito e permissao | Alto | P3 |
 | Importacao de escala | arquivo e preview | extensao visual e tamanho vindo do backend | MIME real, conteudo, limite final | Alto | P4 |
 | Mapa de PA | employee, PA, date, notes | employee_id numerico, valid_from ISO | remoto/presencial, permissao, conflitos | Alto | P4 |
@@ -48,10 +48,19 @@ npm install react-hook-form zod
 3. Escalas de Sabado/upload.
 4. Horas extras ou correcao de ponto.
 5. Funcionarios.
-6. Escala presencial.
-7. Mapa de PA.
-8. Chamados criticos.
-9. Pausas e login apenas com estrategia especifica.
+6. Mapa de PA.
+7. Chamados criticos.
+8. Pausas e login apenas com estrategia especifica.
+
+## Status da Fase 20
+
+- `scheduleRuleSchema` valida `employee_id`, `rule_type`, `effective_from` e `weekdays`.
+- `fixed_weekdays` exige ao menos um dia da semana.
+- Regras diferentes de `fixed_weekdays` limpam `weekdays` no formulario e nao enviam o campo no payload.
+- O payload final de `portal/schedules.php` foi preservado.
+- O formulario usa `handleSubmit`, `register`, `watch`, `setValue`, `reset`, `setError` e `formState.errors`.
+- O runner transacional e `ACTION_FEEDBACK.scheduleSaved` foram preservados.
+- Excecao de escala, importacao, PA Map, chamados criticos, documentos, escala de sabado, pausas, Admin e backend ficaram fora do escopo.
 
 ## Padrao futuro recomendado
 

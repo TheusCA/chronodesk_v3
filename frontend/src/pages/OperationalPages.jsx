@@ -9,7 +9,7 @@ import { api, apiUrl, post, postForm } from '../lib/api'
 import { ACTION_FEEDBACK, decisionFeedback, importFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
-import { reportFiltersSchema } from '../lib/formSchemas'
+import { reportFiltersSchema, scheduleRuleSchema } from '../lib/formSchemas'
 import { queryKeys } from '../lib/queryKeys'
 import {
   DetailPill,
@@ -227,7 +227,20 @@ export function SchedulePage({ session, notify }) {
   const employees = useEmployees()
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '' })
   const resource = useResource(`portal/schedules.php${queryString(filters)}`)
-  const [rule, setRule] = useState(() => emptyScheduleRule())
+  const {
+    clearErrors: clearRuleErrors,
+    formState: { errors: ruleErrors },
+    handleSubmit: handleRuleSubmit,
+    register: registerRule,
+    reset: resetRule,
+    setError: setRuleError,
+    setFocus: setRuleFocus,
+    setValue: setRuleValue,
+    watch: watchRule,
+  } = useForm({
+    defaultValues: emptyScheduleRule(),
+  })
+  const rule = watchRule()
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
   const [importRows, setImportRows] = useState([])
   const [preview, setPreview] = useState(null)
@@ -235,51 +248,72 @@ export function SchedulePage({ session, notify }) {
   const [dragging, setDragging] = useState(false)
   const importInputRef = useRef(null)
 
-  async function saveRule(event) {
-    event.preventDefault()
-    const employeeId = Number(rule.employee_id)
-    const ruleType = String(rule.rule_type || '')
-    if (!SCHEDULE_RULE_VALUES.has(ruleType)) {
-      notify('Selecione uma regra de escala válida.', 'error')
+  function applyScheduleRuleErrors(error) {
+    clearRuleErrors()
+    const focusableFields = ['employee_id', 'rule_type', 'effective_from']
+    let firstField = null
+    for (const issue of error.issues) {
+      const field = issue.path?.[0] || 'employee_id'
+      if (!firstField) firstField = field
+      setRuleError(field, { type: 'zod', message: issue.message || 'Campo invalido.' })
+    }
+    if (focusableFields.includes(firstField)) setRuleFocus(firstField)
+  }
+
+  async function saveRule(values) {
+    const parsed = scheduleRuleSchema.safeParse({
+      ...values,
+      weekdays: Array.isArray(values.weekdays) ? values.weekdays : [],
+    })
+    if (!parsed.success) {
+      applyScheduleRuleErrors(parsed.error)
       return
     }
-    if (ruleType === 'fixed_weekdays' && rule.weekdays.length === 0) {
-      notify('Selecione ao menos um dia presencial.', 'error')
+    clearRuleErrors()
+    const employeeId = Number(parsed.data.employee_id)
+    const ruleType = String(parsed.data.rule_type || '')
+    if (!SCHEDULE_RULE_VALUES.has(ruleType)) {
+      setRuleError('rule_type', { type: 'validate', message: 'Tipo de escala invalido.' })
+      setRuleFocus('rule_type')
+      return
+    }
+    if (ruleType === 'fixed_weekdays' && parsed.data.weekdays.length === 0) {
+      setRuleError('weekdays', { type: 'validate', message: 'Selecione ao menos um dia da semana.' })
       return
     }
     const payload = {
       action: 'rule',
       employee_id: employeeId,
       rule_type: ruleType,
-      effective_from: rule.effective_from,
+      effective_from: parsed.data.effective_from,
     }
     if (ruleType === 'fixed_weekdays') {
-      payload.weekdays = rule.weekdays
+      payload.weekdays = parsed.data.weekdays
     }
     await submit(
       () => post('portal/schedules.php', payload),
       resource.refresh,
       notify,
       ACTION_FEEDBACK.scheduleSaved,
-      () => setRule(emptyScheduleRule(rule.effective_from || today)),
+      () => resetRule(emptyScheduleRule(parsed.data.effective_from || today)),
     )
   }
 
   function toggleRuleWeekday(weekday) {
-    setRule((current) => {
-      const enabled = current.weekdays.includes(weekday)
-      const selected = enabled
-        ? current.weekdays.filter((value) => value !== weekday)
-        : [...current.weekdays, weekday]
-      const ordered = WEEKDAY_OPTIONS
-        .map((option) => option.value)
-        .filter((value) => selected.includes(value))
-      return { ...current, weekdays: ordered }
-    })
+    const currentWeekdays = Array.isArray(watchRule('weekdays')) ? watchRule('weekdays') : []
+    const enabled = currentWeekdays.includes(weekday)
+    const selected = enabled
+      ? currentWeekdays.filter((value) => value !== weekday)
+      : [...currentWeekdays, weekday]
+    const ordered = WEEKDAY_OPTIONS
+      .map((option) => option.value)
+      .filter((value) => selected.includes(value))
+    setRuleValue('weekdays', ordered, { shouldDirty: true })
+    if (ordered.length > 0) clearRuleErrors('weekdays')
   }
 
   function editRule(item) {
-    setRule({
+    resetRule({
       employee_id: String(item.employee_id),
       rule_type: item.rule_type || 'undefined',
       effective_from: item.effective_from || today,
@@ -295,7 +329,7 @@ export function SchedulePage({ session, notify }) {
       notify,
       ACTION_FEEDBACK.scheduleRuleRemoved,
       () => {
-        if (Number(rule.employee_id) === Number(item.employee_id)) setRule(emptyScheduleRule())
+        if (Number(rule.employee_id) === Number(item.employee_id)) resetRule(emptyScheduleRule())
       },
     )
   }
@@ -363,40 +397,67 @@ export function SchedulePage({ session, notify }) {
       <PeriodFilters filters={filters} setFilters={setFilters} extra={<label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>} />
       {canManage && (
         <div className="grid gap-5 xl:grid-cols-2">
-          <form className="card space-y-4" onSubmit={saveRule}>
+          <form className="card space-y-4" onSubmit={handleRuleSubmit(saveRule)}>
             <SectionHeader
               description="Valores canônicos preservados: par/ímpar, sempre presencial, sempre remoto ou sem escala."
               eyebrow="Escala fixa"
               title="Regra por colaborador"
             />
-            <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={rule.employee_id} onChange={(event) => setRule({ ...rule, employee_id: event.target.value })} /></label>
-            <label className="label">Regra<select className="field mt-2" value={rule.rule_type} onChange={(event) => {
-              const ruleType = event.target.value
-              setRule({ ...rule, rule_type: ruleType, weekdays: ruleType === 'fixed_weekdays' ? rule.weekdays : [] })
-            }}>{SCHEDULE_RULE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="label">Colaborador
+              <select aria-invalid={Boolean(ruleErrors.employee_id)} className="field mt-2" {...registerRule('employee_id')}>
+                <option value="">Selecione</option>
+                {(employees.data?.funcionarios || []).map((employee) => (
+                  <option key={employee.id} value={employee.id}>{employee.nome} - {employee.equipe.toUpperCase()}</option>
+                ))}
+              </select>
+              {ruleErrors.employee_id && <span className="mt-1 block text-xs text-red-300">{ruleErrors.employee_id.message}</span>}
+            </label>
+            <label className="label">Regra
+              <select
+                aria-invalid={Boolean(ruleErrors.rule_type)}
+                className="field mt-2"
+                {...registerRule('rule_type', {
+                  onChange: (event) => {
+                    if (event.target.value !== 'fixed_weekdays') {
+                      setRuleValue('weekdays', [], { shouldDirty: true })
+                      clearRuleErrors('weekdays')
+                    }
+                  },
+                })}
+              >
+                {SCHEDULE_RULE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              {ruleErrors.rule_type && <span className="mt-1 block text-xs text-red-300">{ruleErrors.rule_type.message}</span>}
+            </label>
             {rule.rule_type === 'fixed_weekdays' && (
               <div className="space-y-3 rounded-lg border border-white/10 bg-slate-950/35 p-3">
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Dias presenciais</p>
                 <div className="flex flex-wrap gap-2">
                   {WEEKDAY_OPTIONS.map((option) => {
-                    const selected = rule.weekdays.includes(option.value)
+                    const selected = (rule.weekdays || []).includes(option.value)
                     return (
                       <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${selected ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200' : 'border-white/10 bg-slate-900/60 text-slate-400 hover:border-white/20'}`} key={option.value}>
                         <input
                           checked={selected}
                           className="sr-only"
+                          name="weekdays"
                           onChange={() => toggleRuleWeekday(option.value)}
                           type="checkbox"
+                          value={option.value}
                         />
                         {option.label}
                       </label>
                     )
                   })}
                 </div>
-                <p className="text-xs text-slate-500">Presencial: {weekdaySummary(rule.weekdays)}.</p>
+                {ruleErrors.weekdays && <span className="block text-xs text-red-300">{ruleErrors.weekdays.message}</span>}
+                <p className="text-xs text-slate-500">Presencial: {weekdaySummary(rule.weekdays || [])}.</p>
               </div>
             )}
-            <label className="label">Vigência<input className="field mt-2" required type="date" value={rule.effective_from} onChange={(event) => setRule({ ...rule, effective_from: event.target.value })} /></label>
+            <label className="label">Vigência
+              <input aria-invalid={Boolean(ruleErrors.effective_from)} className="field mt-2" required type="date" {...registerRule('effective_from')} />
+              {ruleErrors.effective_from && <span className="mt-1 block text-xs text-red-300">{ruleErrors.effective_from.message}</span>}
+            </label>
             <InlineAlert tone="info" title="Contrato preservado">
               O frontend envia `rule_type` com o valor canônico selecionado. Não há fallback silencioso para “Sem escala definida”.
             </InlineAlert>

@@ -116,11 +116,11 @@ for (const [value, label] of [
   )
 }
 
-const saveRuleSource = operationalPagesSource.match(/async function saveRule\(event\) \{[\s\S]*?\n  \}/)?.[0] || ''
+const saveRuleSource = operationalPagesSource.match(/async function saveRule\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
 assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/)
-assert.match(saveRuleSource, /notify\('Selecione uma regra de escala v.lida\.', 'error'\)/)
-assert.match(saveRuleSource, /ruleType === 'fixed_weekdays' && rule\.weekdays\.length === 0/)
-assert.match(saveRuleSource, /payload\.weekdays = rule\.weekdays/)
+assert.match(saveRuleSource, /scheduleRuleSchema\.safeParse\(/)
+assert.match(saveRuleSource, /ruleType === 'fixed_weekdays' && parsed\.data\.weekdays\.length === 0/)
+assert.match(saveRuleSource, /payload\.weekdays = parsed\.data\.weekdays/)
 assert.match(saveRuleSource, /post\('portal\/schedules\.php', payload\)/)
 assert.doesNotMatch(saveRuleSource, /\.\.\.rule/)
 assert.doesNotMatch(saveRuleSource, /\brule:\s*/)

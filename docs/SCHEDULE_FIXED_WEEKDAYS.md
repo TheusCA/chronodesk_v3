@@ -2,7 +2,7 @@
 
 ## Status
 
-Fase 13 adicionou suporte ao `rule_type` `fixed_weekdays` para escala presencial fixa por dias da semana, preservando as regras existentes.
+Fase 13 adicionou suporte ao `rule_type` `fixed_weekdays` para escala presencial fixa por dias da semana, preservando as regras existentes. Fase 20 manteve o mesmo contrato e migrou somente o formulario de regra para React Hook Form + Zod.
 
 ## Regras Preservadas
 
@@ -96,6 +96,13 @@ Na tela de escala presencial:
 Para editar, usar o botao `Editar` na regra ativa; os dias salvos sao carregados no formulario.
 
 Para limpar, alterar para outra regra ou remover a regra. O backend grava `rule_config = NULL` para regras antigas e na remocao.
+
+Desde a Fase 20:
+
+- `scheduleRuleSchema` exige `weekdays` quando `rule_type = fixed_weekdays`;
+- ao selecionar uma regra diferente, o formulario limpa `weekdays`;
+- o payload continua enviando `weekdays` somente para `fixed_weekdays`;
+- apos salvar, o formulario limpa colaborador, regra e weekdays, preservando a data de vigencia util.
 
 ## Rollback
 

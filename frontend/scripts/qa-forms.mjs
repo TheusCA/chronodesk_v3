@@ -63,7 +63,7 @@ const rhfFiles = sourceFiles.filter((path) => readFileSync(path, 'utf8').include
 assert.deepEqual(
   rhfFiles.map((path) => relative(frontendRoot, path).replaceAll('\\', '/')),
   ['src/pages/OperationalPages.jsx'],
-  'react-hook-form deve ser usado apenas no fluxo de relatorios',
+  'react-hook-form deve continuar restrito a OperationalPages',
 )
 
 const zodFiles = sourceFiles.filter((path) => readFileSync(path, 'utf8').includes("from 'zod'") || readFileSync(path, 'utf8').includes('from "zod"'))
@@ -74,6 +74,7 @@ assert.deepEqual(
 )
 
 assert.match(schemaSource, /export const reportFiltersSchema = z\.object\(\{/, 'Schema de filtros de relatorios deve existir')
+assert.match(schemaSource, /export const scheduleRuleSchema = z\.object\(\{/, 'Schema de regra de escala deve existir')
 assert.match(schemaSource, /competency:\s*z\.string\(\)\.min\(1/, 'Schema deve validar competencia obrigatoria')
 assert.match(schemaSource, /team:\s*z\.enum\(\['', 'n1', 'n2'\]\)\.default\(''\)/, 'Schema deve validar equipe permitida')
 assert.match(schemaSource, /employee_id:\s*z\.string\(\)\.default\(''\)/, 'Schema deve manter employee_id opcional')

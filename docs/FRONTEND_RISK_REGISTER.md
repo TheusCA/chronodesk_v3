@@ -25,6 +25,7 @@
 | Migration de ENUM falhar em ambiente divergente | Banco/MySQL | Baixa | Alto | Migration 010 usa `information_schema` e nao remove dados existentes; aplicar em janela controlada antes do deploy PHP | DevSecOps |
 | RHF/Zod expandir para formulario sensivel sem padrao | Forms | Media | Alto | Fase 14 limita uso a filtros GET de `/relatorios`; `qa:forms` bloqueia mutations, POST novo e dependencias alternativas | Frontend/AppSec |
 | Filtro de relatorios aplicar valor invalido | Forms/Zod | Baixa | Medio | `reportFiltersSchema` valida competencia, equipe e employee_id antes de atualizar `filters`; backend continua autoridade | Frontend/QA |
+| Regra de escala com `fixed_weekdays` perder dias ao trocar tipo | Forms/Escala | Baixa | Alto | Fase 20 limpa `weekdays` apenas quando `rule_type` sai de `fixed_weekdays`, schema exige dias na regra fixa e QA valida payload condicional | Frontend/QA |
 | Falha ao carregar chunk lazy em rede instavel | Bundle | Baixa | Medio | `Suspense` usa fallback consistente; validar manualmente navegacao e considerar Error Boundary dedicado em fase futura | Frontend/QA |
 | Code splitting esconder regressao de rota | Routing | Baixa | Alto | `qa:bundle` valida lazy loading e QAs existentes validam rotas, RBAC visual, query, forms e tabelas | Frontend/QA |
 | Error Boundary esconder erro recuperavel de tela | UX hardening | Baixa | Medio | Boundary fica no nivel de rota, mostra feedback claro e permite retry por reload; paginas seguem tratando erro de API internamente | Frontend/QA |
@@ -55,3 +56,4 @@
 - Fase 17 padronizou feedback pos-acao; validar manualmente fluxos de criar/editar/remover/importar com dados de teste antes de deploy amplo.
 - Fase 18 adicionou action runner em Admin e Operacional; validar manualmente criar/editar funcionario, salvar escala, salvar fixed_weekdays e salvar excecao.
 - Fase 19 adicionou action runner em criar/editar/status de Chamados Criticos; validar manualmente esses fluxos e apenas conferir que importacao segue igual.
+- Fase 20 adicionou RHF/Zod ao formulario de regra de escala; validar manualmente erro de colaborador, erro de data, `fixed_weekdays` sem dias, salvar segunda/quarta/sexta, reset pos-sucesso e remocao.

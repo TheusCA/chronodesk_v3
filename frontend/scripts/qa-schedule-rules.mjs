@@ -56,10 +56,11 @@ for (const weekday of ['mon', 'tue', 'wed', 'thu', 'fri']) {
 }
 assert.doesNotMatch(operationalPage, /value: 'sat'|value: 'sun'/, 'UI inicial nao deve expor fim de semana')
 
-const saveRuleSource = operationalPage.match(/async function saveRule\(event\) \{[\s\S]*?\n  \}/)?.[0] || ''
+const saveRuleSource = operationalPage.match(/async function saveRule\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
 assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/, 'Frontend deve validar rule_type canonico')
-assert.match(saveRuleSource, /ruleType === 'fixed_weekdays' && rule\.weekdays\.length === 0/, 'Frontend deve rejeitar fixed_weekdays sem dias')
-assert.match(saveRuleSource, /payload\.weekdays = rule\.weekdays/, 'Frontend deve enviar weekdays apenas para fixed_weekdays')
+assert.match(saveRuleSource, /scheduleRuleSchema\.safeParse\(/, 'Frontend deve validar regra de escala com Zod')
+assert.match(saveRuleSource, /ruleType === 'fixed_weekdays' && parsed\.data\.weekdays\.length === 0/, 'Frontend deve rejeitar fixed_weekdays sem dias')
+assert.match(saveRuleSource, /payload\.weekdays = parsed\.data\.weekdays/, 'Frontend deve enviar weekdays apenas para fixed_weekdays')
 assert.match(saveRuleSource, /post\('portal\/schedules\.php', payload\)/, 'Frontend deve manter endpoint de escala')
 assert.doesNotMatch(saveRuleSource, /fetch\(/, 'Frontend nao deve criar fetch direto')
 assert.doesNotMatch(saveRuleSource, /postForm\(/, 'Regra fixa nao deve usar upload/formdata')
