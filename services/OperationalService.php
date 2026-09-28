@@ -1675,7 +1675,7 @@ final class OperationalService {
     private function csvRow($handle, array $row): void {
         fputcsv($handle, array_map(static function ($value) {
             $text = (string)$value;
-            return preg_match('/^[\s\x00-\x1F]*[=+\-@]/u', $text) ? "'" . $text : $text;
+            return preg_match('/^[\t\r]|^[\s\x00-\x1F]*[=+\-@]/u', $text) ? "'" . $text : $text;
         }, $row), ';');
     }
 }
