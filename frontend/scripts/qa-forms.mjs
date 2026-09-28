@@ -55,6 +55,7 @@ assert.equal(packageJson.scripts['qa:forms'], 'node scripts/qa-forms.mjs', 'Scri
 
 const sourceFiles = walk(srcRoot).filter((path) => /\.(jsx?|tsx?|ts)$/.test(path))
 const runtimeSource = sourceFiles.map((path) => readFileSync(path, 'utf8')).join('\n')
+const adminSource = read('src/pages/AdminPage.jsx')
 const operationalSource = read('src/pages/OperationalPages.jsx')
 const schemaSource = read('src/lib/formSchemas.ts')
 const reportsPageSource = operationalSource.match(/export function OperationalReportsPage\(\) \{[\s\S]*?\n\}\r?\n\r?\nfunction ReportsSummaryTable/)?.[0] || ''
@@ -62,8 +63,8 @@ const reportsPageSource = operationalSource.match(/export function OperationalRe
 const rhfFiles = sourceFiles.filter((path) => readFileSync(path, 'utf8').includes('react-hook-form'))
 assert.deepEqual(
   rhfFiles.map((path) => relative(frontendRoot, path).replaceAll('\\', '/')),
-  ['src/pages/OperationalPages.jsx'],
-  'react-hook-form deve continuar restrito a OperationalPages',
+  ['src/pages/AdminPage.jsx', 'src/pages/OperationalPages.jsx'],
+  'react-hook-form deve continuar restrito aos formularios aprovados',
 )
 
 const zodFiles = sourceFiles.filter((path) => readFileSync(path, 'utf8').includes("from 'zod'") || readFileSync(path, 'utf8').includes('from "zod"'))
@@ -74,12 +75,14 @@ assert.deepEqual(
 )
 
 assert.match(schemaSource, /export const reportFiltersSchema = z\.object\(\{/, 'Schema de filtros de relatorios deve existir')
+assert.match(schemaSource, /export const employeeFormSchema = z\.object\(\{/, 'Schema de funcionario deve existir')
 assert.match(schemaSource, /export const scheduleRuleSchema = z\.object\(\{/, 'Schema de regra de escala deve existir')
 assert.match(schemaSource, /competency:\s*z\.string\(\)\.min\(1/, 'Schema deve validar competencia obrigatoria')
 assert.match(schemaSource, /team:\s*z\.enum\(\['', 'n1', 'n2'\]\)\.default\(''\)/, 'Schema deve validar equipe permitida')
 assert.match(schemaSource, /employee_id:\s*z\.string\(\)\.default\(''\)/, 'Schema deve manter employee_id opcional')
 
 assert.match(reportsPageSource, /useForm\(\{[\s\S]*defaultValues:\s*filters/, 'Relatorios deve controlar filtros com React Hook Form')
+assert.match(adminSource, /employeeFormSchema\.safeParse\(values\)/, 'Funcionarios deve validar submit com Zod manual')
 assert.match(reportsPageSource, /reportFiltersSchema\.safeParse\(values\)/, 'Relatorios deve validar submit com Zod manual')
 assert.match(reportsPageSource, /setFilters\(parsed\.data\)/, 'Submit valido deve atualizar filters')
 assert.match(reportsPageSource, /name="download"|Exportar CSV|apiUrl\(`portal\/reports\.php\$\{queryString\(\{ \.\.\.filters, format: 'csv' \}\)\}`\)/, 'Export CSV deve continuar presente')

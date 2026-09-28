@@ -26,6 +26,7 @@
 | RHF/Zod expandir para formulario sensivel sem padrao | Forms | Media | Alto | Fase 14 limita uso a filtros GET de `/relatorios`; `qa:forms` bloqueia mutations, POST novo e dependencias alternativas | Frontend/AppSec |
 | Filtro de relatorios aplicar valor invalido | Forms/Zod | Baixa | Medio | `reportFiltersSchema` valida competencia, equipe e employee_id antes de atualizar `filters`; backend continua autoridade | Frontend/QA |
 | Regra de escala com `fixed_weekdays` perder dias ao trocar tipo | Forms/Escala | Baixa | Alto | Fase 20 limpa `weekdays` apenas quando `rule_type` sai de `fixed_weekdays`, schema exige dias na regra fixa e QA valida payload condicional | Frontend/QA |
+| Cadastro de funcionario perder campos legados no payload | Forms/Admin | Baixa | Alto | Fase 21 inclui `ad_login` e `access_role` no schema, valida payload estatico e preserva `id`/`funcionario_id` numericos | Frontend/QA |
 | Falha ao carregar chunk lazy em rede instavel | Bundle | Baixa | Medio | `Suspense` usa fallback consistente; validar manualmente navegacao e considerar Error Boundary dedicado em fase futura | Frontend/QA |
 | Code splitting esconder regressao de rota | Routing | Baixa | Alto | `qa:bundle` valida lazy loading e QAs existentes validam rotas, RBAC visual, query, forms e tabelas | Frontend/QA |
 | Error Boundary esconder erro recuperavel de tela | UX hardening | Baixa | Medio | Boundary fica no nivel de rota, mostra feedback claro e permite retry por reload; paginas seguem tratando erro de API internamente | Frontend/QA |
@@ -57,3 +58,4 @@
 - Fase 18 adicionou action runner em Admin e Operacional; validar manualmente criar/editar funcionario, salvar escala, salvar fixed_weekdays e salvar excecao.
 - Fase 19 adicionou action runner em criar/editar/status de Chamados Criticos; validar manualmente esses fluxos e apenas conferir que importacao segue igual.
 - Fase 20 adicionou RHF/Zod ao formulario de regra de escala; validar manualmente erro de colaborador, erro de data, `fixed_weekdays` sem dias, salvar segunda/quarta/sexta, reset pos-sucesso e remocao.
+- Fase 21 adicionou RHF/Zod aos formularios de funcionarios; validar manualmente erros de ID/nome/horarios, criar, editar e desativar funcionario de teste.

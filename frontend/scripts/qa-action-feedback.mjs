@@ -90,7 +90,7 @@ for (const [source, messageKey] of [
 }
 
 for (const [source, pattern, label] of [
-  [adminSource, /setCreateForm\(emptyEmployee\)/, 'Cadastro de funcionario deve limpar formulario'],
+  [adminSource, /resetCreateEmployee\(emptyEmployee\)/, 'Cadastro de funcionario deve limpar formulario'],
   [adminSource, /setEditForm\(null\)/, 'Edicao de funcionario deve sair do modo edicao'],
   [adminSource, /setForm\(\{ username: '', password: '', role: 'gestor' \}\)/, 'Cadastro de usuario deve limpar formulario'],
   [operationalSource, /function emptyScheduleRule\(effectiveFrom = today\)[\s\S]*weekdays: \[\]/, 'Helper de reset de escala deve limpar weekdays'],

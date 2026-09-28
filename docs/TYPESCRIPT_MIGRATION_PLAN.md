@@ -481,3 +481,32 @@ Rollback da Fase 20:
 - Remover `frontend/scripts/qa-schedule-form.mjs` e o script `qa:schedule-form`.
 - Reverter ajustes nos QAs que passaram a reconhecer `resetRule`.
 - Reverter `docs/SCHEDULE_FORM_RHF_ZOD.md` e as notas de Fase 20.
+
+## Status da Fase 21
+
+Concluido nesta fase:
+
+- `frontend/src/lib/formSchemas.ts` foi expandido com `employeeFormSchema`.
+- `AdminPage.jsx` continuou em JSX e passou a usar React Hook Form apenas nos formularios de adicionar e editar funcionario.
+- A validacao usa `employeeFormSchema.safeParse`, sem `@hookform/resolvers`.
+- `id` e validado como numero de 1 a 999 e convertido com `Number(...)` no payload final.
+- `funcionario_id` continua sendo enviado como `Number(...)` na edicao.
+- `nome`, `equipe`, horarios de jornada/almoco e `ativo` sao validados no schema.
+- `ad_login` e `access_role` continuam no payload real para preservar o contrato existente.
+- Nenhuma pagina foi migrada para TypeScript.
+- Nenhum `.tsx` de runtime foi criado.
+- Nenhuma dependencia nova foi instalada.
+
+Fora da trilha TypeScript, mas registrado aqui por contrato:
+
+- `api.ts`, `actionRunner.ts`, `useResource.ts`, `useLivePauses.js`, `queryClient.ts`, `queryKeys.ts` e `operational.ts` nao foram alterados.
+- Endpoints, payloads, querystrings, RBAC, CSRF, autenticacao, auditoria e regras de negocio foram preservados.
+- Usuarios locais, senha, configuracoes e aprovacoes permaneceram fora do escopo.
+
+Rollback da Fase 21:
+
+- Remover `employeeFormSchema` de `frontend/src/lib/formSchemas.ts`.
+- Restaurar os formularios de funcionario em `AdminPage.jsx` para `useState` local com `setCreateForm` e `setEditForm`.
+- Remover `frontend/scripts/qa-employee-form.mjs` e o script `qa:employee-form`.
+- Reverter ajustes nos QAs que passaram a reconhecer `resetCreateEmployee`.
+- Reverter `docs/EMPLOYEE_FORM_RHF_ZOD.md` e as notas de Fase 21.

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useForm } from 'react-hook-form'
 import { useResource } from '../hooks/useResource'
 import { post } from '../lib/api'
 import { ACTION_FEEDBACK, decisionFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
 import { formatDateTime } from '../lib/format'
+import { employeeFormSchema } from '../lib/formSchemas'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import {
@@ -278,36 +280,42 @@ function normalizeTeamValue(value) {
   return String(value || 'n1').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
-function EmployeeFields({ form, setForm, editing = false }) {
+function EmployeeFields({ form, register, setValue, errors = {}, editing = false }) {
   function updateRole(role) {
     if (form.equipe === 'lideranca') return
-    setForm({ ...form, access_role: role })
+    setValue('access_role', role, { shouldDirty: true })
   }
 
   function updateTeam(team) {
     if (team === 'lideranca') {
-      setForm({ ...form, equipe: 'lideranca', access_role: 'admin' })
+      const leadershipDefaults = { equipe: 'lideranca', access_role: 'admin' }
+      setValue('equipe', leadershipDefaults.equipe, { shouldDirty: true })
+      setValue('access_role', leadershipDefaults.access_role, { shouldDirty: true })
       return
     }
     if (form.equipe === 'lideranca' && form.access_role === 'admin') {
       const confirmed = window.confirm('Ao sair de Liderança, revise manualmente o perfil de acesso se este colaborador não deve permanecer como Admin.')
       if (!confirmed) return
     }
-    setForm({ ...form, equipe: team })
+    setValue('equipe', team, { shouldDirty: true })
   }
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <label className="label">ID
-        <input className="field mt-2" disabled={editing} max="999" min="1" required type="number" value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} />
+        <input aria-disabled={editing} aria-invalid={Boolean(errors.id)} className="field mt-2" max="999" min="1" readOnly={editing} required type="number" {...register('id')} />
+        {errors.id && <span className="mt-1 block text-xs text-red-300">{errors.id.message}</span>}
       </label>
       <label className="label xl:col-span-2">Nome
-        <input className="field mt-2" maxLength="100" minLength="3" required value={form.nome} onChange={(event) => setForm({ ...form, nome: event.target.value })} />
+        <input aria-invalid={Boolean(errors.nome)} className="field mt-2" maxLength="100" minLength="3" required {...register('nome')} />
+        {errors.nome && <span className="mt-1 block text-xs text-red-300">{errors.nome.message}</span>}
       </label>
       <label className="label">Login AD
-        <input className="field mt-2" maxLength="100" placeholder="nome.sobrenome" value={form.ad_login || ''} onChange={(event) => setForm({ ...form, ad_login: event.target.value })} />
+        <input aria-invalid={Boolean(errors.ad_login)} className="field mt-2" maxLength="100" placeholder="nome.sobrenome" {...register('ad_login')} />
+        {errors.ad_login && <span className="mt-1 block text-xs text-red-300">{errors.ad_login.message}</span>}
       </label>
       <label className="label">Equipe operacional
+        <input type="hidden" {...register('equipe')} />
         <select className="field mt-2" value={normalizeTeam(form.equipe)} onChange={(event) => updateTeam(event.target.value)}>
           <option value="n1">N1</option>
           <option value="n2">N2</option>
@@ -315,6 +323,7 @@ function EmployeeFields({ form, setForm, editing = false }) {
         </select>
       </label>
       <label className="label">Perfil de acesso
+        <input type="hidden" {...register('access_role')} />
         <select className="field mt-2" disabled={form.equipe === 'lideranca'} value={form.access_role || 'tecnico'} onChange={(event) => updateRole(event.target.value)}>
           <option value="tecnico">Técnico</option>
           <option value="gestor">Gestor</option>
@@ -323,19 +332,23 @@ function EmployeeFields({ form, setForm, editing = false }) {
         </select>
       </label>
       <label className="label">Entrada
-        <input className="field mt-2" required type="time" value={form.jornada_entrada} onChange={(event) => setForm({ ...form, jornada_entrada: event.target.value })} />
+        <input aria-invalid={Boolean(errors.jornada_entrada)} className="field mt-2" required type="time" {...register('jornada_entrada')} />
+        {errors.jornada_entrada && <span className="mt-1 block text-xs text-red-300">{errors.jornada_entrada.message}</span>}
       </label>
       <label className="label">Saída
-        <input className="field mt-2" required type="time" value={form.jornada_saida} onChange={(event) => setForm({ ...form, jornada_saida: event.target.value })} />
+        <input aria-invalid={Boolean(errors.jornada_saida)} className="field mt-2" required type="time" {...register('jornada_saida')} />
+        {errors.jornada_saida && <span className="mt-1 block text-xs text-red-300">{errors.jornada_saida.message}</span>}
       </label>
       <label className="label">Início almoço
-        <input className="field mt-2" required type="time" value={form.almoco_inicio} onChange={(event) => setForm({ ...form, almoco_inicio: event.target.value })} />
+        <input aria-invalid={Boolean(errors.almoco_inicio)} className="field mt-2" required type="time" {...register('almoco_inicio')} />
+        {errors.almoco_inicio && <span className="mt-1 block text-xs text-red-300">{errors.almoco_inicio.message}</span>}
       </label>
       <label className="label">Fim almoço
-        <input className="field mt-2" required type="time" value={form.almoco_fim} onChange={(event) => setForm({ ...form, almoco_fim: event.target.value })} />
+        <input aria-invalid={Boolean(errors.almoco_fim)} className="field mt-2" required type="time" {...register('almoco_fim')} />
+        {errors.almoco_fim && <span className="mt-1 block text-xs text-red-300">{errors.almoco_fim.message}</span>}
       </label>
       <label className="check-row md:col-span-2">
-        <input checked={Boolean(form.ativo)} onChange={(event) => setForm({ ...form, ativo: event.target.checked })} type="checkbox" />
+        <input type="checkbox" {...register('ativo')} />
         <span><strong>Funcionário ativo</strong><small>Permite autenticação e aplica o perfil configurado.</small></span>
       </label>
     </div>
@@ -343,7 +356,34 @@ function EmployeeFields({ form, setForm, editing = false }) {
 }
 
 function EmployeesTab({ resource, notify }) {
-  const [createForm, setCreateForm] = useState(emptyEmployee)
+  const {
+    clearErrors: clearCreateEmployeeErrors,
+    formState: { errors: createEmployeeErrors },
+    handleSubmit: handleCreateEmployeeSubmit,
+    register: registerCreateEmployee,
+    reset: resetCreateEmployee,
+    setError: setCreateEmployeeError,
+    setFocus: setCreateEmployeeFocus,
+    setValue: setCreateEmployeeValue,
+    watch: watchCreateEmployee,
+  } = useForm({
+    defaultValues: emptyEmployee,
+  })
+  const {
+    clearErrors: clearEditEmployeeErrors,
+    formState: { errors: editEmployeeErrors },
+    handleSubmit: handleEditEmployeeSubmit,
+    register: registerEditEmployee,
+    reset: resetEditEmployee,
+    setError: setEditEmployeeError,
+    setFocus: setEditEmployeeFocus,
+    setValue: setEditEmployeeValue,
+    watch: watchEditEmployee,
+  } = useForm({
+    defaultValues: emptyEmployee,
+  })
+  const createForm = watchCreateEmployee()
+  const editEmployeeForm = watchEditEmployee()
   const [editForm, setEditForm] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
@@ -364,13 +404,36 @@ function EmployeesTab({ resource, notify }) {
   if (resource.loading) return <LoadingState />
   if (resource.error) return <ErrorState message={resource.error.message} onRetry={resource.refresh} />
 
+  function applyEmployeeErrors(error, setError, setFocus, editing = false) {
+    // Campos que renderizam a mensagem de erro abaixo do input em EmployeeFields.
+    const fieldsWithMessage = ['id', 'nome', 'ad_login', 'jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim']
+    let firstField = null
+    let hiddenMessage = ''
+    for (const issue of error.issues) {
+      const field = issue.path?.[0]
+      const message = issue.message || 'Campo inválido.'
+      if (fieldsWithMessage.includes(field)) {
+        if (!firstField) firstField = field
+        setError(field, { type: 'zod', message })
+      } else if (!hiddenMessage) {
+        hiddenMessage = message
+      }
+    }
+    if (hiddenMessage) notify(hiddenMessage, 'error')
+    if (!firstField || (editing && firstField === 'id')) return
+    setFocus(firstField)
+  }
+
   function edit(item) {
-    setEditForm({
+    const nextForm = {
       ...emptyEmployee,
       ...item,
+      ad_login: item.ad_login ?? '',
       access_role: item.access_role || 'tecnico',
       equipe: normalizeTeam(item.equipe),
-    })
+    }
+    setEditForm(nextForm)
+    resetEditEmployee(nextForm)
   }
 
   function validateUnique(form, editing = false) {
@@ -388,34 +451,44 @@ function EmployeesTab({ resource, notify }) {
     return ''
   }
 
-  async function create(event) {
-    event.preventDefault()
-    const error = validateUnique(createForm)
+  async function create(values) {
+    clearCreateEmployeeErrors()
+    const parsed = employeeFormSchema.safeParse(values)
+    if (!parsed.success) {
+      applyEmployeeErrors(parsed.error, setCreateEmployeeError, setCreateEmployeeFocus)
+      return
+    }
+    const error = validateUnique(parsed.data)
     if (error) {
       notify(error, 'error')
       return
     }
     setSubmitting(true)
     await perform(
-      () => post('adicionar_funcionario.php', { ...createForm, id: Number(createForm.id) }),
+      () => post('adicionar_funcionario.php', { ...parsed.data, id: Number(parsed.data.id) }),
       [resource.refresh],
       notify,
       ACTION_FEEDBACK.employeeCreated,
-      () => setCreateForm(emptyEmployee),
+      () => resetCreateEmployee(emptyEmployee),
     )
     setSubmitting(false)
   }
 
-  async function update(event) {
-    event.preventDefault()
-    const error = validateUnique(editForm, true)
+  async function update(values) {
+    clearEditEmployeeErrors()
+    const parsed = employeeFormSchema.safeParse(values)
+    if (!parsed.success) {
+      applyEmployeeErrors(parsed.error, setEditEmployeeError, setEditEmployeeFocus, true)
+      return
+    }
+    const error = validateUnique(parsed.data, true)
     if (error) {
       notify(error, 'error')
       return
     }
     setSubmitting(true)
     await perform(
-      () => post('atualizar_funcionario.php', { ...editForm, funcionario_id: Number(editForm.id) }),
+      () => post('atualizar_funcionario.php', { ...parsed.data, id: Number(parsed.data.id), funcionario_id: Number(parsed.data.id) }),
       [resource.refresh],
       notify,
       ACTION_FEEDBACK.employeeUpdated,
@@ -446,13 +519,13 @@ function EmployeesTab({ resource, notify }) {
         <MetricCard detail="Filtragem por nome, login, equipe e perfil" icon="chart" label="Filtros aplicados" value={[search, team, role, active].filter(Boolean).length} />
       </section>
 
-      <form onSubmit={create}>
+      <form onSubmit={handleCreateEmployeeSubmit(create)}>
         <FormSection
           description="Equipe Liderança aplica automaticamente o perfil Admin. Revise login AD e jornada antes de salvar."
           eyebrow="Novo cadastro"
           title="Adicionar funcionário"
         >
-        <EmployeeFields form={createForm} setForm={setCreateForm} />
+        <EmployeeFields errors={createEmployeeErrors} form={createForm} register={registerCreateEmployee} setValue={setCreateEmployeeValue} />
           <div className="form-actions">
             <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Adicionando...' : 'Adicionar funcionário'}</button>
           </div>
@@ -504,7 +577,7 @@ function EmployeesTab({ resource, notify }) {
       {editForm && (
         <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
           <button aria-label="Cancelar edição" className="absolute inset-0" onClick={() => setEditForm(null)} type="button" />
-          <form className="card relative w-full max-w-5xl space-y-5 border-cyan-500/20" onSubmit={update}>
+          <form className="card relative w-full max-w-5xl space-y-5 border-cyan-500/20" onSubmit={handleEditEmployeeSubmit(update)}>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="section-eyebrow">Alteração auditada</p>
@@ -513,7 +586,7 @@ function EmployeesTab({ resource, notify }) {
               </div>
               <button className="text-sm text-slate-400 hover:text-white" onClick={() => setEditForm(null)} type="button">Cancelar</button>
             </div>
-            <EmployeeFields editing form={editForm} setForm={setEditForm} />
+            <EmployeeFields editing errors={editEmployeeErrors} form={editEmployeeForm} register={registerEditEmployee} setValue={setEditEmployeeValue} />
             <div className="flex justify-end gap-3">
               <button className="btn-secondary" disabled={submitting} onClick={() => setEditForm(null)} type="button">Cancelar</button>
               <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Salvando...' : 'Salvar alterações'}</button>

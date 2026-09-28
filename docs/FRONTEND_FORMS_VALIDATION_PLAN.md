@@ -2,7 +2,7 @@
 
 Objetivo: reduzir bugs de formulario e payload sem substituir a validacao do backend.
 
-React Hook Form e Zod foram instalados na Fase 14 e usados inicialmente apenas nos filtros de `/relatorios`. A Fase 20 aplicou o mesmo padrao, ainda sem `@hookform/resolvers`, somente ao formulario de regra de escala presencial/home office.
+React Hook Form e Zod foram instalados na Fase 14 e usados inicialmente apenas nos filtros de `/relatorios`. A Fase 20 aplicou o mesmo padrao, ainda sem `@hookform/resolvers`, somente ao formulario de regra de escala presencial/home office. A Fase 21 aplicou o padrao aos formularios de adicionar/editar funcionario.
 
 ## Dependencias futuras recomendadas
 
@@ -26,7 +26,7 @@ npm install react-hook-form zod
 | --- | --- | --- | --- | --- | --- |
 | Login AD | required, password | formato vazio, limpeza de senha no state | autenticacao AD, rate limit | Alto | P4 |
 | Pausa/Reuniao | motivo e observacao | motivo permitido, tamanho da observacao | regras N1/N2, limites, jornada | Alto | P4 |
-| Funcionarios | required, min/max, horarios | formato de horarios, equipe/perfil, id numerico | unicidade, permissao admin | Alto | P3 |
+| Funcionarios | required, min/max, horarios | formato de horarios, equipe/perfil, id numerico, jornada e almoco coerentes | unicidade, permissao admin | Alto | Concluido na Fase 21 |
 | Configuracoes | numeros, checkboxes | ranges e booleanos | regra operacional persistida | Alto | P3 |
 | Escala presencial regra | required, date, rule_type | `rule_type` enum, employee_id numerico, data ISO, `weekdays` exigido para `fixed_weekdays` | UPSERT, permissao, regra canonica | Muito alto | Concluido na Fase 20 |
 | Excecao de escala | date, type, note | employee_id numerico, enum de tipo, data ISO | conflito e permissao | Alto | P3 |
@@ -47,10 +47,9 @@ npm install react-hook-form zod
 2. Documentacao/upload: com cuidado, mantendo limites vindos do backend.
 3. Escalas de Sabado/upload.
 4. Horas extras ou correcao de ponto.
-5. Funcionarios.
-6. Mapa de PA.
-7. Chamados criticos.
-8. Pausas e login apenas com estrategia especifica.
+5. Mapa de PA.
+6. Chamados criticos.
+7. Pausas e login apenas com estrategia especifica.
 
 ## Status da Fase 20
 
@@ -61,6 +60,16 @@ npm install react-hook-form zod
 - O formulario usa `handleSubmit`, `register`, `watch`, `setValue`, `reset`, `setError` e `formState.errors`.
 - O runner transacional e `ACTION_FEEDBACK.scheduleSaved` foram preservados.
 - Excecao de escala, importacao, PA Map, chamados criticos, documentos, escala de sabado, pausas, Admin e backend ficaram fora do escopo.
+
+## Status da Fase 21
+
+- `employeeFormSchema` valida `id`, `nome`, `equipe`, `jornada_entrada`, `jornada_saida`, `almoco_inicio`, `almoco_fim` e `ativo`.
+- `ad_login` e `access_role` continuam presentes para preservar o payload real atual.
+- `jornada_entrada < jornada_saida` e `almoco_inicio < almoco_fim` sao validados no schema.
+- Cadastro e edicao usam `handleSubmit`, `register`, `watch`, `setValue`, `reset`, `setError` e `formState.errors`.
+- O payload final de `adicionar_funcionario.php` e `atualizar_funcionario.php` foi preservado.
+- O runner transacional e `ACTION_FEEDBACK.employeeCreated/Updated/Removed` foram preservados.
+- Usuarios locais, senha, configuracoes, aprovacoes, escalas, PA Map, chamados criticos, documentos, pausas e backend ficaram fora do escopo.
 
 ## Padrao futuro recomendado
 

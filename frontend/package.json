@@ -13,6 +13,7 @@
     "qa:action-feedback": "node scripts/qa-action-feedback.mjs",
     "qa:action-runner": "node scripts/qa-action-runner.mjs",
     "qa:bundle": "node scripts/qa-bundle.mjs",
+    "qa:employee-form": "node scripts/qa-employee-form.mjs",
     "qa:forms": "node scripts/qa-forms.mjs",
     "qa:operational": "node scripts/qa-operational.mjs",
     "qa:query": "node scripts/qa-query.mjs",

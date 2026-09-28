@@ -99,7 +99,7 @@ assert.match(criticalImportSource, /post\('portal\/critical_incidents_import\.ph
 assert.match(criticalImportSource, /if \(inputRef\.current\) inputRef\.current\.value = ''/, 'Importacao deve continuar limpando input')
 
 for (const [source, pattern, label] of [
-  [adminSource, /ACTION_FEEDBACK\.employeeCreated[\s\S]*\(\) => setCreateForm\(emptyEmployee\)/, 'Funcionario criado deve manter reset via onSuccess'],
+  [adminSource, /ACTION_FEEDBACK\.employeeCreated[\s\S]*\(\) => resetCreateEmployee\(emptyEmployee\)/, 'Funcionario criado deve manter reset via onSuccess'],
   [adminSource, /ACTION_FEEDBACK\.employeeUpdated[\s\S]*\(\) => setEditForm\(null\)/, 'Funcionario atualizado deve sair de edicao via onSuccess'],
   [adminSource, /ACTION_FEEDBACK\.userCreated[\s\S]*\(\) => setForm\(\{ username: '', password: '', role: 'gestor' \}\)/, 'Usuario criado deve limpar formulario via onSuccess'],
   [operationalSource, /ACTION_FEEDBACK\.scheduleSaved[\s\S]*\(\) => resetRule\(emptyScheduleRule\(parsed\.data\.effective_from \|\| today\)\)/, 'Escala salva deve limpar rule e weekdays via onSuccess'],
