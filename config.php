@@ -120,20 +120,27 @@ define('AD_ADMIN_USERS', ($ad_admin_users_env !== false) ? trim($ad_admin_users_
 $enable_local_admin_env = strtolower(trim((string)(getenv('ENABLE_LOCAL_ADMIN') ?: 'false')));
 define('ENABLE_LOCAL_ADMIN', in_array($enable_local_admin_env, ['true', '1', 'yes', 'on'], true));
 
-if (APP_ENV === 'production') {
+// Travas de segurança: valem em QUALQUER ambiente que não seja explicitamente
+// de desenvolvimento local. Antes valiam só com APP_ENV === 'production', o que
+// deixava staging e o default 'development' aceitarem debug ligado, MySQL root
+// e ausência de allowlist administrativa (achado SEC-05 da auditoria).
+// A flag Secure do cookie NÃO é afetada aqui: ela depende exclusivamente de
+// SESSION_COOKIE_SECURE ou de HTTPS (security.php), e continua desligada
+// enquanto o ChronoDesk não tiver HTTPS próprio.
+if (APP_ENV !== 'development') {
     if (APP_DEBUG) {
-        error_log('[SECURITY CRITICAL] APP_DEBUG=true não é permitido em produção.');
-        throw new RuntimeException('Configuração de produção insegura.');
+        error_log('[SECURITY CRITICAL] APP_DEBUG=true não é permitido fora de desenvolvimento.');
+        throw new RuntimeException('Configuração insegura: depuração habilitada.');
     }
     $db_password_is_placeholder = DB_PASS === ''
         || preg_match('/(?:troque|changeme|change_me)/i', DB_PASS) === 1;
     if (DB_USER === 'root' || $db_password_is_placeholder) {
-        error_log('[SECURITY CRITICAL] Produção exige usuário MySQL dedicado e senha definida.');
-        throw new RuntimeException('Configuração de banco de dados de produção incompleta.');
+        error_log('[SECURITY CRITICAL] Uso de usuário MySQL dedicado e senha definida é obrigatório fora de desenvolvimento.');
+        throw new RuntimeException('Configuração de banco de dados incompleta.');
     }
     if (AD_ADMIN_USERS === '') {
-        error_log('[SECURITY CRITICAL] AD_ADMIN_USERS não configurado para produção.');
-        throw new RuntimeException('Configuração administrativa de produção incompleta.');
+        error_log('[SECURITY CRITICAL] AD_ADMIN_USERS não configurado.');
+        throw new RuntimeException('Configuração administrativa incompleta.');
     }
 }
 
