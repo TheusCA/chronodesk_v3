@@ -28,10 +28,32 @@ ServerSignature Off
         Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'"
         Header always set Cache-Control "no-store, no-cache, must-revalidate"
     </FilesMatch>
+
+    # Cache do build do Vite.
+    # Os arquivos em app/assets/ carregam hash no nome: mudou o conteudo, mudou
+    # a URL. Podem ser cacheados por um ano, o que poupa workers do PHP-FPM.
+    <If "%{REQUEST_URI} =~ m#^/app/assets/#">
+        Header always set Cache-Control "public, max-age=31536000, immutable"
+    </If>
+    # O index.html NUNCA pode ser cacheado: e ele que aponta para o hash atual
+    # dos assets. Em cache, o usuario continua na versao antiga apos o deploy.
+    <If "%{REQUEST_URI} =~ m#^/app/(index\.html)?$#">
+        Header always set Cache-Control "no-store, no-cache, must-revalidate"
+    </If>
 </IfModule>
 
 # Habilitar rewrite engine
 RewriteEngine On
+
+# Base explicita do rewrite. Sem ela, o Apache resolve as substituicoes
+# relativas (app/) contra o caminho fisico do diretorio e o cabecalho
+# Location: passa a expor a estrutura de arquivos do servidor.
+RewriteBase /
+
+# Redirects legados: preservam links antigos que trazem o caminho de
+# filesystem ou o nome do diretorio no inicio da URL.
+RewriteRule ^var/www/chronodesk(/.*)?$ /app/ [R=302,L]
+RewriteRule ^chronodesk(/.*)?$ /app/ [R=302,L]
 
 # Bloquear diretórios que nunca devem ser publicados
 RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|services|migrations|deploy|scripts|sessions|cache|tmp|uploads|chronodesk_private|private_storage)(/|$)" - [F,L]
