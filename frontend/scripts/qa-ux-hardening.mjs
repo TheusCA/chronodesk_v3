@@ -87,10 +87,14 @@ for (const blockedDependency of [
   assert.doesNotMatch(packageLock, new RegExp(`"node_modules/${blockedDependency.replace('/', '\\/')}"`, 'i'), `Dependencia proibida no lock: ${blockedDependency}`)
 }
 
+// Trava de escopo herdada da Fase 17: o transporte e os hooks de dados nao
+// podiam ser tocados durante aquele trabalho de UX.
+// 'frontend/src/lib/api.ts' foi REMOVIDO desta lista no Lote 2 (2026-09-28),
+// que alterou api.ts de forma aprovada para unificar a mensagem de 403.
+// O contrato de api.ts segue coberto por qa-api.
 for (const protectedPath of [
   'frontend/src/hooks/useLivePauses.js',
   'frontend/src/hooks/useResource.ts',
-  'frontend/src/lib/api.ts',
   'frontend/src/lib/queryClient.ts',
   'frontend/src/lib/queryKeys.ts',
   'frontend/src/lib/operational.ts',
