@@ -58,6 +58,15 @@ Base da afirmação:
 | **Validação humana** | **Pendente.** Requer conferência do responsável antes de commit, com atenção especial ao pré-requisito de deploy: `AD_DOMAIN` deve estar presente em `/var/www/.env`, sob pena de falha de autenticação. |
 | **Observações** | A remoção do arquivo `ersmmdcamargochronodesk_v3` foi **bloqueada por hook de política de Segurança da Informação** que impede comandos destrutivos. Fica pendente de execução manual pelo responsável. O histórico do git **não foi reescrito**, por decisão do responsável — os valores permanecem acessíveis em commits anteriores. |
 
+### Lote 2 — Correcoes de baixo risco e alto retorno — 2026-09-28
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Corrigir o redirect que expunha caminho de filesystem, preservar os redirects legados no repositorio, habilitar cache de assets, estender as travas de seguranca para fora de `production`, fechar a lacuna de TAB/CR na neutralizacao de CSV e unificar a mensagem de 403. |
+| **O que a IA alterou** | `.htaccess` (`RewriteBase /`, redirects legados, cache de `app/assets/*` e `app/index.html`); `config.php` (travas passam a valer fora de `development`, exceto `SECRET_KEY`); `.env.production.example` (alerta de indisponibilidade com `FORCE_HTTPS=true`); `services/OperationalService.php`, `api/portal/critical_incidents_export.php`, `api/download_relatorio.php` (TAB/CR no CSV); `frontend/src/lib/api.ts` (mensagem padrao de 401/403); 5 scripts de QA (remocao da trava de escopo da Fase 17 sobre `api.ts`). |
+| **Validacao humana** | **Pendente.** Requer conferencia, com atencao a: (a) alteracao deliberada de 5 scripts de QA; (b) pre-checagens obrigatorias antes do deploy conjunto 1+2; (c) `npm audit fix` nao aplicado. |
+| **Observacoes** | O `npm audit fix` foi **bloqueado pelo ambiente**: o endpoint de advisories do npm passou a falhar com `self-signed certificate in certificate chain` (interceptacao TLS corporativa). A IA **nao** usou `--strict-ssl=false` para contornar, por ser desativacao de verificacao de certificado em um lote cujo proposito e justamente endurecer a seguranca. O `package-lock.json` permaneceu intacto e o item segue pendente de decisao do responsavel. |
+
 ---
 
 ## 5. Responsabilidade
