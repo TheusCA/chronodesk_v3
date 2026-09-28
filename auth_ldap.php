@@ -38,9 +38,17 @@ function autenticar_ad(string $username, string $password) {
         require_once __DIR__ . '/db.php';
     }
 
-    // Configurações do AD - mova para .env em produção
-    $ad_domain    = getenv('AD_DOMAIN')    ?: 'gruponp.local';
-    $ad_upn_suffix = getenv('AD_UPN_SUFFIX') ?: $ad_domain;
+    // Configurações do AD - definidas exclusivamente pelo ambiente (.env).
+    // Não existe domínio literal no código: sem AD_DOMAIN a autenticação falha fechada.
+    $ad_domain = trim((string)(getenv('AD_DOMAIN') ?: ''));
+    if ($ad_domain === '') {
+        error_log('[AUTH_AD] AD_DOMAIN não configurado.');
+        if (function_exists('audit_log')) {
+            audit_log('LDAP_CONFIG_MISSING', 'AD_DOMAIN ausente no ambiente', 'CRITICAL');
+        }
+        return false;
+    }
+    $ad_upn_suffix = trim((string)(getenv('AD_UPN_SUFFIX') ?: '')) ?: $ad_domain;
     $ad_servers_env = trim((string)(getenv('AD_SERVERS') ?: ''));
     if ($ad_servers_env === '') {
         error_log('[AUTH_AD] AD_SERVERS não configurado.');
@@ -125,7 +133,7 @@ function autenticar_ad(string $username, string $password) {
  * Busca atributos do usuário no AD após bind bem-sucedido
  */
 function buscar_atributos_usuario($conn, string $username, string $domain): array {
-    // Converter domínio em base DN: gruponp.local → DC=gruponp,DC=local
+    // Converter domínio em base DN: dominio.exemplo.local → DC=dominio,DC=exemplo,DC=local
     $base_dn_parts = array_map(function($part) {
         return 'DC=' . $part;
     }, explode('.', $domain));

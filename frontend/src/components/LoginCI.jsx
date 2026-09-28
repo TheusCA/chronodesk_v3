@@ -21,7 +21,7 @@ export function LoginCI({ onSubmit, loading }) {
           value={form.login_ad}
           onChange={(event) => setForm({ ...form, login_ad: event.target.value })}
           autoComplete="username"
-          placeholder="usuario ou usuario@paschoalotto.com.br"
+          placeholder="usuario ou usuario@seu-dominio"
           required
         />
       </label>

@@ -13,7 +13,7 @@ O novo responsável pelo projeto (você, leitor deste prompt) ficou encarregado 
 3. Subir o projeto em uma **VM Linux** (Ubuntu/Debian) com Apache + PHP + MySQL
 4. Deixar o sistema acessível a todos os colaboradores da empresa via rede interna
 
-A empresa usa **Active Directory (AD)** com domínio `gruponp.local`. Os servidores AD disponíveis na rede são:
+A empresa usa **Active Directory (AD)** com domínio `dominio.exemplo.local`. Os servidores AD disponíveis na rede são:
 - `servidor-ad-1.exemplo.local`
 - `servidor-ad-2.exemplo.local`
 - `servidor-ad-3.exemplo.local`
@@ -334,7 +334,7 @@ sudo nano /etc/apache2/sites-available/chronodesk.conf
 **Conteúdo do VirtualHost:**
 ```apache
 <VirtualHost *:80>
-    ServerName chronodesk.gruponp.local
+    ServerName chronodesk.dominio.exemplo.local
     DocumentRoot /var/www/html/chronodesk
     
     <Directory /var/www/html/chronodesk>

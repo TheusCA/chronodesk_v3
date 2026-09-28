@@ -111,7 +111,7 @@ AD_ADMIN_USERS=usuario.admin
 ENABLE_LOCAL_ADMIN=true
 ```
 
-`AD_ADMIN_USERS` deve conter sAMAccountNames separados por vírgula e é obrigatório em produção. O login AD aceita `usuario` ou `usuario@paschoalotto.com.br`, normaliza para sAMAccountName em minúsculo e não salva senha AD.
+`AD_ADMIN_USERS` deve conter sAMAccountNames separados por vírgula e é obrigatório em produção. O login AD aceita `usuario` ou `usuario@exemplo.com.br`, normaliza para sAMAccountName em minúsculo e não salva senha AD.
 
 Para bloquear o login local administrativo e permitir apenas AD/LDAP autorizado:
 

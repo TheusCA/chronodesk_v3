@@ -98,7 +98,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-group">
                     <label for="username">Login AD</label>
                     <input type="text" id="username" name="username" autocomplete="username" required autofocus
-                           placeholder="usuario ou usuario@paschoalotto.com.br">
+                           placeholder="usuario ou usuario@seu-dominio">
                 </div>
                 <div class="form-group">
                     <label for="password">Senha</label>
