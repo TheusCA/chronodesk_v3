@@ -29,17 +29,28 @@ ServerSignature Off
         Header always set Cache-Control "no-store, no-cache, must-revalidate"
     </FilesMatch>
 
-    # Cache do build do Vite.
-    # Os arquivos em app/assets/ carregam hash no nome: mudou o conteudo, mudou
-    # a URL. Podem ser cacheados por um ano, o que poupa workers do PHP-FPM.
+    # Cache do build do Vite, decidido por PREFIXO DE URL.
+    #
+    # app/assets/: os arquivos carregam hash no nome, entao mudou o conteudo,
+    # mudou a URL. Podem ser cacheados por um ano, o que poupa workers do
+    # PHP-FPM em cada navegacao.
+    #
+    # Todo o resto de /app/ nunca pode ser cacheado. A regra precisa ser por
+    # prefixo de URL, e nao por nome de arquivo: as rotas do SPA (/app/metricas,
+    # /app/admin) sao reescritas internamente para app/index.html, entao casar
+    # apenas "/app/index.html" dependeria da mecanica do rewrite e deixaria as
+    # rotas reescritas sem cabecalho de cache. E o index.html que aponta para o
+    # hash atual dos assets: se ele ficar em cache, o usuario continua na versao
+    # antiga depois do deploy.
+    #
+    # Os icones de public/ (favicon.png etc.) caem no ramo no-cache. Isso e
+    # correto: eles nao tem hash no nome e podem mudar entre deploys.
     <If "%{REQUEST_URI} =~ m#^/app/assets/#">
         Header always set Cache-Control "public, max-age=31536000, immutable"
     </If>
-    # O index.html NUNCA pode ser cacheado: e ele que aponta para o hash atual
-    # dos assets. Em cache, o usuario continua na versao antiga apos o deploy.
-    <If "%{REQUEST_URI} =~ m#^/app/(index\.html)?$#">
+    <ElseIf "%{REQUEST_URI} =~ m#^/app(/|$)#">
         Header always set Cache-Control "no-store, no-cache, must-revalidate"
-    </If>
+    </ElseIf>
 </IfModule>
 
 # Habilitar rewrite engine
@@ -49,11 +60,6 @@ RewriteEngine On
 # relativas (app/) contra o caminho fisico do diretorio e o cabecalho
 # Location: passa a expor a estrutura de arquivos do servidor.
 RewriteBase /
-
-# Redirects legados: preservam links antigos que trazem o caminho de
-# filesystem ou o nome do diretorio no inicio da URL.
-RewriteRule ^var/www/chronodesk(/.*)?$ /app/ [R=302,L]
-RewriteRule ^chronodesk(/.*)?$ /app/ [R=302,L]
 
 # Bloquear diretórios que nunca devem ser publicados
 RewriteRule "(^|/)(\.git|\.idea|\.vscode|node_modules|vendor|classes|services|migrations|deploy|scripts|sessions|cache|tmp|uploads|chronodesk_private|private_storage)(/|$)" - [F,L]
@@ -67,6 +73,13 @@ RewriteRule "^migrar_.*\.php$" - [F,L]
 # Bloquear arquivos sensíveis por padrão, preservando assets estáticos em static/
 RewriteRule "(^|/)(\.env(\..*)?|composer\..*|package.*\.json)$" - [F,L]
 RewriteRule "\.(json|csv|xlsx|doc|docx|sql|md|log|bak|backup|zip|rar|7z|old|orig|save)$" - [F,L]
+
+# Redirects legados: preservam links antigos que trazem o caminho de
+# filesystem ou o nome do diretorio no inicio da URL.
+# Ficam DEPOIS dos bloqueios para que caminho sensivel sempre responda 403,
+# nunca 302. Ex.: /chronodesk/.git/config continua 403.
+RewriteRule ^var/www/chronodesk(/.*)?$ /app/ [R=302,L]
+RewriteRule ^chronodesk(/.*)?$ /app/ [R=302,L]
 
 # SPA fallback limitado ao build público React.
 # O portal React e a entrada oficial. Apenas paginas visuais GET/HEAD sao
