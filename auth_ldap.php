@@ -56,17 +56,49 @@ function autenticar_ad(string $username, string $password) {
     }
     $ad_servers   = explode(',', $ad_servers_env);
     $ad_port      = (int)(getenv('AD_PORT') ?: 389);    // 389=LDAP, 636=LDAPS
-    $ad_use_tls   = getenv('AD_USE_TLS') === 'true';    // StartTLS
+
+    // Esquema de conexão configurável por ambiente.
+    // 'ldap'  (padrão) = texto claro, comportamento atual, inalterado.
+    // 'ldaps' = TLS implícito na conexão, normalmente na porta 636.
+    // Nada muda no servidor sem alteração explícita do .env.
+    $ad_scheme = strtolower(trim((string)(getenv('AD_SCHEME') ?: 'ldap')));
+    if (!in_array($ad_scheme, ['ldap', 'ldaps'], true)) {
+        error_log('[AUTH_AD] AD_SCHEME inválido; usando ldap.');
+        $ad_scheme = 'ldap';
+    }
+
+    $ad_use_tls = getenv('AD_USE_TLS') === 'true';      // StartTLS sobre ldap://
+    if ($ad_scheme === 'ldaps' && $ad_use_tls) {
+        // StartTLS sobre um canal já cifrado é inválido e faz o bind falhar.
+        error_log('[AUTH_AD] AD_USE_TLS ignorado: ldaps:// já estabelece TLS.');
+        $ad_use_tls = false;
+    }
+    if ($ad_scheme === 'ldap' && $ad_port === 636 && !$ad_use_tls) {
+        error_log('[AUTH_AD] AD_PORT=636 com AD_SCHEME=ldap: defina AD_SCHEME=ldaps para LDAPS.');
+    }
+
+    // Quando há TLS em jogo, exigir certificado válido. Sem isso, um
+    // certificado forjado no caminho anula a proteção. Só tem efeito quando
+    // ldaps:// ou StartTLS estão habilitados, portanto não altera o padrão.
+    $ad_tls_in_use = $ad_scheme === 'ldaps' || $ad_use_tls;
+    if ($ad_tls_in_use && defined('LDAP_OPT_X_TLS_REQUIRE_CERT') && defined('LDAP_OPT_X_TLS_DEMAND')) {
+        @ldap_set_option(null, LDAP_OPT_X_TLS_REQUIRE_CERT, LDAP_OPT_X_TLS_DEMAND);
+    }
 
     // Sanitização básica - login não deve conter caracteres perigosos para LDAP
     $login_info = normalizar_login_ldap($username, $ad_upn_suffix, $ad_domain);
     $username = $login_info['samaccountname'];
+
+    // GUARDA DE SENHA VAZIA — precisa ficar ANTES do laço de servidores.
+    // O AD aceita bind anônimo com senha vazia e responde sucesso, o que
+    // transformaria qualquer login existente em bypass de autenticação.
+    // Coberto por teste negativo em scripts/qa-smoke.php.
     if (!$username || !$password) return false;
 
     // Tentar cada servidor AD em ordem (failover)
     foreach ($ad_servers as $server) {
         $server = trim($server);
-        $ldap_uri = "ldap://{$server}:{$ad_port}";
+        $ldap_uri = "{$ad_scheme}://{$server}:{$ad_port}";
 
         $conn = @ldap_connect($ldap_uri);
         if (!$conn) continue;
@@ -75,6 +107,9 @@ function autenticar_ad(string $username, string $password) {
         ldap_set_option($conn, LDAP_OPT_PROTOCOL_VERSION, 3);
         ldap_set_option($conn, LDAP_OPT_REFERRALS, 0);
         ldap_set_option($conn, LDAP_OPT_NETWORK_TIMEOUT, 5); // 5s timeout por servidor
+        if ($ad_tls_in_use && defined('LDAP_OPT_X_TLS_REQUIRE_CERT') && defined('LDAP_OPT_X_TLS_DEMAND')) {
+            @ldap_set_option($conn, LDAP_OPT_X_TLS_REQUIRE_CERT, LDAP_OPT_X_TLS_DEMAND);
+        }
 
         // StartTLS se configurado
         if ($ad_use_tls) {
