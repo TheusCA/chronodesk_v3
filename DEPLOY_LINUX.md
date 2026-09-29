@@ -94,36 +94,10 @@ sudo nano /var/www/.env
 
 Preencha somente valores reais no servidor. Nao versione `.env` real.
 
-4. Ajustar permissoes:
+4. Permissoes: **TO CONFIRM.** Veja a secao "Permissoes de Arquivos (TO CONFIRM)".
+   Nao aplique o bloco de la sem confirmar o estado real do servidor.
 
-```bash
-sudo chown -R root:www-data /var/www/chronodesk
-sudo find /var/www/chronodesk -type d -exec chmod 750 {} \;
-sudo find /var/www/chronodesk -type f -exec chmod 640 {} \;
-sudo chmod 640 /var/www/.env
-sudo chown root:www-data /var/www/.env
-
-sudo install -d -o www-data -g www-data -m 700 /var/lib/chronodesk/documents
-
-sudo touch /var/www/chronodesk/estado.json \
-  /var/www/chronodesk/pausas.csv \
-  /var/www/chronodesk/config_sistema.json
-sudo chown www-data:www-data \
-  /var/www/chronodesk/estado.json \
-  /var/www/chronodesk/pausas.csv \
-  /var/www/chronodesk/config_sistema.json
-sudo chmod 660 \
-  /var/www/chronodesk/estado.json \
-  /var/www/chronodesk/pausas.csv \
-  /var/www/chronodesk/config_sistema.json
-```
-
-Nao entregue a propriedade dos arquivos PHP ao usuario do Apache. A escrita fica
-limitada aos arquivos operacionais legados acima. Se o PHP nao puder usar o
-diretorio de sessao do sistema, crie `sessions/` com dono `www-data`, modo `700`
-e mantenha o bloqueio HTTP ja existente.
-
-Configure tambem os limites do PHP usados pelo upload privado:
+Configure os limites do PHP usados pelo upload privado:
 
 ```bash
 PHP_VERSION="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
@@ -235,6 +209,354 @@ sudo tail -f /var/log/apache2/chronodesk_access.log
 sudo tail -f /var/log/apache2/chronodesk_error.log
 ```
 
+## Permissoes de Arquivos (TO CONFIRM)
+
+**Divergencia registrada em 2026-09-29.** O servidor em funcionamento esta com o
+clone em `root:root` e arquivos `644`. O bloco abaixo e o endurecimento
+recomendado originalmente (`root:www-data`, `640`/`750`) e **nao** corresponde ao
+estado atual. Ele foi retirado da rotina de deploy e so deve ser aplicado como
+mudanca propria, planejada, depois de confirmar:
+
+- dono, grupo e modo reais de `estado.json`, `pausas.csv`, `config_sistema.json`
+  e dos diretorios privados, e como o PHP consegue grava-los hoje;
+- o usuario efetivo do PHP-FPM/Apache.
+
+```bash
+sudo stat -c '%U:%G %a %n' /var/www/chronodesk /var/www/chronodesk/estado.json /var/www/chronodesk/pausas.csv /var/www/chronodesk/config_sistema.json /var/www/.env
+ps -eo user=,comm= | grep -E 'php-fpm|apache2' | sort -u
+```
+
+Bloco original, **nao aplicar sem a confirmacao acima**:
+
+```bash
+sudo chown -R root:www-data /var/www/chronodesk
+sudo find /var/www/chronodesk -type d -exec chmod 750 {} \;
+sudo find /var/www/chronodesk -type f -exec chmod 640 {} \;
+sudo chmod 640 /var/www/.env
+sudo chown root:www-data /var/www/.env
+
+sudo install -d -o www-data -g www-data -m 700 /var/lib/chronodesk/documents
+
+sudo touch /var/www/chronodesk/estado.json \
+  /var/www/chronodesk/pausas.csv \
+  /var/www/chronodesk/config_sistema.json
+sudo chown www-data:www-data \
+  /var/www/chronodesk/estado.json \
+  /var/www/chronodesk/pausas.csv \
+  /var/www/chronodesk/config_sistema.json
+sudo chmod 660 \
+  /var/www/chronodesk/estado.json \
+  /var/www/chronodesk/pausas.csv \
+  /var/www/chronodesk/config_sistema.json
+```
+
+Nao entregue a propriedade dos arquivos PHP ao usuario do Apache. A escrita fica
+limitada aos arquivos operacionais legados acima. Se o PHP nao puder usar o
+diretorio de sessao do sistema, crie `sessions/` com dono `www-data`, modo `700`
+e mantenha o bloqueio HTTP ja existente.
+
+## Monitoracao (health check)
+
+`api/health.php` responde `200 {"status":"ok","database":"ok"}` ou
+`503 {"status":"fail","database":"fail"}`, sem versao, caminho, host ou
+mensagem de erro. Nao abre sessao e nao toca no estado de pausas. A conexao
+com o banco tem timeout de 2 segundos.
+
+O acesso e restrito a `HEALTH_ALLOWED_IPS` no `.env` (IPs ou CIDR separados por
+virgula). Sem a variavel, apenas loopback. Fora da lista a resposta e `403`.
+Inclua somente o IP ou a rede do sistema de monitoracao.
+
+Teste a partir da propria VM (loopback, com o `Host` do VirtualHost):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: chronodesk.interno.local' http://127.0.0.1/api/health.php
+```
+
+Esperado: `200`. A partir de uma estacao fora da allowlist, o esperado e `403`.
+Com `FORCE_HTTPS=true`, a resposta sobre HTTP e `301`: aponte a monitoracao
+para a URL HTTPS.
+
+## Backup
+
+`scripts/backup-chronodesk.sh` gera, em `/var/backups/chronodesk/AAAAMMDD-HHMMSS/`:
+
+- `database.sql.gz`: dump do MySQL (`mysqldump --single-transaction`), feito
+  com usuario somente leitura;
+- `files.tar.gz`: `estado.json`, `pausas.csv`, `config_sistema.json`,
+  `funcionarios.json` e os diretorios privados (documentos e anexos de escala);
+- `SHA256SUMS`.
+
+O `.env` nao entra no backup: ele contem segredos e deve ser recuperavel do
+cofre. O diretorio so recebe o nome final depois de todas as verificacoes, e a
+retencao so roda apos um backup bem-sucedido.
+
+**Limitacao:** o backup fica no mesmo disco da VM e nao protege contra perda da
+VM. A copia para armazenamento externo depende de decisao de infraestrutura.
+
+Instalacao (uma vez):
+
+1. Criar o usuario de backup no MySQL com uma copia ajustada de
+   `deploy/mysql/setup-backup-user.sql.example` (senha forte, registrada no cofre):
+
+```bash
+docker exec -it <NOME_CONTAINER_MYSQL> mysql -uroot -p
+```
+
+2. Criar a configuracao e o arquivo de credenciais (root, modo 600):
+
+```bash
+sudo install -d -o root -g root -m 700 /etc/chronodesk
+sudo install -o root -g root -m 600 /var/www/chronodesk/deploy/backup/backup.env.example /etc/chronodesk/backup.env
+sudo nano /etc/chronodesk/backup.env
+sudo install -o root -g root -m 600 /dev/null /etc/chronodesk/backup-mysql.cnf
+sudo nano /etc/chronodesk/backup-mysql.cnf
+```
+
+Conteudo de `backup-mysql.cnf`:
+
+```ini
+[client]
+user=chronodesk_backup
+password=<SENHA_DO_COFRE>
+```
+
+Em `backup.env`, confira que `PRIVATE_DIRS` cobre `DOCUMENT_STORAGE_PATH` e
+`SHIFT_STORAGE_PATH` do `/var/www/.env`.
+
+3. Instalar o script fora do clone. Ele roda como root, entao a copia em uso
+   precisa ter dono root e so muda por acao explicita, nunca por `git pull`:
+
+```bash
+sudo install -o root -g root -m 700 /var/www/chronodesk/scripts/backup-chronodesk.sh /usr/local/sbin/chronodesk-backup
+```
+
+4. Antes da primeira execucao, confirmar que todas as tabelas sao InnoDB:
+   `--single-transaction` so garante um dump consistente para InnoDB. A consulta
+   usa a credencial do backup, o que tambem valida a entrega do arquivo de
+   opcoes pela entrada padrao, do mesmo jeito que o script faz:
+
+```bash
+sudo cat /etc/chronodesk/backup-mysql.cnf | docker exec -i <NOME_CONTAINER_MYSQL> mysql --defaults-extra-file=/dev/stdin -e "SELECT COUNT(*) AS tabelas, SUM(engine IS NULL OR engine <> 'InnoDB') AS nao_innodb, GROUP_CONCAT(CASE WHEN engine IS NULL OR engine <> 'InnoDB' THEN CONCAT(table_name, '=', IFNULL(engine, 'NULL')) END) AS quais FROM information_schema.tables WHERE table_schema = 'sistema_pausas' AND table_type = 'BASE TABLE';"
+```
+
+Esperado: `tabelas` maior que zero, `nao_innodb` = `0`, `quais` = `NULL`.
+
+- `Access denied`: credencial ou usuario de backup incorretos.
+- `tabelas` = `0`: o usuario de backup nao enxerga o banco (grant ausente); nao prossiga.
+- `nao_innodb` > `0`: **nao agende o backup.** O dump dessas tabelas nao seria
+  consistente. Converter para InnoDB e mudanca propria, com aprovacao.
+
+5. Primeira execucao manual:
+
+```bash
+sudo /usr/local/sbin/chronodesk-backup
+sudo ls -l /var/backups/chronodesk/
+```
+
+Esperado: ultima linha `backup concluido: /var/backups/chronodesk/<AAAAMMDD-HHMMSS> (<tamanho>)`.
+
+6. Agendar (diario as 02:30, com atraso aleatorio de ate 15 minutos):
+
+```bash
+sudo cp /var/www/chronodesk/deploy/systemd/chronodesk-backup.service /var/www/chronodesk/deploy/systemd/chronodesk-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now chronodesk-backup.timer
+systemctl list-timers chronodesk-backup.timer
+```
+
+Acompanhamento:
+
+```bash
+journalctl -u chronodesk-backup --since today --no-pager
+systemctl status chronodesk-backup.service
+```
+
+Quando o script mudar no repositorio, revise o diff antes de reinstalar:
+
+```bash
+diff -u /usr/local/sbin/chronodesk-backup /var/www/chronodesk/scripts/backup-chronodesk.sh
+```
+
+## Teste de Restauracao
+
+Backup sem teste de restauracao nao e backup. Execute apos a instalacao e
+depois periodicamente (sugestao: mensal). O teste restaura em um banco
+separado, `sistema_pausas_restore_test`, e nao toca no banco em uso.
+
+```bash
+B=/var/backups/chronodesk/<AAAAMMDD-HHMMSS>
+C=<NOME_CONTAINER_MYSQL>
+sudo sh -c 'cd "$1" && sha256sum -c SHA256SUMS' _ "$B"
+```
+
+Os diretorios de backup sao de root com modo 700; por isso todo acesso a eles
+passa por `sudo`.
+
+Banco:
+
+```bash
+docker exec -it "$C" mysql -uroot -p -e "CREATE DATABASE sistema_pausas_restore_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+sudo gunzip -c "$B/database.sql.gz" | docker exec -i "$C" sh -c 'umask 077; cat > /tmp/restore.sql'
+docker exec -it "$C" sh -c 'mysql -uroot -p sistema_pausas_restore_test < /tmp/restore.sql'
+docker exec -it "$C" mysql -uroot -p -e "SELECT 'tabelas', (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='sistema_pausas'), (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='sistema_pausas_restore_test') UNION ALL SELECT 'funcionarios', (SELECT COUNT(*) FROM sistema_pausas.funcionarios), (SELECT COUNT(*) FROM sistema_pausas_restore_test.funcionarios) UNION ALL SELECT 'audit_log', (SELECT COUNT(*) FROM sistema_pausas.audit_log), (SELECT COUNT(*) FROM sistema_pausas_restore_test.audit_log);"
+```
+
+Esperado: mesmo numero de tabelas; `funcionarios` igual (salvo cadastro feito
+depois do backup); `audit_log` restaurado menor ou igual ao atual.
+
+Arquivos:
+
+```bash
+T=$(sudo mktemp -d)
+sudo tar -xzf "$B/files.tar.gz" -C "$T"
+sudo ls -l "$T/app-state"
+sudo diff -rq "$T/var/lib/chronodesk" /var/lib/chronodesk
+```
+
+Esperado: arquivos de estado presentes; `diff` lista apenas o que mudou depois
+do backup.
+
+Limpeza (obrigatoria: o dump contem dados pessoais):
+
+```bash
+docker exec "$C" rm -f /tmp/restore.sql
+docker exec -it "$C" mysql -uroot -p -e "DROP DATABASE sistema_pausas_restore_test;"
+sudo rm -rf -- "$T"
+```
+
+Registre data, backup usado e resultado.
+
+## Restauracao em Incidente
+
+Somente com decisao do responsavel. Tudo o que foi gravado depois do backup
+escolhido sera perdido.
+
+1. Parar a escrita: `sudo systemctl stop apache2`.
+
+   > **Atencao:** o Apache desta VM atende tambem outro site. Parar o `apache2`
+   > derruba **todos** os sites da VM, nao so o ChronoDesk. Combine a janela com o
+   > responsavel pelo outro site antes. Um modo de manutencao exclusivo do
+   > ChronoDesk esta proposto, mas ainda nao aprovado nem implementado.
+
+2. Se o backup escolhido tiver mais de `RETENTION_DAYS` dias, copie-o para fora
+   de `/var/backups/chronodesk` antes do passo 3: a retencao o removeria.
+3. Preservar o estado atual antes de sobrescrever:
+   `sudo /usr/local/sbin/chronodesk-backup`.
+4. Conferir o backup escolhido:
+   `sudo sh -c 'cd "$1" && sha256sum -c SHA256SUMS' _ "$B"`.
+5. Banco. O dump recria cada tabela (`DROP TABLE IF EXISTS` + `CREATE TABLE`):
+
+```bash
+sudo gunzip -c "$B/database.sql.gz" | docker exec -i "$C" sh -c 'umask 077; cat > /tmp/restore.sql'
+docker exec -it "$C" sh -c 'mysql -uroot -p sistema_pausas < /tmp/restore.sql'
+docker exec "$C" rm -f /tmp/restore.sql
+```
+
+6. Arquivos. Extrair em diretorio temporario e copiar o conteudo por cima dos
+   arquivos existentes. `cp` sobre arquivo existente preserva dono e modo do
+   destino, entao as permissoes atuais do servidor nao mudam (ver secao
+   "Permissoes de Arquivos (TO CONFIRM)"). Anote dono e modo antes e confira depois:
+
+```bash
+sudo stat -c '%U:%G %a %n' /var/www/chronodesk/estado.json /var/www/chronodesk/pausas.csv /var/www/chronodesk/config_sistema.json
+T=$(sudo mktemp -d)
+sudo tar -xzf "$B/files.tar.gz" -C "$T"
+sudo sh -c 'for f in "$1"/app-state/*; do cp -- "$f" /var/www/chronodesk/; done' _ "$T"
+sudo tar -xzf "$B/files.tar.gz" -C / var/lib/chronodesk
+sudo rm -rf -- "$T"
+sudo stat -c '%U:%G %a %n' /var/www/chronodesk/estado.json /var/www/chronodesk/pausas.csv /var/www/chronodesk/config_sistema.json
+```
+
+Um arquivo que nao existia no destino e criado com dono `root`; ajuste-o para o
+dono e modo anotados.
+
+Arquivos privados criados depois do backup nao sao apagados pela extracao;
+ficam orfaos, sem registro no banco.
+
+7. Subir e validar: `sudo systemctl start apache2`, depois o QA pos-deploy
+   (passo 8), o health check e o login.
+
+## Atualizacao de Versao e Rollback
+
+1. Registrar o ponto de rollback e conferir que nao ha alteracao local:
+
+```bash
+cd /var/www/chronodesk
+sudo git rev-parse HEAD | sudo tee /var/backups/chronodesk/pre-deploy-commit
+sudo git status --short
+```
+
+O clone pertence a root: `git` sem `sudo` recusa o repositorio (*dubious ownership*).
+
+`git status` deve sair vazio. Alteracao local na VM precisa ser tratada antes
+(copiar para fora, `git checkout -- <arquivo>`), senao o `pull` falha ou a
+sobrescreve.
+
+2. Buscar a versao nova e rodar a pre-checagem **da versao nova** contra o
+   `.env`, antes de trocar o codigo:
+
+```bash
+sudo git fetch origin
+sudo git show origin/<BRANCH>:scripts/preflight-deploy.sh | sudo sh -s -- /var/www/.env
+```
+
+Esperado: `RESULTADO=0`. Qualquer `FALHA` interrompe o deploy.
+
+3. Backup imediatamente antes da troca:
+
+```bash
+sudo systemctl start chronodesk-backup.service
+journalctl -u chronodesk-backup -n 5 --no-pager
+```
+
+Esperado: `backup concluido`. Anote o diretorio: e o ponto de restauracao do banco.
+
+4. Trocar o codigo e revisar o que mudou em pontos sensiveis:
+
+```bash
+sudo git pull --ff-only
+sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
+```
+
+- Migration nova: aplicar como no passo 6 do Passo a Passo. As migrations nao
+  tem script de reversao; desfazer uma migration exige restaurar o backup do item 3.
+- `scripts/backup-chronodesk.sh` alterado: revisar e reinstalar (secao Backup).
+
+5. Frontend e recarga:
+
+```bash
+cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
+```
+
+Recarregue Apache e PHP-FPM (este ultimo limpa o OPcache). `reload` e gracioso:
+nao derruba conexoes do outro site da VM. A rotina **nao** altera permissoes;
+veja "Permissoes de Arquivos (TO CONFIRM)".
+
+```bash
+sudo systemctl reload apache2
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+6. Validar: QA pos-deploy (passo 8), health check, passos 9 a 12 e a checagem
+   HTTP de `scripts/test-linux.sh`. Qualquer falha: rollback.
+
+### Rollback
+
+Codigo (nao perde dados):
+
+```bash
+cd /var/www/chronodesk
+sudo git checkout --detach "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)"
+```
+
+Em seguida repita o item 5 (build e recarga) e o item 6 (validacao).
+O clone fica em *detached HEAD*; no proximo deploy, volte ao branch com
+`sudo git checkout <BRANCH>` antes do `pull`.
+
+Banco: so e necessario se o deploy aplicou migration incompativel com o codigo
+anterior. Nesse caso, siga a Restauracao em Incidente com o backup do item 3,
+ciente de que o que foi gravado depois dele sera perdido.
+
 ## HTTPS Interno
 
 Use HTTPS mesmo na rede interna, com certificado corporativo ou self-signed distribuido de forma controlada. Quando HTTPS estiver ativo:
@@ -273,7 +595,7 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] HTTPS interno configurado ou excecao formal registrada.
 - [ ] `.env` real criado manualmente e fora do Git.
 - [ ] `DOCUMENT_STORAGE_PATH=/var/lib/chronodesk/documents` configurado.
-- [ ] Diretorio privado de documentos com dono `www-data` e modo `700`.
+- [ ] Permissoes de arquivos conferidas (secao "Permissoes de Arquivos (TO CONFIRM)").
 - [ ] `fileinfo`, `zip`, `pdo_mysql` e `ldap` presentes em `php -m`.
 - [ ] `upload_max_filesize=10M`, `post_max_size=12M` e `max_file_uploads=1`.
 - [ ] `LimitRequestBody 12582912` aplicado no VirtualHost.
@@ -289,7 +611,9 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] Login AD validado.
 - [ ] Fluxos CI/admin/gestor validados.
 - [ ] Logs do Apache revisados.
-- [ ] Backup do MySQL testado.
+- [ ] `curl` de loopback em `api/health.php` responde `200`; fora da allowlist, `403`.
+- [ ] `chronodesk-backup.timer` ativo (`systemctl list-timers chronodesk-backup.timer`).
+- [ ] Teste de restauracao executado e registrado.
 - [ ] Rollback documentado e testado.
 # Frontend React (implantação paralela)
 

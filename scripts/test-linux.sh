@@ -9,6 +9,11 @@ find . -type f -name '*.php' -not -path './.git/*' -print | sort | while IFS= re
     echo "OK $file"
 done
 
+echo "== Shell syntax =="
+bash -n scripts/backup-chronodesk.sh
+sh -n scripts/preflight-deploy.sh
+echo "OK scripts/backup-chronodesk.sh scripts/preflight-deploy.sh"
+
 echo "== PHP auth QA =="
 # Exige php-ldap; o script falha se a extensao estiver ausente.
 php scripts/qa-auth.php
@@ -80,6 +85,8 @@ check_status "/metricas.php" public
 check_status "/admin.php" public
 check_status "/api/status.php" public
 check_status "/api/session.php" public
+# Fora da allowlist responde 403; com o IP liberado, 200. 503 (banco fora) reprova.
+check_status "/api/health.php" public
 check_status "/api/portal/documents.php" public
 check_status "/api/portal/critical_incidents.php" public
 check_status "/api/portal/critical_incidents_export.php" public
@@ -107,6 +114,9 @@ check_status "/secret.xlsx" blocked
 check_status "/secret.doc" blocked
 check_status "/secret.docx" blocked
 check_status "/uploads/test.pdf" blocked
+check_status "/scripts/backup-chronodesk.sh" blocked
+check_status "/deploy/backup/backup.env.example" blocked
+check_status "/deploy/systemd/chronodesk-backup.service" blocked
 
 legacy_post_status="$(curl -k -s -o /dev/null -w '%{http_code}' -X POST "${BASE_URL}/login.php")"
 echo "$legacy_post_status POST /login.php"

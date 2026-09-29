@@ -1,0 +1,12 @@
+# Agenda o backup diario do ChronoDesk. Instalar em /etc/systemd/system/.
+[Unit]
+Description=Agenda o backup diario do ChronoDesk
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15m
+# Se a VM estava desligada no horario, executa ao ligar.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

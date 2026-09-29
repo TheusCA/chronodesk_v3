@@ -9,7 +9,7 @@ Registro exigido pelos requisitos corporativos para soluções desenvolvidas for
 | Item | Valor |
 |---|---|
 | Ferramenta | Claude Code (CLI da Anthropic) |
-| Modelo | Claude Opus 5 — identificador `claude-opus-5[1m]` |
+| Modelo | Claude Opus 5 — identificador `claude-opus-5[1m]` (Lotes 0 a 2B); Claude Opus 5.5 — `claude-opus-5-5` (a partir do Lote 3) |
 | Responsável humano | Matheus Camargo |
 | Projeto | ChronoDesk / Portal SDK |
 | Repositório | Conta pessoal no GitHub (migração para Azure DevOps pendente) |
@@ -19,7 +19,7 @@ Registro exigido pelos requisitos corporativos para soluções desenvolvidas for
 
 - A IA opera em **clone de desenvolvimento local (Windows)**. **Não possui acesso ao servidor de aplicação, ao container MySQL, ao Active Directory ou a qualquer ambiente produtivo.**
 - Qualquer ação de infraestrutura é **entregue como comando para execução humana**, nunca executada pela IA.
-- A IA **não faz commit nem push**. Todo versionamento é ato humano.
+- A IA faz **commits locais somente com autorização explícita** do responsável. O **push é sempre executado pelo responsável humano**.
 - Alterações em autenticação, RBAC, CSRF, auditoria ou regra de negócio exigem **aprovação humana explícita item a item** antes da implementação.
 - Segredos (`.env`, senhas, `SECRET_KEY`, tokens, dumps reais) **não são lidos, exibidos nem transmitidos**. Quando um segredo é localizado, reporta-se arquivo e linha, nunca o valor.
 
@@ -75,6 +75,16 @@ Base da afirmação:
 | **O que a IA alterou** | `auth_ldap.php`: nova variavel `AD_SCHEME` (`ldap` padrao, `ldaps` opcional), validacao com fallback seguro, aviso quando `AD_PORT=636` com esquema `ldap`, neutralizacao de `AD_USE_TLS` sob `ldaps` e exigencia de certificado valido (`LDAP_OPT_X_TLS_REQUIRE_CERT = demand`) sempre que houver TLS. `scripts/qa-auth.php` (extraido de `qa-smoke.php`, sem dependencia de banco): testes negativos estruturais e comportamentais de senha vazia, senha `"0"` e login vazio, com verificacao de que nenhuma conexao e tentada e controle positivo. Incluido em `scripts/test-local.ps1` e `scripts/test-linux.sh`. `.env.example` e `.env.production.example`: documentacao das variaveis e do pre-requisito de CA confiavel na VM. |
 | **Validacao humana** | **Pendente.** `scripts/qa-auth.php` **exige a extensao `ldap` do PHP** e falha (nao pula) quando ela esta ausente, para nao reportar sucesso sem testar. No Windows, habilitar `extension=ldap` no `php.ini`; no servidor, `php-ldap`. Executar com `php scripts/qa-auth.php` localmente e no servidor. |
 | **Observacoes** | Nenhuma alteracao de comportamento no servidor sem edicao do `.env`: o padrao `AD_SCHEME=ldap` reproduz exatamente a URI anterior. A exigencia de certificado valido so tem efeito quando TLS e habilitado. |
+
+### Lote 3 — Continuidade e observabilidade — 2026-09-29
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Entregar backup diario com procedimento de restauracao (OPS-01), endpoint de saude (OPS-02) e fluxo de deploy com rollback documentado. PERF-01 foi analisado e aguarda aprovacao antes de qualquer implementacao. |
+| **O que a IA alterou** | `api/health.php` (novo): 200/503 com status do banco, sem sessao, sem `init.php`, conexao propria com timeout de 2 s, acesso restrito por `HEALTH_ALLOWED_IPS` (padrao loopback). `config.php`: constante `CHRONODESK_STATELESS` que evita abrir sessao, usada so pelo health. `security.php`: `ip_in_allowlist()` (IP exato ou CIDR, IPv4/IPv6). `scripts/backup-chronodesk.sh` (novo): dump via `docker exec` com usuario somente leitura e credencial entregue por stdin, arquivo dos estados e diretorios privados, SHA-256, publicacao atomica do diretorio e retencao restrita ao padrao de nome. `deploy/`: usuario MySQL de backup, modelo de configuracao, unidades systemd. `DEPLOY_LINUX.md`: secoes de monitoracao, backup, teste de restauracao, restauracao em incidente e atualizacao/rollback. `scripts/qa-smoke.php`: testes do allowlist e do health em subprocesso. `scripts/test-linux.sh`: sintaxe dos scripts shell e checagens HTTP novas. `.env.example`, `.env.production.example`, `docs/DOCUMENTACAO_TECNICA.md`. |
+| **Validacao executada pela IA** | `php -l` em 83 arquivos; `qa-smoke.php` e `qa-auth.php` OK, inclusive em copia com `.env` de producao contendo valores hostis. Teste de mutacao do health: 6 defeitos introduzidos, 6 detectados. Backup: harness de 24 casos com stubs de `docker` e `php`, executado como root em WSL (Fedora), incluindo falhas de dump, credencial com permissao aberta, chave desconhecida, JSON truncado, concorrencia e injecao de opcao; mutacao reintroduzindo `grep -q` apos `gzip` derruba 11 casos, confirmando a correcao de um falso negativo por SIGPIPE. |
+| **Validacao humana** | **Revisao aprovada em 2026-09-29, com ajustes:** (a) aviso de que parar o `apache2` na restauracao derruba tambem o outro site da VM; (b) bloco de permissoes `root:www-data` retirado da rotina de deploy e registrado como passo separado **TO CONFIRM**, porque o servidor funciona com `root:root 644`; a restauracao passou a preservar dono e modo existentes; (c) consulta de tabelas nao-InnoDB antes da primeira execucao do backup. **Execucao no servidor pendente.** O script de backup **nunca rodou contra MySQL real** (stubs substituem `docker`/`mysqldump`); a entrega do arquivo de opcoes por `--defaults-extra-file=/dev/stdin` (validada pela consulta InnoDB) e o teste de restauracao precisam ser confirmados na primeira execucao manual. O caminho 200 do health so e exercitado com banco real. |
+| **Observacoes** | Modelo deste lote: Claude Opus 5.5 (`claude-opus-5-5`). O backup fica no disco da propria VM; copia externa depende de infraestrutura. |
 
 ---
 

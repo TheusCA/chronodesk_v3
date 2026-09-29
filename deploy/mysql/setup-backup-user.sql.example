@@ -1,0 +1,19 @@
+-- Portal SDK - usuario MySQL dedicado ao backup (OPS-01)
+-- Execute como administrador do MySQL no container.
+-- Troque a senha placeholder antes de executar. A mesma senha vai para
+-- /etc/chronodesk/backup-mysql.cnf (root, modo 600) e para o cofre.
+--
+-- Somente leitura. mysqldump --single-transaction --set-gtid-purged=OFF nao
+-- precisa de LOCK TABLES, RELOAD nem PROCESS (usa --no-tablespaces).
+-- SHOW VIEW e TRIGGER garantem dump completo caso o esquema passe a ter
+-- views ou triggers; hoje nao tem.
+-- 'localhost': o backup conecta pelo socket, via docker exec, dentro do container.
+
+CREATE USER IF NOT EXISTS 'chronodesk_backup'@'localhost' IDENTIFIED BY 'troque_essa_senha';
+
+GRANT SELECT, SHOW VIEW, TRIGGER
+ON sistema_pausas.*
+TO 'chronodesk_backup'@'localhost';
+
+-- Conferencia: deve listar apenas USAGE e a linha acima.
+SHOW GRANTS FOR 'chronodesk_backup'@'localhost';

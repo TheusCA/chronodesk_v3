@@ -1,0 +1,14 @@
+# Backup diario do ChronoDesk. Instalar em /etc/systemd/system/.
+# O script roda a partir de /usr/local/sbin (copia revisada, dono root), nunca
+# direto do clone: quem altera o repositorio nao pode ganhar execucao como root.
+[Unit]
+Description=Backup do ChronoDesk (banco e arquivos privados)
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/chronodesk-backup /etc/chronodesk/backup.env
+SyslogIdentifier=chronodesk-backup
+Nice=10
+IOSchedulingClass=idle

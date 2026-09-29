@@ -129,7 +129,7 @@ Levantado a partir do schema em `migrations/` e `database_SECURED.sql`.
 - **Política de retenção: A DEFINIR.** Não há expurgo automático em nenhuma tabela.
 - `audit_log` cresce indefinidamente; sem política de retenção definida.
 - `pausas.csv` e `estado.json` não têm rotação.
-- **Não há backup automatizado** — ver seção 10.
+- **Backup:** rotina entregue no Lote 3 e pendente de instalação no servidor (seção 10). Os backups contêm os mesmos dados pessoais da base e ficam retidos por `RETENTION_DAYS` (padrão 14 dias) em `/var/backups/chronodesk`, com acesso restrito a root.
 
 ### 5.5 Compartilhamento com terceiros
 
@@ -213,8 +213,8 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 ## 9. Limitações conhecidas
 
 1. **Sem criptografia em trânsito.** Portal em HTTP; LDAP na porta 389 sem TLS; cookie de sessão sem flag `Secure`.
-2. **Sem backup automatizado do banco** e sem teste de restauração.
-3. **Sem endpoint de saúde** e sem monitoramento.
+2. **Backup e teste de restauração entregues, ainda não instalados** no servidor. Quando instalado, o backup fica no mesmo disco da VM: não protege contra perda da VM.
+3. **Endpoint de saúde entregue (`api/health.php`), sem monitoramento configurado** para consumi-lo.
 4. **Sem histórico de escala** (seção 7.2).
 5. **Cadastro limitado a 999 colaboradores** por validação de entrada.
 6. **Listas e exports truncam em 200–500 registros** sem aviso ao usuário.
@@ -233,11 +233,12 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 | Dono do produto / área responsável | **A DEFINIR** |
 | Canal de suporte | **A DEFINIR** |
 | Horário de atendimento / SLA | **A DEFINIR** |
-| Backup do banco | **Inexistente.** Proposta prevista para o Lote 3. |
-| Backup dos arquivos privados (documentos e escalas) | **Inexistente.** Mesmo lote. |
-| Teste de restauração | **Inexistente.** |
-| Rollback de deploy | Parcial — migrations idempotentes, sem scripts de rollback pareados |
-| Monitoramento | **Inexistente.** |
+| Backup do banco | `scripts/backup-chronodesk.sh` (diário via `deploy/systemd/chronodesk-backup.timer`, retenção de 14 dias). **Entregue no Lote 3; pendente de instalação no servidor.** Procedimento em `DEPLOY_LINUX.md`, seção "Backup". |
+| Backup dos arquivos privados (documentos e escalas) | Mesmo script (`files.tar.gz`). Mesma situação. |
+| Cópia externa do backup | **A DEFINIR** — hoje o backup fica no disco da própria VM. |
+| Teste de restauração | Procedimento documentado em `DEPLOY_LINUX.md` (banco de teste separado). **Nunca executado.** |
+| Rollback de deploy | Código: `git checkout` do commit anterior (`DEPLOY_LINUX.md`, "Atualização de Versão e Rollback"). Banco: somente por restauração do backup pré-deploy — migrations sem scripts de reversão. |
+| Monitoramento | `api/health.php` (200/503, restrito por `HEALTH_ALLOWED_IPS`). **Nenhum sistema de monitoração configurado para consumi-lo.** |
 | Jobs agendados | **UNKNOWN / TO CONFIRM** — inventário de cron/systemd não levantado |
 | Plano de continuidade | **A DEFINIR** |
 
