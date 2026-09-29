@@ -67,6 +67,15 @@ Base da afirmação:
 | **Validacao humana** | **Pendente.** Requer conferencia, com atencao a: (a) alteracao deliberada de 5 scripts de QA; (b) pre-checagens obrigatorias antes do deploy conjunto 1+2; (c) `npm audit fix` nao aplicado. |
 | **Observacoes** | O `npm audit fix` foi **bloqueado pelo ambiente**: o endpoint de advisories do npm passou a falhar com `self-signed certificate in certificate chain` (interceptacao TLS corporativa). A IA **nao** usou `--strict-ssl=false` para contornar, por ser desativacao de verificacao de certificado em um lote cujo proposito e justamente endurecer a seguranca. O `package-lock.json` permaneceu intacto e o item segue pendente de decisao do responsavel. |
 
+### Lote 2B — Preparacao de LDAPS — 2026-09-29
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Tornar o esquema de conexao LDAP configuravel por ambiente, preparando LDAPS/StartTLS sem alterar o comportamento atual, e cobrir com teste negativo a rejeicao de senha vazia no bind. |
+| **O que a IA alterou** | `auth_ldap.php`: nova variavel `AD_SCHEME` (`ldap` padrao, `ldaps` opcional), validacao com fallback seguro, aviso quando `AD_PORT=636` com esquema `ldap`, neutralizacao de `AD_USE_TLS` sob `ldaps` e exigencia de certificado valido (`LDAP_OPT_X_TLS_REQUIRE_CERT = demand`) sempre que houver TLS. `scripts/qa-smoke.php`: testes negativos estruturais e comportamentais de senha vazia. `.env.example` e `.env.production.example`: documentacao das variaveis e do pre-requisito de CA confiavel na VM. |
+| **Validacao humana** | **Pendente.** O teste comportamental de senha vazia **nao roda no ambiente de desenvolvimento** (extensao `ldap` do PHP indisponivel no Windows) e e pulado com aviso `[SKIP]`. Precisa ser executado no servidor via `php scripts/qa-smoke.php`. |
+| **Observacoes** | Nenhuma alteracao de comportamento no servidor sem edicao do `.env`: o padrao `AD_SCHEME=ldap` reproduz exatamente a URI anterior. A exigencia de certificado valido so tem efeito quando TLS e habilitado. |
+
 ---
 
 ## 5. Responsabilidade
