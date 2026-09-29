@@ -82,48 +82,6 @@ assert_same('user.name', $validLdap['samaccountname'], 'normaliza login LDAP');
 $invalidLdap = normalizar_login_ldap('user)(name', 'corp.local', 'corp.local');
 assert_same('', $invalidLdap['samaccountname'], 'rejeita metacaracteres LDAP');
 
-// ============================================================================
-// TESTES NEGATIVOS — senha vazia no bind LDAP (Lote 2B)
-//
-// O Active Directory aceita bind anonimo quando a senha e vazia e responde
-// sucesso. Sem a guarda, qualquer login existente viraria bypass de
-// autenticacao. A guarda precisa rodar ANTES de qualquer conexao.
-// ============================================================================
-$authLdapSource = file_get_contents(__DIR__ . '/../auth_ldap.php');
-assert_same(true, is_string($authLdapSource), 'le auth_ldap.php');
-
-$guardPosition = strpos($authLdapSource, 'if (!$username || !$password) return false;');
-$loopPosition = strpos($authLdapSource, 'foreach ($ad_servers as $server)');
-assert_same(true, $guardPosition !== false, 'guarda de senha vazia existe em auth_ldap.php');
-assert_same(true, $loopPosition !== false, 'laco de servidores AD existe em auth_ldap.php');
-assert_same(
-    true,
-    $guardPosition !== false && $loopPosition !== false && $guardPosition < $loopPosition,
-    'guarda de senha vazia roda ANTES do laco de conexao/bind'
-);
-assert_same(
-    false,
-    strpos($authLdapSource, '"ldap://{$server}') !== false,
-    'esquema LDAP nao pode ser fixo no codigo; deve vir de AD_SCHEME'
-);
-
-// Comportamental: exige a extensao ldap, senao autenticar_ad() sai antes da
-// guarda por falta de ldap_connect() e o teste passaria pelo motivo errado.
-if (function_exists('ldap_connect')) {
-    $previousServers = getenv('AD_SERVERS');
-    putenv('AD_SERVERS=dc-inexistente.invalid');
-    assert_same(false, autenticar_ad('user.name', ''), 'senha vazia e rejeitada');
-    assert_same(false, autenticar_ad('user.name', '0'), 'senha "0" e rejeitada (falsy em PHP)');
-    assert_same(false, autenticar_ad('', 'SenhaQualquer'), 'login vazio e rejeitado');
-    if ($previousServers === false) {
-        putenv('AD_SERVERS');
-    } else {
-        putenv('AD_SERVERS=' . $previousServers);
-    }
-} else {
-    echo "[SKIP] extensao ldap indisponivel: teste comportamental de senha vazia nao executado\n";
-}
-
 assert_same('http://chronodesk.local', safe_request_origin(), 'ignora Host header nao confiavel');
 $_SERVER['SCRIPT_NAME'] = '/var/www/chronodesk/app/index.php';
 assert_same('', get_base_path(), 'caminho fisico nunca vira URL publica');

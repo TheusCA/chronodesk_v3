@@ -9,6 +9,10 @@ find . -type f -name '*.php' -not -path './.git/*' -print | sort | while IFS= re
     echo "OK $file"
 done
 
+echo "== PHP auth QA =="
+# Exige php-ldap; o script falha se a extensao estiver ausente.
+php scripts/qa-auth.php
+
 if command -v node >/dev/null 2>&1; then
     echo "== JavaScript syntax =="
     find . -type f -name '*.js' \

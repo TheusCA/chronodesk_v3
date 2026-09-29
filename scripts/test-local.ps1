@@ -66,6 +66,14 @@ if (!$phpExecutable) {
     } else {
         Pass "Smoke test PHP concluido"
     }
+
+    # Exige a extensao ldap (extension=ldap no php.ini); falha se ausente.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-auth.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA de autenticacao LDAP falhou (exige extensao ldap do PHP)"
+    } else {
+        Pass "QA de autenticacao LDAP concluido"
+    }
 }
 
 Write-Section "JavaScript syntax"

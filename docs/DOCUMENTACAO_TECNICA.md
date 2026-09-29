@@ -86,7 +86,7 @@ flowchart TD
 | Autenticação | LDAP / Active Directory (bind por UPN) |
 | Frontend | React 18 + Vite; TypeScript permissivo (`allowJs=true`, `checkJs=false`, `strict=false`) |
 | Bibliotecas | TanStack Query, TanStack Table, React Hook Form, Zod, Tailwind CSS |
-| QA | `scripts/qa-smoke.php` (PHP) e `frontend/scripts/qa-*.mjs` (Node) |
+| QA | `scripts/qa-smoke.php` (PHP), `scripts/qa-auth.php` (PHP, testes negativos de LDAP; sem banco, exige extensão `ldap`) e `frontend/scripts/qa-*.mjs` (Node) |
 
 ---
 

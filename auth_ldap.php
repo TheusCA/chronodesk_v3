@@ -92,7 +92,7 @@ function autenticar_ad(string $username, string $password) {
     // GUARDA DE SENHA VAZIA — precisa ficar ANTES do laço de servidores.
     // O AD aceita bind anônimo com senha vazia e responde sucesso, o que
     // transformaria qualquer login existente em bypass de autenticação.
-    // Coberto por teste negativo em scripts/qa-smoke.php.
+    // Coberto por teste negativo em scripts/qa-auth.php.
     if (!$username || !$password) return false;
 
     // Tentar cada servidor AD em ordem (failover)
