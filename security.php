@@ -429,6 +429,47 @@ function audit_log($action, $details = '', $severity = 'INFO') {
 /**
  * Exige Content-Type application/json em requisições POST
  */
+/**
+ * Verifica se $ip pertence a uma lista separada por vírgula de IPs exatos ou
+ * blocos CIDR, IPv4 ou IPv6 (ex.: "127.0.0.1,::1,10.20.0.0/24").
+ * Entrada inválida, de qualquer lado, nunca casa.
+ */
+function ip_in_allowlist(string $ip, string $allowlist): bool {
+    $ip_binary = @inet_pton(trim($ip));
+    if ($ip_binary === false) return false;
+
+    foreach (explode(',', $allowlist) as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') continue;
+
+        $prefix = null;
+        if (strpos($entry, '/') !== false) {
+            [$entry, $prefix_text] = explode('/', $entry, 2);
+            if (!ctype_digit($prefix_text)) continue;
+            $prefix = (int)$prefix_text;
+        }
+
+        $net_binary = @inet_pton($entry);
+        if ($net_binary === false || strlen($net_binary) !== strlen($ip_binary)) continue;
+
+        $bits = strlen($net_binary) * 8;
+        $prefix = $prefix ?? $bits;
+        if ($prefix > $bits) continue;
+
+        $full_bytes = intdiv($prefix, 8);
+        if (substr($ip_binary, 0, $full_bytes) !== substr($net_binary, 0, $full_bytes)) continue;
+
+        $remaining_bits = $prefix % 8;
+        if ($remaining_bits === 0) return true;
+
+        $mask = (0xFF << (8 - $remaining_bits)) & 0xFF;
+        if ((ord($ip_binary[$full_bytes]) & $mask) === (ord($net_binary[$full_bytes]) & $mask)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function require_json_content_type() {
     $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
     if (!in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) return;

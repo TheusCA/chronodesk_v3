@@ -659,4 +659,80 @@ try {
 }
 assert_same(true, $blocked, 'bloqueia autenticacao SMTP sem criptografia');
 
+// ============================================================================
+// Health check (Lote 3 — OPS-02)
+// ============================================================================
+assert_same(true, ip_in_allowlist('127.0.0.1', '127.0.0.1,::1'), 'allowlist casa IPv4 exato');
+assert_same(true, ip_in_allowlist('::1', '127.0.0.1,::1'), 'allowlist casa IPv6 exato');
+assert_same(true, ip_in_allowlist('10.20.30.40', '10.20.0.0/16'), 'allowlist casa CIDR IPv4');
+assert_same(false, ip_in_allowlist('10.21.0.1', '10.20.0.0/16'), 'allowlist rejeita fora do CIDR IPv4');
+assert_same(true, ip_in_allowlist('10.0.0.130', '10.0.0.128/25'), 'allowlist casa prefixo fora de fronteira de byte');
+assert_same(false, ip_in_allowlist('10.0.0.127', '10.0.0.128/25'), 'allowlist rejeita prefixo fora de fronteira de byte');
+assert_same(true, ip_in_allowlist('fd00::5', 'fd00::/64'), 'allowlist casa CIDR IPv6');
+assert_same(false, ip_in_allowlist('127.0.0.1', '::1'), 'allowlist nao mistura IPv4 com IPv6');
+assert_same(false, ip_in_allowlist('127.0.0.1', ''), 'allowlist vazia nao casa');
+assert_same(false, ip_in_allowlist('', '127.0.0.1'), 'IP vazio nao casa');
+assert_same(false, ip_in_allowlist('127.0.0.1', '127.0.0.1/33,127.0.0.1/x,lixo'), 'entradas invalidas nunca casam');
+assert_same(true, ip_in_allowlist('0.0.0.0', '0.0.0.0/0'), 'CIDR /0 casa qualquer IPv4');
+
+// Executa PHP em processo separado: health.php e config.php chamam exit e
+// definem constantes, entao nao podem rodar no processo do QA.
+function qa_run_php(string $code): array {
+    $process = proc_open([PHP_BINARY, '-r', $code], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+    if (!is_resource($process)) {
+        fwrite(STDERR, "FAIL: nao foi possivel iniciar subprocesso PHP\n");
+        exit(1);
+    }
+    $stdout = (string)stream_get_contents($pipes[1]);
+    $stderr = (string)stream_get_contents($pipes[2]);
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    return [$stdout, $stderr, proc_close($process)];
+}
+
+$qaRoot = var_export(realpath(__DIR__ . '/..'), true);
+$qaSessionProbe = "register_shutdown_function(static function () { fwrite(STDERR, '[session=' . session_status() . ']'); });";
+
+// Controle positivo: sem a constante, config.php abre sessao. Sem este
+// controle, o teste abaixo passaria mesmo se sessao nunca abrisse na CLI.
+[, $stderr] = qa_run_php("{$qaSessionProbe} require {$qaRoot} . '/config.php';");
+assert_same(true, strpos($stderr, '[session=' . PHP_SESSION_ACTIVE . ']') !== false, 'config.php abre sessao por padrao');
+[, $stderr] = qa_run_php("{$qaSessionProbe} define('CHRONODESK_STATELESS', true); require {$qaRoot} . '/config.php';");
+assert_same(true, strpos($stderr, '[session=' . PHP_SESSION_NONE . ']') !== false, 'CHRONODESK_STATELESS impede abertura de sessao');
+
+// Allowlist e banco explicitos: o QA tambem roda no servidor, onde o .env real
+// definiria outra allowlist e um banco acessivel. Porta 1 recusa na hora.
+$qaPreviousEnv = [];
+foreach (['HEALTH_ALLOWED_IPS' => '127.0.0.1,::1', 'DB_HOST' => '127.0.0.1', 'DB_PORT' => '1'] as $key => $value) {
+    $qaPreviousEnv[$key] = getenv($key);
+    putenv("{$key}={$value}");
+}
+
+$qaHealth = static function (string $remoteAddr, string $method = 'GET') use ($qaRoot, $qaSessionProbe): array {
+    return qa_run_php(
+        "{$qaSessionProbe} \$_SERVER['REMOTE_ADDR'] = " . var_export($remoteAddr, true) . ';'
+        . " \$_SERVER['REQUEST_METHOD'] = " . var_export($method, true) . ';'
+        . " require {$qaRoot} . '/api/health.php';"
+    );
+};
+
+[$stdout, $stderr] = $qaHealth('203.0.113.10');
+assert_same('{"status":"forbidden"}', $stdout, 'health nega IP fora da allowlist');
+assert_same(true, strpos($stderr, '[session=' . PHP_SESSION_NONE . ']') !== false, 'health negado nao abre sessao');
+
+[$stdout, $stderr] = $qaHealth('127.0.0.1');
+assert_same('{"status":"fail","database":"fail"}', $stdout, 'health reporta banco indisponivel sem detalhes');
+assert_same(true, strpos($stderr, '[session=' . PHP_SESSION_NONE . ']') !== false, 'health permitido nao abre sessao');
+assert_same(false, strpos($stdout, '127.0.0.1') !== false, 'health nao expoe host do banco');
+
+[$stdout] = $qaHealth('127.0.0.1', 'POST');
+assert_same(true, strpos($stdout, '"sucesso":false') !== false, 'health rejeita POST com 405');
+
+$healthSource = (string)file_get_contents(__DIR__ . '/../api/health.php');
+assert_same(0, preg_match('/(?:require|include)(?:_once)?[^;]*init\.php/', $healthSource), 'health nao inclui init.php (lock de pausas)');
+
+foreach ($qaPreviousEnv as $key => $value) {
+    putenv($value === false ? $key : "{$key}={$value}");
+}
+
 echo "QA smoke OK\n";

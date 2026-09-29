@@ -147,8 +147,13 @@ if (APP_ENV !== 'development') {
 // Configurar headers de segurança
 set_security_headers();
 
-// Configurar sessão segura
-secure_session_start();
+// Configurar sessão segura.
+// Endpoints sem estado (api/health.php) definem CHRONODESK_STATELESS antes de
+// incluir este arquivo: uma sondagem de monitoração a cada poucos segundos não
+// pode criar um arquivo de sessão por requisição.
+if (!defined('CHRONODESK_STATELESS')) {
+    secure_session_start();
+}
 
 // ============================================
 // [VULN-004] CORS com origens explícitas
