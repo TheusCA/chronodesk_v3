@@ -47,7 +47,7 @@ Base da afirmação:
 | **O que a IA gerou** | `docs/AUDITORIA_2026-09.md`: resumo executivo, 30 achados classificados por severidade com evidência `arquivo:linha` e distinção explícita entre fato e hipótese, matriz de aderência aos requisitos corporativos, plano de execução em lotes e perguntas em aberto. |
 | **O que a IA executou** | Somente leitura: leitura de arquivos, `git log`, `git ls-files`, `npm run lint`, `npm run typecheck`, `npm audit`, `php -l` em 81 arquivos e 13 scripts de QA estático do frontend. Nenhum comando contra o servidor. |
 | **Validação humana** | Revisão dos achados pelo responsável. Decisões registradas: (a) a ausência dos documentos de contexto no repositório é intencional e foi removida da auditoria; (b) solicitada verificação adicional do achado SEC-04 (perfis que podem alterar a equipe de um colaborador); (c) aprovação dos Lotes 1, 2, 2B e 3, com ajustes de escopo. |
-| **Limitações declaradas** | PHP local 8.2 × servidor 8.4 (`php -l` valida sintaxe, não runtime). `scripts/qa-smoke.php` não executado (requer banco). `gitleaks` indisponível — usada varredura por padrões. `qa:visual` falha por depender do build em `app/`, não versionado. |
+| **Limitações declaradas** | PHP local 8.2 × servidor 8.4 (`php -l` valida sintaxe, não runtime). `scripts/qa-smoke.php` não foi executado nesta fase por se supor que exigia banco — **suposição incorreta, corrigida em 2026-09-29**: o script não abre conexão com o MySQL e roda localmente (`php scripts/qa-smoke.php`, EXIT 0). `gitleaks` indisponível — usada varredura por padrões. `qa:visual` falha por depender do build em `app/`, não versionado. |
 
 ### Lote 1 — Governança e sanitização — 2026-09-28
 

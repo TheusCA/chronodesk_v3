@@ -182,7 +182,23 @@ senha de conta de servico. Para preparar uma futura integracao com cofre, siga
 php -r "require '/var/www/chronodesk/db.php'; var_dump((bool)get_db_connection());"
 ```
 
-8. Testar URLs:
+8. Executar o QA pós-deploy como o usuário do Apache:
+
+```bash
+cd /var/www/chronodesk
+sudo -u www-data php scripts/qa-auth.php
+sudo -u www-data php scripts/qa-smoke.php
+```
+
+Ambos devem terminar com `OK` e código de saída `0`. Rodar como `www-data`
+confirma que o código é legível pelo usuário do Apache. Não valida o `.env`:
+se ele estiver ilegível, o QA passa mesmo assim, apenas com aviso de `file()`
+na saída; trate qualquer aviso como falha. Os scripts não
+abrem conexão com o banco nem com o AD e só escrevem no diretório temporário
+do sistema. `qa-auth.php` exige `php-ldap` e falha se a extensão estiver
+ausente. Qualquer falha bloqueia o deploy: acionar o rollback.
+
+9. Testar URLs:
 
 ```bash
 curl -I http://chronodesk.interno.local/
@@ -192,7 +208,7 @@ curl -I http://chronodesk.interno.local/api/status.php
 
 Sem cookie de sessao, `/api/status.php` deve responder `401`.
 
-9. Validar bloqueio de arquivos sensiveis:
+10. Validar bloqueio de arquivos sensiveis:
 
 ```bash
 curl -I http://chronodesk.interno.local/.env
@@ -203,7 +219,7 @@ curl -I http://chronodesk.interno.local/README.md
 
 As respostas para arquivos sensiveis devem ser `403` ou `404`.
 
-10. Validar autenticacao e fluxos:
+11. Validar autenticacao e fluxos:
 
 - Login AD para CI.
 - Login admin/gestor autorizado pelo AD.
@@ -212,7 +228,7 @@ As respostas para arquivos sensiveis devem ser `403` ou `404`.
 - Metricas e relatorios.
 - Logout e expiracao de sessao.
 
-11. Validar logs:
+12. Validar logs:
 
 ```bash
 sudo tail -f /var/log/apache2/chronodesk_access.log
@@ -246,7 +262,7 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - `DB_PORT` e `DB_CHARSET` estao no exemplo de producao para documentar a intencao operacional, mas o codigo atual usa porta padrao do MySQL e charset fixo `utf8mb4`.
 - `AUTH_SOURCE` e carregado em `config.php`, mas o fluxo AD atual esta implementado diretamente em `auth_ldap.php` e chamadas relacionadas.
 - `AD_SERVERS` deve receber apenas hostnames ou IPs dos DCs, separados por virgula, por exemplo `servidor-ad-1.dominio.exemplo.local,servidor-ad-2.dominio.exemplo.local`.
-- Nao inclua `ldap://` ou `ldaps://` em `AD_SERVERS`, porque `auth_ldap.php` monta a URI internamente como `ldap://{servidor}:{porta}`.
+- Nao inclua `ldap://` ou `ldaps://` em `AD_SERVERS`, porque `auth_ldap.php` monta a URI internamente como `{AD_SCHEME}://{servidor}:{porta}`. O esquema vem de `AD_SCHEME` (`ldap` padrao, `ldaps` opcional).
 - Use `AD_USE_TLS=true` quando o ambiente AD suportar StartTLS e a cadeia de certificados estiver configurada no servidor Linux.
 
 ## Checklist de Validacao
@@ -267,6 +283,7 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] Usuario MySQL dedicado, sem uso de `root` pela aplicacao.
 - [ ] Usuario MySQL runtime sem `CREATE`, `ALTER`, `DROP` ou `INDEX`.
 - [ ] Banco `sistema_pausas` importado.
+- [ ] `sudo -u www-data php scripts/qa-auth.php` e `sudo -u www-data php scripts/qa-smoke.php` terminam com `OK`.
 - [ ] `api/status.php` responde.
 - [ ] Arquivos sensiveis retornam `403` ou `404`.
 - [ ] Login AD validado.
