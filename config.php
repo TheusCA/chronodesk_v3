@@ -192,48 +192,118 @@ function inicializar_csv() {
 }
 
 /**
- * [VULN-025] Limpar estado antigo SEM deletar o arquivo inteiro
- * Agora reseta pausas abandonadas individualmente (>24h)
+ * Lê o estado de pausas com LOCK_SH no próprio arquivo.
+ *
+ * Os gravadores usam file_put_contents(..., LOCK_EX), que pega o lock ANTES de
+ * truncar e reescrever. Sem o lock compartilhado, uma leitura concorrente pode
+ * pegar o arquivo vazio ou pela metade e a tela mostraria, por um instante,
+ * ninguém em pausa.
+ *
+ * Por que não gravação atômica (temporário + rename): o rename exige que o
+ * usuário do PHP possa escrever na pasta do estado.json, que hoje pertence a
+ * root; trocaria o inode, e com ele dono e modo do arquivo; e quebraria o
+ * contrato de LOCK_EX no próprio arquivo de que os gravadores dependem.
+ *
+ * Retorna null se o arquivo não existir, não puder ser lido ou não for um JSON
+ * com a lista 'funcionarios'. Nunca grava.
  */
-function limpar_estado_antigo() {
-    with_pause_state_lock(function () {
-    if (!file_exists(ESTADO_JSON)) return;
-    
-    $estado = json_decode(file_get_contents(ESTADO_JSON), true);
-    if (!$estado || !isset($estado['funcionarios'])) return;
-    
-    $modificado = false;
+function ler_estado_pausas(string $path = ESTADO_JSON): ?array {
+    if (!is_file($path)) return null;
+    $handle = @fopen($path, 'r');
+    if ($handle === false) return null;
+    try {
+        if (!flock($handle, LOCK_SH)) return null;
+        $conteudo = stream_get_contents($handle);
+        flock($handle, LOCK_UN);
+    } finally {
+        fclose($handle);
+    }
+    $estado = json_decode((string)$conteudo, true);
+    if (!is_array($estado) || !isset($estado['funcionarios']) || !is_array($estado['funcionarios'])) {
+        return null;
+    }
+    return $estado;
+}
+
+/**
+ * Classifica uma entrada do estado: 'abandonada' (pausa > 24h), 'data_invalida'
+ * ou null (nada a fazer). É o único critério de limpeza, usado tanto na
+ * pré-checagem quanto na releitura sob lock, para que as duas nunca divirjam.
+ */
+function classificar_pausa_antiga($func, DateTime $now): ?string {
+    if (!is_array($func) || !($func['em_pausa'] ?? false) || !isset($func['inicio_pausa'])) {
+        return null;
+    }
+    try {
+        $inicio = new DateTime($func['inicio_pausa']);
+    } catch (Exception $e) {
+        return 'data_invalida';
+    }
+    return ($now->getTimestamp() - $inicio->getTimestamp() > 86400) ? 'abandonada' : null;
+}
+
+/**
+ * [VULN-025] Reseta pausas abandonadas (>24h) individualmente, sem apagar o arquivo.
+ *
+ * PERF-01: roda em toda requisição via init.php, inclusive no polling de 15 s.
+ * Antes pegava o lock exclusivo global a cada chamada; agora faz uma pré-checagem
+ * sem esse lock e só o pega quando há algo a limpar, o que quase nunca acontece.
+ *
+ * A pré-checagem só decide se vale a pena pegar o lock. Leitura inválida ou
+ * incompleta encerra sem gravar. A gravação é decidida exclusivamente pela
+ * releitura feita sob o lock.
+ *
+ * $ler_estado existe para os testes simularem leituras divergentes.
+ * Retorna true se gravou.
+ */
+function limpar_pausas_abandonadas(string $path, callable $ler_estado): bool {
+    $previa = $ler_estado($path);
+    if ($previa === null) return false;
+
     $now = new DateTime();
-    
-    foreach ($estado['funcionarios'] as $id => &$func) {
-        if (($func['em_pausa'] ?? false) && isset($func['inicio_pausa'])) {
-            try {
-                $inicio = new DateTime($func['inicio_pausa']);
-                $diff = $now->getTimestamp() - $inicio->getTimestamp();
-                if ($diff > 86400) { // Pausa > 24h = abandonada
-                    $func['em_pausa'] = false;
-                    $func['inicio_pausa'] = null;
-                    $func['motivo_pausa'] = null;
-                    $func['status_aprovacao'] = null;
-                    $func['solicitacao_timestamp'] = null;
-                    $func['observacao_reuniao'] = null;
-                    error_log("[CLEANUP] Pausa abandonada resetada: funcionario ID {$id}");
-                    $modificado = true;
-                }
-            } catch (Exception $e) {
-                // Data inválida, resetar
+    $ha_o_que_limpar = false;
+    foreach ($previa['funcionarios'] as $func) {
+        if (classificar_pausa_antiga($func, $now) !== null) {
+            $ha_o_que_limpar = true;
+            break;
+        }
+    }
+    if (!$ha_o_que_limpar) return false;
+
+    return with_pause_state_lock(function () use ($path, $ler_estado) {
+        $estado = $ler_estado($path);
+        if ($estado === null) return false;
+
+        $modificado = false;
+        $now = new DateTime();
+        foreach ($estado['funcionarios'] as $id => &$func) {
+            $situacao = classificar_pausa_antiga($func, $now);
+            if ($situacao === 'abandonada') {
+                $func['em_pausa'] = false;
+                $func['inicio_pausa'] = null;
+                $func['motivo_pausa'] = null;
+                $func['status_aprovacao'] = null;
+                $func['solicitacao_timestamp'] = null;
+                $func['observacao_reuniao'] = null;
+                error_log("[CLEANUP] Pausa abandonada resetada: funcionario ID {$id}");
+                $modificado = true;
+            } elseif ($situacao === 'data_invalida') {
                 $func['em_pausa'] = false;
                 $func['inicio_pausa'] = null;
                 $modificado = true;
             }
         }
-    }
-    unset($func);
-    
-    if ($modificado) {
-        file_put_contents(ESTADO_JSON, json_encode($estado, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
-    }
-    });
+        unset($func);
+
+        if ($modificado) {
+            file_put_contents($path, json_encode($estado, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE), LOCK_EX);
+        }
+        return $modificado;
+    }, $path);
+}
+
+function limpar_estado_antigo() {
+    limpar_pausas_abandonadas(ESTADO_JSON, 'ler_estado_pausas');
 }
 
 function json_response($data, $status_code = 200) {

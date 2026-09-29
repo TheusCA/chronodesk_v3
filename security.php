@@ -631,9 +631,13 @@ function require_portal_auth(array $allowed_roles = []): string {
     return $role;
 }
 
-function with_pause_state_lock(callable $callback) {
-    $state_path = defined('ESTADO_JSON') ? ESTADO_JSON : __DIR__ . '/estado.json';
-    $lock_path = sys_get_temp_dir() . '/chronodesk_pause_' . md5($state_path) . '.lock';
+function pause_state_lock_path(string $state_path): string {
+    return sys_get_temp_dir() . '/chronodesk_pause_' . md5($state_path) . '.lock';
+}
+
+function with_pause_state_lock(callable $callback, ?string $state_path = null) {
+    $state_path = $state_path ?? (defined('ESTADO_JSON') ? ESTADO_JSON : __DIR__ . '/estado.json');
+    $lock_path = pause_state_lock_path($state_path);
     $handle = @fopen($lock_path, 'c');
     if ($handle === false || !flock($handle, LOCK_EX)) {
         if (is_resource($handle)) {

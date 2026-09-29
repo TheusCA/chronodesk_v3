@@ -86,6 +86,17 @@ Base da afirmação:
 | **Validacao humana** | **Revisao aprovada em 2026-09-29, com ajustes:** (a) aviso de que parar o `apache2` na restauracao derruba tambem o outro site da VM; (b) bloco de permissoes `root:www-data` retirado da rotina de deploy e registrado como passo separado **TO CONFIRM**, porque o servidor funciona com `root:root 644`; a restauracao passou a preservar dono e modo existentes; (c) consulta de tabelas nao-InnoDB antes da primeira execucao do backup. **Execucao no servidor pendente.** O script de backup **nunca rodou contra MySQL real** (stubs substituem `docker`/`mysqldump`); a entrega do arquivo de opcoes por `--defaults-extra-file=/dev/stdin` (validada pela consulta InnoDB) e o teste de restauracao precisam ser confirmados na primeira execucao manual. O caminho 200 do health so e exercitado com banco real. |
 | **Observacoes** | Modelo deste lote: Claude Opus 5.5 (`claude-opus-5-5`). O backup fica no disco da propria VM; copia externa depende de infraestrutura. |
 
+### PERF-01 (itens A e D) — Estado de pausas — 2026-09-29
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Tirar o lock exclusivo global do caminho de leitura (polling de 15 s) e eliminar a leitura parcial de `estado.json`. **Deploy separado, posterior ao deploy dos Lotes 1 a 3** (que termina no commit `072ed16`). |
+| **Aprovacao** | Itens A e D aprovados pelo responsavel em 2026-09-29. B (intervalos de polling) recusado por ora, a reavaliar com medicao apos A. C (carga preguicosa de funcionarios) recusado. |
+| **O que a IA alterou** | `config.php`: `ler_estado_pausas()` le com `LOCK_SH`; `classificar_pausa_antiga()` e o criterio unico de limpeza; `limpar_pausas_abandonadas()` faz pre-checagem sem o lock exclusivo e so o pega quando ha pausa a limpar; a gravacao e decidida exclusivamente pela releitura sob lock. `limpar_estado_antigo()` mantem a assinatura. `security.php`: caminho do lock extraido para `pause_state_lock_path()` e parametro opcional de caminho em `with_pause_state_lock()`, sem mudar as chamadas existentes. `classes/GerenciadorPausas.php`: `carregar_estado()` usa o leitor com `LOCK_SH`. |
+| **Decisao D** | `LOCK_SH` na leitura em vez de gravacao atomica (temporario + rename). O rename exigiria permissao de escrita do usuario do PHP na pasta de `estado.json`, que pertence a root (e cujo estado real esta TO CONFIRM); trocaria o inode e, com ele, dono e modo do arquivo; e quebraria o contrato de `LOCK_EX` no proprio arquivo usado por `file_put_contents`, que trava antes de truncar. |
+| **Validacao executada pela IA** | Testes de comportamento em `qa-smoke.php` sobre arquivo e lock temporarios (nunca o estado real): gravador simulado segurando `LOCK_EX` com metade do JSON, e o leitor espera e ve o estado completo; previa invalida, previa desatualizada, releitura divergente, releitura invalida e arquivo truncado em disco nao gravam; com o lock exclusivo ocupado, estado sem pausa antiga retorna sem esperar, e o controle positivo espera e grava. Mutacao: 6 defeitos introduzidos, 6 detectados. |
+| **Validacao humana** | **Pendente.** Medir a latencia do polling antes e depois do deploy, que tambem e a base para reavaliar o item B. |
+
 ---
 
 ## 5. Responsabilidade

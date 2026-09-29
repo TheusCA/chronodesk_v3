@@ -735,4 +735,144 @@ foreach ($qaPreviousEnv as $key => $value) {
     putenv($value === false ? $key : "{$key}={$value}");
 }
 
+// ============================================================================
+// Estado de pausas (PERF-01 A e D)
+//
+// Tudo roda sobre um estado.json temporario, com lock proprio derivado do
+// caminho: o QA tambem roda no servidor e nunca pode tocar no estado real.
+// ============================================================================
+$qaStateDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'chronodesk_state_qa_' . bin2hex(random_bytes(4));
+mkdir($qaStateDir, 0700);
+$qaStatePath = $qaStateDir . DIRECTORY_SEPARATOR . 'estado.json';
+
+$qaAbandoned = ['em_pausa' => true, 'inicio_pausa' => (new DateTime('-2 days'))->format('c'), 'motivo_pausa' => 'cafe',
+    'status_aprovacao' => 'aprovado', 'solicitacao_timestamp' => null, 'observacao_reuniao' => 'x'];
+$qaRecent = ['em_pausa' => true, 'inicio_pausa' => (new DateTime('-10 minutes'))->format('c'), 'motivo_pausa' => 'cafe',
+    'status_aprovacao' => 'aprovado', 'solicitacao_timestamp' => null, 'observacao_reuniao' => null];
+$qaStateWithAbandoned = ['funcionarios' => ['1' => $qaAbandoned, '2' => $qaRecent]];
+$qaStateFresh = ['funcionarios' => ['1' => $qaRecent, '2' => $qaRecent]];
+
+$qaWriteState = static function (string $content) use ($qaStatePath): void {
+    file_put_contents($qaStatePath, $content);
+    clearstatcache();
+};
+$qaStateHash = static function () use ($qaStatePath): string {
+    clearstatcache();
+    return (string)hash_file('sha256', $qaStatePath);
+};
+// Leitor roteirizado: cada chamada devolve a proxima resposta e conta as chamadas.
+$qaScriptedReader = static function (array $answers, &$calls): callable {
+    $calls = 0;
+    return static function (string $path) use ($answers, &$calls) {
+        return $answers[$calls++] ?? null;
+    };
+};
+
+// --- D: leitura com LOCK_SH -------------------------------------------------
+assert_same(null, ler_estado_pausas($qaStateDir . DIRECTORY_SEPARATOR . 'inexistente.json'), 'leitor: arquivo ausente retorna null');
+$qaWriteState('{"funcionarios":{"1":');
+assert_same(null, ler_estado_pausas($qaStatePath), 'leitor: JSON truncado retorna null');
+$qaWriteState('{"outra":1}');
+assert_same(null, ler_estado_pausas($qaStatePath), 'leitor: JSON sem funcionarios retorna null');
+$qaWriteState(json_encode($qaStateFresh));
+assert_same($qaStateFresh, ler_estado_pausas($qaStatePath), 'leitor: JSON valido retorna o estado');
+
+// Um gravador segura LOCK_EX, trunca e escreve metade; so completa depois de
+// 1 s. O leitor, iniciado no meio da escrita, precisa esperar e ver o estado
+// inteiro. Sem LOCK_SH ele leria a metade e devolveria null.
+$qaFullJson = json_encode($qaStateWithAbandoned);
+$qaHalf = intdiv(strlen($qaFullJson), 2);
+$qaWriterCode = '$h = fopen(' . var_export($qaStatePath, true) . ', "c"); flock($h, LOCK_EX); ftruncate($h, 0);'
+    . ' fwrite($h, ' . var_export(substr($qaFullJson, 0, $qaHalf), true) . '); fflush($h);'
+    . ' echo "pronto\n"; fflush(STDOUT); usleep(1000000);'
+    . ' fwrite($h, ' . var_export(substr($qaFullJson, $qaHalf), true) . '); fflush($h); flock($h, LOCK_UN); fclose($h);';
+$qaWriter = proc_open([PHP_BINARY, '-r', $qaWriterCode], [1 => ['pipe', 'w']], $qaWriterPipes);
+assert_same('pronto', trim((string)fgets($qaWriterPipes[1])), 'gravador simulado segurou o lock');
+$qaStarted = microtime(true);
+$qaReadDuringWrite = ler_estado_pausas($qaStatePath);
+$qaWaited = microtime(true) - $qaStarted;
+fclose($qaWriterPipes[1]);
+proc_close($qaWriter);
+assert_same($qaStateWithAbandoned, $qaReadDuringWrite, 'leitor espera o gravador e ve o estado completo');
+assert_same(true, $qaWaited >= 0.5, 'leitor bloqueou enquanto o gravador segurava LOCK_EX');
+
+// carregar_estado() le ESTADO_JSON fixo e nao pode ser apontado para o arquivo
+// temporario; garante-se entao que ele passa pelo leitor testado acima.
+$qaManagerSource = (string)file_get_contents(__DIR__ . '/../classes/GerenciadorPausas.php');
+preg_match('/function carregar_estado\(\)\s*\{(.*?)\n    \}/s', $qaManagerSource, $qaLoadBody);
+assert_same(true, strpos($qaLoadBody[1] ?? '', 'ler_estado_pausas(ESTADO_JSON)') !== false, 'carregar_estado usa o leitor com LOCK_SH');
+assert_same(false, strpos($qaLoadBody[1] ?? '', 'file_get_contents') !== false, 'carregar_estado nao le o arquivo sem lock');
+
+// --- A: pre-checagem nunca grava; so a releitura sob lock decide ------------
+$qaWriteState(json_encode($qaStateWithAbandoned));
+$qaDiskHash = $qaStateHash();
+
+$reader = $qaScriptedReader([null], $calls);
+assert_same(false, limpar_pausas_abandonadas($qaStatePath, $reader), 'A: previa invalida nao grava');
+assert_same(1, $calls, 'A: previa invalida nao chega a reler sob lock');
+assert_same($qaDiskHash, $qaStateHash(), 'A: previa invalida deixa o arquivo intacto');
+
+$reader = $qaScriptedReader([$qaStateFresh], $calls);
+assert_same(false, limpar_pausas_abandonadas($qaStatePath, $reader), 'A: previa sem pausa antiga nao grava');
+assert_same(1, $calls, 'A: previa sem pausa antiga nao pega o lock');
+assert_same($qaDiskHash, $qaStateHash(), 'A: previa sem pausa antiga deixa o arquivo intacto');
+
+$reader = $qaScriptedReader([$qaStateWithAbandoned, $qaStateFresh], $calls);
+assert_same(false, limpar_pausas_abandonadas($qaStatePath, $reader), 'A: releitura sob lock sem pausa antiga nao grava');
+assert_same(2, $calls, 'A: previa com pausa antiga dispara releitura');
+assert_same($qaDiskHash, $qaStateHash(), 'A: releitura divergente deixa o arquivo intacto');
+
+$reader = $qaScriptedReader([$qaStateWithAbandoned, null], $calls);
+assert_same(false, limpar_pausas_abandonadas($qaStatePath, $reader), 'A: releitura invalida sob lock nao grava');
+assert_same($qaDiskHash, $qaStateHash(), 'A: releitura invalida deixa o arquivo intacto');
+
+$qaWriteState('{"funcionarios":{"1":{"em_pausa":true,"inicio_pausa":"2020-01-01T00:00:00');
+$qaDiskHash = $qaStateHash();
+assert_same(false, limpar_pausas_abandonadas($qaStatePath, 'ler_estado_pausas'), 'A: arquivo truncado em disco nao grava');
+assert_same($qaDiskHash, $qaStateHash(), 'A: arquivo truncado em disco fica intacto');
+
+$qaWriteState(json_encode($qaStateWithAbandoned));
+assert_same(true, limpar_pausas_abandonadas($qaStatePath, 'ler_estado_pausas'), 'A: pausa abandonada e limpa');
+$qaCleaned = ler_estado_pausas($qaStatePath);
+assert_same(false, $qaCleaned['funcionarios']['1']['em_pausa'], 'A: pausa abandonada resetada');
+assert_same(null, $qaCleaned['funcionarios']['1']['observacao_reuniao'], 'A: pausa abandonada limpa todos os campos');
+assert_same($qaRecent, $qaCleaned['funcionarios']['2'], 'A: pausa recente preservada');
+
+$qaInvalidDate = ['funcionarios' => ['1' => ['em_pausa' => true, 'inicio_pausa' => 'data-invalida', 'motivo_pausa' => 'cafe']]];
+$qaWriteState(json_encode($qaInvalidDate));
+assert_same(true, limpar_pausas_abandonadas($qaStatePath, 'ler_estado_pausas'), 'A: data invalida e limpa');
+assert_same(
+    ['em_pausa' => false, 'inicio_pausa' => null, 'motivo_pausa' => 'cafe'],
+    ler_estado_pausas($qaStatePath)['funcionarios']['1'],
+    'A: data invalida mantem o comportamento anterior (so em_pausa e inicio)'
+);
+
+// Sem pausa antiga, a limpeza nao pode esperar o lock exclusivo: e isso que
+// tira o polling da fila. Controle positivo: com pausa antiga, ela espera.
+$qaLockHolderCode = '$h = fopen(' . var_export(pause_state_lock_path($qaStatePath), true) . ', "c"); flock($h, LOCK_EX);'
+    . ' echo "pronto\n"; fflush(STDOUT); usleep(1500000); flock($h, LOCK_UN); fclose($h);';
+$qaTimeCleanup = static function (string $stateJson) use ($qaWriteState, $qaStatePath, $qaLockHolderCode): array {
+    $qaWriteState($stateJson);
+    $holder = proc_open([PHP_BINARY, '-r', $qaLockHolderCode], [1 => ['pipe', 'w']], $pipes);
+    assert_same('pronto', trim((string)fgets($pipes[1])), 'processo auxiliar segurou o lock de pausas');
+    $started = microtime(true);
+    $wrote = limpar_pausas_abandonadas($qaStatePath, 'ler_estado_pausas');
+    $elapsed = microtime(true) - $started;
+    fclose($pipes[1]);
+    proc_close($holder);
+    return [$wrote, $elapsed];
+};
+[$wrote, $elapsed] = $qaTimeCleanup(json_encode($qaStateFresh));
+assert_same(false, $wrote, 'A: estado sem pausa antiga nao grava');
+assert_same(true, $elapsed < 0.75, 'A: estado sem pausa antiga nao espera o lock exclusivo');
+[$wrote, $elapsed] = $qaTimeCleanup(json_encode($qaStateWithAbandoned));
+assert_same(true, $wrote, 'A: controle positivo grava apos obter o lock');
+assert_same(true, $elapsed >= 1.0, 'A: controle positivo espera o lock exclusivo');
+
+foreach (glob($qaStateDir . DIRECTORY_SEPARATOR . '*') ?: [] as $qaFile) {
+    unlink($qaFile);
+}
+rmdir($qaStateDir);
+@unlink(pause_state_lock_path($qaStatePath));
+
 echo "QA smoke OK\n";

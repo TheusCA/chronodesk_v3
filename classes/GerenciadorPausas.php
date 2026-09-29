@@ -24,24 +24,23 @@ class GerenciadorPausas {
     }
 
     public function carregar_estado() {
-        if (file_exists(ESTADO_JSON)) {
-            $estado = json_decode(file_get_contents(ESTADO_JSON), true);
-            if ($estado && isset($estado['funcionarios'])) {
-                foreach ($estado['funcionarios'] as $id => $data) {
-                    if (isset($this->funcionarios[$id])) {
-                        $func = $this->funcionarios[$id];
-                        $func->em_pausa = $data['em_pausa'] ?? false;
-                        $func->inicio_pausa = ($data['inicio_pausa'] ?? null)
-                            ? new DateTime($data['inicio_pausa'])
-                            : null;
-                        $func->motivo_pausa = $data['motivo_pausa'] ?? null;
-                        $func->status_aprovacao = $data['status_aprovacao'] ?? null;
-                        $func->solicitacao_timestamp = ($data['solicitacao_timestamp'] ?? null)
-                            ? new DateTime($data['solicitacao_timestamp'])
-                            : null;
-                        $func->observacao_reuniao = $data['observacao_reuniao'] ?? null;
-                    }
-                }
+        // LOCK_SH no proprio arquivo: ver ler_estado_pausas() em config.php.
+        $estado = ler_estado_pausas(ESTADO_JSON);
+        if ($estado === null) return;
+
+        foreach ($estado['funcionarios'] as $id => $data) {
+            if (isset($this->funcionarios[$id])) {
+                $func = $this->funcionarios[$id];
+                $func->em_pausa = $data['em_pausa'] ?? false;
+                $func->inicio_pausa = ($data['inicio_pausa'] ?? null)
+                    ? new DateTime($data['inicio_pausa'])
+                    : null;
+                $func->motivo_pausa = $data['motivo_pausa'] ?? null;
+                $func->status_aprovacao = $data['status_aprovacao'] ?? null;
+                $func->solicitacao_timestamp = ($data['solicitacao_timestamp'] ?? null)
+                    ? new DateTime($data['solicitacao_timestamp'])
+                    : null;
+                $func->observacao_reuniao = $data['observacao_reuniao'] ?? null;
             }
         }
     }
