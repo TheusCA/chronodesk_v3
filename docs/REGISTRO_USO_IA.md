@@ -95,7 +95,16 @@ Base da afirmação:
 | **O que a IA alterou** | `config.php`: `ler_estado_pausas()` le com `LOCK_SH`; `classificar_pausa_antiga()` e o criterio unico de limpeza; `limpar_pausas_abandonadas()` faz pre-checagem sem o lock exclusivo e so o pega quando ha pausa a limpar; a gravacao e decidida exclusivamente pela releitura sob lock. `limpar_estado_antigo()` mantem a assinatura. `security.php`: caminho do lock extraido para `pause_state_lock_path()` e parametro opcional de caminho em `with_pause_state_lock()`, sem mudar as chamadas existentes. `classes/GerenciadorPausas.php`: `carregar_estado()` usa o leitor com `LOCK_SH`. |
 | **Decisao D** | `LOCK_SH` na leitura em vez de gravacao atomica (temporario + rename). O rename exigiria permissao de escrita do usuario do PHP na pasta de `estado.json`, que pertence a root (e cujo estado real esta TO CONFIRM); trocaria o inode e, com ele, dono e modo do arquivo; e quebraria o contrato de `LOCK_EX` no proprio arquivo usado por `file_put_contents`, que trava antes de truncar. |
 | **Validacao executada pela IA** | Testes de comportamento em `qa-smoke.php` sobre arquivo e lock temporarios (nunca o estado real): gravador simulado segurando `LOCK_EX` com metade do JSON, e o leitor espera e ve o estado completo; previa invalida, previa desatualizada, releitura divergente, releitura invalida e arquivo truncado em disco nao gravam; com o lock exclusivo ocupado, estado sem pausa antiga retorna sem esperar, e o controle positivo espera e grava. Mutacao: 6 defeitos introduzidos, 6 detectados. |
-| **Validacao humana** | **Pendente.** Medir a latencia do polling antes e depois do deploy, que tambem e a base para reavaliar o item B. |
+| **Validacao humana** | Revisao aprovada em 2026-09-29; deploy separado, posterior ao dos Lotes 1 a 3. **Pendente:** medir a latencia do polling antes e depois do deploy, que tambem e a base para reavaliar o item B. |
+
+### Modo de manutencao exclusivo do ChronoDesk — 2026-09-29
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Parar a escrita no ChronoDesk (ex.: restauracao em incidente) sem parar o `apache2`, que atende tambem outro site da VM. Aprovado pelo responsavel em 2026-09-29. **Mesmo deploy do PERF-01 A+D.** |
+| **O que a IA alterou** | `.htaccess`: com o arquivo-sinal `%{DOCUMENT_ROOT}/../chronodesk.maintenance` presente, toda requisicao recebe 503 antes do PHP; regra depois dos bloqueios (caminho sensivel segue 403); loopback passa, para validacao pela VM; `ErrorDocument 503` com texto neutro. `scripts/test-linux.sh`: teste opt-in (`MAINTENANCE_TEST=1`) que cria o arquivo, confere 503, health respondido pelo Apache, `.env` bloqueado, bypass de loopback e retorno apos remover; recusa rodar se ja houver manutencao em curso e remove o arquivo via `trap` em qualquer falha. `DEPLOY_LINUX.md`: secao "Modo de Manutencao"; restauracao em incidente passa a usa-lo. |
+| **Validacao executada pela IA** | Logica do teste: harness de 10 casos em WSL com `curl` simulado, incluindo regra que nao dispara, loopback sem bypass, limpeza por `trap` e preservacao de manutencao real em curso. **A regra do `.htaccess` nao foi executada em Apache real**: nao ha Apache no ambiente de desenvolvimento. |
+| **Validacao humana** | **Pendente.** Rodar `sudo MAINTENANCE_TEST=1 sh scripts/test-linux.sh` no servidor, fora do horario de uso, logo apos o deploy. Erro de sintaxe no `.htaccess` derruba o ChronoDesk inteiro (500): validar imediatamente e ter o rollback de codigo pronto. |
 
 ---
 

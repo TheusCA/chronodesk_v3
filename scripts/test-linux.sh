@@ -124,5 +124,66 @@ case "$legacy_post_status" in
     3*) echo "Legacy POST must not be redirected"; exit 1 ;;
 esac
 
+# Modo de manutencao. Opt-in: derruba o portal por alguns segundos.
+# Uso: sudo MAINTENANCE_TEST=1 sh scripts/test-linux.sh
+# BASE_URL nao pode resolver para loopback, que passa pela manutencao de proposito.
+echo "== Maintenance mode =="
+if [ "${MAINTENANCE_TEST:-0}" != 1 ]; then
+    echo "SKIP (rode com MAINTENANCE_TEST=1, como root, fora do horario de uso)"
+else
+    MAINTENANCE_FLAG="${MAINTENANCE_FLAG:-/var/www/chronodesk.maintenance}"
+    if [ -e "$MAINTENANCE_FLAG" ]; then
+        echo "FAIL: $MAINTENANCE_FLAG ja existe; o sistema ja esta em manutencao e o teste nao vai remove-lo"
+        exit 1
+    fi
+    if [ ! -w "$(dirname "$MAINTENANCE_FLAG")" ]; then
+        echo "FAIL: sem permissao para criar $MAINTENANCE_FLAG (rode como root)"
+        exit 1
+    fi
+
+    maintenance_created=0
+    cleanup_maintenance() {
+        if [ "$maintenance_created" = 1 ]; then
+            rm -f -- "$MAINTENANCE_FLAG"
+        fi
+    }
+    trap cleanup_maintenance EXIT INT TERM
+
+    base_scheme="${BASE_URL%%://*}"
+    base_host="$(printf '%s' "$BASE_URL" | sed -E 's#^[A-Za-z]+://([^/:]+).*#\1#')"
+    http_status() { curl -k -s -o /dev/null -w '%{http_code}' "$@"; }
+
+    touch "$MAINTENANCE_FLAG"
+    maintenance_created=1
+
+    status="$(http_status "${BASE_URL}/")"
+    echo "$status / (em manutencao)"
+    [ "$status" = 503 ] || { echo "FAIL: esperado 503 com o arquivo-sinal presente"; exit 1; }
+
+    body="$(curl -k -s "${BASE_URL}/api/health.php")"
+    case "$body" in
+        *"temporariamente indisponivel"*) echo "OK /api/health.php respondido pelo Apache, sem chegar ao PHP" ;;
+        *) echo "FAIL: health chegou ao PHP em manutencao: $body"; exit 1 ;;
+    esac
+
+    status="$(http_status "${BASE_URL}/.env")"
+    echo "$status /.env (em manutencao)"
+    case "$status" in
+        403|404) ;;
+        *) echo "FAIL: caminho sensivel deve continuar bloqueado em manutencao"; exit 1 ;;
+    esac
+
+    status="$(http_status -H "Host: ${base_host}" "${base_scheme}://127.0.0.1/")"
+    echo "$status / via loopback (em manutencao)"
+    [ "$status" != 503 ] || { echo "FAIL: loopback deveria passar pela manutencao"; exit 1; }
+
+    rm -f -- "$MAINTENANCE_FLAG"
+    maintenance_created=0
+
+    status="$(http_status "${BASE_URL}/")"
+    echo "$status / (apos remover o arquivo-sinal)"
+    [ "$status" != 503 ] || { echo "FAIL: portal continua em 503 sem o arquivo-sinal"; exit 1; }
+fi
+
 echo "All Linux validation checks passed."
 

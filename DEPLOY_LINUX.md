@@ -255,6 +255,58 @@ limitada aos arquivos operacionais legados acima. Se o PHP nao puder usar o
 diretorio de sessao do sistema, crie `sessions/` com dono `www-data`, modo `700`
 e mantenha o bloqueio HTTP ja existente.
 
+## Modo de Manutencao
+
+Tira do ar **somente o ChronoDesk**, sem parar o Apache e sem afetar os outros
+sites da VM. Disponivel a partir do deploy que inclui a regra no `.htaccess`
+(mesmo deploy do PERF-01).
+
+Com o arquivo-sinal `/var/www/chronodesk.maintenance` presente (fora do
+DocumentRoot, ao lado do clone), toda requisicao ao ChronoDesk recebe `503`
+com o texto `ChronoDesk temporariamente indisponivel.`, sem chegar ao PHP.
+Caminhos sensiveis continuam `403`. Requisicoes da propria VM (loopback)
+passam, para validar antes de reabrir.
+
+Entrar em manutencao:
+
+```bash
+sudo touch /var/www/chronodesk.maintenance
+curl -s -o /dev/null -w '%{http_code}\n' http://chronodesk.interno.local/
+```
+
+Esperado: `503`. Aguarde alguns segundos: requisicoes que ja estavam em
+andamento terminam normalmente.
+
+Validar pela propria VM durante a manutencao (passa pelo bloqueio):
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: chronodesk.interno.local' http://127.0.0.1/api/health.php
+```
+
+Sair da manutencao:
+
+```bash
+sudo rm -f /var/www/chronodesk.maintenance
+curl -s -o /dev/null -w '%{http_code}\n' http://chronodesk.interno.local/
+```
+
+Esperado: diferente de `503`.
+
+O arquivo-sinal fica fora do clone: `git pull`, rollback e restauracao nao o
+removem. Confira que ele nao ficou para tras (`ls /var/www/chronodesk.maintenance`
+deve dizer que nao existe).
+
+O monitoramento ve `503` durante a manutencao, como deve. Um `503` fora de
+janela com esse mesmo texto pode ser o arquivo-sinal esquecido **ou** o
+PHP-FPM fora do ar: o texto e neutro de proposito. Verifique o arquivo primeiro.
+
+Teste automatizado (derruba o portal por alguns segundos; rode como root, fora
+do horario de uso):
+
+```bash
+cd /var/www/chronodesk && sudo MAINTENANCE_TEST=1 sh scripts/test-linux.sh
+```
+
 ## Monitoracao (health check)
 
 `api/health.php` responde `200 {"status":"ok","database":"ok"}` ou
@@ -431,12 +483,13 @@ Registre data, backup usado e resultado.
 Somente com decisao do responsavel. Tudo o que foi gravado depois do backup
 escolhido sera perdido.
 
-1. Parar a escrita: `sudo systemctl stop apache2`.
+1. Parar a escrita com o Modo de Manutencao (secao acima):
+   `sudo touch /var/www/chronodesk.maintenance`.
 
-   > **Atencao:** o Apache desta VM atende tambem outro site. Parar o `apache2`
-   > derruba **todos** os sites da VM, nao so o ChronoDesk. Combine a janela com o
-   > responsavel pelo outro site antes. Um modo de manutencao exclusivo do
-   > ChronoDesk esta proposto, mas ainda nao aprovado nem implementado.
+   > **Antes do deploy que traz o modo de manutencao**, a unica forma de parar a
+   > escrita e `sudo systemctl stop apache2`, que derruba **todos** os sites da
+   > VM, nao so o ChronoDesk. Nesse caso, combine a janela com o responsavel pelo
+   > outro site antes, e no passo 7 use `sudo systemctl start apache2`.
 
 2. Se o backup escolhido tiver mais de `RETENTION_DAYS` dias, copie-o para fora
    de `/var/backups/chronodesk` antes do passo 3: a retencao o removeria.
@@ -473,8 +526,9 @@ dono e modo anotados.
 Arquivos privados criados depois do backup nao sao apagados pela extracao;
 ficam orfaos, sem registro no banco.
 
-7. Subir e validar: `sudo systemctl start apache2`, depois o QA pos-deploy
-   (passo 8), o health check e o login.
+7. Validar ainda em manutencao, pela propria VM: QA pos-deploy (passo 8) e
+   health check por loopback. Depois sair da manutencao
+   (`sudo rm -f /var/www/chronodesk.maintenance`) e validar o login.
 
 ## Atualizacao de Versao e Rollback
 
@@ -614,6 +668,7 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] `curl` de loopback em `api/health.php` responde `200`; fora da allowlist, `403`.
 - [ ] `chronodesk-backup.timer` ativo (`systemctl list-timers chronodesk-backup.timer`).
 - [ ] Teste de restauracao executado e registrado.
+- [ ] Modo de manutencao testado (`MAINTENANCE_TEST=1`) e `/var/www/chronodesk.maintenance` ausente ao final.
 - [ ] Rollback documentado e testado.
 # Frontend React (implantação paralela)
 

@@ -74,6 +74,22 @@ RewriteRule "^migrar_.*\.php$" - [F,L]
 RewriteRule "(^|/)(\.env(\..*)?|composer\..*|package.*\.json)$" - [F,L]
 RewriteRule "\.(json|csv|xlsx|doc|docx|sql|md|log|bak|backup|zip|rar|7z|old|orig|save)$" - [F,L]
 
+# Modo de manutencao exclusivo do ChronoDesk: com o arquivo-sinal presente
+# FORA do DocumentRoot (/var/www/chronodesk.maintenance na instalacao padrao),
+# toda requisicao recebe 503 sem chegar ao PHP. Os outros sites da VM seguem
+# no ar. Fica DEPOIS dos bloqueios, para que caminho sensivel continue 403.
+# Loopback passa, para o operador validar pela propria VM antes de reabrir.
+# Procedimento: DEPLOY_LINUX.md, secao "Modo de Manutencao".
+RewriteCond %{DOCUMENT_ROOT}/../chronodesk.maintenance -f
+RewriteCond %{REMOTE_ADDR} !^(?:127\.0\.0\.1|::1)$
+RewriteRule ^ - [R=503,L]
+
+# Texto literal, sem arquivo: um ErrorDocument local passaria de novo pela
+# regra acima. Neutro de proposito: o Apache tambem gera 503 quando o PHP-FPM
+# cai, e ai "manutencao" seria mentira. Respostas 503 do proprio PHP (ex.:
+# api/health.php) mantem o corpo JSON.
+ErrorDocument 503 "ChronoDesk temporariamente indisponivel."
+
 # Redirects legados: preservam links antigos que trazem o caminho de
 # filesystem ou o nome do diretorio no inicio da URL.
 # Ficam DEPOIS dos bloqueios para que caminho sensivel sempre responda 403,
