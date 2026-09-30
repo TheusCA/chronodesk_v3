@@ -13,7 +13,7 @@ Registro exigido pelos requisitos corporativos para soluções desenvolvidas for
 | Responsável humano | Matheus Camargo |
 | Projeto | ChronoDesk / Portal SDK |
 | Repositório | Conta pessoal no GitHub (migração para Azure DevOps pendente) |
-| Branch | `codex/modernizacao-ui-backend` |
+| Branch | `codex/modernizacao-ui-backend`; A5 em `feat/employee-form-rhf-zod` |
 
 ## 2. Modo de operação e limites acordados
 
@@ -105,6 +105,18 @@ Base da afirmação:
 | **O que a IA alterou** | `.htaccess`: com o arquivo-sinal `%{DOCUMENT_ROOT}/../chronodesk.maintenance` presente, toda requisicao recebe 503 antes do PHP; regra depois dos bloqueios (caminho sensivel segue 403); loopback passa, para validacao pela VM; `ErrorDocument 503` com texto neutro. `scripts/test-linux.sh`: teste opt-in (`MAINTENANCE_TEST=1`) que cria o arquivo, confere 503, health respondido pelo Apache, `.env` bloqueado, bypass de loopback e retorno apos remover; recusa rodar se ja houver manutencao em curso e remove o arquivo via `trap` em qualquer falha. `DEPLOY_LINUX.md`: secao "Modo de Manutencao"; restauracao em incidente passa a usa-lo. |
 | **Validacao executada pela IA** | Logica do teste: harness de 10 casos em WSL com `curl` simulado, incluindo regra que nao dispara, loopback sem bypass, limpeza por `trap` e preservacao de manutencao real em curso. **A regra do `.htaccess` nao foi executada em Apache real**: nao ha Apache no ambiente de desenvolvimento. |
 | **Validacao humana** | **Pendente.** Rodar `sudo MAINTENANCE_TEST=1 sh scripts/test-linux.sh` no servidor, fora do horario de uso, logo apos o deploy. Erro de sintaxe no `.htaccess` derruba o ChronoDesk inteiro (500): validar imediatamente e ter o rollback de codigo pronto. |
+
+### A5 — Formulario de funcionario com React Hook Form e Zod — 2026-09-29
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Avaliar o branch `wip/employee-form-rhf-zod` contra o HEAD e, aprovada a integracao com ajustes, migrar os formularios de cadastro e edicao de funcionario em Admin para React Hook Form com validacao por `employeeFormSchema`. Pre-requisito da parte de Tecnicos (RF-07) da Parte B, que altera os mesmos arquivos. |
+| **Branch e commit** | `feat/employee-form-rhf-zod`, commit local `c049868`, baseado em `0db826d`. Fora do branch `codex/modernizacao-ui-backend` ate o deploy. Sem push. |
+| **O que a IA alterou** | `frontend/src/pages/AdminPage.jsx`: duas instancias de React Hook Form (cadastro e edicao), validacao manual por `employeeFormSchema.safeParse`, sem `@hookform/resolvers`. `frontend/src/lib/formSchemas.ts`: `employeeFormSchema`; `ad_login` `null`/`undefined` vira `''` (o `listar_funcionarios.php` devolve `null` para quem nao tem login AD, o que quebrava a edicao); mensagens em portugues, inclusive para erro de tipo. Falha de validacao em campo sem mensagem visivel (`equipe`, `access_role`, `ativo`) cai em `notify`. `frontend/scripts/qa-employee-form.mjs` (novo) e script `qa:employee-form`; ajustes pontuais em `qa-action-feedback`, `qa-action-runner`, `qa-forms` e `qa-visual`. Documentacao em `docs/EMPLOYEE_FORM_RHF_ZOD.md` e nos planos de frontend. **Nenhuma alteracao de backend, payload, endpoint, RBAC, CSRF ou auditoria.** |
+| **Validacao executada pela IA** | `qa:employee-form` testa o schema por comportamento (`safeParse` com casos validos e invalidos, importando `formSchemas.ts` direto). Reexecutado em 2026-09-30 sobre `c049868`: `qa:employee-form`, `lint` e `typecheck` com EXIT 0. **O QA e local e estatico: nenhum teste exercitou o formulario em navegador com sessao autenticada.** |
+| **Validacao humana** | **Revisao aprovada em 2026-09-30.** **Validacao obrigatoria no deploy deste branch:** teste manual de edicao de um funcionario **sem login AD vinculado** (abrir a edicao, salvar sem preencher o login e conferir que o registro continua sem login). E o caso que o ajuste de `ad_login` corrige e que nenhum teste automatizado cobre de ponta a ponta. Sem esse teste o deploy nao e considerado validado. |
+| **Ordem de deploy** | Terceiro da fila: (1) Lotes 1 a 3, ate `072ed16`; (2) PERF-01 A+D com o modo de manutencao, `d71fac5` e `0db826d`; (3) este branch. Deploy somente de frontend; rollback sem migration. |
+| **Divida tecnica registrada** | Os QAs de fases anteriores (`qa-action-feedback`, `qa-action-runner`, `qa-bundle`, `qa-forms`, `qa-schedule-form`, `qa-ux-hardening`) ainda tem checagens baseadas em `git diff` da arvore de trabalho, que so enxergam mudancas nao commitadas e passam vazias depois do commit. **Decisao do responsavel em 2026-09-30: registrar como divida tecnica, sem alterar agora**, para nao mexer em entregas ja aprovadas. No `qa-employee-form` essas checagens ja foram substituidas. |
 
 ---
 

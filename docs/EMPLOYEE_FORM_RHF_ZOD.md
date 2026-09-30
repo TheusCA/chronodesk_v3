@@ -148,7 +148,19 @@ Checagens baseadas em `git diff` da arvore de trabalho foram retiradas deste scr
 - "nao adicionar novo confirm/alert" virou inventario fechado de `window.confirm` por arquivo, que vale com a arvore limpa; `alert` ja era checado no fonte inteiro;
 - "arquivos protegidos nao alterados" foi removida. E restricao de escopo do diff, nao invariante do repositorio: um inventario fixo quebraria na primeira fase futura que alterar `api.ts` legitimamente. Na revisao, verificar com `git diff --name-only <base>..HEAD -- frontend/src/hooks frontend/src/lib`; no fechamento do A5, com base `0db826d`, apenas `frontend/src/lib/formSchemas.ts` aparece.
 
-Os QAs de fases anteriores (`qa-action-feedback`, `qa-action-runner`, `qa-bundle`, `qa-forms`, `qa-schedule-form`, `qa-ux-hardening`) ainda usam o mesmo padrao de `git diff`; ficam como estao para nao alterar entregas ja aprovadas.
+Os QAs de fases anteriores (`qa-action-feedback`, `qa-action-runner`, `qa-bundle`, `qa-forms`, `qa-schedule-form`, `qa-ux-hardening`) ainda usam o mesmo padrao de `git diff`. Decisao do responsavel em 2026-09-30: fica registrado como divida tecnica, sem alterar agora, para nao mexer em entregas ja aprovadas.
+
+## Aprovacao E Deploy
+
+- Revisao aprovada pelo responsavel em 2026-09-30: commit local `c049868` no branch `feat/employee-form-rhf-zod`, baseado em `0db826d`. Sem push.
+- Ordem de deploy: terceiro da fila, depois de (1) Lotes 1 a 3 e (2) PERF-01 A+D com o modo de manutencao.
+- **Validacao obrigatoria do deploy deste branch:** teste manual de edicao de funcionario sem login AD.
+  1. Entrar como Admin e abrir Aprovacoes e admin > Funcionarios.
+  2. Editar um funcionario que nao tem login AD vinculado.
+  3. Alterar um campo qualquer (ex.: horario de saida), manter o login AD vazio e salvar.
+  4. Esperado: nenhum erro de validacao no login AD, toast `Funcionario atualizado com sucesso.`, lista atualizada e o funcionario continua sem login AD.
+  5. Repetir com um funcionario que tem login AD, para confirmar que o login e preservado.
+- Sem esse teste o deploy nao e considerado validado. O QA automatizado cobre o schema, nao o fluxo autenticado no navegador.
 
 ## AppSec
 
@@ -169,7 +181,7 @@ CSRF, RBAC, autenticacao e auditoria permanecem no contrato existente do backend
 ## Riscos Residuais
 
 - O backend continua sendo a autoridade final para permissoes, unicidade real e persistencia.
-- O QA local e estatico, com teste de comportamento apenas do schema; ainda e necessario smoke manual autenticado por perfil, incluindo editar um funcionario sem login AD.
+- O QA local e estatico, com teste de comportamento apenas do schema; ainda e necessario smoke manual autenticado por perfil. A edicao de um funcionario sem login AD e validacao obrigatoria do deploy (secao "Aprovacao E Deploy").
 - `AdminPage.jsx` segue denso e deve ser quebrado apenas em fases futuras planejadas.
 
 ## Rollback
