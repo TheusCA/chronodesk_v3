@@ -118,6 +118,17 @@ Base da afirmação:
 | **Ordem de deploy** | Terceiro da fila: (1) Lotes 1 a 3, ate `072ed16`; (2) PERF-01 A+D com o modo de manutencao, `d71fac5` e `0db826d`; (3) este branch. Deploy somente de frontend; rollback sem migration. |
 | **Divida tecnica registrada** | Os QAs de fases anteriores (`qa-action-feedback`, `qa-action-runner`, `qa-bundle`, `qa-forms`, `qa-schedule-form`, `qa-ux-hardening`) ainda tem checagens baseadas em `git diff` da arvore de trabalho, que so enxergam mudancas nao commitadas e passam vazias depois do commit. **Decisao do responsavel em 2026-09-30: registrar como divida tecnica, sem alterar agora**, para nao mexer em entregas ja aprovadas. No `qa-employee-form` essas checagens ja foram substituidas. |
 
+### A6 — Fase de Desenho da Parte B (Mapa PA, escalas, ausencias) — 2026-09-30
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Entregavel da secao 9 de `REQUISITOS_PA_ESCALA_AUSENCIA.md`: levantamento do que existe, modelo de dados, contratos de API, especificacao do motor de presenca, telas, impacto em relatorios, posicao sobre D1 a D10 e divisao em lotes. **Somente desenho.** |
+| **O que a IA gerou** | `docs/DESENHO_PA_ESCALA_AUSENCIA.md` (novo). `docs/API_CONTRACTS_FRONTEND.md`: secao "Contratos propostos - Parte B", marcada como nao implementada; a tabela de contratos em uso nao foi alterada. |
+| **O que a IA executou** | Somente leitura do repositorio. `qa:employee-form`, `lint` e `typecheck` (EXIT 0). Um script descartavel, fora do repositorio, conferiu a formula de contagem de dias uteis do ciclo contra a contagem dia a dia (4.000 combinacoes, sem divergencia). **Nenhum codigo, migration ou teste do projeto foi alterado. Nenhum comando contra o servidor.** O documento de requisitos foi lido de uma pasta local fora do repositorio, onde o responsavel o mantem. |
+| **Validacao humana** | **Aprovado em 2026-09-30, com tres pontos em aberto.** Aprovadas: D1 a D10 (a D9 na forma da contraproposta P1), P3 a P7, P9 a P11, P13 a P16. Aprovadas explicitamente as duas mudancas de RBAC e autenticacao: escopo de leitura de ausencias (SEC-07, tambem exposto por `calendar.php`) e checagem de funcionario ativo em `require_portal_auth` (P11). P8 ficou sem efeito: `portal_absences` esta vazia (0 linhas, 0 orfas), entao a FK entra. **Em aberto, a decidir pelo responsavel:** P2 (almoco), P12 (escala para Lideranca) e o tratamento dos relatorios de periodos ja fechados. |
+| **Limitacoes declaradas** | A IA nao acessa o banco. O documento traz seis consultas (Q1 a Q6), que devolvem apenas contagens. Respondidas pelo responsavel em 2026-09-30: estrutura confirmada com os nomes do repositorio (Q1), `portal_absences` vazia (Q3) e nenhuma excecao de escala lancada (Q4, a revalidar antes do F3). A analise de compatibilidade da migration de historico com o codigo atual foi feita por leitura, sem execucao em MySQL. |
+| **Observacoes** | A implementacao da Parte B comeca pelo F1, depois da validacao e do deploy do lote de fuso horario (A4, entrada seguinte). |
+
 ### A4 — Lote de fuso horario (BIZ-02) — 2026-09-30
 
 | Campo | Conteudo |

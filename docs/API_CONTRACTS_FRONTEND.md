@@ -45,6 +45,25 @@ Mapa inicial dos contratos consumidos pelo frontend. Este documento descreve o u
 | `usuarios.php` | GET/POST | action listar/criar/atualizar/deletar | usuarios, `mensagem` | Admin local | Alto | Backend smoke | Teste local admin |
 | `portal/reports.php` | GET | filtros, opcional `format=csv` | items/resumo ou CSV | Relatorios | Medio | Build/lint | Smoke CSV |
 
+## Contratos propostos - Parte B (NAO IMPLEMENTADOS)
+
+Desenho aprovado em 2026-09-30, com P2, P12 e o tratamento dos relatorios em aberto. Nada desta secao existe no codigo. A tabela acima continua sendo o contrato em uso; cada linha so muda no lote que implementar o endpoint. Especificacao completa em `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 3.
+
+| Endpoint | Situacao | Mudanca proposta | Lote |
+| --- | --- | --- | --- |
+| `portal/presence.php` | Novo | GET `from`, `to`, `team`, `employee_id`; devolve `server_now`, `days[]` com `situacao`, `origem`, `detalhe`, `escala`, `ausencias` | F2 |
+| `status.php` | Alterado | Cada item ganha `presenca` de hoje; deixa de incluir arquivados | F2, F4 |
+| `portal/schedules.php` | Alterado | `rule_type=cycle` com `cycle{onsite_days, remote_days, starts_with, anchor_date}`; `fixed_weekdays` com `input_mode` e `home_weekdays`; `action=rule_preview`; regras com `is_current`, `is_future`, `config`; `include_history=1`; excecao sem tipos de ausencia | F1, F2B, F3 |
+| `portal/absences.php` | Alterado | GET com filtros e escopo por perfil (tecnico e somente leitura so as proprias); POST `action=create/update/cancel` para admin e gestor; retroativo so admin | F3 |
+| `portal/calendar.php` | Alterado | Escala vinda do motor; ausencia deixa de ser evento separado e de expor `reason` | F3, F5 |
+| `remover_funcionario.php` | Alterado | Mesmo payload; executa o arquivamento completo e devolve `efeitos` | F4 |
+| `restaurar_funcionario.php` | Novo | POST `funcionario_id`; so admin | F4 |
+| `atualizar_funcionario.php` | Alterado | Mesmo payload; troca de `ativo` passa pelas rotinas de arquivar e restaurar | F4 |
+| `portal/technicians.php` | Alterado | Acrescenta `presence` | F4 |
+| `portal/pa_map.php` | Alterado | GET com `presence` por vinculo, `conflicts`, `has_conflict`, `absences_week`, `week`, `server_now`; `save` deixa de devolver 409 por conflito de escala e passa a devolver `warnings` e `conflicts` | F6 |
+| `portal/dashboard.php` | Alterado | Acrescenta `server_now` e `presence_summary` por equipe | F7 |
+| `portal/reports.php` | Alterado | Escala vinda do motor; `absence_days`, `no_schedule_days`; fim de semana e `undefined` deixam de contar como presencial/remoto | F2 |
+
 ## Campos que merecem tipos primeiro
 
 - `role`, `permissions`.
