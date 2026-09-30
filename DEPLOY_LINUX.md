@@ -146,6 +146,24 @@ docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260615_007_war_room_and_shift_feed.sql
 ```
 
+**Fuso horario em sessao manual.** A aplicacao abre a conexao em
+`America/Sao_Paulo` (`db.php`, lote BIZ-02), mas uma sessao aberta a mao
+(`docker exec ... mysql`) continua no fuso do container, que e UTC. Nela,
+`NOW()`, `CURRENT_DATE` e `CURRENT_TIMESTAMP` saem 3 h adiante, e colunas
+`TIMESTAMP` sao exibidas 3 h adiante.
+
+- Toda migration aplicada manualmente deve comecar com
+  `SET time_zone = 'America/Sao_Paulo';`. As migrations a partir da 011 ja
+  trazem essa linha no topo do arquivo.
+- Em sessao interativa ou consulta avulsa, execute o mesmo `SET` antes de
+  qualquer comando, ou abra o cliente com
+  `--init-command="SET time_zone = 'America/Sao_Paulo'"`.
+- Migrations novas nao usam `NOW()` nem `CURRENT_TIMESTAMP` em `INSERT` ou
+  `UPDATE` de dados: data necessaria vai como valor explicito. `DEFAULT
+  CURRENT_TIMESTAMP` na definicao de coluna continua permitido.
+- Excecao: os scripts de `migrations/correcao_dados/` usam `-03:00` de
+  proposito (seu calculo e de 3 h fixas). Ver `docs/FUSO_HORARIO_BIZ02.md`.
+
 O login LDAP atual faz bind com a credencial informada pelo usuario e nao exige
 senha de conta de servico. Para preparar uma futura integracao com cofre, siga
 `AD_CREDENTIALS.md`; nao chame scripts Bash a partir de requisicoes PHP.
@@ -586,8 +604,10 @@ sudo git pull --ff-only
 sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
 ```
 
-- Migration nova: aplicar como no passo 6 do Passo a Passo. As migrations nao
-  tem script de reversao; desfazer uma migration exige restaurar o backup do item 3.
+- Migration nova: aplicar como no passo 6 do Passo a Passo, com a sessao em
+  `America/Sao_Paulo` (ver "Fuso horario em sessao manual", no mesmo passo).
+  As migrations ate a 010 nao tem script de reversao; desfazer uma delas exige
+  restaurar o backup do item 3.
 - `scripts/backup-chronodesk.sh` alterado: revisar e reinstalar (secao Backup).
 - Arquivos em `migrations/correcao_dados/` **nao** sao migrations de deploy: sao
   scripts de correcao de dados, cada um com procedimento proprio. Nao aplicar

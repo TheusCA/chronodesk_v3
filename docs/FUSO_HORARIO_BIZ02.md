@@ -2,7 +2,7 @@
 
 **Lote:** A4 — fuso horário
 **Data:** 2026-09-30
-**Situação:** código e scripts entregues em commit local, **aguardando validação**. Nada foi executado no servidor. Os scripts SQL **não foram executados em MySQL** (não há banco no ambiente de desenvolvimento): a primeira execução é o ensaio da seção 7.3.
+**Situação:** código e scripts em commit local (`9957496`), **aprovados em 2026-09-30, aguardando deploy** (quarto da fila). Nada foi executado no servidor. Os scripts SQL **não foram executados em MySQL** (não há banco no ambiente de desenvolvimento): a primeira execução é o ensaio da seção 7.3.
 
 ---
 
@@ -308,7 +308,22 @@ As linhas gravadas entre o deploy e um rollback de código ficam no fuso certo n
 
 ---
 
-## 10. Limites e pendências
+## 10. Sessões manuais e migrations futuras
+
+A correção vale para as conexões abertas pela aplicação (`db_connect()`). Uma sessão aberta à mão (`docker exec ... mysql`) continua no fuso padrão do container, que é **UTC**: nela, `NOW()`, `CURRENT_DATE` e `CURRENT_TIMESTAMP` saem 3 h adiante, e colunas `TIMESTAMP` aparecem 3 h adiante.
+
+Regras, decididas em 2026-09-30:
+
+1. **Toda migration aplicada manualmente começa com** `SET time_zone = 'America/Sao_Paulo';`. As migrations novas (011 a 014 da Parte B) trazem essa linha no topo do arquivo.
+2. **Em sessão interativa ou consulta avulsa**, execute o mesmo `SET` antes de qualquer comando, ou abra o cliente com `--init-command="SET time_zone = 'America/Sao_Paulo'"`.
+3. **Migrations novas não usam `NOW()` nem `CURRENT_TIMESTAMP` em `INSERT` ou `UPDATE` de dados.** Quando precisarem de data, recebem o valor explícito (`'2026-10-05 00:00:00'`, ou uma variável definida no topo do arquivo com esse valor). Assim o resultado não depende do fuso da sessão que aplicou o script. `DEFAULT CURRENT_TIMESTAMP` e `ON UPDATE CURRENT_TIMESTAMP` na definição de coluna continuam permitidos: são avaliados pela sessão da aplicação no momento da gravação.
+4. **Exceção:** os scripts de `migrations/correcao_dados/` definem `-03:00` de propósito, porque o cálculo deles é de 3 h fixas e não pode depender das tabelas de fuso do MySQL.
+
+As migrations 001 a 010 não usam relógio do MySQL em dados (só em `DEFAULT` de coluna): reaplicá-las numa sessão em UTC não gera valor errado.
+
+---
+
+## 11. Limites e pendências
 
 - **Scripts SQL nunca executados.** Revisados por leitura. Escritos para falhar sem alterar dados: uma transação por script, guardas e comparação com o valor fotografado. O ensaio da 7.3 é obrigatório.
 - **O caminho de fallback do `db.php` não foi exercitado contra MySQL real.** O reconhecimento do erro 1298 foi testado com exceção simulada. O `--db` confirma no servidor.

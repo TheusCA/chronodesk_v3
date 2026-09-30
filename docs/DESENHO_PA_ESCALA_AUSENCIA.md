@@ -44,7 +44,7 @@ P1 a P16. As que bloqueiam o primeiro lote (F1) são **P10** e **P12**. As demai
 | Item | Situação |
 |---|---|
 | 0.1 Lotes 1, 2, 2B e 3 | Aprovados; deploy pendente |
-| 0.1 Lote de fuso (BIZ-02 / A4) | Desbloqueado em 2026-09-30 pelas consultas no servidor e **implementado em commit local (`9957496`), aguardando validação e deploy** (`docs/FUSO_HORARIO_BIZ02.md`). **A implementação da Parte B não começa antes disso.** O desenho reduz a dependência: todo código novo usa a hora do PHP (`America/Sao_Paulo`, `config.php:53`) e passa datas como parâmetro, sem `NOW()`/`CURRENT_DATE` no SQL |
+| 0.1 Lote de fuso (BIZ-02 / A4) | Desbloqueado em 2026-09-30 pelas consultas no servidor e **implementado em commit local (`9957496`), aprovado em 2026-09-30, aguardando deploy** (`docs/FUSO_HORARIO_BIZ02.md`). **A implementação da Parte B não começa antes disso.** O desenho reduz a dependência: todo código novo usa a hora do PHP (`America/Sao_Paulo`, `config.php:53`) e passa datas como parâmetro, sem `NOW()`/`CURRENT_DATE` no SQL |
 | 0.2 Formulário de funcionário (A5) | Aprovado (`c049868`); deploy é o terceiro da fila. F4 altera `AdminPage.jsx` e `formSchemas.ts` a partir dele |
 | 0.3 Corrigir escopo de `absences` antes de ampliar | Primeiro passo de F3. Altera RBAC; **aprovado em 2026-09-30** (seção 3.3) |
 | 0.4 Histórico de escala (BIZ-03) | F1 |
@@ -194,7 +194,7 @@ Nenhuma considera pausa e ausência junto com escala. `plantonistas_ativos` e `s
 
 ## 2. Modelo de dados proposto
 
-Princípios: estender o que existe; toda migration idempotente, no padrão de `20260624_010` (checagem em `information_schema` + `PREPARE`); cada uma com script de rollback em `migrations/rollback/`; aplicação manual pelo responsável. Os nomes finais dos arquivos levam a data da implementação.
+Princípios: estender o que existe; toda migration idempotente, no padrão de `20260624_010` (checagem em `information_schema` + `PREPARE`); cada uma com script de rollback em `migrations/rollback/`; aplicação manual pelo responsável. Os nomes finais dos arquivos levam a data da implementação. **Fuso (decisão de 2026-09-30):** toda migration e todo rollback começam com `SET time_zone = 'America/Sao_Paulo';` e não usam `NOW()` nem `CURRENT_TIMESTAMP` em `INSERT`/`UPDATE` de dados — data necessária vai como valor explícito (`docs/FUSO_HORARIO_BIZ02.md`, seção 10).
 
 ### 2.1 Histórico de escala (RF-03) — migration 011
 
