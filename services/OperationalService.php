@@ -7,6 +7,7 @@ final class OperationalService {
     public const MAX_IMPORT_COLUMNS = 6;
     public const MAX_IMPORT_CELL_CHARS = 500;
     public const MAX_IMPORT_PAYLOAD_BYTES = 1048576;
+    public const LIST_LIMIT = 500;
     private const RULE_TYPES = [
         'even_days', 'odd_days', 'always_remote', 'always_onsite', 'undefined', 'fixed_weekdays',
     ];
@@ -573,6 +574,48 @@ final class OperationalService {
         return $this->listWorkflowRecords('portal_overtime_entries', 'work_date', $filters, $actor);
     }
 
+    /**
+     * [BIZ-01] Totais de horas extras de todo o filtro (periodo, equipe,
+     * colaborador e escopo do perfil), sem o filtro de status: os totais ja
+     * separam os status por si. Nao depende do limite da lista da tela.
+     */
+    public function overtimeTotalsForFilters(array $filters, array $actor): array {
+        return self::overtimeTotals($this->iterateWorkflowRecords(
+            'portal_overtime_entries',
+            'work_date',
+            $filters,
+            $actor,
+            false
+        ));
+    }
+
+    /**
+     * [BIZ-01] Soma minutos por status. Aprovado conta so "approved"; pendente,
+     * so "pending". Rejeitado nunca entra em total. "synced" e "sync_error" nao
+     * tem gravador no codigo e ficam fora dos dois totais ate haver decisao.
+     */
+    public static function overtimeTotals(iterable $rows): array {
+        $totals = ['approved_minutes' => 0, 'pending_minutes' => 0, 'by_employee' => []];
+        foreach ($rows as $row) {
+            $key = match ((string)($row['status'] ?? '')) {
+                'approved' => 'approved_minutes',
+                'pending' => 'pending_minutes',
+                default => null,
+            };
+            $employeeId = (int)($row['employee_id'] ?? 0);
+            if (!isset($totals['by_employee'][$employeeId])) {
+                $totals['by_employee'][$employeeId] = ['approved_minutes' => 0, 'pending_minutes' => 0];
+            }
+            if ($key === null) {
+                continue;
+            }
+            $minutes = (int)($row['total_minutes'] ?? 0);
+            $totals[$key] += $minutes;
+            $totals['by_employee'][$employeeId][$key] += $minutes;
+        }
+        return $totals;
+    }
+
     public function createOvertime(array $data, array $actor): int {
         return $this->atomic(fn(): int => $this->createOvertimeUnsafe($data, $actor));
     }
@@ -582,7 +625,7 @@ final class OperationalService {
         $date = self::dateValue($data['work_date'] ?? null, 'Data');
         $start = $this->timeValue($data['start_time'] ?? null, 'Hora inicial');
         $end = $this->timeValue($data['end_time'] ?? null, 'Hora final');
-        $minutes = $this->minutesBetween($start, $end);
+        $minutes = self::overtimeMinutes($start, $end);
         $reason = $this->requiredText($data['reason'] ?? null, 500, 'Motivo');
         $justification = $this->requiredText($data['justification'] ?? null, 2000, 'Justificativa');
         $username = $actor['username'];
@@ -697,12 +740,20 @@ final class OperationalService {
             return [
                 'overtime' => [],
                 'time_adjustments' => [],
+                'overtime_truncated' => false,
+                'time_adjustments_truncated' => false,
+                'limit' => self::LIST_LIMIT,
             ];
         }
 
+        $overtime = $this->pendingWorkflowRecords('portal_overtime_entries', 'work_date');
+        $adjustments = $this->pendingWorkflowRecords('portal_time_adjustments', 'adjustment_date');
         return [
-            'overtime' => $this->pendingWorkflowRecords('portal_overtime_entries', 'work_date'),
-            'time_adjustments' => $this->pendingWorkflowRecords('portal_time_adjustments', 'adjustment_date'),
+            'overtime' => $overtime['items'],
+            'time_adjustments' => $adjustments['items'],
+            'overtime_truncated' => $overtime['truncated'],
+            'time_adjustments_truncated' => $adjustments['truncated'],
+            'limit' => self::LIST_LIMIT,
         ];
     }
 
@@ -785,11 +836,21 @@ final class OperationalService {
         $byEmployee = [];
         $byTeam = [];
         foreach ($overtime as $row) {
+            // [BIZ-01] Rejeitado nunca entra em total; aprovado e pendente separados.
+            $key = match ($row['status']) {
+                'approved' => 'overtime_approved_minutes',
+                'pending' => 'overtime_pending_minutes',
+                default => null,
+            };
+            if ($key === null) {
+                continue;
+            }
             $name = $row['employee_name'];
             $rowTeam = strtoupper($row['team']);
-            $byEmployee[$name]['overtime_minutes'] = ($byEmployee[$name]['overtime_minutes'] ?? 0) + (int)$row['total_minutes'];
-            $byTeam[$rowTeam]['overtime_minutes'] = ($byTeam[$rowTeam]['overtime_minutes'] ?? 0) + (int)$row['total_minutes'];
+            $byEmployee[$name][$key] = ($byEmployee[$name][$key] ?? 0) + (int)$row['total_minutes'];
+            $byTeam[$rowTeam][$key] = ($byTeam[$rowTeam][$key] ?? 0) + (int)$row['total_minutes'];
         }
+        $overtimeTotals = self::overtimeTotals($overtime);
         foreach ($adjustments as $row) {
             $byEmployee[$row['employee_name']]['adjustments'] = ($byEmployee[$row['employee_name']]['adjustments'] ?? 0) + 1;
             $key = strtoupper($row['team']);
@@ -820,7 +881,8 @@ final class OperationalService {
             'period' => ['from' => $from, 'to' => $to],
             'summary' => [
                 'overtime_count' => count($overtime),
-                'overtime_minutes' => array_sum(array_map(static fn(array $row): int => (int)$row['total_minutes'], $overtime)),
+                'overtime_approved_minutes' => $overtimeTotals['approved_minutes'],
+                'overtime_pending_minutes' => $overtimeTotals['pending_minutes'],
                 'adjustments_count' => count($adjustments),
                 'oncall_count' => count($oncall),
                 'onsite_days' => count(array_filter($schedule, static fn(array $row): bool => $row['presence_type'] === 'onsite')),
@@ -862,13 +924,15 @@ final class OperationalService {
         fclose($handle);
     }
 
+    /**
+     * [BIZ-01][PERF-02] Todas as linhas do filtro, em paginas, sem limite. Os
+     * totais por colaborador cobrem o filtro inteiro e sao calculados antes da
+     * primeira linha: "Total aprovado" e "Total pendente"; rejeitado fica fora
+     * dos dois e aparece identificado na coluna Status.
+     */
     public function streamOvertimeCsv(array $filters, array $actor): void {
-        $rows = $this->listOvertime($filters, $actor);
-        $totalsByEmployee = [];
-        foreach ($rows as $row) {
-            $employeeId = (int)$row['employee_id'];
-            $totalsByEmployee[$employeeId] = ($totalsByEmployee[$employeeId] ?? 0) + (int)$row['total_minutes'];
-        }
+        $totalsByEmployee = $this->overtimeTotalsForFilters($filters, $actor)['by_employee'];
+        $rows = $this->iterateWorkflowRecords('portal_overtime_entries', 'work_date', $filters, $actor);
 
         $filename = 'horas_extras_' . date('Ymd_His') . '.csv';
         header('Content-Type: text/csv; charset=utf-8');
@@ -877,33 +941,49 @@ final class OperationalService {
         header('X-Content-Type-Options: nosniff');
         $handle = fopen('php://output', 'wb');
         fwrite($handle, "\xEF\xBB\xBF");
-        fputcsv($handle, [
-            'NC',
-            'Nome completo',
-            'Data da realizacao',
-            'Hora de entrada',
-            'Hora de saida',
-            'Descricao',
-            'Total de Horas',
-            'Total Realizado',
-        ], ';');
+        fputcsv($handle, self::OVERTIME_CSV_HEADER, ';');
         foreach ($rows as $row) {
-            $this->csvRow($handle, [
-                '',
-                $row['employee_name'],
-                $row['work_date'],
-                substr((string)$row['start_time'], 0, 5),
-                substr((string)$row['end_time'], 0, 5),
-                $row['reason'] ?: $row['justification'],
-                $this->minutesText((int)$row['total_minutes']),
-                $this->minutesText((int)($totalsByEmployee[(int)$row['employee_id']] ?? 0)),
-            ]);
+            $this->csvRow($handle, self::overtimeCsvRow($row, $totalsByEmployee));
         }
         fclose($handle);
     }
 
+    public const OVERTIME_CSV_HEADER = [
+        'NC',
+        'Nome completo',
+        'Data da realizacao',
+        'Hora de entrada',
+        'Hora de saida',
+        'Descricao',
+        'Total de Horas',
+        'Total aprovado',
+        'Total pendente',
+        'Status',
+    ];
+
+    /**
+     * Uma linha do CSV de horas extras. Os dois totais sao do colaborador no
+     * filtro inteiro e se repetem em cada linha dele, como o antigo "Total
+     * Realizado", que somava todos os status.
+     */
+    public static function overtimeCsvRow(array $row, array $totalsByEmployee): array {
+        $employeeTotals = $totalsByEmployee[(int)$row['employee_id']] ?? ['approved_minutes' => 0, 'pending_minutes' => 0];
+        return [
+            '',
+            $row['employee_name'],
+            $row['work_date'],
+            substr((string)$row['start_time'], 0, 5),
+            substr((string)$row['end_time'], 0, 5),
+            $row['reason'] ?: $row['justification'],
+            self::minutesText((int)$row['total_minutes']),
+            self::minutesText((int)$employeeTotals['approved_minutes']),
+            self::minutesText((int)$employeeTotals['pending_minutes']),
+            self::workflowStatusLabel($row['status']),
+        ];
+    }
+
     public function streamTimeAdjustmentsCsv(array $filters, array $actor): void {
-        $rows = $this->listTimeAdjustments($filters, $actor);
+        $rows = $this->iterateWorkflowRecords('portal_time_adjustments', 'adjustment_date', $filters, $actor);
         $filename = 'correcao_ponto_' . date('Ymd_His') . '.csv';
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -942,8 +1022,52 @@ final class OperationalService {
         fclose($handle);
     }
 
+    /**
+     * Lista da tela: ate LIST_LIMIT linhas, com aviso quando ha mais (PERF-02).
+     */
     private function listWorkflowRecords(string $table, string $dateColumn, array $filters, array $actor): array {
-        [$from, $to] = $this->period($filters, 366);
+        [$sql, $params] = $this->workflowFilterSql($table, $dateColumn, $filters, $actor, true);
+        $stmt = $this->pdo->prepare($sql . " ORDER BY {$dateColumn} DESC, id DESC LIMIT " . (self::LIST_LIMIT + 1));
+        $stmt->execute($params);
+        return db_limit_rows($stmt->fetchAll(), self::LIST_LIMIT);
+    }
+
+    /**
+     * Todas as linhas do filtro, em paginas por chave (data, id), para export.
+     */
+    private function iterateWorkflowRecords(
+        string $table,
+        string $dateColumn,
+        array $filters,
+        array $actor,
+        bool $withStatus = true
+    ): Generator {
+        [$sql, $params] = $this->workflowFilterSql($table, $dateColumn, $filters, $actor, $withStatus);
+        return db_keyset_iterate(function (?array $lastRow, int $chunk) use ($sql, $params, $dateColumn): array {
+            if ($lastRow !== null) {
+                $sql .= " AND ({$dateColumn} < :cursor_date OR ({$dateColumn} = :cursor_same_date AND id < :cursor_id))";
+                $params[':cursor_date'] = $lastRow[$dateColumn];
+                $params[':cursor_same_date'] = $lastRow[$dateColumn];
+                $params[':cursor_id'] = (int)$lastRow['id'];
+            }
+            $stmt = $this->pdo->prepare($sql . " ORDER BY {$dateColumn} DESC, id DESC LIMIT " . $chunk);
+            $stmt->execute($params);
+            return $stmt->fetchAll();
+        });
+    }
+
+    /**
+     * Filtro comum da lista e do export. Sem periodo informado, vale a
+     * competencia corrente (16 a 15), a mesma que a tela usa por padrao.
+     */
+    private function workflowFilterSql(
+        string $table,
+        string $dateColumn,
+        array $filters,
+        array $actor,
+        bool $withStatus
+    ): array {
+        [$from, $to] = $this->period($filters, 366, true);
         $sql = 'SELECT ' . $this->workflowColumns($table)
             . " FROM {$table} WHERE {$dateColumn} BETWEEN :date_from AND :date_to";
         $params = [':date_from' => $from, ':date_to' => $to];
@@ -954,13 +1078,11 @@ final class OperationalService {
         }
         $this->appendEmployeeTeamFilters($sql, $params, $team, $employeeId);
         $status = $this->text($filters['status'] ?? '', 20, true);
-        if ($status) {
+        if ($withStatus && $status) {
             $sql .= ' AND status = :status';
             $params[':status'] = $status;
         }
-        $stmt = $this->pdo->prepare($sql . " ORDER BY {$dateColumn} DESC, id DESC LIMIT 500");
-        $stmt->execute($params);
-        return $stmt->fetchAll();
+        return [$sql, $params];
     }
 
     private function atomic(callable $callback) {
@@ -1022,10 +1144,10 @@ final class OperationalService {
     private function pendingWorkflowRecords(string $table, string $dateColumn): array {
         $stmt = $this->pdo->prepare(
             'SELECT ' . $this->workflowColumns($table)
-            . " FROM {$table} WHERE status = :status ORDER BY {$dateColumn} DESC, id DESC LIMIT 500"
+            . " FROM {$table} WHERE status = :status ORDER BY {$dateColumn} DESC, id DESC LIMIT " . (self::LIST_LIMIT + 1)
         );
         $stmt->execute([':status' => 'pending']);
-        return $stmt->fetchAll();
+        return db_limit_rows($stmt->fetchAll(), self::LIST_LIMIT);
     }
 
     private function actorEmployeeId(array $actor): ?int {
@@ -1422,7 +1544,7 @@ final class OperationalService {
         );
     }
 
-    private function workflowStatusLabel(string $status): string {
+    private static function workflowStatusLabel(string $status): string {
         return match ($status) {
             'pending' => 'Pendente',
             'approved' => 'Aprovado',
@@ -1445,7 +1567,7 @@ final class OperationalService {
         };
     }
 
-    private function minutesText(int $minutes): string {
+    private static function minutesText(int $minutes): string {
         return sprintf('%02d:%02d', intdiv(max(0, $minutes), 60), max(0, $minutes) % 60);
     }
 
@@ -1537,11 +1659,15 @@ final class OperationalService {
         ];
     }
 
-    private function period(array $filters, int $maxDays): array {
+    private function period(array $filters, int $maxDays, bool $defaultToCompetency = false): array {
         if (!empty($filters['competency'])) {
             $competency = self::competencyRange((string)$filters['competency']);
             $from = $competency['start'];
             $to = $competency['end'];
+        } elseif ($defaultToCompetency) {
+            $competency = self::competencyRange();
+            $from = $filters['from'] ?? $competency['start'];
+            $to = $filters['to'] ?? $competency['end'];
         } else {
             $from = $filters['from'] ?? date('Y-m-01');
             $to = $filters['to'] ?? date('Y-m-t');
@@ -1589,14 +1715,32 @@ final class OperationalService {
         return strlen($value) === 5 ? $value . ':00' : $value;
     }
 
-    private function minutesBetween(string $start, string $end): int {
-        $startAt = new DateTimeImmutable('2000-01-01 ' . $start);
-        $endAt = new DateTimeImmutable('2000-01-01 ' . $end);
-        if ($endAt <= $startAt) {
-            $endAt = $endAt->modify('+1 day');
+    /**
+     * [BIZ-04] Minutos entre entrada e saida no formato HH:MM[:SS]. Saida menor
+     * que a entrada e virada de dia (22:00 as 02:00 = 240). Entrada igual a
+     * saida e recusada: antes virava 24 h de hora extra. Sem teto por lancamento
+     * (decisao do negocio). Conta em segundos do dia, sem DateTime nem fuso
+     * (BIZ-06).
+     */
+    public static function overtimeMinutes(string $start, string $end): int {
+        $seconds = static function (string $time): int {
+            if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/', $time, $parts)) {
+                throw new InvalidArgumentException('Horario invalido.');
+            }
+            return (int)$parts[1] * 3600 + (int)$parts[2] * 60 + (int)($parts[3] ?? 0);
+        };
+        $difference = $seconds($end) - $seconds($start);
+        if ($difference === 0) {
+            throw new InvalidArgumentException(
+                'Hora de entrada igual a hora de saida. Informe o horario real de saida; '
+                . 'se a hora extra passou da meia-noite, a saida fica menor que a entrada.'
+            );
         }
-        $minutes = (int)(($endAt->getTimestamp() - $startAt->getTimestamp()) / 60);
-        if ($minutes < 1 || $minutes > 1440) {
+        if ($difference < 0) {
+            $difference += 86400;
+        }
+        $minutes = intdiv($difference, 60);
+        if ($minutes < 1) {
             throw new InvalidArgumentException('Intervalo de horas extras invalido.');
         }
         return $minutes;

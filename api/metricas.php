@@ -8,6 +8,9 @@ require_portal_auth(['admin', 'gestor']);
 
 global $gerenciador;
 $metricas = $gerenciador->obter_metricas();
-$metricas['solicitacoes_reuniao'] = (new ApprovalRequestService())->listRecent();
+$solicitacoes = (new ApprovalRequestService())->listRecent();
+$metricas['solicitacoes_reuniao'] = $solicitacoes['items'];
+$metricas['solicitacoes_reuniao_truncadas'] = $solicitacoes['truncated'];
+$metricas['solicitacoes_reuniao_limite'] = $solicitacoes['limit'];
 json_response($metricas);
 

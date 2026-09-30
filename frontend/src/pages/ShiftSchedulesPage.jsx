@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../components/ui/Icon'
-import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader } from '../components/ui/Primitives'
+import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader, TruncationNotice } from '../components/ui/Primitives'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { useResource } from '../hooks/useResource'
 import { apiUrl, postForm } from '../lib/api'
@@ -232,6 +232,7 @@ export function ShiftSchedulesPage({ notify }) {
         <input aria-label="Filtrar por mês de referência" className="field" type="month" value={filters.month} onChange={(event) => setFilters({ ...filters, month: event.target.value })} />
         <select aria-label="Filtrar por formato" className="field" value={filters.extension} onChange={(event) => setFilters({ ...filters, extension: event.target.value })}><option value="">Todos os formatos</option><option value="png">Imagem PNG</option><option value="jpg">Imagem JPG</option><option value="jpeg">Imagem JPEG</option><option value="pdf">PDF</option><option value="csv">CSV</option><option value="xls">XLS</option><option value="xlsx">XLSX</option></select>
       </FilterBar>
+      <TruncationNotice limit={resource.data?.limit} truncated={resource.data?.truncated} />
       {items.length === 0 ? <EmptyState title="Nenhuma escala publicada" description="As escalas publicadas pelos administradores aparecerão aqui." /> : (
         <section className="mx-auto max-w-4xl space-y-4">
           <h3 className="sr-only">Escalas de Sábado publicadas</h3>

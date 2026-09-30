@@ -395,7 +395,14 @@ class GerenciadorPausas {
         return $status;
     }
 
-    public function obter_metricas() {
+    /**
+     * $completo = false (tela de métricas): até METRICS_MAX_ROWS pausas mais
+     * recentes, com aviso em "dados_truncados".
+     * $completo = true (exportação, PERF-02): todas as pausas, lidas em páginas.
+     * Com $ao_detalhar, cada pausa detalhada vai para o callback em vez de ficar
+     * acumulada em "pausas_detalhadas": a exportação grava linha a linha.
+     */
+    public function obter_metricas(bool $completo = false, ?callable $ao_detalhar = null) {
         $metricas = [
             "total_pausas_funcionario" => [],
             "duracao_total_funcionario" => [],
@@ -422,8 +429,41 @@ class GerenciadorPausas {
         if (!$this->pdo) {
             // Se não houver conexão com o banco, tentar ler do CSV (fallback ou legado)
             if (file_exists(PAUSAS_CSV)) {
-                return $this->obter_metricas_csv($metricas);
+                return $this->obter_metricas_csv($metricas, $ao_detalhar);
             }
+            return $metricas;
+        }
+
+        if ($completo) {
+            try {
+                $pausas = db_keyset_iterate(function (?array $ultima, int $pagina): array {
+                    $sql = "SELECT id, id_funcionario, nome_funcionario, equipe, inicio_pausa, fim_pausa,
+                                   duracao_segundos, motivo_pausa, alerta_15min, alerta_20min,
+                                   status_aprovacao, observacao_reuniao
+                            FROM pausas";
+                    $params = [];
+                    if ($ultima !== null) {
+                        $sql .= " WHERE inicio_pausa < :cursor_inicio
+                                  OR (inicio_pausa = :cursor_mesmo_inicio AND id < :cursor_id)";
+                        $params = [
+                            ':cursor_inicio' => $ultima['inicio_pausa'],
+                            ':cursor_mesmo_inicio' => $ultima['inicio_pausa'],
+                            ':cursor_id' => (int)$ultima['id'],
+                        ];
+                    }
+                    $stmt = $this->pdo->prepare($sql . ' ORDER BY inicio_pausa DESC, id DESC LIMIT ' . $pagina);
+                    $stmt->execute($params);
+                    return $stmt->fetchAll();
+                }, 1000);
+                foreach ($pausas as $row) {
+                    $this->processar_linha_metrica($metricas, $row, $ao_detalhar);
+                }
+            } catch (PDOException $e) {
+                // Sem fallback parcial: exportação incompleta não pode sair como se fosse completa.
+                error_log("Erro ao exportar pausas do MySQL: " . $e->getMessage());
+                throw new RuntimeException('Nao foi possivel ler todas as pausas.', 0, $e);
+            }
+            $this->calcular_medias_metricas($metricas);
             return $metricas;
         }
 
@@ -463,7 +503,7 @@ class GerenciadorPausas {
         return $metricas;
     }
 
-    private function processar_linha_metrica(&$metricas, $data) {
+    private function processar_linha_metrica(&$metricas, $data, ?callable $ao_detalhar = null) {
         $id_func = (int)$data['id_funcionario'];
         $nome_func = $data['nome_funcionario'];
         $equipe_func = $data['equipe'];
@@ -504,7 +544,11 @@ class GerenciadorPausas {
             'excedeu_limite' => $this->pausa_conta_para_limite($motivo)
                 && $duracao > $this->duracao_pausa_minutos * 60
         ];
-        $metricas["pausas_detalhadas"][] = $pausa_detalhada;
+        if ($ao_detalhar !== null) {
+            $ao_detalhar($pausa_detalhada);
+        } else {
+            $metricas["pausas_detalhadas"][] = $pausa_detalhada;
+        }
 
         // Métricas por funcionário
         if (!isset($metricas["total_pausas_funcionario"][$func_key])) {
@@ -585,13 +629,13 @@ class GerenciadorPausas {
         }
     }
 
-    private function obter_metricas_csv(&$metricas) {
+    private function obter_metricas_csv(&$metricas, ?callable $ao_detalhar = null) {
         $file = fopen(PAUSAS_CSV, 'r');
         $headers = fgetcsv($file); // Pular cabeçalho
 
         while (($row = fgetcsv($file)) !== false) {
             $data = array_combine($headers, $row);
-            $this->processar_linha_metrica($metricas, $data);
+            $this->processar_linha_metrica($metricas, $data, $ao_detalhar);
         }
         fclose($file);
         

@@ -7,6 +7,7 @@ final class CriticalIncidentService {
     public const MAX_IMPORT_COLUMNS = 40;
     public const MAX_IMPORT_CELL_CHARS = 4000;
     public const MAX_IMPORT_PAYLOAD_BYTES = 2097152;
+    public const LIST_LIMIT = 500;
     public const ALLOWED_IMPORT_HEADERS = [
         'incident_number', 'room_date', 'incident_opened_at',
         'operation_reported_at', 'room_opened_at', 'normalized_at',
@@ -127,15 +128,14 @@ final class CriticalIncidentService {
                 FIELD(severity, "critical", "high", "medium", "low"),
                 FIELD(status, "war_room", "open", "in_progress", "mitigated", "resolved", "cancelled"),
                 opened_at DESC, id DESC
-             LIMIT 500'
+             LIMIT ' . (self::LIST_LIMIT + 1)
         );
         $stmt->execute($params);
 
         return [
             'period' => $period,
-            'items' => $stmt->fetchAll(),
             'summary' => $this->summary($where, $params),
-        ];
+        ] + db_limit_rows($stmt->fetchAll(), self::LIST_LIMIT);
     }
 
     public function get(int $id): array {
@@ -334,17 +334,35 @@ final class CriticalIncidentService {
         });
     }
 
+    /**
+     * [PERF-02] Todas as linhas do filtro, em paginas por chave (opened_at, id):
+     * a exportacao nao trunca. A contagem vem antes, para a auditoria.
+     */
     public function exportRows(array $filters): array {
         [$where, $params] = $this->filterSql($filters);
-        $stmt = $this->pdo->prepare(
-            'SELECT ' . self::DETAIL_COLUMNS . '
-             FROM portal_critical_incidents
-             ' . $where . '
-             ORDER BY opened_at DESC, id DESC
-             LIMIT 500'
-        );
-        $stmt->execute($params);
-        return $stmt->fetchAll();
+        $count = $this->pdo->prepare('SELECT COUNT(*) FROM portal_critical_incidents ' . $where);
+        $count->execute($params);
+
+        $rows = db_keyset_iterate(function (?array $lastRow, int $chunk) use ($where, $params): array {
+            if ($lastRow !== null) {
+                $where .= ' AND (opened_at < :cursor_opened_at
+                            OR (opened_at = :cursor_same_opened_at AND id < :cursor_id))';
+                $params[':cursor_opened_at'] = $lastRow['opened_at'];
+                $params[':cursor_same_opened_at'] = $lastRow['opened_at'];
+                $params[':cursor_id'] = (int)$lastRow['id'];
+            }
+            $stmt = $this->pdo->prepare(
+                'SELECT ' . self::DETAIL_COLUMNS . '
+                 FROM portal_critical_incidents
+                 ' . $where . '
+                 ORDER BY opened_at DESC, id DESC
+                 LIMIT ' . $chunk
+            );
+            $stmt->execute($params);
+            return $stmt->fetchAll();
+        });
+
+        return ['count' => (int)$count->fetchColumn(), 'rows' => $rows];
     }
 
     public static function sourceLabel($value): string {

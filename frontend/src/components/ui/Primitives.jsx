@@ -91,6 +91,16 @@ export function InlineAlert({ tone = 'info', title, children, className = '' }) 
   )
 }
 
+// PERF-02: a lista da tela tem limite; o aviso impede que o corte passe calado.
+export function TruncationNotice({ truncated, limit, children }) {
+  if (!truncated) return null
+  return (
+    <InlineAlert tone="warning" title={`Exibindo os ${limit} registros mais recentes`}>
+      {children || 'Há mais registros neste filtro. Refine os filtros para ver os demais.'}
+    </InlineAlert>
+  )
+}
+
 export function DetailPill({ label, value, tone = 'neutral' }) {
   return (
     <span className={`detail-pill detail-pill-${tone}`}>

@@ -12,7 +12,7 @@ try {
         if (isset($_GET['type']) && $_GET['type'] !== '') {
             $legacyService = new PortalService();
             $type = sanitize_input($_GET['type'], 30);
-            json_response(['sucesso' => true, 'items' => $legacyService->schedules($type)]);
+            json_response(['sucesso' => true] + $legacyService->schedules($type));
         }
         json_response(['sucesso' => true] + $service->scheduleData($_GET));
     }

@@ -11,7 +11,7 @@ try {
     if ($method === 'GET') {
         json_response([
             'sucesso' => true,
-            'items' => $service->list($_GET, $actor),
+        ] + $service->list($_GET, $actor) + [
             'limits' => [
                 'max_file_bytes' => DocumentService::MAX_FILE_BYTES,
                 'max_request_bytes' => DocumentService::MAX_REQUEST_BYTES,

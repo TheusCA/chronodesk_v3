@@ -6,10 +6,11 @@ require_get_method();
 require_portal_auth();
 
 try {
-    $rows = (new CriticalIncidentService())->exportRows($_GET);
+    $export = (new CriticalIncidentService())->exportRows($_GET);
+    $rows = $export['rows'];
     audit_log(
         'CRITICAL_INCIDENT_EXPORTED',
-        'Exportacao CSV de chamados criticos. Registros ' . count($rows),
+        'Exportacao CSV de chamados criticos. Registros ' . $export['count'],
         'INFO'
     );
 

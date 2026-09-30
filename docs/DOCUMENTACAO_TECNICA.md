@@ -187,7 +187,8 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 - Lançamento por técnico apenas para si; gestor/admin podem lançar para terceiros.
 - Aprovação exige perfil gestor ou admin; **autoaprovação é bloqueada** no servidor.
 - Decisão protegida por transação e `SELECT ... FOR UPDATE`; só registros `pending` podem ser decididos.
-- Duração calculada com virada de dia (fim ≤ início ⇒ dia seguinte), limitada a 1440 minutos.
+- Duração calculada com virada de dia (fim < início ⇒ dia seguinte). Início igual ao fim é recusado. Sem teto por lançamento (decisão do negócio, 2026-09-30).
+- Totais por colaborador em duas colunas, aprovado e pendente; rejeitados não entram em nenhum total. Ver `docs/HORAS_EXTRAS_LOTE6.md`.
 - Competência quinzenal: dia 16 do mês anterior ao dia 15 do mês corrente.
 
 ### 7.4 Mapa de PA
@@ -217,7 +218,7 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 3. **Endpoint de saúde entregue (`api/health.php`), sem monitoramento configurado** para consumi-lo.
 4. **Sem histórico de escala** (seção 7.2).
 5. **Cadastro limitado a 999 colaboradores** por validação de entrada.
-6. **Listas e exports truncam em 200–500 registros** sem aviso ao usuário.
+6. **Listas de tela limitadas a 100–500 registros**, com aviso quando há mais (Lote 6). As exportações CSV não truncam.
 7. **Estado de pausas em arquivo** (`estado.json`), não no banco — sem garantia transacional, serializado por lock global.
 8. **Interface legada em PHP** ainda presente no servidor; acessível por POST.
 9. **Fuso horário não alinhado** entre PHP e a sessão MySQL (sessão em UTC, confirmado no servidor em 2026-09-30). Correção entregue no lote de fuso, **pendente de deploy**: a conexão passa a definir `America/Sao_Paulo`. Os `DATETIME` gravados pelo relógio do MySQL antes do deploy (auditoria, aprovações, decisões, remoções) continuam 3 h adiante até a correção histórica, feita por script separado. Ver `docs/FUSO_HORARIO_BIZ02.md`.

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../db.php';
 final class ShiftAttachmentService {
     public const MAX_FILE_BYTES = 10485760;
     public const MAX_REQUEST_BYTES = 12582912;
+    public const LIST_LIMIT = 200;
     public const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'pdf', 'csv', 'xls', 'xlsx'];
     private const MIME_TYPES = [
         'png' => ['image/png', 'image/x-png'],
@@ -63,9 +64,9 @@ final class ShiftAttachmentService {
             $params[':search_notes'] = $value;
             $params[':search_file'] = $value;
         }
-        $stmt = $this->pdo->prepare($sql . ' ORDER BY uploaded_at DESC, id DESC LIMIT 200');
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY uploaded_at DESC, id DESC LIMIT ' . (self::LIST_LIMIT + 1));
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        return db_limit_rows($stmt->fetchAll(), self::LIST_LIMIT);
     }
 
     public function upload(array $file, array $metadata, array $actor): array {

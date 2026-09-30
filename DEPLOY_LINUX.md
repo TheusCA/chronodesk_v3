@@ -181,6 +181,7 @@ cd /var/www/chronodesk
 sudo -u www-data php scripts/qa-auth.php
 sudo -u www-data php scripts/qa-smoke.php
 sudo -u www-data php scripts/qa-timezone.php
+sudo -u www-data php scripts/qa-overtime.php
 ```
 
 Todos devem terminar com `OK` e código de saída `0`. Rodar como `www-data`
@@ -699,7 +700,7 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] Usuario MySQL dedicado, sem uso de `root` pela aplicacao.
 - [ ] Usuario MySQL runtime sem `CREATE`, `ALTER`, `DROP` ou `INDEX`.
 - [ ] Banco `sistema_pausas` importado.
-- [ ] `sudo -u www-data php scripts/qa-auth.php`, `sudo -u www-data php scripts/qa-smoke.php` e `sudo -u www-data php scripts/qa-timezone.php` terminam com `OK`.
+- [ ] `sudo -u www-data php scripts/qa-auth.php`, `sudo -u www-data php scripts/qa-smoke.php`, `sudo -u www-data php scripts/qa-timezone.php` e `sudo -u www-data php scripts/qa-overtime.php` terminam com `OK`.
 - [ ] `sudo -u www-data php scripts/qa-timezone.php --db` informa `sessao MySQL em America/Sao_Paulo` e termina com `OK`.
 - [ ] `api/status.php` responde.
 - [ ] Arquivos sensiveis retornam `403` ou `404`.

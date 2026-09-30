@@ -31,4 +31,7 @@ json_response([
     "solicitacoes" => $solicitacoes,
     "overtime" => $operational['overtime'],
     "time_adjustments" => $operational['time_adjustments'],
+    "overtime_truncated" => $operational['overtime_truncated'],
+    "time_adjustments_truncated" => $operational['time_adjustments_truncated'],
+    "limit" => $operational['limit'],
 ]);

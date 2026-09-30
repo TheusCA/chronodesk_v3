@@ -13,9 +13,14 @@ try {
             $service->streamOvertimeCsv($_GET, $actor);
             exit;
         }
+        $totals = $service->overtimeTotalsForFilters($_GET, $actor);
         json_response([
             'sucesso' => true,
-            'items' => $service->listOvertime($_GET, $actor),
+        ] + $service->listOvertime($_GET, $actor) + [
+            'totals' => [
+                'approved_minutes' => $totals['approved_minutes'],
+                'pending_minutes' => $totals['pending_minutes'],
+            ],
             'competency' => OperationalService::competencyRange($_GET['competency'] ?? null),
         ]);
     }

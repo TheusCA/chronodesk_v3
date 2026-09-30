@@ -18,6 +18,7 @@ import {
   InlineAlert,
   MetricCard,
   SectionHeader,
+  TruncationNotice,
   UserAvatar,
 } from '../components/ui/Primitives'
 import {
@@ -544,15 +545,20 @@ export function SchedulePage({ session, notify }) {
   )
 }
 
+const SAME_TIME_MESSAGE = 'Hora de entrada igual à hora de saída. Informe o horário real de saída; se a hora extra passou da meia-noite, a saída fica menor que a entrada.'
+
+// Espelha OperationalService::overtimeMinutes: saída menor que a entrada é virada
+// de dia; entrada igual à saída é recusada (antes virava 24 h). O servidor valida.
 function overtimePreview(form) {
   const [startHour, startMinute] = String(form.start_time || '00:00').split(':').map(Number)
   const [endHour, endMinute] = String(form.end_time || '00:00').split(':').map(Number)
-  if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return { minutes: 0, overnight: false }
+  if (![startHour, startMinute, endHour, endMinute].every(Number.isFinite)) return { minutes: 0, overnight: false, sameTime: false }
   const start = startHour * 60 + startMinute
   let end = endHour * 60 + endMinute
-  const overnight = end <= start
+  if (end === start) return { minutes: 0, overnight: false, sameTime: true }
+  const overnight = end < start
   if (overnight) end += 24 * 60
-  return { minutes: Math.max(0, end - start), overnight }
+  return { minutes: end - start, overnight, sameTime: false }
 }
 
 function WorkflowPage({ kind, session, notify }) {
@@ -572,6 +578,10 @@ function WorkflowPage({ kind, session, notify }) {
 
   async function create(event) {
     event.preventDefault()
+    if (overtime && preview.sameTime) {
+      notify(SAME_TIME_MESSAGE, 'error')
+      return
+    }
     await submit(
       () => post(endpoint, { action: 'create', ...form, employee_id: Number(form.employee_id) }),
       resource.refresh,
@@ -590,6 +600,8 @@ function WorkflowPage({ kind, session, notify }) {
   const items = resource.data?.items || []
   const pending = items.filter((item) => item.status === 'pending')
   const history = items.filter((item) => item.status !== 'pending')
+  // Totais do servidor: cobrem o filtro inteiro e nunca somam rejeitados (BIZ-01).
+  const totals = resource.data?.totals || {}
   const title = overtime ? 'Horas extras' : 'Correção de ponto'
   const noun = overtime ? 'hora extra' : 'ajuste de ponto'
 
@@ -652,9 +664,21 @@ function WorkflowPage({ kind, session, notify }) {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard detail={`Total de ${noun}s nos filtros`} icon={overtime ? 'timer' : 'edit'} label="Registros" value={items.length} />
         <MetricCard detail="Aguardam decisão de gestor/admin" icon="bell" label="Pendentes" tone="warning" value={pending.length} />
-        <MetricCard detail="Itens aprovados ou rejeitados" icon="file" label="Histórico" value={history.length} />
-        <MetricCard detail={overtime ? 'Soma de horas extras listadas' : 'Ajustes de ponto listados'} icon="chart" label={overtime ? 'Total calculado' : 'Total filtrado'} tone="info" value={overtime ? minutesLabel(items.reduce((total, item) => total + Number(item.total_minutes || 0), 0)) : items.length} />
+        {overtime ? (
+          <>
+            <MetricCard detail="Horas aprovadas no período; rejeitadas não entram" icon="chart" label="Total aprovado" tone="success" value={minutesLabel(totals.approved_minutes)} />
+            <MetricCard detail="Horas aguardando decisão no período" icon="timer" label="Total pendente" tone="warning" value={minutesLabel(totals.pending_minutes)} />
+          </>
+        ) : (
+          <>
+            <MetricCard detail="Itens aprovados ou rejeitados" icon="file" label="Histórico" value={history.length} />
+            <MetricCard detail="Ajustes de ponto listados" icon="chart" label="Total filtrado" tone="info" value={items.length} />
+          </>
+        )}
       </section>
+      <TruncationNotice limit={resource.data?.limit} truncated={resource.data?.truncated}>
+        Há mais {noun}s neste filtro do que os exibidos. Refine os filtros para vê-los; a planilha exportada traz todas as linhas{overtime ? ' e os totais acima já consideram o filtro inteiro' : ''}.
+      </TruncationNotice>
       {!canCreate && <InlineAlert tone="info" title="Acesso somente leitura">Novos lançamentos e decisões estão desabilitados para seu perfil.</InlineAlert>}
       <form className={canCreate ? '' : 'hidden'} onSubmit={create}>
         <FormSection
@@ -674,6 +698,7 @@ function WorkflowPage({ kind, session, notify }) {
                 <span className="block text-xs font-bold uppercase tracking-wider text-slate-600">Total calculado</span>
                 <strong className="mt-1 block text-white">{minutesLabel(preview.minutes)}</strong>
                 {preview.overnight && <small className="mt-1 block text-amber-300">Virada de dia considerada no cálculo.</small>}
+                {preview.sameTime && <small className="mt-1 block text-red-300" role="alert">{SAME_TIME_MESSAGE}</small>}
               </div>
             </>
           ) : (
@@ -806,7 +831,8 @@ export function OperationalReportsPage() {
   const indicators = useMemo(() => {
     const summary = resource.data?.summary || {}
     return [
-      ['Horas extras', minutesLabel(summary.overtime_minutes)],
+      ['Horas extras aprovadas', minutesLabel(summary.overtime_approved_minutes)],
+      ['Horas extras pendentes', minutesLabel(summary.overtime_pending_minutes)],
       ['Ajustes de ponto', summary.adjustments_count || 0],
       ['Plantões', summary.oncall_count || 0],
       ['Dias presenciais', summary.onsite_days || 0],
@@ -891,7 +917,7 @@ function ReportsSummaryTable({ title, values }) {
         const value = getValue() || {}
         return (
           <span className="text-right text-slate-500">
-            {minutesLabel(value.overtime_minutes)} HE, {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantão(ões), {value.onsite_days || 0} presencial(is)
+            {minutesLabel(value.overtime_approved_minutes)} HE aprovada(s), {minutesLabel(value.overtime_pending_minutes)} pendente(s), {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantão(ões), {value.onsite_days || 0} presencial(is)
           </span>
         )
       },

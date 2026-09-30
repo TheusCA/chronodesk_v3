@@ -20,10 +20,7 @@ function portal_list_response(string $resource, array $roles = []): void {
     require_portal_auth($roles);
     $service = new PortalService();
     try {
-        json_response([
-            'sucesso' => true,
-            'items' => $service->list($resource),
-        ]);
+        json_response(['sucesso' => true] + $service->list($resource));
     } catch (PortalStorageException $e) {
         json_response([
             'sucesso' => false,

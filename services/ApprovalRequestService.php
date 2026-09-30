@@ -61,12 +61,13 @@ class ApprovalRequestService {
                  ORDER BY requested_at DESC
                  LIMIT :limit'
             );
-            $stmt->bindValue(':limit', max(1, min($limit, 1000)), PDO::PARAM_INT);
+            $limit = max(1, min($limit, 1000));
+            $stmt->bindValue(':limit', $limit + 1, PDO::PARAM_INT);
             $stmt->execute();
-            return $stmt->fetchAll();
+            return db_limit_rows($stmt->fetchAll(), $limit);
         } catch (Throwable $e) {
             error_log('[APPROVAL_HISTORY] Histórico indisponível: ' . $e->getMessage());
-            return [];
+            return db_limit_rows([], max(1, min($limit, 1000)));
         }
     }
 }

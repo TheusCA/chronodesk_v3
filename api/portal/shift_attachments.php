@@ -11,7 +11,7 @@ try {
     if ($method === 'GET') {
         json_response([
             'sucesso' => true,
-            'items' => $service->list($_GET),
+        ] + $service->list($_GET) + [
             'can_upload' => $role === 'admin',
             'limits' => [
                 'max_file_bytes' => ShiftAttachmentService::MAX_FILE_BYTES,

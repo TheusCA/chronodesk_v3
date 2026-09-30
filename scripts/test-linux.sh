@@ -22,6 +22,9 @@ echo "== PHP timezone QA =="
 # Sem banco. Contra o banco real (somente leitura): php scripts/qa-timezone.php --db
 php scripts/qa-timezone.php
 
+echo "== PHP overtime and export QA =="
+php scripts/qa-overtime.php
+
 if command -v node >/dev/null 2>&1; then
     echo "== JavaScript syntax =="
     find . -type f -name '*.js' \

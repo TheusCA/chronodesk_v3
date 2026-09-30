@@ -139,6 +139,11 @@ export function MetricasPage() {
           A análise está limitada aos {resource.data.limite_registros} registros mais recentes. Use um período menor para resultados precisos.
         </div>
       )}
+      {resource.data?.solicitacoes_reuniao_truncadas && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
+          As decisões de reunião consideram só as {resource.data.solicitacoes_reuniao_limite} solicitações mais recentes.
+        </div>
+      )}
       <FilterBar>
           <select className="field" value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value })}>
             <option value="today">Hoje</option><option value="7d">Últimos 7 dias</option><option value="30d">Últimos 30 dias</option><option value="month">Mês atual</option><option value="custom">Intervalo personalizado</option><option value="all">Todo o histórico</option>

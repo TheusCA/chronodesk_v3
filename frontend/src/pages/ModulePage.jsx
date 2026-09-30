@@ -3,6 +3,7 @@ import { useResource } from '../hooks/useResource'
 import { apiUrl } from '../lib/api'
 import { formatDate, formatDateTime } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
+import { TruncationNotice } from '../components/ui/Primitives'
 
 const modules = {
   '/calendario': { endpoint: 'portal/calendar.php', noun: 'evento', columns: ['title', 'type', 'starts_at', 'status'] },
@@ -55,6 +56,9 @@ export function ModulePage({ path }) {
         <div><h2 className="font-bold text-white">Base operacional</h2><p className="text-sm text-slate-500">Estrutura preparada para persistência e integrações futuras.</p></div>
         <input className="field sm:max-w-xs" placeholder={`Buscar ${definition.noun}`} value={search} onChange={(event) => setSearch(event.target.value)} />
       </section>
+      <TruncationNotice limit={resource.data?.limit} truncated={resource.data?.truncated}>
+        A busca considera só os registros exibidos. Registros mais antigos não aparecem nesta lista.
+      </TruncationNotice>
       {items.length === 0 ? <EmptyState title={`Nenhum ${definition.noun} cadastrado`} description="A migration cria a estrutura segura; os dados serão exibidos aqui sem mocks fixos." /> : (
         <section className="card table-wrap">
           <table className="data-table">

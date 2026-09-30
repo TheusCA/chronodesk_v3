@@ -13,6 +13,7 @@ import {
   InlineAlert,
   MetricCard,
   SectionHeader,
+  TruncationNotice,
 } from '../components/ui/Primitives'
 import {
   competencyFor,
@@ -518,6 +519,9 @@ export function CriticalIncidentsPage({ session, notify }) {
         <label className="label md:col-span-2">Texto livre<input className="field mt-2" maxLength="120" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} /></label>
       </FilterBar>
 
+      <TruncationNotice limit={resource.data?.limit} truncated={resource.data?.truncated}>
+        Há mais chamados neste filtro do que os exibidos. Refine os filtros para vê-los; a exportação CSV traz todas as linhas.
+      </TruncationNotice>
       {items.length === 0 ? <EmptyState title="Nenhum chamado crítico encontrado" description="Ajuste os filtros ou cadastre o primeiro registro do período." /> : (
         <section className="card table-wrap">
           <SectionHeader

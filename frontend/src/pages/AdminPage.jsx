@@ -15,6 +15,7 @@ import {
   InlineAlert,
   MetricCard,
   SectionHeader,
+  TruncationNotice,
   UserAvatar,
 } from '../components/ui/Primitives'
 
@@ -128,7 +129,13 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
         <MetricCard detail="Ajustes de marcação pendentes" icon="edit" label="Correção de ponto" tone="warning" value={adjustments.length} />
         <MetricCard detail="Fila completa da central" icon="bell" label="Total pendente" tone={total > 0 ? 'warning' : 'success'} value={total} />
       </section>
-      {total === 0 && <EmptyState title="Nenhuma aprovação pendente" description="Novas solicitações operacionais aparecerão automaticamente nesta área." />}
+      <TruncationNotice limit={requests.data?.limit} truncated={requests.data?.overtime_truncated}>
+        Há mais horas extras pendentes do que as exibidas. Decida as mais recentes ou filtre em Horas extras.
+      </TruncationNotice>
+      <TruncationNotice limit={requests.data?.limit} truncated={requests.data?.time_adjustments_truncated}>
+        Há mais correções de ponto pendentes do que as exibidas. Decida as mais recentes ou filtre em Correção de ponto.
+      </TruncationNotice>
+      {total === 0 &&<EmptyState title="Nenhuma aprovação pendente" description="Novas solicitações operacionais aparecerão automaticamente nesta área." />}
 
       {total > 0 && (
         <>

@@ -49,9 +49,9 @@ class PortalService {
         try {
             $pdo = get_db_connection();
             $stmt = $pdo->prepare("SELECT {$columns} FROM {$table} ORDER BY updated_at DESC, id DESC LIMIT :limit");
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':limit', $limit + 1, PDO::PARAM_INT);
             $stmt->execute();
-            return $stmt->fetchAll();
+            return db_limit_rows($stmt->fetchAll(), $limit);
         } catch (Throwable $e) {
             error_log('[PORTAL] Recurso indisponível: ' . $resource);
             throw new PortalStorageException('A base do portal ainda não está disponível.', 0, $e);
@@ -76,9 +76,9 @@ class PortalService {
             if ($type !== null) {
                 $stmt->bindValue(':type', $type);
             }
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':limit', $limit + 1, PDO::PARAM_INT);
             $stmt->execute();
-            return $stmt->fetchAll();
+            return db_limit_rows($stmt->fetchAll(), $limit);
         } catch (Throwable $e) {
             error_log('[PORTAL] Escalas indisponíveis.');
             throw new PortalStorageException('A base de escalas ainda não está disponível.', 0, $e);

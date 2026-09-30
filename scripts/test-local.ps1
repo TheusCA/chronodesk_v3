@@ -82,6 +82,13 @@ if (!$phpExecutable) {
     } else {
         Pass "QA de fuso horario concluido"
     }
+
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-overtime.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA de horas extras e exportacoes falhou"
+    } else {
+        Pass "QA de horas extras e exportacoes concluido"
+    }
 }
 
 Write-Section "JavaScript syntax"

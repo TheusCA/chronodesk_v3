@@ -4,6 +4,7 @@ require_once __DIR__ . '/../db.php';
 final class DocumentService {
     public const MAX_FILE_BYTES = 10485760;
     public const MAX_REQUEST_BYTES = 12582912;
+    public const LIST_LIMIT = 300;
     public const ALLOWED_EXTENSIONS = [
         'pdf', 'doc', 'docx', 'xlsx', 'csv', 'txt', 'md', 'png', 'jpg', 'jpeg',
     ];
@@ -116,9 +117,9 @@ final class DocumentService {
             $sql .= ' AND visibility = "internal"';
         }
 
-        $stmt = $this->pdo->prepare($sql . ' ORDER BY uploaded_at DESC, id DESC LIMIT 300');
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY uploaded_at DESC, id DESC LIMIT ' . (self::LIST_LIMIT + 1));
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        return db_limit_rows($stmt->fetchAll(), self::LIST_LIMIT);
     }
 
     public function upload(array $file, array $metadata, array $actor): array {

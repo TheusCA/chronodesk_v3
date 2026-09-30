@@ -78,6 +78,38 @@ function db_connect(array $options = [], ?callable $factory = null, ?array $time
     throw new PDOException('Fuso da sessão MySQL indefinido ou inválido.');
 }
 
+/**
+ * [PERF-02] Lista limitada que avisa quando cortou. O chamador busca $limit + 1
+ * linhas; a linha a mais só serve para saber que existem outras.
+ */
+function db_limit_rows(array $rows, int $limit): array {
+    return [
+        'items' => array_slice($rows, 0, $limit),
+        'truncated' => count($rows) > $limit,
+        'limit' => $limit,
+    ];
+}
+
+/**
+ * [PERF-02] Percorre um resultado inteiro em páginas de $chunk linhas, sem
+ * carregar tudo na memória e sem LIMIT fixo: exportação nunca trunca.
+ *
+ * $fetch_page(?array $last_row, int $chunk) devolve a próxima página, a partir
+ * da última linha da página anterior (null na primeira). A paginação é por
+ * chave (keyset), então linhas com a mesma data não se repetem nem se perdem.
+ */
+function db_keyset_iterate(callable $fetch_page, int $chunk = 500): Generator {
+    $chunk = max(1, $chunk);
+    $last_row = null;
+    do {
+        $rows = $fetch_page($last_row, $chunk);
+        foreach ($rows as $row) {
+            yield $row;
+        }
+        $last_row = $rows === [] ? null : $rows[count($rows) - 1];
+    } while (count($rows) === $chunk);
+}
+
 function get_db_connection() {
     static $pdo = null;
 

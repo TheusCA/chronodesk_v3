@@ -15,7 +15,7 @@ try {
         }
         json_response([
             'sucesso' => true,
-            'items' => $service->listTimeAdjustments($_GET, $actor),
+        ] + $service->listTimeAdjustments($_GET, $actor) + [
             'competency' => OperationalService::competencyRange($_GET['competency'] ?? null),
         ]);
     }

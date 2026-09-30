@@ -6,7 +6,6 @@ require_get_method();
 require_portal_auth(['admin', 'gestor']);
 
 global $gerenciador;
-$metricas = $gerenciador->obter_metricas();
 $timestamp = date('Ymd_His');
 $request_id = $timestamp . '_' . bin2hex(random_bytes(8));
 
@@ -35,6 +34,78 @@ register_shutdown_function(static function () use ($temporary_files): void {
         }
     }
 });
+
+// [PERF-02] Detalhado com TODAS as pausas: lidas em paginas e gravadas linha a
+// linha, sem o teto de METRICS_MAX_ROWS da tela de metricas.
+$file_detalhado = @fopen($relatorio_detalhado_path, 'wb');
+if ($file_detalhado === false) {
+    audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Falha ao criar arquivo temporario detalhado', 'WARNING');
+    json_response(['sucesso' => false, 'mensagem' => 'Erro ao gerar relatório.'], 500);
+}
+csv_safe_row($file_detalhado, [
+    'id_funcionario', 'nome_funcionario', 'equipe', 'inicio_pausa', 'fim_pausa',
+    'duracao_segundos', 'duracao_formatada', 'motivo_pausa', 'alerta_15min',
+    'alerta_20min', 'excedeu_limite', 'status_aprovacao', 'observacao_reuniao'
+]);
+$gravar_pausa_detalhada = static function (array $pausa) use ($file_detalhado): void {
+    $duracao_seg = $pausa['duracao_segundos'];
+    $horas = floor($duracao_seg / 3600);
+    $minutos = floor(($duracao_seg % 3600) / 60);
+    $segundos = $duracao_seg % 60;
+
+    if ($horas > 0) {
+        $duracao_formatada = "{$horas}h {$minutos}m {$segundos}s";
+    } elseif ($minutos > 0) {
+        $duracao_formatada = "{$minutos}m {$segundos}s";
+    } else {
+        $duracao_formatada = "{$segundos}s";
+    }
+
+    // Formatar datas
+    $inicio_formatado = $pausa['inicio_pausa'];
+    $fim_formatado = $pausa['fim_pausa'];
+
+    try {
+        if ($inicio_formatado) {
+            $inicio_dt = new DateTime($inicio_formatado);
+            $inicio_formatado = $inicio_dt->format('d/m/Y H:i:s');
+        }
+    } catch (Exception $e) {
+        // Manter formato original em caso de erro
+    }
+
+    try {
+        if ($fim_formatado) {
+            $fim_dt = new DateTime($fim_formatado);
+            $fim_formatado = $fim_dt->format('d/m/Y H:i:s');
+        }
+    } catch (Exception $e) {
+        // Manter formato original em caso de erro
+    }
+
+    csv_safe_row($file_detalhado, [
+        $pausa['id_funcionario'],
+        $pausa['nome_funcionario'],
+        strtoupper($pausa['equipe']),
+        $inicio_formatado,
+        $fim_formatado,
+        $pausa['duracao_segundos'],
+        $duracao_formatada,
+        $pausa['motivo_pausa'],
+        $pausa['alerta_15min'] ? 'Sim' : 'Não',
+        $pausa['alerta_20min'] ? 'Sim' : 'Não',
+        $pausa['excedeu_limite'] ? 'Sim' : 'Não',
+        $pausa['status_aprovacao'],
+        $pausa['observacao_reuniao'] ?: 'N/A'
+    ]);
+};
+try {
+    $metricas = $gerenciador->obter_metricas(true, $gravar_pausa_detalhada);
+} catch (RuntimeException $e) {
+    audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Leitura incompleta das pausas; exportacao cancelada', 'WARNING');
+    json_response(['sucesso' => false, 'mensagem' => 'Erro ao gerar relatório.'], 500);
+}
+fclose($file_detalhado);
 
 $file = @fopen($relatorio_path, 'wb');
 if ($file === false) {
@@ -129,73 +200,6 @@ foreach ($metricas['pausas_reuniao_pendentes'] as $func => $total) {
 }
 
 fclose($file);
-
-// Criar arquivo detalhado
-$file_detalhado = @fopen($relatorio_detalhado_path, 'wb');
-if ($file_detalhado === false) {
-    audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Falha ao criar arquivo temporario detalhado', 'WARNING');
-    json_response(['sucesso' => false, 'mensagem' => 'Erro ao gerar relatório.'], 500);
-}
-$headers_detalhado = [
-    'id_funcionario', 'nome_funcionario', 'equipe', 'inicio_pausa', 'fim_pausa',
-    'duracao_segundos', 'duracao_formatada', 'motivo_pausa', 'alerta_15min',
-    'alerta_20min', 'excedeu_limite', 'status_aprovacao', 'observacao_reuniao'
-];
-csv_safe_row($file_detalhado, $headers_detalhado);
-
-foreach ($metricas['pausas_detalhadas'] as $pausa) {
-    $duracao_seg = $pausa['duracao_segundos'];
-    $horas = floor($duracao_seg / 3600);
-    $minutos = floor(($duracao_seg % 3600) / 60);
-    $segundos = $duracao_seg % 60;
-
-    if ($horas > 0) {
-        $duracao_formatada = "{$horas}h {$minutos}m {$segundos}s";
-    } elseif ($minutos > 0) {
-        $duracao_formatada = "{$minutos}m {$segundos}s";
-    } else {
-        $duracao_formatada = "{$segundos}s";
-    }
-
-    // Formatar datas
-    $inicio_formatado = $pausa['inicio_pausa'];
-    $fim_formatado = $pausa['fim_pausa'];
-    
-    try {
-        if ($inicio_formatado) {
-            $inicio_dt = new DateTime($inicio_formatado);
-            $inicio_formatado = $inicio_dt->format('d/m/Y H:i:s');
-        }
-    } catch (Exception $e) {
-        // Manter formato original em caso de erro
-    }
-    
-    try {
-        if ($fim_formatado) {
-            $fim_dt = new DateTime($fim_formatado);
-            $fim_formatado = $fim_dt->format('d/m/Y H:i:s');
-        }
-    } catch (Exception $e) {
-        // Manter formato original em caso de erro
-    }
-
-    csv_safe_row($file_detalhado, [
-        $pausa['id_funcionario'],
-        $pausa['nome_funcionario'],
-        strtoupper($pausa['equipe']),
-        $inicio_formatado,
-        $fim_formatado,
-        $pausa['duracao_segundos'],
-        $duracao_formatada,
-        $pausa['motivo_pausa'],
-        $pausa['alerta_15min'] ? 'Sim' : 'Não',
-        $pausa['alerta_20min'] ? 'Sim' : 'Não',
-        $pausa['excedeu_limite'] ? 'Sim' : 'Não',
-        $pausa['status_aprovacao'],
-        $pausa['observacao_reuniao'] ?: 'N/A'
-    ]);
-}
-fclose($file_detalhado);
 
 // Criar ZIP
 if (!class_exists('ZipArchive')) {

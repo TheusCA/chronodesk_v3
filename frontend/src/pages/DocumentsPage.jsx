@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
-import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader } from '../components/ui/Primitives'
+import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader, TruncationNotice } from '../components/ui/Primitives'
 import { useResource } from '../hooks/useResource'
 import { apiUrl, post, postForm } from '../lib/api'
 import { ACTION_FEEDBACK } from '../lib/actionFeedback'
@@ -242,6 +242,7 @@ export function DocumentsPage({ notify }) {
         <input className="field" aria-label="Data de envio" type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} />
       </FilterBar>
 
+      <TruncationNotice limit={resource.data?.limit} truncated={resource.data?.truncated} />
       {filtered.length === 0 ? (
         <EmptyState title="Nenhum documento encontrado" description={items.length ? 'Ajuste os filtros para localizar outros documentos.' : 'Use “Adicionar arquivo” para cadastrar o primeiro documento interno.'} />
       ) : (

@@ -45,6 +45,17 @@ Mapa inicial dos contratos consumidos pelo frontend. Este documento descreve o u
 | `usuarios.php` | GET/POST | action listar/criar/atualizar/deletar | usuarios, `mensagem` | Admin local | Alto | Backend smoke | Teste local admin |
 | `portal/reports.php` | GET | filtros, opcional `format=csv` | items/resumo ou CSV | Relatorios | Medio | Build/lint | Smoke CSV |
 
+## Listas limitadas e exportacoes (Lote 6, PERF-02 e BIZ-01)
+
+- Listas de tela com limite devolvem, junto de `items`, `truncated` (ha mais registros que os exibidos) e `limit`. Vale para `portal/overtime.php` e `portal/time_corrections.php` (500), `portal/critical_incidents.php` (500), `portal/documents.php` (300), `portal/shift_attachments.php` (200) e as listas genericas de `PortalService` (`portal/absences.php`, `portal/announcements.php`, `portal/schedules.php?type=`, `portal/standby.php`; 100). O frontend mostra o aviso com `TruncationNotice`.
+- `solicitacoes_pendentes.php` acrescenta `overtime_truncated`, `time_adjustments_truncated` e `limit`.
+- `metricas.php` acrescenta `solicitacoes_reuniao_truncadas` e `solicitacoes_reuniao_limite`.
+- `portal/overtime.php` (GET) acrescenta `totals.approved_minutes` e `totals.pending_minutes`, calculados sobre o filtro inteiro, sem o filtro de status. Rejeitados nao entram.
+- Sem `from`/`to`/`competency`, horas extras e correcao de ponto usam a competencia corrente (16 a 15), nao mais o mes calendario.
+- `portal/reports.php`: `summary.overtime_minutes` e `overtime_minutes` por colaborador/equipe foram **substituidos** por `overtime_approved_minutes` e `overtime_pending_minutes`.
+- Exportacoes CSV nao truncam: horas extras, correcao de ponto, chamados criticos e o ZIP de pausas (`download_relatorio.php`) percorrem o filtro inteiro em paginas.
+- CSV de horas extras: a coluna `Total Realizado` (somava todos os status) foi substituida por `Total aprovado` e `Total pendente`, e entrou a coluna `Status` no fim. Detalhes em `docs/HORAS_EXTRAS_LOTE6.md`.
+
 ## Contratos propostos - Parte B (NAO IMPLEMENTADOS)
 
 Desenho aprovado em 2026-09-30, com P2, P12 e o tratamento dos relatorios em aberto. Nada desta secao existe no codigo. A tabela acima continua sendo o contrato em uso; cada linha so muda no lote que implementar o endpoint. Especificacao completa em `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 3.
