@@ -74,6 +74,14 @@ if (!$phpExecutable) {
     } else {
         Pass "QA de autenticacao LDAP concluido"
     }
+
+    # Sem banco: abertura da conexao simulada e modelo da sessao MySQL.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-timezone.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA de fuso horario falhou"
+    } else {
+        Pass "QA de fuso horario concluido"
+    }
 }
 
 Write-Section "JavaScript syntax"

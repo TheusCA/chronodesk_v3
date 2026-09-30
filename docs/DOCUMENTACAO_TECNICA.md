@@ -220,7 +220,7 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 6. **Listas e exports truncam em 200–500 registros** sem aviso ao usuário.
 7. **Estado de pausas em arquivo** (`estado.json`), não no banco — sem garantia transacional, serializado por lock global.
 8. **Interface legada em PHP** ainda presente no servidor; acessível por POST.
-9. **Fuso horário não alinhado** entre PHP e a sessão MySQL. Em análise — ver Lote de fuso horário.
+9. **Fuso horário não alinhado** entre PHP e a sessão MySQL (sessão em UTC, confirmado no servidor em 2026-09-30). Correção entregue no lote de fuso, **pendente de deploy**: a conexão passa a definir `America/Sao_Paulo`. Os `DATETIME` gravados pelo relógio do MySQL antes do deploy (auditoria, aprovações, decisões, remoções) continuam 3 h adiante até a correção histórica, feita por script separado. Ver `docs/FUSO_HORARIO_BIZ02.md`.
 10. **Repositório fora da esteira corporativa** (conta pessoal); migração para Azure DevOps pendente.
 
 ---

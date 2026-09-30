@@ -162,15 +162,25 @@ php -r "require '/var/www/chronodesk/db.php'; var_dump((bool)get_db_connection()
 cd /var/www/chronodesk
 sudo -u www-data php scripts/qa-auth.php
 sudo -u www-data php scripts/qa-smoke.php
+sudo -u www-data php scripts/qa-timezone.php
 ```
 
-Ambos devem terminar com `OK` e código de saída `0`. Rodar como `www-data`
+Todos devem terminar com `OK` e código de saída `0`. Rodar como `www-data`
 confirma que o código é legível pelo usuário do Apache. Não valida o `.env`:
 se ele estiver ilegível, o QA passa mesmo assim, apenas com aviso de `file()`
 na saída; trate qualquer aviso como falha. Os scripts não
 abrem conexão com o banco nem com o AD e só escrevem no diretório temporário
 do sistema. `qa-auth.php` exige `php-ldap` e falha se a extensão estiver
 ausente. Qualquer falha bloqueia o deploy: acionar o rollback.
+
+Fuso da sessão MySQL contra o banco real (somente leitura; ver
+`docs/FUSO_HORARIO_BIZ02.md`, seção 8.2):
+
+```bash
+sudo -u www-data php scripts/qa-timezone.php --db
+```
+
+Esperado: `sessao MySQL em America/Sao_Paulo` e `QA timezone (banco real) OK`.
 
 9. Testar URLs:
 
@@ -489,7 +499,7 @@ escolhido sera perdido.
    > **Antes do deploy que traz o modo de manutencao**, a unica forma de parar a
    > escrita e `sudo systemctl stop apache2`, que derruba **todos** os sites da
    > VM, nao so o ChronoDesk. Nesse caso, combine a janela com o responsavel pelo
-   > outro site antes, e no passo 7 use `sudo systemctl start apache2`.
+   > outro site antes, e no passo 8 use `sudo systemctl start apache2`.
 
 2. Se o backup escolhido tiver mais de `RETENTION_DAYS` dias, copie-o para fora
    de `/var/backups/chronodesk` antes do passo 3: a retencao o removeria.
@@ -526,7 +536,11 @@ dono e modo anotados.
 Arquivos privados criados depois do backup nao sao apagados pela extracao;
 ficam orfaos, sem registro no banco.
 
-7. Validar ainda em manutencao, pela propria VM: QA pos-deploy (passo 8) e
+7. Se o backup restaurado for anterior ao corte do fuso horario (BIZ-02) e o
+   codigo no ar ja for o corrigido, registre o corte de novo antes de reabrir:
+   `docs/FUSO_HORARIO_BIZ02.md`, secao 9.
+
+8. Validar ainda em manutencao, pela propria VM: QA pos-deploy (passo 8) e
    health check por loopback. Depois sair da manutencao
    (`sudo rm -f /var/www/chronodesk.maintenance`) e validar o login.
 
@@ -575,6 +589,12 @@ sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEA
 - Migration nova: aplicar como no passo 6 do Passo a Passo. As migrations nao
   tem script de reversao; desfazer uma migration exige restaurar o backup do item 3.
 - `scripts/backup-chronodesk.sh` alterado: revisar e reinstalar (secao Backup).
+- Arquivos em `migrations/correcao_dados/` **nao** sao migrations de deploy: sao
+  scripts de correcao de dados, cada um com procedimento proprio. Nao aplicar
+  junto com as migrations numeradas.
+- Deploy que traz o lote de fuso horario (BIZ-02): ha passos adicionais, entre
+  eles o registro do corte **antes** da recarga do item 5. Siga
+  `docs/FUSO_HORARIO_BIZ02.md`, secao 6.
 
 5. Frontend e recarga:
 
@@ -659,7 +679,8 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] Usuario MySQL dedicado, sem uso de `root` pela aplicacao.
 - [ ] Usuario MySQL runtime sem `CREATE`, `ALTER`, `DROP` ou `INDEX`.
 - [ ] Banco `sistema_pausas` importado.
-- [ ] `sudo -u www-data php scripts/qa-auth.php` e `sudo -u www-data php scripts/qa-smoke.php` terminam com `OK`.
+- [ ] `sudo -u www-data php scripts/qa-auth.php`, `sudo -u www-data php scripts/qa-smoke.php` e `sudo -u www-data php scripts/qa-timezone.php` terminam com `OK`.
+- [ ] `sudo -u www-data php scripts/qa-timezone.php --db` informa `sessao MySQL em America/Sao_Paulo` e termina com `OK`.
 - [ ] `api/status.php` responde.
 - [ ] Arquivos sensiveis retornam `403` ou `404`.
 - [ ] Login AD validado.

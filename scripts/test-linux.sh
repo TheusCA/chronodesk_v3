@@ -18,6 +18,10 @@ echo "== PHP auth QA =="
 # Exige php-ldap; o script falha se a extensao estiver ausente.
 php scripts/qa-auth.php
 
+echo "== PHP timezone QA =="
+# Sem banco. Contra o banco real (somente leitura): php scripts/qa-timezone.php --db
+php scripts/qa-timezone.php
+
 if command -v node >/dev/null 2>&1; then
     echo "== JavaScript syntax =="
     find . -type f -name '*.js' \

@@ -15,7 +15,7 @@
  * para que um banco travado nao prenda um worker do pool do PHP-FPM.
  */
 define('CHRONODESK_STATELESS', true);
-require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../db.php';
 
 header('Cache-Control: no-store');
 require_http_method(['GET', 'HEAD']);
@@ -30,15 +30,12 @@ if (!ip_in_allowlist((string)($_SERVER['REMOTE_ADDR'] ?? ''), $health_allowed_ip
 
 $database_ok = false;
 try {
-    $pdo = new PDO(
-        'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET,
-        DB_USER,
-        DB_PASS,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_TIMEOUT => 2,
-        ]
-    );
+    // Mesma abertura da aplicacao (db.php), inclusive o fuso da sessao: se a
+    // aplicacao nao consegue conectar, a sondagem tambem nao.
+    $pdo = db_connect([
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_TIMEOUT => 2,
+    ]);
     $database_ok = (string)$pdo->query('SELECT 1')->fetchColumn() === '1';
 } catch (Throwable $e) {
     $database_ok = false;
