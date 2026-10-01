@@ -39,7 +39,7 @@ try {
                 $value = sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
             }
             $text = (string)$value;
-            $values[] = preg_match('/^[\t\r]|^[\s\x00-\x1F]*[=+\-@]/u', $text) ? "'" . $text : $text;
+            $values[] = csv_neutralize_cell($text);
         }
         fputcsv($output, $values, ';');
     }

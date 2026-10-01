@@ -92,6 +92,22 @@ function sanitize_attr($data) {
     return htmlspecialchars((string)$data, ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * [SEC-11] Célula de CSV que a planilha não executa como fórmula: prefixa com
+ * apóstrofo o texto iniciado por = + - @ (mesmo depois de espaço ou caractere
+ * de controle) ou por TAB/CR. Única implementação, usada por todas as
+ * exportações. Com UTF-8 inválido o modo /u não avalia o texto; a checagem
+ * repete byte a byte em vez de deixar a célula passar sem prefixo.
+ */
+function csv_neutralize_cell(string $text): string {
+    $pattern = '/^[\t\r]|^[\s\x00-\x1F]*[=+\-@]/';
+    $match = preg_match($pattern . 'u', $text);
+    if ($match === false) {
+        $match = preg_match($pattern, $text);
+    }
+    return $match !== 0 ? "'" . $text : $text;
+}
+
 // ============================================
 // VALIDAÇÕES
 // ============================================
