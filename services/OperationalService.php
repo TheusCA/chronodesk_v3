@@ -1544,6 +1544,10 @@ final class OperationalService {
         );
     }
 
+    /**
+     * Nome do status no CSV: nunca em branco, inclusive para "synced" e
+     * "sync_error", que ficam fora dos totais (divida tecnica, HORAS_EXTRAS_LOTE6).
+     */
     private static function workflowStatusLabel(string $status): string {
         return match ($status) {
             'pending' => 'Pendente',
@@ -1551,6 +1555,7 @@ final class OperationalService {
             'rejected' => 'Rejeitado',
             'synced' => 'Sincronizado',
             'sync_error' => 'Erro de sincronizacao',
+            '' => 'Sem status',
             default => ucfirst(str_replace('_', ' ', $status)),
         };
     }

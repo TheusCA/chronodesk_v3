@@ -1,7 +1,7 @@
 # Horas extras e exportações — Lote 6 (BIZ-01, BIZ-04, PERF-02)
 
 **Data:** 2026-09-30
-**Situação:** commit local, aguardando validação. Deploy 5 da fila.
+**Situação:** aprovado em 2026-10-01 (`a68066a`); complemento de status e índices em commit separado. Deploy 5 da fila.
 
 ---
 
@@ -38,6 +38,8 @@ Regra única em `OperationalService::overtimeTotals()`:
 
 `synced` e `sync_error` existem no schema, mas nenhum código grava esses status hoje (a integração com SharePoint está inativa). Ficam fora dos totais até haver decisão. A consulta da seção 8 confirma se há alguma linha assim.
 
+**Dívida técnica:** `synced` = aprovado e sincronizado; reavaliar a regra de totais se a integração com o SharePoint voltar. Até lá, essas linhas ficam fora dos dois totais, mas aparecem no CSV com o nome do status (seção 4).
+
 Os totais ignoram o filtro de status da tela: filtrar "Pendente" não zera o total aprovado, porque o total já separa os status.
 
 ## 4. CSV de horas extras
@@ -47,7 +49,7 @@ Os totais ignoram o filtro de status da tela: filtrar "Pendente" não zera o tot
 | 1–7 | NC, Nome completo, Data da realizacao, Hora de entrada, Hora de saida, Descricao, Total de Horas | **Iguais** |
 | 8 | `Total Realizado` — soma de **todos** os status do colaborador, inclusive rejeitados, e só das até 500 linhas exportadas | `Total aprovado` — do colaborador no filtro inteiro |
 | 9 | — | `Total pendente` — do colaborador no filtro inteiro |
-| 10 | — | `Status` — Aprovado, Pendente, Rejeitado |
+| 10 | — | `Status` — Aprovado, Pendente, Rejeitado; `synced` sai como Sincronizado e `sync_error` como Erro de sincronizacao. Nunca em branco: status vazio sai como Sem status |
 
 **Atenção para quem consome a planilha (folha de pagamento):** a coluna 8 mudou de nome e de conteúdo, e há duas colunas novas no fim. Antes, o total vinha inflado sempre que havia lançamento pendente ou rejeitado no período, e o arquivo parava em 500 linhas sem aviso.
 
@@ -65,6 +67,8 @@ O CSV de correção de ponto não tinha totais: só ganhou a exportação comple
 A tela mostra o aviso no quadro "Total calculado" e não envia o formulário.
 
 **Registros antigos com entrada igual à saída continuam no banco com 24 h.** O lote não altera dados. A seção 8 traz a consulta para encontrá-los.
+
+**Aprovação de pendente antigo com entrada igual à saída (em aberto, 2026-10-01).** Hoje `decideWorkflow()` só confere se o registro está pendente, se não é do próprio aprovador e se a decisão é válida; não recalcula os minutos. Aprovar um pendente antigo de 24 h funciona e soma 1.440 minutos no total aprovado. Proposta aguardando aprovação do responsável: recusar só a **aprovação** desses lançamentos, com mensagem pedindo a correção do horário; a rejeição continua permitida e os já aprovados não mudam. Não há edição de lançamento no sistema: corrigir significa rejeitar e lançar de novo.
 
 ## 6. PERF-02
 
@@ -136,6 +140,38 @@ UNION ALL SELECT 'pausas', COUNT(*) FROM pausas;
 ```
 
 Se a segunda consulta trouxer linhas, a correção é decisão do negócio: o lote não mexe em lançamentos existentes.
+
+### Índices das consultas paginadas (data, id)
+
+No InnoDB, todo índice secundário termina com a chave primária (`id`). Assim, um índice só em `data` já vale como (`data`, `id`) e atende a ordem e o cursor sem ordenação extra; um índice (`data`, `outra_coluna`) atende o intervalo de datas, mas não a ordem por `id` dentro da mesma data.
+
+| Exportação | Filtro e ordem | Índice que atende | Situação |
+|---|---|---|---|
+| Pausas (ZIP) | Tabela inteira; `ORDER BY inicio_pausa DESC, id DESC` | `idx_data (inicio_pausa)` = (`inicio_pausa`, `id`) | **Completo**: leitura do índice de trás para a frente, sem ordenação extra |
+| Horas extras, por colaborador (inclui técnico e somente leitura, que veem só os próprios) | `employee_id = ?` e período; ordem (`work_date`, `id`) | `idx_overtime_employee (employee_id, work_date)` | **Completo** |
+| Horas extras, por status | `status = ?` e período | `idx_overtime_status (status, work_date)` | **Completo** |
+| Horas extras, só período ou período + equipe | `work_date BETWEEN` (no máximo 366 dias) | `idx_overtime_competency (work_date, team)` | **Parcial**: o índice limita as linhas ao período; a ordem por `id` dentro da mesma data exige ordenação em memória a cada página |
+| Totais da tela e do CSV de horas extras | Igual às linhas acima, sem o status | Os mesmos | Igual às linhas acima |
+| Correção de ponto | Mesmo desenho, sobre `adjustment_date` | `idx_adjustment_employee`, `idx_adjustment_status`, `idx_adjustment_competency` | Igual a horas extras |
+| Chamados críticos | `COALESCE(room_date, DATE(opened_at)) BETWEEN`; ordem (`opened_at`, `id`) | Nenhum para o período: a expressão com `COALESCE` impede o uso de índice. O cursor pode usar `idx_critical_incident_period (opened_at, status, severity)` | **Sem índice para o filtro**: cada página percorre os chamados anteriores ao cursor e ordena em memória |
+
+**Avaliação: não vale migration agora.** Nos casos parciais, o custo de cada página é ler e ordenar as linhas do período filtrado. Com o volume esperado (até alguns milhares de lançamentos por competência e algumas centenas de chamados críticos), a estimativa é de poucos milissegundos a dezenas de milissegundos por página (não medido), e a exportação é manual e eventual. Um índice novo (`work_date`, `id`) ou uma coluna gerada para o período dos chamados críticos só se paga com dezenas de milhares de linhas no período. Critério para reavaliar: a terceira consulta acima passar de **50.000** linhas em horas extras ou correção de ponto, ou de **10.000** em chamados críticos, ou o `EXPLAIN` abaixo mostrar `rows` nessa ordem. Se for o caso, a migration usa número fora da faixa 011–014 (reservada para a Parte B) e só é criada com aprovação.
+
+Análise feita pela definição dos índices nas migrations; **não houve `EXPLAIN` em banco real**. Para confirmar no servidor (só o plano, sem dados):
+
+```sql
+EXPLAIN SELECT id FROM portal_overtime_entries
+WHERE work_date BETWEEN '2026-09-16' AND '2026-10-15'
+ORDER BY work_date DESC, id DESC LIMIT 500;
+
+EXPLAIN SELECT id FROM portal_critical_incidents
+WHERE COALESCE(room_date, DATE(opened_at)) BETWEEN '2026-09-16' AND '2026-10-15'
+ORDER BY opened_at DESC, id DESC LIMIT 500;
+
+EXPLAIN SELECT id FROM pausas ORDER BY inicio_pausa DESC, id DESC LIMIT 1000;
+```
+
+Esperado: a primeira com `key = idx_overtime_competency` e `Using filesort`; a segunda com varredura (`type = ALL` ou índice em `opened_at`) e `Using where`; a terceira com `key = idx_data` e sem `filesort`.
 
 ## 9. Rollback
 

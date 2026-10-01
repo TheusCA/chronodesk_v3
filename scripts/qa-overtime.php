@@ -117,6 +117,17 @@ $csvRow = OperationalService::overtimeCsvRow([
 ], []);
 assert_same(['', 'Sem totais', '2026-10-05', '18:00', '19:00', 'Justificativa', '01:00', '00:00', '00:00', 'Aprovado'], $csvRow, 'colaborador sem totais sai zerado; descricao cai para a justificativa');
 
+// Status sem gravador aparece pelo nome, nunca em branco.
+foreach (['pending' => 'Pendente', 'synced' => 'Sincronizado', 'sync_error' => 'Erro de sincronizacao', '' => 'Sem status'] as $status => $label) {
+    $csvRow = OperationalService::overtimeCsvRow([
+        'employee_id' => 4, 'employee_name' => 'Status QA', 'work_date' => '2026-10-05',
+        'start_time' => '18:00:00', 'end_time' => '18:15:00', 'reason' => 'x',
+        'justification' => 'x', 'total_minutes' => 15, 'status' => $status,
+    ], $totals['by_employee']);
+    assert_same($label, $csvRow[9], "coluna Status do CSV para \"{$status}\"");
+    assert_same(['00:00', '00:00'], [$csvRow[7], $csvRow[8]], "status \"{$status}\" do colaborador 4 fora dos totais");
+}
+
 // ----------------------------------------------------------------------------
 // Competencia: 16 de um mes a 15 do seguinte
 // ----------------------------------------------------------------------------
