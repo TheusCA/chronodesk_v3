@@ -5,6 +5,7 @@
  * 
  * Correções aplicadas:
  * - VULN-006: Rate limiting por IP (file-based)
+ * - SEC-03: Limite de tentativas de login por usuário (MySQL)
  * - VULN-013: CSP com suporte a nonce
  * - VULN-015: HSTS enforcement
  * - VULN-017: Sistema de auditoria
@@ -399,6 +400,216 @@ function check_rate_limit($key, $max_requests = 5, $time_window = 900) {
         flock($handle, LOCK_UN);
         fclose($handle);
     }
+}
+
+// ============================================
+// [SEC-03] LIMITE DE TENTATIVAS DE LOGIN POR USUÁRIO
+// ============================================
+
+/**
+ * Limite por usuário, independente de IP, persistido no MySQL (tabela
+ * login_user_throttle, migration 015). Complementa os limites por IP acima,
+ * que continuam valendo: aqueles não contêm tentativas contra a mesma conta
+ * vindas de IPs diferentes, que podem bloquear a conta no AD do domínio.
+ *
+ * Toda tentativa que chega à autenticação conta, antes do bind; só o login
+ * concluído zera a contagem. A contagem volta a zero depois de uma janela
+ * inteira sem tentativas, a mesma regra do contador de senha errada do AD.
+ * Com limite menor que o do domínio e janela maior ou igual à dele, o
+ * ChronoDesk sozinho nunca leva a conta ao bloqueio do AD.
+ *
+ * Nunca recebe nem grava a senha: só o login normalizado.
+ */
+const LOGIN_USER_THROTTLE_DEFAULT_MAX = 5;
+const LOGIN_USER_THROTTLE_DEFAULT_WINDOW = 900;
+
+function login_user_throttle_env_int(string $name, int $default, int $min, int $max): int {
+    $raw = getenv($name);
+    if ($raw === false || trim($raw) === '') {
+        return $default;
+    }
+    $value = filter_var(trim($raw), FILTER_VALIDATE_INT, ['options' => ['min_range' => $min, 'max_range' => $max]]);
+    if ($value === false) {
+        error_log("[LOGIN_THROTTLE] {$name} inválido (aceito: {$min} a {$max}); usando {$default}.");
+        return $default;
+    }
+    return $value;
+}
+
+/**
+ * Executa um comando do contador; resultado false (conexão sem modo de
+ * exceção) vira exceção, para o limite nunca falhar aberto em silêncio.
+ */
+function login_user_throttle_execute(PDO $pdo, string $sql, array $params): PDOStatement {
+    $statement = $pdo->prepare($sql);
+    if ($statement === false || $statement->execute($params) === false) {
+        throw new RuntimeException('Falha no contador de login por usuario.');
+    }
+    return $statement;
+}
+
+function login_user_throttle_config(): array {
+    return [
+        'max_attempts' => login_user_throttle_env_int('LOGIN_USER_MAX_FAILURES', LOGIN_USER_THROTTLE_DEFAULT_MAX, 1, 20),
+        'window' => login_user_throttle_env_int('LOGIN_USER_WINDOW_SECONDS', LOGIN_USER_THROTTLE_DEFAULT_WINDOW, 60, 86400),
+    ];
+}
+
+/**
+ * Chave do contador: o sAMAccountName com que autenticar_ad() faz o bind,
+ * calculado pela mesma função e com a mesma configuração, para que
+ * "usuario", "USUARIO" e "usuario@dominio" contem juntos. Login que essa
+ * função recusa nunca chega ao bind e fica sem contador.
+ *
+ * Não usar normalizar_samaccountname() aqui: ela recusa "usuario@", que o
+ * bind aceita como "usuario"; a tentativa passaria sem ser contada.
+ */
+function login_user_throttle_key($login): ?string {
+    if (!function_exists('normalizar_login_ldap')) {
+        require_once __DIR__ . '/auth_ldap.php';
+    }
+    $ad_domain = trim((string)(getenv('AD_DOMAIN') ?: ''));
+    $ad_upn_suffix = trim((string)(getenv('AD_UPN_SUFFIX') ?: '')) ?: $ad_domain;
+    $username = normalizar_login_ldap((string)$login, $ad_upn_suffix, $ad_domain)['samaccountname'];
+    return $username !== '' ? $username : null;
+}
+
+/**
+ * Decisão pura sobre a linha atual do contador (null quando não existe).
+ * Devolve se a tentativa pode seguir e, se puder, o novo total.
+ */
+function login_user_throttle_decide(?array $row, int $now, int $max_attempts, int $window): array {
+    $attempts = 0;
+    $last = $row !== null ? strtotime((string)($row['last_attempt_at'] ?? '')) : false;
+    if ($last !== false && $now - $last < $window) {
+        $attempts = max(0, (int)($row['failed_attempts'] ?? 0));
+    }
+
+    if ($attempts >= $max_attempts) {
+        return ['allowed' => false, 'attempts' => $attempts, 'retry_after' => max(1, $last + $window - $now)];
+    }
+    return ['allowed' => true, 'attempts' => $attempts + 1, 'retry_after' => 0];
+}
+
+/**
+ * Reserva uma tentativa para o login antes de autenticar.
+ * Devolve 'allowed', 'blocked' ou 'unavailable' (banco fora: o chamador
+ * recusa o login, sem consultar o AD).
+ *
+ * A linha é travada com SELECT ... FOR UPDATE, então requisições simultâneas
+ * para o mesmo login não passam do limite juntas.
+ */
+function login_user_throttle_acquire($login, ?PDO $pdo = null, ?int $now = null): string {
+    $key = login_user_throttle_key($login);
+    if ($key === null) {
+        return 'allowed';
+    }
+
+    $config = login_user_throttle_config();
+    $now = $now ?? time();
+    $now_text = date('Y-m-d H:i:s', $now);
+
+    try {
+        if ($pdo === null) {
+            if (!function_exists('get_db_connection')) {
+                require_once __DIR__ . '/db.php';
+            }
+            $pdo = get_db_connection();
+        }
+
+        // Garante a linha antes da transação: travar linha inexistente pegaria
+        // trava de intervalo, e duas primeiras tentativas simultâneas
+        // terminariam em deadlock.
+        login_user_throttle_execute(
+            $pdo,
+            'INSERT INTO login_user_throttle (login, failed_attempts, last_attempt_at) VALUES (?, 0, ?)
+             ON DUPLICATE KEY UPDATE login = login',
+            [$key, $now_text]
+        );
+
+        $pdo->beginTransaction();
+        $row = login_user_throttle_execute(
+            $pdo,
+            'SELECT failed_attempts, last_attempt_at FROM login_user_throttle WHERE login = ? FOR UPDATE',
+            [$key]
+        )->fetch(PDO::FETCH_ASSOC);
+        $decision = login_user_throttle_decide(is_array($row) ? $row : null, $now, $config['max_attempts'], $config['window']);
+
+        if ($decision['allowed']) {
+            login_user_throttle_execute(
+                $pdo,
+                'INSERT INTO login_user_throttle (login, failed_attempts, last_attempt_at) VALUES (?, ?, ?)
+                 ON DUPLICATE KEY UPDATE failed_attempts = ?, last_attempt_at = ?',
+                [$key, $decision['attempts'], $now_text, $decision['attempts'], $now_text]
+            );
+        }
+        $pdo->commit();
+
+        // Linhas vencidas valem zero de qualquer forma; apagar só mantém a tabela pequena.
+        login_user_throttle_execute(
+            $pdo,
+            'DELETE FROM login_user_throttle WHERE last_attempt_at < ?',
+            [date('Y-m-d H:i:s', $now - $config['window'])]
+        );
+
+        return $decision['allowed'] ? 'allowed' : 'blocked';
+    } catch (\Throwable $e) {
+        try {
+            if ($pdo !== null && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+        } catch (\Throwable $ignored) {
+        }
+        error_log('[LOGIN_THROTTLE] Contador por usuário indisponível; login recusado.');
+        return 'unavailable';
+    }
+}
+
+/**
+ * Login concluído: zera o contador do usuário. Falha aqui não desfaz o login;
+ * no pior caso a contagem expira sozinha ao fim da janela.
+ */
+function login_user_throttle_release($login, ?PDO $pdo = null): void {
+    $key = login_user_throttle_key($login);
+    if ($key === null) {
+        return;
+    }
+    try {
+        if ($pdo === null) {
+            if (!function_exists('get_db_connection')) {
+                require_once __DIR__ . '/db.php';
+            }
+            $pdo = get_db_connection();
+        }
+        login_user_throttle_execute($pdo, 'DELETE FROM login_user_throttle WHERE login = ?', [$key]);
+    } catch (\Throwable $e) {
+        error_log('[LOGIN_THROTTLE] Falha ao zerar contador por usuário.');
+    }
+}
+
+function login_user_throttle_message(string $result): string {
+    return $result === 'unavailable'
+        ? 'Não foi possível validar o login agora. Tente novamente em instantes.'
+        : 'Muitas tentativas de autenticação. Aguarde alguns minutos e tente novamente.';
+}
+
+/**
+ * Endpoints JSON: reserva a tentativa ou encerra com 429 (limite) ou 503
+ * (contador indisponível). A mensagem de 429 é a mesma do limite por IP e
+ * vale para qualquer login, cadastrado ou não: não revela se a conta existe.
+ */
+function require_login_user_throttle($login, string $context): void {
+    $result = login_user_throttle_acquire($login);
+    if ($result === 'allowed') {
+        return;
+    }
+    $key = login_user_throttle_key($login) ?? 'invalido';
+    if ($result === 'blocked') {
+        audit_log('LOGIN_USER_THROTTLED', 'Limite por usuario no contexto ' . $context . ' para ' . $key, 'WARNING');
+        json_response(['sucesso' => false, 'mensagem' => login_user_throttle_message($result)], 429);
+    }
+    audit_log('LOGIN_THROTTLE_UNAVAILABLE', 'Contador por usuario indisponivel no contexto ' . $context, 'WARNING');
+    json_response(['sucesso' => false, 'mensagem' => login_user_throttle_message($result)], 503);
 }
 
 // ============================================

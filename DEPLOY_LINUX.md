@@ -182,6 +182,7 @@ sudo -u www-data php scripts/qa-auth.php
 sudo -u www-data php scripts/qa-smoke.php
 sudo -u www-data php scripts/qa-timezone.php
 sudo -u www-data php scripts/qa-overtime.php
+sudo -u www-data php scripts/qa-security.php
 ```
 
 Todos devem terminar com `OK` e código de saída `0`. Rodar como `www-data`
@@ -190,7 +191,9 @@ se ele estiver ilegível, o QA passa mesmo assim, apenas com aviso de `file()`
 na saída; trate qualquer aviso como falha. Os scripts não
 abrem conexão com o banco nem com o AD e só escrevem no diretório temporário
 do sistema. `qa-auth.php` exige `php-ldap` e falha se a extensão estiver
-ausente. Qualquer falha bloqueia o deploy: acionar o rollback.
+ausente. `qa-security.php` executa endpoints reais em processos PHP filhos
+(exige `proc_open` na linha de comando), com banco e AD apontados para
+endereços inexistentes e os arquivos de estado no diretório temporário. Qualquer falha bloqueia o deploy: acionar o rollback.
 
 Fuso da sessão MySQL contra o banco real (somente leitura; ver
 `docs/FUSO_HORARIO_BIZ02.md`, seção 8.2):
@@ -616,6 +619,10 @@ sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEA
 - Deploy que traz o lote de fuso horario (BIZ-02): ha passos adicionais, entre
   eles o registro do corte **antes** da recarga do item 5. Siga
   `docs/FUSO_HORARIO_BIZ02.md`, secao 6.
+- Deploy que traz o Lote 7 (limite de login por usuario, SEC-03): a migration
+  015 vai **antes** do `git pull`, lida da versao nova como no item 2. Sem a
+  tabela, o codigo novo recusa todo login com 503. A tabela nao afeta o codigo
+  anterior. Siga `docs/LIMITE_LOGIN_POR_USUARIO.md`, secao 6.
 
 5. Frontend e recarga:
 
@@ -700,7 +707,7 @@ O codigo atual usa `DB_HOST`, `DB_NAME`, `DB_USER` e `DB_PASS`; a porta padrao 3
 - [ ] Usuario MySQL dedicado, sem uso de `root` pela aplicacao.
 - [ ] Usuario MySQL runtime sem `CREATE`, `ALTER`, `DROP` ou `INDEX`.
 - [ ] Banco `sistema_pausas` importado.
-- [ ] `sudo -u www-data php scripts/qa-auth.php`, `sudo -u www-data php scripts/qa-smoke.php`, `sudo -u www-data php scripts/qa-timezone.php` e `sudo -u www-data php scripts/qa-overtime.php` terminam com `OK`.
+- [ ] `sudo -u www-data php scripts/qa-auth.php`, `sudo -u www-data php scripts/qa-smoke.php`, `sudo -u www-data php scripts/qa-timezone.php`, `sudo -u www-data php scripts/qa-overtime.php` e `sudo -u www-data php scripts/qa-security.php` terminam com `OK`.
 - [ ] `sudo -u www-data php scripts/qa-timezone.php --db` informa `sessao MySQL em America/Sao_Paulo` e termina com `OK`.
 - [ ] `api/status.php` responde.
 - [ ] Arquivos sensiveis retornam `403` ou `404`.

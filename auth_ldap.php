@@ -526,6 +526,7 @@ function exigir_autenticacao_ci_pausa($data, $funcionario_id, $contexto = 'pausa
     if (function_exists('check_rate_limit') && !check_rate_limit($rate_key, 5, 300)) {
         json_response(['sucesso' => false, 'mensagem' => 'Muitas tentativas de autenticação. Aguarde alguns minutos e tente novamente.'], 429);
     }
+    require_login_user_throttle($login_ad, 'ad_' . $contexto);
 
     $autenticacao = autenticar_ci_via_ad($login_ad, $senha_ad);
     if (!$autenticacao['sucesso']) {
@@ -552,6 +553,7 @@ function exigir_autenticacao_ci_pausa($data, $funcionario_id, $contexto = 'pausa
             'mensagem' => 'As credenciais informadas não pertencem ao CI selecionado.'
         ], 403);
     }
+    login_user_throttle_release($login_ad);
 
     return $autenticacao;
 }

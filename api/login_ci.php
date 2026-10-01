@@ -23,6 +23,7 @@ if (!check_rate_limit('ci_login_global', 20, 300) || !check_rate_limit($rate_key
     audit_log('CI_LOGIN_RATE_LIMIT', 'Rate limit no login CI para usuario ' . normalizar_samaccountname($login_ad), 'WARNING');
     json_response(['sucesso' => false, 'mensagem' => 'Muitas tentativas de autenticação. Aguarde alguns minutos e tente novamente.'], 429);
 }
+require_login_user_throttle($login_ad, 'ci_login');
 
 $autenticacao = autenticar_ci_via_ad($login_ad, $senha_ad);
 $senha_ad = '';
@@ -40,6 +41,7 @@ if (!$funcionario || !($funcionario['ativo'] ?? true)) {
 
 clear_rate_limit('ci_login_global');
 clear_rate_limit($rate_key);
+login_user_throttle_release($login_ad);
 session_regenerate_id(true);
 $access_role = validate_access_role($funcionario['access_role'] ?? 'tecnico') ?? 'tecnico';
 $_SESSION['ci_logged_in'] = true;

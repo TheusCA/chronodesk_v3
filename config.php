@@ -66,11 +66,12 @@ if (getenv('PHP_ERROR_LOG')) {
     ini_set('error_log', getenv('PHP_ERROR_LOG'));
 }
 
-// Caminhos de arquivos
-define('PAUSAS_CSV', __DIR__ . '/pausas.csv');
-define('ESTADO_JSON', __DIR__ . '/estado.json');
-define('CONFIG_JSON', __DIR__ . '/config_sistema.json');
-define('FUNCIONARIOS_JSON', __DIR__ . '/funcionarios.json');
+// Caminhos de arquivos. Só scripts/qa-security.php os define antes, para que os
+// endpoints executados no QA não toquem o estado real de pausas.
+defined('PAUSAS_CSV') || define('PAUSAS_CSV', __DIR__ . '/pausas.csv');
+defined('ESTADO_JSON') || define('ESTADO_JSON', __DIR__ . '/estado.json');
+defined('CONFIG_JSON') || define('CONFIG_JSON', __DIR__ . '/config_sistema.json');
+defined('FUNCIONARIOS_JSON') || define('FUNCIONARIOS_JSON', __DIR__ . '/funcionarios.json');
 
 // ============================================
 // [VULN-002] Credenciais do banco via variáveis de ambiente

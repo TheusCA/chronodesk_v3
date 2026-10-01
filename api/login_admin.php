@@ -26,6 +26,7 @@ if (!check_rate_limit('admin_api_global', 10, 900) || !check_rate_limit($rate_ke
         'mensagem' => 'Muitas tentativas de login. Aguarde alguns minutos.'
     ], 429);
 }
+require_login_user_throttle($username_input, 'admin_api');
 
 $authenticated = false;
 $auth_type = '';
@@ -68,6 +69,7 @@ if (!$authenticated) {
 
 clear_rate_limit('admin_api_global');
 clear_rate_limit($rate_key);
+login_user_throttle_release($username_input);
 session_regenerate_id(true);
 $session_role = $auth_type === 'local' ? ($local_role ?? 'gestor') : 'admin';
 $_SESSION['admin_logged_in'] = $session_role === 'admin';

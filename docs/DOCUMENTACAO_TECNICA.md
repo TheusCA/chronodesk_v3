@@ -67,6 +67,7 @@ flowchart TD
 1. A SPA chama `GET /api/session.php` e obtém token CSRF, perfil e permissões.
 2. O usuário informa login e senha do AD; a SPA envia para `POST /api/login_ci.php` (ou `login_admin.php`).
 3. O backend faz `ldap_bind` direto com a credencial informada — **não há conta de serviço**. Senha vazia é rejeitada antes do bind.
+   Antes do bind passam dois limites: por IP (arquivo temporário, como antes) e por usuário, independente de IP (tabela `login_user_throttle`, SEC-03): 5 tentativas sem sucesso, zeradas após 15 min sem tentativa ou no login concluído. Sem acesso à tabela, o login é recusado com 503. Ver `docs/LIMITE_LOGIN_POR_USUARIO.md`.
 4. Com o bind aceito, busca-se o colaborador por `ad_login` na tabela `funcionarios`.
 5. A sessão é regenerada (`session_regenerate_id(true)`) e o perfil é gravado na sessão PHP.
 6. Toda requisição de escrita exige token CSRF válido no header `X-CSRF-Token`.

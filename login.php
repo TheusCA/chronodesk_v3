@@ -20,6 +20,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Muitas tentativas de login. Aguarde 15 minutos antes de tentar novamente.';
     } elseif ($username === null || $password === '') {
         $error = 'Informe seu login e senha do AD.';
+    } elseif (($throttle = login_user_throttle_acquire($username_input)) !== 'allowed') {
+        $error = login_user_throttle_message($throttle);
+        audit_log(
+            $throttle === 'blocked' ? 'LOGIN_USER_THROTTLED' : 'LOGIN_THROTTLE_UNAVAILABLE',
+            'Limite por usuario no contexto metricas_login para ' . $username,
+            'WARNING'
+        );
     } else {
         $authenticated = false;
         $auth_type = '';
@@ -52,6 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = '';
         if ($authenticated) {
             clear_rate_limit('metricas_login');
+            login_user_throttle_release($username_input);
             session_regenerate_id(true);
             $_SESSION['logged_in'] = true;
             $_SESSION['username'] = $username;

@@ -89,6 +89,14 @@ if (!$phpExecutable) {
     } else {
         Pass "QA de horas extras e exportacoes concluido"
     }
+
+    # Sem banco e sem AD: limite de login por usuario e testes negativos.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-security.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA de seguranca (SEC-03 e testes negativos) falhou"
+    } else {
+        Pass "QA de seguranca concluido"
+    }
 }
 
 Write-Section "JavaScript syntax"

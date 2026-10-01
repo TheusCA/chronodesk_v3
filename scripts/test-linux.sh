@@ -25,6 +25,10 @@ php scripts/qa-timezone.php
 echo "== PHP overtime and export QA =="
 php scripts/qa-overtime.php
 
+echo "== PHP security QA =="
+# Limite de login por usuario (SEC-03) e testes negativos (QA-01); sem banco e sem AD.
+php scripts/qa-security.php
+
 if command -v node >/dev/null 2>&1; then
     echo "== JavaScript syntax =="
     find . -type f -name '*.js' \

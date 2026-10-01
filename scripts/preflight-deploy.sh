@@ -83,6 +83,24 @@ else
     if [ -n "$(gv AD_ADMIN_USERS)" ]; then echo "AD_ADMIN_USERS: OK"; else echo "AD_ADMIN_USERS: FALHA"; F=1; fi
 fi
 
+# Limite de login por usuario (SEC-03). Valor invalido nao derruba a aplicacao
+# (security.php usa o padrao), mas indica configuracao diferente da pretendida.
+check_int_range() {
+    value=$(gv "$1")
+    if [ -z "$value" ]; then echo "$1: OK (padrao $4)"; return; fi
+    case $value in
+        *[!0-9]*) echo "$1: FALHA (nao numerico)"; F=1; return ;;
+        0?*) echo "$1: FALHA (zero a esquerda; o PHP recusaria)"; F=1; return ;;
+    esac
+    if [ "$value" -ge "$2" ] && [ "$value" -le "$3" ]; then
+        echo "$1: OK"
+    else
+        echo "$1: FALHA (fora da faixa $2 a $3)"; F=1
+    fi
+}
+check_int_range LOGIN_USER_MAX_FAILURES 1 20 5
+check_int_range LOGIN_USER_WINDOW_SECONDS 60 86400 900
+
 # FORCE_HTTPS ligado sem vhost HTTPS proprio derruba o portal (301 em loop).
 case $(printf %s "$(gv FORCE_HTTPS)" | tr 'A-Z' 'a-z') in
     1|true|yes|on) echo "FORCE_HTTPS: FALHA"; F=1 ;;
