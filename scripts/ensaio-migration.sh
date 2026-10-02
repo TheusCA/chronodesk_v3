@@ -89,6 +89,14 @@ estado() {
     mostra -e "SELECT TABLE_NAME AS tabela FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${ENSAIO}' ORDER BY TABLE_NAME;"
     mostra -e "CHECKSUM TABLE \`${ENSAIO}\`.funcionarios;"
     mostra -e "SELECT equipe, access_role, ativo, COUNT(*) AS funcionarios FROM \`${ENSAIO}\`.funcionarios GROUP BY equipe, access_role, ativo ORDER BY equipe, access_role, ativo;"
+    if [ -n "$EXTRAS" ]; then
+        # Tabelas extras: colunas (tipo, nulo, padrao, comentario) e checksum.
+        LISTA=$(printf %s "$EXTRAS" | sed "s/,/','/g")
+        mostra -e "SELECT TABLE_NAME AS tabela, COLUMN_NAME AS coluna, COLUMN_TYPE AS tipo, IS_NULLABLE AS aceita_nulo, COLUMN_DEFAULT AS padrao, COLUMN_COMMENT AS comentario FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '${ENSAIO}' AND TABLE_NAME IN ('${LISTA}') ORDER BY TABLE_NAME, ORDINAL_POSITION;"
+        for t in $(printf %s "$EXTRAS" | tr ',' ' '); do
+            mostra -e "CHECKSUM TABLE \`${ENSAIO}\`.\`${t}\`;"
+        done
+    fi
     if printf %s ",${EXTRAS}," | grep -q ',audit_log,'; then
         mostra -e "SELECT action AS evento, severity, COUNT(*) AS eventos FROM \`${ENSAIO}\`.audit_log GROUP BY action, severity ORDER BY action;"
     fi
