@@ -144,7 +144,16 @@ docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_005_documents_and_employee_roles.sql
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260614_006_critical_incidents.sql
 docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260615_007_war_room_and_shift_feed.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_008_dashboard_ci_pa_map.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_009_pa_map_recurring_assignments.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260624_010_schedule_fixed_weekdays.sql
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20261001_015_login_user_throttle.sql
 ```
+
+A numeracao pula de 010 para 015 de proposito: 011 a 014 estao reservadas para a
+Parte B (`docs/DESENHO_PA_ESCALA_AUSENCIA.md`) e ainda nao existem. Quando
+existirem, entram nesta lista na ordem numerica. Sem a 015, o codigo atual
+recusa todo login com 503 (`docs/LIMITE_LOGIN_POR_USUARIO.md`).
 
 **Fuso horario em sessao manual.** A aplicacao abre a conexao em
 `America/Sao_Paulo` (`db.php`, lote BIZ-02), mas uma sessao aberta a mao
@@ -601,6 +610,20 @@ journalctl -u chronodesk-backup -n 5 --no-pager
 
 Esperado: `backup concluido`. Anote o diretorio: e o ponto de restauracao do banco.
 
+   **Migration 015 (Lote 7), antes do `git pull`.** Se a versao nova traz
+   `migrations/20261001_015_login_user_throttle.sql` e ela ainda nao foi aplicada
+   no banco, aplique agora, lida da versao nova (o arquivo comeca com o
+   `SET time_zone`), e confira a tabela (resultado `1`):
+
+```bash
+cd /var/www/chronodesk
+sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas
+docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle';"
+```
+
+   A migration e idempotente: repetir nao altera nada. A tabela nao afeta o
+   codigo anterior, que continua no ar ate o item 4.
+
 4. Trocar o codigo e revisar o que mudou em pontos sensiveis:
 
 ```bash
@@ -620,9 +643,9 @@ sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEA
   eles o registro do corte **antes** da recarga do item 5. Siga
   `docs/FUSO_HORARIO_BIZ02.md`, secao 6.
 - Deploy que traz o Lote 7 (limite de login por usuario, SEC-03): a migration
-  015 vai **antes** do `git pull`, lida da versao nova como no item 2. Sem a
-  tabela, o codigo novo recusa todo login com 503. A tabela nao afeta o codigo
-  anterior. Siga `docs/LIMITE_LOGIN_POR_USUARIO.md`, secao 6.
+  015 ja deve ter sido aplicada no item 3, **antes** do `git pull`. Sem a
+  tabela, o codigo novo recusa todo login com 503. Siga
+  `docs/LIMITE_LOGIN_POR_USUARIO.md`, secao 6.
 
 5. Frontend e recarga:
 
