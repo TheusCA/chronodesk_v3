@@ -151,6 +151,7 @@ docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /v
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260624_010_schedule_fixed_weekdays.sql
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261001_015_login_user_throttle.sql
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261002_016_lideranca_profile.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261002_017_shift_attachment_team.sql
 unset P
 ```
 
@@ -746,6 +747,16 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SHOW INDEX FROM
    e repetir. Idempotente. Ate o item 4, o codigo anterior recebe erro ao gravar
    num cadastro o login AD de outro cadastro inativo (antes era aceito).
 
+   **Migration 017 (Lote 4, SEC-08), antes do `git pull`.** Equipe do anexo de
+   escala; o codigo anterior nao le a coluna. Ensaie antes (secao Ensaio de
+   Migration, com `portal_shift_attachments` nas extras) e aplique:
+
+```bash
+cd /var/www/chronodesk
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show origin/<BRANCH>:migrations/20261002_017_shift_attachment_team.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SHOW COLUMNS FROM portal_shift_attachments LIKE 'team'; SHOW INDEX FROM portal_shift_attachments WHERE Key_name = 'idx_shift_attachment_team';"
+```
+
 4. Trocar o codigo e revisar o que mudou em pontos sensiveis:
 
 ```bash
@@ -789,6 +800,17 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   `n2`/`admin` ativos 2 (inalterados); o `n2` inativo como `tecnico`; um evento
   de cada. Repetir o `016b` nao muda nada. Sessoes nao sao afetadas: o perfil
   efetivo dos tres lideres nao muda (2 admin pela allowlist, 1 `lideranca`).
+- Deploy que traz o Lote 4 (SEC-08, SEC-07 e banco indisponivel). **Checagem
+  previa**, antes do item 3, so contagem:
+  `docker exec -it Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT audience, COUNT(*) FROM portal_announcements GROUP BY audience;"`.
+  Valor fora do padrao (`all`, `todos`, vazio, `n1`, `n2`, `lideranca`,
+  `gestao` ou lista deles separada por virgula) fica visivel so para a gestao;
+  decidir antes do deploy se o valor deve ser corrigido. A 017 ja deve ter
+  sido aplicada no item 3. Depois da recarga: publicar um anexo de escala para
+  N1 e conferir que um tecnico da N2 nao o lista nem o baixa (404) e que um
+  gestor ve os dois; um tecnico ve os avisos de todos e os da propria equipe,
+  e um gestor ve todos. Com o banco fora, as telas recebem 503 com "Banco de dados
+  indisponivel no momento" em vez de erro 500 (`docs/DESENHO_LOTE4.md`).
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -841,6 +863,10 @@ Lote 5 (perfil de Lideranca), sem restaurar backup e nesta ordem:
 2. Rollback do codigo, como acima.
 3. Opcional: `migrations/rollback/20261002_016_lideranca_profile_down.sql` (para
    sem alterar nada se ainda houver `lideranca`).
+
+Lote 4 (SEC-08): depois do rollback do codigo, opcional,
+`migrations/rollback/20261002_017_shift_attachment_team_down.sql` (remove a
+coluna `team`; os anexos voltam a ser visiveis para todos).
 
 ## HTTPS Interno
 

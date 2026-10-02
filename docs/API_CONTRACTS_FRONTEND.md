@@ -49,6 +49,7 @@ Mapa inicial dos contratos consumidos pelo frontend. Este documento descreve o u
 
 ## Listas limitadas e exportacoes (Lote 6, PERF-02 e BIZ-01)
 
+- Lote 4: `portal/announcements.php` filtra por publico (`audience`): gestao (gestor, Lideranca, admin) ve todos; tecnico e somente leitura, os de todos e os da propria equipe. `portal/shift_attachments.php` e `portal/shift_attachments_download.php` filtram por equipe (anexo de outra equipe: 404); o upload exige `team` (`n1`, `n2`, `lideranca` ou `todas`). Banco indisponivel: 503 com mensagem.
 - Listas de tela com limite devolvem, junto de `items`, `truncated` (ha mais registros que os exibidos) e `limit`. Vale para `portal/overtime.php` e `portal/time_corrections.php` (500), `portal/critical_incidents.php` (500), `portal/documents.php` (300), `portal/shift_attachments.php` (200) e as listas genericas de `PortalService` (`portal/absences.php`, `portal/announcements.php`, `portal/schedules.php?type=`, `portal/standby.php`; 100). O frontend mostra o aviso com `TruncationNotice`.
 - `solicitacoes_pendentes.php` acrescenta `overtime_truncated`, `time_adjustments_truncated` e `limit`.
 - `metricas.php` acrescenta `solicitacoes_reuniao_truncadas` e `solicitacoes_reuniao_limite`.
