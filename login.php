@@ -22,11 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Informe seu login e senha do AD.';
     } elseif (($throttle = login_user_throttle_acquire($username_input)) !== 'allowed') {
         $error = login_user_throttle_message($throttle);
-        audit_log(
-            $throttle === 'blocked' ? 'LOGIN_USER_THROTTLED' : 'LOGIN_THROTTLE_UNAVAILABLE',
-            'Limite por usuario no contexto metricas_login para ' . $username,
-            'WARNING'
-        );
+        login_user_throttle_audit($throttle, $username_input, 'metricas_login');
     } else {
         $authenticated = false;
         $auth_type = '';

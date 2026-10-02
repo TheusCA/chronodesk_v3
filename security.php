@@ -594,6 +594,61 @@ function login_user_throttle_message(string $result): string {
 }
 
 /**
+ * Indica se o login normalizado existe no cadastro: funcionário (ad_login) ou
+ * usuário local (username), na mesma comparação do login local. Erro na
+ * consulta conta como "não cadastrado": na dúvida, o texto digitado não vai
+ * para o audit_log.
+ */
+function login_user_throttle_is_registered(string $key, ?PDO $pdo = null): bool {
+    try {
+        if ($pdo === null) {
+            if (!function_exists('get_db_connection')) {
+                require_once __DIR__ . '/db.php';
+            }
+            $pdo = get_db_connection();
+        }
+        $found = login_user_throttle_execute(
+            $pdo,
+            'SELECT 1 FROM funcionarios WHERE ad_login = ? UNION ALL SELECT 1 FROM usuarios WHERE username = ? LIMIT 1',
+            [$key, $key]
+        )->fetchColumn();
+        return $found !== false;
+    } catch (\Throwable $e) {
+        error_log('[LOGIN_THROTTLE] Falha ao consultar o cadastro para o audit_log.');
+        return false;
+    }
+}
+
+/**
+ * Detalhe do audit_log para o bloqueio por usuário. O login normalizado só é
+ * gravado se a conta existir no cadastro: a normalização corta no "@", então
+ * uma senha digitada no campo de usuário (por exemplo "Senha@") viraria
+ * "senha", gravada para sempre. Fora do cadastro grava login_cadastrado=false
+ * e o contexto, sem o texto digitado; o IP fica na coluna user_ip.
+ */
+function login_user_throttle_audit_details($login, string $context, ?PDO $pdo = null): string {
+    $details = 'contexto=' . $context;
+    $key = login_user_throttle_key($login);
+    if ($key !== null && login_user_throttle_is_registered($key, $pdo)) {
+        return $details . ' login=' . $key;
+    }
+    return $details . ' login_cadastrado=false';
+}
+
+/**
+ * Único ponto de gravação no audit_log das recusas do contador. Com o contador
+ * indisponível o banco está fora e nem o cadastro pode ser consultado: grava
+ * só o contexto.
+ */
+function login_user_throttle_audit(string $result, $login, string $context): void {
+    if ($result === 'blocked') {
+        audit_log('LOGIN_USER_THROTTLED', login_user_throttle_audit_details($login, $context), 'WARNING');
+        return;
+    }
+    audit_log('LOGIN_THROTTLE_UNAVAILABLE', 'contexto=' . $context, 'WARNING');
+}
+
+/**
  * Endpoints JSON: reserva a tentativa ou encerra com 429 (limite) ou 503
  * (contador indisponível). A mensagem de 429 é a mesma do limite por IP e
  * vale para qualquer login, cadastrado ou não: não revela se a conta existe.
@@ -603,13 +658,20 @@ function require_login_user_throttle($login, string $context): void {
     if ($result === 'allowed') {
         return;
     }
-    $key = login_user_throttle_key($login) ?? 'invalido';
-    if ($result === 'blocked') {
-        audit_log('LOGIN_USER_THROTTLED', 'Limite por usuario no contexto ' . $context . ' para ' . $key, 'WARNING');
-        json_response(['sucesso' => false, 'mensagem' => login_user_throttle_message($result)], 429);
-    }
-    audit_log('LOGIN_THROTTLE_UNAVAILABLE', 'Contador por usuario indisponivel no contexto ' . $context, 'WARNING');
-    json_response(['sucesso' => false, 'mensagem' => login_user_throttle_message($result)], 503);
+    login_user_throttle_audit($result, $login, $context);
+    [$body, $status] = login_user_throttle_json_response($result);
+    json_response($body, $status);
+}
+
+/**
+ * Resposta JSON da recusa. Depende só do resultado do contador, nunca do
+ * login nem do cadastro.
+ */
+function login_user_throttle_json_response(string $result): array {
+    return [
+        ['sucesso' => false, 'mensagem' => login_user_throttle_message($result)],
+        $result === 'blocked' ? 429 : 503,
+    ];
 }
 
 // ============================================

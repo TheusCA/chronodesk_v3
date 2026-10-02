@@ -284,6 +284,7 @@ final class QaThrottlePdo extends PDO {
     public bool $transaction = false;
     public ?string $throwOn = null;
     public ?string $falseOn = null;
+    public array $registered = [];
 
     public function __construct() {
     }
@@ -357,6 +358,12 @@ final class QaThrottleStatement extends PDOStatement {
                     unset($pdo->rows[$login]);
                 }
             }
+        } elseif ($sql === 'SELECT 1 FROM funcionarios WHERE ad_login = ? UNION ALL SELECT 1 FROM usuarios WHERE username = ? LIMIT 1') {
+            if ($params[0] !== $params[1]) {
+                throw new LogicException('consulta de cadastro com chaves divergentes');
+            }
+            $pdo->log[] = 'REGISTERED ' . $params[0];
+            $this->result = in_array($params[0], $pdo->registered, true) ? [[1 => 1]] : [];
         } elseif ($sql === 'DELETE FROM login_user_throttle WHERE login = ?') {
             $pdo->log[] = 'RELEASE ' . $params[0];
             unset($pdo->rows[$params[0]]);
@@ -368,6 +375,11 @@ final class QaThrottleStatement extends PDOStatement {
 
     public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
         return array_shift($this->result) ?? false;
+    }
+
+    public function fetchColumn(int $column = 0): mixed {
+        $row = array_shift($this->result);
+        return $row === null ? false : reset($row);
     }
 }
 
@@ -437,6 +449,65 @@ assert_same(
     login_user_throttle_message('blocked'),
     'mensagem do bloqueio igual a do limite por IP (nao revela se a conta existe)'
 );
+
+// audit_log do bloqueio: login normalizado so se a conta existir no cadastro.
+// A normalizacao corta no "@": uma senha digitada no campo de usuario, como
+// "Senha@", viraria "senha" gravada para sempre.
+$pdo = new QaThrottlePdo();
+$pdo->registered = ['joao.silva'];
+assert_same(
+    'contexto=admin_api login=joao.silva',
+    login_user_throttle_audit_details('JOAO.SILVA@corp.local', 'admin_api', $pdo),
+    'audit_log: conta cadastrada grava o login normalizado'
+);
+assert_same(['REGISTERED joao.silva'], $pdo->log, 'audit_log: cadastro consultado pela chave normalizada');
+foreach (['Senha@' => 'senha', 'Senha2026' => 'senha2026', 'Maria.Inexistente@corp.local' => 'maria.inexistente'] as $typed => $normalized) {
+    $details = login_user_throttle_audit_details($typed, 'admin_api', $pdo);
+    assert_same('contexto=admin_api login_cadastrado=false', $details, "audit_log: login fora do cadastro ({$typed}) sem o texto digitado");
+    assert_same(false, stripos($details, $normalized) !== false, "audit_log: nem a forma normalizada de {$typed} e gravada");
+}
+$pdo->log = [];
+assert_same('contexto=ci_login login_cadastrado=false', login_user_throttle_audit_details('usuario invalido', 'ci_login', $pdo), 'audit_log: login sem chave nao e gravado');
+assert_same([], $pdo->log, 'audit_log: login sem chave nao consulta o cadastro');
+$pdo = new QaThrottlePdo();
+$pdo->registered = ['joao.silva'];
+$pdo->throwOn = 'FROM funcionarios';
+assert_same('contexto=admin_api login_cadastrado=false', login_user_throttle_audit_details('joao.silva', 'admin_api', $pdo), 'audit_log: falha no cadastro nao grava o login');
+$pdo = new QaThrottlePdo();
+$pdo->registered = ['joao.silva'];
+$pdo->falseOn = 'FROM funcionarios';
+assert_same('contexto=admin_api login_cadastrado=false', login_user_throttle_audit_details('joao.silva', 'admin_api', $pdo), 'audit_log: consulta de cadastro com execute false nao grava o login');
+
+// Resposta HTTP: depende so do resultado do contador (o login nem chega a ela).
+assert_same(
+    [['sucesso' => false, 'mensagem' => 'Muitas tentativas de autenticação. Aguarde alguns minutos e tente novamente.'], 429],
+    login_user_throttle_json_response('blocked'),
+    'API: bloqueio por usuario responde 429 com a mensagem unica'
+);
+assert_same(
+    [['sucesso' => false, 'mensagem' => 'Não foi possível validar o login agora. Tente novamente em instantes.'], 503],
+    login_user_throttle_json_response('unavailable'),
+    'API: contador indisponivel responde 503'
+);
+
+// Os eventos do contador so sao gravados por login_user_throttle_audit(); os
+// formularios que chamam o contador direto passam por ela.
+foreach (['login.php', 'admin_login.php'] as $file) {
+    $source = (string)file_get_contents(__DIR__ . '/../' . $file);
+    assert_same(1, substr_count($source, 'login_user_throttle_audit($throttle, $username_input,'), "{$file}: recusa do contador gravada pela funcao unica");
+}
+$auditEventFiles = [];
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(realpath(__DIR__ . '/..'), FilesystemIterator::SKIP_DOTS)) as $file) {
+    $path = str_replace('\\', '/', (string)$file);
+    if (substr($path, -4) !== '.php' || preg_match('#/(node_modules|vendor|scripts|\.git)/#', $path)) {
+        continue;
+    }
+    $source = (string)file_get_contents($path);
+    if (strpos($source, "'LOGIN_USER_THROTTLED'") !== false || strpos($source, "'LOGIN_THROTTLE_UNAVAILABLE'") !== false) {
+        $auditEventFiles[] = basename($path);
+    }
+}
+assert_same(['security.php'], $auditEventFiles, 'eventos do contador gravados so em security.php');
 
 // Toda chamada ao AD a partir de um ponto de entrada passa pelo contador antes.
 // Ponto de entrada novo faz este teste falhar e exige revisao. A busca e por
@@ -605,6 +676,13 @@ function qa_assert_no_ad(array $result, string $label): void {
     assert_same(false, strpos($result['log'], '[AUTH_AD]') !== false, "{$label}: AD nao consultado");
 }
 
+// Banco fora: o audit_log cai no error_log. Grava o evento com o contexto e
+// nunca o login digitado.
+function qa_assert_unavailable_audit(array $result, string $label): void {
+    assert_same(true, strpos($result['log'], 'LOGIN_THROTTLE_UNAVAILABLE: contexto=') !== false, "{$label}: evento registrado com o contexto");
+    assert_same(false, stripos($result['log'], 'joao.silva') !== false, "{$label}: login digitado fora do log");
+}
+
 $json = 'application/json';
 $credentials = static fn (string $loginField, string $passwordField, string $password): string
     => (string)json_encode([$loginField => 'joao.silva', $passwordField => $password]);
@@ -653,11 +731,13 @@ foreach ([
     $result = qa_run_endpoint($qaDir, ['endpoint' => $endpoint, 'method' => 'POST', 'content_type' => $json, 'body' => $credentials($loginField, $passwordField, QA_PASSWORD)]);
     qa_assert_endpoint($result, 503, 'Não foi possível validar o login agora.', "{$endpoint} com contador indisponivel");
     qa_assert_no_ad($result, "{$endpoint} com contador indisponivel");
+    qa_assert_unavailable_audit($result, "{$endpoint} com contador indisponivel");
 }
 foreach (['admin_login.php', 'login.php'] as $endpoint) {
     $result = qa_run_endpoint($qaDir, ['endpoint' => $endpoint, 'method' => 'POST', 'post' => ['username' => 'joao.silva', 'password' => QA_PASSWORD]]);
     qa_assert_endpoint($result, 200, 'Não foi possível validar o login agora.', "formulario {$endpoint} com contador indisponivel");
     qa_assert_no_ad($result, "formulario {$endpoint} com contador indisponivel");
+    qa_assert_unavailable_audit($result, "formulario {$endpoint} com contador indisponivel");
 }
 $result = qa_run_endpoint($qaDir, [
     'endpoint' => 'api/iniciar_pausa.php',

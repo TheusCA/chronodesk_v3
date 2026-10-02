@@ -1,7 +1,7 @@
 # Limite de login por usuário e testes negativos — Lote 7 (SEC-03, QA-01)
 
 **Data:** 2026-10-01
-**Situação:** implementado em commit local, aguardando aprovação. Vai no deploy 5 da fila, junto com o Lote 6.
+**Situação:** `5f5a5c1` **aprovado em 2026-10-02 com um ajuste** (auditoria só com login cadastrado, seção 2), feito em commit separado. Vai no deploy 5 da fila, junto com o Lote 6.
 **Decisão aplicada (2026-09-30):** limite de tentativas por usuário, independente de IP, persistido no MySQL, mantendo o limite por IP; limiar no `.env`, padrão de 5 falhas em 15 min, abaixo do bloqueio de conta do domínio (TO CONFIRM); a senha nunca é registrada.
 
 ---
@@ -42,10 +42,30 @@ Um teste estrutural lista os arquivos que chamam `autenticar_ad()` ou `autentica
 
 ### Eventos de auditoria
 
-| Evento | Severidade | Quando |
+| Evento | Severidade | Detalhe gravado |
 |---|---|---|
-| `LOGIN_USER_THROTTLED` | WARNING | Tentativa recusada pelo limite por usuário; registra o login normalizado e o contexto |
-| `LOGIN_THROTTLE_UNAVAILABLE` | WARNING | Contador indisponível (o registro cai no `error_log` se o banco estiver fora) |
+| `LOGIN_USER_THROTTLED` | WARNING | Login cadastrado: `contexto=<ctx> login=<login normalizado>`. Fora do cadastro: `contexto=<ctx> login_cadastrado=false`, **sem o texto digitado** |
+| `LOGIN_THROTTLE_UNAVAILABLE` | WARNING | Só `contexto=<ctx>`: com o banco fora nem o cadastro pode ser consultado (o registro cai no `error_log`) |
+
+O IP fica na coluna `user_ip` do `audit_log`, em todos os casos.
+
+**Ajuste pedido na aprovação (2026-10-02).** O login normalizado só vai para o `audit_log` se existir no cadastro: `funcionarios.ad_login` ou `usuarios.username`, comparados como no login local (collation `utf8mb4_unicode_ci`, sem diferença de maiúsculas). Motivo: a normalização corta no "@", então uma senha digitada no campo de usuário, como `Senha@`, viraria `senha` e ficaria gravada para sempre. Erro na consulta do cadastro conta como "não cadastrado". A resposta HTTP é a mesma nos dois casos: `login_user_throttle_json_response()` depende só do resultado do contador. Os dois eventos são gravados só por `login_user_throttle_audit()`; um teste estrutural reprova outro ponto que os grave.
+
+Fora do escopo, sem alteração: eventos anteriores ao Lote 7 (`ADMIN_LOGIN_FAILURE`, `CI_LOGIN_FAILURE`, `CI_AD_LOGIN_FAILURE`, `CI_LOGIN_RATE_LIMIT`) gravam o login digitado normalizado, cadastrado ou não. Têm o mesmo risco e ficam como pendência para decisão.
+
+### Decisões da aprovação (2026-10-02)
+
+- `SELECT ... FOR UPDATE` com gravação do total calculado no PHP, no lugar do `+1` direto: aceito, porque a decisão precisa do valor lido sob trava.
+- Nome `LOGIN_USER_WINDOW_SECONDS`: mantido.
+- `DELETE` autorizado somente na `login_user_throttle`: no login concluído, na limpeza das linhas vencidas e no desbloqueio manual da seção 7.
+- Chave sem HMAC: aceita, com o risco abaixo.
+- Auditoria só com login cadastrado: ajuste feito (acima).
+
+### Chave em texto legível na tabela (decisão de 2026-10-02)
+
+A condição original pedia HMAC-SHA256 do login. Foi retirada na aprovação: a linha é transitória (apagada no sucesso ou na limpeza depois da janela) e o desbloqueio manual (seção 7) precisa do login legível.
+
+**Risco residual aceito:** um texto digitado errado no campo de usuário fica na tabela até o fim da janela (padrão 15 min), inclusive uma senha digitada no lugar do login, desde que ela passe pela normalização (por exemplo `Senha2026` ou `Senha@`; `Senha@2026` é recusado, porque `2026` não é sufixo permitido, e não chega à tabela). Quem lê essa tabela no banco vê esse texto enquanto a linha existir. No `audit_log`, que é permanente, o texto só entra se for um login cadastrado (acima).
 
 ## 3. Por que fica abaixo do bloqueio do AD
 
@@ -154,6 +174,7 @@ Não acessa banco nem AD, nem no servidor: o QA aponta o banco para `127.0.0.1:1
 | Protocolo SQL | Contra uma tabela simulada: ordem garantir, travar, gravar, confirmar, limpar; bloqueio não grava; liberação no sucesso; limpeza só de linhas vencidas; nenhuma senha nos parâmetros |
 | Falha fechada | Erro ao garantir, travar ou gravar e `execute` devolvendo `false`: `unavailable` e transação desfeita |
 | Pontos de entrada | Os cinco chamam o contador antes do AD e o zeram no sucesso; ponto novo reprova |
+| Auditoria do bloqueio | Login cadastrado grava a forma normalizada; fora do cadastro (`Senha@`, `Senha2026`, login inexistente com sufixo), sem chave ou com erro na consulta, grava `login_cadastrado=false` e nem a forma normalizada aparece; resposta 429/503 depende só do resultado; os eventos só saem de `login_user_throttle_audit()`; com o contador indisponível, o log tem o contexto e não tem o login |
 | CSV | `=`, `+`, `-`, `@`, espaço ou controle antes da fórmula, TAB, CR, UTF-8 inválido; a exportação operacional grava a célula neutralizada; nenhuma outra cópia do regex |
 | Endpoints (QA-01) | Processo PHP filho com sessão, token CSRF e corpo JSON simulados, executando o arquivo real |
 
@@ -171,9 +192,11 @@ Endpoints exercitados:
 | `api/portal/documents_delete.php` com sessão de gestor, sem token e com token inválido | 403 |
 | Controle: o mesmo com token válido | Passa da checagem e responde 400 ("Documento invalido.") |
 
-Em todos: a senha de teste não aparece na resposta nem no log, e não há erro de PHP.
+Em todos: a senha de teste não aparece na resposta nem no log, e não há erro de PHP. Nos casos de contador indisponível, o log tem `LOGIN_THROTTLE_UNAVAILABLE: contexto=` e não tem o login digitado.
 
 **Mutação:** 26 defeitos introduzidos à mão, 26 detectados. Entre eles: retirar o contador de cada ponto de entrada, chamá-lo depois do AD, `<=` na janela, `>` no limite, falhar aberto, voltar à chave por `normalizar_samaccountname()`, ignorar `execute` falso, tirar o `FOR UPDATE`, o `ROLLBACK` ou a limpeza, desligar CSRF e RBAC, aceitar senha vazia, escrever a senha no log, tirar TAB, CR ou `@` do CSV, voltar a neutralização ao código anterior (o caso de UTF-8 inválido reprova) devolver a uma exportação sua cópia do regex e deixar o processo filho usar os arquivos reais de estado.
+
+**Mutação do ajuste de auditoria (2026-10-02):** 12 defeitos, 12 detectados: cadastro sempre verdadeiro ou invertido, erro na consulta tratado como cadastrado, detalhe ignorando o cadastro, gravar o texto digitado ou a chave normalizada fora do cadastro, consultar `usuarios` com outra chave, gravar o login no evento de indisponível, tirar esse evento, `login.php` voltando ao `audit_log` com o login, `admin_login.php` sem auditoria e bloqueio da API respondendo 503. O último não era detectado antes: a resposta foi extraída para `login_user_throttle_json_response()` e ganhou teste.
 
 ## 10. Limites e riscos
 
@@ -182,4 +205,5 @@ Em todos: a senha de teste não aparece na resposta nem no log, e não há erro 
 - **Password spray** (poucas tentativas em muitas contas) não é contido pelo limite por conta. Continua contido só pelo limite por IP, como antes.
 - **AD fora do ar** também conta tentativas: quem insistir 5 vezes durante a queda espera a janela depois que o AD voltar.
 - **Login local** (`ENABLE_LOCAL_ADMIN`) usa a mesma chave do AD para o mesmo nome; as tentativas somam.
+- **Texto digitado na tabela** até o fim da janela, inclusive senha digitada no campo de usuário: risco aceito em 2026-10-02 (seção 2). A consulta de cadastro do `audit_log` também nunca rodou em MySQL real.
 - `qa-security.php` usa `proc_open`. Se o PHP de linha de comando do servidor desabilitar essa função, o QA falha com "nao iniciou o processo filho": falha visível, não aprovação falsa.
