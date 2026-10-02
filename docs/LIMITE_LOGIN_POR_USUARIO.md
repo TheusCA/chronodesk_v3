@@ -130,7 +130,7 @@ Ordem dentro de "Atualização de Versão e Rollback" (`DEPLOY_LINUX.md`):
 
 ```bash
 cd /var/www/chronodesk
-sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
 ```
 
 4. Conferir a tabela (o resultado deve ser `1`):

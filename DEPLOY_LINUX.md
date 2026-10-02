@@ -137,20 +137,28 @@ Dentro do MySQL, execute uma copia ajustada de `deploy/mysql/setup-production.sq
 Importe o schema da aplicacao:
 
 ```bash
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/database_SECURED.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260612_001_portal_foundation.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260612_002_notification_reads.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_003_operational_modules.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_004_operational_hardening.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_005_documents_and_employee_roles.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260614_006_critical_incidents.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260615_007_war_room_and_shift_feed.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_008_dashboard_ci_pa_map.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_009_pa_map_recurring_assignments.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260624_010_schedule_fixed_weekdays.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20261001_015_login_user_throttle.sql
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20261002_016_lideranca_profile.sql
+read -rsp 'Senha root do MySQL: ' P; echo
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/database_SECURED.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260612_001_portal_foundation.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260612_002_notification_reads.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260613_003_operational_modules.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260613_004_operational_hardening.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260613_005_documents_and_employee_roles.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260614_006_critical_incidents.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260615_007_war_room_and_shift_feed.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260617_008_dashboard_ci_pa_map.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260617_009_pa_map_recurring_assignments.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260624_010_schedule_fixed_weekdays.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261001_015_login_user_throttle.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261002_016_lideranca_profile.sql
+unset P
 ```
+
+Senha por variavel: sem terminal (`docker exec -i` sem `-t`), o `mysql -p` le a
+senha da entrada padrao, que aqui e o proprio arquivo SQL, e consome a primeira
+linha dele. Por isso a senha e lida antes, sem eco, e passada em `MYSQL_PWD`
+so para o comando. `MYSQL_PWD` e obsoleta no MySQL 8.0, mas funciona na imagem
+`mysql:8.0`; a alternativa e um arquivo de opcoes, como o do backup.
 
 A numeracao pula de 010 para 015 de proposito: 011 a 014 estao reservadas para a
 Parte B (`docs/DESENHO_PA_ESCALA_AUSENCIA.md`) e ainda nao existem. Quando
@@ -632,7 +640,7 @@ docker exec -it Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "DELETE FROM us
 
 7. Registrar o encerramento no mesmo chamado: horario de inicio e fim, o que foi
    feito e a contagem de eventos de login local no periodo
-   (`SELECT action, COUNT(*) FROM audit_log WHERE action LIKE 'ADMIN_LOGIN%' AND created_at >= '<inicio>' GROUP BY action;`).
+   (`` SELECT action, COUNT(*) FROM audit_log WHERE action LIKE 'ADMIN_LOGIN%' AND `timestamp` >= '<inicio>' GROUP BY action; ``).
    Descartar a senha do cofre.
 
 Se o passo 5 for esquecido, o preflight do proximo deploy da `FALHA` com
@@ -680,7 +688,7 @@ Esperado: `backup concluido`. Anote o diretorio: e o ponto de restauracao do ban
 
 ```bash
 cd /var/www/chronodesk
-sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
 docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle';"
 ```
 
@@ -695,7 +703,7 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT COUNT(*)
 
 ```bash
 cd /var/www/chronodesk
-sudo git show origin/<BRANCH>:migrations/20261002_016_lideranca_profile.sql | docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show origin/<BRANCH>:migrations/20261002_016_lideranca_profile.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
 docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SHOW INDEX FROM funcionarios WHERE Key_name = 'uq_funcionarios_ad_login'; SHOW COLUMNS FROM funcionarios LIKE 'access_role';"
 ```
 
