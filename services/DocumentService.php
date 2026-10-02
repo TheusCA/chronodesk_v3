@@ -235,7 +235,7 @@ final class DocumentService {
         }
         if (
             $document['visibility'] === 'management'
-            && !in_array($actor['role'] ?? '', ['admin', 'gestor'], true)
+            && !portal_role_is_manager($actor['role'] ?? null)
         ) {
             throw new DomainException('Documento nao disponivel para este perfil.');
         }
@@ -272,7 +272,7 @@ final class DocumentService {
     }
 
     private function assertCanManage(array $actor): void {
-        if (!in_array($actor['role'] ?? '', ['admin', 'gestor'], true)) {
+        if (!portal_role_is_manager($actor['role'] ?? null)) {
             throw new DomainException('Seu perfil nao possui permissao para gerenciar documentos.');
         }
     }

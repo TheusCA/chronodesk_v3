@@ -4,7 +4,7 @@ require_once __DIR__ . '/../../services/CriticalIncidentService.php';
 require_once __DIR__ . '/../../services/SpreadsheetImportService.php';
 
 require_post_method();
-require_portal_auth(['admin', 'gestor']);
+require_portal_auth(PORTAL_MANAGER_ROLES);
 $action = null;
 
 try {

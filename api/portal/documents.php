@@ -17,7 +17,7 @@ try {
                 'max_request_bytes' => DocumentService::MAX_REQUEST_BYTES,
                 'allowed_extensions' => DocumentService::ALLOWED_EXTENSIONS,
             ],
-            'can_upload' => in_array($role, ['admin', 'gestor'], true),
+            'can_upload' => portal_role_is_manager($role),
         ]);
     }
 
@@ -36,7 +36,7 @@ try {
         audit_log('DOCUMENT_UPLOAD_REJECTED', 'Requisicao de upload acima do limite.', 'WARNING');
         json_response(['sucesso' => false, 'mensagem' => 'A requisicao excede o limite de 12 MB.'], 413);
     }
-    if (!in_array($role, ['admin', 'gestor'], true)) {
+    if (!portal_role_is_manager($role)) {
         audit_log('DOCUMENT_UPLOAD_DENIED', 'Perfil sem permissao tentou enviar documento.', 'WARNING');
         json_response(['sucesso' => false, 'mensagem' => 'Seu perfil nao pode enviar documentos.'], 403);
     }

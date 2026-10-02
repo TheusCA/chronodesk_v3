@@ -3,7 +3,7 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../services/ApprovalRequestService.php';
 
 require_post_method();
-require_portal_auth(['admin', 'gestor']);
+require_portal_auth(PORTAL_MANAGER_ROLES);
 require_csrf_token();
 require_json_content_type();
 

@@ -10,7 +10,7 @@ try {
         json_response(['sucesso' => true] + $service->listCalendar($_GET));
     }
 
-    if (!in_array($role, ['admin', 'gestor'], true)) {
+    if (!portal_role_is_manager($role)) {
         json_response(['sucesso' => false, 'mensagem' => 'Apenas gestores podem criar eventos.'], 403);
     }
     $data = portal_json_input();

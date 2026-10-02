@@ -79,8 +79,14 @@ else
     else
         echo "DB_PASS: OK"
     fi
+fi
 
-    if [ -n "$(gv AD_ADMIN_USERS)" ]; then echo "AD_ADMIN_USERS: OK"; else echo "AD_ADMIN_USERS: FALHA"; F=1; fi
+# [A2] Admin vem so de AD_ADMIN_USERS (Lote 5): obrigatorio em qualquer APP_ENV.
+# Ausente, vazio ou so com separadores reprova.
+if printf %s "$(gv AD_ADMIN_USERS)" | tr -d ' ,\t' | grep -q .; then
+    echo "AD_ADMIN_USERS: OK"
+else
+    echo "AD_ADMIN_USERS: FALHA"; F=1
 fi
 
 # Limite de login por usuario (SEC-03). Valor invalido nao derruba a aplicacao

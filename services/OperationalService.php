@@ -736,7 +736,7 @@ final class OperationalService {
     }
 
     public function listPendingWorkflowApprovals(array $actor): array {
-        if (!in_array($actor['role'], ['admin', 'gestor'], true)) {
+        if (!portal_role_is_manager($actor['role'] ?? null)) {
             return [
                 'overtime' => [],
                 'time_adjustments' => [],

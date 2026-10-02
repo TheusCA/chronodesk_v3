@@ -3,7 +3,7 @@ require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/../../services/DocumentService.php';
 
 require_post_method();
-$role = require_portal_auth(['admin', 'gestor']);
+$role = require_portal_auth(PORTAL_MANAGER_ROLES);
 $actor = portal_actor($role);
 
 try {

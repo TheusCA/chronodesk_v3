@@ -35,7 +35,7 @@ json_response([
     'summary' => [
         'tecnicos_monitorados' => count($funcionarios),
         'pausas_ativas' => $pausas_ativas,
-        'solicitacoes_pendentes' => in_array($role, ['admin', 'gestor'], true) ? $pendentes + $workflowPendentes : 0,
+        'solicitacoes_pendentes' => portal_role_is_manager($role) ? $pendentes + $workflowPendentes : 0,
         'alertas_operacionais' => (int)($criticalSummary['critical_open_count'] ?? 0),
         'chamados_criticos_abertos' => (int)($criticalSummary['open_count'] ?? 0),
         'war_rooms_ativas' => (int)($criticalSummary['war_room_count'] ?? 0),

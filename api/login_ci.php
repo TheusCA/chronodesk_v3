@@ -43,16 +43,26 @@ clear_rate_limit('ci_login_global');
 clear_rate_limit($rate_key);
 login_user_throttle_release($login_ad);
 session_regenerate_id(true);
-$access_role = validate_access_role($funcionario['access_role'] ?? 'tecnico') ?? 'tecnico';
+$ci_username = normalizar_samaccountname($autenticacao['ad_user']['login'] ?? $login_ad);
+// [L1] Admin só pela allowlist; access_role 'admin' legado vira lideranca ou gestor.
+$allowlisted = $ci_username !== null && is_ad_admin_authorized($ci_username);
+$access_role = session_role_for($allowlisted, $funcionario['access_role'] ?? null, $funcionario['equipe'] ?? null);
+if (!$allowlisted && portal_role_value($funcionario['access_role'] ?? '') === 'admin') {
+    audit_log(
+        'ADMIN_ROLE_SEM_ALLOWLIST',
+        'Funcionario ID ' . (int)$funcionario['id'] . ' com perfil admin fora de AD_ADMIN_USERS; sessao como ' . $access_role,
+        'WARNING'
+    );
+}
 $_SESSION['ci_logged_in'] = true;
 $_SESSION['ci_funcionario_id'] = (int)$funcionario['id'];
-$_SESSION['ci_username'] = normalizar_samaccountname($autenticacao['ad_user']['login'] ?? $login_ad);
+$_SESSION['ci_username'] = $ci_username;
 $_SESSION['ci_nome'] = sanitize_input($funcionario['nome'] ?? '', 100);
 $_SESSION['ci_access_role'] = $access_role;
 $_SESSION['ci_login_time'] = time();
 $_SESSION['ci_last_activity'] = time();
 
-if (in_array($access_role, ['admin', 'gestor'], true)) {
+if (portal_role_is_manager($access_role)) {
     $_SESSION['ci_elevated_session'] = true;
     $_SESSION['admin_logged_in'] = $access_role === 'admin';
     $_SESSION['admin_auth_type'] = 'employee_role';

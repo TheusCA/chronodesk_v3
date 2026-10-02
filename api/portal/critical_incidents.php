@@ -21,7 +21,7 @@ try {
         }
         json_response([
             'sucesso' => true,
-            'can_manage' => in_array($role, ['admin', 'gestor'], true),
+            'can_manage' => portal_role_is_manager($role),
         ] + $service->list($_GET));
     }
 
@@ -32,7 +32,7 @@ try {
     }
     if ($action === 'create') {
         require_portal_write_access($role);
-        if (!in_array($role, ['admin', 'gestor'], true)) {
+        if (!portal_role_is_manager($role)) {
             $data['status'] = 'open';
         }
         $id = $service->create($data, portal_username());
@@ -44,7 +44,7 @@ try {
         ], 201);
     }
 
-    if (!in_array($role, ['admin', 'gestor'], true)) {
+    if (!portal_role_is_manager($role)) {
         audit_log('CRITICAL_INCIDENT_WRITE_DENIED', 'Perfil sem permissao tentou gerenciar chamado critico.', 'WARNING');
         json_response([
             'sucesso' => false,

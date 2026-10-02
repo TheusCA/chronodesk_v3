@@ -9,7 +9,7 @@ header('Content-Type: application/json; charset=utf-8');
 
 require_get_method();
 // [VULN-003] Exigir autenticação para ver solicitações
-$role = require_portal_auth(['admin', 'gestor']);
+$role = require_portal_auth(PORTAL_MANAGER_ROLES);
 $actor = portal_actor($role);
 
 global $gerenciador;

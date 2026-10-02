@@ -2,7 +2,7 @@
 require_once __DIR__ . '/_bootstrap.php';
 
 require_get_method();
-require_portal_auth(['admin', 'gestor']);
+require_portal_auth(PORTAL_MANAGER_ROLES);
 
 try {
     $service = new OperationalService();

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { isManagerRole } from '../lib/roles'
 import { useQuery } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { useForm } from 'react-hook-form'
@@ -164,7 +165,7 @@ function PeriodFilters({ filters, setFilters, extra = null }) {
 }
 
 export function CalendarPage({ session, notify }) {
-  const canManage = session.role === 'admin' || session.role === 'gestor'
+  const canManage = isManagerRole(session.role)
   const employees = useEmployees()
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '', type: '', status: '' })
   const resource = useResource(`portal/calendar.php${queryString(filters)}`)
@@ -223,7 +224,7 @@ export function CalendarPage({ session, notify }) {
 }
 
 export function SchedulePage({ session, notify }) {
-  const canManage = session.role === 'admin' || session.role === 'gestor'
+  const canManage = isManagerRole(session.role)
   const canRemoveRule = session.role === 'admin'
   const employees = useEmployees()
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '' })
@@ -565,7 +566,7 @@ function WorkflowPage({ kind, session, notify }) {
   const overtime = kind === 'overtime'
   const endpoint = overtime ? 'portal/overtime.php' : 'portal/time_corrections.php'
   const employees = useEmployees()
-  const canApprove = session.role === 'admin' || session.role === 'gestor'
+  const canApprove = isManagerRole(session.role)
   const canCreate = session.role !== 'somente_leitura'
   const ownEmployee = session.ci.funcionario_id || ''
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '', status: '' })
@@ -756,7 +757,7 @@ export function TimeCorrectionPage(props) {
 }
 
 export function OncallPage({ session, notify }) {
-  const canManage = session.role === 'admin' || session.role === 'gestor'
+  const canManage = isManagerRole(session.role)
   const employees = useEmployees()
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '' })
   const resource = useResource(`portal/oncall.php${queryString(filters)}`)

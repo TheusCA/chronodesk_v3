@@ -64,7 +64,7 @@ class NotificationService {
                  VALUES
                     (:role, :title, :message, :type, :severity, :url)'
             );
-            foreach (['admin', 'gestor'] as $role) {
+            foreach (PORTAL_MANAGER_ROLES as $role) {
                 $stmt->execute([
                     ':role' => $role,
                     ':title' => $title,

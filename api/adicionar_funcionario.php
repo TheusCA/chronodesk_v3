@@ -93,8 +93,8 @@ if (isset($funcs[$id])) {
     json_response(['sucesso' => false, 'mensagem' => 'ID já existe. Use outro ID.'], 400);
 }
 
-if ($ativo && $ad_login !== null && funcionario_ad_login_ativo_existe($ad_login)) {
-    json_response(['sucesso' => false, 'mensagem' => 'Login AD já vinculado a outro funcionário ativo.'], 400);
+if ($ad_login !== null && funcionario_ad_login_em_uso($ad_login)) {
+    json_response(['sucesso' => false, 'mensagem' => 'Login AD já vinculado a outro funcionário (ativo ou inativo).'], 400);
 }
 
 // Adicionar funcionário

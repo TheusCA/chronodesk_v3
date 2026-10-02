@@ -33,7 +33,7 @@ try {
         json_response(['sucesso' => true, 'id' => $id, 'mensagem' => 'Hora extra enviada para aprovacao.'], 201);
     }
     if ($action === 'decision') {
-        if (!in_array($role, ['admin', 'gestor'], true)) {
+        if (!portal_role_is_manager($role)) {
             json_response(['sucesso' => false, 'mensagem' => 'Apenas gestores podem decidir lancamentos.'], 403);
         }
         $id = filter_var($data['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);

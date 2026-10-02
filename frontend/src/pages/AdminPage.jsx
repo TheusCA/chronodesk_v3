@@ -450,10 +450,9 @@ function EmployeesTab({ resource, notify }) {
     const duplicateLogin = login && employees.some((item) => (
       String(item.ad_login || '').trim().toLowerCase() === login
       && (!editing || Number(item.id) !== Number(form.id))
-      && item.ativo
     ))
     if (duplicateId) return 'Já existe um funcionário com este ID.'
-    if (duplicateLogin) return 'Este login AD já está vinculado a outro funcionário ativo.'
+    if (duplicateLogin) return 'Este login AD já está vinculado a outro funcionário (ativo ou inativo).'
     if (login && !/^[a-z0-9._@-]+$/.test(login)) return 'O login AD contém caracteres inválidos.'
     return ''
   }

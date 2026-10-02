@@ -9,7 +9,7 @@ try {
     if ($method === 'GET') {
         json_response(['sucesso' => true, 'items' => $service->listOncall($_GET)]);
     }
-    if (!in_array($role, ['admin', 'gestor'], true)) {
+    if (!portal_role_is_manager($role)) {
         json_response(['sucesso' => false, 'mensagem' => 'Apenas gestores podem cadastrar plantoes.'], 403);
     }
     $data = portal_json_input();

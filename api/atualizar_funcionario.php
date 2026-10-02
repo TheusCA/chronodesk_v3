@@ -85,8 +85,8 @@ if (!$gerenciador) {
     json_response(['sucesso' => false, 'mensagem' => 'Gerenciador não inicializado'], 500);
 }
 
-if ($ativo && $ad_login !== null && funcionario_ad_login_ativo_existe($ad_login, $funcionario_id)) {
-    json_response(['sucesso' => false, 'mensagem' => 'Login AD já vinculado a outro funcionário ativo.'], 400);
+if ($ad_login !== null && funcionario_ad_login_em_uso($ad_login, $funcionario_id)) {
+    json_response(['sucesso' => false, 'mensagem' => 'Login AD já vinculado a outro funcionário (ativo ou inativo).'], 400);
 }
 
 try {

@@ -16,7 +16,7 @@ try {
         }
         json_response(['sucesso' => true] + $service->scheduleData($_GET));
     }
-    if (!in_array($role, ['admin', 'gestor'], true)) {
+    if (!portal_role_is_manager($role)) {
         json_response(['sucesso' => false, 'mensagem' => 'Apenas gestores podem alterar escalas.'], 403);
     }
     if (isset($_FILES['spreadsheet']) && is_array($_FILES['spreadsheet'])) {

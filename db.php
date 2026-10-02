@@ -110,23 +110,29 @@ function db_keyset_iterate(callable $fetch_page, int $chunk = 500): Generator {
     } while (count($rows) === $chunk);
 }
 
-function get_db_connection() {
-    static $pdo = null;
+// Definida só se ainda não existir: o processo filho do qa-security define uma
+// conexão simulada antes de incluir o endpoint. Em produção ninguém a define
+// antes, e o comportamento não muda (mesmo padrão das constantes de caminho
+// em config.php).
+if (!function_exists('get_db_connection')) {
+    function get_db_connection() {
+        static $pdo = null;
 
-    if ($pdo !== null) {
-        return $pdo;
-    }
+        if ($pdo !== null) {
+            return $pdo;
+        }
 
-    try {
-        $pdo = db_connect([
-            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES   => false,
-        ]);
-        return $pdo;
-    } catch (\PDOException $e) {
-        // Em produção, logar o erro e mostrar mensagem genérica
-        error_log("Erro de conexão com o banco de dados.");
-        throw new \Exception(public_error_message($e, "Erro ao conectar ao banco de dados."));
+        try {
+            $pdo = db_connect([
+                PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES   => false,
+            ]);
+            return $pdo;
+        } catch (\PDOException $e) {
+            // Em produção, logar o erro e mostrar mensagem genérica
+            error_log("Erro de conexão com o banco de dados.");
+            throw new \Exception(public_error_message($e, "Erro ao conectar ao banco de dados."));
+        }
     }
 }

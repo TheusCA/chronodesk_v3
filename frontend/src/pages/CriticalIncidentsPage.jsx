@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { isManagerRole } from '../lib/roles'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { useResource } from '../hooks/useResource'
@@ -409,7 +410,7 @@ function ImportPanel({ onClose, onImported }) {
 }
 
 export function CriticalIncidentsPage({ session, notify }) {
-  const canManage = session.role === 'admin' || session.role === 'gestor'
+  const canManage = isManagerRole(session.role)
   const canCreate = session.role !== 'somente_leitura'
   const [filters, setFilters] = useState({
     competency: competency.key,

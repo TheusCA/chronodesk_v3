@@ -8,6 +8,7 @@ putenv('AD_DOMAIN=corp.local');
 putenv('AD_UPN_SUFFIX=corp.local');
 putenv('APP_BASE_URL');
 putenv('MAIL_ENABLED=false');
+putenv('AD_ADMIN_USERS=qa.admin');
 
 $_SERVER['REQUEST_METHOD'] = 'GET';
 $_SERVER['REMOTE_ADDR'] = '127.0.0.250';
@@ -88,17 +89,22 @@ assert_same('', get_base_path(), 'caminho fisico nunca vira URL publica');
 assert_same(true, session_window_is_current(900, 950, 500, 100, 1000), 'sessao dentro da janela');
 assert_same(false, session_window_is_current(100, 950, 500, 100, 1000), 'sessao absoluta expirada');
 
-$_SESSION = [
-    'logged_in' => true,
-    'portal_role' => 'gestor',
-    'login_time' => time(),
-    'last_activity' => time(),
-];
-assert_same('gestor', current_portal_role(), 'RBAC identifica gestor');
+// Perfil da sessao de gestao (sem revalidacao: so a leitura das chaves). O
+// fluxo completo, com revalidacao contra o cadastro, fica no qa-security.
+assert_same('gestor', session_stored_role(['logged_in' => true, 'portal_role' => 'gestor']), 'RBAC identifica gestor');
 assert_same(false, in_array('admin.manage', portal_permissions_for_role('gestor'), true), 'gestor nao recebe admin');
 assert_same(true, in_array('operacao.approve', portal_permissions_for_role('gestor'), true), 'gestor pode decidir pausas');
 assert_same(false, in_array('operacao.approve', portal_permissions_for_role('tecnico'), true), 'tecnico nao pode decidir pausas');
-$_SESSION['admin_logged_in'] = true;
+// Admin por AD: a revalidacao confere so a allowlist, sem banco.
+$_SESSION = [
+    'logged_in' => true,
+    'admin_logged_in' => true,
+    'admin_auth_type' => 'ad',
+    'admin_username' => 'qa.admin',
+    'username' => 'qa.admin',
+    'login_time' => time(),
+    'last_activity' => time(),
+];
 assert_same('admin', current_portal_role(), 'RBAC identifica admin');
 assert_same(true, in_array('admin.manage', portal_permissions_for_role('admin'), true), 'admin recebe permissao administrativa');
 assert_same(true, in_array('operacao.approve', portal_permissions_for_role('admin'), true), 'admin pode decidir pausas proprias ou de terceiros');
@@ -147,7 +153,7 @@ foreach (['aprovar', 'rejeitar'] as $pauseDecision) {
     assert_same(true, is_string($decisionSource), "le endpoint de {$pauseDecision} pausa");
     assert_same(
         true,
-        strpos($decisionSource, "require_portal_auth(['admin', 'gestor'])") !== false,
+        strpos($decisionSource, 'require_portal_auth(PORTAL_MANAGER_ROLES)') !== false,
         "{$pauseDecision} exige role administrativa no backend"
     );
     assert_same(

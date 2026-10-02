@@ -360,6 +360,7 @@ function verificar_login() {
 }
 
 function usuario_pode_acessar_metricas() {
+    session_revalidate();
     $authenticated = (
         (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) ||
         (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true)
@@ -373,6 +374,7 @@ function usuario_pode_acessar_metricas() {
 }
 
 function verificar_login_api() {
+    session_revalidate();
     $authenticated = (
         (isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) ||
         (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true)
@@ -404,6 +406,7 @@ function verificar_login_api() {
  */
 function verificar_admin_login() {
     if (session_status() === PHP_SESSION_NONE) session_start();
+    session_revalidate();
     
     if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
         _redirecionar_login('admin_login.php');
@@ -525,10 +528,24 @@ function normalizar_samaccountname($login) {
     return strlen($login) >= 2 && strlen($login) <= 100 ? $login : null;
 }
 
+/**
+ * [A2] Entradas de AD_ADMIN_USERS normalizadas como o bind (ad_login_key):
+ * minúsculas, "@dominio" só com sufixo permitido. "DOMINIO\usuario" tem o
+ * prefixo retirado antes. Entrada que o bind recusaria fica de fora.
+ */
 function get_ad_admin_users() {
+    return ad_admin_users_from(AD_ADMIN_USERS);
+}
+
+function ad_admin_users_from(string $list): array {
     $users = [];
-    foreach (explode(',', AD_ADMIN_USERS) as $user) {
-        $normalized = normalizar_samaccountname($user);
+    foreach (explode(',', $list) as $user) {
+        $user = trim($user);
+        $backslash = strrpos($user, '\\');
+        if ($backslash !== false) {
+            $user = substr($user, $backslash + 1);
+        }
+        $normalized = ad_login_key($user);
         if ($normalized !== null) {
             $users[] = $normalized;
         }
@@ -537,7 +554,7 @@ function get_ad_admin_users() {
 }
 
 function is_ad_admin_authorized($login) {
-    $normalized = normalizar_samaccountname($login);
+    $normalized = ad_login_key((string)$login);
     if ($normalized === null) {
         return false;
     }
@@ -714,7 +731,11 @@ function salvar_funcionarios_mysql($funcionarios) {
     }
 }
 
-function funcionario_ad_login_ativo_existe($ad_login, $ignorar_id = null) {
+/**
+ * [A3] Login AD em uso por outro cadastro, ativo ou inativo: a migration 016
+ * torna funcionarios.ad_login unico, e conferir antes evita o erro do banco.
+ */
+function funcionario_ad_login_em_uso($ad_login, $ignorar_id = null) {
     $ad_login = normalizar_ad_login($ad_login);
     if ($ad_login === null) {
         return false;
@@ -725,7 +746,7 @@ function funcionario_ad_login_ativo_existe($ad_login, $ignorar_id = null) {
             require_once __DIR__ . '/db.php';
         }
         $pdo = get_db_connection();
-        $sql = "SELECT id FROM funcionarios WHERE ad_login = :ad_login AND ativo = 1";
+        $sql = "SELECT id FROM funcionarios WHERE ad_login = :ad_login";
         $params = [':ad_login' => $ad_login];
         if ($ignorar_id !== null) {
             $sql .= " AND id <> :id";
@@ -740,7 +761,7 @@ function funcionario_ad_login_ativo_existe($ad_login, $ignorar_id = null) {
             if ((int)$func['id'] === (int)$ignorar_id) {
                 continue;
             }
-            if (($func['ativo'] ?? true) && normalizar_ad_login($func['ad_login'] ?? null) === $ad_login) {
+            if (normalizar_ad_login($func['ad_login'] ?? null) === $ad_login) {
                 return true;
             }
         }

@@ -24,6 +24,83 @@ declare(strict_types=1);
 const QA_RUNNER_FLAG = '--run-endpoint';
 const QA_PASSWORD = 'SenhaQa-Nunca-Gravar-7';
 
+// Banco simulado (Lote 5a): responde so as consultas da revalidacao da
+// sessao (A1) e aceita o audit_log, que vai para o log do processo como
+// "[QA_AUDIT] ACAO [SEVERIDADE]: detalhe"; qualquer outra consulta falha como
+// banco fora. Usado pelo processo filho e pelos testes de unidade.
+final class QaChildPdo extends PDO {
+    public function __construct(public array $db) {
+    }
+
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaChildStatement($this, (string)preg_replace('/\s+/', ' ', trim($query)));
+    }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
+        if (trim($query) === 'SELECT 1 FROM audit_log LIMIT 1') {
+            return new QaChildStatement($this, 'SELECT 1 FROM audit_log LIMIT 1');
+        }
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista');
+    }
+
+    public function beginTransaction(): bool {
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: transacao nao prevista');
+    }
+
+    public function inTransaction(): bool {
+        return false;
+    }
+}
+
+final class QaChildStatement extends PDOStatement {
+    private array $rows = [];
+
+    public function __construct(private QaChildPdo $pdo, private string $sql) {
+    }
+
+    public function execute(?array $params = null): bool {
+        $params = $params ?? [];
+        if ($this->sql === 'SELECT ativo, access_role, equipe, ad_login FROM funcionarios WHERE id = ?') {
+            $row = $this->pdo->db['funcionarios'][(string)$params[0]] ?? null;
+            $this->rows = is_array($row) ? [$row] : [];
+            return true;
+        }
+        if ($this->sql === 'SELECT role FROM usuarios WHERE username = ?') {
+            $role = $this->pdo->db['usuarios'][(string)$params[0]] ?? null;
+            $this->rows = $role !== null ? [['role' => $role]] : [];
+            return true;
+        }
+        if ($this->sql === 'INSERT INTO audit_log (user_ip, username, action, details, severity) VALUES (?, ?, ?, ?, ?)') {
+            error_log("[QA_AUDIT] {$params[2]} [{$params[4]}]: {$params[3]}");
+            return true;
+        }
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista');
+    }
+
+    public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
+        return array_shift($this->rows) ?? false;
+    }
+
+    public function fetchColumn(int $column = 0): mixed {
+        $row = array_shift($this->rows);
+        return $row === null ? false : array_values($row)[$column];
+    }
+
+    public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
+        $rows = $this->rows;
+        $this->rows = [];
+        return $rows;
+    }
+
+    public function bindValue(int|string $param, mixed $value, int $type = PDO::PARAM_STR): bool {
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista');
+    }
+
+    public function bindParam(int|string $param, mixed &$var, int $type = PDO::PARAM_STR, int $maxLength = 0, mixed $driverOptions = null): bool {
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista');
+    }
+}
+
 function qa_isolated_environment(string $errorLog): void {
     foreach ([
         'APP_ENV' => 'development',
@@ -153,6 +230,16 @@ if (($argv[1] ?? '') === QA_RUNNER_FLAG) {
             'body' => $body,
         ]) . "\n");
     });
+    // Banco simulado (Lote 5a): responde so as consultas da revalidacao da
+    // sessao (A1); qualquer outra falha como banco fora. Sem 'db', o banco
+    // real aponta para 127.0.0.1:1 e nada responde.
+    if (is_array($spec['db'] ?? null)) {
+        $GLOBALS['qa_child_pdo'] = new QaChildPdo($spec['db']);
+        function get_db_connection(): PDO {
+            return $GLOBALS['qa_child_pdo'];
+        }
+    }
+
     $endpoint = dirname(__DIR__) . '/' . $spec['endpoint'];
     chdir(dirname($endpoint));
     require $endpoint;
@@ -673,12 +760,52 @@ foreach ($iterator as $file) {
 // ============================================================================
 // 3. QA-01 — endpoints reais em processo filho
 // ============================================================================
-function qa_run_endpoint(string $qaDir, array $spec): array {
+// Banco simulado dos processos filhos: so as linhas que a revalidacao da sessao
+// (A1) consulta. Login AD do admin vem da allowlist do filho (qa.admin).
+const QA_DB = [
+    'funcionarios' => [
+        '1' => ['ativo' => 1, 'access_role' => 'tecnico', 'equipe' => 'n1', 'ad_login' => 'joao.silva'],
+        '2' => ['ativo' => 1, 'access_role' => 'lideranca', 'equipe' => 'lideranca', 'ad_login' => 'qa.lider'],
+        '3' => ['ativo' => 1, 'access_role' => 'gestor', 'equipe' => 'n2', 'ad_login' => 'qa.gestor'],
+        '4' => ['ativo' => 1, 'access_role' => 'somente_leitura', 'equipe' => 'n1', 'ad_login' => 'qa.leitura'],
+        '5' => ['ativo' => 1, 'access_role' => 'admin', 'equipe' => 'lideranca', 'ad_login' => 'qa.lider.legado'],
+        '6' => ['ativo' => 1, 'access_role' => 'admin', 'equipe' => 'n2', 'ad_login' => 'qa.n2.legado'],
+        '7' => ['ativo' => 1, 'access_role' => 'tecnico', 'equipe' => 'n2', 'ad_login' => 'qa.admin'],
+    ],
+    'usuarios' => [],
+];
+
+// Sessao como login_ci.php a monta: CI e, para perfis de gestao, a sessao
+// elevada.
+function qa_ci_session(int $id, string $login, string $role): array {
+    $session = [
+        'ci_logged_in' => true, 'ci_funcionario_id' => $id, 'ci_username' => $login, 'ci_nome' => 'QA',
+        'ci_access_role' => $role, 'ci_login_time' => '__now__', 'ci_last_activity' => '__now__',
+    ];
+    if (portal_role_is_manager($role)) {
+        $session += [
+            'ci_elevated_session' => true, 'admin_logged_in' => $role === 'admin', 'admin_auth_type' => 'employee_role',
+            'admin_username' => $login, 'portal_role' => $role, 'logged_in' => true, 'username' => $login,
+            'login_time' => '__now__', 'last_activity' => '__now__',
+        ];
+    }
+    return $session;
+}
+
+const QA_ADMIN_SESSION = [
+    'logged_in' => true, 'admin_logged_in' => true, 'admin_auth_type' => 'ad', 'admin_username' => 'qa.admin',
+    'portal_role' => 'admin', 'username' => 'qa.admin', 'login_time' => '__now__', 'last_activity' => '__now__',
+];
+
+function qa_start_endpoint(string $qaDir, array $spec): array {
     static $run = 0;
     $run++;
     $log = $qaDir . "/endpoint-{$run}.log";
     touch($log);
     $spec += ['csrf' => 'valid', 'session' => [], 'body' => null];
+    // Com sessao, o banco simulado responde a revalidacao; 'db' => false
+    // simula o banco fora.
+    $spec += ['db' => $spec['session'] ? QA_DB : false];
     $spec['error_log'] = $log;
     $command = [
         PHP_BINARY,
@@ -696,20 +823,43 @@ function qa_run_endpoint(string $qaDir, array $spec): array {
         fwrite(STDERR, "FAIL: nao iniciou o processo filho\n");
         exit(1);
     }
-    $stdout = (string)stream_get_contents($pipes[1]);
-    $stderr = (string)stream_get_contents($pipes[2]);
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-    proc_close($process);
+    return ['process' => $process, 'pipes' => $pipes, 'log' => $log, 'endpoint' => $spec['endpoint']];
+}
+
+function qa_finish_endpoint(array $handle): array {
+    $stdout = (string)stream_get_contents($handle['pipes'][1]);
+    $stderr = (string)stream_get_contents($handle['pipes'][2]);
+    fclose($handle['pipes'][1]);
+    fclose($handle['pipes'][2]);
+    proc_close($handle['process']);
 
     if (!preg_match('/^QA_RESULT (.+)$/m', $stdout, $match)) {
-        fwrite(STDERR, "FAIL: {$spec['endpoint']} nao devolveu resultado\n{$stdout}\n{$stderr}\n");
+        fwrite(STDERR, "FAIL: {$handle['endpoint']} nao devolveu resultado\n{$stdout}\n{$stderr}\n");
         exit(1);
     }
     $result = json_decode($match[1], true);
-    $result['log'] = (string)file_get_contents($log);
+    $result['log'] = (string)file_get_contents($handle['log']);
     $result['stderr'] = $stderr;
     return $result;
+}
+
+function qa_run_endpoint(string $qaDir, array $spec): array {
+    return qa_finish_endpoint(qa_start_endpoint($qaDir, $spec));
+}
+
+/** Varios endpoints em paralelo; devolve os resultados nas mesmas chaves. */
+function qa_run_endpoints(string $qaDir, array $specs, int $parallel = 8): array {
+    $results = [];
+    foreach (array_chunk($specs, $parallel, true) as $chunk) {
+        $handles = [];
+        foreach ($chunk as $key => $spec) {
+            $handles[$key] = qa_start_endpoint($qaDir, $spec);
+        }
+        foreach ($handles as $key => $handle) {
+            $results[$key] = qa_finish_endpoint($handle);
+        }
+    }
+    return $results;
 }
 
 function qa_assert_endpoint(array $result, int $status, string $message, string $label): void {
@@ -735,8 +885,8 @@ function qa_assert_unavailable_audit(array $result, string $label): void {
 $json = 'application/json';
 $credentials = static fn (string $loginField, string $passwordField, string $password): string
     => (string)json_encode([$loginField => 'joao.silva', $passwordField => $password]);
-$technician = ['ci_logged_in' => true, 'ci_funcionario_id' => 1, 'ci_username' => 'joao.silva', 'ci_access_role' => 'tecnico', 'ci_login_time' => '__now__', 'ci_last_activity' => '__now__'];
-$manager = ['logged_in' => true, 'username' => 'qa.gestor', 'portal_role' => 'gestor', 'login_time' => '__now__', 'last_activity' => '__now__'];
+$technician = qa_ci_session(1, 'joao.silva', 'tecnico');
+$manager = qa_ci_session(3, 'qa.gestor', 'gestor');
 
 // Os arquivos reais de estado da aplicacao nao podem mudar durante o QA (no
 // servidor sao os de producao).
@@ -816,5 +966,316 @@ qa_assert_endpoint($result, 400, 'Documento invalido.', 'controle: gestor com CS
 assert_same($stateBefore, qa_state_snapshot($root), 'endpoints do QA nao alteram os arquivos reais de estado');
 clearstatcache();
 assert_same(true, is_file($qaDir . '/pausas.csv'), 'controle: init.php dos endpoints gravou no diretorio do QA');
+
+// ============================================================================
+// 4. Lote 5a — perfis, allowlist e revalidacao da sessao
+// ============================================================================
+
+// QA 6: perfil da sessao a partir das fontes (L1).
+foreach ([
+    [true, 'tecnico', 'n1', 'admin', 'allowlist da admin mesmo a tecnico'],
+    [true, 'admin', 'lideranca', 'admin', 'allowlist com admin legado'],
+    [false, 'admin', 'lideranca', 'lideranca', 'admin legado na Lideranca vira lideranca'],
+    [false, 'admin', 'Liderança', 'lideranca', 'admin legado com a grafia antiga da equipe'],
+    [false, 'admin', 'n2', 'gestor', 'admin legado fora da Lideranca vira gestor'],
+    [false, 'ADMIN', 'n1', 'gestor', 'admin legado em maiusculas'],
+    [false, 'lideranca', 'n1', 'lideranca', 'perfil lideranca independe da equipe'],
+    [false, 'gestor', 'lideranca', 'gestor', 'equipe Lideranca nao eleva gestor'],
+    [false, 'tecnico', 'lideranca', 'tecnico', 'equipe Lideranca nao eleva tecnico'],
+    [false, 'somente_leitura', 'n1', 'somente_leitura', 'somente leitura'],
+    [false, null, 'n1', 'tecnico', 'perfil ausente'],
+    [false, 'root', 'n1', 'tecnico', 'perfil desconhecido'],
+] as [$allowlisted, $accessRole, $team, $expected, $label]) {
+    assert_same($expected, session_role_for($allowlisted, $accessRole, $team), "perfil da sessao: {$label}");
+}
+
+// Permissoes: gestor contido na Lideranca, Lideranca contida no admin.
+$gestorPermissions = portal_permissions_for_role('gestor');
+$leaderPermissions = portal_permissions_for_role('lideranca');
+$adminPermissions = portal_permissions_for_role('admin');
+assert_same([], array_values(array_diff($gestorPermissions, $leaderPermissions)), 'Lideranca tem tudo o que o gestor tem');
+assert_same([], array_values(array_diff($leaderPermissions, $adminPermissions)), 'admin tem tudo o que a Lideranca tem');
+foreach (['funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end', 'operacao.approve', 'ausencias.manage'] as $permission) {
+    assert_same(true, in_array($permission, $leaderPermissions, true), "Lideranca recebe {$permission}");
+}
+foreach (['configuracoes.manage', 'integracoes.manage', 'usuarios_locais.manage', 'perfis.promote', 'admin.manage'] as $permission) {
+    assert_same(false, in_array($permission, $leaderPermissions, true), "Lideranca nao recebe {$permission}");
+    assert_same(true, in_array($permission, $adminPermissions, true), "admin recebe {$permission}");
+}
+foreach (['funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end'] as $permission) {
+    assert_same(false, in_array($permission, $gestorPermissions, true), "gestor nao recebe {$permission}");
+}
+assert_same(true, portal_role_is_manager('lideranca'), 'Lideranca passa onde o gestor passa');
+assert_same(false, portal_role_is_manager('tecnico'), 'tecnico nao e perfil de gestao');
+
+// QA 7 (leitura da sessao): lideranca nao cai para gestor; portal_role admin
+// sem admin_logged_in nao vira admin.
+foreach ([
+    [['logged_in' => true, 'portal_role' => 'lideranca'], 'lideranca'],
+    [['logged_in' => true, 'portal_role' => 'gestor'], 'gestor'],
+    [['logged_in' => true, 'portal_role' => 'admin'], 'gestor'],
+    [['logged_in' => true, 'portal_role' => 'qualquer'], 'gestor'],
+    [['logged_in' => true, 'admin_logged_in' => true], 'admin'],
+    [['ci_logged_in' => true, 'ci_access_role' => 'lideranca'], 'lideranca'],
+    [['ci_logged_in' => true, 'ci_access_role' => 'invalido'], 'tecnico'],
+    [[], null],
+] as $i => [$session, $expected]) {
+    assert_same($expected, session_stored_role($session), "perfil guardado na sessao, caso {$i}");
+}
+
+// A2: allowlist normalizada como o bind.
+assert_same(
+    ['qa.admin', 'outro', 'maria', 'usuario'],
+    ad_admin_users_from(' QA.Admin , CORP\outro, maria@corp.local, x@externo.com, , CORP\, usuario@, qa.admin'),
+    'allowlist: minusculas, DOMINIO\ retirado, sufixo permitido, entrada invalida fora, sem repeticao'
+);
+assert_same(true, is_ad_admin_authorized('QA.ADMIN@corp.local'), 'allowlist: login com sufixo permitido');
+assert_same(true, is_ad_admin_authorized('qa.admin@'), 'allowlist: "usuario@" como o bind');
+assert_same(false, is_ad_admin_authorized('qa.admin@externo.com'), 'allowlist: sufixo nao permitido');
+assert_same(false, is_ad_admin_authorized('CORP\qa.admin'), 'allowlist: DOMINIO\ no login e recusado, como no bind');
+assert_same(false, is_ad_admin_authorized(''), 'allowlist: login vazio');
+
+// A1: quando a revalidacao encerra a sessao.
+foreach ([
+    ['gestor', null, true], ['gestor', 'tecnico', true], ['admin', 'lideranca', true], ['lideranca', 'gestor', true],
+    ['gestor', 'gestor', false], ['tecnico', 'gestor', false], ['lideranca', 'admin', false],
+] as [$stored, $current, $expected]) {
+    assert_same($expected, session_revalidation_revokes($stored, $current), "revalidacao: {$stored} -> " . ($current ?? 'nenhum'));
+}
+
+// A1: perfil atual pelas fontes, contra o banco simulado.
+$sessionDb = new QaChildPdo(QA_DB);
+foreach ([
+    [qa_ci_session(1, 'joao.silva', 'tecnico'), ['tecnico', 'ok'], 'CI tecnico'],
+    [qa_ci_session(2, 'qa.lider', 'lideranca'), ['lideranca', 'ok'], 'CI lideranca'],
+    [qa_ci_session(5, 'qa.lider.legado', 'lideranca'), ['lideranca', 'ok'], 'admin legado na Lideranca'],
+    [qa_ci_session(6, 'qa.n2.legado', 'gestor'), ['gestor', 'ok'], 'admin legado no N2'],
+    [qa_ci_session(7, 'qa.admin', 'admin'), ['admin', 'ok'], 'CI na allowlist'],
+    [qa_ci_session(99, 'ninguem', 'tecnico'), [null, 'cadastro_inexistente'], 'cadastro inexistente'],
+    [qa_ci_session(1, 'outro.login', 'tecnico'), [null, 'ad_login_alterado'], 'login da sessao diferente do cadastro'],
+] as [$session, $expected, $label]) {
+    assert_same($expected, session_current_role($session, $sessionDb), "perfil atual: {$label}");
+}
+$inactiveDb = QA_DB;
+$inactiveDb['funcionarios']['1']['ativo'] = 0;
+assert_same([null, 'cadastro_inativo'], session_current_role(qa_ci_session(1, 'joao.silva', 'tecnico'), new QaChildPdo($inactiveDb)), 'perfil atual: cadastro inativo');
+// Sessao de gestao por AD e local: sem consulta ao cadastro de funcionarios.
+$noQueryDb = new QaThrottlePdo();
+$noQueryDb->throwOn = 'SELECT';
+assert_same(['admin', 'ok'], session_current_role(QA_ADMIN_SESSION, $noQueryDb), 'perfil atual: admin por AD so pela allowlist');
+assert_same([null, 'fora_da_allowlist'], session_current_role(['admin_username' => 'ex.admin'] + QA_ADMIN_SESSION, $noQueryDb), 'perfil atual: fora da allowlist');
+assert_same([null, 'acesso_local_desligado'], session_current_role(['admin_auth_type' => 'local'] + QA_ADMIN_SESSION, $noQueryDb), 'perfil atual: acesso local desligado');
+foreach (['throwOn' => 'FROM funcionarios', 'falseOn' => 'FROM funcionarios'] as $mode => $needle) {
+    $failingDb = new QaThrottlePdo();
+    $failingDb->{$mode} = $needle;
+    $failed = false;
+    try {
+        session_current_role(qa_ci_session(1, 'joao.silva', 'tecnico'), $failingDb);
+    } catch (Throwable $e) {
+        $failed = true;
+    }
+    assert_same(true, $failed, "perfil atual: erro do banco ({$mode}) propaga, sem perfil");
+}
+
+// A1 e QA 7 de ponta a ponta, em processo filho.
+$demotedDb = QA_DB;
+$demotedDb['funcionarios']['3']['access_role'] = 'tecnico';
+$promotedDb = QA_DB;
+$promotedDb['funcionarios']['1']['access_role'] = 'gestor';
+$changedLoginDb = QA_DB;
+$changedLoginDb['funcionarios']['1']['ad_login'] = 'outro.login';
+$legacyAdminSession = ['admin_logged_in' => true, 'portal_role' => 'admin'] + qa_ci_session(6, 'qa.n2.legado', 'gestor');
+$sessionCases = qa_run_endpoints($qaDir, [
+    'lideranca' => ['endpoint' => 'api/session.php', 'method' => 'GET', 'session' => qa_ci_session(2, 'qa.lider', 'lideranca')],
+    'legado' => ['endpoint' => 'api/session.php', 'method' => 'GET', 'session' => qa_ci_session(5, 'qa.lider.legado', 'lideranca')],
+    'rebaixado' => ['endpoint' => 'api/portal/reports.php', 'method' => 'GET', 'session' => $manager, 'db' => $demotedDb],
+    'inativo' => ['endpoint' => 'api/status.php', 'method' => 'GET', 'session' => $technician, 'db' => $inactiveDb],
+    'inativo_sessao' => ['endpoint' => 'api/session.php', 'method' => 'GET', 'session' => $technician, 'db' => $inactiveDb],
+    'login_trocado' => ['endpoint' => 'api/status.php', 'method' => 'GET', 'session' => $technician, 'db' => $changedLoginDb],
+    'fora_allowlist' => ['endpoint' => 'api/configuracoes.php', 'method' => 'GET', 'session' => ['admin_username' => 'ex.admin', 'username' => 'ex.admin'] + QA_ADMIN_SESSION],
+    'admin_legado' => ['endpoint' => 'api/configuracoes.php', 'method' => 'GET', 'session' => $legacyAdminSession],
+    'promovido' => ['endpoint' => 'api/portal/reports.php', 'method' => 'GET', 'session' => $technician, 'db' => $promotedDb],
+    'banco_fora' => ['endpoint' => 'api/portal/reports.php', 'method' => 'GET', 'session' => $manager, 'db' => false],
+]);
+foreach (['lideranca', 'legado'] as $case) {
+    $body = json_decode($sessionCases[$case]['body'], true);
+    assert_same('lideranca', $body['role'] ?? null, "sessao {$case}: perfil lideranca");
+    assert_same(true, in_array('funcionarios.manage', $body['permissions'] ?? [], true), "sessao {$case}: permissoes da Lideranca");
+    assert_same(false, in_array('configuracoes.manage', $body['permissions'] ?? [], true), "sessao {$case}: sem configuracoes");
+    assert_same(false, $body['gestor']['admin'] ?? null, "sessao {$case}: nao e admin");
+}
+foreach ([
+    'rebaixado' => 'perfil gestor -> tecnico, motivo ok',
+    'inativo' => 'perfil tecnico -> nenhum, motivo cadastro_inativo',
+    'login_trocado' => 'perfil tecnico -> nenhum, motivo ad_login_alterado',
+    'fora_allowlist' => 'perfil admin -> nenhum, motivo fora_da_allowlist',
+    'admin_legado' => 'perfil admin -> gestor, motivo ok',
+] as $case => $detail) {
+    assert_same(401, $sessionCases[$case]['status'], "revalidacao {$case}: sessao encerrada (401)");
+    assert_same(true, strpos($sessionCases[$case]['log'], 'SESSION_REVOKED') !== false && strpos($sessionCases[$case]['log'], $detail) !== false, "revalidacao {$case}: SESSION_REVOKED com '{$detail}'");
+}
+$inactiveSession = json_decode($sessionCases['inativo_sessao']['body'], true);
+assert_same([false, 0, null], [$inactiveSession['ci']['autenticado'] ?? null, $inactiveSession['ci']['funcionario_id'] ?? null, array_key_exists('role', $inactiveSession) ? $inactiveSession['role'] : 'ausente'], 'revalidacao: api/session.php nao mostra CI de cadastro inativo');
+assert_same(403, $sessionCases['promovido']['status'], 'revalidacao: promocao nao eleva a sessao aberta');
+assert_same(false, strpos($sessionCases['promovido']['log'], 'SESSION_REVOKED') !== false, 'revalidacao: promocao nao encerra a sessao');
+assert_same(503, $sessionCases['banco_fora']['status'], 'revalidacao: banco fora responde 503');
+assert_same(true, strpos($sessionCases['banco_fora']['body'], 'Não foi possível validar a sessão') !== false, 'revalidacao: mensagem de banco fora');
+assert_same(false, strpos($sessionCases['banco_fora']['log'], 'SESSION_REVOKED') !== false, 'revalidacao: banco fora nao encerra a sessao');
+
+// QA 11: matriz de perfis por endpoint, no estado do 5a. 'ok' = passa da
+// checagem de perfil (nem 401 nem 403); [status, trecho] = resposta de regra
+// de negocio esperada. Endpoint novo sem linha aqui reprova.
+$roles = ['admin', 'lideranca', 'gestor', 'tecnico', 'somente_leitura', 'nenhum'];
+$expect = [
+    'TODOS' => ['ok', 'ok', 'ok', 'ok', 'ok', 401],
+    'GESTAO' => ['ok', 'ok', 'ok', 403, 403, 401],
+    'ADMIN' => ['ok', 403, 403, 403, 403, 401],
+    // verificar_admin_login_api(): sem sessao de gestao a resposta e 401.
+    'ADMIN_LEGADO' => ['ok', 403, 403, 401, 401, 401],
+];
+$emptyJson = ['content_type' => $json, 'body' => '{}'];
+$matrix = [
+    'api/adicionar_funcionario.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
+    'api/alterar_senha_admin.php POST' => [$emptyJson, [[403, 'alterada no Active Directory']] + $expect['ADMIN_LEGADO']],
+    'api/aprovar_pausa.php POST' => [$emptyJson, $expect['GESTAO']],
+    'api/atualizar_funcionario.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
+    'api/configuracoes.php GET' => [[], $expect['ADMIN']],
+    'api/download_relatorio.php GET' => [[], $expect['GESTAO']],
+    'api/listar_funcionarios.php GET' => [[], $expect['TODOS']],
+    'api/metricas.php GET' => [[], $expect['GESTAO']],
+    'api/rejeitar_pausa.php POST' => [$emptyJson, $expect['GESTAO']],
+    'api/remover_funcionario.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
+    'api/salvar_configuracao.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
+    'api/solicitacoes_pendentes.php GET' => [[], $expect['GESTAO']],
+    'api/status.php GET' => [[], $expect['TODOS']],
+    'api/usuarios.php GET' => [[], [[403, 'usuarios locais esta desativado']] + $expect['ADMIN_LEGADO']],
+    'api/portal/absences.php GET' => [[], $expect['TODOS']],
+    'api/portal/admin_force_end_break.php POST' => [$emptyJson, $expect['ADMIN']],
+    'api/portal/announcements.php GET' => [[], $expect['TODOS']],
+    'api/portal/calendar.php GET' => [[], $expect['TODOS']],
+    'api/portal/calendar.php POST' => [$emptyJson, $expect['GESTAO']],
+    'api/portal/critical_incidents.php GET' => [[], $expect['TODOS']],
+    'api/portal/critical_incidents.php POST' => [['content_type' => $json, 'body' => '{"action":"status","id":1}'], $expect['GESTAO']],
+    'api/portal/critical_incidents_export.php GET' => [[], $expect['TODOS']],
+    'api/portal/critical_incidents_import.php POST' => [$emptyJson, $expect['GESTAO']],
+    'api/portal/dashboard.php GET' => [[], $expect['TODOS']],
+    'api/portal/documents.php GET' => [[], $expect['TODOS']],
+    'api/portal/documents.php POST' => [['content_type' => 'multipart/form-data', 'body' => 'x'], $expect['GESTAO']],
+    'api/portal/documents_delete.php POST' => [['content_type' => $json, 'body' => '{"id":0}'], $expect['GESTAO']],
+    'api/portal/documents_download.php GET' => [[], $expect['TODOS']],
+    'api/portal/integrations.php GET' => [[], $expect['ADMIN']],
+    'api/portal/notifications.php GET' => [[], $expect['TODOS']],
+    'api/portal/oncall.php GET' => [[], $expect['TODOS']],
+    'api/portal/oncall.php POST' => [$emptyJson, $expect['GESTAO']],
+    'api/portal/overtime.php GET' => [[], $expect['TODOS']],
+    'api/portal/overtime.php POST' => [['content_type' => $json, 'body' => '{"action":"decision","id":0,"decision":"approved"}'], $expect['GESTAO']],
+    'api/portal/pa_map.php GET' => [[], $expect['TODOS']],
+    'api/portal/pa_map.php POST' => [$emptyJson, $expect['ADMIN']],
+    'api/portal/reports.php GET' => [[], $expect['GESTAO']],
+    'api/portal/schedules.php GET' => [[], $expect['TODOS']],
+    'api/portal/schedules.php POST' => [['content_type' => $json, 'body' => '{"action":"rule"}'], $expect['GESTAO']],
+    'api/portal/schedules.php POST remove_rule' => [['content_type' => $json, 'body' => '{"action":"remove_rule"}'], $expect['ADMIN']],
+    'api/portal/sdk_responsibles.php GET' => [[], $expect['TODOS']],
+    // POST de anexo de escala: a checagem de perfil fica no servico, depois da
+    // validacao do arquivo; coberta no 5c.
+    'api/portal/shift_attachments.php GET' => [[], $expect['TODOS']],
+    'api/portal/shift_attachments_download.php GET' => [[], $expect['TODOS']],
+    'api/portal/standby.php GET' => [[], $expect['TODOS']],
+    'api/portal/technicians.php GET' => [[], $expect['TODOS']],
+    'api/portal/time_corrections.php GET' => [[], $expect['TODOS']],
+    'api/portal/time_corrections.php POST' => [['content_type' => $json, 'body' => '{"action":"decision","id":0,"decision":"approved"}'], $expect['GESTAO']],
+];
+// Fora da matriz, com o motivo: publicos, saude restrita por IP e pausas
+// autenticadas por credencial do AD a cada requisicao.
+$matrixExempt = [
+    'api/health.php', 'api/login_admin.php', 'api/login_ci.php', 'api/logout.php', 'api/logout_ci.php', 'api/session.php',
+    'api/iniciar_pausa.php', 'api/finalizar_pausa.php', 'api/solicitar_pausa_com_aprovacao.php',
+];
+$covered = array_unique(array_map(static fn (string $row): string => explode(' ', $row)[0], array_keys($matrix)));
+$endpointFiles = array_merge(glob($root . '/api/*.php'), glob($root . '/api/portal/*.php'));
+$missing = [];
+foreach ($endpointFiles as $file) {
+    $relative = substr(str_replace('\\', '/', $file), strlen(str_replace('\\', '/', $root)) + 1);
+    if (basename($relative) !== '_bootstrap.php' && !in_array($relative, $covered, true) && !in_array($relative, $matrixExempt, true)) {
+        $missing[] = $relative;
+    }
+}
+assert_same([], $missing, 'matriz de perfis: todo endpoint tem linha ou esta na lista de excecoes');
+
+$roleSessions = [
+    'admin' => QA_ADMIN_SESSION,
+    'lideranca' => qa_ci_session(2, 'qa.lider', 'lideranca'),
+    'gestor' => qa_ci_session(3, 'qa.gestor', 'gestor'),
+    'tecnico' => qa_ci_session(1, 'joao.silva', 'tecnico'),
+    'somente_leitura' => qa_ci_session(4, 'qa.leitura', 'somente_leitura'),
+    'nenhum' => [],
+];
+$matrixSpecs = [];
+foreach ($matrix as $row => [$extra, $expected]) {
+    [$endpoint, $method] = explode(' ', $row);
+    foreach ($roles as $role) {
+        $matrixSpecs["{$row} | {$role}"] = ['endpoint' => $endpoint, 'method' => $method, 'session' => $roleSessions[$role], 'db' => QA_DB] + $extra;
+    }
+}
+$matrixResults = qa_run_endpoints($qaDir, $matrixSpecs);
+$matrixFailures = [];
+foreach ($matrix as $row => [$extra, $expected]) {
+    foreach ($roles as $i => $role) {
+        $result = $matrixResults["{$row} | {$role}"];
+        $want = $expected[$i];
+        if ($want === 'ok') {
+            $passed = !in_array($result['status'], [401, 403], true) && strpos($result['body'], 'Não foi possível validar a sessão') === false;
+        } elseif (is_array($want)) {
+            $passed = $result['status'] === $want[0] && strpos($result['body'], $want[1]) !== false;
+        } else {
+            $passed = $result['status'] === $want;
+        }
+        if (!$passed) {
+            $matrixFailures[] = "{$row} | {$role}: esperado " . json_encode($want) . ", obtido {$result['status']}";
+        }
+        // Erro fatal de codigo reprova; banco simulado fora nao (alguns
+        // endpoints nao tratam banco indisponivel, comportamento anterior).
+        preg_match_all('/^.*Fatal.*$/m', $result['log'] . "\n" . $result['stderr'], $fatal);
+        $codeFatal = array_values(array_filter($fatal[0], static fn (string $line): bool => strpos($line, 'banco simulado') === false));
+        assert_same([], $codeFatal, "matriz {$row} | {$role}: sem erro fatal de codigo");
+    }
+}
+assert_same([], $matrixFailures, 'matriz de perfis por endpoint (5a)');
+
+// Estrutural: o login CI precisa de AD e nao roda aqui. Confere que o perfil
+// vem de session_role_for() com a allowlist (a revalidacao da requisicao
+// seguinte encerraria uma sessao montada com perfil maior que o das fontes).
+$loginCiSource = (string)file_get_contents($root . '/api/login_ci.php');
+assert_same(true, strpos($loginCiSource, '$allowlisted = $ci_username !== null && is_ad_admin_authorized($ci_username);') !== false, 'login CI: allowlist pela normalizacao do bind');
+assert_same(true, strpos($loginCiSource, '$access_role = session_role_for($allowlisted, $funcionario[\'access_role\'] ?? null, $funcionario[\'equipe\'] ?? null);') !== false, 'login CI: perfil por session_role_for()');
+assert_same(false, strpos($loginCiSource, 'validate_access_role(') !== false, 'login CI: perfil nao vem direto do cadastro');
+assert_same(true, strpos($loginCiSource, "\$_SESSION['admin_logged_in'] = \$access_role === 'admin';") !== false, 'login CI: admin_logged_in so para o perfil admin resolvido');
+
+// Estrutural (A3): login AD em uso em ativos e inativos.
+$configSource = (string)file_get_contents($root . '/config.php');
+$inUseStart = (int)strpos($configSource, 'function funcionario_ad_login_em_uso(');
+$inUseSource = substr($configSource, $inUseStart, (int)strpos($configSource, "\n}\n", $inUseStart) - $inUseStart);
+assert_same(false, strpos($inUseSource, 'ativo') !== false, 'login AD em uso: nao filtra por ativo (SQL nem JSON)');
+foreach (['adicionar_funcionario.php', 'atualizar_funcionario.php'] as $file) {
+    $source = (string)file_get_contents($root . '/api/' . $file);
+    assert_same(true, strpos($source, 'if ($ad_login !== null && funcionario_ad_login_em_uso($ad_login') !== false, "{$file}: confere login em todos os cadastros");
+}
+
+// Estrutural: migration 016 e rollback.
+$migration016 = (string)file_get_contents($root . '/migrations/20261002_016_lideranca_profile.sql');
+$rollback016 = (string)file_get_contents($root . '/migrations/rollback/20261002_016_lideranca_profile_down.sql');
+foreach (['migration 016' => $migration016, 'rollback 016' => $rollback016] as $label => $sql) {
+    $code = (string)preg_replace('/^--.*$/m', '', $sql);
+    assert_same(0, strpos(ltrim($code), "SET time_zone = 'America/Sao_Paulo';"), "{$label}: comeca com SET time_zone");
+    assert_same(0, preg_match('/\b(NOW|CURRENT_TIMESTAMP|CURDATE)\s*\(?/i', $code), "{$label}: sem NOW()/CURRENT_TIMESTAMP");
+    assert_same(0, preg_match('/\b(UPDATE|DELETE|INSERT|DROP\s+TABLE|TRUNCATE)\b/i', $code), "{$label}: nao altera linhas nem apaga tabela");
+    $firstAlter = strpos($code, 'ALTER TABLE');
+    $abort = strpos($code, $label === 'migration 016' ? 'migration_016_abortada_ad_login_duplicado' : 'rollback_016_abortado_perfil_lideranca_em_uso');
+    assert_same(true, $abort !== false && $firstAlter !== false && $abort < $firstAlter, "{$label}: checagem previa antes de qualquer ALTER");
+}
+assert_same(true, strpos($migration016, "ENUM(''tecnico'', ''gestor'', ''admin'', ''somente_leitura'', ''lideranca'')") !== false, 'migration 016: lideranca no fim do ENUM, valores existentes na mesma posicao');
+assert_same(true, strpos($migration016, 'ADD UNIQUE KEY uq_funcionarios_ad_login (ad_login)') !== false, 'migration 016: UNIQUE em ad_login');
+assert_same(true, strpos($migration016, 'HAVING COUNT(*) > 1') !== false && strpos($migration016, 'WHERE ad_login IS NOT NULL') !== false, 'migration 016: duplicados contam so login nao nulo');
+assert_same(true, strpos($rollback016, "ENUM(''tecnico'', ''gestor'', ''admin'', ''somente_leitura'')") !== false, 'rollback 016: ENUM original');
 
 echo "qa-security OK\n";

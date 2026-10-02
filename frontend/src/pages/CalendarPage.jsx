@@ -4,6 +4,7 @@ import { useResource } from '../hooks/useResource'
 import { formatDateTime } from '../lib/format'
 import { localDate, queryString } from '../lib/operational'
 import { post } from '../lib/api'
+import { isManagerRole } from '../lib/roles'
 
 const typeLabels = {
   manual: 'Evento',
@@ -80,7 +81,7 @@ function EventChip({ event }) {
 }
 
 export function CalendarPage({ session, notify }) {
-  const canManage = session.role === 'admin' || session.role === 'gestor'
+  const canManage = isManagerRole(session.role)
   const [anchor, setAnchor] = useState(() => new Date())
   const [view, setView] = useState('month')
   const [selectedDay, setSelectedDay] = useState(localDate())

@@ -465,6 +465,16 @@ function login_user_throttle_config(): array {
  * bind aceita como "usuario"; a tentativa passaria sem ser contada.
  */
 function login_user_throttle_key($login): ?string {
+    return ad_login_key($login);
+}
+
+/**
+ * sAMAccountName com que autenticar_ad() faz o bind: mesma função e mesma
+ * configuração (minúsculas; "@dominio" só com sufixo permitido). Usada pelo
+ * contador por usuário e pela allowlist AD_ADMIN_USERS (A2). Devolve null para
+ * o que o bind recusa.
+ */
+function ad_login_key($login): ?string {
     if (!function_exists('normalizar_login_ldap')) {
         require_once __DIR__ . '/auth_ldap.php';
     }
@@ -828,6 +838,7 @@ function session_window_is_current($login_time, $last_activity, $absolute_timeou
 }
 
 function ci_session_is_current(): bool {
+    session_revalidate();
     if (!isset($_SESSION['ci_logged_in']) || $_SESSION['ci_logged_in'] !== true) {
         return false;
     }
@@ -868,33 +879,198 @@ function current_portal_role(): ?string {
         if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
             return 'admin';
         }
-        $role = validate_access_role($_SESSION['portal_role'] ?? '');
-        if ($role === 'gestor') {
-            return $role;
-        }
-        return 'gestor';
+        $role = portal_role_value($_SESSION['portal_role'] ?? '');
+        return in_array($role, ['lideranca', 'gestor'], true) ? $role : 'gestor';
     }
     if (ci_session_is_current()) {
-        return validate_access_role($_SESSION['ci_access_role'] ?? '') ?? 'tecnico';
+        return portal_role_value($_SESSION['ci_access_role'] ?? '') ?? 'tecnico';
     }
     return null;
 }
 
+// ============================================
+// [SEC-04] PERFIS (Lote 5a)
+// ============================================
+
+const PORTAL_ROLES = ['tecnico', 'gestor', 'lideranca', 'admin', 'somente_leitura'];
+
+/** Perfis que hoje passam onde o gestor passa (paridade mínima do 5a). */
+const PORTAL_MANAGER_ROLES = ['admin', 'lideranca', 'gestor'];
+
+function portal_role_value($role): ?string {
+    $role = strtolower(trim((string)$role));
+    return in_array($role, PORTAL_ROLES, true) ? $role : null;
+}
+
+function portal_role_is_manager(?string $role): bool {
+    return in_array($role, PORTAL_MANAGER_ROLES, true);
+}
+
+function portal_role_rank(?string $role): int {
+    return ['somente_leitura' => 1, 'tecnico' => 2, 'gestor' => 3, 'lideranca' => 4, 'admin' => 5][$role] ?? 0;
+}
+
+/**
+ * [L1] Perfil da sessão a partir das fontes. Admin vem só da allowlist
+ * AD_ADMIN_USERS; access_role = 'admin' é valor legado e não concede
+ * administração: vira lideranca na equipe Liderança e gestor fora dela
+ * (regra de transição até o 016b).
+ */
+function session_role_for(bool $allowlisted, $access_role, $equipe): string {
+    if ($allowlisted) {
+        return 'admin';
+    }
+    $role = portal_role_value($access_role) ?? 'tecnico';
+    if ($role !== 'admin') {
+        return $role;
+    }
+    return validate_funcionario_equipe((string)$equipe) === 'lideranca' ? 'lideranca' : 'gestor';
+}
+
 function portal_permissions_for_role(?string $role): array {
+    $gestor = [
+        'portal.read', 'pausas.use', 'metricas.read', 'relatorios.read',
+        'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage',
+    ];
+    $lideranca = array_merge($gestor, [
+        'funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end',
+    ]);
     $permissions = [
-        'admin' => [
-            'portal.read', 'pausas.use', 'admin.manage', 'metricas.read',
-            'relatorios.read', 'configuracoes.manage', 'integracoes.manage',
-            'documentacao.edit', 'avisos.manage', 'operacao.approve'
-        ],
-        'gestor' => [
-            'portal.read', 'pausas.use', 'metricas.read', 'relatorios.read',
-            'documentacao.edit', 'avisos.manage', 'operacao.approve'
-        ],
+        'admin' => array_merge($lideranca, [
+            'admin.manage', 'configuracoes.manage', 'integracoes.manage',
+            'usuarios_locais.manage', 'perfis.promote',
+        ]),
+        'lideranca' => $lideranca,
+        'gestor' => $gestor,
         'tecnico' => ['portal.read', 'pausas.use'],
         'somente_leitura' => ['portal.read'],
     ];
     return $permissions[$role] ?? [];
+}
+
+// ============================================
+// [A1] REVALIDAÇÃO DA SESSÃO POR REQUISIÇÃO
+// ============================================
+
+/** Perfil que a sessão carrega hoje (o mesmo critério de current_portal_role, sem janelas). */
+function session_stored_role(array $session): ?string {
+    if (($session['admin_logged_in'] ?? false) === true) {
+        return 'admin';
+    }
+    if (($session['logged_in'] ?? false) === true) {
+        $role = portal_role_value($session['portal_role'] ?? '');
+        return in_array($role, ['lideranca', 'gestor'], true) ? $role : 'gestor';
+    }
+    if (($session['ci_logged_in'] ?? false) === true) {
+        return portal_role_value($session['ci_access_role'] ?? '') ?? 'tecnico';
+    }
+    return null;
+}
+
+/**
+ * Perfil que a sessão teria agora, pelas fontes atuais: cadastro do
+ * funcionário (chave primária) e allowlist para sessão CI; allowlist para
+ * sessão de gestão por AD; tabela usuarios e ENABLE_LOCAL_ADMIN para sessão
+ * local. Devolve [perfil ou null, motivo]. Erro de banco propaga.
+ */
+function session_current_role(array $session, ?PDO $pdo = null): array {
+    $connect = static function () use (&$pdo): PDO {
+        if ($pdo === null) {
+            if (!function_exists('get_db_connection')) {
+                require_once __DIR__ . '/db.php';
+            }
+            $pdo = get_db_connection();
+        }
+        return $pdo;
+    };
+
+    if (($session['ci_logged_in'] ?? false) === true) {
+        $stmt = $connect()->prepare('SELECT ativo, access_role, equipe, ad_login FROM funcionarios WHERE id = ?');
+        if ($stmt === false || $stmt->execute([(int)($session['ci_funcionario_id'] ?? 0)]) === false) {
+            throw new RuntimeException('Consulta de revalidacao falhou.');
+        }
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($row)) {
+            return [null, 'cadastro_inexistente'];
+        }
+        if ((int)($row['ativo'] ?? 0) !== 1) {
+            return [null, 'cadastro_inativo'];
+        }
+        $login = ad_login_key($session['ci_username'] ?? '');
+        if ($login === null || ad_login_key($row['ad_login'] ?? '') !== $login) {
+            return [null, 'ad_login_alterado'];
+        }
+        return [session_role_for(is_ad_admin_authorized($login), $row['access_role'] ?? null, $row['equipe'] ?? null), 'ok'];
+    }
+
+    $auth_type = (string)($session['admin_auth_type'] ?? $session['auth_type'] ?? '');
+    $username = (string)($session['admin_username'] ?? $session['username'] ?? '');
+    if ($auth_type === 'local') {
+        if (!defined('ENABLE_LOCAL_ADMIN') || ENABLE_LOCAL_ADMIN !== true) {
+            return [null, 'acesso_local_desligado'];
+        }
+        $stmt = $connect()->prepare('SELECT role FROM usuarios WHERE username = ?');
+        if ($stmt === false || $stmt->execute([$username]) === false) {
+            throw new RuntimeException('Consulta de revalidacao falhou.');
+        }
+        $role = $stmt->fetchColumn();
+        if ($role === false) {
+            return [null, 'usuario_local_removido'];
+        }
+        return in_array($role, ['admin', 'gestor'], true) ? [$role, 'ok'] : [null, 'perfil_local_invalido'];
+    }
+
+    return is_ad_admin_authorized($username) ? ['admin', 'ok'] : [null, 'fora_da_allowlist'];
+}
+
+/** Encerra a sessão se o perfil atual for menor que o da sessão ou não existir. */
+function session_revalidation_revokes(?string $stored, ?string $current): bool {
+    return $current === null || portal_role_rank($current) < portal_role_rank($stored);
+}
+
+/**
+ * [A1] Recalcula o perfil uma vez por requisição, nas portas por onde toda
+ * autorização passa. Perfil menor, cadastro inativo, fora da allowlist e afins
+ * encerram a sessão (a requisição segue como sem sessão). Banco fora: 503,
+ * sem conceder nada e sem destruir a sessão. Não eleva no meio da sessão:
+ * promoção vale no próximo login.
+ */
+function session_revalidate(?PDO $pdo = null): string {
+    static $done = [];
+    $session = $_SESSION ?? [];
+    $stored = session_stored_role($session);
+    if ($stored === null) {
+        return 'none';
+    }
+    $signature = hash('sha256', (string)json_encode([
+        session_id(), $stored,
+        $session['ci_funcionario_id'] ?? null, $session['ci_username'] ?? null,
+        $session['admin_username'] ?? null, $session['username'] ?? null,
+        $session['admin_auth_type'] ?? null, $session['auth_type'] ?? null,
+    ]));
+    if (isset($done[$signature])) {
+        return $done[$signature];
+    }
+
+    try {
+        [$current, $reason] = session_current_role($session, $pdo);
+    } catch (\Throwable $e) {
+        error_log('[SESSION] Revalidacao da sessao indisponivel.');
+        json_response([
+            'sucesso' => false,
+            'mensagem' => 'Não foi possível validar a sessão agora. Tente novamente em instantes.',
+        ], 503);
+    }
+
+    if (!session_revalidation_revokes($stored, $current)) {
+        return $done[$signature] = 'ok';
+    }
+    $who = ($session['ci_logged_in'] ?? false) === true
+        ? 'funcionario ID ' . (int)($session['ci_funcionario_id'] ?? 0)
+        : 'sessao de gestao';
+    audit_log('SESSION_REVOKED', "Sessao encerrada ({$who}): perfil {$stored} -> " . ($current ?? 'nenhum') . ", motivo {$reason}", 'WARNING');
+    destroy_current_session();
+    return $done[$signature] = 'revoked';
 }
 
 function require_portal_auth(array $allowed_roles = []): string {
@@ -916,7 +1092,7 @@ function require_portal_auth(array $allowed_roles = []): string {
     if (ci_session_is_current()) {
         $_SESSION['ci_last_activity'] = time();
     }
-    if (in_array($role, ['admin', 'gestor'], true)) {
+    if (portal_role_is_manager($role)) {
         $_SESSION['last_activity'] = time();
     }
     return $role;

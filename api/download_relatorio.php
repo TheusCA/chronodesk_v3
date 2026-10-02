@@ -3,7 +3,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
 
 require_get_method();
-require_portal_auth(['admin', 'gestor']);
+require_portal_auth(PORTAL_MANAGER_ROLES);
 
 global $gerenciador;
 $timestamp = date('Ymd_His');
