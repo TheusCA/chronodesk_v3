@@ -287,23 +287,14 @@ function normalizeTeamValue(value) {
   return String(value || 'n1').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
-function EmployeeFields({ form, register, setValue, errors = {}, editing = false }) {
+// Lote 5b: equipe e perfil são independentes. Promover à Liderança é só do
+// admin (perfis.promote); admin não é perfil de cadastro (allowlist AD_ADMIN_USERS).
+function EmployeeFields({ form, register, setValue, errors = {}, editing = false, canPromote = false }) {
   function updateRole(role) {
-    if (form.equipe === 'lideranca') return
     setValue('access_role', role, { shouldDirty: true })
   }
 
   function updateTeam(team) {
-    if (team === 'lideranca') {
-      const leadershipDefaults = { equipe: 'lideranca', access_role: 'admin' }
-      setValue('equipe', leadershipDefaults.equipe, { shouldDirty: true })
-      setValue('access_role', leadershipDefaults.access_role, { shouldDirty: true })
-      return
-    }
-    if (form.equipe === 'lideranca' && form.access_role === 'admin') {
-      const confirmed = window.confirm('Ao sair de Liderança, revise manualmente o perfil de acesso se este colaborador não deve permanecer como Admin.')
-      if (!confirmed) return
-    }
     setValue('equipe', team, { shouldDirty: true })
   }
 
@@ -331,12 +322,14 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
       </label>
       <label className="label">Perfil de acesso
         <input type="hidden" {...register('access_role')} />
-        <select className="field mt-2" disabled={form.equipe === 'lideranca'} value={form.access_role || 'tecnico'} onChange={(event) => updateRole(event.target.value)}>
+        <select className="field mt-2" value={form.access_role || 'tecnico'} onChange={(event) => updateRole(event.target.value)}>
           <option value="tecnico">Técnico</option>
           <option value="gestor">Gestor</option>
-          <option value="admin">Admin</option>
+          {(canPromote || form.access_role === 'lideranca') && <option disabled={!canPromote} value="lideranca">Liderança</option>}
           <option value="somente_leitura">Somente leitura</option>
+          {form.access_role === 'admin' && <option disabled value="admin">Admin (legado)</option>}
         </select>
+        {form.access_role === 'admin' && <span className="mt-1 block text-xs text-amber-300">Admin vem da lista AD_ADMIN_USERS. Escolha outro perfil para salvar.</span>}
       </label>
       <label className="label">Entrada
         <input aria-invalid={Boolean(errors.jornada_entrada)} className="field mt-2" required type="time" {...register('jornada_entrada')} />
@@ -362,7 +355,7 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
   )
 }
 
-function EmployeesTab({ resource, notify }) {
+function EmployeesTab({ resource, notify, canPromote = false }) {
   const {
     clearErrors: clearCreateEmployeeErrors,
     formState: { errors: createEmployeeErrors },
@@ -521,7 +514,7 @@ function EmployeesTab({ resource, notify }) {
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard detail="Funcionários visíveis nesta consulta" icon="users" label="Listados" value={filtered.length} />
         <MetricCard detail="Ativos podem autenticar e operar" icon="shield" label="Ativos" tone="success" value={filtered.filter((item) => item.ativo).length} />
-        <MetricCard detail="Perfis com permissão administrativa" icon="settings" label="Admins" tone="warning" value={filtered.filter((item) => item.access_role === 'admin').length} />
+        <MetricCard detail="Perfil Liderança (admin vem da lista AD_ADMIN_USERS)" icon="settings" label="Liderança" tone="warning" value={filtered.filter((item) => item.access_role === 'lideranca').length} />
         <MetricCard detail="Filtragem por nome, login, equipe e perfil" icon="chart" label="Filtros aplicados" value={[search, team, role, active].filter(Boolean).length} />
       </section>
 
@@ -531,7 +524,7 @@ function EmployeesTab({ resource, notify }) {
           eyebrow="Novo cadastro"
           title="Adicionar funcionário"
         >
-        <EmployeeFields errors={createEmployeeErrors} form={createForm} register={registerCreateEmployee} setValue={setCreateEmployeeValue} />
+        <EmployeeFields canPromote={canPromote} errors={createEmployeeErrors} form={createForm} register={registerCreateEmployee} setValue={setCreateEmployeeValue} />
           <div className="form-actions">
             <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Adicionando...' : 'Adicionar funcionário'}</button>
           </div>
@@ -542,7 +535,7 @@ function EmployeesTab({ resource, notify }) {
         <FilterBar>
           <input className="field" placeholder="Buscar nome, login ou equipe" value={search} onChange={(event) => setSearch(event.target.value)} />
           <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select>
-          <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="admin">Admin</option><option value="somente_leitura">Somente leitura</option></select>
+          <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="lideranca">Liderança</option><option value="admin">Admin (legado)</option><option value="somente_leitura">Somente leitura</option></select>
           <select className="field" value={active} onChange={(event) => setActive(event.target.value)}><option value="">Ativos e inativos</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
         </FilterBar>
         <section className="card table-wrap">
@@ -570,7 +563,7 @@ function EmployeesTab({ resource, notify }) {
                   <td><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></td>
                   <td>{item.jornada_entrada} - {item.jornada_saida}</td>
                   <td><span className={`status-badge ${item.ativo ? 'status-success' : 'status-neutral'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>
-                  <td><div className="flex gap-2"><button className="table-action" onClick={() => edit(item)} type="button">Editar</button>{item.ativo && <button className="table-action text-red-300" onClick={() => deactivate(item.id)} type="button">Desativar</button>}</div></td>
+                  <td>{canPromote || !['lideranca', 'admin'].includes(item.access_role) ? <div className="flex gap-2"><button className="table-action" onClick={() => edit(item)} type="button">Editar</button>{item.ativo && <button className="table-action text-red-300" onClick={() => deactivate(item.id)} type="button">Desativar</button>}</div> : <span className="text-xs text-slate-500">Só administradores</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -592,7 +585,7 @@ function EmployeesTab({ resource, notify }) {
               </div>
               <button className="text-sm text-slate-400 hover:text-white" onClick={() => setEditForm(null)} type="button">Cancelar</button>
             </div>
-            <EmployeeFields editing errors={editEmployeeErrors} form={editEmployeeForm} register={registerEditEmployee} setValue={setEditEmployeeValue} />
+            <EmployeeFields canPromote={canPromote} editing errors={editEmployeeErrors} form={editEmployeeForm} register={registerEditEmployee} setValue={setEditEmployeeValue} />
             <div className="flex justify-end gap-3">
               <button className="btn-secondary" disabled={submitting} onClick={() => setEditForm(null)} type="button">Cancelar</button>
               <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Salvando...' : 'Salvar alterações'}</button>
@@ -804,14 +797,18 @@ function SecurityTab({ config, notify }) {
 
 export function AdminPage({ session, search, navigate, notify, refreshStatus }) {
   const isAdmin = session.role === 'admin'
-  const availableTabs = isAdmin ? tabs : tabs.filter(([key]) => key === 'aprovacoes')
+  const permissions = new Set(session.permissions || [])
+  // Lote 5b: a Liderança vê Aprovações e Funcionários; o resto é só do admin.
+  const canManageEmployees = permissions.has('funcionarios.manage')
+  const canPromote = permissions.has('perfis.promote')
+  const availableTabs = isAdmin ? tabs : tabs.filter(([key]) => key === 'aprovacoes' || (key === 'funcionarios' && canManageEmployees))
   const rawRequestedTab = new URLSearchParams(search).get('tab')
   const requestedTab = rawRequestedTab === 'segurança' ? 'seguranca' : rawRequestedTab
   const activeTab = availableTabs.some(([key]) => key === requestedTab) ? requestedTab : 'aprovacoes'
   const requests = useResource('solicitacoes_pendentes.php')
   const refreshRequests = requests.refresh
   const config = useResource('configuracoes.php', { enabled: isAdmin })
-  const employees = useResource('listar_funcionarios.php', { enabled: isAdmin })
+  const employees = useResource('listar_funcionarios.php', { enabled: canManageEmployees })
   const users = useResource('usuarios.php?action=listar', {
     enabled: isAdmin && Boolean(config.data?.configuracoes?.local_admin_enabled),
   })
@@ -830,7 +827,7 @@ export function AdminPage({ session, search, navigate, notify, refreshStatus }) 
       </div>
       {activeTab === 'aprovacoes' && <ApprovalsTab requests={requests} refresh={requests.refresh} refreshStatus={refreshStatus} notify={notify} />}
       {activeTab === 'configuracoes' && <SettingsTab resource={config} notify={notify} />}
-      {activeTab === 'funcionarios' && <EmployeesTab resource={employees} notify={notify} />}
+      {activeTab === 'funcionarios' && <EmployeesTab canPromote={canPromote} resource={employees} notify={notify} />}
       {activeTab === 'usuarios' && <UsersTab enabled={Boolean(config.data?.configuracoes?.local_admin_enabled)} resource={users} notify={notify} />}
       {activeTab === 'seguranca' && <SecurityTab config={config.data?.configuracoes} notify={notify} />}
     </div>

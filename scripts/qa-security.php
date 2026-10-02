@@ -70,6 +70,31 @@ final class QaChildStatement extends PDOStatement {
             $this->rows = $role !== null ? [['role' => $role]] : [];
             return true;
         }
+        // Lote 5b: leituras e gravacoes dos endpoints de funcionario. Gravacao
+        // e aceita sem efeito (o teste olha a resposta e o audit_log).
+        $byId = static fn (QaChildPdo $pdo, $id): ?array => $pdo->db['funcionarios'][(string)$id] ?? null;
+        if ($this->sql === 'SELECT access_role, ad_login FROM funcionarios WHERE id = :id LIMIT 1'
+            || $this->sql === 'SELECT access_role FROM funcionarios WHERE id = :id LIMIT 1') {
+            $row = $byId($this->pdo, $params[':id'] ?? 0);
+            $columns = strpos($this->sql, 'ad_login') !== false ? ['access_role', 'ad_login'] : ['access_role'];
+            $this->rows = $row ? [array_intersect_key($row, array_flip($columns))] : [];
+            return true;
+        }
+        if (strpos($this->sql, 'SELECT id FROM funcionarios WHERE ad_login = :ad_login') === 0) {
+            $this->rows = [];
+            foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                if (strcasecmp((string)$row['ad_login'], (string)$params[':ad_login']) === 0 && (string)$id !== (string)($params[':id'] ?? '')) {
+                    $this->rows[] = ['id' => (int)$id];
+                }
+            }
+            return true;
+        }
+        if (strpos($this->sql, 'INSERT INTO funcionarios (') === 0
+            || strpos($this->sql, 'UPDATE funcionarios SET nome = :nome') === 0
+            || $this->sql === 'UPDATE funcionarios SET ativo = 0 WHERE id = :id') {
+            error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? '?') . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-'));
+            return true;
+        }
         if ($this->sql === 'INSERT INTO audit_log (user_ip, username, action, details, severity) VALUES (?, ?, ?, ?, ?)') {
             error_log("[QA_AUDIT] {$params[2]} [{$params[4]}]: {$params[3]}");
             return true;
@@ -84,6 +109,10 @@ final class QaChildStatement extends PDOStatement {
     public function fetchColumn(int $column = 0): mixed {
         $row = array_shift($this->rows);
         return $row === null ? false : array_values($row)[$column];
+    }
+
+    public function rowCount(): int {
+        return 1;
     }
 
     public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
@@ -1175,19 +1204,21 @@ $expect = [
     'ADMIN' => ['ok', 403, 403, 403, 403, 401],
     // verificar_admin_login_api(): sem sessao de gestao a resposta e 401.
     'ADMIN_LEGADO' => ['ok', 403, 403, 401, 401, 401],
+    // Lote 5b: funcionarios.manage (admin e Lideranca).
+    'FUNCIONARIOS' => ['ok', 'ok', 403, 403, 403, 401],
 ];
 $emptyJson = ['content_type' => $json, 'body' => '{}'];
 $matrix = [
-    'api/adicionar_funcionario.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
+    'api/adicionar_funcionario.php POST' => [$emptyJson, $expect['FUNCIONARIOS']],
     'api/alterar_senha_admin.php POST' => [$emptyJson, [[403, 'alterada no Active Directory']] + $expect['ADMIN_LEGADO']],
     'api/aprovar_pausa.php POST' => [$emptyJson, $expect['GESTAO']],
-    'api/atualizar_funcionario.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
+    'api/atualizar_funcionario.php POST' => [$emptyJson, $expect['FUNCIONARIOS']],
     'api/configuracoes.php GET' => [[], $expect['ADMIN']],
     'api/download_relatorio.php GET' => [[], $expect['GESTAO']],
     'api/listar_funcionarios.php GET' => [[], $expect['TODOS']],
     'api/metricas.php GET' => [[], $expect['GESTAO']],
     'api/rejeitar_pausa.php POST' => [$emptyJson, $expect['GESTAO']],
-    'api/remover_funcionario.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
+    'api/remover_funcionario.php POST' => [$emptyJson, $expect['FUNCIONARIOS']],
     'api/salvar_configuracao.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
     'api/solicitacoes_pendentes.php GET' => [[], $expect['GESTAO']],
     'api/status.php GET' => [[], $expect['TODOS']],
@@ -1283,7 +1314,7 @@ foreach ($matrix as $row => [$extra, $expected]) {
         assert_same([], $codeFatal, "matriz {$row} | {$role}: sem erro fatal de codigo");
     }
 }
-assert_same([], $matrixFailures, 'matriz de perfis por endpoint (5a)');
+assert_same([], $matrixFailures, 'matriz de perfis por endpoint (5a e 5b)');
 
 // Estrutural: o login CI precisa de AD e nao roda aqui. Confere que o perfil
 // vem de session_role_for() com a allowlist (a revalidacao da requisicao
@@ -1320,5 +1351,157 @@ assert_same(true, strpos($migration016, "ENUM(''tecnico'', ''gestor'', ''admin''
 assert_same(true, strpos($migration016, 'ADD UNIQUE KEY uq_funcionarios_ad_login (ad_login)') !== false, 'migration 016: UNIQUE em ad_login');
 assert_same(true, strpos($migration016, 'HAVING COUNT(*) > 1') !== false && strpos($migration016, 'WHERE ad_login IS NOT NULL') !== false, 'migration 016: duplicados contam so login nao nulo');
 assert_same(true, strpos($rollback016, "ENUM(''tecnico'', ''gestor'', ''admin'', ''somente_leitura'')") !== false, 'rollback 016: ENUM original');
+
+// Estrutural: 016b (dados) e 016b_down (Lote 5b). Sem MySQL local, a prova de
+// comportamento e o ensaio no servidor (scripts/ensaio-migration.sh).
+$data016b = (string)preg_replace('/^--.*$/m', '', (string)file_get_contents($root . '/migrations/20261002_016b_lideranca_profile_data.sql'));
+$data016bDown = (string)preg_replace('/^--.*$/m', '', (string)file_get_contents($root . '/migrations/rollback/20261002_016b_lideranca_profile_data_down.sql'));
+foreach (['016b' => $data016b, '016b_down' => $data016bDown] as $label => $code) {
+    $normalized = (string)preg_replace('/\s+/', ' ', trim($code));
+    assert_same(0, strpos($normalized, "SET time_zone = 'America/Sao_Paulo';"), "{$label}: comeca com SET time_zone");
+    assert_same(0, preg_match('/\b(NOW|CURRENT_TIMESTAMP|CURDATE)\b/i', $code), "{$label}: sem NOW()/CURRENT_TIMESTAMP");
+    assert_same(0, preg_match('/\b(DELETE|DROP|TRUNCATE|ALTER)\b/i', $code), "{$label}: sem DELETE, DROP, TRUNCATE nem ALTER");
+    // Todo UPDATE de funcionarios so restaura ou aplica o que esta registrado.
+    preg_match_all('/UPDATE funcionarios f JOIN funcionarios_perfil_016b r ON r\.funcionario_id = f\.id SET f\.access_role = r\.access_role_(novo|anterior) WHERE /', $normalized, $updates);
+    assert_same(substr_count($normalized, 'UPDATE '), count($updates[0]), "{$label}: todo UPDATE passa pelo registro de reversao");
+}
+$normalized016b = (string)preg_replace('/\s+/', ' ', $data016b);
+$abort016b = strpos($normalized016b, 'migration_016b_exige_016');
+assert_same(true, $abort016b !== false && $abort016b < strpos($normalized016b, 'CREATE TABLE') && $abort016b < strpos($normalized016b, 'UPDATE '), '016b: exige a 016 antes de qualquer alteracao');
+assert_same(true, strpos($normalized016b, 'INSERT IGNORE INTO funcionarios_perfil_016b') < strpos($normalized016b, 'UPDATE '), '016b: registra antes de alterar');
+assert_same(true, strpos($normalized016b, "WHERE access_role = 'admin' AND equipe = 'lideranca';") !== false, '016b: Lideranca admin vira lideranca');
+assert_same(true, strpos($normalized016b, "WHERE access_role = 'admin' AND ativo = 0 AND equipe <> 'lideranca';") !== false, '016b: so admin inativo fora da Lideranca vira tecnico (aprovado em 2026-10-02)');
+assert_same(true, strpos($normalized016b, "WHERE r.passo = 'admin_inativo' AND f.access_role = r.access_role_anterior AND f.ativo = 0;") !== false, '016b: admin ativo fora da Lideranca nao e alterado');
+assert_same(2, substr_count($normalized016b, 'WHERE @'), '016b: eventos so quando algo mudou (idempotente)');
+assert_same(true, strpos($normalized016b, "'LIDERANCA_PERFIL_MIGRADO'") !== false && strpos($normalized016b, "'ADMIN_INATIVO_REBAIXADO'") !== false, '016b: um evento CRITICAL por passo');
+assert_same(true, strpos((string)preg_replace('/\s+/', ' ', $data016bDown), 'WHERE f.access_role = r.access_role_novo') !== false, '016b_down: so linhas ainda com o perfil gravado pelo 016b');
+
+// ============================================================================
+// 5. Lote 5b — cadastro de funcionarios por perfil
+// ============================================================================
+
+// QA 4: regra de 2.3 em tabela-verdade (ator x perfil atual x perfil novo).
+// null no perfil atual = cadastro novo ou ainda nao lido; null no novo =
+// desativar (perfil nao muda).
+$profileValues = [null, 'tecnico', 'somente_leitura', 'gestor', 'lideranca', 'admin'];
+foreach (['admin', 'lideranca', 'gestor', 'tecnico', 'somente_leitura'] as $actor) {
+    foreach ($profileValues as $current) {
+        foreach ($profileValues as $new) {
+            if (!in_array($actor, ['admin', 'lideranca'], true)) {
+                $expected = 403;
+            } elseif ($new === 'admin') {
+                $expected = 400;
+            } elseif ($actor === 'lideranca' && ($new === 'lideranca' || in_array($current, ['lideranca', 'admin'], true))) {
+                $expected = 403;
+            } else {
+                $expected = null;
+            }
+            $denied = funcionario_change_denied($actor, $current, $new);
+            assert_same($expected, $denied[0] ?? null, "regra 2.3: ator {$actor}, atual " . ($current ?? '-') . ', novo ' . ($new ?? '-'));
+        }
+    }
+}
+assert_same('Somente administradores promovem à Liderança.', funcionario_change_denied('lideranca', null, 'lideranca')[1], 'regra 2.3: mensagem da promocao');
+assert_same(true, strpos(funcionario_change_denied('admin', 'admin', 'admin')[1], 'AD_ADMIN_USERS') !== false, 'regra 2.3: admin nao e gravavel nem por admin (L3)');
+foreach ([['gestor', true], ['lideranca', true], ['admin', true], ['tecnico', false], ['somente_leitura', false], [null, false]] as [$role, $elevated]) {
+    assert_same($elevated, funcionario_role_is_elevated($role), 'perfil de gestao para auditoria: ' . ($role ?? 'nenhum'));
+}
+
+// QA 2, 3, 13 e A3 de ponta a ponta. O banco simulado aceita as gravacoes e
+// registra [QA_WRITE] no log; o audit_log vai como [QA_AUDIT].
+$employeeBody = static fn (array $override): string => (string)json_encode($override + [
+    'id' => 900, 'nome' => 'Fulano Teste', 'equipe' => 'n1', 'access_role' => 'tecnico', 'ad_login' => 'fulano.teste',
+    'jornada_entrada' => '08:00', 'jornada_saida' => '17:00', 'almoco_inicio' => '12:00', 'almoco_fim' => '13:00', 'ativo' => true,
+]);
+$leaderSession = qa_ci_session(2, 'qa.lider', 'lideranca');
+$withInactive = QA_DB;
+$withInactive['funcionarios']['8'] = ['ativo' => 0, 'access_role' => 'tecnico', 'equipe' => 'n1', 'ad_login' => 'qa.inativo'];
+$employeeSpec = static fn (string $endpoint, array $session, string $body, array $db = QA_DB): array
+    => ['endpoint' => 'api/' . $endpoint, 'method' => 'POST', 'content_type' => 'application/json', 'body' => $body, 'session' => $session, 'db' => $db];
+$employeeCases = qa_run_endpoints($qaDir, [
+    'lid_cria_lideranca' => $employeeSpec('adicionar_funcionario.php', $leaderSession, $employeeBody(['access_role' => 'lideranca'])),
+    'lid_altera_para_lideranca' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'access_role' => 'lideranca', 'ad_login' => 'joao.silva'])),
+    'admin_grava_admin' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['access_role' => 'admin'])),
+    'lid_grava_admin' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'access_role' => 'admin', 'ad_login' => 'joao.silva'])),
+    'lid_edita_lider' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $employeeBody(['funcionario_id' => 2, 'id' => 2, 'access_role' => 'tecnico', 'ad_login' => 'qa.lider'])),
+    'lid_desativa_admin_legado' => $employeeSpec('remover_funcionario.php', $leaderSession, '{"funcionario_id":5}'),
+    'lid_desativa_lider' => $employeeSpec('remover_funcionario.php', $leaderSession, '{"funcionario_id":2}'),
+    'lid_promove_gestor' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'access_role' => 'gestor', 'ad_login' => 'joao.silva'])),
+    'lid_cria_tecnico' => $employeeSpec('adicionar_funcionario.php', $leaderSession, $employeeBody(['id' => 901, 'ad_login' => 'novo.tecnico'])),
+    'lid_desativa_tecnico' => $employeeSpec('remover_funcionario.php', $leaderSession, '{"funcionario_id":1}'),
+    'admin_cria_lideranca' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['id' => 902, 'access_role' => 'lideranca', 'equipe' => 'lideranca', 'ad_login' => 'nova.lider'])),
+    'admin_lideranca_tecnico' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['id' => 903, 'equipe' => 'lideranca', 'ad_login' => 'tecnico.lideranca'])),
+    'login_tecnico' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.novo'])),
+    'login_gestor' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 3, 'id' => 3, 'access_role' => 'gestor', 'equipe' => 'n2', 'ad_login' => 'gestor.novo'])),
+    'login_inativo' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['id' => 904, 'ad_login' => 'qa.inativo']), $withInactive),
+    'lista_lideranca' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => $leaderSession],
+    'lista_gestor' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => $manager],
+]);
+// Listagem: quem gerencia funcionarios ve login AD e perfil; gestor nao.
+assert_same(true, strpos($employeeCases['lista_lideranca']['body'], '"access_role"') !== false, 'listagem: Lideranca ve perfil e login AD');
+assert_same(false, strpos($employeeCases['lista_gestor']['body'], '"access_role"') !== false, 'listagem: gestor nao ve perfil nem login AD');
+foreach ([
+    'lid_cria_lideranca' => [403, 'Somente administradores promovem'],
+    'lid_altera_para_lideranca' => [403, 'Somente administradores promovem'],
+    'admin_grava_admin' => [400, 'AD_ADMIN_USERS'],
+    'lid_grava_admin' => [400, 'AD_ADMIN_USERS'],
+    'lid_edita_lider' => [403, 'não altera cadastros de Liderança'],
+    'lid_desativa_admin_legado' => [403, 'não altera cadastros de Liderança'],
+    'lid_desativa_lider' => [403, 'não altera cadastros de Liderança'],
+    'login_inativo' => [400, 'ativo ou inativo'],
+] as $case => [$status, $message]) {
+    $result = $employeeCases[$case];
+    assert_same($status, $result['status'], "funcionario {$case}: HTTP {$status}");
+    assert_same(true, strpos($result['body'], $message) !== false, "funcionario {$case}: mensagem");
+    // A carga de emergencia do init.php grava os cadastros padrao (ids 1 a 17)
+    // sem banco; o caso nao pode gravar UPDATE nem INSERT dos ids de teste.
+    assert_same(0, preg_match('/\[QA_WRITE\] (UPDATE |INSERT INTO funcionarios id=90\d)/', $result['log']), "funcionario {$case}: nada gravado");
+    if ($status === 403) {
+        assert_same(true, strpos($result['log'], '[QA_AUDIT] FUNCIONARIO_ALTERACAO_NEGADA [WARNING]') !== false, "funcionario {$case}: recusa auditada");
+    }
+}
+foreach ([
+    'lid_promove_gestor' => ['UPDATE funcionarios SET nome = :nome, equipe = :equipe, access_role = :access_role, ad_login = :ad_login, jornada_entrada = :jornada_entrada, jornada_saida = :jornada_saida, almoco_inicio = :almoco_inicio, almoco_fim = :almoco_fim, ativo = :ativo WHERE id = :id id=1 perfil=gestor', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Perfil do funcionario ID 1 alterado de tecnico para gestor por lideranca'],
+    'lid_cria_tecnico' => ['INSERT INTO funcionarios id=901 perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
+    'lid_desativa_tecnico' => ['UPDATE funcionarios SET ativo = 0 WHERE id = :id id=1', '[QA_AUDIT] FUNCIONARIO_REMOVIDO [CRITICAL]: Funcionario desativado (ID: 1, perfil: tecnico) por lideranca'],
+    'admin_cria_lideranca' => ['INSERT INTO funcionarios id=902 perfil=lideranca', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Funcionario ID 902 criado com perfil lideranca por admin'],
+    'admin_lideranca_tecnico' => ['INSERT INTO funcionarios id=903 perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
+    'login_tecnico' => ['id=1 perfil=tecnico login=joao.novo', '[QA_AUDIT] FUNCIONARIO_AD_LOGIN_ALTERADO [WARNING]: Login AD do funcionario ID 1 alterado de joao.silva para joao.novo por admin'],
+    'login_gestor' => ['id=3 perfil=gestor login=gestor.novo', '[QA_AUDIT] FUNCIONARIO_AD_LOGIN_ALTERADO [CRITICAL]: Login AD do funcionario ID 3 alterado de qa.gestor para gestor.novo por admin'],
+] as $case => [$write, $audit]) {
+    $result = $employeeCases[$case];
+    assert_same(false, in_array($result['status'], [400, 401, 403, 500], true), "funcionario {$case}: aceito (HTTP {$result['status']})");
+    assert_same(true, strpos($result['log'], $write) !== false, "funcionario {$case}: gravacao esperada ({$write})");
+    assert_same(true, strpos($result['log'], $audit) !== false, "funcionario {$case}: auditoria '{$audit}'");
+}
+// Criar tecnico ou tecnico na equipe Lideranca nao gera evento de perfil (QA 5).
+foreach (['lid_cria_tecnico', 'admin_lideranca_tecnico', 'login_tecnico'] as $case) {
+    assert_same(false, strpos($employeeCases[$case]['log'], 'FUNCIONARIO_PERFIL_ALTERADO') !== false, "funcionario {$case}: sem evento de perfil");
+}
+
+// QA 13 e A3, estruturais: so os endpoints de funcionario e a carga de
+// emergencia do config.php gravam access_role; ad_login gravado so depois de
+// normalizado (NULL, nunca vazio).
+$roleWriters = [];
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $file) {
+    $path = str_replace('\\', '/', (string)$file);
+    if (substr($path, -4) === '.php' && !preg_match('#/(node_modules|vendor|scripts|\.git)/#', $path) && strpos((string)file_get_contents($path), ':access_role') !== false) {
+        $roleWriters[] = substr($path, strlen(str_replace('\\', '/', $root)) + 1);
+    }
+}
+sort($roleWriters);
+assert_same(['api/adicionar_funcionario.php', 'api/atualizar_funcionario.php', 'config.php'], $roleWriters, 'so os caminhos conhecidos gravam access_role (caminho novo exige revisao)');
+foreach (['adicionar_funcionario.php', 'atualizar_funcionario.php'] as $file) {
+    $source = (string)file_get_contents($root . '/api/' . $file);
+    assert_same(true, strpos($source, '$ad_login = validate_ad_login(') !== false && strpos($source, "':ad_login' => \$ad_login,") !== false, "{$file}: ad_login gravado so depois de validate_ad_login()");
+    assert_same(true, preg_match('/require_funcionario_change\(\$actor_role, null, \$access_role, /', $source) === 1, "{$file}: regra do perfil novo antes do banco");
+}
+assert_same(true, strpos((string)file_get_contents($root . '/api/atualizar_funcionario.php'), 'require_funcionario_change($actor_role, $currentRole, $access_role, ') !== false, 'atualizar: regra com o perfil atual lido do banco');
+assert_same(true, strpos((string)file_get_contents($root . '/api/remover_funcionario.php'), 'require_funcionario_change($actor_role, (string)$currentRole, null, ') !== false, 'remover: regra com o perfil atual lido do banco');
+foreach (['', '   ', null] as $empty) {
+    assert_same(null, validate_ad_login($empty), 'login AD vazio vira NULL: ' . var_export($empty, true));
+}
+$authSource = (string)file_get_contents($root . '/auth_ldap.php');
+assert_same(true, strpos($authSource, "funcionario_role_is_elevated(\$funcionario['access_role'] ?? null) ? 'CRITICAL' : 'WARNING'") !== false, 'vinculo automatico do AD auditado pelo perfil (A3)');
 
 echo "qa-security OK\n";

@@ -776,10 +776,8 @@ function normalizar_funcionario_array($func) {
     }
 
     $access_role = validate_access_role($func['access_role'] ?? 'tecnico') ?? 'tecnico';
+    // [Lote 5b] A equipe não define o perfil: lideranca deixou de forçar admin.
     $equipe = validate_funcionario_equipe($func['equipe'] ?? 'n1') ?? 'n1';
-    if ($equipe === 'lideranca') {
-        $access_role = 'admin';
-    }
 
     return [
         'id' => validate_funcionario_id($func['id'] ?? 0) ?? 0,

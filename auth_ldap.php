@@ -385,10 +385,11 @@ function tentar_vincular_funcionario_ad(array $ad_user): ?array {
             return null;
         }
 
+        // [A3] Vínculo automático também é troca de login AD.
         audit_log(
             'AD_LOGIN_AUTO_LINK',
-            'Login AD vinculado automaticamente ao funcionário ID ' . (int)$funcionario['id'],
-            'INFO'
+            'Login AD vinculado automaticamente ao funcionário ID ' . (int)$funcionario['id'] . ' (perfil ' . ($funcionario['access_role'] ?? 'tecnico') . ')',
+            funcionario_role_is_elevated($funcionario['access_role'] ?? null) ? 'CRITICAL' : 'WARNING'
         );
         $funcionario['id'] = (int)$funcionario['id'];
         return $funcionario;

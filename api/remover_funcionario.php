@@ -3,7 +3,9 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
 
-verificar_admin_login_api();
+// [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
+$actor_role = require_portal_auth();
+require_funcionario_change($actor_role, null, null, 'remover');
 require_csrf_token();
 require_json_content_type();
 
@@ -29,6 +31,13 @@ if (!$gerenciador) {
 
 try {
     $pdo = get_db_connection();
+    $currentStmt = $pdo->prepare('SELECT access_role FROM funcionarios WHERE id = :id LIMIT 1');
+    $currentStmt->execute([':id' => $funcionario_id]);
+    $currentRole = $currentStmt->fetchColumn();
+    if ($currentRole === false) {
+        json_response(['sucesso' => false, 'mensagem' => 'Funcionário não encontrado.'], 404);
+    }
+    require_funcionario_change($actor_role, (string)$currentRole, null, 'remover');
     $stmt = $pdo->prepare("UPDATE funcionarios SET ativo = 0 WHERE id = :id");
     $stmt->execute([':id' => $funcionario_id]);
 } catch (Exception $e) {
@@ -39,7 +48,7 @@ try {
 $resultado = $gerenciador->remover_funcionario($funcionario_id);
 
 if (($resultado['sucesso'] ?? false) === true) {
-    audit_log('FUNCIONARIO_REMOVIDO', "Funcionario desativado (ID: {$funcionario_id})", 'CRITICAL');
+    audit_log('FUNCIONARIO_REMOVIDO', "Funcionario desativado (ID: {$funcionario_id}, perfil: {$currentRole}) por {$actor_role}", 'CRITICAL');
 }
 
 json_response($resultado);

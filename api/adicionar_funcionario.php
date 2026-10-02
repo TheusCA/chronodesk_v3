@@ -4,7 +4,9 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../classes/Funcionario.php';
 
-verificar_admin_login_api();
+// [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
+$actor_role = require_portal_auth();
+require_funcionario_change($actor_role, null, null, 'adicionar');
 require_csrf_token();
 require_json_content_type();
 
@@ -45,9 +47,7 @@ if ($access_role === null) {
     json_response(['sucesso' => false, 'mensagem' => 'Perfil de acesso inválido.'], 400);
 }
 
-if ($equipe === 'lideranca') {
-    $access_role = 'admin';
-}
+require_funcionario_change($actor_role, null, $access_role, 'adicionar');
 
 if ($ad_login === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Login AD inválido. Use letras, números, ponto, hífen, underscore ou @.'], 400);
@@ -127,6 +127,9 @@ try {
     $gerenciador->adicionar_funcionario($funcionario);
     $gerenciador->salvar_estado();
     audit_log('FUNCIONARIO_ADICIONADO', "Funcionario '{$nome}' adicionado (ID: {$id}, equipe: {$equipe}, perfil: {$access_role})", 'WARNING');
+    if (funcionario_role_is_elevated($access_role)) {
+        audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Funcionario ID {$id} criado com perfil {$access_role} por {$actor_role}", 'CRITICAL');
+    }
     
     json_response([
         'sucesso' => true,

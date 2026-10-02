@@ -226,6 +226,8 @@ assert_same(7, count(iterator_to_array(db_keyset_iterate(
 final class QaDecisionPdo extends PDO {
     public array $log = [];
     public bool $transaction = false;
+    /** Login AD => id do funcionario ativo (actorEmployeeId de quem nao e tecnico). */
+    public array $employeesByLogin = [];
 
     public function __construct(public array $record) {
     }
@@ -271,6 +273,9 @@ final class QaDecisionStatement extends PDOStatement {
             $this->pdo->log[] = 'UPDATE ' . $params[':status'];
         } elseif (strpos($this->sql, 'INSERT INTO portal_sync_queue') === 0) {
             $this->pdo->log[] = 'SYNC';
+        } elseif ($this->sql === 'SELECT id FROM funcionarios WHERE ativo = 1 AND LOWER(ad_login) = :ad_login LIMIT 1') {
+            $id = $this->pdo->employeesByLogin[$params[':ad_login']] ?? null;
+            $this->result = $id === null ? [] : [['id' => $id]];
         } else {
             throw new LogicException('SQL inesperado: ' . $this->sql);
         }
@@ -280,12 +285,18 @@ final class QaDecisionStatement extends PDOStatement {
     public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
         return array_shift($this->result) ?? false;
     }
+
+    public function fetchColumn(int $column = 0): mixed {
+        $row = array_shift($this->result);
+        return $row === null ? false : array_values($row)[$column];
+    }
 }
 
-function qa_decide(string $method, array $record, string $decision): array {
+function qa_decide(string $method, array $record, string $decision, ?array $actor = null, array $employeesByLogin = []): array {
     $pdo = new QaDecisionPdo($record);
+    $pdo->employeesByLogin = $employeesByLogin;
     $service = new OperationalService($pdo);
-    $actor = ['username' => 'qa.gestor', 'role' => 'gestor', 'employee_id' => 99];
+    $actor = $actor ?? ['username' => 'qa.gestor', 'role' => 'gestor', 'employee_id' => 99];
     try {
         $service->{$method}(1, $decision, $actor);
         return ['ok', $pdo->log];
@@ -323,6 +334,21 @@ $adjustment = [
     'created_at' => '2026-09-10 10:00:00', 'updated_at' => '2026-09-10 10:00:00',
 ];
 assert_same(['ok', ['BEGIN', 'LOCK', 'UPDATE approved', 'SYNC', 'COMMIT']], qa_decide('decideTimeAdjustment', $adjustment, 'approved'), 'correcao de ponto nao e afetada pela regra de horas extras');
+
+// Lote 5b (QA 12): a Lideranca aprova, mas nao o proprio lancamento. Sem
+// employee_id na sessao, o colaborador vem do login AD (actorEmployeeId).
+$leader = ['username' => 'qa.lider', 'role' => 'lideranca', 'employee_id' => null];
+$ownLeaderRecord = $overtimeRecord('18:00:00', '20:00:00', 'pending', 120);
+assert_same(
+    ['Nao e permitido aprovar o proprio lancamento.', ['BEGIN', 'LOCK', 'ROLLBACK']],
+    qa_decide('decideOvertime', $ownLeaderRecord, 'approved', $leader, ['qa.lider' => 7]),
+    'Lideranca nao aprova o proprio lancamento'
+);
+assert_same(
+    ['ok', ['BEGIN', 'LOCK', 'UPDATE approved', 'SYNC', 'COMMIT']],
+    qa_decide('decideOvertime', $ownLeaderRecord, 'approved', $leader, ['qa.lider' => 8]),
+    'controle: Lideranca aprova lancamento de outro colaborador'
+);
 
 // Estrutural: nenhuma exportacao volta a usar a lista limitada.
 $overtimeCsv = substr($serviceSource, (int)strpos($serviceSource, 'public function streamOvertimeCsv'), 900);

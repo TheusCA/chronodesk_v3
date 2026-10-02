@@ -128,7 +128,8 @@ const confirmInventory = Object.fromEntries(sourceFiles
   .filter(([, count]) => count > 0))
 assert.deepEqual(confirmInventory, {
   'src/App.jsx': 1,
-  'src/pages/AdminPage.jsx': 4,
+  // Lote 5b: saiu o aviso de "sair de Lideranca" (equipe nao define mais o perfil).
+  'src/pages/AdminPage.jsx': 3,
   'src/pages/DocumentsPage.jsx': 1,
   'src/pages/OperationalPages.jsx': 1,
   'src/pages/PaMapPage.jsx': 1,
@@ -187,7 +188,8 @@ assert.deepEqual(issuesFor({ almoco_inicio: '13:30', almoco_fim: '13:00' }), [
 for (const equipe of ['n3', 'N1', '', null, 'na']) {
   assert.deepEqual(issuesFor({ equipe }), [{ path: 'equipe', message: 'Equipe inválida.' }], `equipe=${String(equipe)} deve falhar`)
 }
-for (const accessRole of ['root', 'Admin', '', null]) {
+// Lote 5b: admin nao e gravado no cadastro (vem da allowlist AD_ADMIN_USERS).
+for (const accessRole of ['root', 'Admin', 'admin', '', null]) {
   assert.deepEqual(issuesFor({ access_role: accessRole }), [{ path: 'access_role', message: 'Perfil de acesso inválido.' }], `access_role=${String(accessRole)} deve falhar`)
 }
 
@@ -224,5 +226,24 @@ const pageTsFiles = walk(pagesRoot).filter((path) => /\.(tsx?|ts)$/.test(path))
 assert.deepEqual(pageTsFiles, [], 'Nenhuma pagina deve ser migrada para TypeScript')
 
 assert.doesNotMatch(sourceText, /frontend\/poc|\.example\.tsx?|from ['"][^'"]*\/poc/, 'POC deve continuar fora do runtime')
+
+for (const accessRole of ['tecnico', 'gestor', 'lideranca', 'somente_leitura']) {
+  assert.deepEqual(issuesFor({ access_role: accessRole }), [], `access_role=${accessRole} deve passar`)
+}
+assert.deepEqual(issuesFor({ equipe: 'lideranca', access_role: 'tecnico' }), [], 'equipe Lideranca nao exige perfil admin')
+
+// Lote 5b: equipe e perfil independentes; Lideranca so para quem promove;
+// acoes em cadastros de Lideranca/admin so para quem promove.
+assert.doesNotMatch(adminSource, /leadershipDefaults|access_role: 'admin'/, 'Equipe Lideranca nao pode marcar perfil admin')
+const updateTeamSource = adminSource.match(/function updateTeam\(team\) \{[\s\S]*?\n  \}/)?.[0] || ''
+assert.ok(updateTeamSource.includes("setValue('equipe', team"), 'Le updateTeam')
+assert.doesNotMatch(updateTeamSource, /access_role/, 'Trocar a equipe nao muda o perfil')
+assert.doesNotMatch(adminSource, /disabled=\{form\.equipe === 'lideranca'\}/, 'Perfil nao pode ficar travado pela equipe')
+assert.match(adminSource, /\{\(canPromote \|\| form\.access_role === 'lideranca'\) && <option disabled=\{!canPromote\} value="lideranca">/, 'Opcao Lideranca so para quem promove')
+const employeeFieldsSource = adminSource.match(/function EmployeeFields\([\s\S]*?\n}\n/)?.[0] || ''
+assert.ok(employeeFieldsSource.includes('Perfil de acesso'), 'Le o componente EmployeeFields')
+assert.doesNotMatch(employeeFieldsSource, /<option value="admin">/, 'Formulario de funcionario nao oferece Admin (a aba de usuarios locais continua com admin)')
+assert.match(adminSource, /canPromote \|\| !\['lideranca', 'admin'\]\.includes\(item\.access_role\)/, 'Editar e desativar Lideranca/admin so para quem promove')
+assert.match(adminSource, /const canPromote = permissions\.has\('perfis\.promote'\)/, 'Promocao pela permissao do servidor')
 
 console.log('Employee form RHF/Zod QA OK')

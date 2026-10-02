@@ -126,19 +126,21 @@ assert_same(
     'admin local usa allowlist explicita'
 );
 
-foreach (['adicionar_funcionario.php', 'atualizar_funcionario.php'] as $employeeEndpoint) {
+// Lote 5b: admin e Lideranca gerenciam funcionarios pela regra de 2.3; a
+// equipe Lideranca deixou de forcar o perfil admin.
+foreach (['adicionar_funcionario.php', 'atualizar_funcionario.php', 'remover_funcionario.php'] as $employeeEndpoint) {
     $employeeEndpointSource = file_get_contents(__DIR__ . '/../api/' . $employeeEndpoint);
     assert_same(true, is_string($employeeEndpointSource), 'le endpoint ' . $employeeEndpoint);
     assert_same(
         true,
-        strpos($employeeEndpointSource, 'verificar_admin_login_api()') !== false,
-        $employeeEndpoint . ' exige permissao admin'
+        strpos($employeeEndpointSource, 'require_funcionario_change($actor_role, null, null,') !== false,
+        $employeeEndpoint . ' exige funcionarios.manage antes de qualquer outra coisa'
     );
     assert_same(
-        true,
+        false,
         strpos($employeeEndpointSource, "\$equipe === 'lideranca'") !== false
-            && strpos($employeeEndpointSource, "\$access_role = 'admin'") !== false,
-        $employeeEndpoint . ' forca Lideranca como admin'
+            || strpos($employeeEndpointSource, "\$access_role = 'admin'") !== false,
+        $employeeEndpoint . ' nao forca Lideranca como admin'
     );
 }
 
@@ -146,7 +148,7 @@ $adminPageSource = file_get_contents(__DIR__ . '/../frontend/src/pages/AdminPage
 assert_same(true, is_string($adminPageSource), 'le AdminPage');
 assert_same(true, strpos($adminPageSource, 'Liderança') !== false, 'AdminPage exibe Lideranca');
 assert_same(false, strpos($adminPageSource, 'Não se aplica') !== false, 'AdminPage nao exibe Nao se aplica');
-assert_same(true, strpos($adminPageSource, "access_role: 'admin'") !== false, 'UI define admin ao selecionar Lideranca');
+assert_same(false, strpos($adminPageSource, "access_role: 'admin'") !== false, 'UI nao define admin ao selecionar Lideranca');
 
 foreach (['aprovar', 'rejeitar'] as $pauseDecision) {
     $decisionSource = file_get_contents(__DIR__ . '/../api/' . $pauseDecision . '_pausa.php');
@@ -191,7 +193,8 @@ $normalizedLeadership = normalizar_funcionario_array([
     'access_role' => 'tecnico',
 ]);
 assert_same('lideranca', $normalizedLeadership['equipe'], 'normaliza funcionario Lideranca');
-assert_same('admin', $normalizedLeadership['access_role'], 'Lideranca recebe perfil admin no backend');
+assert_same('tecnico', $normalizedLeadership['access_role'], 'equipe Lideranca nao muda o perfil no backend');
+assert_same('lideranca', validate_access_role('lideranca'), 'perfil lideranca aceito');
 
 putenv('AD_CREDENTIAL_PROVIDER=none');
 assert_same('none', AdCredentialProviderFactory::fromEnvironment()->source(), 'provider AD desabilitado por padrao');

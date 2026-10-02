@@ -11,7 +11,8 @@ require_portal_auth();
 
 global $gerenciador;
 $lista = [];
-$is_admin = current_portal_role() === 'admin';
+// [Lote 5b] Inativos, login AD e perfil para quem gerencia funcionários.
+$is_admin = in_array('funcionarios.manage', portal_permissions_for_role(current_portal_role()), true);
 
 if ($gerenciador) {
     foreach ($gerenciador->getFuncionarios() as $f) {

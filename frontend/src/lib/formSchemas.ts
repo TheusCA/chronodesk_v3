@@ -39,7 +39,8 @@ export const employeeFormSchema = z.object({
   equipe: z.enum(['n1', 'n2', 'lideranca'], {
     error: 'Equipe inválida.',
   }),
-  access_role: z.enum(['tecnico', 'gestor', 'admin', 'somente_leitura'], {
+  // Lote 5b: admin vem da allowlist AD_ADMIN_USERS e não é gravado no cadastro.
+  access_role: z.enum(['tecnico', 'gestor', 'lideranca', 'somente_leitura'], {
     error: 'Perfil de acesso inválido.',
   }).default('tecnico'),
   jornada_entrada: employeeTimeSchema,

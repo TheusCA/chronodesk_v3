@@ -97,7 +97,9 @@ const navigationSource = readFileSync(new URL('../src/lib/navigation.ts', import
 assert.match(navigationSource, /path: '\/admin'.*permission: 'operacao\.approve'/)
 
 const adminSource = readFileSync(new URL('../src/pages/AdminPage.jsx', import.meta.url), 'utf8')
-assert.match(adminSource, /availableTabs = isAdmin \? tabs : tabs\.filter/)
+assert.match(adminSource, /availableTabs = isAdmin \? tabs : tabs\.filter\(\(\[key\]\) => key === 'aprovacoes' \|\| \(key === 'funcionarios' && canManageEmployees\)\)/)
+assert.match(adminSource, /const canManageEmployees = permissions\.has\('funcionarios\.manage'\)/)
+assert.match(adminSource, /useResource\('listar_funcionarios\.php', \{ enabled: canManageEmployees \}\)/)
 assert.match(adminSource, /useResource\('configuracoes\.php', \{ enabled: isAdmin \}\)/)
 
 const operationalPagesSource = readFileSync(new URL('../src/pages/OperationalPages.jsx', import.meta.url), 'utf8')

@@ -3,7 +3,9 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
 
-verificar_admin_login_api();
+// [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
+$actor_role = require_portal_auth();
+require_funcionario_change($actor_role, null, null, 'atualizar');
 require_csrf_token();
 require_json_content_type();
 
@@ -43,9 +45,7 @@ if ($access_role === null) {
     json_response(['sucesso' => false, 'mensagem' => 'Perfil de acesso inválido.'], 400);
 }
 
-if ($equipe === 'lideranca') {
-    $access_role = 'admin';
-}
+require_funcionario_change($actor_role, null, $access_role, 'atualizar');
 
 if ($ad_login === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Login AD inválido. Use letras, números, ponto, hífen, underscore ou @.'], 400);
@@ -91,12 +91,15 @@ if ($ad_login !== null && funcionario_ad_login_em_uso($ad_login, $funcionario_id
 
 try {
     $pdo = get_db_connection();
-    $currentStmt = $pdo->prepare('SELECT access_role FROM funcionarios WHERE id = :id LIMIT 1');
+    $currentStmt = $pdo->prepare('SELECT access_role, ad_login FROM funcionarios WHERE id = :id LIMIT 1');
     $currentStmt->execute([':id' => $funcionario_id]);
-    $currentRole = $currentStmt->fetchColumn();
-    if ($currentRole === false) {
+    $current = $currentStmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($current)) {
         json_response(['sucesso' => false, 'mensagem' => 'Funcionário não encontrado.'], 404);
     }
+    $currentRole = (string)$current['access_role'];
+    $currentAdLogin = normalizar_ad_login($current['ad_login'] ?? null);
+    require_funcionario_change($actor_role, $currentRole, $access_role, 'atualizar');
     $stmt = $pdo->prepare(
         "UPDATE funcionarios
          SET nome = :nome,
@@ -136,7 +139,15 @@ try {
 if (($resultado['sucesso'] ?? false) === true) {
     audit_log('FUNCIONARIO_ATUALIZADO', "Funcionario '{$nome}' atualizado (ID: {$funcionario_id}, equipe: {$equipe}, perfil: {$access_role}, ativo: " . ($ativo ? 'sim' : 'nao') . ")", 'WARNING');
     if ((string)$currentRole !== $access_role) {
-        audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Perfil do funcionario ID {$funcionario_id} alterado de {$currentRole} para {$access_role}", 'CRITICAL');
+        audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Perfil do funcionario ID {$funcionario_id} alterado de {$currentRole} para {$access_role} por {$actor_role}", 'CRITICAL');
+    }
+    // [A3] Troca de login AD: CRITICAL se o perfil (atual ou novo) for de gestão.
+    if ($currentAdLogin !== $ad_login) {
+        audit_log(
+            'FUNCIONARIO_AD_LOGIN_ALTERADO',
+            "Login AD do funcionario ID {$funcionario_id} alterado de " . ($currentAdLogin ?? 'vazio') . ' para ' . ($ad_login ?? 'vazio') . " por {$actor_role}",
+            funcionario_role_is_elevated($currentRole) || funcionario_role_is_elevated($access_role) ? 'CRITICAL' : 'WARNING'
+        );
     }
 }
 

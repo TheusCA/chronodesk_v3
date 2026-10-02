@@ -145,7 +145,7 @@ function validate_funcionario_equipe($equipe) {
 
 function validate_access_role($role) {
     $role = strtolower(trim((string)$role));
-    return in_array($role, ['tecnico', 'gestor', 'admin', 'somente_leitura'], true)
+    return in_array($role, ['tecnico', 'gestor', 'lideranca', 'admin', 'somente_leitura'], true)
         ? $role
         : null;
 }
@@ -946,6 +946,55 @@ function portal_permissions_for_role(?string $role): array {
         'somente_leitura' => ['portal.read'],
     ];
     return $permissions[$role] ?? [];
+}
+
+// ============================================
+// [Lote 5b] CADASTRO DE FUNCIONÁRIOS POR PERFIL
+// ============================================
+
+/**
+ * Regra de 2.3 do desenho do Lote 5: o ator pode gravar o cadastro?
+ * $current_role: perfil atual do cadastro; null para cadastro novo ou ainda
+ * não lido (a regra que só depende do perfil novo vale antes do banco).
+ * $new_role: perfil que será gravado; null quando não muda (desativar).
+ * Devolve null (pode) ou [status HTTP, mensagem].
+ */
+function funcionario_change_denied(string $actor_role, ?string $current_role, ?string $new_role): ?array {
+    if (!in_array('funcionarios.manage', portal_permissions_for_role($actor_role), true)) {
+        return [403, 'Seu perfil não possui permissão para gerenciar funcionários.'];
+    }
+    if ($new_role === 'admin') {
+        return [400, 'O perfil Admin não é gravado no cadastro: admin vem da allowlist AD_ADMIN_USERS. Escolha outro perfil.'];
+    }
+    if ($actor_role === 'admin') {
+        return null;
+    }
+    if ($new_role === 'lideranca') {
+        return [403, 'Somente administradores promovem à Liderança.'];
+    }
+    if (in_array(portal_role_value($current_role), ['lideranca', 'admin'], true)) {
+        return [403, 'A Liderança não altera cadastros de Liderança ou de administradores.'];
+    }
+    return null;
+}
+
+/** Encerra a requisição se funcionario_change_denied() recusar, com auditoria. */
+function require_funcionario_change(string $actor_role, ?string $current_role, ?string $new_role, string $context): void {
+    $denied = funcionario_change_denied($actor_role, $current_role, $new_role);
+    if ($denied === null) {
+        return;
+    }
+    audit_log(
+        'FUNCIONARIO_ALTERACAO_NEGADA',
+        "contexto={$context} perfil_ator={$actor_role} perfil_atual=" . ($current_role ?? '-') . ' perfil_novo=' . ($new_role ?? '-'),
+        'WARNING'
+    );
+    json_response(['sucesso' => false, 'mensagem' => $denied[1]], $denied[0]);
+}
+
+/** Perfis cujo cadastro dá acesso de gestão: mudanças neles são CRITICAL (A3). */
+function funcionario_role_is_elevated(?string $role): bool {
+    return in_array(portal_role_value($role), ['gestor', 'lideranca', 'admin'], true);
 }
 
 // ============================================
