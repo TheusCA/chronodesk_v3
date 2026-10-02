@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30, com três pontos em aberto** (P2, P12 e o tratamento dos relatórios) — ver seção 0.5. Nenhum código, migration ou teste da Parte B foi escrito. A implementação começa pelo F1, depois da validação e do deploy do lote de fuso (A4).
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. Nenhum código, migration ou teste da Parte B foi escrito. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -66,6 +66,46 @@ P1 a P16. As que bloqueiam o primeiro lote (F1) são **P10** e **P12**. As demai
 | **P2** (almoço) | **Em aberto** | O motor pode expor `em_almoco` sem depender disso. A contagem de "disponíveis" (F7) e a criação ou não de um estado de almoço dependem da decisão: **F2 não fecha a especificação de situação sem ela** |
 | **P12** (Liderança com escala) | **Em aberto** | F1 segue **sem** o passo 2.6. Se aprovada depois, vira migration própria. Até lá, Liderança aparece no Mapa PA como "Sem escala" |
 | **Tratamento dos relatórios** (seção 6) | **Em aberto** | Falta decidir se os números de períodos já fechados podem mudar ou se as regras novas valem só a partir da data de corte. **Bloqueia a troca do relatório operacional para o motor** em F2; o restante de F2 não depende disso |
+
+P2, P12 e o tratamento dos relatórios foram decididos em 2026-10-02: seção 0.6.
+
+### 0.6 Decisões do responsável (2026-10-02)
+
+| Item | Decisão | Como entra no desenho |
+|---|---|---|
+| **P12** | Liderança participa do Mapa PA com escala **sempre presencial** (regra fixa, sem home) e PA como os técnicos | Ver "P12 e cadastros fora do Mapa e da escala", abaixo |
+| **L9** (Lote 5) | Escala da Liderança: só o admin edita | Regra, exceção e ausência de quem é da equipe Liderança: só admin (também A4 do Lote 5). A Liderança gerencia o Mapa PA (Lote 5c) |
+| **P2** | Almoço é estado próprio ("Almoço") e **não** conta como disponível | Seção 4.3: `almoco` entra na precedência depois de `pausa`; seção 4.5: `almoco` vira parcela da soma; a Visão Operacional ganha a coluna "Almoço" |
+| **Relatórios de períodos fechados** | Regras novas só a partir da **data de corte do deploy**; períodos anteriores mantêm a regra antiga | Seção 6: o motor tem os dois modos e o relatório divide o período no corte |
+| **SEC-08** | Anexo de escala restrito à própria equipe; gestor, Liderança e admin veem todos | Lote 4 (fora da Parte B) |
+| **Ordem** | Desenvolver tudo antes; implantar a fila em etapas. "F1 só depois do deploy do A4" vira regra de ordem de deploy | Os lotes F entram na fila de deploy depois do deploy 6. Toda migration nova: regra do A4, rollback e ensaio em `scripts/ensaio-migration.sh` |
+
+#### P12 e cadastros fora do Mapa e da escala
+
+**Escala da Liderança.** Proposta: escala **implícita** para quem é da equipe Liderança, sempre presencial em dia útil, sem linha em `portal_schedule_rules`. O motor (F2) resolve "equipe Liderança, sem exceção no dia → presencial"; a tela de escala mostra a Liderança como "Presencial (regra fixa)", sem botão de editar regra. Não há regra a cadastrar nem importar para a Liderança: linha de líder na planilha recebe aviso e é ignorada. O que o admin edita (L9) são as **exceções** (treinamento, plantão; a exceção remota é recusada, porque a regra é sem home) e as **ausências** (A4 do Lote 5). O passo 2.6 continua na migration 011 (`team` com `lideranca` nas tabelas de regra e de exceção), porque a exceção de líder precisa do valor. Alternativa, se o responsável preferir dado explícito: gravar regra `always_onsite` para cada líder e aceitar só esse tipo para a equipe; custa cadastro manual e abre a chance de um líder sem regra aparecer como "Sem escala".
+
+**Cadastros fora do Mapa e da escala.** O desenho aprovado só tinha o arquivamento (`ativo = 0`), que bloqueia o login e não serve. Proposta:
+
+| Item | Proposta |
+|---|---|
+| Dado | `funcionarios.fora_mapa_escala TINYINT(1) NOT NULL DEFAULT 0`, na migration 011 (F1). Vale para qualquer equipe; hoje o uso previsto é em 2 cadastros da Liderança. Nenhum nome ou ID no código, nas migrations ou nos commits: o responsável marca pela tela depois do deploy |
+| Quem edita | Só admin (permissão nova `funcionarios.fora_mapa`, só do admin), no formulário de funcionário (caixa "Fora do Mapa PA e da escala") e em `atualizar_funcionario.php`. A Liderança vê o valor, não altera |
+| Auditoria | `FUNCIONARIO_FORA_MAPA_ALTERADO` (WARNING), com o valor anterior, o novo e o ator |
+| Mapa PA (F6) | Não aparece. Marcar é **recusado** (409) enquanto houver vínculo de PA ativo, com mensagem: o admin remove o vínculo antes. Menos destrutivo que encerrar vínculos em silêncio |
+| Escala (F1, F2) | Não tem escala nem aparece na tela de escala. Regra ou exceção para o cadastro marcado: 409 |
+| Visão Operacional (F7) e contadores (4.5) | Fora de todas as contagens, inclusive "Sem escala" |
+| Ausências (F3) | Continuam registráveis (por admin, quando for líder) e aparecem na lista de ausências com a mesma regra de leitura (P9). Não entram em contagem nenhuma |
+| Calendário (F5) | Sem eventos de escala (não há escala); as ausências aparecem na camada de ausências, como as dos demais; eventos operacionais sem mudança |
+| Login, permissões e pausas | Sem mudança |
+| Relatórios | Fora da seção de escala do relatório operacional a partir do corte; horas extras, ponto e pausas sem mudança |
+
+#### P2 — almoço
+
+`almoco` é uma `situacao` própria, com o rótulo "Almoço": dentro do intervalo `almoco_inicio`–`almoco_fim` da jornada do colaborador, em dia útil, depois de ausência, fora do expediente e pausa na precedência (pausa durante o almoço continua "Em pausa"). Não conta como disponível. Contadores: `escalados = disponiveis + em_pausa + almoco + ausentes + fora_expediente`.
+
+#### Relatórios — data de corte
+
+A data de corte é registrada no deploy do F2, como valor explícito (mesmo padrão do corte do BIZ-02). O relatório operacional divide o período no corte: antes, regra antiga (sem P3, P4, ausência e arquivado); a partir dele, o motor. O CSV ganha uma linha de aviso quando o período cruza o corte.
 
 ---
 
@@ -528,6 +568,7 @@ Esse é o primeiro critério de aceite e vira teste automatizado.
 | 1 | Ausência aprovada ativa em `agora` | `ausente` | `ausencia` | "Ausente (dia todo)", "Ausente desde 14:00", "Ausente 10:00–12:00" |
 | 2 | Fora do expediente, ou dia não útil | `fora_expediente` | `expediente` | "Expediente 08:00–17:00", "Fim de semana" |
 | 3 | Pausa em andamento | `pausa` | `pausa` | Motivo da pausa |
+| 3a | Intervalo de almoço da jornada (P2, decidido em 2026-10-02) | `almoco` | `expediente` | "Almoço 12:00–13:00" |
 | 4 | Escala presencial ou remota | `presencial` / `remoto` | `regra_escala` | "Presencial (ciclo 2P/1R)"; com ausência parcial ainda não iniciada: "Ausente a partir de 14:00" |
 | 5 | Sem regra | `sem_escala` | `regra_escala` | "Sem escala definida" |
 
@@ -552,7 +593,7 @@ Ausência ativa: `full_day` o dia todo; `from_time` de `start_time` até o fim d
 | Pausa fora do expediente (pausa esquecida) | `fora_expediente`, pela precedência |
 | Sem escala e fora do expediente | `fora_expediente` |
 | `estado.json` ilegível | Trata como sem pausa e devolve `meta.pausas_disponiveis = false`; a tela avisa em vez de mostrar zero |
-| Almoço | Não muda `situacao`. Sai como `em_almoco: true`, informativo (P2) |
+| Almoço | `situacao = almoco` (P2 decidida em 2026-10-02): estado próprio, não conta como disponível |
 | Virada de mês em `even_days`/`odd_days` | Sem mudança (BIZ-05 continua em aberto). Um ciclo `["onsite","remote"]` resolve a alternância para quem quiser migrar |
 | Feriado | Tratado como dia útil comum (D2). Pendência registrada |
 | Horário de verão | Não existe no Brasil desde 2019. Horários são comparados em minutos do dia, na mesma data |
@@ -562,7 +603,7 @@ Ausência ativa: `full_day` o dia todo; `from_time` de `start_time` até o fim d
 População por equipe: técnicos ativos cuja **escala do dia** é presencial ou remota (`escalados`). Cada um cai em exatamente uma situação:
 
 ```
-escalados = disponiveis (presencial + remoto) + em_pausa + ausentes + fora_expediente
+escalados = disponiveis (presencial + remoto) + em_pausa + almoco + ausentes + fora_expediente
 ```
 
 `sem_escala` é contador à parte, fora da soma: quem não tem escala não é "escalado", mesmo que tenha ausência lançada. `ausentes` só conta ausência lançada. O teste confere a identidade para cada equipe em vários instantes do dia.
@@ -696,10 +737,10 @@ Técnico    Equipe  Data   Período            Categoria
 ### 5.7 Visão Operacional (RF-10) — F7
 
 ```
-              Escalados  Disponíveis  Em pausa  Ausentes  Fora do expediente  Sem escala
-N1                8          5           1         1            1                 0
-N2                9          7           0         2            0                 1
-Liderança         3          3           0         0            0                 0     (fora dos totais)
+              Escalados  Disponíveis  Em pausa  Almoço  Ausentes  Fora do expediente  Sem escala
+N1                8          4           1         1       1            1                 0
+N2                9          7           0         0       2            0                 1
+Liderança         3          3           0         0       0            0                 0     (fora dos totais)
 ```
 
 - Números vindos de `presence_summary`. O navegador deixa de contar (`DashboardPage.jsx:30-43`).
@@ -730,7 +771,7 @@ Liderança         3          3           0         0            0              
 4. **Ausência aparece.** Hoje o dia de ausência aprovada some do relatório. Passa a contar em `absence_days`, e o CSV ganha a linha com o rótulo "Ausência". A categoria não vai para o CSV.
 5. **Técnico arquivado aparece nos períodos anteriores ao arquivamento**, o que hoje não acontece na seção de escala (`OperationalService.php:1129`).
 
-Os itens 2 e 3 alteram números de períodos já fechados. Se isso não for aceitável, a alternativa é aplicar as regras novas só a partir da data de corte, ao custo de o motor ter dois modos.
+Os itens 2 e 3 alteram números de períodos já fechados. **Decisão de 2026-10-02:** as regras novas valem só a partir da data de corte do deploy; períodos anteriores mantêm a regra antiga (seção 0.6). O motor tem os dois modos.
 
 O limite de 500 linhas das listas (PERF-02) não é tratado aqui.
 
@@ -783,7 +824,7 @@ Cada lote: commit local por tema, sem push, parada para aprovação, atualizaç�
 | Lote | Escopo | Testes novos | Rollback | Depende de |
 |---|---|---|---|---|
 | **F0** | Rodar Q1–Q6; decidir D1–D10 e P1–P16 | — | — | Este documento |
-| **F1** Dados e histórico | Migration 011; salvar, remover e importar com vigência; `GET` com `is_current`/`is_future`; atualizar `DEPLOY_LINUX.md` | Planejador de mudança de regra como função pura (fecha, insere, atualiza, regra futura, idêntica, retroativa); consulta de não sobreposição; mutação | Script de rollback da 011 + voltar o código | BIZ-02 fechado; P10, P12 |
+| **F1** Dados e histórico | Migration 011 (com o passo 2.6 e `fora_mapa_escala`); salvar, remover e importar com vigência; Liderança com escala implícita e edição só por admin (P12, L9); campo "fora do Mapa e da escala" no cadastro, só admin; `GET` com `is_current`/`is_future`; atualizar `DEPLOY_LINUX.md` | Planejador de mudança de regra como função pura (fecha, insere, atualiza, regra futura, idêntica, retroativa); consulta de não sobreposição; mutação | Script de rollback da 011 + voltar o código | P10, P12 (decidida); deploy depois do A4 |
 | **F2** Motor | `PresenceEngine`, `PresenceRepository`, cálculo de ciclo, `portal/presence.php`; `generatedSchedule` e `status.php` delegando | `qa-presence-engine`: ciclo em 3 semanas, precedência, 13:59/14:00, 23:30/00:30, identidade da soma, contagem de consultas | Código apenas. Com linha `cycle` gravada, rodar antes o rollback da 011 | F1; P1–P4, P14 |
 | **F2B** Escalas na tela | Ciclo com prévia, dias de home, histórico (RF-01, RF-02) | `qa:schedule-form` e `qa:schedule-rules` ampliados; "home ter e qui" grava seg/qua/sex; regras `fixed_weekdays` antigas intactas | Frontend + validador | F2 |
 | **F3** Ausências | **Primeiro** o escopo de leitura (SEC-07 e L-01); migrations 012 e 013; serviço; página; inventário LGPD | `qa-absences`: validações, sobreposição, retroativo, matriz de perfis; negativo de CI → 403 em subprocesso | Scripts da 012 e 013 + código | F2; aprovação de RBAC; P5–P9 |
@@ -802,7 +843,7 @@ F5, F6 e F7 são independentes entre si e podem mudar de ordem.
 
 | Risco | Mitigação |
 |---|---|
-| Fuso do MySQL (A4): correção implementada, ainda não validada nem implantada | Implementação da Parte B só depois do deploy do A4. Código novo não usa relógio do banco |
+| Fuso do MySQL (A4): correção implementada, ainda não validada nem implantada | Regra de ordem de deploy (2026-10-02): os lotes F entram na fila depois do deploy 6, que inclui o A4. O desenvolvimento não espera. Código novo não usa relógio do banco |
 | Números de relatório mudam (P3, P4, ausência, arquivado) | Seção 6; validar com quem consome o CSV antes de F2 |
 | Rollback de código com regra `cycle` gravada quebra três telas | Documentado em 2.1; o script de rollback converte antes |
 | Migrations dependem de nomes de índice e FK do servidor | Q1 antes de F1; todas as migrations checam `information_schema` |
@@ -816,4 +857,4 @@ F5, F6 e F7 são independentes entre si e podem mudar de ordem.
 
 ---
 
-**Fim da Fase de Desenho.** Aprovado em 2026-09-30 com P2, P12 e o tratamento dos relatórios em aberto (seção 0.5).
+**Fim da Fase de Desenho.** Aprovado em 2026-09-30; P2, P12 e o tratamento dos relatórios decididos em 2026-10-02 (seção 0.6). As propostas de 0.6 para a escala implícita da Liderança e para o atributo `fora_mapa_escala` são confirmadas na aprovação do F1.
