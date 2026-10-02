@@ -1,7 +1,7 @@
 # Horas extras e exportações — Lote 6 (BIZ-01, BIZ-04, PERF-02)
 
 **Data:** 2026-09-30
-**Situação:** aprovado em 2026-10-01 (`a68066a`); complemento de status e índices em commit separado. Deploy 5 da fila.
+**Situação:** aprovado em 2026-10-01 (`a68066a`); complemento de status e índices (`f4acb5a`) aprovado em 2026-10-02; recusa da aprovação de pendente de 24 h aprovada em 2026-10-02 e feita em commit separado (seção 5). Deploy 5 da fila.
 
 ---
 
@@ -13,7 +13,7 @@
 | Total por colaborador em duas colunas: aprovado e pendente | `Total aprovado` e `Total pendente` no CSV, na tela de horas extras e no relatório operacional |
 | Rejeitado nunca entra em total | Fica fora dos dois totais em todos os pontos; no CSV, a linha continua listada e identificada na coluna `Status` |
 | Sem teto por lançamento | Nenhum teto foi criado |
-| Recusar início igual ao fim | Recusado no servidor e na tela, com mensagem que explica a virada de dia |
+| Recusar início igual ao fim | Recusado no servidor e na tela, com mensagem que explica a virada de dia. Pendente antigo nessa situação não pode ser aprovado, só rejeitado (decisão de 2026-10-02) |
 | Virada de dia com fim menor que início | Continua valendo (22:00 às 02:00 = 4 h) |
 | Exportações não truncam | Todas as linhas do filtro, lidas em páginas |
 | Listas da tela avisam quando cortam | Aviso "Exibindo os N registros mais recentes" |
@@ -68,7 +68,14 @@ A tela mostra o aviso no quadro "Total calculado" e não envia o formulário.
 
 **Registros antigos com entrada igual à saída continuam no banco com 24 h.** O lote não altera dados. A seção 8 traz a consulta para encontrá-los.
 
-**Aprovação de pendente antigo com entrada igual à saída (em aberto, 2026-10-01).** Hoje `decideWorkflow()` só confere se o registro está pendente, se não é do próprio aprovador e se a decisão é válida; não recalcula os minutos. Aprovar um pendente antigo de 24 h funciona e soma 1.440 minutos no total aprovado. Proposta aguardando aprovação do responsável: recusar só a **aprovação** desses lançamentos, com mensagem pedindo a correção do horário; a rejeição continua permitida e os já aprovados não mudam. Não há edição de lançamento no sistema: corrigir significa rejeitar e lançar de novo.
+**Aprovação de pendente antigo com entrada igual à saída (aprovado em 2026-10-02).** Antes, `decideWorkflow()` só conferia se o registro estava pendente, se não era do próprio aprovador e se a decisão era válida; aprovar um pendente antigo de 24 h somava 1.440 minutos no total aprovado. Agora:
+
+- **aprovar** hora extra pendente com entrada igual à saída é recusado com 409 e a mensagem "Lancamento com hora de entrada igual a hora de saida, contado como 24 h. Nao e possivel aprova-lo: rejeite e peca ao colaborador para lancar de novo com o horario real de saida (se passou da meia-noite, a saida fica menor que a entrada)." Nada é gravado e nada vai para a fila de sincronização;
+- **rejeitar** esse lançamento continua permitido;
+- lançamentos já aprovados (ou em qualquer status diferente de pendente) não mudam, e nenhum dado é alterado;
+- a regra olha os horários (`start_time` igual a `end_time`, com `HH:MM` e `HH:MM:SS` equivalentes), não o total gravado; correção de ponto não é afetada.
+
+Não há edição de lançamento no sistema: corrigir significa rejeitar e lançar de novo. Implementação: `OperationalService::assertOvertimeApprovable()`, chamada em `decideWorkflow()` depois das checagens de status e de autoria, antes do `UPDATE`. A tela de Aprovações não mudou: o botão continua ativo e o erro aparece na notificação, com a mensagem do servidor (verificado por leitura do `actionRunner`, não no navegador).
 
 ## 6. PERF-02
 
@@ -108,9 +115,10 @@ Sem banco:
 - competência: dias 5, 15, 16, virada de ano, janeiro e fevereiro; padrão da API sem período;
 - lista: corte com 501 linhas e sem corte com 500;
 - exportação: 0, 1, 499, 500, 501, 1.000 e 1.203 linhas com muitas datas repetidas — todas, uma vez, na ordem, com o número esperado de páginas;
-- estrutura: nenhuma exportação volta a usar a lista limitada.
+- estrutura: nenhuma exportação volta a usar a lista limitada;
+- aprovação de pendente de 24 h (PDO simulado, chamando `decideOvertime()` e `decideTimeAdjustment()`): aprovar é recusado sem gravar nem sincronizar; rejeitar grava; `HH:MM` igual a `HH:MM:SS` é recusado; regra pelo horário, não pelo total; virada de dia e 1 minuto continuam aprováveis; já aprovado não muda; correção de ponto não é afetada.
 
-Mutação: 11 defeitos introduzidos, 11 detectados.
+Mutação: 11 defeitos introduzidos, 11 detectados. Recusa de 24 h (2026-10-02): 8 defeitos, 8 detectados (checagem removida, aplicada também à rejeição ou a qualquer tabela, sem normalizar `HH:MM`, comparação invertida, regra pelo total de 1.440, mensagem sem orientação, checagem depois do `UPDATE`). O defeito "regra pelo total" só foi detectado depois de um teste a mais: com dados reais é quase equivalente, porque horários diferentes dão no máximo 1.439 minutos.
 
 **Não testado sem banco:** as consultas SQL de paginação (a condição de cursor foi testada sobre uma tabela em memória que reproduz a mesma regra) e a separação aprovado/pendente dentro de `report()`, que lê do banco.
 
@@ -175,4 +183,4 @@ Esperado: a primeira com `key = idx_overtime_competency` e `Using filesort`; a s
 
 ## 9. Rollback
 
-Só código; nenhuma migration nem alteração de dados. Voltar ao commit anterior restaura a coluna `Total Realizado`, o limite de 500 linhas e a aceitação de entrada igual à saída.
+Só código; nenhuma migration nem alteração de dados. Voltar ao commit anterior restaura a coluna `Total Realizado`, o limite de 500 linhas e a aceitação de entrada igual à saída. Reverter só o commit da recusa de 24 h volta a permitir a aprovação desses pendentes.

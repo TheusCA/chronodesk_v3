@@ -1124,6 +1124,9 @@ final class OperationalService {
             if ($actorEmployeeId !== null && (int)$record['employee_id'] === $actorEmployeeId) {
                 throw new DomainException('Nao e permitido aprovar o proprio lancamento.');
             }
+            if ($recordType === 'overtime' && $decision === 'approved') {
+                self::assertOvertimeApprovable($record);
+            }
             $update = $this->pdo->prepare(
                 "UPDATE {$table}
                  SET status = :status, approved_by = :approved_by, approved_at = NOW(), updated_by = :updated_by
@@ -1718,6 +1721,22 @@ final class OperationalService {
             throw new InvalidArgumentException("{$label} invalida.");
         }
         return strlen($value) === 5 ? $value . ':00' : $value;
+    }
+
+    /**
+     * [BIZ-04] Lancamento antigo com entrada igual a saida, gravado como 24 h
+     * antes da recusa no cadastro, nao pode ser aprovado. A rejeicao continua
+     * permitida; lancamentos ja aprovados e os dados gravados nao mudam.
+     */
+    public static function assertOvertimeApprovable(array $record): void {
+        $normalize = static fn ($time): string => strlen((string)$time) === 5 ? $time . ':00' : (string)$time;
+        if ($normalize($record['start_time'] ?? '') === $normalize($record['end_time'] ?? '')) {
+            throw new DomainException(
+                'Lancamento com hora de entrada igual a hora de saida, contado como 24 h. '
+                . 'Nao e possivel aprova-lo: rejeite e peca ao colaborador para lancar de novo '
+                . 'com o horario real de saida (se passou da meia-noite, a saida fica menor que a entrada).'
+            );
+        }
     }
 
     /**

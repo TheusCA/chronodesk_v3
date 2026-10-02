@@ -219,6 +219,111 @@ assert_same(7, count(iterator_to_array(db_keyset_iterate(
     0
 ), false)), 'pagina invalida vira 1 e ainda termina');
 
+// ----------------------------------------------------------------------------
+// BIZ-04: aprovacao de pendente antigo com entrada igual a saida (24 h)
+// ----------------------------------------------------------------------------
+// PDO simulado: devolve o registro travado e registra as escritas.
+final class QaDecisionPdo extends PDO {
+    public array $log = [];
+    public bool $transaction = false;
+
+    public function __construct(public array $record) {
+    }
+
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaDecisionStatement($this, preg_replace('/\s+/', ' ', trim($query)));
+    }
+
+    public function beginTransaction(): bool {
+        $this->transaction = true;
+        $this->log[] = 'BEGIN';
+        return true;
+    }
+
+    public function commit(): bool {
+        $this->transaction = false;
+        $this->log[] = 'COMMIT';
+        return true;
+    }
+
+    public function rollBack(): bool {
+        $this->transaction = false;
+        $this->log[] = 'ROLLBACK';
+        return true;
+    }
+
+    public function inTransaction(): bool {
+        return $this->transaction;
+    }
+}
+
+final class QaDecisionStatement extends PDOStatement {
+    private array $result = [];
+
+    public function __construct(private QaDecisionPdo $pdo, private string $sql) {
+    }
+
+    public function execute(?array $params = null): bool {
+        if (strpos($this->sql, 'FOR UPDATE') !== false) {
+            $this->pdo->log[] = 'LOCK';
+            $this->result = [$this->pdo->record];
+        } elseif (strpos($this->sql, 'UPDATE portal_') === 0) {
+            $this->pdo->log[] = 'UPDATE ' . $params[':status'];
+        } elseif (strpos($this->sql, 'INSERT INTO portal_sync_queue') === 0) {
+            $this->pdo->log[] = 'SYNC';
+        } else {
+            throw new LogicException('SQL inesperado: ' . $this->sql);
+        }
+        return true;
+    }
+
+    public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
+        return array_shift($this->result) ?? false;
+    }
+}
+
+function qa_decide(string $method, array $record, string $decision): array {
+    $pdo = new QaDecisionPdo($record);
+    $service = new OperationalService($pdo);
+    $actor = ['username' => 'qa.gestor', 'role' => 'gestor', 'employee_id' => 99];
+    try {
+        $service->{$method}(1, $decision, $actor);
+        return ['ok', $pdo->log];
+    } catch (DomainException $e) {
+        return [$e->getMessage(), $pdo->log];
+    }
+}
+
+$overtimeRecord = static fn (string $start, string $end, string $status = 'pending', int $minutes = 1440): array => [
+    'id' => 1, 'employee_id' => 7, 'employee_name' => 'QA', 'team' => 'n1', 'work_date' => '2026-09-10',
+    'start_time' => $start, 'end_time' => $end, 'total_minutes' => $minutes, 'reason' => 'r', 'justification' => 'j',
+    'status' => $status, 'approved_by' => null, 'approved_at' => null, 'created_by' => 'qa', 'updated_by' => 'qa',
+    'created_at' => '2026-09-10 10:00:00', 'updated_at' => '2026-09-10 10:00:00',
+];
+$dayLong = $overtimeRecord('10:00:00', '10:00:00');
+
+[$message, $log] = qa_decide('decideOvertime', $dayLong, 'approved');
+assert_same(true, strpos($message, 'hora de entrada igual a hora de saida') !== false, 'aprovar pendente de 24 h e recusado');
+assert_same(true, strpos($message, 'rejeite e peca ao colaborador para lancar de novo') !== false, 'mensagem orienta a rejeitar e lancar de novo');
+assert_same(['BEGIN', 'LOCK', 'ROLLBACK'], $log, 'recusa da aprovacao nao grava nada nem enfileira sincronizacao');
+assert_same(['ok', ['BEGIN', 'LOCK', 'UPDATE rejected', 'SYNC', 'COMMIT']], qa_decide('decideOvertime', $dayLong, 'rejected'), 'rejeitar pendente de 24 h continua permitido');
+assert_same(true, strpos(qa_decide('decideOvertime', $overtimeRecord('22:15', '22:15:00'), 'approved')[0], 'hora de entrada igual') !== false, 'HH:MM e HH:MM:SS iguais tambem sao recusados');
+assert_same(true, strpos(qa_decide('decideOvertime', $overtimeRecord('08:00:00', '08:00:00', 'pending', 0), 'approved')[0], 'hora de entrada igual') !== false, 'regra pelo horario, nao pelo total gravado');
+assert_same(['ok', ['BEGIN', 'LOCK', 'UPDATE approved', 'SYNC', 'COMMIT']], qa_decide('decideOvertime', $overtimeRecord('22:00:00', '02:00:00', 'pending', 240), 'approved'), 'controle: virada de dia continua aprovavel');
+assert_same(['ok', ['BEGIN', 'LOCK', 'UPDATE approved', 'SYNC', 'COMMIT']], qa_decide('decideOvertime', $overtimeRecord('10:00:00', '10:01:00', 'pending', 1), 'approved'), 'controle: um minuto continua aprovavel');
+assert_same(
+    ['Somente registros pendentes podem ser decididos.', ['BEGIN', 'LOCK', 'ROLLBACK']],
+    qa_decide('decideOvertime', $overtimeRecord('10:00:00', '10:00:00', 'approved'), 'approved'),
+    'lancamento de 24 h ja aprovado nao muda'
+);
+$adjustment = [
+    'id' => 1, 'employee_id' => 7, 'employee_name' => 'QA', 'team' => 'n1', 'adjustment_date' => '2026-09-10',
+    'adjustment_type' => 'entrada', 'correct_time' => '08:00:00', 'recorded_time' => '08:00:00', 'justification' => 'j',
+    'status' => 'pending', 'approved_by' => null, 'approved_at' => null, 'created_by' => 'qa', 'updated_by' => 'qa',
+    'created_at' => '2026-09-10 10:00:00', 'updated_at' => '2026-09-10 10:00:00',
+];
+assert_same(['ok', ['BEGIN', 'LOCK', 'UPDATE approved', 'SYNC', 'COMMIT']], qa_decide('decideTimeAdjustment', $adjustment, 'approved'), 'correcao de ponto nao e afetada pela regra de horas extras');
+
 // Estrutural: nenhuma exportacao volta a usar a lista limitada.
 $overtimeCsv = substr($serviceSource, (int)strpos($serviceSource, 'public function streamOvertimeCsv'), 900);
 $adjustmentCsv = substr($serviceSource, (int)strpos($serviceSource, 'public function streamTimeAdjustmentsCsv'), 400);
