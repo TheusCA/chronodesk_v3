@@ -185,6 +185,17 @@ Base da afirmação:
 | **Limitacoes declaradas** | **Sem MySQL local:** a consulta de cadastro e o fluxo de aprovacao nunca rodaram contra o banco. A comparacao sem diferenca de maiusculas depende da collation `utf8mb4_unicode_ci` (a do schema). A tela de Aprovacoes nao mudou: o botao continua ativo e o erro aparece pela notificacao, verificado por leitura do `actionRunner`, nao no navegador. `gitleaks` nao esta instalado na estacao; a checagem de arquivos sensiveis do `test-local.ps1` passou. **Fora do escopo, sem alteracao:** eventos anteriores ao Lote 7 (`ADMIN_LOGIN_FAILURE`, `CI_LOGIN_FAILURE`, `CI_AD_LOGIN_FAILURE`, `CI_LOGIN_RATE_LIMIT`) gravam o login digitado normalizado, cadastrado ou nao: mesmo risco do ajuste (k), pendente de decisao. |
 | **Validacao humana** | **Pendente.** |
 
+### Lote 5 — Desenho do perfil de Liderança (SEC-04, SEC-10) — 2026-10-02
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Somente desenho, pedido em 2026-09-30: perfil de Lideranca separado do admin, admin so pela allowlist `AD_ADMIN_USERS`, promocao so por admin com auditoria CRITICAL, decisao sobre `AUTH_SOURCE`, relacao com a P12. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`, commit local de documentacao. Sem push. |
+| **O que a IA alterou** | `docs/DESENHO_PERFIL_LIDERANCA.md` (novo): problema com evidencia de codigo, proposta (perfil `lideranca`, equipe separada do perfil, guardas por permissao), matriz atual x proposta por endpoint, impacto nos 3 ativos da Lideranca, migration 016 e normalizacao 016b depois do codigo, rollback em ordem inversa, 14 testes negativos, consultas so de contagem, decisoes L1 a L9 e plano em tres sublotes. **Nenhum codigo, migration ou teste.** |
+| **Validacao executada pela IA** | Leitura do codigo: guardas de todos os endpoints de `api/` e `api/portal/`, checagens de perfil nos servicos, resolucao do perfil (`current_portal_role`, `portal_permissions_for_role`), logins CI, admin e local, formulario e abas do frontend. Nada executado. |
+| **Limitacoes declaradas** | As linhas citadas sao do estado atual da branch e podem andar. Quem dos 3 lideres esta na allowlist e **TO CONFIRM** no servidor. A regra de transicao e a ordem 016 -> codigo -> 016b foram raciocinadas, nao ensaiadas. |
+| **Validacao humana** | **Pendente.** Decisoes L1 a L9 e a P12. |
+
 ---
 
 ## 5. Responsabilidade
