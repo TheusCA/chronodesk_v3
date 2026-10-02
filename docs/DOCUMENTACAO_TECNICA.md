@@ -186,7 +186,7 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 ### 7.3 Horas extras e correção de ponto
 
 - Lançamento por técnico apenas para si; gestor/admin podem lançar para terceiros.
-- Aprovação exige perfil gestor ou admin; **autoaprovação é bloqueada** no servidor.
+- Aprovação exige perfil gestor, Liderança ou admin; **autoaprovação é bloqueada** no servidor. Hora extra pendente com entrada igual à saída (24 h) não pode ser aprovada, só rejeitada.
 - Decisão protegida por transação e `SELECT ... FOR UPDATE`; só registros `pending` podem ser decididos.
 - Duração calculada com virada de dia (fim < início ⇒ dia seguinte). Início igual ao fim é recusado. Sem teto por lançamento (decisão do negócio, 2026-09-30).
 - Totais por colaborador em duas colunas, aprovado e pendente; rejeitados não entram em nenhum total. Ver `docs/HORAS_EXTRAS_LOTE6.md`.
@@ -205,10 +205,11 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 |---|---|
 | `tecnico` | `portal.read`, `pausas.use` — vê e lança apenas os próprios registros operacionais |
 | `somente_leitura` | `portal.read` — nenhuma operação de escrita |
-| `gestor` | leitura do portal, pausas, métricas, relatórios, documentação, avisos e **aprovação de operações** |
-| `admin` | tudo do gestor mais `admin.manage`, `configuracoes.manage`, `integracoes.manage` |
+| `gestor` | leitura do portal, pausas, métricas, relatórios, documentação, avisos, **aprovação de operações** e `ausencias.manage` |
+| `lideranca` | tudo do gestor mais `funcionarios.manage`, `escalas.manage`, `pa_map.manage`, `pausas.force_end` (Lote 5; no 5a, só os direitos do gestor estão ativos nos endpoints) |
+| `admin` | tudo da Liderança mais `admin.manage`, `configuracoes.manage`, `integracoes.manage`, `usuarios_locais.manage`, `perfis.promote` |
 
-**Concessão do perfil administrativo — atenção:** existem hoje **duas fontes independentes**. A allowlist `AD_ADMIN_USERS` (usada por `login.php`, `admin_login.php` e `api/login_admin.php`) e o campo `funcionarios.access_role` (usado por `api/login_ci.php`). Além disso, `equipe='lideranca'` força `access_role='admin'` automaticamente. Consequência documentada: um administrador pode conceder perfil administrativo a outro colaborador sem que este conste na allowlist. Ver achado SEC-04. **A DEFINIR:** qual fonte deve prevalecer.
+**Concessão do perfil administrativo (Lote 5a, 2026-10-02):** admin vem **só** da allowlist `AD_ADMIN_USERS`, comparada pela mesma normalização do bind, em todos os logins. `funcionarios.access_role = 'admin'` é valor legado e não concede administração: vira `lideranca` na equipe Liderança e `gestor` fora dela. A equipe não concede permissão. Exceção explícita: o admin local de emergência (`ENABLE_LOCAL_ADMIN`, procedimento em `DEPLOY_LINUX.md`). O perfil é recalculado a cada requisição a partir do cadastro e da allowlist; se cair, a sessão é encerrada (`SESSION_REVOKED`). Desenho completo: `docs/DESENHO_PERFIL_LIDERANCA.md`.
 
 ---
 
@@ -263,3 +264,4 @@ Ordem recomendada, validada em incidente real (falha de socket PHP-FPM):
 | Versão | Data | Autor | Mudança |
 |---|---|---|---|
 | 1.0 | 2026-09-28 | Matheus Camargo (elaboração assistida por IA — ver `REGISTRO_USO_IA.md`) | Versão inicial, gerada no Lote 1 do plano de remediação |
+| 1.1 | 2026-10-02 | Matheus Camargo (elaboração assistida por IA) | Perfis do Lote 5a (Liderança, admin só pela allowlist, revalidação por requisição) e recusa da aprovação de 24 h |

@@ -9,12 +9,13 @@ Mapa inicial dos contratos consumidos pelo frontend. Este documento descreve o u
 - CSRF: enviado em metodos nao GET/HEAD via `X-CSRF-Token`.
 - FormData: mantem `Content-Type` automatico do navegador.
 - 401: dispara evento `chronodesk:unauthorized`, exceto `session.php`.
+- Lote 5a: toda requisicao autenticada revalida o perfil no servidor. Sessao encerrada pela revalidacao responde como sem sessao (401). Com o banco fora, a revalidacao responde 503 ("Nao foi possivel validar a sessao agora") e a sessao continua.
 
 ## Contratos principais
 
 | Endpoint | Metodo | Payload enviado | Resposta esperada | Permissao/tela | Risco | Teste atual | Teste recomendado |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `session.php` | GET | nenhum | `csrf_token`, `role`, `permissions`, `ci`, `gestor` | `App.jsx` | Alto: sessao/RBAC | Build/lint | Smoke por perfil |
+| `session.php` | GET | nenhum | `csrf_token`, `role` (`admin`, `lideranca`, `gestor`, `tecnico`, `somente_leitura`), `permissions`, `ci`, `gestor` | `App.jsx` | Alto: sessao/RBAC | Build/lint | Matriz de perfis no `qa-security` (Lote 5a) |
 | `login_ci.php` | POST | `login_ad`, `senha_ad` | `mensagem`, sessao valida | Login | Alto: AD | Backend smoke parcial | Teste manual AD |
 | `logout.php` | POST | `{}` | `csrf_token`, `mensagem` | App/logout | Medio | Backend smoke | Smoke manual |
 | `status.php` | GET | nenhum | `n1`, `n2`, `server_now` | Pausas/live | Alto: timers | QA operacional parcial | Contrato tipado |
