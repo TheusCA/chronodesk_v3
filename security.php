@@ -992,6 +992,41 @@ function require_funcionario_change(string $actor_role, ?string $current_role, ?
     json_response(['sucesso' => false, 'mensagem' => $denied[1]], $denied[0]);
 }
 
+// ============================================
+// [Lote 4, 0d] BANCO INDISPONÍVEL E EXCEÇÃO SEM CAPTURA
+// ============================================
+
+const DATABASE_UNAVAILABLE_MESSAGE = 'Banco de dados indisponível no momento. Tente novamente em instantes.';
+
+/** Falha de banco: consulta (PDOException) ou conexão (DatabaseUnavailableException, db.php). */
+function database_unavailable_error(Throwable $error): bool {
+    for ($current = $error; $current !== null; $current = $current->getPrevious()) {
+        if ($current instanceof PDOException || $current instanceof DatabaseUnavailableException) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Rede de segurança para exceção que nenhum endpoint capturou: uma linha no
+ * log, sem "PHP Fatal error", e resposta controlada. Banco indisponível: 503
+ * com mensagem; o resto: 500 genérico, sem detalhe da exceção.
+ */
+function chronodesk_uncaught_exception(Throwable $error): void {
+    $database = database_unavailable_error($error);
+    error_log('[UNCAUGHT] ' . get_class($error) . ($database ? ' (banco indisponivel)' : '') . ': ' . $error->getMessage());
+    if (headers_sent()) {
+        return;
+    }
+    http_response_code($database ? 503 : 500);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode([
+        'sucesso' => false,
+        'mensagem' => $database ? DATABASE_UNAVAILABLE_MESSAGE : 'Não foi possível concluir a operação.',
+    ], JSON_UNESCAPED_UNICODE);
+}
+
 /** [Lote 5c] O perfil tem a permissão? Guardas por permissão, não por lista de perfis. */
 function portal_role_can(?string $role, string $permission): bool {
     return in_array($permission, portal_permissions_for_role($role), true);

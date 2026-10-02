@@ -98,6 +98,10 @@ function portal_operational_error(Throwable $error): void {
     if ($error instanceof LengthException) {
         json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 413);
     }
+    if (database_unavailable_error($error)) {
+        error_log('[PORTAL_OPERATIONAL] Banco indisponivel: ' . get_class($error));
+        json_response(['sucesso' => false, 'mensagem' => DATABASE_UNAVAILABLE_MESSAGE], 503);
+    }
     if ($error instanceof PortalForbiddenException) {
         audit_log('PORTAL_ACCESS_DENIED', 'Recusa de perfil no servico: ' . $error->getMessage(), 'WARNING');
         json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 403);

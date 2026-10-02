@@ -110,6 +110,13 @@ function db_keyset_iterate(callable $fetch_page, int $chunk = 500): Generator {
     } while (count($rows) === $chunk);
 }
 
+// [Lote 4, 0d] Falha de conexão com o banco: exceção própria, reconhecida pelo
+// tratador global (503) e por portal_operational_error().
+if (!class_exists('DatabaseUnavailableException')) {
+    class DatabaseUnavailableException extends RuntimeException {
+    }
+}
+
 // Definida só se ainda não existir: o processo filho do qa-security define uma
 // conexão simulada antes de incluir o endpoint. Em produção ninguém a define
 // antes, e o comportamento não muda (mesmo padrão das constantes de caminho
@@ -132,7 +139,7 @@ if (!function_exists('get_db_connection')) {
         } catch (\PDOException $e) {
             // Em produção, logar o erro e mostrar mensagem genérica
             error_log("Erro de conexão com o banco de dados.");
-            throw new \Exception(public_error_message($e, "Erro ao conectar ao banco de dados."));
+            throw new DatabaseUnavailableException(public_error_message($e, "Erro ao conectar ao banco de dados."), 0, $e);
         }
     }
 }

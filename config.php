@@ -140,6 +140,13 @@ if (APP_ENV !== 'development') {
     }
 }
 
+// [Lote 4, 0d] Exceção sem captura vira resposta controlada (503 para banco
+// indisponível), sem erro fatal no log. Só em requisição web: script de linha
+// de comando continua mostrando a exceção.
+if (PHP_SAPI !== 'cli') {
+    set_exception_handler('chronodesk_uncaught_exception');
+}
+
 // Configurar headers de segurança
 set_security_headers();
 

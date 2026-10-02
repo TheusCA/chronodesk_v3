@@ -103,6 +103,10 @@ try {
     $metricas = $gerenciador->obter_metricas(true, $gravar_pausa_detalhada);
 } catch (RuntimeException $e) {
     audit_log('RELATORIO_DOWNLOAD_FAILURE', 'Leitura incompleta das pausas; exportacao cancelada', 'WARNING');
+    // [Lote 4, 0d] Banco indisponivel: 503 com mensagem.
+    if (database_unavailable_error($e)) {
+        json_response(['sucesso' => false, 'mensagem' => DATABASE_UNAVAILABLE_MESSAGE], 503);
+    }
     json_response(['sucesso' => false, 'mensagem' => 'Erro ao gerar relatório.'], 500);
 }
 fclose($file_detalhado);

@@ -5,9 +5,11 @@ require_once __DIR__ . '/../../services/DocumentService.php';
 $method = require_http_method(['GET', 'POST']);
 $role = require_portal_auth();
 $actor = portal_actor($role);
-$service = new DocumentService();
 
 try {
+    // [Lote 4, 0d] Conexao dentro do try: banco indisponivel vira 503 pelo
+    // portal_operational_error(), sem excecao sem captura.
+    $service = new DocumentService();
     if ($method === 'GET') {
         json_response([
             'sucesso' => true,
@@ -64,6 +66,9 @@ try {
     audit_log('DOCUMENT_UPLOAD_REJECTED', $error->getMessage(), 'WARNING');
     json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 400);
 } catch (Throwable $error) {
+    if (database_unavailable_error($error)) {
+        portal_operational_error($error);
+    }
     audit_log('DOCUMENT_UPLOAD_FAILED', 'Falha interna ao processar upload de documento.', 'CRITICAL');
     error_log('[DOCUMENT_UPLOAD] ' . get_class($error) . ': ' . $error->getMessage());
     json_response(['sucesso' => false, 'mensagem' => 'Nao foi possivel processar o documento.'], 500);

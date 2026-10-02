@@ -4,9 +4,11 @@ require_once __DIR__ . '/../../services/PaMapService.php';
 
 $method = require_http_method(['GET', 'POST']);
 $role = require_portal_auth();
-$service = new PaMapService();
 
 try {
+    // [Lote 4, 0d] Conexao dentro do try: banco indisponivel vira 503 pelo
+    // portal_operational_error(), sem excecao sem captura.
+    $service = new PaMapService();
     if ($method === 'GET') {
         json_response([
             'sucesso' => true,

@@ -26,7 +26,12 @@ foreach ($gerenciador->getFuncionarios() as $funcionario) {
         ];
     }
 }
-$operational = (new OperationalService())->listPendingWorkflowApprovals($actor);
+// [Lote 4, 0d] Banco indisponivel: 503 com mensagem, sem erro fatal.
+try {
+    $operational = (new OperationalService())->listPendingWorkflowApprovals($actor);
+} catch (Throwable $error) {
+    portal_operational_error($error);
+}
 json_response([
     "solicitacoes" => $solicitacoes,
     "overtime" => $operational['overtime'],
