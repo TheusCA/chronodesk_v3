@@ -5,13 +5,14 @@ require_once __DIR__ . '/../../init.php';
 $method = require_http_method(['POST']);
 $role = require_portal_auth();
 
-if ($role !== 'admin') {
+// [Lote 5c, L5] Admin e Liderança.
+if (!portal_role_can($role, 'pausas.force_end')) {
     audit_log(
         'BREAK_FORCE_END_DENIED',
         'Perfil sem permissao tentou derrubar pausa. Usuario: ' . portal_username() . ', role: ' . $role,
         'WARNING'
     );
-    json_response(['sucesso' => false, 'mensagem' => 'Apenas administradores podem derrubar pausas.'], 403);
+    json_response(['sucesso' => false, 'mensagem' => 'Apenas administradores e Liderança podem derrubar pausas.'], 403);
 }
 
 try {

@@ -3,6 +3,7 @@ import { formatDuration, parseDate } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { MetricCard, SectionHeader, StatusDot, UserAvatar } from '../components/ui/Primitives'
 import { Icon } from '../components/ui/Icon'
+import { hasPermission } from '../lib/roles'
 
 const metrics = [
   ['tecnicos_monitorados', 'Técnicos monitorados', 'info', 'users', 'Equipe operacional no painel'],
@@ -38,7 +39,7 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
     pausas_ativas: activePauses.length,
     solicitacoes_pendentes: Math.max(resource.data?.summary?.solicitacoes_pendentes || 0, pendingPauses),
   }
-  const canForceEndBreak = session.role === 'admin'
+  const canForceEndBreak = hasPermission(session, 'pausas.force_end')
   const n1Available = (livePauses.status.n1 || []).filter((item) => !item.em_pausa && item.disponibilidade?.status === 'disponivel').length
   const n2Available = (livePauses.status.n2 || []).filter((item) => !item.em_pausa && item.disponibilidade?.status === 'disponivel').length
 

@@ -10,15 +10,15 @@ try {
     if ($method === 'GET') {
         json_response([
             'sucesso' => true,
-            'can_manage' => $role === 'admin',
+            'can_manage' => portal_role_can($role, 'pa_map.manage'),
         ] + $service->list($_GET));
     }
 
-    if ($role !== 'admin') {
+    if (!portal_role_can($role, 'pa_map.manage')) {
         audit_log('PA_MAP_WRITE_DENIED', 'Perfil sem permissao tentou alterar Mapa de PA.', 'WARNING');
         json_response([
             'sucesso' => false,
-            'mensagem' => 'Apenas administradores podem alterar o Mapa de PA.',
+            'mensagem' => 'Apenas administradores e Liderança podem alterar o Mapa de PA.',
         ], 403);
     }
 

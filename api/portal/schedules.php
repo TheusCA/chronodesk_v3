@@ -44,14 +44,14 @@ try {
         throw new InvalidArgumentException('Acao de escala invalida.');
     }
     if ($action === 'rule') {
-        $id = $service->saveScheduleRule($data, portal_username());
+        $id = $service->saveScheduleRule($data, portal_username(), $role);
         audit_log('SCHEDULE_RULE_SAVED', 'Regra de escala salva. ID ' . $id, 'WARNING');
         json_response(['sucesso' => true, 'id' => $id, 'mensagem' => 'Regra de escala salva.']);
     }
     if ($action === 'remove_rule') {
-        if ($role !== 'admin') {
+        if (!portal_role_can($role, 'escalas.manage')) {
             audit_log('SCHEDULE_RULE_REMOVE_DENIED', 'Perfil sem permissao tentou remover regra de escala.', 'WARNING');
-            json_response(['sucesso' => false, 'mensagem' => 'Apenas administradores podem remover regras de escala.'], 403);
+            json_response(['sucesso' => false, 'mensagem' => 'Apenas administradores e Liderança podem remover regras de escala.'], 403);
         }
         $rawEmployeeId = $data['employee_id'] ?? null;
         if (!is_scalar($rawEmployeeId)) {
@@ -65,12 +65,12 @@ try {
         if (!$employeeId) {
             throw new InvalidArgumentException('Colaborador invalido.');
         }
-        $count = $service->removeScheduleRule((int)$employeeId, portal_username());
+        $count = $service->removeScheduleRule((int)$employeeId, portal_username(), $role);
         audit_log('SCHEDULE_RULE_REMOVED', 'Regra de escala removida para colaborador ID ' . (int)$employeeId, 'WARNING');
         json_response(['sucesso' => true, 'removed' => $count, 'mensagem' => 'Regra de escala removida.']);
     }
     if ($action === 'exception') {
-        $id = $service->saveScheduleException($data, portal_username());
+        $id = $service->saveScheduleException($data, portal_username(), $role);
         audit_log('SCHEDULE_EXCEPTION_SAVED', 'Excecao de escala salva. ID ' . $id, 'WARNING');
         json_response(['sucesso' => true, 'id' => $id, 'mensagem' => 'Excecao de escala salva.']);
     }
@@ -90,7 +90,7 @@ try {
         if (!isset($data['rows']) || !is_array($data['rows'])) {
             throw new InvalidArgumentException('Rows deve ser uma lista de linhas.');
         }
-        $count = $service->confirmScheduleImport($data['rows'], portal_username());
+        $count = $service->confirmScheduleImport($data['rows'], portal_username(), $role);
         audit_log('SCHEDULE_IMPORT_CONFIRMED', 'Importacao de escala confirmada. Linhas ' . $count, 'WARNING');
         json_response(['sucesso' => true, 'imported' => $count, 'mensagem' => "{$count} regra(s) importada(s)."]);
     }

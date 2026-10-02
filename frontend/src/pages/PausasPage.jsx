@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { formatDuration } from '../lib/format'
 import { Icon } from '../components/ui/Icon'
 import { SectionHeader, StatusDot, UserAvatar } from '../components/ui/Primitives'
+import { hasPermission } from '../lib/roles'
 
 const reasons = ['Café', 'Pessoal', 'Reunião']
 
@@ -165,7 +166,7 @@ function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loadin
 export function PausasPage({ session, status, livePauses, loading, onStart, onRequest, onFinish, onForceEndBreak }) {
   const employees = useMemo(() => [...(status.n1 || []), ...(status.n2 || [])], [status])
   const current = employees.find((item) => Number(item.id) === Number(session.ci.funcionario_id))
-  const canForceEndBreak = session.role === 'admin'
+  const canForceEndBreak = hasPermission(session, 'pausas.force_end')
 
   return (
     <div className="space-y-7">

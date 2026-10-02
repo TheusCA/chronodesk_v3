@@ -12,7 +12,7 @@ try {
         json_response([
             'sucesso' => true,
         ] + $service->list($_GET) + [
-            'can_upload' => $role === 'admin',
+            'can_upload' => portal_role_can($role, 'escalas.manage'),
             'limits' => [
                 'max_file_bytes' => ShiftAttachmentService::MAX_FILE_BYTES,
                 'allowed_extensions' => ShiftAttachmentService::ALLOWED_EXTENSIONS,
@@ -20,6 +20,11 @@ try {
         ]);
     }
     require_csrf_token();
+    // [Lote 5c] Perfil antes de qualquer validacao do arquivo.
+    if (!portal_role_can($role, 'escalas.manage')) {
+        audit_log('SHIFT_ATTACHMENT_UPLOAD_DENIED', 'Perfil sem permissao tentou publicar escala.', 'WARNING');
+        json_response(['sucesso' => false, 'mensagem' => 'Seu perfil nao pode publicar escalas.'], 403);
+    }
     $contentLength = filter_var($_SERVER['CONTENT_LENGTH'] ?? null, FILTER_VALIDATE_INT);
     if ($contentLength === false || $contentLength < 1) {
         json_response(['sucesso' => false, 'mensagem' => 'Tamanho da requisicao invalido.'], 411);

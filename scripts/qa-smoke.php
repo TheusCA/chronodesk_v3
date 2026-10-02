@@ -175,7 +175,7 @@ assert_same('lideranca', validate_funcionario_equipe('Não se aplica'), 'normali
 $forceEndBreakSource = file_get_contents(__DIR__ . '/../api/portal/admin_force_end_break.php');
 assert_same(true, is_string($forceEndBreakSource), 'le endpoint de derrubada manual de pausa');
 assert_same(true, strpos($forceEndBreakSource, 'require_portal_auth()') !== false, 'derrubada manual exige sessao');
-assert_same(true, strpos($forceEndBreakSource, "\$role !== 'admin'") !== false, 'derrubada manual exige admin exato');
+assert_same(true, strpos($forceEndBreakSource, "portal_role_can(\$role, 'pausas.force_end')") !== false, 'derrubada manual exige pausas.force_end (admin e Lideranca, Lote 5c)');
 assert_same(true, strpos($forceEndBreakSource, 'portal_json_input()') !== false, 'derrubada manual exige CSRF e JSON');
 assert_same(true, strpos($forceEndBreakSource, 'with_pause_state_lock') !== false, 'derrubada manual usa lock de estado');
 assert_same(true, strpos($forceEndBreakSource, 'finalizar_pausa') !== false, 'derrubada manual reutiliza finalizacao segura');
@@ -431,7 +431,7 @@ $shiftApiSource = file_get_contents(__DIR__ . '/../api/portal/shift_attachments.
 $shiftPageSource = file_get_contents(__DIR__ . '/../frontend/src/pages/ShiftSchedulesPage.jsx');
 $navigationSource = file_get_contents(__DIR__ . '/../frontend/src/lib/navigation.ts');
 assert_same(true, is_string($shiftApiSource) && is_string($shiftPageSource) && is_string($navigationSource), 'le feed de escalas');
-assert_same(true, strpos($shiftApiSource, "\$role === 'admin'") !== false, 'endpoint de escalas mostra upload apenas para admin');
+assert_same(true, strpos($shiftApiSource, "portal_role_can(\$role, 'escalas.manage')") !== false, 'endpoint de escalas mostra upload para escalas.manage (Lote 5c)');
 assert_same(true, strpos($shiftPageSource, 'Escalas de Sábado') !== false, 'feed foi renomeado para Escalas de Sabado');
 assert_same(true, strpos($navigationSource, 'Escalas de Sábado') !== false, 'menu foi renomeado para Escalas de Sabado');
 assert_same(false, strpos($shiftPageSource, 'Escala de turnos') !== false, 'feed nao exibe texto antigo de turnos');
@@ -502,7 +502,7 @@ $scheduleApiSource = file_get_contents(__DIR__ . '/../api/portal/schedules.php')
 $operationalSource = file_get_contents(__DIR__ . '/../services/OperationalService.php');
 assert_same(true, is_string($scheduleApiSource) && is_string($operationalSource), 'le backend de escala presencial');
 assert_same(true, strpos($scheduleApiSource, "\$action === 'remove_rule'") !== false, 'endpoint possui acao para remover regra de escala');
-assert_same(true, strpos($scheduleApiSource, "\$role !== 'admin'") !== false, 'remocao de regra exige admin');
+assert_same(true, strpos($scheduleApiSource, "portal_role_can(\$role, 'escalas.manage')") !== false, 'remocao de regra exige escalas.manage (Lote 5c)');
 assert_same(true, strpos($operationalSource, 'ON DUPLICATE KEY UPDATE') !== false, 'salvar regra usa UPSERT por employee_id');
 assert_same(true, strpos($operationalSource, 'id = LAST_INSERT_ID(id)') !== false, 'UPSERT reaproveita id existente sem duplicar');
 assert_same(true, strpos($operationalSource, 'effective_until = NULL') !== false, 'UPSERT reativa regra removida');

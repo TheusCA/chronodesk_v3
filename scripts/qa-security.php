@@ -43,12 +43,25 @@ final class QaChildPdo extends PDO {
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista');
     }
 
+    public bool $transaction = false;
+
     public function beginTransaction(): bool {
-        throw new PDOException('SQLSTATE[HY000]: banco simulado: transacao nao prevista');
+        $this->transaction = true;
+        return true;
+    }
+
+    public function commit(): bool {
+        $this->transaction = false;
+        return true;
+    }
+
+    public function rollBack(): bool {
+        $this->transaction = false;
+        return true;
     }
 
     public function inTransaction(): bool {
-        return false;
+        return $this->transaction;
     }
 }
 
@@ -78,6 +91,13 @@ final class QaChildStatement extends PDOStatement {
             $row = $byId($this->pdo, $params[':id'] ?? 0);
             $columns = strpos($this->sql, 'ad_login') !== false ? ['access_role', 'ad_login'] : ['access_role'];
             $this->rows = $row ? [array_intersect_key($row, array_flip($columns))] : [];
+            return true;
+        }
+        if ($this->sql === 'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login, access_role FROM funcionarios WHERE id = :id AND ativo = 1') {
+            $row = $byId($this->pdo, $params[':id'] ?? 0);
+            $this->rows = $row && (int)$row['ativo'] === 1
+                ? [['id' => (int)$params[':id'], 'name' => 'QA', 'team' => $row['equipe'], 'ad_login' => $row['ad_login'], 'access_role' => $row['access_role']]]
+                : [];
             return true;
         }
         if (strpos($this->sql, 'SELECT id FROM funcionarios WHERE ad_login = :ad_login') === 0) {
@@ -1204,8 +1224,10 @@ $expect = [
     'ADMIN' => ['ok', 403, 403, 403, 403, 401],
     // verificar_admin_login_api(): sem sessao de gestao a resposta e 401.
     'ADMIN_LEGADO' => ['ok', 403, 403, 401, 401, 401],
-    // Lote 5b: funcionarios.manage (admin e Lideranca).
+    // Lote 5b e 5c: funcionarios.manage, escalas.manage, pa_map.manage e
+    // pausas.force_end (admin e Lideranca).
     'FUNCIONARIOS' => ['ok', 'ok', 403, 403, 403, 401],
+    'ADMIN_LIDERANCA' => ['ok', 'ok', 403, 403, 403, 401],
 ];
 $emptyJson = ['content_type' => $json, 'body' => '{}'];
 $matrix = [
@@ -1224,7 +1246,7 @@ $matrix = [
     'api/status.php GET' => [[], $expect['TODOS']],
     'api/usuarios.php GET' => [[], [[403, 'usuarios locais esta desativado']] + $expect['ADMIN_LEGADO']],
     'api/portal/absences.php GET' => [[], $expect['TODOS']],
-    'api/portal/admin_force_end_break.php POST' => [$emptyJson, $expect['ADMIN']],
+    'api/portal/admin_force_end_break.php POST' => [$emptyJson, $expect['ADMIN_LIDERANCA']],
     'api/portal/announcements.php GET' => [[], $expect['TODOS']],
     'api/portal/calendar.php GET' => [[], $expect['TODOS']],
     'api/portal/calendar.php POST' => [$emptyJson, $expect['GESTAO']],
@@ -1244,15 +1266,15 @@ $matrix = [
     'api/portal/overtime.php GET' => [[], $expect['TODOS']],
     'api/portal/overtime.php POST' => [['content_type' => $json, 'body' => '{"action":"decision","id":0,"decision":"approved"}'], $expect['GESTAO']],
     'api/portal/pa_map.php GET' => [[], $expect['TODOS']],
-    'api/portal/pa_map.php POST' => [$emptyJson, $expect['ADMIN']],
+    'api/portal/pa_map.php POST' => [$emptyJson, $expect['ADMIN_LIDERANCA']],
     'api/portal/reports.php GET' => [[], $expect['GESTAO']],
     'api/portal/schedules.php GET' => [[], $expect['TODOS']],
     'api/portal/schedules.php POST' => [['content_type' => $json, 'body' => '{"action":"rule"}'], $expect['GESTAO']],
-    'api/portal/schedules.php POST remove_rule' => [['content_type' => $json, 'body' => '{"action":"remove_rule"}'], $expect['ADMIN']],
+    'api/portal/schedules.php POST remove_rule' => [['content_type' => $json, 'body' => '{"action":"remove_rule"}'], $expect['ADMIN_LIDERANCA']],
     'api/portal/sdk_responsibles.php GET' => [[], $expect['TODOS']],
-    // POST de anexo de escala: a checagem de perfil fica no servico, depois da
-    // validacao do arquivo; coberta no 5c.
     'api/portal/shift_attachments.php GET' => [[], $expect['TODOS']],
+    // Lote 5c: o perfil e conferido antes de qualquer validacao do arquivo.
+    'api/portal/shift_attachments.php POST' => [['content_type' => 'multipart/form-data', 'body' => 'x'], $expect['ADMIN_LIDERANCA']],
     'api/portal/shift_attachments_download.php GET' => [[], $expect['TODOS']],
     'api/portal/standby.php GET' => [[], $expect['TODOS']],
     'api/portal/technicians.php GET' => [[], $expect['TODOS']],
@@ -1314,7 +1336,7 @@ foreach ($matrix as $row => [$extra, $expected]) {
         assert_same([], $codeFatal, "matriz {$row} | {$role}: sem erro fatal de codigo");
     }
 }
-assert_same([], $matrixFailures, 'matriz de perfis por endpoint (5a e 5b)');
+assert_same([], $matrixFailures, 'matriz de perfis por endpoint (5a, 5b e 5c)');
 
 // Estrutural: o login CI precisa de AD e nao roda aqui. Confere que o perfil
 // vem de session_role_for() com a allowlist (a revalidacao da requisicao
@@ -1503,5 +1525,113 @@ foreach (['', '   ', null] as $empty) {
 }
 $authSource = (string)file_get_contents($root . '/auth_ldap.php');
 assert_same(true, strpos($authSource, "funcionario_role_is_elevated(\$funcionario['access_role'] ?? null) ? 'CRITICAL' : 'WARNING'") !== false, 'vinculo automatico do AD auditado pelo perfil (A3)');
+
+// ============================================================================
+// 6. Lote 5c — escalas, Mapa PA, derrubada de pausa, L9, L7 e L4
+// ============================================================================
+
+// Guardas por permissao.
+foreach ([
+    ['admin', 'escalas.manage', true], ['lideranca', 'escalas.manage', true], ['gestor', 'escalas.manage', false],
+    ['lideranca', 'pa_map.manage', true], ['gestor', 'pa_map.manage', false],
+    ['lideranca', 'pausas.force_end', true], ['gestor', 'pausas.force_end', false], ['tecnico', 'pausas.force_end', false],
+    [null, 'portal.read', false],
+] as [$role, $permission, $expected]) {
+    assert_same($expected, portal_role_can($role, $permission), 'permissao ' . ($role ?? 'nenhum') . " {$permission}");
+}
+
+// L9: tabela-verdade (ator x equipe do alvo x perfil do alvo).
+foreach (['admin', 'lideranca', 'gestor'] as $actor) {
+    foreach (['n1', 'n2', 'lideranca', 'Liderança'] as $team) {
+        foreach (['tecnico', 'somente_leitura', 'gestor', 'lideranca', 'admin', null] as $targetRole) {
+            $protected = in_array($team, ['lideranca', 'Liderança'], true) || in_array($targetRole, ['lideranca', 'admin'], true);
+            $expected = $actor !== 'admin' && $protected ? 403 : null;
+            $denied = schedule_change_denied($actor, $team, $targetRole);
+            assert_same($expected, $denied[0] ?? null, "L9: ator {$actor}, equipe {$team}, perfil " . ($targetRole ?? '-'));
+        }
+    }
+}
+
+// L9 no servico: a recusa vem antes de qualquer outra consulta; quem passa
+// segue para o banco (aqui, o banco simulado falha de proposito).
+$scheduleDb = QA_DB;
+$scheduleDb['funcionarios']['10'] = ['ativo' => 1, 'access_role' => 'lideranca', 'equipe' => 'n1', 'ad_login' => 'qa.lider.n1'];
+$scheduleDb['funcionarios']['11'] = ['ativo' => 1, 'access_role' => 'admin', 'equipe' => 'n2', 'ad_login' => 'qa.admin.n2'];
+$scheduleCall = static function (callable $call): string {
+    try {
+        $call();
+        return 'ok';
+    } catch (PortalForbiddenException $e) {
+        return '403: ' . $e->getMessage();
+    } catch (Throwable $e) {
+        return 'passou da checagem (' . get_class($e) . ')';
+    }
+};
+$scheduleService = new OperationalService(new QaChildPdo($scheduleDb));
+$forbidden = '403: Somente administradores alteram a escala da Liderança.';
+foreach ([
+    ['regra de cadastro Lideranca pela Lideranca', fn () => $scheduleService->saveScheduleRule(['employee_id' => 10, 'rule_type' => 'always_onsite'], 'qa', 'lideranca'), $forbidden],
+    ['regra de cadastro Lideranca pelo gestor', fn () => $scheduleService->saveScheduleRule(['employee_id' => 10, 'rule_type' => 'always_onsite'], 'qa', 'gestor'), $forbidden],
+    ['remocao de regra de admin legado pela Lideranca', fn () => $scheduleService->removeScheduleRule(11, 'qa', 'lideranca'), $forbidden],
+    ['excecao de cadastro Lideranca pelo gestor', fn () => $scheduleService->saveScheduleException(['employee_id' => 10, 'exception_date' => '2026-10-05', 'exception_type' => 'onsite'], 'qa', 'gestor'), $forbidden],
+] as [$label, $call, $expected]) {
+    assert_same($expected, $scheduleCall($call), "L9 no servico: {$label}");
+}
+foreach ([
+    ['regra de cadastro Lideranca pelo admin', fn () => $scheduleService->saveScheduleRule(['employee_id' => 10, 'rule_type' => 'always_onsite'], 'qa', 'admin')],
+    ['regra de tecnico pela Lideranca', fn () => $scheduleService->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite'], 'qa', 'lideranca')],
+    ['regra de tecnico pelo gestor', fn () => $scheduleService->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite'], 'qa', 'gestor')],
+] as [$label, $call]) {
+    assert_same(0, strpos($scheduleCall($call), 'passou da checagem'), "L9 no servico: {$label}");
+}
+$operationalSource = (string)file_get_contents($root . '/services/OperationalService.php');
+assert_same(3, substr_count($operationalSource, '$this->assertScheduleChangeAllowed($employee, $actorRole);'), 'L9: regra, remocao e excecao conferem o alvo (a importacao passa pela regra)');
+assert_same(true, strpos($operationalSource, "], \$actor, \$actorRole, 'import');") !== false, 'L9: importacao repassa o perfil do ator');
+
+// L9 de ponta a ponta: 403 com auditoria.
+$scheduleCases = qa_run_endpoints($qaDir, [
+    'lider_regra_lider' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"rule","employee_id":10,"rule_type":"always_onsite"}', 'session' => $leaderSession, 'db' => $scheduleDb],
+    'gestor_regra_tecnico' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"rule","employee_id":1,"rule_type":"always_onsite"}', 'session' => $manager, 'db' => $scheduleDb],
+]);
+assert_same(403, $scheduleCases['lider_regra_lider']['status'], 'L9: Lideranca editando escala de cadastro Lideranca recebe 403');
+assert_same(true, strpos($scheduleCases['lider_regra_lider']['body'], 'Somente administradores alteram a escala da Liderança') !== false, 'L9: mensagem');
+assert_same(true, strpos($scheduleCases['lider_regra_lider']['log'], '[QA_AUDIT] PORTAL_ACCESS_DENIED [WARNING]') !== false, 'L9: recusa auditada');
+assert_same(false, in_array($scheduleCases['gestor_regra_tecnico']['status'], [401, 403], true), 'L9: gestor continua editando escala de tecnico');
+
+// L7: AUTH_SOURCE removida do codigo e da tela.
+$authSourceFiles = [];
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $file) {
+    $path = str_replace('\\', '/', (string)$file);
+    if (!preg_match('/\.(php|jsx|ts|js|example)$/', $path) || preg_match('#/(node_modules|vendor|scripts|\.git|app|dist)/#', $path)) {
+        continue;
+    }
+    $source = (string)file_get_contents($path);
+    if (stripos($source, 'AUTH_SOURCE') !== false) {
+        $authSourceFiles[] = substr($path, strlen(str_replace('\\', '/', $root)) + 1);
+    }
+}
+assert_same([], $authSourceFiles, 'L7: AUTH_SOURCE/auth_source fora do codigo, da tela e dos exemplos de .env');
+assert_same(true, strpos((string)file_get_contents($root . '/scripts/preflight-deploy.sh'), 'AUTH_SOURCE: AVISO') !== false, 'L7: preflight avisa se AUTH_SOURCE ainda estiver no .env');
+
+// L4: login local auditado como CRITICAL nos tres caminhos; preflight reprova
+// o acesso local ligado fora de development.
+foreach (['login.php', 'admin_login.php', 'api/login_admin.php'] as $file) {
+    assert_same(true, strpos((string)file_get_contents($root . '/' . $file), "\$auth_type === 'local' ? 'CRITICAL' : 'INFO'") !== false, "L4: {$file} audita login local como CRITICAL");
+}
+$preflightSource = (string)file_get_contents($root . '/scripts/preflight-deploy.sh');
+$localCheck = strpos($preflightSource, 'ENABLE_LOCAL_ADMIN: FALHA');
+assert_same(true, $localCheck !== false && $localCheck > strpos($preflightSource, 'if [ "$APP_ENV_VALUE" = development ]; then') && $localCheck < strpos($preflightSource, '# [A2]'), 'L4: preflight reprova acesso local ligado fora de development');
+
+// Frontend: acoes por permissao, nao pelo nome do perfil.
+foreach ([
+    'frontend/src/App.jsx' => "hasPermission(session, 'pausas.force_end')",
+    'frontend/src/pages/DashboardPage.jsx' => "hasPermission(session, 'pausas.force_end')",
+    'frontend/src/pages/PausasPage.jsx' => "hasPermission(session, 'pausas.force_end')",
+    'frontend/src/pages/OperationalPages.jsx' => "hasPermission(session, 'escalas.manage')",
+] as $file => $needle) {
+    $source = (string)file_get_contents($root . '/' . $file);
+    assert_same(true, strpos($source, $needle) !== false, "frontend {$file}: {$needle}");
+    assert_same(0, preg_match("/session\.role [!=]== 'admin'/", $source), "frontend {$file}: sem comparacao com o nome admin");
+}
 
 echo "qa-security OK\n";

@@ -293,12 +293,13 @@ final class OperationalService {
         ];
     }
 
-    public function saveScheduleRule(array $data, string $actor): int {
-        return $this->atomic(fn(): int => $this->saveScheduleRuleUnsafe($data, $actor));
+    public function saveScheduleRule(array $data, string $actor, string $actorRole): int {
+        return $this->atomic(fn(): int => $this->saveScheduleRuleUnsafe($data, $actor, $actorRole));
     }
 
-    private function saveScheduleRuleUnsafe(array $data, string $actor, string $origin = 'manual'): int {
+    private function saveScheduleRuleUnsafe(array $data, string $actor, string $actorRole, string $origin = 'manual'): int {
         $employee = $this->employee($data['employee_id'] ?? null);
+        $this->assertScheduleChangeAllowed($employee, $actorRole);
         $rule = (string)($data['rule_type'] ?? '');
         if (!in_array($rule, self::RULE_TYPES, true)) {
             throw new InvalidArgumentException('Regra de escala invalida.');
@@ -363,9 +364,10 @@ final class OperationalService {
         return $id;
     }
 
-    public function removeScheduleRule(int $employeeId, string $actor): int {
-        return $this->atomic(function () use ($employeeId, $actor): int {
+    public function removeScheduleRule(int $employeeId, string $actor, string $actorRole): int {
+        return $this->atomic(function () use ($employeeId, $actor, $actorRole): int {
             $employee = $this->employee($employeeId);
+            $this->assertScheduleChangeAllowed($employee, $actorRole);
             $existing = $this->latestScheduleRuleForEmployee((int)$employee['id']);
             if ($existing === null || $existing['effective_until'] !== null) {
                 throw new DomainException('Colaborador nao possui regra de escala ativa.');
@@ -395,12 +397,13 @@ final class OperationalService {
         });
     }
 
-    public function saveScheduleException(array $data, string $actor): int {
-        return $this->atomic(fn(): int => $this->saveScheduleExceptionUnsafe($data, $actor));
+    public function saveScheduleException(array $data, string $actor, string $actorRole): int {
+        return $this->atomic(fn(): int => $this->saveScheduleExceptionUnsafe($data, $actor, $actorRole));
     }
 
-    private function saveScheduleExceptionUnsafe(array $data, string $actor): int {
+    private function saveScheduleExceptionUnsafe(array $data, string $actor, string $actorRole): int {
         $employee = $this->employee($data['employee_id'] ?? null);
+        $this->assertScheduleChangeAllowed($employee, $actorRole);
         $date = self::dateValue($data['exception_date'] ?? null, 'Data');
         $type = (string)($data['exception_type'] ?? '');
         $allowed = ['remote', 'onsite', 'day_off', 'absence', 'training', 'oncall', 'vacation', 'leave'];
@@ -553,18 +556,18 @@ final class OperationalService {
         ];
     }
 
-    public function confirmScheduleImport(array $rows, string $actor): int {
+    public function confirmScheduleImport(array $rows, string $actor, string $actorRole): int {
         $preview = $this->previewScheduleImport($rows);
         if ($preview['invalid_count'] > 0 || $preview['valid_count'] === 0) {
             throw new InvalidArgumentException('A importacao possui linhas invalidas.');
         }
-        return $this->atomic(function () use ($preview, $actor): int {
+        return $this->atomic(function () use ($preview, $actor, $actorRole): int {
             foreach ($preview['rows'] as $row) {
                 $this->saveScheduleRuleUnsafe([
                     'employee_id' => $row['employee_id'],
                     'rule_type' => $row['rule_type'],
                     'effective_from' => date('Y-m-d'),
-                ], $actor, 'import');
+                ], $actor, $actorRole, 'import');
             }
             return $preview['valid_count'];
         });
@@ -1191,7 +1194,7 @@ final class OperationalService {
     private function employee($id): array {
         $employeeId = $this->positiveInt($id);
         $stmt = $this->pdo->prepare(
-            'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login
+            'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login, access_role
              FROM funcionarios WHERE id = :id AND ativo = 1'
         );
         $stmt->execute([':id' => $employeeId]);
@@ -1200,6 +1203,14 @@ final class OperationalService {
             throw new InvalidArgumentException('Colaborador nao encontrado ou inativo.');
         }
         return $employee;
+    }
+
+    /** [L9] Escala de Liderança, ou de cadastro Liderança/admin, só pelo admin. */
+    private function assertScheduleChangeAllowed(array $employee, string $actorRole): void {
+        $denied = schedule_change_denied($actorRole, $employee['team'] ?? null, $employee['access_role'] ?? null);
+        if ($denied !== null) {
+            throw new PortalForbiddenException($denied[1]);
+        }
     }
 
     private function findEmployeeForImport(array $row): ?array {

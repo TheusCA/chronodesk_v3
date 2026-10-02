@@ -992,6 +992,32 @@ function require_funcionario_change(string $actor_role, ?string $current_role, ?
     json_response(['sucesso' => false, 'mensagem' => $denied[1]], $denied[0]);
 }
 
+/** [Lote 5c] O perfil tem a permissão? Guardas por permissão, não por lista de perfis. */
+function portal_role_can(?string $role, string $permission): bool {
+    return in_array($permission, portal_permissions_for_role($role), true);
+}
+
+/** Recusa de perfil que um serviço lança; portal_operational_error() responde 403. */
+class PortalForbiddenException extends RuntimeException {
+}
+
+/**
+ * [L9] Escala (regra, exceção, remoção, importação) de quem é da equipe
+ * Liderança ou tem perfil Liderança ou admin: só o admin altera. Os demais
+ * perfis de gestão seguem a regra atual para N1 e N2.
+ * Devolve null (pode) ou [status HTTP, mensagem].
+ */
+function schedule_change_denied(string $actor_role, ?string $target_team, ?string $target_role): ?array {
+    if ($actor_role === 'admin') {
+        return null;
+    }
+    if (validate_funcionario_equipe((string)$target_team) === 'lideranca'
+        || in_array(portal_role_value($target_role), ['lideranca', 'admin'], true)) {
+        return [403, 'Somente administradores alteram a escala da Liderança.'];
+    }
+    return null;
+}
+
 /** Perfis cujo cadastro dá acesso de gestão: mudanças neles são CRITICAL (A3). */
 function funcionario_role_is_elevated(?string $role): bool {
     return in_array(portal_role_value($role), ['gestor', 'lideranca', 'admin'], true);

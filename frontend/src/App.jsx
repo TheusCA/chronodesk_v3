@@ -8,6 +8,7 @@ import { api, post, setCsrfToken } from './lib/api'
 import { navigation } from './lib/navigation'
 import { useRouter } from './lib/router'
 import { useLivePauses } from './hooks/useLivePauses'
+import { hasPermission } from './lib/roles'
 
 const lazyPage = (loader, exportName) => lazy(() => loader().then((module) => ({ default: module[exportName] })))
 
@@ -136,7 +137,7 @@ export default function App() {
   const funcionarioId = session.ci.funcionario_id
 
   async function forceEndBreak(employee) {
-    if (session.role !== 'admin' || !employee?.em_pausa) return null
+    if (!hasPermission(session, 'pausas.force_end') || !employee?.em_pausa) return null
     if (!window.confirm(`Tem certeza que deseja derrubar a pausa de ${employee.nome}?`)) return null
     const justificativa = window.prompt('Justificativa da derrubada (opcional):', '') || ''
     return runAction(() => post('portal/admin_force_end_break.php', {

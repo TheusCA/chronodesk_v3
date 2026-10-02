@@ -294,7 +294,7 @@ final class ShiftAttachmentService {
     }
 
     private function assertManager(array $actor): void {
-        if (($actor['role'] ?? '') !== 'admin') {
+        if (!portal_role_can($actor['role'] ?? null, 'escalas.manage')) {
             throw new DomainException('Seu perfil nao pode publicar escalas.');
         }
     }

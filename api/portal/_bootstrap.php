@@ -98,6 +98,10 @@ function portal_operational_error(Throwable $error): void {
     if ($error instanceof LengthException) {
         json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 413);
     }
+    if ($error instanceof PortalForbiddenException) {
+        audit_log('PORTAL_ACCESS_DENIED', 'Recusa de perfil no servico: ' . $error->getMessage(), 'WARNING');
+        json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 403);
+    }
     if ($error instanceof PortalStorageException) {
         json_response(['sucesso' => false, 'mensagem' => $error->getMessage()], 503);
     }

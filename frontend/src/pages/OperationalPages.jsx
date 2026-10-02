@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { isManagerRole } from '../lib/roles'
+import { hasPermission, isManagerRole } from '../lib/roles'
 import { useQuery } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { useForm } from 'react-hook-form'
@@ -225,7 +225,7 @@ export function CalendarPage({ session, notify }) {
 
 export function SchedulePage({ session, notify }) {
   const canManage = isManagerRole(session.role)
-  const canRemoveRule = session.role === 'admin'
+  const canRemoveRule = hasPermission(session, 'escalas.manage')
   const employees = useEmployees()
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '' })
   const resource = useResource(`portal/schedules.php${queryString(filters)}`)
