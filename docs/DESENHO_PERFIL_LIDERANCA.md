@@ -294,6 +294,15 @@ No servidor, sem exibir valores: quantos dos `ad_login` da Liderança ativa est�
 - Banco indisponível na revalidação: **503**, sem conceder nada e sem destruir a sessão (falha fechada; o usuário volta quando o banco voltar).
 - Executa uma vez por requisição, nas portas por onde toda autorização passa: `ci_session_is_current()`, `usuario_pode_acessar_metricas()`, `verificar_login_api()` e `verificar_admin_login()`.
 - **P11** (checagem de funcionário ativo em `require_portal_auth`, aprovada no desenho da Parte B): coberta pelo A1, que é mais amplo. Não precisa de implementação separada no F3.
+- **Sessão de gestão sem CI — quem consegue abrir (verificado em 2026-10-02, condição 1 da validação do 5a).** Nenhum caminho dá sessão de gestão por AD a quem está fora da allowlist; fora dela, só usuário local, que é revalidado pela tabela `usuarios`. Por isso a revalidação dessas sessões pela allowlist não deixa ninguém legítimo em 401.
+
+  | Caminho | Por AD | Por usuário local (`ENABLE_LOCAL_ADMIN=true`) | Chaves gravadas |
+  |---|---|---|---|
+  | `login.php` | Só allowlist (`login.php:33`); fora dela, erro sem tentar o local (`:37-38`, `:42`) | `usuarios.role` `admin` ou `gestor` (`:46`) | `logged_in`, `username`, `auth_type` (`:60-62`) |
+  | `admin_login.php` | Só allowlist (`admin_login.php:33`; `:37-38`) | Só `usuarios.role = 'admin'` (`:46`; gestor recusado em `:49-50`) | `admin_logged_in`, `admin_auth_type`, `admin_username`, `logged_in`, `username` (`:62-66`) |
+  | `api/login_admin.php` | Só allowlist (`api/login_admin.php:36`); fora dela, 403 sem tentar o local (`:40-46`) | `usuarios.role` `admin` ou `gestor` (`:54`) | idem, mais `portal_role` (`:75-80`) |
+
+  Gestor pelo cadastro de funcionários só abre sessão pelo login CI (`api/login_ci.php:66-72`, `admin_auth_type = 'employee_role'`), sempre com as chaves CI, e é revalidado pelo cadastro. `clear_ci_session()` (`security.php:1153-1175`) apaga as chaves elevadas junto com as do CI, então não sobra sessão `employee_role` sem CI. O `qa-security` confere que só esses quatro arquivos gravam chaves de sessão de gestão e cobre as sessões locais de ponta a ponta (gestor pelo `login.php`, admin pelo `admin_login.php`, usuário removido, acesso local desligado, admin local rebaixado).
 - Custo: o polling atual (15 s por usuário) soma uma consulta por chave primária por requisição, ao lado do `init.php`, que já carrega todos os funcionários. Desprezível no volume de hoje (30 cadastros); não medido.
 
 **A2 — Allowlist normalizada como o bind.** `AD_ADMIN_USERS` e o login são comparados por `ad_login_key()`, que usa a mesma `normalizar_login_ldap()` do bind: minúsculas, `@dominio` só com sufixo permitido. Entradas da allowlist no formato `DOMINIO\usuario` têm o prefixo retirado antes. Observação, sem alteração: o **bind** não aceita `DOMINIO\usuario` digitado no login (a normalização recusa a barra invertida); quem digitar assim não autentica. O preflight dá `FALHA` se `AD_ADMIN_USERS` estiver ausente, vazio ou só com separadores, em **qualquer** `APP_ENV` (antes, só fora de `development`).
@@ -342,7 +351,7 @@ No servidor, sem exibir valores: quantos dos `ad_login` da Liderança ativa est�
 
 **Observações do 5a, sem alteração:**
 - A revalidação é também uma defesa em profundidade para o login CI: uma sessão montada com perfil maior que o das fontes seria encerrada na requisição seguinte.
-- Alguns endpoints não tratam banco indisponível (por exemplo `api/solicitacoes_pendentes.php`: a exceção sobe sem captura e vira erro 500 com registro de erro fatal). É anterior ao lote; a matriz do QA ignora só esse caso.
+- Endpoints que não tratam banco indisponível: `api/solicitacoes_pendentes.php` (GET, admin) e `api/portal/standby.php` (GET, qualquer perfil). A exceção sobe sem captura e vira erro 500 com registro de erro fatal. Levantamento de 2026-10-02: todos os endpoints de `api/` e `api/portal/`, GET e POST (corpo `{}`), como admin e como técnico, com o banco respondendo só à revalidação. Não cobre falha de conexão nem corpos válidos. Anterior ao lote; **pendência para lote próprio**. A matriz do QA ignora só esse caso.
 - O POST de anexo de escala checa o perfil dentro do serviço, depois de validar o arquivo; fica fora da matriz e entra no 5c.
 
 Cada sublote para no fim, com QA, mutação, registro e roteiro manual, como nos lotes anteriores. Documentação a atualizar na implementação: `API_CONTRACTS_FRONTEND.md`, `DOCUMENTACAO_TECNICA.md`, `DEPLOY_LINUX.md` (016 e 016b), `AUDITORIA_2026-09.md` (SEC-04, SEC-10).

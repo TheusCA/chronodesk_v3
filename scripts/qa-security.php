@@ -134,6 +134,10 @@ if (($argv[1] ?? '') === QA_RUNNER_FLAG) {
         exit(2);
     }
     qa_isolated_environment($spec['error_log']);
+    // Variaveis do caso (por exemplo ENABLE_LOCAL_ADMIN) sobre o ambiente isolado.
+    foreach ($spec['env'] ?? [] as $name => $value) {
+        putenv("{$name}={$value}");
+    }
 
     // php://input nao existe na CLI: um wrapper devolve o corpo da requisicao
     // e repassa os demais caminhos php:// ao wrapper original.
@@ -1114,6 +1118,45 @@ foreach ([
     assert_same(401, $sessionCases[$case]['status'], "revalidacao {$case}: sessao encerrada (401)");
     assert_same(true, strpos($sessionCases[$case]['log'], 'SESSION_REVOKED') !== false && strpos($sessionCases[$case]['log'], $detail) !== false, "revalidacao {$case}: SESSION_REVOKED com '{$detail}'");
 }
+// Sessao de gestao sem CI (condicao 1 da validacao de 2026-10-02): por AD so
+// entra quem esta na allowlist (login.php:33, admin_login.php:33,
+// api/login_admin.php:36); fora dela, so usuario local, revalidado pela tabela
+// usuarios. login.php grava auth_type; os outros dois, admin_auth_type.
+$localOn = ['ENABLE_LOCAL_ADMIN' => 'true'];
+$localGestorSession = ['logged_in' => true, 'username' => 'qa.local', 'auth_type' => 'local', 'login_time' => '__now__', 'last_activity' => '__now__'];
+$localAdminSession = ['admin_logged_in' => true, 'admin_auth_type' => 'local', 'admin_username' => 'qa.local.admin', 'logged_in' => true, 'username' => 'qa.local.admin', 'login_time' => '__now__', 'last_activity' => '__now__'];
+$withLocal = static fn (array $users): array => ['usuarios' => $users] + QA_DB;
+$localCases = qa_run_endpoints($qaDir, [
+    'gestor_local' => ['endpoint' => 'api/portal/reports.php', 'method' => 'GET', 'session' => $localGestorSession, 'env' => $localOn, 'db' => $withLocal(['qa.local' => 'gestor'])],
+    'admin_local' => ['endpoint' => 'api/configuracoes.php', 'method' => 'GET', 'session' => $localAdminSession, 'env' => $localOn, 'db' => $withLocal(['qa.local.admin' => 'admin'])],
+    'local_removido' => ['endpoint' => 'api/portal/reports.php', 'method' => 'GET', 'session' => $localGestorSession, 'env' => $localOn, 'db' => $withLocal([])],
+    'local_desligado' => ['endpoint' => 'api/portal/reports.php', 'method' => 'GET', 'session' => $localGestorSession, 'db' => $withLocal(['qa.local' => 'gestor'])],
+    'admin_local_rebaixado' => ['endpoint' => 'api/configuracoes.php', 'method' => 'GET', 'session' => $localAdminSession, 'env' => $localOn, 'db' => $withLocal(['qa.local.admin' => 'gestor'])],
+]);
+assert_same(false, in_array($localCases['gestor_local']['status'], [401, 403, 503], true), 'sessao local: gestor pelo login.php continua valido (passa da checagem de perfil)');
+assert_same(false, in_array($localCases['admin_local']['status'], [401, 403, 503], true), 'sessao local: admin local continua valido (passa da checagem de perfil)');
+foreach ([
+    'local_removido' => 'perfil gestor -> nenhum, motivo usuario_local_removido',
+    'local_desligado' => 'perfil gestor -> nenhum, motivo acesso_local_desligado',
+    'admin_local_rebaixado' => 'perfil admin -> gestor, motivo ok',
+] as $case => $detail) {
+    assert_same(401, $localCases[$case]['status'], "sessao local {$case}: encerrada (401)");
+    assert_same(true, strpos($localCases[$case]['log'], $detail) !== false, "sessao local {$case}: SESSION_REVOKED com '{$detail}'");
+}
+// Evidencia por leitura do codigo, conferida aqui: so estes quatro arquivos
+// gravam chaves de sessao de gestao.
+$sessionWriters = [];
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS)) as $file) {
+    $path = str_replace('\\', '/', (string)$file);
+    if (substr($path, -4) !== '.php' || preg_match('#/(node_modules|vendor|scripts|\.git)/#', $path)) {
+        continue;
+    }
+    if (preg_match('/\$_SESSION\[.(logged_in|admin_logged_in|portal_role|admin_auth_type|auth_type).\]\s*=[^=]/', (string)file_get_contents($path))) {
+        $sessionWriters[] = substr($path, strlen(str_replace('\\', '/', $root)) + 1);
+    }
+}
+sort($sessionWriters);
+assert_same(['admin_login.php', 'api/login_admin.php', 'api/login_ci.php', 'login.php'], $sessionWriters, 'so os quatro logins gravam sessao de gestao (ponto novo exige revisao da revalidacao)');
 $inactiveSession = json_decode($sessionCases['inativo_sessao']['body'], true);
 assert_same([false, 0, null], [$inactiveSession['ci']['autenticado'] ?? null, $inactiveSession['ci']['funcionario_id'] ?? null, array_key_exists('role', $inactiveSession) ? $inactiveSession['role'] : 'ausente'], 'revalidacao: api/session.php nao mostra CI de cadastro inativo');
 assert_same(403, $sessionCases['promovido']['status'], 'revalidacao: promocao nao eleva a sessao aberta');
