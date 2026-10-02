@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['auth_type'] = $auth_type;
             $_SESSION['login_time'] = time();
             $_SESSION['last_activity'] = time();
-            audit_log('ADMIN_LOGIN_SUCCESS', 'Acesso às métricas via ' . $auth_type . ' para ' . $username, 'INFO');
+            audit_log('ADMIN_LOGIN_SUCCESS', 'Acesso às métricas via ' . $auth_type . ' para ' . $username, $auth_type === 'local' ? 'CRITICAL' : 'INFO');
             header('Location: ' . get_base_path() . '/metricas.php');
             exit;
         }

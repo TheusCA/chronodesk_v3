@@ -8,7 +8,6 @@
  * - VULN-002: Credenciais DB de .env + usuário dedicado
  * - VULN-004: CORS com origens explícitas
  * - VULN-009: Sessões com expiração absoluta e inatividade
- * - VULN-014: AUTH_SOURCE configurável (eliminar dual auth)
  * - VULN-025: limpar_estado_antigo() corrigido (não deleta tudo)
  */
 
@@ -105,12 +104,8 @@ define('SECRET_KEY', $secret_key);
 define('USUARIO_ADMIN', 'admin');
 define('ADMIN_USERNAME', 'administrador');
 
-// ============================================
-// [VULN-014] Fonte de autenticação configurável
-// ============================================
-define('AUTH_SOURCE', getenv('AUTH_SOURCE') ?: 'json_fallback');
-// 'mysql'         = apenas banco de dados (recomendado para produção)
-// 'json_fallback' = MySQL com fallback para config_sistema.json (legacy/migração)
+// [SEC-10, Lote 5c] A fonte de autenticacao configuravel foi removida: era inerte. O controle efetivo da
+// autenticação local é ENABLE_LOCAL_ADMIN (acesso de emergência, L4).
 
 // ============================================
 // Autenticação administrativa híbrida

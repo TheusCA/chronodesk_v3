@@ -79,6 +79,20 @@ else
     else
         echo "DB_PASS: OK"
     fi
+
+    # [L4, Lote 5c] Admin local e so acesso de emergencia: ligado fora de
+    # development reprova o deploy (procedimento em DEPLOY_LINUX.md). Mesma
+    # leitura do config.php: true, 1, yes ou on, sem diferenca de maiusculas.
+    case $(printf %s "$(gv ENABLE_LOCAL_ADMIN)" | tr 'A-Z' 'a-z') in
+        true|1|yes|on) echo "ENABLE_LOCAL_ADMIN: FALHA (acesso de emergencia ligado)"; F=1 ;;
+        *) echo "ENABLE_LOCAL_ADMIN: OK" ;;
+    esac
+fi
+
+# [SEC-10, L7] AUTH_SOURCE foi removida do codigo (era inerte). Presente no
+# .env, so avisa: pode ser apagada.
+if [ -n "$(gv AUTH_SOURCE)" ]; then
+    echo "AUTH_SOURCE: AVISO (variavel obsoleta, nao e lida; remover do .env)"
 fi
 
 # [A2] Admin vem so de AD_ADMIN_USERS (Lote 5): obrigatorio em qualquer APP_ENV.

@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['username'] = $username;
             $_SESSION['login_time'] = time();
             $_SESSION['last_activity'] = time();
-            audit_log('ADMIN_LOGIN_SUCCESS', 'Login administrativo via ' . $auth_type . ' para ' . $username, 'INFO');
+            audit_log('ADMIN_LOGIN_SUCCESS', 'Login administrativo via ' . $auth_type . ' para ' . $username, $auth_type === 'local' ? 'CRITICAL' : 'INFO');
             header('Location: ' . get_base_path() . '/admin.php');
             exit;
         }

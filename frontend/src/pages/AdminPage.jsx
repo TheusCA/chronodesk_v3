@@ -702,8 +702,8 @@ function SecurityTab({ config, notify }) {
   const [password, setPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const protections = securityProtections.map((item) => (
-    item[0] === 'Autenticação AD/LDAP' && config?.auth_source !== 'ad'
-      ? [item[0], 'Parcial', item[2], 'O ambiente atual não informa AD como fonte principal de autenticação.']
+    item[0] === 'Autenticação AD/LDAP' && config?.local_admin_enabled
+      ? [item[0], 'Parcial', item[2], 'O acesso local de emergência está ligado: desligue assim que terminar o uso.']
       : item
   ))
   const activeCount = protections.filter(([, status]) => ['Ativo', 'Configurado'].includes(status)).length
@@ -773,7 +773,7 @@ function SecurityTab({ config, notify }) {
       <section className="grid gap-5 md:grid-cols-2">
         <div className="card">
           <p className="text-sm text-slate-500">Modo de autenticação</p>
-          <h3 className="mt-2 text-xl font-bold uppercase text-white">{config?.auth_source || 'Não informado'}</h3>
+          <h3 className="mt-2 text-xl font-bold text-white">{config?.local_admin_enabled ? 'AD/LDAP e acesso local de emergência' : 'AD/LDAP'}</h3>
           <p className="mt-3 text-sm text-slate-400">Credenciais, servidores e segredos permanecem exclusivamente no backend.</p>
         </div>
         <div className="card">
