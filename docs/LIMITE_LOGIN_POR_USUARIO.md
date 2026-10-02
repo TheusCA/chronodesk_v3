@@ -130,13 +130,13 @@ Ordem dentro de "Atualização de Versão e Rollback" (`DEPLOY_LINUX.md`):
 
 ```bash
 cd /var/www/chronodesk
-sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas
+sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas
 ```
 
 4. Conferir a tabela (o resultado deve ser `1`):
 
 ```bash
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle';"
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle';"
 ```
 
 5. Item 4 em diante, como sempre. No QA pós-deploy, `qa-security.php` deve terminar com `OK`.

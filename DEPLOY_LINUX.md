@@ -124,11 +124,12 @@ sudo systemctl reload apache2
 
 6. Configurar MySQL no Docker:
 
+O container do MySQL no servidor e o `Chrono_Desk_DB` (imagem `mysql:8.0`).
 Confirme se o container publica a porta local:
 
 ```bash
 docker ps
-docker exec -it <NOME_CONTAINER_MYSQL> mysql -uroot -p
+docker exec -it Chrono_Desk_DB mysql -uroot -p
 ```
 
 Dentro do MySQL, execute uma copia ajustada de `deploy/mysql/setup-production.sql.example`. Troque somente os placeholders no servidor.
@@ -136,18 +137,18 @@ Dentro do MySQL, execute uma copia ajustada de `deploy/mysql/setup-production.sq
 Importe o schema da aplicacao:
 
 ```bash
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/database_SECURED.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260612_001_portal_foundation.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260612_002_notification_reads.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_003_operational_modules.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_004_operational_hardening.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_005_documents_and_employee_roles.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260614_006_critical_incidents.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260615_007_war_room_and_shift_feed.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_008_dashboard_ci_pa_map.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_009_pa_map_recurring_assignments.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260624_010_schedule_fixed_weekdays.sql
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20261001_015_login_user_throttle.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/database_SECURED.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260612_001_portal_foundation.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260612_002_notification_reads.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_003_operational_modules.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_004_operational_hardening.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260613_005_documents_and_employee_roles.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260614_006_critical_incidents.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260615_007_war_room_and_shift_feed.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_008_dashboard_ci_pa_map.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_009_pa_map_recurring_assignments.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260624_010_schedule_fixed_weekdays.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20261001_015_login_user_throttle.sql
 ```
 
 A numeracao pula de 010 para 015 de proposito: 011 a 014 estao reservadas para a
@@ -392,7 +393,7 @@ Instalacao (uma vez):
    `deploy/mysql/setup-backup-user.sql.example` (senha forte, registrada no cofre):
 
 ```bash
-docker exec -it <NOME_CONTAINER_MYSQL> mysql -uroot -p
+docker exec -it Chrono_Desk_DB mysql -uroot -p
 ```
 
 2. Criar a configuracao e o arquivo de credenciais (root, modo 600):
@@ -429,7 +430,7 @@ sudo install -o root -g root -m 700 /var/www/chronodesk/scripts/backup-chronodes
    opcoes pela entrada padrao, do mesmo jeito que o script faz:
 
 ```bash
-sudo cat /etc/chronodesk/backup-mysql.cnf | docker exec -i <NOME_CONTAINER_MYSQL> mysql --defaults-extra-file=/dev/stdin -e "SELECT COUNT(*) AS tabelas, SUM(engine IS NULL OR engine <> 'InnoDB') AS nao_innodb, GROUP_CONCAT(CASE WHEN engine IS NULL OR engine <> 'InnoDB' THEN CONCAT(table_name, '=', IFNULL(engine, 'NULL')) END) AS quais FROM information_schema.tables WHERE table_schema = 'sistema_pausas' AND table_type = 'BASE TABLE';"
+sudo cat /etc/chronodesk/backup-mysql.cnf | docker exec -i Chrono_Desk_DB mysql --defaults-extra-file=/dev/stdin -e "SELECT COUNT(*) AS tabelas, SUM(engine IS NULL OR engine <> 'InnoDB') AS nao_innodb, GROUP_CONCAT(CASE WHEN engine IS NULL OR engine <> 'InnoDB' THEN CONCAT(table_name, '=', IFNULL(engine, 'NULL')) END) AS quais FROM information_schema.tables WHERE table_schema = 'sistema_pausas' AND table_type = 'BASE TABLE';"
 ```
 
 Esperado: `tabelas` maior que zero, `nao_innodb` = `0`, `quais` = `NULL`.
@@ -478,7 +479,7 @@ separado, `sistema_pausas_restore_test`, e nao toca no banco em uso.
 
 ```bash
 B=/var/backups/chronodesk/<AAAAMMDD-HHMMSS>
-C=<NOME_CONTAINER_MYSQL>
+C=Chrono_Desk_DB
 sudo sh -c 'cd "$1" && sha256sum -c SHA256SUMS' _ "$B"
 ```
 
@@ -575,6 +576,63 @@ ficam orfaos, sem registro no banco.
    health check por loopback. Depois sair da manutencao
    (`sudo rm -f /var/www/chronodesk.maintenance`) e validar o login.
 
+## Acesso de Emergencia (admin local)
+
+Admin vem do `AD_ADMIN_USERS` (Lote 5, L1). O admin local (`ENABLE_LOCAL_ADMIN`,
+tabela `usuarios`) e so a saida de emergencia, por exemplo com o AD fora do ar
+e uma configuracao urgente a fazer. Fica desligado e sem usuario no dia a dia
+(em 2026-10-02: `usuarios` vazia e `ENABLE_LOCAL_ADMIN=false`).
+
+1. Registrar antes de comecar: quem, quando, por que e o numero do chamado.
+
+2. Gerar uma senha forte (gerenciador de senhas ou cofre; 20 caracteres ou mais,
+   aleatoria) e guarda-la so no cofre, nunca no repositorio, no chamado ou no
+   terminal compartilhado. Criar o usuario local; a senha e lida sem eco e passa
+   ao PHP pela entrada padrao (nao aparece em `ps` nem no historico):
+
+```bash
+cd /var/www/chronodesk
+read -r -p 'Usuario de emergencia: ' U; read -rs -p 'Senha: ' P; echo
+printf '%s\n%s\n' "$U" "$P" | sudo -u www-data php -r 'require "config.php"; require "classes/Usuario.php"; $u = trim((string)fgets(STDIN)); $p = rtrim((string)fgets(STDIN), "\r\n"); (new Usuario())->criar($u, $p, "admin"); echo "usuario criado\n";'
+unset P
+```
+
+   Use um nome que nao seja login do AD (por exemplo `emergencia.chronodesk`):
+   o limite de tentativas por usuario conta os dois juntos.
+
+3. Ligar o acesso local e recarregar:
+
+```bash
+sudo sed -i 's/^ENABLE_LOCAL_ADMIN=.*/ENABLE_LOCAL_ADMIN=true/' /var/www/.env
+grep -q '^ENABLE_LOCAL_ADMIN=true' /var/www/.env && echo OK
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+4. Usar: login administrativo com o usuario local, so para o que motivou o
+   acesso.
+
+5. Desligar e recarregar, assim que terminar:
+
+```bash
+sudo sed -i 's/^ENABLE_LOCAL_ADMIN=.*/ENABLE_LOCAL_ADMIN=false/' /var/www/.env
+grep -q '^ENABLE_LOCAL_ADMIN=false' /var/www/.env && echo OK
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+6. Remover o usuario e conferir (o resultado deve ser `0`):
+
+```bash
+docker exec -it Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "DELETE FROM usuarios WHERE username = '<usuario de emergencia>'; SELECT COUNT(*) FROM usuarios;"
+```
+
+7. Registrar o encerramento no mesmo chamado: horario de inicio e fim, o que foi
+   feito e a contagem de eventos de login local no periodo
+   (`SELECT action, COUNT(*) FROM audit_log WHERE action LIKE 'ADMIN_LOGIN%' AND created_at >= '<inicio>' GROUP BY action;`).
+   Descartar a senha do cofre.
+
+Se o passo 5 for esquecido, o preflight do proximo deploy da `FALHA` com
+`ENABLE_LOCAL_ADMIN=true` em producao (L4, depois do Lote 5c).
+
 ## Atualizacao de Versao e Rollback
 
 1. Registrar o ponto de rollback e conferir que nao ha alteracao local:
@@ -617,8 +675,8 @@ Esperado: `backup concluido`. Anote o diretorio: e o ponto de restauracao do ban
 
 ```bash
 cd /var/www/chronodesk
-sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas
-docker exec -i <NOME_CONTAINER_MYSQL> mysql -uroot -p sistema_pausas -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle';"
+sudo git show origin/<BRANCH>:migrations/20261001_015_login_user_throttle.sql | docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle';"
 ```
 
    A migration e idempotente: repetir nao altera nada. A tabela nao afeta o
