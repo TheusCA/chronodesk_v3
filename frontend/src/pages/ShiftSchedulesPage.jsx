@@ -50,6 +50,11 @@ function attachmentLabel(extension) {
   return 'Anexo da escala'
 }
 
+// SEC-08: anexo sem equipe e de todas as equipes.
+function teamLabel(team) {
+  return { n1: 'N1', n2: 'N2', lideranca: 'Liderança' }[team] || 'Todas as equipes'
+}
+
 function UploadPreview({ file, previewUrl, imageFailed, onImageError }) {
   const extension = extensionFromName(file.name)
   const image = isImageExtension(extension)
@@ -87,8 +92,9 @@ function UploadShift({ limits, onClose, onUploaded }) {
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // SEC-08: a equipe e obrigatoria e decide quem ve o anexo.
   const [metadata, setMetadata] = useState({
-    title: '', reference_month: localDate().slice(0, 7), notes: '',
+    title: '', reference_month: localDate().slice(0, 7), team: '', notes: '',
   })
   const previewUrl = useMemo(
     () => (file && isImageExtension(extensionFromName(file.name)) ? URL.createObjectURL(file) : ''),
@@ -120,6 +126,7 @@ function UploadShift({ limits, onClose, onUploaded }) {
   async function submit(event) {
     event.preventDefault()
     if (!metadata.title.trim()) return setError('Título é obrigatório.')
+    if (!metadata.team) return setError('Escolha a equipe que verá a escala.')
     if (!file) return setError('Selecione um arquivo para publicar.')
     setLoading(true)
     setError('')
@@ -130,7 +137,7 @@ function UploadShift({ limits, onClose, onUploaded }) {
       await postForm('portal/shift_attachments.php', body)
       setFile(null)
       setImageFailed(false)
-      setMetadata({ title: '', reference_month: metadata.reference_month, notes: '' })
+      setMetadata({ title: '', reference_month: metadata.reference_month, team: '', notes: '' })
       if (inputRef.current) inputRef.current.value = ''
       await onUploaded(ACTION_FEEDBACK.shiftUploaded)
       onClose()
@@ -171,6 +178,15 @@ function UploadShift({ limits, onClose, onUploaded }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="label sm:col-span-2">Título *<input className="field mt-2" maxLength="180" required value={metadata.title} onChange={(event) => setMetadata({ ...metadata, title: event.target.value })} /></label>
           <label className="label">Mês de referência<input className="field mt-2" required type="month" value={metadata.reference_month} onChange={(event) => setMetadata({ ...metadata, reference_month: event.target.value })} /></label>
+          <label className="label">Equipe que verá *
+            <select className="field mt-2" required value={metadata.team} onChange={(event) => setMetadata({ ...metadata, team: event.target.value })}>
+              <option value="">Selecione</option>
+              <option value="n1">N1</option>
+              <option value="n2">N2</option>
+              <option value="lideranca">Liderança</option>
+              <option value="todas">Todas as equipes</option>
+            </select>
+          </label>
           <label className="label sm:col-span-2">Observação<textarea className="field mt-2 min-h-24 resize-y" maxLength="2000" value={metadata.notes} onChange={(event) => setMetadata({ ...metadata, notes: event.target.value })} /></label>
         </div>
         {error && <InlineAlert tone="danger" title="Falha no upload">{error}</InlineAlert>}
@@ -254,6 +270,7 @@ export function ShiftSchedulesPage({ notify }) {
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <span className="status-badge status-info">{monthLabel(item.reference_month)}</span>
+                      <span className="status-badge status-neutral">{teamLabel(item.team)}</span>
                       <FileTypeBadge extension={extension} />
                     </div>
                     <h3 className="mt-3 text-xl font-bold text-white">{item.title}</h3>

@@ -100,6 +100,34 @@ final class QaChildStatement extends PDOStatement {
                 : [];
             return true;
         }
+        // Lote 4 (SEC-08): equipe do colaborador e anexos de escala.
+        if ($this->sql === 'SELECT equipe FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1') {
+            $row = $byId($this->pdo, $params[':id'] ?? 0);
+            $this->rows = $row && (int)$row['ativo'] === 1 ? [['equipe' => $row['equipe']]] : [];
+            return true;
+        }
+        if (strpos($this->sql, 'SELECT id, title, reference_month, team, notes') === 0) {
+            $this->rows = [];
+            foreach ($this->pdo->db['anexos'] ?? [] as $id => $row) {
+                $team = $row['team'] ?? null;
+                if (strpos($this->sql, 'AND (team IS NULL OR team = :viewer_team)') !== false && $team !== null && $team !== $params[':viewer_team']) {
+                    continue;
+                }
+                if (strpos($this->sql, 'AND team IS NULL') !== false && $team !== null) {
+                    continue;
+                }
+                $this->rows[] = ['id' => (int)$id, 'title' => 'Escala ' . $id, 'team' => $team];
+            }
+            return true;
+        }
+        if (strpos($this->sql, 'SELECT original_name, storage_key, team,') === 0) {
+            $row = $this->pdo->db['anexos'][(string)($params[':id'] ?? 0)] ?? null;
+            $this->rows = $row ? [[
+                'original_name' => 'escala.pdf', 'storage_key' => 'qa/inexistente.pdf', 'team' => $row['team'] ?? null,
+                'extension' => 'pdf', 'detected_mime' => 'application/pdf', 'size_bytes' => 10, 'sha256' => str_repeat('0', 64),
+            ]] : [];
+            return true;
+        }
         if (strpos($this->sql, 'SELECT id FROM funcionarios WHERE ad_login = :ad_login') === 0) {
             $this->rows = [];
             foreach ($this->pdo->db['funcionarios'] as $id => $row) {
@@ -257,6 +285,12 @@ if (($argv[1] ?? '') === QA_RUNNER_FLAG) {
 
     $csrf = ['valid' => 'qa-csrf-token', 'invalid' => 'outro-token', 'missing' => null][$spec['csrf']];
     $_SERVER['REQUEST_METHOD'] = $spec['method'];
+    $_GET = $spec['query'] ?? [];
+    // O filho e CLI: registra a rede de seguranca que o config.php registra
+    // nas requisicoes web (0d).
+    set_exception_handler(static function (Throwable $error): void {
+        chronodesk_uncaught_exception($error);
+    });
     $_SERVER['REMOTE_ADDR'] = '192.0.2.10';
     $_SERVER['SERVER_NAME'] = 'chronodesk.local';
     $_SERVER['SERVER_PORT'] = '80';
@@ -1182,8 +1216,8 @@ $localCases = qa_run_endpoints($qaDir, [
     'local_desligado' => ['endpoint' => 'api/portal/reports.php', 'method' => 'GET', 'session' => $localGestorSession, 'db' => $withLocal(['qa.local' => 'gestor'])],
     'admin_local_rebaixado' => ['endpoint' => 'api/configuracoes.php', 'method' => 'GET', 'session' => $localAdminSession, 'env' => $localOn, 'db' => $withLocal(['qa.local.admin' => 'gestor'])],
 ]);
-assert_same(false, in_array($localCases['gestor_local']['status'], [401, 403, 503], true), 'sessao local: gestor pelo login.php continua valido (passa da checagem de perfil)');
-assert_same(false, in_array($localCases['admin_local']['status'], [401, 403, 503], true), 'sessao local: admin local continua valido (passa da checagem de perfil)');
+assert_same(false, in_array($localCases['gestor_local']['status'], [401, 403], true) || strpos($localCases['gestor_local']['body'], 'validar a sessão') !== false, 'sessao local: gestor pelo login.php continua valido (passa da revalidacao e da checagem de perfil)');
+assert_same(false, in_array($localCases['admin_local']['status'], [401, 403], true) || strpos($localCases['admin_local']['body'], 'validar a sessão') !== false, 'sessao local: admin local continua valido (passa da revalidacao e da checagem de perfil)');
 foreach ([
     'local_removido' => 'perfil gestor -> nenhum, motivo usuario_local_removido',
     'local_desligado' => 'perfil gestor -> nenhum, motivo acesso_local_desligado',
@@ -1632,6 +1666,156 @@ foreach ([
     $source = (string)file_get_contents($root . '/' . $file);
     assert_same(true, strpos($source, $needle) !== false, "frontend {$file}: {$needle}");
     assert_same(0, preg_match("/session\.role [!=]== 'admin'/", $source), "frontend {$file}: sem comparacao com o nome admin");
+}
+
+// ============================================================================
+// 7. Lote 4 — SEC-08 (anexos de escala por equipe) e 0d (banco indisponivel)
+// ============================================================================
+
+require_once __DIR__ . '/../services/ShiftAttachmentService.php';
+
+// SEC-08: regra de visibilidade, pura.
+foreach ([
+    [['all' => true, 'team' => null], 'n2', true, 'gestao ve anexo de outra equipe'],
+    [['all' => false, 'team' => 'n1'], 'n1', true, 'tecnico ve anexo da propria equipe'],
+    [['all' => false, 'team' => 'n1'], null, true, 'tecnico ve anexo de todas as equipes'],
+    [['all' => false, 'team' => 'n1'], 'n2', false, 'tecnico nao ve anexo de outra equipe'],
+    [['all' => false, 'team' => 'n1'], 'lideranca', false, 'tecnico nao ve anexo da Lideranca'],
+    [['all' => false, 'team' => null], null, true, 'sem equipe ve so o de todas as equipes'],
+    [['all' => false, 'team' => null], 'n1', false, 'sem equipe nao ve anexo de equipe'],
+] as [$scope, $team, $expected, $label]) {
+    assert_same($expected, ShiftAttachmentService::visibleTo($scope, $team), "SEC-08: {$label}");
+}
+
+// SEC-08: escopo do ator, listagem e download contra o banco simulado.
+$attachmentDb = QA_DB;
+$attachmentDb['anexos'] = ['21' => ['team' => 'n1'], '22' => ['team' => 'n2'], '23' => ['team' => null], '24' => ['team' => 'lideranca']];
+$attachmentService = new ShiftAttachmentService(new QaChildPdo($attachmentDb), sys_get_temp_dir());
+foreach ([
+    [['role' => 'admin'], ['all' => true, 'team' => null]],
+    [['role' => 'lideranca'], ['all' => true, 'team' => null]],
+    [['role' => 'gestor'], ['all' => true, 'team' => null]],
+    [['role' => 'tecnico', 'employee_id' => 1], ['all' => false, 'team' => 'n1']],
+    [['role' => 'somente_leitura', 'employee_id' => 4], ['all' => false, 'team' => 'n1']],
+    [['role' => 'tecnico', 'employee_id' => 99], ['all' => false, 'team' => null]],
+    [['role' => 'tecnico'], ['all' => false, 'team' => null]],
+] as $i => [$actor, $expected]) {
+    assert_same($expected, $attachmentService->viewerScope($actor), "SEC-08: escopo do ator, caso {$i}");
+}
+$listedIds = static fn (array $actor): array => array_map(static fn (array $row): int => $row['id'], $attachmentService->list([], $actor)['items']);
+assert_same([21, 22, 23, 24], $listedIds(['role' => 'gestor']), 'SEC-08: gestor lista todos os anexos');
+assert_same([21, 23], $listedIds(['role' => 'tecnico', 'employee_id' => 1]), 'SEC-08: tecnico N1 lista os da N1 e os de todas as equipes');
+assert_same([23], $listedIds(['role' => 'tecnico', 'employee_id' => 99]), 'SEC-08: tecnico sem equipe lista so os de todas as equipes');
+$downloadResult = static function (array $actor, int $id) use ($attachmentService): string {
+    try {
+        $attachmentService->download($id, $actor);
+        return 'baixado';
+    } catch (DomainException $e) {
+        return 'nao encontrada';
+    } catch (RuntimeException $e) {
+        return 'passou do escopo';
+    }
+};
+assert_same('nao encontrada', $downloadResult(['role' => 'tecnico', 'employee_id' => 1], 22), 'SEC-08: tecnico N1 nao baixa anexo da N2 (404, sem confirmar o ID)');
+assert_same('nao encontrada', $downloadResult(['role' => 'tecnico', 'employee_id' => 1], 24), 'SEC-08: tecnico N1 nao baixa anexo da Lideranca');
+assert_same('passou do escopo', $downloadResult(['role' => 'tecnico', 'employee_id' => 1], 21), 'SEC-08: tecnico N1 baixa anexo da N1');
+assert_same('passou do escopo', $downloadResult(['role' => 'tecnico', 'employee_id' => 1], 23), 'SEC-08: tecnico baixa anexo de todas as equipes');
+assert_same('passou do escopo', $downloadResult(['role' => 'gestor'], 22), 'SEC-08: gestor baixa anexo de qualquer equipe');
+assert_same('nao encontrada', $downloadResult(['role' => 'gestor'], 99), 'SEC-08: anexo inexistente');
+
+// SEC-08: equipe obrigatoria no upload.
+$teamMethod = new ReflectionMethod(ShiftAttachmentService::class, 'team');
+foreach (['N1' => 'n1', 'n2' => 'n2', 'lideranca' => 'lideranca', 'todas' => null, ' Todas ' => null] as $input => $expected) {
+    assert_same($expected, $teamMethod->invoke($attachmentService, $input), "SEC-08: equipe do upload '{$input}'");
+}
+foreach (['', null, 'n3', 'Liderança'] as $input) {
+    $rejected = false;
+    try {
+        $teamMethod->invoke($attachmentService, $input);
+    } catch (InvalidArgumentException $e) {
+        $rejected = true;
+    }
+    assert_same(true, $rejected, 'SEC-08: equipe do upload invalida: ' . var_export($input, true));
+}
+
+// SEC-08 de ponta a ponta: download fora do escopo responde 404.
+$attachmentCases = qa_run_endpoints($qaDir, [
+    'tecnico_outra_equipe' => ['endpoint' => 'api/portal/shift_attachments_download.php', 'method' => 'GET', 'query' => ['id' => '22'], 'session' => $technician, 'db' => $attachmentDb],
+    'tecnico_lista' => ['endpoint' => 'api/portal/shift_attachments.php', 'method' => 'GET', 'session' => $technician, 'db' => $attachmentDb],
+]);
+assert_same(404, $attachmentCases['tecnico_outra_equipe']['status'], 'SEC-08: download de outra equipe responde 404');
+assert_same(true, strpos($attachmentCases['tecnico_outra_equipe']['log'], 'SHIFT_ATTACHMENT_DOWNLOAD_DENIED') !== false, 'SEC-08: recusa auditada');
+$listedBody = json_decode($attachmentCases['tecnico_lista']['body'], true);
+assert_same([21, 23], array_map(static fn (array $row): int => $row['id'], $listedBody['items'] ?? []), 'SEC-08: listagem do tecnico pelo endpoint');
+
+// SEC-08: frontend e migration 017.
+$shiftPageSource = (string)file_get_contents($root . '/frontend/src/pages/ShiftSchedulesPage.jsx');
+assert_same(true, strpos($shiftPageSource, '<option value="todas">Todas as equipes</option>') !== false && strpos($shiftPageSource, "if (!metadata.team) return setError(") !== false, 'SEC-08: upload exige escolher a equipe');
+$migration017 = (string)preg_replace('/^--.*$/m', '', (string)file_get_contents($root . '/migrations/20261002_017_shift_attachment_team.sql'));
+$rollback017 = (string)preg_replace('/^--.*$/m', '', (string)file_get_contents($root . '/migrations/rollback/20261002_017_shift_attachment_team_down.sql'));
+foreach (['migration 017' => $migration017, 'rollback 017' => $rollback017] as $label => $code) {
+    assert_same(0, strpos(ltrim($code), "SET time_zone = 'America/Sao_Paulo';"), "{$label}: comeca com SET time_zone");
+    assert_same(0, preg_match('/\b(NOW|CURRENT_TIMESTAMP|CURDATE|UPDATE|DELETE|INSERT|DROP\s+TABLE|TRUNCATE)\b/i', $code), "{$label}: nao altera nem apaga linhas");
+    assert_same(true, strpos($code, 'information_schema') !== false, "{$label}: idempotente (checa information_schema)");
+}
+
+// 0d: classificacao e rede de seguranca.
+foreach ([
+    [new PDOException('x'), true, 'falha de consulta'],
+    [new DatabaseUnavailableException('x'), true, 'falha de conexao'],
+    [new RuntimeException('x', 0, new PDOException('y')), true, 'falha de banco encadeada'],
+    [new RuntimeException('x'), false, 'outra falha'],
+    [new DomainException('x'), false, 'regra de negocio'],
+] as [$error, $expected, $label]) {
+    assert_same($expected, database_unavailable_error($error), "0d: {$label}");
+}
+foreach ([[new PDOException('detalhe interno'), DATABASE_UNAVAILABLE_MESSAGE], [new RuntimeException('detalhe interno'), 'Não foi possível concluir a operação.']] as [$error, $message]) {
+    ob_start();
+    chronodesk_uncaught_exception($error);
+    $body = json_decode((string)ob_get_clean(), true);
+    assert_same(['sucesso' => false, 'mensagem' => $message], $body, '0d: rede de seguranca responde sem detalhe da excecao (' . get_class($error) . ')');
+}
+
+$configSourceForHandler = (string)file_get_contents($root . '/config.php');
+assert_same(true, strpos($configSourceForHandler, "if (PHP_SAPI !== 'cli') {
+    set_exception_handler('chronodesk_uncaught_exception');
+}") !== false, '0d: config.php registra a rede de seguranca nas requisicoes web');
+
+// 0d de ponta a ponta: todo endpoint, GET e POST, com sessao de admin (a
+// revalidacao dela nao usa o banco), em dois modos: consulta falha (banco
+// simulado) e conexao falha (banco real inexistente). Nenhum erro fatal,
+// nenhuma excecao sem captura, nenhum 500.
+$downSpecs = [];
+foreach (array_merge(glob($root . '/api/*.php'), glob($root . '/api/portal/*.php')) as $file) {
+    $relative = substr(str_replace('\\', '/', $file), strlen(str_replace('\\', '/', $root)) + 1);
+    if (basename($relative) === '_bootstrap.php') {
+        continue;
+    }
+    foreach (['GET', 'POST'] as $method) {
+        foreach (['consulta' => QA_DB, 'conexao' => false] as $mode => $db) {
+            $spec = ['endpoint' => $relative, 'method' => $method, 'session' => QA_ADMIN_SESSION, 'db' => $db];
+            if ($method === 'POST') {
+                $spec += ['content_type' => $json, 'body' => '{}'];
+            }
+            $downSpecs["{$relative} {$method} {$mode}"] = $spec;
+        }
+    }
+}
+$downFailures = [];
+foreach (qa_run_endpoints($qaDir, $downSpecs) as $key => $result) {
+    $text = $result['log'] . "\n" . $result['stderr'];
+    if ($result['status'] === 500 || strpos($text, 'Fatal error') !== false || strpos($text, '[UNCAUGHT]') !== false) {
+        $downFailures[] = "{$key}: HTTP {$result['status']}";
+    }
+}
+assert_same([], $downFailures, '0d: banco indisponivel sem erro fatal, sem excecao sem captura e sem 500');
+foreach (['api/solicitacoes_pendentes.php', 'api/portal/standby.php'] as $endpoint) {
+    foreach (['consulta' => QA_DB, 'conexao' => false] as $mode => $db) {
+        $result = qa_run_endpoint($qaDir, ['endpoint' => $endpoint, 'method' => 'GET', 'session' => QA_ADMIN_SESSION, 'db' => $db]);
+        assert_same(503, $result['status'], "0d: {$endpoint} ({$mode}) responde 503");
+        $message = json_decode($result['body'], true)['mensagem'] ?? '';
+        assert_same(true, in_array($message, [DATABASE_UNAVAILABLE_MESSAGE, 'A base de escalas ainda não está disponível.'], true), "0d: {$endpoint} ({$mode}) com mensagem");
+    }
 }
 
 echo "qa-security OK\n";

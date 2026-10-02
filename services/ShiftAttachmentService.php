@@ -37,11 +37,50 @@ final class ShiftAttachmentService {
             : $base . DIRECTORY_SEPARATOR . 'chronodesk_private' . DIRECTORY_SEPARATOR . 'shift_schedules';
     }
 
-    public function list(array $filters): array {
-        $sql = 'SELECT id, title, reference_month, notes, original_name, extension,
+    /** [SEC-08] Equipes de anexo; NULL no banco = todas as equipes. */
+    public const TEAMS = ['n1', 'n2', 'lideranca'];
+
+    /**
+     * [SEC-08] O que o ator ve: gestao (gestor, Lideranca, admin) ve todos;
+     * tecnico e somente leitura, os anexos da propria equipe e os de todas as
+     * equipes. Sem equipe identificada, so os de todas as equipes.
+     * Devolve ['all' => bool, 'team' => ?string].
+     */
+    public function viewerScope(array $actor): array {
+        if (portal_role_is_manager($actor['role'] ?? null)) {
+            return ['all' => true, 'team' => null];
+        }
+        $employeeId = (int)($actor['employee_id'] ?? 0);
+        if ($employeeId < 1) {
+            return ['all' => false, 'team' => null];
+        }
+        $stmt = $this->pdo->prepare('SELECT equipe FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1');
+        $stmt->execute([':id' => $employeeId]);
+        $team = validate_funcionario_equipe((string)$stmt->fetchColumn());
+        return ['all' => false, 'team' => in_array($team, self::TEAMS, true) ? $team : null];
+    }
+
+    /** [SEC-08] Regra de visibilidade de um anexo, pura. */
+    public static function visibleTo(array $scope, ?string $attachmentTeam): bool {
+        return $scope['all'] === true
+            || $attachmentTeam === null
+            || ($scope['team'] !== null && $attachmentTeam === $scope['team']);
+    }
+
+    public function list(array $filters, array $actor): array {
+        $sql = 'SELECT id, title, reference_month, team, notes, original_name, extension,
                        detected_mime, size_bytes, uploaded_by, uploaded_at
                 FROM portal_shift_attachments WHERE status = "active"';
         $params = [];
+        $scope = $this->viewerScope($actor);
+        if (!$scope['all']) {
+            $sql .= $scope['team'] !== null
+                ? ' AND (team IS NULL OR team = :viewer_team)'
+                : ' AND team IS NULL';
+            if ($scope['team'] !== null) {
+                $params[':viewer_team'] = $scope['team'];
+            }
+        }
         $month = trim((string)($filters['month'] ?? ''));
         if ($month !== '') {
             $this->month($month);
@@ -106,6 +145,7 @@ final class ShiftAttachmentService {
 
         $title = $this->text($metadata['title'] ?? null, 180, false, 'Titulo e obrigatorio.');
         $month = $this->month((string)($metadata['reference_month'] ?? ''));
+        $team = $this->team($metadata['team'] ?? null);
         $notes = $this->text($metadata['notes'] ?? '', 2000, true);
         $storedName = bin2hex(random_bytes(32)) . '.' . $extension;
         $shard = substr($storedName, 0, 2);
@@ -124,15 +164,16 @@ final class ShiftAttachmentService {
         try {
             $stmt = $this->pdo->prepare(
                 'INSERT INTO portal_shift_attachments
-                    (title, reference_month, notes, original_name, stored_name, storage_key,
+                    (title, reference_month, team, notes, original_name, stored_name, storage_key,
                      extension, detected_mime, size_bytes, sha256, uploaded_by, updated_by)
                  VALUES
-                    (:title, :reference_month, :notes, :original_name, :stored_name, :storage_key,
+                    (:title, :reference_month, :team, :notes, :original_name, :stored_name, :storage_key,
                      :extension, :detected_mime, :size_bytes, :sha256, :uploaded_by, :updated_by)'
             );
             $stmt->execute([
                 ':title' => $title,
                 ':reference_month' => $month,
+                ':team' => $team,
                 ':notes' => $notes !== '' ? $notes : null,
                 ':original_name' => $originalName,
                 ':stored_name' => $storedName,
@@ -151,14 +192,15 @@ final class ShiftAttachmentService {
         return ['id' => (int)$this->pdo->lastInsertId(), 'title' => $title];
     }
 
-    public function download(int $id): array {
+    public function download(int $id, array $actor): array {
         $stmt = $this->pdo->prepare(
-            'SELECT original_name, storage_key, extension, detected_mime, size_bytes, sha256
+            'SELECT original_name, storage_key, team, extension, detected_mime, size_bytes, sha256
              FROM portal_shift_attachments WHERE id = :id AND status = "active" LIMIT 1'
         );
         $stmt->execute([':id' => $id]);
         $item = $stmt->fetch();
-        if (!$item) {
+        // [SEC-08] Fora do escopo responde como inexistente: nao confirma o ID.
+        if (!$item || !self::visibleTo($this->viewerScope($actor), $item['team'] ?? null)) {
             throw new DomainException('Escala nao encontrada.');
         }
         $path = $this->resolvePath((string)$item['storage_key']);
@@ -275,6 +317,18 @@ final class ShiftAttachmentService {
         }
         if (!is_string($mime) || $mime === '') throw new InvalidArgumentException('MIME invalido.');
         return strtolower($mime);
+    }
+
+    /** [SEC-08] Equipe do upload: n1, n2, lideranca ou "todas" (NULL). Obrigatoria. */
+    private function team($value): ?string {
+        $team = strtolower(trim((string)$value));
+        if ($team === 'todas') {
+            return null;
+        }
+        if (!in_array($team, self::TEAMS, true)) {
+            throw new InvalidArgumentException('Equipe da escala obrigatoria: N1, N2, Liderança ou Todas as equipes.');
+        }
+        return $team;
     }
 
     private function month(string $value): string {

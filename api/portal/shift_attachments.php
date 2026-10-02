@@ -5,13 +5,15 @@ require_once __DIR__ . '/../../services/ShiftAttachmentService.php';
 $method = require_http_method(['GET', 'POST']);
 $role = require_portal_auth();
 $actor = portal_actor($role);
-$service = new ShiftAttachmentService();
 
 try {
+    // [Lote 4, 0d] Conexao dentro do try: banco indisponivel vira 503 pelo
+    // portal_operational_error(), sem excecao sem captura.
+    $service = new ShiftAttachmentService();
     if ($method === 'GET') {
         json_response([
             'sucesso' => true,
-        ] + $service->list($_GET) + [
+        ] + $service->list($_GET, $actor) + [
             'can_upload' => portal_role_can($role, 'escalas.manage'),
             'limits' => [
                 'max_file_bytes' => ShiftAttachmentService::MAX_FILE_BYTES,
@@ -39,6 +41,9 @@ try {
     audit_log('SHIFT_ATTACHMENT_UPLOADED', 'Escala publicada. ID ' . $item['id'], 'WARNING');
     json_response(['sucesso' => true, 'item' => $item, 'mensagem' => 'Escala publicada com sucesso.'], 201);
 } catch (Throwable $error) {
+    if (database_unavailable_error($error)) {
+        portal_operational_error($error);
+    }
     audit_log('SHIFT_ATTACHMENT_REJECTED', get_class($error) . ': ' . $error->getMessage(), 'WARNING');
     if ($error instanceof RuntimeException) {
         error_log('[SHIFT_ATTACHMENT_UPLOAD] ' . get_class($error) . ': ' . $error->getMessage());

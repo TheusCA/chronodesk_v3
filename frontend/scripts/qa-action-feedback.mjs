@@ -102,7 +102,8 @@ for (const [source, pattern, label] of [
   [criticalSource, /setFormItem\(null\)/, 'Chamado critico deve sair do modo edicao'],
   [criticalSource, /if \(inputRef\.current\) inputRef\.current\.value = ''/, 'Importacao de chamados deve limpar input de arquivo'],
   [documentsSource, /setMetadata\(\{ title: '', category: 'Procedimento', description: '', visibility: 'internal' \}\)/, 'Upload de documentos deve limpar metadados'],
-  [shiftSource, /setMetadata\(\{ title: '', reference_month: metadata\.reference_month, notes: '' \}\)/, 'Upload de escala de sabado deve limpar campos transacionais preservando mes'],
+  // SEC-08: a equipe tambem e limpa; cada upload escolhe a sua.
+  [shiftSource, /setMetadata\(\{ title: '', reference_month: metadata\.reference_month, team: '', notes: '' \}\)/, 'Upload de escala de sabado deve limpar campos transacionais preservando mes'],
   [pausasSource, /setReason\(''\)[\s\S]*setObservation\(''\)/, 'Formulario de pausa deve limpar motivo e observacao apos sucesso'],
 ]) {
   assert.match(source, pattern, label)

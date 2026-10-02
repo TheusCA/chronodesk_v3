@@ -3,13 +3,14 @@ require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/../../services/ShiftAttachmentService.php';
 
 require_get_method();
-require_portal_auth();
+// [SEC-08] O ator decide o que pode ser baixado (equipe do anexo).
+$actor = portal_actor(require_portal_auth());
 $id = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
 if (!$id) {
     json_response(['sucesso' => false, 'mensagem' => 'Escala invalida.'], 400);
 }
 try {
-    $item = (new ShiftAttachmentService())->download((int)$id);
+    $item = (new ShiftAttachmentService())->download((int)$id, $actor);
     audit_log('SHIFT_ATTACHMENT_DOWNLOADED', 'Escala ID ' . (int)$id . ' baixada.', 'INFO');
     $name = preg_replace('/[^A-Za-z0-9._ -]/u', '_', (string)$item['original_name']);
     header('Content-Type: ' . $item['detected_mime']);
