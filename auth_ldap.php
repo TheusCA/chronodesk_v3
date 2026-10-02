@@ -531,7 +531,7 @@ function exigir_autenticacao_ci_pausa($data, $funcionario_id, $contexto = 'pausa
     $autenticacao = autenticar_ci_via_ad($login_ad, $senha_ad);
     if (!$autenticacao['sucesso']) {
         if (function_exists('audit_log')) {
-            audit_log('CI_AD_LOGIN_FAILURE', 'Falha de autenticacao AD no contexto ' . $contexto . ' para login ' . normalizar_samaccountname($login_ad), 'WARNING');
+            audit_log('CI_AD_LOGIN_FAILURE', login_audit_details($login_ad, 'ad_' . $contexto), 'WARNING');
         }
         json_response(['sucesso' => false, 'mensagem' => $autenticacao['mensagem']], 401);
     }

@@ -457,26 +457,26 @@ $pdo = new QaThrottlePdo();
 $pdo->registered = ['joao.silva'];
 assert_same(
     'contexto=admin_api login=joao.silva',
-    login_user_throttle_audit_details('JOAO.SILVA@corp.local', 'admin_api', $pdo),
+    login_audit_details('JOAO.SILVA@corp.local', 'admin_api', $pdo),
     'audit_log: conta cadastrada grava o login normalizado'
 );
 assert_same(['REGISTERED joao.silva'], $pdo->log, 'audit_log: cadastro consultado pela chave normalizada');
 foreach (['Senha@' => 'senha', 'Senha2026' => 'senha2026', 'Maria.Inexistente@corp.local' => 'maria.inexistente'] as $typed => $normalized) {
-    $details = login_user_throttle_audit_details($typed, 'admin_api', $pdo);
+    $details = login_audit_details($typed, 'admin_api', $pdo);
     assert_same('contexto=admin_api login_cadastrado=false', $details, "audit_log: login fora do cadastro ({$typed}) sem o texto digitado");
     assert_same(false, stripos($details, $normalized) !== false, "audit_log: nem a forma normalizada de {$typed} e gravada");
 }
 $pdo->log = [];
-assert_same('contexto=ci_login login_cadastrado=false', login_user_throttle_audit_details('usuario invalido', 'ci_login', $pdo), 'audit_log: login sem chave nao e gravado');
+assert_same('contexto=ci_login login_cadastrado=false', login_audit_details('usuario invalido', 'ci_login', $pdo), 'audit_log: login sem chave nao e gravado');
 assert_same([], $pdo->log, 'audit_log: login sem chave nao consulta o cadastro');
 $pdo = new QaThrottlePdo();
 $pdo->registered = ['joao.silva'];
 $pdo->throwOn = 'FROM funcionarios';
-assert_same('contexto=admin_api login_cadastrado=false', login_user_throttle_audit_details('joao.silva', 'admin_api', $pdo), 'audit_log: falha no cadastro nao grava o login');
+assert_same('contexto=admin_api login_cadastrado=false', login_audit_details('joao.silva', 'admin_api', $pdo), 'audit_log: falha no cadastro nao grava o login');
 $pdo = new QaThrottlePdo();
 $pdo->registered = ['joao.silva'];
 $pdo->falseOn = 'FROM funcionarios';
-assert_same('contexto=admin_api login_cadastrado=false', login_user_throttle_audit_details('joao.silva', 'admin_api', $pdo), 'audit_log: consulta de cadastro com execute false nao grava o login');
+assert_same('contexto=admin_api login_cadastrado=false', login_audit_details('joao.silva', 'admin_api', $pdo), 'audit_log: consulta de cadastro com execute false nao grava o login');
 
 // Resposta HTTP: depende so do resultado do contador (o login nem chega a ela).
 assert_same(
@@ -508,6 +508,55 @@ foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(realpath(_
     }
 }
 assert_same(['security.php'], $auditEventFiles, 'eventos do contador gravados so em security.php');
+
+// Eventos de login recusado (Lote 7b): toda ocorrencia do nome do evento e o
+// primeiro argumento de audit_log(), e o segundo e login_audit_details(). Nada
+// de texto digitado, concatenacao ou evento vindo de variavel. Busca por token
+// do PHP: comentario e texto nao contam.
+$loginFailureEvents = ['LOGIN_USER_THROTTLED', 'ADMIN_LOGIN_FAILURE', 'CI_LOGIN_FAILURE', 'CI_AD_LOGIN_FAILURE', 'CI_LOGIN_RATE_LIMIT'];
+function qa_significant_tokens(string $source): array {
+    return array_values(array_filter(token_get_all($source), static fn ($token): bool
+        => !is_array($token) || !in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)));
+}
+function qa_token_text($token): string {
+    return is_array($token) ? $token[1] : $token;
+}
+$loginEventSites = [];
+$loginEventViolations = [];
+foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(realpath(__DIR__ . '/..'), FilesystemIterator::SKIP_DOTS)) as $file) {
+    $path = str_replace('\\', '/', (string)$file);
+    if (substr($path, -4) !== '.php' || preg_match('#/(node_modules|vendor|scripts|\.git)/#', $path)) {
+        continue;
+    }
+    $tokens =qa_significant_tokens((string)file_get_contents($path));
+    foreach ($tokens as $i => $token) {
+        if (!is_array($token) || $token[0] !== T_CONSTANT_ENCAPSED_STRING || !in_array(trim($token[1], "'\""), $loginFailureEvents, true)) {
+            continue;
+        }
+        $where = basename($path) . ':' . $token[2];
+        $valid = qa_token_text($tokens[$i - 2] ?? '') === 'audit_log'
+            && qa_token_text($tokens[$i - 1] ?? '') === '('
+            && qa_token_text($tokens[$i + 1] ?? '') === ','
+            && qa_token_text($tokens[$i + 2] ?? '') === 'login_audit_details'
+            && qa_token_text($tokens[$i + 3] ?? '') === '(';
+        if ($valid) {
+            // O argumento termina no parentese que fecha login_audit_details();
+            // depois dele so pode vir a virgula da severidade.
+            $depth = 0;
+            for ($j = $i + 3; $j < count($tokens); $j++) {
+                $text = qa_token_text($tokens[$j]);
+                $depth += $text === '(' ? 1 : ($text === ')' ? -1 : 0);
+                if ($depth === 0) {
+                    break;
+                }
+            }
+            $valid = qa_token_text($tokens[$j + 1] ?? '') === ',';
+        }
+        $valid ? $loginEventSites[] = $where : $loginEventViolations[] = $where;
+    }
+}
+assert_same([], $loginEventViolations, 'eventos de login recusado so citam o login por login_audit_details()');
+assert_same(9, count($loginEventSites), 'eventos de login recusado: todos os pontos de gravacao conhecidos (ponto novo exige revisao)');
 
 // Toda chamada ao AD a partir de um ponto de entrada passa pelo contador antes.
 // Ponto de entrada novo faz este teste falhar e exige revisao. A busca e por

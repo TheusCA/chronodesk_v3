@@ -620,13 +620,15 @@ function login_user_throttle_is_registered(string $key, ?PDO $pdo = null): bool 
 }
 
 /**
- * Detalhe do audit_log para o bloqueio por usuário. O login normalizado só é
- * gravado se a conta existir no cadastro: a normalização corta no "@", então
- * uma senha digitada no campo de usuário (por exemplo "Senha@") viraria
- * "senha", gravada para sempre. Fora do cadastro grava login_cadastrado=false
- * e o contexto, sem o texto digitado; o IP fica na coluna user_ip.
+ * Detalhe do audit_log para eventos de login recusado (bloqueio por usuário e
+ * falhas de login). O login normalizado só é gravado se a conta existir no
+ * cadastro: a normalização corta no "@", então uma senha digitada no campo de
+ * usuário (por exemplo "Senha@") viraria "senha", gravada para sempre. Fora do
+ * cadastro grava login_cadastrado=false e o contexto, sem o texto digitado; o
+ * IP fica na coluna user_ip. Única forma de esses eventos citarem o login: o
+ * qa-security reprova outra.
  */
-function login_user_throttle_audit_details($login, string $context, ?PDO $pdo = null): string {
+function login_audit_details($login, string $context, ?PDO $pdo = null): string {
     $details = 'contexto=' . $context;
     $key = login_user_throttle_key($login);
     if ($key !== null && login_user_throttle_is_registered($key, $pdo)) {
@@ -642,7 +644,7 @@ function login_user_throttle_audit_details($login, string $context, ?PDO $pdo = 
  */
 function login_user_throttle_audit(string $result, $login, string $context): void {
     if ($result === 'blocked') {
-        audit_log('LOGIN_USER_THROTTLED', login_user_throttle_audit_details($login, $context), 'WARNING');
+        audit_log('LOGIN_USER_THROTTLED', login_audit_details($login, $context), 'WARNING');
         return;
     }
     audit_log('LOGIN_THROTTLE_UNAVAILABLE', 'contexto=' . $context, 'WARNING');

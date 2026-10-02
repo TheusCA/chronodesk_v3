@@ -51,7 +51,16 @@ O IP fica na coluna `user_ip` do `audit_log`, em todos os casos.
 
 **Ajuste pedido na aprovação (2026-10-02).** O login normalizado só vai para o `audit_log` se existir no cadastro: `funcionarios.ad_login` ou `usuarios.username`, comparados como no login local (collation `utf8mb4_unicode_ci`, sem diferença de maiúsculas). Motivo: a normalização corta no "@", então uma senha digitada no campo de usuário, como `Senha@`, viraria `senha` e ficaria gravada para sempre. Erro na consulta do cadastro conta como "não cadastrado". A resposta HTTP é a mesma nos dois casos: `login_user_throttle_json_response()` depende só do resultado do contador. Os dois eventos são gravados só por `login_user_throttle_audit()`; um teste estrutural reprova outro ponto que os grave.
 
-Fora do escopo, sem alteração: eventos anteriores ao Lote 7 (`ADMIN_LOGIN_FAILURE`, `CI_LOGIN_FAILURE`, `CI_AD_LOGIN_FAILURE`, `CI_LOGIN_RATE_LIMIT`) gravam o login digitado normalizado, cadastrado ou não. Têm o mesmo risco e ficam como pendência para decisão.
+**Lote 7b (2026-10-02):** a mesma regra vale para os eventos de falha de login anteriores ao Lote 7, que gravavam o login digitado normalizado, cadastrado ou não. A função foi renomeada para `login_audit_details()` e é a única forma de esses eventos citarem o login:
+
+| Evento | Pontos | Contexto gravado |
+|---|---|---|
+| `ADMIN_LOGIN_FAILURE` | `admin_login.php`, `login.php`, `api/login_admin.php` (3) | `admin_login`, `metricas_login`, `admin_api/rate_limit`, `admin_api/sem_autorizacao`, `admin_api` |
+| `CI_LOGIN_RATE_LIMIT` | `api/login_ci.php` | `ci_login/rate_limit` |
+| `CI_LOGIN_FAILURE` | `api/login_ci.php` | `ci_login` |
+| `CI_AD_LOGIN_FAILURE` | `auth_ldap.php` (reautenticação da pausa) | `ad_iniciar_pausa`, `ad_finalizar_pausa`, `ad_solicitar_pausa` |
+
+Respostas HTTP sem alteração. O `qa-security` lê os fontes por token do PHP e reprova qualquer ocorrência desses nomes (e de `LOGIN_USER_THROTTLED`) que não seja `audit_log('EVENTO', login_audit_details(...), ...)`: texto concatenado, evento em variável ou ponto novo. Hoje são 9 pontos; ponto novo exige revisão do teste.
 
 ### Decisões da aprovação (2026-10-02)
 
@@ -195,6 +204,8 @@ Endpoints exercitados:
 Em todos: a senha de teste não aparece na resposta nem no log, e não há erro de PHP. Nos casos de contador indisponível, o log tem `LOGIN_THROTTLE_UNAVAILABLE: contexto=` e não tem o login digitado.
 
 **Mutação:** 26 defeitos introduzidos à mão, 26 detectados. Entre eles: retirar o contador de cada ponto de entrada, chamá-lo depois do AD, `<=` na janela, `>` no limite, falhar aberto, voltar à chave por `normalizar_samaccountname()`, ignorar `execute` falso, tirar o `FOR UPDATE`, o `ROLLBACK` ou a limpeza, desligar CSRF e RBAC, aceitar senha vazia, escrever a senha no log, tirar TAB, CR ou `@` do CSV, voltar a neutralização ao código anterior (o caso de UTF-8 inválido reprova) devolver a uma exportação sua cópia do regex e deixar o processo filho usar os arquivos reais de estado.
+
+**Mutação do Lote 7b (2026-10-02):** 12 defeitos, 12 detectados: cada um dos 8 pontos voltando ao texto antigo ou concatenando o login, evento em variável, gravação extra do mesmo evento, bloqueio voltando a gravar a chave e a função gravando o texto digitado.
 
 **Mutação do ajuste de auditoria (2026-10-02):** 12 defeitos, 12 detectados: cadastro sempre verdadeiro ou invertido, erro na consulta tratado como cadastrado, detalhe ignorando o cadastro, gravar o texto digitado ou a chave normalizada fora do cadastro, consultar `usuarios` com outra chave, gravar o login no evento de indisponível, tirar esse evento, `login.php` voltando ao `audit_log` com o login, `admin_login.php` sem auditoria e bloqueio da API respondendo 503. O último não era detectado antes: a resposta foi extraída para `login_user_throttle_json_response()` e ganhou teste.
 

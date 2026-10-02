@@ -20,7 +20,7 @@ if ($username === null || $password === '') {
 
 $rate_key = 'admin_api_' . preg_replace('/[^a-z0-9_]/', '_', $username);
 if (!check_rate_limit('admin_api_global', 10, 900) || !check_rate_limit($rate_key, 5, 900)) {
-    audit_log('ADMIN_LOGIN_FAILURE', 'Rate limit no login administrativo para ' . $username, 'WARNING');
+    audit_log('ADMIN_LOGIN_FAILURE', login_audit_details($username_input, 'admin_api/rate_limit'), 'WARNING');
     json_response([
         'sucesso' => false,
         'mensagem' => 'Muitas tentativas de login. Aguarde alguns minutos.'
@@ -39,7 +39,7 @@ if ($ad_user) {
         $username = $ad_username;
     } else {
         $password = '';
-        audit_log('ADMIN_LOGIN_FAILURE', 'Usuário AD sem autorização administrativa: ' . $username, 'WARNING');
+        audit_log('ADMIN_LOGIN_FAILURE', login_audit_details($username_input, 'admin_api/sem_autorizacao'), 'WARNING');
         json_response([
             'sucesso' => false,
             'mensagem' => 'Usuário AD autenticado, mas não autorizado como administrador ou gestor.'
@@ -63,7 +63,7 @@ if (!$authenticated && ENABLE_LOCAL_ADMIN) {
 
 $password = '';
 if (!$authenticated) {
-    audit_log('ADMIN_LOGIN_FAILURE', 'Falha de login administrativo para ' . $username, 'WARNING');
+    audit_log('ADMIN_LOGIN_FAILURE', login_audit_details($username_input, 'admin_api'), 'WARNING');
     json_response(['sucesso' => false, 'mensagem' => 'Login ou senha incorretos.'], 401);
 }
 

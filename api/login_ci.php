@@ -20,7 +20,7 @@ if (!$login_ad || !$senha_ad) {
 
 $rate_key = 'ci_login_' . preg_replace('/[^a-zA-Z0-9_]/', '_', strtolower($login_ad));
 if (!check_rate_limit('ci_login_global', 20, 300) || !check_rate_limit($rate_key, 5, 300)) {
-    audit_log('CI_LOGIN_RATE_LIMIT', 'Rate limit no login CI para usuario ' . normalizar_samaccountname($login_ad), 'WARNING');
+    audit_log('CI_LOGIN_RATE_LIMIT', login_audit_details($login_ad, 'ci_login/rate_limit'), 'WARNING');
     json_response(['sucesso' => false, 'mensagem' => 'Muitas tentativas de autenticação. Aguarde alguns minutos e tente novamente.'], 429);
 }
 require_login_user_throttle($login_ad, 'ci_login');
@@ -29,7 +29,7 @@ $autenticacao = autenticar_ci_via_ad($login_ad, $senha_ad);
 $senha_ad = '';
 
 if (!$autenticacao['sucesso']) {
-    audit_log('CI_LOGIN_FAILURE', 'Falha de login CI para usuario ' . normalizar_samaccountname($login_ad), 'WARNING');
+    audit_log('CI_LOGIN_FAILURE', login_audit_details($login_ad, 'ci_login'), 'WARNING');
     json_response(['sucesso' => false, 'mensagem' => $autenticacao['mensagem']], 401);
 }
 

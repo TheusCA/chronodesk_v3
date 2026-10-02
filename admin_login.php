@@ -74,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($error === '') {
             $error = 'Login ou senha incorretos.';
         }
-        audit_log('ADMIN_LOGIN_FAILURE', 'Falha de login administrativo para ' . ($username ?? 'inválido'), 'WARNING');
+        audit_log('ADMIN_LOGIN_FAILURE', login_audit_details($username_input, 'admin_login'), 'WARNING');
     }
 }
 ?>
