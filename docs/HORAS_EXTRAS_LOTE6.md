@@ -66,7 +66,7 @@ O CSV de correção de ponto não tinha totais: só ganhou a exportação comple
 
 A tela mostra o aviso no quadro "Total calculado" e não envia o formulário.
 
-**Registros antigos com entrada igual à saída continuam no banco com 24 h.** O lote não altera dados. A seção 8 traz a consulta para encontrá-los.
+**Registros antigos com entrada igual à saída continuam no banco com 24 h.** O lote não altera dados. A seção 8 traz a consulta para encontrá-los. No servidor, em 2026-10-02: **nenhum**.
 
 **Aprovação de pendente antigo com entrada igual à saída (aprovado em 2026-10-02).** Antes, `decideWorkflow()` só conferia se o registro estava pendente, se não era do próprio aprovador e se a decisão era válida; aprovar um pendente antigo de 24 h somava 1.440 minutos no total aprovado. Agora:
 
@@ -180,6 +180,19 @@ EXPLAIN SELECT id FROM pausas ORDER BY inicio_pausa DESC, id DESC LIMIT 1000;
 ```
 
 Esperado: a primeira com `key = idx_overtime_competency` e `Using filesort`; a segunda com varredura (`type = ALL` ou índice em `opened_at`) e `Using where`; a terceira com `key = idx_data` e sem `filesort`.
+
+### Resultado no servidor (2026-10-02, informado pelo responsável, só contagens)
+
+| Consulta | Resultado |
+|---|---|
+| Status `synced` / `sync_error` | Nenhum, nas duas tabelas |
+| Lançamentos com entrada igual à saída | Nenhum |
+| Volumes | Horas extras 3; correção de ponto 3; chamados críticos 3; pausas 81 |
+| `EXPLAIN` horas extras | `idx_overtime_competency` + `filesort`, como esperado |
+| `EXPLAIN` chamados críticos | Varredura completa (3 linhas), como esperado |
+| `EXPLAIN` pausas | `idx_data` em leitura reversa, sem `filesort`, como esperado |
+
+**Pendências do Lote 6 encerradas pelos dados:** (1) `synced`/`sync_error` fora dos totais não afeta nenhum lançamento hoje (a dívida técnica da seção 3 continua registrada para quando a integração com o SharePoint voltar); (2) não há lançamento antigo de 24 h no banco, então a recusa da seção 5 não tem caso a tratar. Os volumes estão muito abaixo do critério de reavaliação dos índices.
 
 ## 9. Rollback
 
