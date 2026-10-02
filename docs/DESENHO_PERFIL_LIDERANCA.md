@@ -168,7 +168,7 @@ Comunicar antes do deploy: ao líder que passa a `lideranca` e ao N2 que passa a
 **Migration 016** (011 a 014 reservadas para a Parte B; 015 é o Lote 7), `migrations/20261002_016_lideranca_profile.sql`. Idempotente, começa com `SET time_zone = 'America/Sao_Paulo';`, sem `NOW()`, sem alteração de linhas:
 
 0. **Checagem prévia (A3):** conta os `ad_login` não nulos repetidos (na collation da coluna, sem diferença de maiúsculas). Se houver algum, a migration para **antes de qualquer alteração**, com erro de tabela inexistente cujo nome explica o motivo (`migration_016_abortada_ad_login_duplicado`). O cliente `mysql` em lote para no primeiro erro.
-1. Amplia o `ENUM` de `funcionarios.access_role` para `('tecnico', 'gestor', 'lideranca', 'admin', 'somente_leitura')`, só se `'lideranca'` não estiver no `COLUMN_TYPE`.
+1. Amplia o `ENUM` de `funcionarios.access_role` para `('tecnico', 'gestor', 'admin', 'somente_leitura', 'lideranca')`, só se `'lideranca'` não estiver no `COLUMN_TYPE`. O valor novo entra **no fim**: os existentes mantêm a posição interna e nenhuma linha muda.
 2. Cria `UNIQUE KEY uq_funcionarios_ad_login (ad_login)`, se não existir (A3). `NULL` repetido continua permitido. Convive com `uq_funcionarios_ad_login_ativo` (só ativos) e com `idx_ad_login`, que fica redundante e **não** é removido.
 
 Pode ser aplicada **antes** do `git pull`, como a 015: ampliar o enum não altera linhas, e o código antigo não grava `lideranca`. Efeito do `UNIQUE` sobre o código antigo, até o `git pull`: cadastrar ou editar funcionário com o login de um cadastro **inativo** passa a falhar com erro 500 (antes era aceito). Com os dados de hoje (30 logins distintos) só acontece se alguém tentar isso na janela. O código do 5a confere o login em todos os cadastros, ativos e inativos, e responde 400 com mensagem.
@@ -328,6 +328,22 @@ No servidor, sem exibir valores: quantos dos `ad_login` da Liderança ativa est�
 4. Conferir: `SHOW INDEX FROM funcionarios WHERE Key_name = 'uq_funcionarios_ad_login';` (1 linha) e `SHOW COLUMNS FROM funcionarios LIKE 'access_role';` (com `lideranca`).
 5. Depois do deploy: login do responsável (admin), do líder fora da allowlist (`lideranca`, direitos de gestor no 5a) e do N2 fora da allowlist (`gestor`); conferir `ADMIN_ROLE_SEM_ALLOWLIST` no `audit_log` para os dois últimos.
 6. Revalidação: com um usuário de teste, desativar o cadastro com a sessão aberta; a próxima requisição deve responder 401, com `SESSION_REVOKED` no `audit_log`. Reativar em seguida.
+
+### 10.1 O que o 5a entregou (2026-10-02)
+
+| Item | Onde |
+|---|---|
+| Perfis, paridade e permissões | `security.php`: `PORTAL_ROLES`, `PORTAL_MANAGER_ROLES`, `portal_role_is_manager()`, `session_role_for()`, `portal_permissions_for_role()`; `current_portal_role()` aceita `lideranca`. As listas `['admin', 'gestor']` de 16 endpoints e 3 serviços passam a usar `PORTAL_MANAGER_ROLES` (as do usuário local ficam como estão). Frontend: `lib/roles.ts` (`isManagerRole`) em 6 pontos |
+| Login CI (L1) | `api/login_ci.php`: perfil por `session_role_for()` com a allowlist; `ADMIN_ROLE_SEM_ALLOWLIST` (WARNING) para `admin` legado fora dela |
+| A1 | `session_revalidate()`, `session_current_role()`, `session_stored_role()`, `session_revalidation_revokes()`; chamada em `ci_session_is_current()`, `usuario_pode_acessar_metricas()`, `verificar_login_api()` e `verificar_admin_login()` |
+| A2 | `ad_login_key()` (a mesma normalização do contador do Lote 7), `ad_admin_users_from()`; preflight em qualquer `APP_ENV` |
+| A3 (parte do 5a) | Migration 016 e rollback; `funcionario_ad_login_em_uso()` confere ativos e inativos nos dois endpoints e no formulário, com mensagem 400 |
+| QA | `qa-security.php`, seção 4: QA 6, 7 e 11, A1 de ponta a ponta (perfil rebaixado, inativo, login trocado, fora da allowlist, admin legado com sessão antiga, promoção sem elevação, banco fora), A2, estruturais do login CI, do login em uso e da 016. O processo filho ganhou banco simulado (`db.php` define `get_db_connection()` só se ainda não existir, como as constantes de caminho do `config.php`) |
+
+**Observações do 5a, sem alteração:**
+- A revalidação é também uma defesa em profundidade para o login CI: uma sessão montada com perfil maior que o das fontes seria encerrada na requisição seguinte.
+- Alguns endpoints não tratam banco indisponível (por exemplo `api/solicitacoes_pendentes.php`: a exceção sobe sem captura e vira erro 500 com registro de erro fatal). É anterior ao lote; a matriz do QA ignora só esse caso.
+- O POST de anexo de escala checa o perfil dentro do serviço, depois de validar o arquivo; fica fora da matriz e entra no 5c.
 
 Cada sublote para no fim, com QA, mutação, registro e roteiro manual, como nos lotes anteriores. Documentação a atualizar na implementação: `API_CONTRACTS_FRONTEND.md`, `DOCUMENTACAO_TECNICA.md`, `DEPLOY_LINUX.md` (016 e 016b), `AUDITORIA_2026-09.md` (SEC-04, SEC-10).
 

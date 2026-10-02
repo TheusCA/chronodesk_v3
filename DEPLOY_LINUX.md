@@ -149,12 +149,17 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronode
 docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260617_009_pa_map_recurring_assignments.sql
 docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20260624_010_schedule_fixed_weekdays.sql
 docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20261001_015_login_user_throttle.sql
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas < /var/www/chronodesk/migrations/20261002_016_lideranca_profile.sql
 ```
 
 A numeracao pula de 010 para 015 de proposito: 011 a 014 estao reservadas para a
 Parte B (`docs/DESENHO_PA_ESCALA_AUSENCIA.md`) e ainda nao existem. Quando
 existirem, entram nesta lista na ordem numerica. Sem a 015, o codigo atual
-recusa todo login com 503 (`docs/LIMITE_LOGIN_POR_USUARIO.md`).
+recusa todo login com 503 (`docs/LIMITE_LOGIN_POR_USUARIO.md`). A 016 (perfil de
+Lideranca e login AD unico) para sem alterar nada se houver login AD repetido
+(`docs/DESENHO_PERFIL_LIDERANCA.md`, secao 5). Na instalacao nova, `AD_ADMIN_USERS`
+precisa ter ao menos um login: admin vem so dessa lista (o preflight reprova
+se estiver vazia).
 
 **Fuso horario em sessao manual.** A aplicacao abre a conexao em
 `America/Sao_Paulo` (`db.php`, lote BIZ-02), mas uma sessao aberta a mao
@@ -682,6 +687,25 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT COUNT(*)
    A migration e idempotente: repetir nao altera nada. A tabela nao afeta o
    codigo anterior, que continua no ar ate o item 4.
 
+   **Migration 016 (Lote 5a), antes do `git pull`.** Primeiro, confirme que o
+   login do responsavel esta em `AD_ADMIN_USERS` no `/var/www/.env`: a partir do
+   Lote 5, admin vem so dessa lista, e sem ela ninguem entra como admin (so o
+   acesso de emergencia). Depois aplique a 016, lida da versao nova, e confira
+   (indice: 1 linha; coluna: tipo com `lideranca`):
+
+```bash
+cd /var/www/chronodesk
+sudo git show origin/<BRANCH>:migrations/20261002_016_lideranca_profile.sql | docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SHOW INDEX FROM funcionarios WHERE Key_name = 'uq_funcionarios_ad_login'; SHOW COLUMNS FROM funcionarios LIKE 'access_role';"
+```
+
+   Se parar com `Table ... migration_016_abortada_ad_login_duplicado doesn't
+   exist`, ha login AD repetido entre cadastros e **nada foi alterado**: resolver
+   os duplicados (consulta so de contagem:
+   `SELECT COUNT(*) FROM (SELECT ad_login FROM funcionarios WHERE ad_login IS NOT NULL GROUP BY ad_login HAVING COUNT(*) > 1) d;`)
+   e repetir. Idempotente. Ate o item 4, o codigo anterior recebe erro ao gravar
+   num cadastro o login AD de outro cadastro inativo (antes era aceito).
+
 4. Trocar o codigo e revisar o que mudou em pontos sensiveis:
 
 ```bash
@@ -704,6 +728,12 @@ sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEA
   015 ja deve ter sido aplicada no item 3, **antes** do `git pull`. Sem a
   tabela, o codigo novo recusa todo login com 503. Siga
   `docs/LIMITE_LOGIN_POR_USUARIO.md`, secao 6.
+- Deploy que traz o Lote 5a (perfil de Lideranca): a 016 ja deve ter sido
+  aplicada no item 3. Depois da recarga, siga o roteiro de
+  `docs/DESENHO_PERFIL_LIDERANCA.md`, secao 10 (login de cada perfil,
+  `ADMIN_ROLE_SEM_ALLOWLIST` e teste da revalidacao). Toda sessao aberta antes do
+  deploy com perfil maior que o atual e encerrada na primeira requisicao
+  (`SESSION_REVOKED`): o N2 e o lider fora da allowlist precisam entrar de novo.
 
 5. Frontend e recarga:
 
