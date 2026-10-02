@@ -1,7 +1,7 @@
 # Perfil de Liderança — desenho do Lote 5 (SEC-04, SEC-10)
 
 **Data:** 2026-10-02
-**Situação:** **aprovado em 2026-10-02**: decisões L1 a L9 como recomendadas (seção 9), com os acréscimos A1 a A5 (seção 9.1), que viram requisito. 5a e 5b aprovados; **5c implementado** em commits locais (seção 10.3). A P12 foi decidida em 2026-10-02 (seção 9 e `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, seção 0.6).
+**Situação:** **Lote 5 concluído e aprovado em 2026-10-02** (5a, 5b e 5c), pendente só do ensaio das migrations no servidor. Decisões L1 a L9 (seção 9) e acréscimos A1 a A5 (seção 9.1). A P12 foi decidida em 2026-10-02 (seção 9 e `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, seção 0.6).
 **Pedido (2026-09-30):** a Liderança mantém adicionar e remover funcionários, aprovar pausas, horas extras e correções, gerenciar escalas, Mapa PA e ausências. Não pode mexer em configurações, integrações e usuários locais, nem promover alguém a Liderança ou admin. Só um admin da allowlist `AD_ADMIN_USERS` promove, com auditoria CRITICAL.
 
 ---
@@ -378,7 +378,7 @@ No servidor, sem exibir valores: quantos dos `ad_login` da Liderança ativa est�
 | L9 | `schedule_change_denied()` e `PortalForbiddenException` (403 em `portal_operational_error()`, com `PORTAL_ACCESS_DENIED`). `OperationalService`: regra, remoção, exceção e importação recebem o perfil do ator; escala de quem é da equipe Liderança, ou de cadastro com perfil Liderança ou admin, só pelo admin. `employee()` passa a ler `access_role`. Hoje a escala só aceita N1 e N2; a escala implícita da equipe Liderança (P12) entra no F1 |
 | L6 | Retroativos ainda não existem (P10 é do F1, ausência retroativa é do F3); entram com a permissão da Liderança nesses lotes |
 | L7 | `AUTH_SOURCE` removida de `config.php`, de `api/configuracoes.php` (campo `auth_source`) e dos exemplos de `.env`; a aba Segurança mostra "AD/LDAP" e marca "Parcial" só com o acesso local ligado; o preflight avisa se a variável ainda estiver no `.env` |
-| L4 | Login local auditado como `CRITICAL` em `login.php`, `admin_login.php` e `api/login_admin.php`; preflight reprova `ENABLE_LOCAL_ADMIN` ligado fora de `development` (a auditoria registrou o servidor em `staging`; **TO CONFIRM**: com `development` no `.env`, a trava não se aplica) |
+| L4 | Login local auditado como `CRITICAL` em `login.php`, `admin_login.php` e `api/login_admin.php`; preflight reprova `ENABLE_LOCAL_ADMIN` ligado fora de `development` (`APP_ENV` do servidor **confirmado em 2026-10-02: staging**, então a trava vale lá) |
 | Frontend | `lib/roles.ts`: `hasPermission()`. Derrubar pausa (`App.jsx`, `DashboardPage.jsx`, `PausasPage.jsx`) e remover regra (`OperationalPages.jsx`) pela permissão do servidor |
 | QA | `qa-security.php`, seção 6: permissões, tabela-verdade da L9, L9 no serviço contra o banco simulado (recusa antes de qualquer outra consulta), L9 de ponta a ponta com auditoria, estruturais de L7, L4 e do frontend. Matriz: linha nova do POST de anexo de escala e linhas `ADMIN_LIDERANCA` para Mapa PA, remover regra e derrubar pausa. `qa-smoke` atualizado. O banco simulado aceita transação sem efeito |
 

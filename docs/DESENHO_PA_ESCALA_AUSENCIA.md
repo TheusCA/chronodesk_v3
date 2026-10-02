@@ -82,7 +82,11 @@ P2, P12 e o tratamento dos relatórios foram decididos em 2026-10-02: seção 0.
 
 #### P12 e cadastros fora do Mapa e da escala
 
-**Escala da Liderança.** Proposta: escala **implícita** para quem é da equipe Liderança, sempre presencial em dia útil, sem linha em `portal_schedule_rules`. O motor (F2) resolve "equipe Liderança, sem exceção no dia → presencial"; a tela de escala mostra a Liderança como "Presencial (regra fixa)", sem botão de editar regra. Não há regra a cadastrar nem importar para a Liderança: linha de líder na planilha recebe aviso e é ignorada. O que o admin edita (L9) são as **exceções** (treinamento, plantão; a exceção remota é recusada, porque a regra é sem home) e as **ausências** (A4 do Lote 5). O passo 2.6 continua na migration 011 (`team` com `lideranca` nas tabelas de regra e de exceção), porque a exceção de líder precisa do valor. Alternativa, se o responsável preferir dado explícito: gravar regra `always_onsite` para cada líder e aceitar só esse tipo para a equipe; custa cadastro manual e abre a chance de um líder sem regra aparecer como "Sem escala".
+**Propostas abaixo aprovadas em 2026-10-02**, com estes esclarecimentos:
+- escala implícita da Liderança, sem linha em `portal_schedule_rules`; os dias e horários vêm da jornada do próprio cadastro (P1); sábado não é implícito, só por exceção; exceção remota recusada; linha de líder na planilha de importação recebe aviso e é ignorada;
+- `funcionarios.fora_mapa_escala` como na tabela: só admin edita (permissão `funcionarios.fora_mapa`); auditoria WARNING com valor anterior, novo e ator; 409 se houver vínculo de PA ativo ou se tentarem regra ou exceção para o cadastro marcado; fora de todas as contagens; ausências continuam registráveis; nenhum nome ou ID no código, nas migrations ou nos commits.
+
+**Escala da Liderança.** Proposta: escala **implícita** para quem é da equipe Liderança, sempre presencial em dia útil, sem linha em `portal_schedule_rules`. O motor (F2) resolve "equipe Liderança, sem exceção no dia → presencial nos dias e horários da jornada do cadastro (P1); sábado só por exceção"; a tela de escala mostra a Liderança como "Presencial (regra fixa)", sem botão de editar regra. Não há regra a cadastrar nem importar para a Liderança: linha de líder na planilha recebe aviso e é ignorada. O que o admin edita (L9) são as **exceções** (treinamento, plantão; a exceção remota é recusada, porque a regra é sem home) e as **ausências** (A4 do Lote 5). O passo 2.6 continua na migration 011 (`team` com `lideranca` nas tabelas de regra e de exceção), porque a exceção de líder precisa do valor. Alternativa, se o responsável preferir dado explícito: gravar regra `always_onsite` para cada líder e aceitar só esse tipo para a equipe; custa cadastro manual e abre a chance de um líder sem regra aparecer como "Sem escala".
 
 **Cadastros fora do Mapa e da escala.** O desenho aprovado só tinha o arquivamento (`ativo = 0`), que bloqueia o login e não serve. Proposta:
 
@@ -857,4 +861,4 @@ F5, F6 e F7 são independentes entre si e podem mudar de ordem.
 
 ---
 
-**Fim da Fase de Desenho.** Aprovado em 2026-09-30; P2, P12 e o tratamento dos relatórios decididos em 2026-10-02 (seção 0.6). As propostas de 0.6 para a escala implícita da Liderança e para o atributo `fora_mapa_escala` são confirmadas na aprovação do F1.
+**Fim da Fase de Desenho.** Aprovado em 2026-09-30; P2, P12 e o tratamento dos relatórios decididos em 2026-10-02 (seção 0.6). As propostas de 0.6 para a escala implícita da Liderança e para o atributo `fora_mapa_escala` foram aprovadas em 2026-10-02, com os esclarecimentos registrados na seção.
