@@ -1027,6 +1027,56 @@ function chronodesk_uncaught_exception(Throwable $error): void {
     ], JSON_UNESCAPED_UNICODE);
 }
 
+// ============================================
+// [SEC-07, SEC-08] ESCOPO DE LEITURA POR EQUIPE
+// ============================================
+
+/**
+ * O que o ator vê em conteúdo por equipe (anexos de escala, avisos): gestão
+ * (gestor, Liderança, admin) vê tudo; técnico e somente leitura, a própria
+ * equipe (do cadastro ativo). Sem equipe identificada, só o que é de todos.
+ * Devolve ['all' => bool, 'team' => ?string].
+ */
+function portal_viewer_scope(PDO $pdo, array $actor): array {
+    if (portal_role_is_manager($actor['role'] ?? null)) {
+        return ['all' => true, 'team' => null];
+    }
+    $employee_id = (int)($actor['employee_id'] ?? 0);
+    if ($employee_id < 1) {
+        return ['all' => false, 'team' => null];
+    }
+    $stmt = $pdo->prepare('SELECT equipe FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1');
+    $stmt->execute([':id' => $employee_id]);
+    $team = validate_funcionario_equipe((string)$stmt->fetchColumn());
+    return ['all' => false, 'team' => in_array($team, ['n1', 'n2', 'lideranca'], true) ? $team : null];
+}
+
+/**
+ * [SEC-07] Público de um aviso (`audience`): lista separada por vírgula, sem
+ * diferença de maiúsculas e espaços. Vazio, `all` e `todos` = todos.
+ */
+function announcement_audience_tokens(?string $audience): array {
+    $tokens = array_values(array_filter(array_map('trim', explode(',', strtolower((string)$audience))), 'strlen'));
+    if ($tokens === []) {
+        return ['all'];
+    }
+    return array_map(static fn (string $token): string => $token === 'todos' ? 'all' : $token, $tokens);
+}
+
+/**
+ * [SEC-07] Regra aprovada em 2026-10-02 (S7a a S7c): gestão vê todos;
+ * técnico e somente leitura veem `all` e a própria equipe; `gestao` e valor
+ * desconhecido, só a gestão.
+ */
+function announcement_visible(array $scope, ?string $audience): bool {
+    if ($scope['all'] === true) {
+        return true;
+    }
+    $tokens = announcement_audience_tokens($audience);
+    return in_array('all', $tokens, true)
+        || ($scope['team'] !== null && in_array($scope['team'], $tokens, true));
+}
+
 /** [Lote 5c] O perfil tem a permissão? Guardas por permissão, não por lista de perfis. */
 function portal_role_can(?string $role, string $permission): bool {
     return in_array($permission, portal_permissions_for_role($role), true);

@@ -72,7 +72,24 @@ final class QaChildStatement extends PDOStatement {
     }
 
     public function execute(?array $params = null): bool {
-        $params = $params ?? [];
+        $params = ($params ?? []) + $this->bound;
+        // Lote 4 (SEC-07): avisos. Emula a clausula SQL de forma independente
+        // da regra em PHP (announcement_visible), para comparar as duas.
+        if (strpos($this->sql, 'SELECT id, title, category, severity, content, audience') === 0) {
+            $clause = "WHERE (REPLACE(LOWER(COALESCE(audience, '')), ' ', '') = '' OR FIND_IN_SET('all', REPLACE(LOWER(COALESCE(audience, '')), ' ', '')) > 0 OR FIND_IN_SET('todos', REPLACE(LOWER(COALESCE(audience, '')), ' ', '')) > 0";
+            $filtered = strpos($this->sql, $clause) !== false;
+            $team = strpos($this->sql, "OR FIND_IN_SET(:viewer_team, REPLACE(LOWER(COALESCE(audience, '')), ' ', '')) > 0)") !== false ? ($params[':viewer_team'] ?? null) : null;
+            $this->rows = [];
+            foreach ($this->pdo->db['avisos'] ?? [] as $id => $audience) {
+                $normalized = str_replace(' ', '', strtolower((string)$audience));
+                $set = explode(',', $normalized);
+                if ($filtered && !($normalized === '' || in_array('all', $set, true) || in_array('todos', $set, true) || ($team !== null && in_array($team, $set, true)))) {
+                    continue;
+                }
+                $this->rows[] = ['id' => (int)$id, 'title' => 'Aviso ' . $id, 'audience' => $audience];
+            }
+            return true;
+        }
         if ($this->sql === 'SELECT ativo, access_role, equipe, ad_login FROM funcionarios WHERE id = ?') {
             $row = $this->pdo->db['funcionarios'][(string)$params[0]] ?? null;
             $this->rows = is_array($row) ? [$row] : [];
@@ -169,8 +186,11 @@ final class QaChildStatement extends PDOStatement {
         return $rows;
     }
 
+    private array $bound = [];
+
     public function bindValue(int|string $param, mixed $value, int $type = PDO::PARAM_STR): bool {
-        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista');
+        $this->bound[$param] = $value;
+        return true;
     }
 
     public function bindParam(int|string $param, mixed &$var, int $type = PDO::PARAM_STR, int $maxLength = 0, mixed $driverOptions = null): bool {
@@ -1817,5 +1837,70 @@ foreach (['api/solicitacoes_pendentes.php', 'api/portal/standby.php'] as $endpoi
         assert_same(true, in_array($message, [DATABASE_UNAVAILABLE_MESSAGE, 'A base de escalas ainda não está disponível.'], true), "0d: {$endpoint} ({$mode}) com mensagem");
     }
 }
+
+// ============================================================================
+// 8. Lote 4 — SEC-07 (avisos por publico), aprovado em 2026-10-02 (S7a a S7c)
+// ============================================================================
+
+foreach ([
+    [null, ['all']], ['', ['all']], ['  ', ['all']], ['all', ['all']], ['Todos', ['all']], [' ALL ', ['all']],
+    ['n1', ['n1']], ['N2, Lideranca', ['n2', 'lideranca']], ['n1,,n2', ['n1', 'n2']], ['gestao', ['gestao']],
+] as [$audience, $expected]) {
+    assert_same($expected, announcement_audience_tokens($audience), 'SEC-07: publico ' . var_export($audience, true));
+}
+$noticeAudiences = [
+    '31' => 'all', '32' => null, '33' => '', '34' => 'n1', '35' => 'n2', '36' => 'lideranca', '37' => 'gestao',
+    '38' => 'n1,n2', '39' => ' N2 , Lideranca ', '40' => 'financeiro', '41' => 'todos', '42' => 'ALL,gestao',
+];
+$visibleFor = static function (array $scope) use ($noticeAudiences): array {
+    $ids = [];
+    foreach ($noticeAudiences as $id => $audience) {
+        if (announcement_visible($scope, $audience)) {
+            $ids[] = (int)$id;
+        }
+    }
+    return $ids;
+};
+$allNotices = array_map('intval', array_keys($noticeAudiences));
+foreach ([
+    [['all' => true, 'team' => null], $allNotices, 'gestao ve todos, inclusive gestao e valor desconhecido (S7b, S7c)'],
+    [['all' => false, 'team' => 'n1'], [31, 32, 33, 34, 38, 41, 42], 'tecnico N1: todos e a propria equipe'],
+    [['all' => false, 'team' => 'n2'], [31, 32, 33, 35, 38, 39, 41, 42], 'tecnico N2: todos e a propria equipe, com espaco e maiuscula'],
+    [['all' => false, 'team' => 'lideranca'], [31, 32, 33, 36, 39, 41, 42], 'perfil de leitura da Lideranca: todos e a equipe'],
+    [['all' => false, 'team' => null], [31, 32, 33, 41, 42], 'sem equipe: so os de todos'],
+] as [$scope, $expected, $label]) {
+    assert_same($expected, $visibleFor($scope), "SEC-07: {$label}");
+}
+assert_same(false, announcement_visible(['all' => false, 'team' => 'n1'], 'gestao'), 'SEC-07: gestao nunca para tecnico');
+assert_same(false, announcement_visible(['all' => false, 'team' => 'n1'], 'financeiro'), 'SEC-07: valor desconhecido so para a gestao (S7c)');
+
+// De ponta a ponta: o filtro do SQL (emulado no banco simulado) da o mesmo
+// resultado da regra em PHP.
+$noticeDb = QA_DB;
+$noticeDb['avisos'] = $noticeAudiences;
+$noticeDb['funcionarios']['12'] = ['ativo' => 1, 'access_role' => 'tecnico', 'equipe' => 'n2', 'ad_login' => 'qa.n2'];
+$noticeCases = qa_run_endpoints($qaDir, [
+    'gestor' => ['endpoint' => 'api/portal/announcements.php', 'method' => 'GET', 'session' => $manager, 'db' => $noticeDb],
+    'lideranca' => ['endpoint' => 'api/portal/announcements.php', 'method' => 'GET', 'session' => $leaderSession, 'db' => $noticeDb],
+    'tecnico_n1' => ['endpoint' => 'api/portal/announcements.php', 'method' => 'GET', 'session' => $technician, 'db' => $noticeDb],
+    'tecnico_n2' => ['endpoint' => 'api/portal/announcements.php', 'method' => 'GET', 'session' => qa_ci_session(12, 'qa.n2', 'tecnico'), 'db' => $noticeDb],
+    'somente_leitura' => ['endpoint' => 'api/portal/announcements.php', 'method' => 'GET', 'session' => qa_ci_session(4, 'qa.leitura', 'somente_leitura'), 'db' => $noticeDb],
+]);
+$noticeIds = static function (array $result): array {
+    $ids = array_map(static fn (array $row): int => $row['id'], json_decode($result['body'], true)['items'] ?? []);
+    sort($ids);
+    return $ids;
+};
+foreach ([
+    'gestor' => ['all' => true, 'team' => null],
+    'lideranca' => ['all' => true, 'team' => null],
+    'tecnico_n1' => ['all' => false, 'team' => 'n1'],
+    'tecnico_n2' => ['all' => false, 'team' => 'n2'],
+    'somente_leitura' => ['all' => false, 'team' => 'n1'],
+] as $case => $scope) {
+    assert_same(200, $noticeCases[$case]['status'], "SEC-07: {$case} lista avisos");
+    assert_same($visibleFor($scope), $noticeIds($noticeCases[$case]), "SEC-07: {$case} pelo endpoint igual a regra");
+}
+assert_same(true, strpos((string)file_get_contents($root . '/api/portal/announcements.php'), 'portal_list_response(') === false, 'SEC-07: avisos nao usam mais a listagem generica sem escopo');
 
 echo "qa-security OK\n";

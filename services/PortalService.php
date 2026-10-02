@@ -58,6 +58,40 @@ class PortalService {
         }
     }
 
+    /**
+     * [SEC-07] Avisos visíveis ao ator, filtrados no SQL antes do limite.
+     * A regra é announcement_visible() (security.php); o filtro reproduz a
+     * mesma regra no banco: vazio, all ou todos, ou a equipe do ator.
+     */
+    public function announcements(array $actor, int $limit = 100): array {
+        $limit = max(1, min($limit, 200));
+        try {
+            $pdo = get_db_connection();
+            $scope = portal_viewer_scope($pdo, $actor);
+            $sql = 'SELECT ' . self::TABLES['announcements']['columns'] . ' FROM portal_announcements';
+            $params = [];
+            if (!$scope['all']) {
+                $audience = "REPLACE(LOWER(COALESCE(audience, '')), ' ', '')";
+                $sql .= " WHERE ({$audience} = '' OR FIND_IN_SET('all', {$audience}) > 0 OR FIND_IN_SET('todos', {$audience}) > 0";
+                if ($scope['team'] !== null) {
+                    $sql .= " OR FIND_IN_SET(:viewer_team, {$audience}) > 0";
+                    $params[':viewer_team'] = $scope['team'];
+                }
+                $sql .= ')';
+            }
+            $stmt = $pdo->prepare($sql . ' ORDER BY updated_at DESC, id DESC LIMIT :limit');
+            foreach ($params as $name => $value) {
+                $stmt->bindValue($name, $value);
+            }
+            $stmt->bindValue(':limit', $limit + 1, PDO::PARAM_INT);
+            $stmt->execute();
+            return db_limit_rows($stmt->fetchAll(), $limit);
+        } catch (Throwable $e) {
+            error_log('[PORTAL] Recurso indisponível: announcements');
+            throw new PortalStorageException('A base do portal ainda não está disponível.', 0, $e);
+        }
+    }
+
     public function schedules(?string $type = null, int $limit = 100): array {
         $allowed = ['turno', 'home_office', 'presencial', 'folga', 'ferias', 'sobreaviso', 'plantao', 'ausencia'];
         if ($type !== null && !in_array($type, $allowed, true)) {

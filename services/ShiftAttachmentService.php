@@ -47,17 +47,7 @@ final class ShiftAttachmentService {
      * Devolve ['all' => bool, 'team' => ?string].
      */
     public function viewerScope(array $actor): array {
-        if (portal_role_is_manager($actor['role'] ?? null)) {
-            return ['all' => true, 'team' => null];
-        }
-        $employeeId = (int)($actor['employee_id'] ?? 0);
-        if ($employeeId < 1) {
-            return ['all' => false, 'team' => null];
-        }
-        $stmt = $this->pdo->prepare('SELECT equipe FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1');
-        $stmt->execute([':id' => $employeeId]);
-        $team = validate_funcionario_equipe((string)$stmt->fetchColumn());
-        return ['all' => false, 'team' => in_array($team, self::TEAMS, true) ? $team : null];
+        return portal_viewer_scope($this->pdo, $actor);
     }
 
     /** [SEC-08] Regra de visibilidade de um anexo, pura. */
