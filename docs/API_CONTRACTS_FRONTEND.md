@@ -40,7 +40,8 @@ Mapa inicial dos contratos consumidos pelo frontend. Este documento descreve o u
 | `portal/notifications.php` | GET/POST | POST `id` para marcar leitura | unread, items, `mensagem` | Layout | Medio | Build/lint | Query future |
 | `portal/dashboard.php` | GET | nenhum | metricas e cards | Dashboard | Medio | Build/lint | Contrato tipado |
 | `portal/calendar.php` | GET/POST | filtros; form de evento | items, `mensagem` | Calendario | Medio | Build/lint | Schema futuro |
-| `listar_funcionarios.php` | GET | nenhum | `funcionarios` | Admin, filtros, selects | Alto | Backend smoke | Tipo Employee |
+| `listar_funcionarios.php` | GET | nenhum | `funcionarios` (com `ativo` falso, `ad_login` e `access_role` so para quem tem `funcionarios.manage`: admin e Lideranca) | Admin, filtros, selects | Alto | Backend smoke | Tipo Employee |
+| `adicionar_funcionario.php` / `atualizar_funcionario.php` / `remover_funcionario.php` | POST | cadastro (`access_role`: `tecnico`, `gestor`, `lideranca`, `somente_leitura`) / `funcionario_id` | `mensagem` | Admin (aba Funcionarios) | Alto: RBAC | `qa-security` secao 5 | Lote 5b: admin e Lideranca; 400 para `access_role = 'admin'` e para login AD de outro cadastro (ativo ou inativo); 403 para Lideranca promovendo a `lideranca` ou mexendo em cadastro de Lideranca/admin; 401 sem sessao, 403 para os demais perfis |
 | `configuracoes.php` | GET | nenhum | `configuracoes` | Admin | Alto: admin only | Backend smoke | RBAC manual |
 | `salvar_configuracao.php` | POST | configuracoes de pausa | `mensagem` | Admin | Alto | Backend smoke | Teste admin |
 | `usuarios.php` | GET/POST | action listar/criar/atualizar/deletar | usuarios, `mensagem` | Admin local | Alto | Backend smoke | Teste local admin |

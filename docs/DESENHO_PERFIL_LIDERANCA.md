@@ -1,7 +1,7 @@
 # Perfil de Liderança — desenho do Lote 5 (SEC-04, SEC-10)
 
 **Data:** 2026-10-02
-**Situação:** **aprovado em 2026-10-02**: decisões L1 a L9 como recomendadas (seção 9), com os acréscimos A1 a A5 (seção 9.1), que viram requisito. Sublote 5a implementado em commit local (seção 10); 5b e 5c aguardam. A P12 continua em aberto.
+**Situação:** **aprovado em 2026-10-02**: decisões L1 a L9 como recomendadas (seção 9), com os acréscimos A1 a A5 (seção 9.1), que viram requisito. 5a aprovado com condições (atendidas em 2026-10-02); **5b implementado** em commits locais (seção 10.2); 5c aguarda. A P12 continua em aberto.
 **Pedido (2026-09-30):** a Liderança mantém adicionar e remover funcionários, aprovar pausas, horas extras e correções, gerenciar escalas, Mapa PA e ausências. Não pode mexer em configurações, integrações e usuários locais, nem promover alguém a Liderança ou admin. Só um admin da allowlist `AD_ADMIN_USERS` promove, com auditoria CRITICAL.
 
 ---
@@ -324,7 +324,7 @@ No servidor, sem exibir valores: quantos dos `ad_login` da Liderança ativa est�
 | Lote | Conteúdo | Rollback |
 |---|---|---|
 | **5a** (implementado) | Migration 016 e `016_down` (checagem de duplicados, enum, `UNIQUE`); permissões novas em `portal_permissions_for_role`; resolução do perfil (2.1) em função pura; logins CI e admin pela allowlist normalizada (A2), com `ADMIN_ROLE_SEM_ALLOWLIST`; `current_portal_role` aceita `lideranca`; revalidação por requisição (A1); preflight (A2); login AD único em ativos e inativos nos endpoints de funcionário (A3); **paridade mínima**: onde hoje admin e gestor passam, a Liderança também passa (`portal_role_is_manager()` no servidor, `isManagerRole()` no frontend, notificações de aprovação); QA 6, 7 e 11, A1 e A2 | Código + `016_down` |
-| 5b | Endpoints de funcionário com a função de 2.3; L3; promoção com `CRITICAL`; auditoria de troca de `ad_login` e teste estrutural do `NULL` (A3); `016b` e `016b_down`; formulário e abas do frontend; QA 2 a 5, 9, 12 a 14 | `016b_down` + código |
+| **5b** (implementado) | Endpoints de funcionário com a função de 2.3; L3; promoção com `CRITICAL`; auditoria de troca de `ad_login` e teste estrutural do `NULL` (A3); `016b` e `016b_down`; ensaio de migration (`scripts/ensaio-migration.sh`); formulário e abas do frontend; QA 2 a 5, 9, 12 a 14 | `016b_down` + código |
 | 5c | Escalas (remover regra, anexos), Mapa PA, forçar fim de pausa (L5), retroativos (L6), L9 (só depois da P12), `AUTH_SOURCE` (L7), admin local (L4); QA 1, 8, 10 | Código |
 
 **Por que a paridade mínima entra no 5a:** a partir do 5a, a sessão do líder fora da allowlist passa a ser `lideranca`. Sem a paridade, as listas `['admin', 'gestor']` espalhadas pelos endpoints a deixariam abaixo de gestor. Com ela, o 5a sozinho deixa esse líder com os direitos de gestor; os direitos próprios da Liderança (funcionários, Mapa PA, remover regra, anexos, forçar fim de pausa) chegam no 5b e no 5c. **Recomendado:** levar 5a, 5b e 5c no mesmo deploy.
@@ -353,6 +353,22 @@ No servidor, sem exibir valores: quantos dos `ad_login` da Liderança ativa est�
 - A revalidação é também uma defesa em profundidade para o login CI: uma sessão montada com perfil maior que o das fontes seria encerrada na requisição seguinte.
 - Endpoints que não tratam banco indisponível: `api/solicitacoes_pendentes.php` (GET, admin) e `api/portal/standby.php` (GET, qualquer perfil). A exceção sobe sem captura e vira erro 500 com registro de erro fatal. Levantamento de 2026-10-02: todos os endpoints de `api/` e `api/portal/`, GET e POST (corpo `{}`), como admin e como técnico, com o banco respondendo só à revalidação. Não cobre falha de conexão nem corpos válidos. Anterior ao lote; **pendência para lote próprio**. A matriz do QA ignora só esse caso.
 - O POST de anexo de escala checa o perfil dentro do serviço, depois de validar o arquivo; fica fora da matriz e entra no 5c.
+
+### 10.2 O que o 5b entregou (2026-10-02)
+
+| Item | Onde |
+|---|---|
+| Regra de 2.3 | `security.php`: `funcionario_change_denied()` (pura), `require_funcionario_change()` (recusa com `FUNCIONARIO_ALTERACAO_NEGADA`, WARNING), `funcionario_role_is_elevated()`. `validate_access_role()` aceita `lideranca` |
+| Endpoints de funcionário | `adicionar`, `atualizar` e `remover_funcionario.php`: `require_portal_auth()` e permissão `funcionarios.manage` no lugar de `verificar_admin_login_api()` (técnico e somente leitura passam de 401 para 403); regra do perfil novo **antes** do banco; regra do perfil atual depois de lê-lo. `listar_funcionarios.php`: inativos, login AD e perfil para quem tem `funcionarios.manage` |
+| L3 | `access_role = 'admin'` recusado com 400 para todos, com mensagem que aponta a allowlist |
+| Equipe e perfil separados | Saiu `equipe = 'lideranca'` ⇒ `admin` dos dois endpoints, de `normalizar_funcionario_array()` e do formulário |
+| Auditoria (13 e A3) | Criação com perfil `gestor` ou `lideranca`: `FUNCIONARIO_PERFIL_ALTERADO` CRITICAL; mudança de perfil e desativação registram o ator; troca de `ad_login`: `FUNCIONARIO_AD_LOGIN_ALTERADO`, CRITICAL se o perfil atual ou novo for de gestão e WARNING nos demais; vínculo automático do AD com a mesma regra |
+| `016b` e `016b_down` | `migrations/20261002_016b_lideranca_profile_data.sql` e `migrations/rollback/20261002_016b_lideranca_profile_data_down.sql`, com a tabela de registro `funcionarios_perfil_016b` (seção 5) |
+| Ensaio | `scripts/ensaio-migration.sh` e seção "Ensaio de Migration" do `DEPLOY_LINUX.md`; `PREPARO` aplica a 016 antes de ensaiar o 016b |
+| Frontend | Formulário sem a opção Admin (o valor legado aparece desabilitado, com aviso) e sem vínculo equipe ⇒ perfil; opção Liderança só para quem tem `perfis.promote`; editar e desativar cadastros de Liderança ou admin só para quem promove; aba Funcionários para quem tem `funcionarios.manage`; checagem de login duplicado em ativos e inativos |
+| QA | `qa-security.php`, seção 5: tabela-verdade da regra (180 casos), 17 casos de ponta a ponta (recusas sem gravação e auditadas, promoção de gestor pela Liderança, criação de Liderança pelo admin, técnico na equipe Liderança, troca de login com WARNING e CRITICAL, login de cadastro inativo, desativação, listagem), estruturais (quem grava `access_role`, `ad_login` só depois de normalizado, vínculo automático) e do `016b`. Matriz atualizada (linha `FUNCIONARIOS`). `qa-overtime.php`: autoaprovação pela Liderança recusada (QA 12). `qa-smoke` e `qa:employee-form`/`qa:operational` atualizados |
+
+**Ainda não feito (5c):** escalas (remover regra, anexos), Mapa PA, forçar fim de pausa (L5), retroativos (L6), L9 (só depois da P12), `AUTH_SOURCE` (L7), admin local (L4: auditoria CRITICAL do login e preflight). Até lá, a Liderança ainda não tem esses direitos.
 
 Cada sublote para no fim, com QA, mutação, registro e roteiro manual, como nos lotes anteriores. Documentação a atualizar na implementação: `API_CONTRACTS_FRONTEND.md`, `DOCUMENTACAO_TECNICA.md`, `DEPLOY_LINUX.md` (016 e 016b), `AUDITORIA_2026-09.md` (SEC-04, SEC-10).
 

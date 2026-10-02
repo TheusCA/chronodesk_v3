@@ -771,6 +771,21 @@ sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEA
   `ADMIN_ROLE_SEM_ALLOWLIST` e teste da revalidacao). Toda sessao aberta antes do
   deploy com perfil maior que o atual e encerrada na primeira requisicao
   (`SESSION_REVOKED`): o N2 e o lider fora da allowlist precisam entrar de novo.
+- Deploy que traz o Lote 5b (cadastro de funcionarios por perfil): o `016b`
+  (normalizacao dos perfis) vai **depois** da recarga do item 5, com o codigo
+  novo no ar; o codigo anterior leria `lideranca` como tecnico. Ensaie antes
+  (secao Ensaio de Migration, com `PREPARO` da 016) e aplique:
+
+```bash
+cd /var/www/chronodesk
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < migrations/20261002_016b_lideranca_profile_data.sql; unset P
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, access_role, ativo, COUNT(*) FROM funcionarios GROUP BY equipe, access_role, ativo; SELECT action, COUNT(*) FROM audit_log WHERE action IN ('LIDERANCA_PERFIL_MIGRADO', 'ADMIN_INATIVO_REBAIXADO') GROUP BY action;"
+```
+
+  Esperado com os dados de 2026-10-02: `lideranca`/`lideranca` ativos 3;
+  `n2`/`admin` ativos 2 (inalterados); o `n2` inativo como `tecnico`; um evento
+  de cada. Repetir o `016b` nao muda nada. Sessoes nao sao afetadas: o perfil
+  efetivo dos tres lideres nao muda (2 admin pela allowlist, 1 `lideranca`).
 
 5. Frontend e recarga:
 
@@ -806,6 +821,16 @@ O clone fica em *detached HEAD*; no proximo deploy, volte ao branch com
 Banco: so e necessario se o deploy aplicou migration incompativel com o codigo
 anterior. Nesse caso, siga a Restauracao em Incidente com o backup do item 3,
 ciente de que o que foi gravado depois dele sera perdido.
+
+Lote 5 (perfil de Lideranca), sem restaurar backup e nesta ordem:
+1. Com o codigo novo **ainda no ar**, reverter os dados:
+   `read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < migrations/rollback/20261002_016b_lideranca_profile_data_down.sql; unset P`
+   (so as linhas registradas pelo `016b` que ainda estao com o perfil gravado por
+   ele; quem foi promovido a `lideranca` depois fica como esta e, com o codigo
+   anterior, entra como tecnico).
+2. Rollback do codigo, como acima.
+3. Opcional: `migrations/rollback/20261002_016_lideranca_profile_down.sql` (para
+   sem alterar nada se ainda houver `lideranca`).
 
 ## HTTPS Interno
 

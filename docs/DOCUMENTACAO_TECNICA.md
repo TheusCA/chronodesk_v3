@@ -206,7 +206,7 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 | `tecnico` | `portal.read`, `pausas.use` — vê e lança apenas os próprios registros operacionais |
 | `somente_leitura` | `portal.read` — nenhuma operação de escrita |
 | `gestor` | leitura do portal, pausas, métricas, relatórios, documentação, avisos, **aprovação de operações** e `ausencias.manage` |
-| `lideranca` | tudo do gestor mais `funcionarios.manage`, `escalas.manage`, `pa_map.manage`, `pausas.force_end` (Lote 5; no 5a, só os direitos do gestor estão ativos nos endpoints) |
+| `lideranca` | tudo do gestor mais `funcionarios.manage`, `escalas.manage`, `pa_map.manage`, `pausas.force_end` (Lote 5: no 5b, funcionários está ativo, sem promover à Liderança nem alterar cadastros de Liderança ou admin; escalas, Mapa PA e forçar fim de pausa chegam no 5c) |
 | `admin` | tudo da Liderança mais `admin.manage`, `configuracoes.manage`, `integracoes.manage`, `usuarios_locais.manage`, `perfis.promote` |
 
 **Concessão do perfil administrativo (Lote 5a, 2026-10-02):** admin vem **só** da allowlist `AD_ADMIN_USERS`, comparada pela mesma normalização do bind, em todos os logins. `funcionarios.access_role = 'admin'` é valor legado e não concede administração: vira `lideranca` na equipe Liderança e `gestor` fora dela. A equipe não concede permissão. Exceção explícita: o admin local de emergência (`ENABLE_LOCAL_ADMIN`, procedimento em `DEPLOY_LINUX.md`). O perfil é recalculado a cada requisição a partir do cadastro e da allowlist; se cair, a sessão é encerrada (`SESSION_REVOKED`). Desenho completo: `docs/DESENHO_PERFIL_LIDERANCA.md`.
