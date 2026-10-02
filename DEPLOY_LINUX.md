@@ -595,7 +595,8 @@ Antes de aplicar uma migration (ou script de dados) em producao, ensaie em banco
 descartavel no mesmo MySQL. `scripts/ensaio-migration.sh` cria `ensaio_<nome>`,
 copia `funcionarios` (estrutura e dados, so colunas nao geradas) e a estrutura
 das tabelas extras indicadas, roda a migration duas vezes e o rollback duas
-vezes, e mostra a cada etapa: tipo das colunas de `funcionarios`, indices,
+vezes, e mostra a cada etapa: tipo, nulo, padrao e comentario das colunas de
+`funcionarios`, indices,
 tabelas, `CHECKSUM TABLE` e contagens por equipe, perfil e situacao (com
 `audit_log` nas extras, tambem os eventos gravados). Ao fim, ou se for
 interrompido, apaga **so** o `ensaio_<nome>`. Se o banco de ensaio ja existir,

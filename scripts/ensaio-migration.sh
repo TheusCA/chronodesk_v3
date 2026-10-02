@@ -13,7 +13,7 @@
 #               colunas nao geradas).
 #
 # Roda a migration duas vezes e o rollback duas vezes e mostra, a cada etapa,
-# o tipo das colunas de funcionarios, os indices, as tabelas, um checksum
+# tipo, nulo, padrao e comentario das colunas de funcionarios, os indices, as tabelas, um checksum
 # dos dados e contagens por perfil, equipe e situacao. Ao fim, apaga SO o
 # banco ensaio_<nome> (tambem se o script for interrompido).
 #
@@ -84,7 +84,7 @@ sql -e "INSERT INTO \`${ENSAIO}\`.funcionarios (${COLUNAS}) SELECT ${COLUNAS} FR
 estado() {
     echo
     echo "== Estado: $1"
-    mostra -e "SELECT COLUMN_NAME AS coluna, COLUMN_TYPE AS tipo FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '${ENSAIO}' AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME IN ('access_role', 'ad_login', 'ad_login_ativo', 'equipe', 'ativo') ORDER BY ORDINAL_POSITION;"
+    mostra -e "SELECT COLUMN_NAME AS coluna, COLUMN_TYPE AS tipo, IS_NULLABLE AS aceita_nulo, COLUMN_DEFAULT AS padrao, COLUMN_COMMENT AS comentario FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '${ENSAIO}' AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME IN ('access_role', 'ad_login', 'ad_login_ativo', 'equipe', 'ativo') ORDER BY ORDINAL_POSITION;"
     mostra -e "SELECT TABLE_NAME AS tabela, INDEX_NAME AS indice, IF(NON_UNIQUE = 0, 'unico', '') AS unico, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS colunas FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = '${ENSAIO}' GROUP BY TABLE_NAME, INDEX_NAME, NON_UNIQUE ORDER BY TABLE_NAME, INDEX_NAME;"
     mostra -e "SELECT TABLE_NAME AS tabela FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${ENSAIO}' ORDER BY TABLE_NAME;"
     mostra -e "CHECKSUM TABLE \`${ENSAIO}\`.funcionarios;"
