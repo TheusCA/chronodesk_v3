@@ -1,7 +1,7 @@
 # Perfil de Liderança — desenho do Lote 5 (SEC-04, SEC-10)
 
 **Data:** 2026-10-02
-**Situação:** **aprovado em 2026-10-02**: decisões L1 a L9 como recomendadas (seção 9), com os acréscimos A1 a A5 (seção 9.1), que viram requisito. 5a aprovado com condições (atendidas em 2026-10-02); **5b implementado** em commits locais (seção 10.2); 5c aguarda. A P12 continua em aberto.
+**Situação:** **aprovado em 2026-10-02**: decisões L1 a L9 como recomendadas (seção 9), com os acréscimos A1 a A5 (seção 9.1), que viram requisito. 5a e 5b aprovados; **5c implementado** em commits locais (seção 10.3). A P12 foi decidida em 2026-10-02 (seção 9 e `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, seção 0.6).
 **Pedido (2026-09-30):** a Liderança mantém adicionar e remover funcionários, aprovar pausas, horas extras e correções, gerenciar escalas, Mapa PA e ausências. Não pode mexer em configurações, integrações e usuários locais, nem promover alguém a Liderança ou admin. Só um admin da allowlist `AD_ADMIN_USERS` promove, com auditoria CRITICAL.
 
 ---
@@ -325,7 +325,7 @@ No servidor, sem exibir valores: quantos dos `ad_login` da Liderança ativa est�
 |---|---|---|
 | **5a** (implementado) | Migration 016 e `016_down` (checagem de duplicados, enum, `UNIQUE`); permissões novas em `portal_permissions_for_role`; resolução do perfil (2.1) em função pura; logins CI e admin pela allowlist normalizada (A2), com `ADMIN_ROLE_SEM_ALLOWLIST`; `current_portal_role` aceita `lideranca`; revalidação por requisição (A1); preflight (A2); login AD único em ativos e inativos nos endpoints de funcionário (A3); **paridade mínima**: onde hoje admin e gestor passam, a Liderança também passa (`portal_role_is_manager()` no servidor, `isManagerRole()` no frontend, notificações de aprovação); QA 6, 7 e 11, A1 e A2 | Código + `016_down` |
 | **5b** (implementado) | Endpoints de funcionário com a função de 2.3; L3; promoção com `CRITICAL`; auditoria de troca de `ad_login` e teste estrutural do `NULL` (A3); `016b` e `016b_down`; ensaio de migration (`scripts/ensaio-migration.sh`); formulário e abas do frontend; QA 2 a 5, 9, 12 a 14 | `016b_down` + código |
-| 5c | Escalas (remover regra, anexos), Mapa PA, forçar fim de pausa (L5), retroativos (L6), L9 (só depois da P12), `AUTH_SOURCE` (L7), admin local (L4); QA 1, 8, 10 | Código |
+| **5c** (implementado) | Escalas (remover regra, anexos), Mapa PA, forçar fim de pausa (L5), retroativos (L6), L9 (só depois da P12), `AUTH_SOURCE` (L7), admin local (L4); QA 1, 8, 10 | Código |
 
 **Por que a paridade mínima entra no 5a:** a partir do 5a, a sessão do líder fora da allowlist passa a ser `lideranca`. Sem a paridade, as listas `['admin', 'gestor']` espalhadas pelos endpoints a deixariam abaixo de gestor. Com ela, o 5a sozinho deixa esse líder com os direitos de gestor; os direitos próprios da Liderança (funcionários, Mapa PA, remover regra, anexos, forçar fim de pausa) chegam no 5b e no 5c. **Recomendado:** levar 5a, 5b e 5c no mesmo deploy.
 
@@ -368,7 +368,19 @@ No servidor, sem exibir valores: quantos dos `ad_login` da Liderança ativa est�
 | Frontend | Formulário sem a opção Admin (o valor legado aparece desabilitado, com aviso) e sem vínculo equipe ⇒ perfil; opção Liderança só para quem tem `perfis.promote`; editar e desativar cadastros de Liderança ou admin só para quem promove; aba Funcionários para quem tem `funcionarios.manage`; checagem de login duplicado em ativos e inativos |
 | QA | `qa-security.php`, seção 5: tabela-verdade da regra (180 casos), 17 casos de ponta a ponta (recusas sem gravação e auditadas, promoção de gestor pela Liderança, criação de Liderança pelo admin, técnico na equipe Liderança, troca de login com WARNING e CRITICAL, login de cadastro inativo, desativação, listagem), estruturais (quem grava `access_role`, `ad_login` só depois de normalizado, vínculo automático) e do `016b`. Matriz atualizada (linha `FUNCIONARIOS`). `qa-overtime.php`: autoaprovação pela Liderança recusada (QA 12). `qa-smoke` e `qa:employee-form`/`qa:operational` atualizados |
 
-**Ainda não feito (5c):** escalas (remover regra, anexos), Mapa PA, forçar fim de pausa (L5), retroativos (L6), L9 (só depois da P12), `AUTH_SOURCE` (L7), admin local (L4: auditoria CRITICAL do login e preflight). Até lá, a Liderança ainda não tem esses direitos.
+**Feito no 5c (2026-10-02):** ver 10.3. **Era o pendente do 5b:** escalas (remover regra, anexos), Mapa PA, forçar fim de pausa (L5), retroativos (L6), L9 (só depois da P12), `AUTH_SOURCE` (L7), admin local (L4: auditoria CRITICAL do login e preflight). Até lá, a Liderança ainda não tem esses direitos.
+
+### 10.3 O que o 5c entregou (2026-10-02)
+
+| Item | Onde |
+|---|---|
+| Guardas por permissão | `security.php`: `portal_role_can()`. `portal/schedules.php` (`remove_rule`: `escalas.manage`), `portal/shift_attachments.php` (perfil conferido **antes** da validação do arquivo, mais `can_upload`), `ShiftAttachmentService::assertManager()`, `portal/pa_map.php` (`pa_map.manage`, mais `can_manage`), `portal/admin_force_end_break.php` (`pausas.force_end`, L5). Gestor continua sem esses direitos |
+| L9 | `schedule_change_denied()` e `PortalForbiddenException` (403 em `portal_operational_error()`, com `PORTAL_ACCESS_DENIED`). `OperationalService`: regra, remoção, exceção e importação recebem o perfil do ator; escala de quem é da equipe Liderança, ou de cadastro com perfil Liderança ou admin, só pelo admin. `employee()` passa a ler `access_role`. Hoje a escala só aceita N1 e N2; a escala implícita da equipe Liderança (P12) entra no F1 |
+| L6 | Retroativos ainda não existem (P10 é do F1, ausência retroativa é do F3); entram com a permissão da Liderança nesses lotes |
+| L7 | `AUTH_SOURCE` removida de `config.php`, de `api/configuracoes.php` (campo `auth_source`) e dos exemplos de `.env`; a aba Segurança mostra "AD/LDAP" e marca "Parcial" só com o acesso local ligado; o preflight avisa se a variável ainda estiver no `.env` |
+| L4 | Login local auditado como `CRITICAL` em `login.php`, `admin_login.php` e `api/login_admin.php`; preflight reprova `ENABLE_LOCAL_ADMIN` ligado fora de `development` (a auditoria registrou o servidor em `staging`; **TO CONFIRM**: com `development` no `.env`, a trava não se aplica) |
+| Frontend | `lib/roles.ts`: `hasPermission()`. Derrubar pausa (`App.jsx`, `DashboardPage.jsx`, `PausasPage.jsx`) e remover regra (`OperationalPages.jsx`) pela permissão do servidor |
+| QA | `qa-security.php`, seção 6: permissões, tabela-verdade da L9, L9 no serviço contra o banco simulado (recusa antes de qualquer outra consulta), L9 de ponta a ponta com auditoria, estruturais de L7, L4 e do frontend. Matriz: linha nova do POST de anexo de escala e linhas `ADMIN_LIDERANCA` para Mapa PA, remover regra e derrubar pausa. `qa-smoke` atualizado. O banco simulado aceita transação sem efeito |
 
 Cada sublote para no fim, com QA, mutação, registro e roteiro manual, como nos lotes anteriores. Documentação a atualizar na implementação: `API_CONTRACTS_FRONTEND.md`, `DOCUMENTACAO_TECNICA.md`, `DEPLOY_LINUX.md` (016 e 016b), `AUDITORIA_2026-09.md` (SEC-04, SEC-10).
 

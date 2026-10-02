@@ -674,7 +674,9 @@ docker exec -it Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "DELETE FROM us
    Descartar a senha do cofre.
 
 Se o passo 5 for esquecido, o preflight do proximo deploy da `FALHA` com
-`ENABLE_LOCAL_ADMIN=true` em producao (L4, depois do Lote 5c).
+`ENABLE_LOCAL_ADMIN=true` em qualquer `APP_ENV` diferente de `development`
+(L4, Lote 5c). Todo login local fica no `audit_log` como `ADMIN_LOGIN_SUCCESS`
+com severidade `CRITICAL`.
 
 ## Atualizacao de Versao e Rollback
 
@@ -787,6 +789,13 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   `n2`/`admin` ativos 2 (inalterados); o `n2` inativo como `tecnico`; um evento
   de cada. Repetir o `016b` nao muda nada. Sessoes nao sao afetadas: o perfil
   efetivo dos tres lideres nao muda (2 admin pela allowlist, 1 `lideranca`).
+- Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
+  ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
+  `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
+  da recarga: a Lideranca passa a remover regra de escala, publicar anexo de
+  escala, alterar o Mapa PA e derrubar pausa; regra ou excecao de escala de
+  cadastro da equipe Lideranca, ou com perfil Lideranca ou admin, so pelo admin
+  (L9).
 
 5. Frontend e recarga:
 
