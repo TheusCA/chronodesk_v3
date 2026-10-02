@@ -589,6 +589,35 @@ ficam orfaos, sem registro no banco.
    health check por loopback. Depois sair da manutencao
    (`sudo rm -f /var/www/chronodesk.maintenance`) e validar o login.
 
+## Ensaio de Migration
+
+Antes de aplicar uma migration (ou script de dados) em producao, ensaie em banco
+descartavel no mesmo MySQL. `scripts/ensaio-migration.sh` cria `ensaio_<nome>`,
+copia `funcionarios` (estrutura e dados, so colunas nao geradas) e a estrutura
+das tabelas extras indicadas, roda a migration duas vezes e o rollback duas
+vezes, e mostra a cada etapa: tipo das colunas de `funcionarios`, indices,
+tabelas, `CHECKSUM TABLE` e contagens por equipe, perfil e situacao (com
+`audit_log` nas extras, tambem os eventos gravados). Ao fim, ou se for
+interrompido, apaga **so** o `ensaio_<nome>`. Se o banco de ensaio ja existir,
+para sem apagar nada.
+
+```bash
+cd /var/www/chronodesk
+sudo bash scripts/ensaio-migration.sh m016 migrations/20261002_016_lideranca_profile.sql migrations/rollback/20261002_016_lideranca_profile_down.sql
+sudo env PREPARO=migrations/20261002_016_lideranca_profile.sql bash scripts/ensaio-migration.sh m016b migrations/20261002_016b_lideranca_profile_data.sql migrations/rollback/20261002_016b_lideranca_profile_data_down.sql audit_log
+```
+
+`PREPARO` aplica uma migration pre-requisito uma vez, antes do estado inicial: o
+`016b` exige a 016 e, sem ela, para com `migration_016b_exige_016` sem alterar
+nada.
+
+O que conferir: a 1a e a 2a execucao da migration terminam no mesmo estado
+(idempotencia); a 1a e a 2a do rollback tambem; o rollback volta ao checksum e as
+contagens do estado inicial. A senha do root e lida sem eco (`MYSQL_PWD` so nos
+comandos). Nada de dado pessoal e exibido; a copia fica no mesmo servidor e some
+no `DROP` do ensaio. Variaveis opcionais: `CONTAINER` (padrao `Chrono_Desk_DB`),
+`ORIGEM` (padrao `sistema_pausas`) e `PREPARO`.
+
 ## Acesso de Emergencia (admin local)
 
 Admin vem do `AD_ADMIN_USERS` (Lote 5, L1). O admin local (`ENABLE_LOCAL_ADMIN`,
