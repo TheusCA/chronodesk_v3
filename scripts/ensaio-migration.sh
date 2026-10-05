@@ -5,6 +5,7 @@
 # Uso, no servidor, a partir de /var/www/chronodesk:
 #   sudo bash scripts/ensaio-migration.sh <nome> <migration.sql> <rollback.sql> [tabelas]
 #   sudo env PREPARO=<pre-requisito.sql> bash scripts/ensaio-migration.sh ...
+#   sudo env DADOS=<tabela,...> VERIFICA=<consulta.sql> bash scripts/ensaio-migration.sh ...
 #
 #   <nome>      sufixo do banco de ensaio: cria ensaio_<nome> (a-z, 0-9, _).
 #   [tabelas]   tabelas extras, separadas por virgula, copiadas so na
@@ -21,9 +22,15 @@
 # comandos. Nenhum dado pessoal e exibido: so estrutura, contagens e checksum.
 # Os dados copiados ficam no mesmo servidor e somem no DROP do ensaio.
 #
-# Variaveis: CONTAINER (padrao Chrono_Desk_DB), ORIGEM (padrao sistema_pausas) e
+# Variaveis: CONTAINER (padrao Chrono_Desk_DB), ORIGEM (padrao sistema_pausas),
 # PREPARO (migration pre-requisito, aplicada uma vez antes do estado inicial;
-# por exemplo a 016 para ensaiar o 016b).
+# por exemplo a 016 para ensaiar o 016b), DADOS (F1: tabelas copiadas com
+# estrutura, chaves estrangeiras e dados, pelo mysqldump; por exemplo as de
+# escala, para a migration e o rollback trabalharem sobre as linhas reais) e
+# VERIFICA (arquivo .sql de consultas que so devolvem contagens, rodado em
+# cada estado; por exemplo migrations/verificacao/..._check.sql).
+# CREATE TABLE ... LIKE (tabelas extras) NAO copia chave estrangeira: para
+# ensaiar migration que mexe em indice usado por FK, use DADOS.
 # ============================================================================
 set -u
 
@@ -34,12 +41,15 @@ MIGRATION=${2:-}
 ROLLBACK=${3:-}
 EXTRAS=${4:-}
 PREPARO=${PREPARO:-}
+DADOS=${DADOS:-}
+VERIFICA=${VERIFICA:-}
 
 uso() { echo "Uso: sudo bash scripts/ensaio-migration.sh <nome> <migration.sql> <rollback.sql> [tabelas]" >&2; exit 2; }
 [ -n "$NOME" ] && [ -n "$MIGRATION" ] && [ -n "$ROLLBACK" ] || uso
 printf %s "$NOME" | grep -Eq '^[a-z0-9_]{1,40}$' || { echo "Nome invalido: use a-z, 0-9 e _ (ate 40)." >&2; exit 2; }
 [ -z "$EXTRAS" ] || printf %s "$EXTRAS" | grep -Eq '^[a-z0-9_]+(,[a-z0-9_]+)*$' || { echo "Tabelas invalidas." >&2; exit 2; }
-for f in "$MIGRATION" "$ROLLBACK" ${PREPARO:+"$PREPARO"}; do
+[ -z "$DADOS" ] || printf %s "$DADOS" | grep -Eq '^[a-z0-9_]+(,[a-z0-9_]+)*$' || { echo "Tabelas de DADOS invalidas." >&2; exit 2; }
+for f in "$MIGRATION" "$ROLLBACK" ${PREPARO:+"$PREPARO"} ${VERIFICA:+"$VERIFICA"}; do
     [ -f "$f" ] || { echo "Arquivo nao encontrado: $f" >&2; exit 2; }
 done
 
@@ -49,6 +59,12 @@ export P
 
 sql() {
     docker exec -i -e MYSQL_PWD="$P" "$CONTAINER" mysql -uroot --batch "$@"
+}
+
+# Estrutura (com FK), dados e nada mais: sem gatilho, sem GTID, sem bloqueio.
+dump() {
+    docker exec -i -e MYSQL_PWD="$P" "$CONTAINER" mysqldump -uroot --single-transaction \
+        --skip-triggers --no-tablespaces --set-gtid-purged=OFF "$@"
 }
 
 # Exibicao em tabela; sql() sem bordas e para valores lidos pelo script.
@@ -80,24 +96,38 @@ for t in funcionarios $(printf %s "$EXTRAS" | tr ',' ' '); do
 done
 COLUNAS=$(sql --skip-column-names -e "SELECT GROUP_CONCAT(CONCAT('\`', COLUMN_NAME, '\`') ORDER BY ORDINAL_POSITION) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '${ORIGEM}' AND TABLE_NAME = 'funcionarios' AND EXTRA NOT LIKE '%GENERATED%';" | tr -d '\r')
 sql -e "INSERT INTO \`${ENSAIO}\`.funcionarios (${COLUNAS}) SELECT ${COLUNAS} FROM \`${ORIGEM}\`.funcionarios;" || exit 1
+if [ -n "$DADOS" ]; then
+    # Saida do mysqldump direto para o banco de ensaio: nada e exibido.
+    # pipefail: falha do mysqldump interrompe o ensaio, em vez de copia parcial.
+    # shellcheck disable=SC2046
+    ( set -o pipefail; dump "$ORIGEM" $(printf %s "$DADOS" | tr ',' ' ') | sql "$ENSAIO" ) || exit 1
+fi
+TABELAS_EXTRAS=$(printf %s "${EXTRAS}${EXTRAS:+${DADOS:+,}}${DADOS}")
 
 estado() {
     echo
     echo "== Estado: $1"
-    mostra -e "SELECT COLUMN_NAME AS coluna, COLUMN_TYPE AS tipo, IS_NULLABLE AS aceita_nulo, COLUMN_DEFAULT AS padrao, COLUMN_COMMENT AS comentario FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '${ENSAIO}' AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME IN ('access_role', 'ad_login', 'ad_login_ativo', 'equipe', 'ativo') ORDER BY ORDINAL_POSITION;"
+    mostra -e "SELECT COLUMN_NAME AS coluna, COLUMN_TYPE AS tipo, IS_NULLABLE AS aceita_nulo, COLUMN_DEFAULT AS padrao, COLUMN_COMMENT AS comentario FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '${ENSAIO}' AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME IN ('access_role', 'ad_login', 'ad_login_ativo', 'equipe', 'ativo', 'fora_mapa_escala') ORDER BY ORDINAL_POSITION;"
     mostra -e "SELECT TABLE_NAME AS tabela, INDEX_NAME AS indice, IF(NON_UNIQUE = 0, 'unico', '') AS unico, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) AS colunas FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = '${ENSAIO}' GROUP BY TABLE_NAME, INDEX_NAME, NON_UNIQUE ORDER BY TABLE_NAME, INDEX_NAME;"
     mostra -e "SELECT TABLE_NAME AS tabela FROM information_schema.TABLES WHERE TABLE_SCHEMA = '${ENSAIO}' ORDER BY TABLE_NAME;"
     mostra -e "CHECKSUM TABLE \`${ENSAIO}\`.funcionarios;"
     mostra -e "SELECT equipe, access_role, ativo, COUNT(*) AS funcionarios FROM \`${ENSAIO}\`.funcionarios GROUP BY equipe, access_role, ativo ORDER BY equipe, access_role, ativo;"
-    if [ -n "$EXTRAS" ]; then
-        # Tabelas extras: colunas (tipo, nulo, padrao, comentario) e checksum.
-        LISTA=$(printf %s "$EXTRAS" | sed "s/,/','/g")
+    if [ -n "$TABELAS_EXTRAS" ]; then
+        # Tabelas extras e de DADOS: colunas (tipo, nulo, padrao, comentario) e checksum.
+        LISTA=$(printf %s "$TABELAS_EXTRAS" | sed "s/,/','/g")
         mostra -e "SELECT TABLE_NAME AS tabela, COLUMN_NAME AS coluna, COLUMN_TYPE AS tipo, IS_NULLABLE AS aceita_nulo, COLUMN_DEFAULT AS padrao, COLUMN_COMMENT AS comentario FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '${ENSAIO}' AND TABLE_NAME IN ('${LISTA}') ORDER BY TABLE_NAME, ORDINAL_POSITION;"
-        for t in $(printf %s "$EXTRAS" | tr ',' ' '); do
+        for t in $(printf %s "$TABELAS_EXTRAS" | tr ',' ' '); do
             mostra -e "CHECKSUM TABLE \`${ENSAIO}\`.\`${t}\`;"
         done
     fi
-    if printf %s ",${EXTRAS}," | grep -q ',audit_log,'; then
+    for t in $(printf %s "$DADOS" | tr ',' ' '); do
+        mostra -e "SELECT '${t}' AS tabela, COUNT(*) AS linhas FROM \`${ENSAIO}\`.\`${t}\`;"
+    done
+    if [ -n "$VERIFICA" ]; then
+        echo "-- Verificacao: ${VERIFICA}"
+        sql --table "$ENSAIO" < "$VERIFICA" || echo "-> verificacao: FALHOU (veja a mensagem acima)"
+    fi
+    if printf %s ",${TABELAS_EXTRAS}," | grep -q ',audit_log,'; then
         mostra -e "SELECT action AS evento, severity, COUNT(*) AS eventos FROM \`${ENSAIO}\`.audit_log GROUP BY action, severity ORDER BY action;"
     fi
 }
