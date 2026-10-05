@@ -122,6 +122,15 @@ function scheduleRuleTone(value) {
   }[value] || 'status-neutral'
 }
 
+// [P12] Equipe Liderança: escala fixa presencial, sem regra a cadastrar.
+function isLeadershipTeam(team) {
+  return ['lideranca', 'liderança'].includes(String(team || '').toLowerCase())
+}
+
+function teamLabel(team) {
+  return isLeadershipTeam(team) ? 'Liderança' : String(team || '').toUpperCase()
+}
+
 function EmployeeSelect({ employees, value, onChange, disabled = false }) {
   return (
     <select className="field mt-2" disabled={disabled} required value={value} onChange={onChange}>
@@ -245,6 +254,11 @@ export function SchedulePage({ session, notify }) {
   })
   const rule = watchRule()
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
+  const allEmployees = employees.data?.funcionarios || []
+  // Regra: só N1 e N2. Exceção de líder: só admin (L9), nunca remota.
+  const ruleEmployees = allEmployees.filter((employee) => !isLeadershipTeam(employee.equipe))
+  const exceptionEmployees = hasPermission(session, 'escalas.lideranca') ? allEmployees : ruleEmployees
+  const exceptionIsLeadership = isLeadershipTeam(allEmployees.find((employee) => String(employee.id) === String(exception.employee_id))?.equipe)
   const [importRows, setImportRows] = useState([])
   const [preview, setPreview] = useState(null)
   const [importLoading, setImportLoading] = useState(false)
@@ -415,8 +429,8 @@ export function SchedulePage({ session, notify }) {
             <label className="label">Colaborador
               <select aria-invalid={Boolean(ruleErrors.employee_id)} className="field mt-2" {...registerRule('employee_id')}>
                 <option value="">Selecione</option>
-                {(employees.data?.funcionarios || []).map((employee) => (
-                  <option key={employee.id} value={employee.id}>{employee.nome} - {employee.equipe.toUpperCase()}</option>
+                {ruleEmployees.map((employee) => (
+                  <option key={employee.id} value={employee.id}>{employee.nome} - {teamLabel(employee.equipe)}</option>
                 ))}
               </select>
               {ruleErrors.employee_id && <span className="mt-1 block text-xs text-red-300">{ruleErrors.employee_id.message}</span>}
@@ -482,10 +496,13 @@ export function SchedulePage({ session, notify }) {
               eyebrow="Ajuste pontual"
               title="Exceção por data"
             />
-            <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={exception.employee_id} onChange={(event) => setException({ ...exception, employee_id: event.target.value })} /></label>
+            <label className="label">Colaborador<EmployeeSelect employees={exceptionEmployees} value={exception.employee_id} onChange={(event) => {
+              const leader = isLeadershipTeam(allEmployees.find((employee) => String(employee.id) === event.target.value)?.equipe)
+              setException({ ...exception, employee_id: event.target.value, exception_type: leader && exception.exception_type === 'remote' ? 'onsite' : exception.exception_type })
+            }} /></label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="label">Data<input className="field mt-2" required type="date" value={exception.exception_date} onChange={(event) => setException({ ...exception, exception_date: event.target.value })} /></label>
-              <label className="label">Tipo<select className="field mt-2" value={exception.exception_type} onChange={(event) => setException({ ...exception, exception_type: event.target.value })}><option value="remote">Remoto excepcional</option><option value="onsite">Presencial excepcional</option><option value="day_off">Folga</option><option value="absence">Ausência</option><option value="training">Treinamento</option><option value="oncall">Plantão</option><option value="vacation">Férias</option><option value="leave">Licença</option></select></label>
+              <label className="label">Tipo<select className="field mt-2" value={exception.exception_type} onChange={(event) => setException({ ...exception, exception_type: event.target.value })}>{!exceptionIsLeadership && <option value="remote">Remoto excepcional</option>}<option value="onsite">Presencial excepcional</option><option value="day_off">Folga</option><option value="absence">Ausência</option><option value="training">Treinamento</option><option value="oncall">Plantão</option><option value="vacation">Férias</option><option value="leave">Licença</option></select></label>
             </div>
             <label className="label">Observação<input className="field mt-2" maxLength="1000" value={exception.note} onChange={(event) => setException({ ...exception, note: event.target.value })} /></label>
             <button className="btn-primary" type="submit">Salvar exceção</button>
@@ -511,11 +528,11 @@ export function SchedulePage({ session, notify }) {
             <input ref={importInputRef} accept={IMPORT_LIMITS.acceptedExtensions.join(',')} className="hidden" type="file" onChange={(event) => { readSpreadsheet(event.target.files?.[0]); event.target.value = '' }} />
             {preview && (
               <div className="space-y-3">
-                <p className="text-sm text-slate-300">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s).</p>
+                <p className="text-sm text-slate-300">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s){preview.ignored_count ? `, ${preview.ignored_count} ignorada(s)` : ''}.</p>
                 <div className="max-h-56 overflow-auto rounded-lg border border-white/5">
-                  {preview.rows.map((row) => <div className="border-b border-white/5 px-3 py-2 text-sm" key={row.line}><span className={row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span> - {row.employee_name || row.ad_login || 'Não identificado'} - {row.rule_type || row.errors.join(' ')}</div>)}
+                  {preview.rows.map((row) => <div className="border-b border-white/5 px-3 py-2 text-sm" key={row.line}><span className={row.ignored ? 'text-amber-300' : row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span> - {row.employee_name || row.ad_login || 'Não identificado'} - {row.ignored ? (row.warnings || []).join(' ') : row.rule_type || row.errors.join(' ')}</div>)}
                 </div>
-                <button className="btn-primary" disabled={preview.invalid_count > 0} onClick={confirmImport} type="button">Confirmar importação</button>
+                <button className="btn-primary" disabled={preview.invalid_count > 0 || preview.valid_count === 0} onClick={confirmImport} type="button">Confirmar importação</button>
               </div>
             )}
           </section>
@@ -528,19 +545,21 @@ export function SchedulePage({ session, notify }) {
             <table className="data-table">
               <thead><tr><th>Colaborador</th><th>Equipe</th><th>Regra</th><th>Vigência</th><th>Ações</th></tr></thead>
               <tbody>{(resource.data?.rules || []).filter((item) => item.is_current || item.is_future).map((item) => (
-                <tr key={item.id}>
+                <tr key={item.id ?? `implicita-${item.employee_id}`}>
                   <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>{item.ad_login || 'Sem login AD'}</small></div></div></td>
-                  <td>{item.team.toUpperCase()}</td>
+                  <td>{teamLabel(item.team)}</td>
                   <td><span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span></td>
                   <td>
                     <span className={`status-badge ${item.is_current ? 'status-success' : 'status-info'}`}>{item.is_current ? 'Vigente' : 'Agendada'}</span>
-                    <small className="block">{formatDate(item.effective_from)}{item.effective_until ? ` até ${formatDate(item.effective_until)}` : ''}</small>
+                    <small className="block">{item.implicit ? `Dias úteis, ${item.work_start}–${item.work_end}` : `${formatDate(item.effective_from)}${item.effective_until ? ` até ${formatDate(item.effective_until)}` : ''}`}</small>
                   </td>
                   <td>
+                    {item.implicit ? <span>Regra fixa da Liderança; exceções só pelo admin</span> : (
                     <div className="flex flex-wrap gap-2">
                       {canManage && <button className="table-action" onClick={() => editRule(item)} type="button">Editar</button>}
                       {canRemoveRule ? <button className="table-action text-red-300" onClick={() => removeRule(item)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
                     </div>
+                    )}
                   </td>
                 </tr>
               ))}</tbody>
@@ -551,7 +570,7 @@ export function SchedulePage({ session, notify }) {
           <section className="card table-wrap">
             <table className="data-table">
               <thead><tr><th>Data</th><th>Colaborador</th><th>Equipe</th><th>Modalidade</th><th>Origem</th></tr></thead>
-              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td>{item.team.toUpperCase()}</td><td><Status value={item.presence_type} /></td><td>{item.source === 'exception' ? `Exceção: ${item.label}` : 'Regra fixa'}</td></tr>)}</tbody>
+              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td>{teamLabel(item.team)}</td><td><Status value={item.presence_type} /></td><td>{item.source === 'exception' ? `Exceção: ${item.label}` : item.source === 'implicit' ? 'Regra fixa da Liderança' : 'Regra fixa'}</td></tr>)}</tbody>
             </table>
           </section>
         )}

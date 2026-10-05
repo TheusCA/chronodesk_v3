@@ -20,6 +20,11 @@ final class OperationalService {
         'thu' => 'qui',
         'fri' => 'sex',
     ];
+    /** [P12] Escala implicita da Lideranca (desenho, secao 0.6). */
+    public const LEADERSHIP_RULE_LABEL = 'Presencial (regra fixa)';
+    public const LEADERSHIP_RULE_MESSAGE = 'A Liderança tem escala fixa presencial nos dias úteis, na jornada do próprio cadastro: não há regra a cadastrar. Para treinamento, plantão ou sábado, use exceção por data.';
+    public const LEADERSHIP_REMOTE_MESSAGE = 'A Liderança tem escala sempre presencial: exceção remota não é aceita.';
+    public const LEADERSHIP_IMPORT_WARNING = 'Linha ignorada: a Liderança tem escala fixa presencial, sem regra a importar.';
     public const ALLOWED_IMPORT_HEADERS = [
         'id', 'employee_id',
         'login_ad', 'ad_login', 'email',
@@ -290,7 +295,10 @@ final class OperationalService {
         // [F1] Padrao: regras que vigoram no periodo e as agendadas; com
         // include_history=1, tambem as encerradas antes dele.
         $includeHistory = in_array((string)($filters['include_history'] ?? ''), ['1', 'true'], true);
-        $rules = $this->scheduleRules($team, $employeeId, $includeHistory ? null : $from);
+        $rules = array_merge(
+            $this->scheduleRules($team, $employeeId, $includeHistory ? null : $from),
+            $this->leadershipImplicitRules($team, $employeeId)
+        );
         $exceptions = $this->scheduleExceptions($from, $to, $team, $employeeId);
         return [
             'period' => ['from' => $from, 'to' => $to],
@@ -313,6 +321,9 @@ final class OperationalService {
     private function saveScheduleRuleUnsafe(array $data, string $actor, string $actorRole, string $origin = 'manual'): array {
         $employee = $this->scheduleEmployee($data['employee_id'] ?? null);
         $this->assertScheduleChangeAllowed($employee, $actorRole);
+        if ($employee['team'] === 'lideranca') {
+            throw new DomainException(self::LEADERSHIP_RULE_MESSAGE);
+        }
         $rule = (string)($data['rule_type'] ?? '');
         if (!in_array($rule, self::RULE_TYPES, true)) {
             throw new InvalidArgumentException('Regra de escala invalida.');
@@ -448,6 +459,9 @@ final class OperationalService {
         if (!in_array($type, $allowed, true)) {
             throw new InvalidArgumentException('Tipo de excecao invalido.');
         }
+        if ($employee['team'] === 'lideranca' && $type === 'remote') {
+            throw new DomainException(self::LEADERSHIP_REMOTE_MESSAGE);
+        }
         $this->lockScheduleEmployee($employee);
         $stmt = $this->pdo->prepare(
             'INSERT INTO portal_schedule_exceptions
@@ -562,13 +576,19 @@ final class OperationalService {
             $rule = $this->normalizeRule((string)($row['regra'] ?? $row['rule_type'] ?? ''));
             $team = strtolower(trim((string)($row['equipe'] ?? $row['team'] ?? '')));
             $errors = [];
+            $warnings = [];
+            // [P12] Linha de lider: aviso e ignorada (escala implicita).
+            $ignored = $employee !== null && $employee['team'] === 'lideranca';
+            if ($ignored) {
+                $warnings[] = self::LEADERSHIP_IMPORT_WARNING;
+            }
             if (!$employee) {
                 $errors[] = 'Colaborador nao encontrado.';
             }
-            if (!$rule) {
+            if (!$ignored && !$rule) {
                 $errors[] = 'Regra invalida.';
             }
-            if ($employee && $team && $team !== $employee['team']) {
+            if (!$ignored && $employee && $team && $team !== $employee['team']) {
                 $errors[] = 'Equipe divergente do cadastro.';
             }
             if ($employee && isset($seen[$employee['id']])) {
@@ -583,25 +603,34 @@ final class OperationalService {
                 'employee_name' => $employee['name'] ?? ($row['nome'] ?? ''),
                 'ad_login' => $employee['ad_login'] ?? ($row['login_ad'] ?? ''),
                 'team' => $employee['team'] ?? $team,
-                'rule_type' => $rule,
+                'rule_type' => $ignored ? null : $rule,
                 'valid' => count($errors) === 0,
+                'ignored' => $ignored && count($errors) === 0,
                 'errors' => $errors,
+                'warnings' => $warnings,
             ];
         }
         return [
             'rows' => $result,
-            'valid_count' => count(array_filter($result, static fn(array $row): bool => $row['valid'])),
+            'valid_count' => count(array_filter($result, static fn(array $row): bool => $row['valid'] && !$row['ignored'])),
             'invalid_count' => count(array_filter($result, static fn(array $row): bool => !$row['valid'])),
+            'ignored_count' => count(array_filter($result, static fn(array $row): bool => $row['ignored'])),
         ];
     }
 
     public function confirmScheduleImport(array $rows, string $actor, string $actorRole): int {
         $preview = $this->previewScheduleImport($rows);
-        if ($preview['invalid_count'] > 0 || $preview['valid_count'] === 0) {
+        if ($preview['invalid_count'] > 0) {
             throw new InvalidArgumentException('A importacao possui linhas invalidas.');
+        }
+        if ($preview['valid_count'] === 0) {
+            throw new InvalidArgumentException('Nenhuma linha a importar: todas foram ignoradas.');
         }
         return $this->atomic(function () use ($preview, $actor, $actorRole): int {
             foreach ($preview['rows'] as $row) {
+                if ($row['ignored']) {
+                    continue;
+                }
                 $this->saveScheduleRuleUnsafe([
                     'employee_id' => $row['employee_id'],
                     'rule_type' => $row['rule_type'],
@@ -1349,7 +1378,11 @@ final class OperationalService {
         );
         $stmt->execute($params);
         $rows = $stmt->fetchAll();
-        return count($rows) === 1 ? $rows[0] : null;
+        if (count($rows) !== 1) {
+            return null;
+        }
+        $rows[0]['team'] = validate_funcionario_equipe((string)$rows[0]['team']) ?? $rows[0]['team'];
+        return $rows[0];
     }
 
     private function normalizeRule(string $rule): ?string {
@@ -1394,6 +1427,53 @@ final class OperationalService {
         return array_map(fn(array $row): array => $this->scheduleRuleView($row), $stmt->fetchAll());
     }
 
+    /**
+     * [P12] Escala implicita da Lideranca: sem linha em portal_schedule_rules;
+     * presencial nos dias uteis, na jornada do proprio cadastro; sabado e
+     * domingo so por excecao. O filtro de equipe da tela so tem N1 e N2.
+     */
+    private function leadershipImplicitRules(?string $team, ?int $employeeId): array {
+        if ($team !== null) {
+            return [];
+        }
+        $sql = 'SELECT id, nome AS employee_name, ad_login, equipe, jornada_entrada, jornada_saida
+                FROM funcionarios
+                WHERE ativo = 1';
+        $params = [];
+        if ($employeeId) {
+            $sql .= ' AND id = :employee_id';
+            $params[':employee_id'] = $employeeId;
+        }
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY nome');
+        $stmt->execute($params);
+        $rules = [];
+        foreach ($stmt->fetchAll() as $row) {
+            if (validate_funcionario_equipe((string)$row['equipe']) !== 'lideranca') {
+                continue;
+            }
+            $rules[] = [
+                'id' => null,
+                'employee_id' => (int)$row['id'],
+                'employee_name' => $row['employee_name'],
+                'ad_login' => $row['ad_login'],
+                'team' => 'lideranca',
+                'rule_type' => 'always_onsite',
+                'rule_config' => null,
+                'config' => null,
+                'weekdays' => [],
+                'rule_label' => self::LEADERSHIP_RULE_LABEL,
+                'effective_from' => null,
+                'effective_until' => null,
+                'is_current' => true,
+                'is_future' => false,
+                'implicit' => true,
+                'work_start' => substr((string)$row['jornada_entrada'], 0, 5),
+                'work_end' => substr((string)$row['jornada_saida'], 0, 5),
+            ];
+        }
+        return $rules;
+    }
+
     private function scheduleExceptions(string $from, string $to, ?string $team, ?int $employeeId): array {
         $sql = 'SELECT id, employee_id, employee_name, team, exception_date,
                        exception_type, note, created_by, created_at, updated_at
@@ -1427,10 +1507,11 @@ final class OperationalService {
         for ($date = $start; $date <= $end; $date = $date->modify('+1 day')) {
             foreach ($rules as $rule) {
                 $dateKey = $date->format('Y-m-d');
-                if ($dateKey < $rule['effective_from']) {
+                $implicit = ($rule['implicit'] ?? false) === true;
+                if (!$implicit && $dateKey < $rule['effective_from']) {
                     continue;
                 }
-                if ($rule['effective_until'] && $dateKey > $rule['effective_until']) {
+                if (!$implicit && $rule['effective_until'] && $dateKey > $rule['effective_until']) {
                     continue;
                 }
                 $key = $rule['employee_id'] . ':' . $dateKey;
@@ -1438,6 +1519,10 @@ final class OperationalService {
                     continue;
                 }
                 $exception = $exceptionMap[$key] ?? null;
+                // [P12] Lideranca: sabado e domingo so com excecao.
+                if ($implicit && !$exception && (int)$date->format('N') >= 6) {
+                    continue;
+                }
                 if ($exception) {
                     $presence = $this->presenceForException($exception['exception_type']);
                     $label = $this->scheduleStatusLabel($presence);
@@ -1445,9 +1530,11 @@ final class OperationalService {
                 } else {
                     $presence = self::presenceForRule($rule['rule_type'], $dateKey, $rule['weekdays'] ?? []);
                     $label = $this->scheduleStatusLabel($presence);
-                    $source = 'rule';
+                    $source = $implicit ? 'implicit' : 'rule';
                 }
-                $ruleLabel = $this->scheduleRuleLabel($rule['rule_type'], $rule['weekdays'] ?? []);
+                $ruleLabel = $implicit
+                    ? $rule['rule_label']
+                    : $this->scheduleRuleLabel($rule['rule_type'], $rule['weekdays'] ?? []);
                 $items[] = [
                     'employee_id' => (int)$rule['employee_id'],
                     'employee_name' => $rule['employee_name'],

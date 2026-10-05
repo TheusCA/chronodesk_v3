@@ -941,6 +941,8 @@ function portal_permissions_for_role(?string $role): array {
         'admin' => array_merge($lideranca, [
             'admin.manage', 'configuracoes.manage', 'integracoes.manage',
             'usuarios_locais.manage', 'perfis.promote',
+            // [L9] Escala (excecoes) de quem e da Lideranca (F1, P12).
+            'escalas.lideranca',
         ]),
         'lideranca' => $lideranca,
         'gestor' => $gestor,
@@ -1095,7 +1097,7 @@ class PortalForbiddenException extends RuntimeException {
  * Devolve null (pode) ou [status HTTP, mensagem].
  */
 function schedule_change_denied(string $actor_role, ?string $target_team, ?string $target_role): ?array {
-    if ($actor_role === 'admin') {
+    if (portal_role_can($actor_role, 'escalas.lideranca')) {
         return null;
     }
     if (validate_funcionario_equipe((string)$target_team) === 'lideranca'

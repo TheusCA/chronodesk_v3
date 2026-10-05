@@ -207,6 +207,74 @@ final class QaScheduleStatement extends PDOStatement {
             $db->writeRules(array_filter($rules));
             return true;
         }
+        // Excecoes: upsert por colaborador e data, e leitura do id.
+        if (strpos($sql, 'INSERT INTO portal_schedule_exceptions (') === 0) {
+            if (!in_array($params[':team'], ['n1', 'n2', 'lideranca'], true)) {
+                throw new PDOException('SQLSTATE[01000]: Data truncated for column team');
+            }
+            $key = $params[':employee_id'] . ':' . $params[':exception_date'];
+            $db->exceptions[$key] = [
+                'id' => $db->exceptions[$key]['id'] ?? $db->nextId++, 'employee_id' => (int)$params[':employee_id'],
+                'employee_name' => $params[':employee_name'], 'team' => $params[':team'], 'exception_date' => $params[':exception_date'],
+                'exception_type' => $params[':exception_type'], 'note' => $params[':note'],
+            ];
+            return true;
+        }
+        if ($sql === 'SELECT id FROM portal_schedule_exceptions WHERE employee_id = :employee_id AND exception_date = :exception_date') {
+            $row = $db->exceptions[$params[':employee_id'] . ':' . $params[':exception_date']] ?? null;
+            $this->rows = $row ? [['id' => $row['id']]] : [];
+            return true;
+        }
+        // Importacao: identificacao por id ou login (as condicoes do servico).
+        if (strpos($sql, 'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login FROM funcionarios WHERE ativo = 1 AND (') === 0) {
+            foreach ($db->employees as $id => $row) {
+                $byId = isset($params[':id']) && (int)$params[':id'] === $id;
+                $byLogin = isset($params[':ad_login']) && strtolower((string)$row['ad_login']) === $params[':ad_login'];
+                if ((int)$row['ativo'] === 1 && ($byId || $byLogin)) {
+                    $this->rows[] = ['id' => $id, 'name' => $row['nome'], 'team' => strtolower($row['equipe']), 'ad_login' => $row['ad_login']]
+                        + (strpos($sql, 'fora_mapa_escala') !== false ? ['fora_mapa_escala' => (int)$row['fora_mapa_escala']] : []);
+                }
+            }
+            return true;
+        }
+        // GET de escalas: regras com cadastro (N1 e N2), Lideranca, excecoes e ausencias.
+        if (strpos($sql, 'SELECT r.id, r.employee_id, f.nome AS employee_name,') === 0) {
+            foreach ($db->rules as $rule) {
+                $employee = $db->employees[$rule['employee_id']] ?? null;
+                if ($employee === null || (int)$employee['ativo'] !== 1 || !in_array(strtolower($employee['equipe']), ['n1', 'n2'], true)
+                    || (strpos($sql, 'f.fora_mapa_escala = 0') !== false && (int)$employee['fora_mapa_escala'] === 1)
+                    || (isset($params[':team']) && strtolower($employee['equipe']) !== $params[':team'])
+                    || (isset($params[':employee_id']) && $rule['employee_id'] !== $params[':employee_id'])
+                    || (isset($params[':period_from']) && $rule['effective_until'] !== null
+                        && ($rule['effective_until'] < $params[':period_from'] || $rule['effective_until'] < $rule['effective_from']))) {
+                    continue;
+                }
+                $this->rows[] = $rule + ['employee_name' => $employee['nome'], 'ad_login' => $employee['ad_login'], 'created_by' => 'qa', 'updated_by' => 'qa', 'created_at' => null, 'updated_at' => null];
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, nome AS employee_name, ad_login, equipe, jornada_entrada, jornada_saida FROM funcionarios WHERE ativo = 1') === 0) {
+            foreach ($db->employees as $id => $row) {
+                if ((int)$row['ativo'] !== 1 || (isset($params[':employee_id']) && $params[':employee_id'] !== $id)
+                    || (strpos($sql, 'fora_mapa_escala = 0') !== false && (int)$row['fora_mapa_escala'] === 1)) {
+                    continue;
+                }
+                $this->rows[] = ['id' => $id, 'employee_name' => $row['nome'], 'ad_login' => $row['ad_login'], 'equipe' => $row['equipe'],
+                    'jornada_entrada' => $row['jornada_entrada'] ?? '08:00:00', 'jornada_saida' => $row['jornada_saida'] ?? '17:00:00'];
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, employee_id, employee_name, team, exception_date,') === 0) {
+            foreach ($db->exceptions as $row) {
+                if ($row['exception_date'] >= $params[':date_from'] && $row['exception_date'] <= $params[':date_to']) {
+                    $this->rows[] = $row;
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on FROM portal_absences a') === 0) {
+            return true;
+        }
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $sql);
     }
 
@@ -237,12 +305,14 @@ final class QaScheduleStatement extends PDOStatement {
     }
 }
 
-/** Banco simulado com um cadastro N1 (1), um N2 (2) e as regras dadas. */
+/** Banco simulado com um cadastro N1 (1), um N2 (2), um da Lideranca (3) e as regras dadas. */
 function qa_schedule_db(array $rules = []): QaSchedulePdo {
     $pdo = new QaSchedulePdo();
     $pdo->employees = [
         1 => ['nome' => 'Tecnico QA 1', 'equipe' => 'n1', 'ad_login' => 'qa.tecnico1', 'access_role' => 'tecnico', 'ativo' => 1, 'fora_mapa_escala' => 0],
         2 => ['nome' => 'Tecnico QA 2', 'equipe' => 'N2', 'ad_login' => 'qa.tecnico2', 'access_role' => 'tecnico', 'ativo' => 1, 'fora_mapa_escala' => 0],
+        3 => ['nome' => 'Lider QA', 'equipe' => 'Liderança', 'ad_login' => 'qa.lider', 'access_role' => 'lideranca', 'ativo' => 1, 'fora_mapa_escala' => 0,
+            'jornada_entrada' => '09:00:00', 'jornada_saida' => '18:00:00'],
     ];
     foreach ($rules as $rule) {
         $pdo->rules[$rule['id']] = $rule + ['employee_id' => 1, 'team' => 'n1', 'rule_config' => null];
@@ -546,5 +616,64 @@ for ($seed = 1; $seed <= 40; $seed++) {
     }
 }
 assert_same(1200, $operations, 'propriedade: 1.200 operacoes conferidas');
+
+// ----------------------------------------------------------------------------
+// 4. Escala implicita da Lideranca (P12) e L9
+// ----------------------------------------------------------------------------
+$leaderRule = ['employee_id' => 3, 'rule_type' => 'always_onsite'];
+$pdo = qa_schedule_db();
+$service = new OperationalService($pdo, $today);
+assert_same('409: ' . OperationalService::LEADERSHIP_RULE_MESSAGE, qa_outcome(fn () => $service->saveScheduleRule($leaderRule, 'qa', 'admin')), 'P12: admin nao cadastra regra para a Lideranca');
+assert_same([[], false], [$pdo->rules, in_array('SELECT id FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE', $pdo->events, true)], 'P12: recusa sem gravar nem travar');
+foreach (['lideranca', 'gestor'] as $role) {
+    assert_same('403: Somente administradores alteram a escala da Liderança.', qa_outcome(fn () => $service->saveScheduleRule($leaderRule, 'qa', $role)), "L9: {$role} recebe 403 em regra da Lideranca");
+    assert_same('403: Somente administradores alteram a escala da Liderança.', qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 3, 'exception_date' => '2026-10-10', 'exception_type' => 'onsite'], 'qa', $role)), "L9: {$role} recebe 403 em excecao da Lideranca");
+    assert_same('403: Somente administradores alteram a escala da Liderança.', qa_outcome(fn () => $service->removeScheduleRule(3, 'qa', $role)), "L9: {$role} recebe 403 ao remover regra da Lideranca");
+}
+assert_same('409: ' . OperationalService::LEADERSHIP_REMOTE_MESSAGE, qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 3, 'exception_date' => '2026-10-06', 'exception_type' => 'remote'], 'qa', 'admin')), 'P12: excecao remota da Lideranca recusada');
+assert_same([], $pdo->exceptions, 'P12: nada gravado na recusa da remota');
+foreach (['onsite' => '2026-10-10', 'training' => '2026-10-07', 'oncall' => '2026-10-08'] as $type => $date) {
+    assert_same('ok', qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 3, 'exception_date' => $date, 'exception_type' => $type], 'qa', 'admin')), "P12: admin grava excecao {$type} da Lideranca");
+}
+assert_same('lideranca', $pdo->exceptions['3:2026-10-10']['team'], 'P12: excecao da Lideranca grava a equipe normalizada (passo 2.6)');
+assert_same('ok', qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 1, 'exception_date' => '2026-10-06', 'exception_type' => 'remote'], 'qa', 'gestor')), 'controle: gestor grava excecao remota de tecnico');
+
+// GET: Lideranca com regra fixa presencial, dias uteis da jornada; sabado so por excecao.
+$view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-11']);
+$implicit = array_values(array_filter($view['rules'], static fn (array $rule): bool => $rule['implicit']));
+assert_same(1, count($implicit), 'P12: uma regra implicita para o cadastro da Lideranca');
+assert_same([3, 'lideranca', OperationalService::LEADERSHIP_RULE_LABEL, true, false, '09:00', '18:00', null], [
+    $implicit[0]['employee_id'], $implicit[0]['team'], $implicit[0]['rule_label'], $implicit[0]['is_current'], $implicit[0]['is_future'],
+    $implicit[0]['work_start'], $implicit[0]['work_end'], $implicit[0]['id'],
+], 'P12: regra implicita com a jornada do cadastro, sem linha no banco');
+$leaderDays = [];
+foreach ($view['generated'] as $item) {
+    if ($item['employee_id'] === 3) {
+        $leaderDays[$item['date']] = $item['presence_type'] . '/' . $item['source'];
+    }
+}
+assert_same([
+    '2026-10-05' => 'onsite/implicit', '2026-10-06' => 'onsite/implicit', '2026-10-07' => 'onsite/exception',
+    '2026-10-08' => 'onsite/exception', '2026-10-09' => 'onsite/implicit', '2026-10-10' => 'onsite/exception',
+], $leaderDays, 'P12: presencial seg a sex, sabado so com excecao, domingo fora');
+$filtered = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-11', 'team' => 'n1']);
+assert_same([], array_values(array_filter($filtered['rules'], static fn (array $rule): bool => $rule['implicit'])), 'P12: filtro N1 nao traz a Lideranca');
+
+foreach (['admin' => true, 'lideranca' => false, 'gestor' => false, 'tecnico' => false, 'somente_leitura' => false] as $role => $expected) {
+    assert_same($expected, portal_role_can($role, 'escalas.lideranca'), "L9: permissao escalas.lideranca para {$role}");
+}
+
+// Importacao: linha de lider recebe aviso e e ignorada, sem 403 para o gestor.
+$pdo = qa_schedule_db();
+$service = new OperationalService($pdo, $today);
+$importRows = [['login_ad' => 'qa.lider', 'regra' => 'presencial'], ['login_ad' => 'qa.tecnico1', 'regra' => 'par']];
+$preview = $service->previewScheduleImport($importRows);
+assert_same([1, 0, 1], [$preview['valid_count'], $preview['invalid_count'], $preview['ignored_count']], 'importacao: lider ignorado, tecnico valido');
+assert_same([true, true, [OperationalService::LEADERSHIP_IMPORT_WARNING], null], [$preview['rows'][0]['valid'], $preview['rows'][0]['ignored'], $preview['rows'][0]['warnings'], $preview['rows'][0]['rule_type']], 'importacao: aviso na linha do lider');
+assert_same(1, $service->confirmScheduleImport($importRows, 'qa', 'gestor'), 'importacao: gestor importa so a linha do tecnico');
+assert_same([1], array_values(array_unique(array_column($pdo->rules, 'employee_id'))), 'importacao: nenhuma regra gravada para a Lideranca');
+assert_same('400: Nenhuma linha a importar: todas foram ignoradas.', qa_outcome(fn () => $service->confirmScheduleImport([['login_ad' => 'qa.lider', 'regra' => 'presencial']], 'qa', 'admin')), 'importacao: so linhas de lider nao importa nada');
+$preview = $service->previewScheduleImport([['login_ad' => 'qa.lider', 'regra' => 'nao existe']]);
+assert_same([true, []], [$preview['rows'][0]['ignored'], $preview['rows'][0]['errors']], 'importacao: regra invalida em linha de lider so gera o aviso');
 
 echo "QA schedule history OK\n";
