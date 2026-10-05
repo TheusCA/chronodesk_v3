@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue em 2026-10-05, aguardando aprovação** (seção 9.1). F2 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue em 2026-10-05, revisado em MySQL 8.0.46 pelo responsável e corrigido no mesmo dia; aguardando aprovação** (seção 9.1). F2 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -864,6 +864,16 @@ Commits `f91c850` (ensaio com `DADOS` e `VERIFICA`), `cc16dc2` (migration 011, r
 6. **Mapa PA:** além do 409 ao marcar com vínculo ativo (pedido), o vínculo novo para cadastro marcado é recusado (409) e o cadastro sai da lista de elegíveis; sem isso a marcação podia ser contornada logo depois. As duas operações travam o mesmo cadastro.
 7. **Listagem de funcionários:** `fora_mapa_escala` vai para gestor, Liderança e admin (telas de escala); sem a coluna (011 não aplicada), o campo fica de fora e a lista continua.
 8. **Criação de funcionário:** o campo não é aceito em `adicionar_funcionario.php` (nasce 0); marcar é só na edição, como na seção 0.6.
+
+**Revisão de 2026-10-05 (testes do responsável em MySQL 8.0.46 real) e correções:**
+
+| # | Achado na revisão | Correção |
+|---|---|---|
+| 1 | Duas gravações simultâneas no mesmo colaborador (regras agendadas a partir de 10/10 e de 20/10) commitaram sobreposição (verificação: `sobreposicoes=2`). No REPEATABLE READ, a leitura simples do cadastro antes da trava fixava o snapshot; a gravação que esperou a trava lia o histórico antigo, e a conferência de invariantes também | `0b1b67b`: leitura do histórico com `FOR UPDATE` (no teste do responsável, 0 sobreposições). O banco simulado do `qa-schedule-history` passou a emular o REPEATABLE READ e um teste faz a outra gravação acontecer durante a espera da trava; sem o `FOR UPDATE`, reprova com a sobreposição |
+| 2 | No segundo rollback da 011, a cópia era pulada (já existia), o histórico gravado depois do primeiro rollback era apagado e a cópia continuava a antiga | `d58c070`: com qualquer `*_bkp_011` existente, o rollback para antes de alterar (`SIGNAL SQLSTATE '45000'`, "rollback_011 abortado: ..."), por um procedimento temporário; as cópias deixaram de ser condicionais. No ensaio, o 2º rollback agora falha de propósito |
+| 3 | O `CHECKSUM TABLE` das regras muda depois da 011 (coluna gerada `STORED`) e volta depois do rollback; o `DEPLOY_LINUX.md` dizia que ficava igual | `d9d4703`: "o que conferir" corrigido; a verificação ganhou a assinatura das colunas originais (CRC32 por linha, XOR), que não muda com a 011 |
+
+Validação em MySQL real: feita pelo responsável nesta revisão (ensaio da 011 e do rollback e o teste de concorrência). As correções acima ainda não foram reexecutadas em MySQL real.
 
 **Roteiro manual por lote no servidor** (o QA local não tem MySQL, Apache nem AD): aplicar a migration, rodar a consulta de verificação, exercitar a tela por perfil. Entregue junto de cada lote, como nos anteriores.
 
