@@ -46,9 +46,12 @@ try {
         throw new InvalidArgumentException('Acao de escala invalida.');
     }
     if ($action === 'rule') {
-        $id = $service->saveScheduleRule($data, portal_username(), $role);
-        audit_log('SCHEDULE_RULE_SAVED', 'Regra de escala salva. ID ' . $id, 'WARNING');
-        json_response(['sucesso' => true, 'id' => $id, 'mensagem' => 'Regra de escala salva.']);
+        $saved = $service->saveScheduleRule($data, portal_username(), $role);
+        if ($saved['unchanged']) {
+            json_response(['sucesso' => true, 'mensagem' => 'Regra igual à vigente; nada foi alterado.'] + $saved);
+        }
+        audit_log('SCHEDULE_RULE_SAVED', 'Regra de escala salva. ID ' . $saved['id'], 'WARNING');
+        json_response(['sucesso' => true, 'mensagem' => 'Regra de escala salva.'] + $saved);
     }
     if ($action === 'remove_rule') {
         if (!portal_role_can($role, 'escalas.manage')) {

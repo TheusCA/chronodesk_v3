@@ -503,16 +503,20 @@ $operationalSource = file_get_contents(__DIR__ . '/../services/OperationalServic
 assert_same(true, is_string($scheduleApiSource) && is_string($operationalSource), 'le backend de escala presencial');
 assert_same(true, strpos($scheduleApiSource, "\$action === 'remove_rule'") !== false, 'endpoint possui acao para remover regra de escala');
 assert_same(true, strpos($scheduleApiSource, "portal_role_can(\$role, 'escalas.manage')") !== false, 'remocao de regra exige escalas.manage (Lote 5c)');
-assert_same(true, strpos($operationalSource, 'ON DUPLICATE KEY UPDATE') !== false, 'salvar regra usa UPSERT por employee_id');
-assert_same(true, strpos($operationalSource, 'id = LAST_INSERT_ID(id)') !== false, 'UPSERT reaproveita id existente sem duplicar');
-assert_same(true, strpos($operationalSource, 'effective_until = NULL') !== false, 'UPSERT reativa regra removida');
+// [F1] Historico de escala: o UPSERT por colaborador (BIZ-03) deu lugar ao
+// planejador de vigencia; o comportamento e testado em qa-schedule-history.php.
+$saveRuleSource = substr($operationalSource, (int)strpos($operationalSource, 'private function saveScheduleRuleUnsafe'), 5000);
+assert_same(true, strpos($saveRuleSource, 'ScheduleRulePlanner::planSave(') !== false, 'salvar regra passa pelo planejador de vigencia (F1)');
+assert_same(false, strpos($saveRuleSource, 'ON DUPLICATE KEY UPDATE') !== false, 'salvar regra nao sobrescreve a regra anterior (F1)');
+assert_same(true, strpos($saveRuleSource, '$this->lockScheduleEmployee($employee);') < strpos($saveRuleSource, '$this->employeeScheduleRules('), 'salvar regra trava o colaborador antes de ler o historico (F1)');
 assert_same(true, strpos($operationalSource, "\$rule = (string)(\$data['rule_type'] ?? '');") !== false, 'salvar regra nao assume undefined quando rule_type esta ausente');
 assert_same(true, strpos($operationalSource, "'fixed_weekdays'") !== false, 'salvar regra valida valores canonicos incluindo fixed_weekdays');
-assert_same(true, strpos($operationalSource, 'rule_config = VALUES(rule_config)') !== false, 'salvar regra persiste configuracao de dias fixos');
+assert_same(true, strpos($saveRuleSource, 'rule_config = :rule_config') !== false && strpos($saveRuleSource, "':rule_config' => \$ruleConfig") !== false, 'salvar regra persiste configuracao de dias fixos');
 assert_same(true, strpos($operationalSource, "throw new InvalidArgumentException('Selecione ao menos um dia presencial.')") !== false, 'backend rejeita fixed_weekdays sem dias');
 assert_same(true, strpos($operationalSource, "throw new InvalidArgumentException('Regra de escala invalida.')") !== false, 'salvar regra rejeita regra invalida');
 assert_same(false, strpos($operationalSource, "\$data['rule_type'] ?? 'undefined'") !== false, 'backend nao converte rule_type ausente para undefined silenciosamente');
-assert_same(true, strpos($operationalSource, "SET rule_type = \"undefined\"") !== false, 'remocao marca regra como indefinida');
+assert_same(false, strpos($operationalSource, "SET rule_type = \"undefined\"") !== false, 'remocao nao apaga qual era a regra (F1, L-08)');
+assert_same(false, strpos($operationalSource, 'DATE_SUB(CURRENT_DATE') !== false, 'remocao usa a data do PHP, nao o relogio do banco (F1, A4)');
 assert_same(true, strpos($operationalSource, 'SCHEDULE_RULE_RECREATED') !== false, 'audita recriacao de regra');
 assert_same(true, strpos($operationalSource, 'SCHEDULE_RULE_IMPORTED') !== false, 'audita importacao de regra');
 assert_same(false, strpos($operationalSource, 'Colaborador ja possui regra de escala ativa.') !== false, 'importacao nao rejeita regra existente');

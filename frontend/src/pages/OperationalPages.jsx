@@ -226,6 +226,7 @@ export function CalendarPage({ session, notify }) {
 export function SchedulePage({ session, notify }) {
   const canManage = isManagerRole(session.role)
   const canRemoveRule = hasPermission(session, 'escalas.manage')
+  const canRetroactiveRule = hasPermission(session, 'escalas.retroativa')
   const employees = useEmployees()
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '' })
   const resource = useResource(`portal/schedules.php${queryString(filters)}`)
@@ -296,8 +297,12 @@ export function SchedulePage({ session, notify }) {
       () => post('portal/schedules.php', payload),
       resource.refresh,
       notify,
-      ACTION_FEEDBACK.scheduleSaved,
-      () => resetRule(emptyScheduleRule(parsed.data.effective_from || today)),
+      null,
+      (result) => {
+        resetRule(emptyScheduleRule(parsed.data.effective_from || today))
+        // Regra igual à vigente: o servidor não grava nada e avisa.
+        notify(result?.unchanged ? result.mensagem : ACTION_FEEDBACK.scheduleSaved, result?.unchanged ? 'info' : undefined)
+      },
     )
   }
 
@@ -315,10 +320,12 @@ export function SchedulePage({ session, notify }) {
   }
 
   function editRule(item) {
+    // Regra vigente: a edição vira uma versão nova a partir de hoje (o
+    // histórico fica). Regra agendada: corrige no próprio início.
     resetRule({
       employee_id: String(item.employee_id),
       rule_type: item.rule_type || 'undefined',
-      effective_from: item.effective_from || today,
+      effective_from: item.effective_from && item.effective_from > today ? item.effective_from : today,
       weekdays: item.weekdays || [],
     })
   }
@@ -456,9 +463,13 @@ export function SchedulePage({ session, notify }) {
                 <p className="text-xs text-slate-500">Presencial: {weekdaySummary(rule.weekdays || [])}.</p>
               </div>
             )}
-            <label className="label">Vigência
-              <input aria-invalid={Boolean(ruleErrors.effective_from)} className="field mt-2" required type="date" {...registerRule('effective_from')} />
+            <label className="label">Início da vigência
+              <input aria-invalid={Boolean(ruleErrors.effective_from)} className="field mt-2" min={canRetroactiveRule ? undefined : today} required type="date" {...registerRule('effective_from')} />
               {ruleErrors.effective_from && <span className="mt-1 block text-xs text-red-300">{ruleErrors.effective_from.message}</span>}
+              <span className="mt-1 block text-xs text-slate-500">
+                A regra vigente termina na véspera e o histórico fica guardado.
+                {canRetroactiveRule ? ' Data anterior a hoje reescreve o histórico e fica auditada.' : ' Data anterior a hoje: só administradores e Liderança.'}
+              </span>
             </label>
             <InlineAlert tone="info" title="Contrato preservado">
               O frontend envia `rule_type` com o valor canônico selecionado. Não há fallback silencioso para “Sem escala definida”.
@@ -511,17 +522,20 @@ export function SchedulePage({ session, notify }) {
         </div>
       )}
       <OperationalShell resource={resource}>
-        {(resource.data?.rules || []).filter((item) => !item.effective_until).length > 0 && (
+        {(resource.data?.rules || []).filter((item) => item.is_current || item.is_future).length > 0 && (
           <section className="card table-wrap">
-            <h2 className="mb-4 font-bold text-white">Regras ativas por colaborador</h2>
+            <h2 className="mb-4 font-bold text-white">Regras vigentes e agendadas</h2>
             <table className="data-table">
               <thead><tr><th>Colaborador</th><th>Equipe</th><th>Regra</th><th>Vigência</th><th>Ações</th></tr></thead>
-              <tbody>{(resource.data?.rules || []).filter((item) => !item.effective_until).map((item) => (
+              <tbody>{(resource.data?.rules || []).filter((item) => item.is_current || item.is_future).map((item) => (
                 <tr key={item.id}>
                   <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>{item.ad_login || 'Sem login AD'}</small></div></div></td>
                   <td>{item.team.toUpperCase()}</td>
                   <td><span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span></td>
-                  <td>{formatDate(item.effective_from)}</td>
+                  <td>
+                    <span className={`status-badge ${item.is_current ? 'status-success' : 'status-info'}`}>{item.is_current ? 'Vigente' : 'Agendada'}</span>
+                    <small className="block">{formatDate(item.effective_from)}{item.effective_until ? ` até ${formatDate(item.effective_until)}` : ''}</small>
+                  </td>
                   <td>
                     <div className="flex flex-wrap gap-2">
                       {canManage && <button className="table-action" onClick={() => editRule(item)} type="button">Editar</button>}

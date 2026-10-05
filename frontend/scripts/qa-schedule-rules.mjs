@@ -72,8 +72,14 @@ assert.match(operationalService, /throw new InvalidArgumentException\('Dia da se
 assert.match(operationalService, /throw new InvalidArgumentException\('Dias da semana duplicados\.'\)/, 'Backend deve rejeitar duplicidade de dias')
 assert.match(operationalService, /presenceForRule\(string \$rule, string \$date, array \$weekdays = \[\]\)/, 'Calculo deve receber weekdays')
 assert.match(operationalService, /'fixed_weekdays' => in_array\(strtolower\(\$dateValue->format\('D'\)\), \$weekdays, true\) \? 'onsite' : 'remote'/, 'Calculo deve transformar dias selecionados em presencial/remoto')
-assert.match(operationalService, /rule_config = VALUES\(rule_config\)/, 'UPSERT deve persistir rule_config')
-assert.match(operationalService, /SET rule_type = "undefined",\s*rule_config = NULL/s, 'Remocao deve limpar rule_config')
+// F1: historico de escala. A regra anterior fecha e fica (sem UPSERT); a
+// remocao fecha a vigente sem trocar o tipo (L-08). Comportamento em
+// scripts/qa-schedule-history.php.
+assert.match(operationalService, /rule_config = :rule_config/, 'Gravacao deve persistir rule_config')
+assert.match(operationalService, /ScheduleRulePlanner::planSave\(/, 'Gravacao deve passar pelo planejador de vigencia')
+assert.doesNotMatch(operationalService, /SET rule_type = "undefined"/, 'Remocao nao deve apagar qual era a regra')
+assert.match(operationalPage, /item\.is_current \|\| item\.is_future/, 'Tela deve listar regras vigentes e agendadas pelo servidor')
+assert.doesNotMatch(operationalPage, /filter\(\(item\) => !item\.effective_until\)/, 'Tela nao deve inferir regra ativa por effective_until vazio')
 
 assert.match(paMapService, /'fixed_weekdays'/, 'Mapa de PA deve reconhecer fixed_weekdays')
 assert.match(paMapService, /schedule_rule_config/, 'Mapa de PA deve persistir snapshot da configuracao')

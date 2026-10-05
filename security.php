@@ -934,6 +934,8 @@ function portal_permissions_for_role(?string $role): array {
     ];
     $lideranca = array_merge($gestor, [
         'funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end',
+        // [P10, L6] Regra de escala com inicio retroativo (F1).
+        'escalas.retroativa',
     ]);
     $permissions = [
         'admin' => array_merge($lideranca, [
