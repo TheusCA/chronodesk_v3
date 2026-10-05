@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue em 2026-10-05, revisado em MySQL 8.0.46 pelo responsável e corrigido no mesmo dia; aguardando aprovação** (seção 9.1). F2 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). F2 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -839,7 +839,7 @@ Cada lote: commit local por tema, sem push, parada para aprovação, atualizaç�
 
 F5, F6 e F7 são independentes entre si e podem mudar de ordem.
 
-### 9.1 F1 — entrega de 2026-10-05 (aguardando aprovação)
+### 9.1 F1 — entrega de 2026-10-05 (aprovado em 2026-10-05)
 
 Commits `f91c850` (ensaio com `DADOS` e `VERIFICA`), `cc16dc2` (migration 011, rollback e verificação), `aa15d65` (vigência), `5f1fdf0` (escala implícita da Liderança e L9), `2b82eef` (ajuste do `qa:action-runner`), `8a97e5d` (fora do Mapa PA e da escala), `696e541` (testes) e o commit de documentação.
 
@@ -873,7 +873,9 @@ Commits `f91c850` (ensaio com `DADOS` e `VERIFICA`), `cc16dc2` (migration 011, r
 | 2 | No segundo rollback da 011, a cópia era pulada (já existia), o histórico gravado depois do primeiro rollback era apagado e a cópia continuava a antiga | `d58c070`: com qualquer `*_bkp_011` existente, o rollback para antes de alterar (`SIGNAL SQLSTATE '45000'`, "rollback_011 abortado: ..."), por um procedimento temporário; as cópias deixaram de ser condicionais. No ensaio, o 2º rollback agora falha de propósito |
 | 3 | O `CHECKSUM TABLE` das regras muda depois da 011 (coluna gerada `STORED`) e volta depois do rollback; o `DEPLOY_LINUX.md` dizia que ficava igual | `d9d4703`: "o que conferir" corrigido; a verificação ganhou a assinatura das colunas originais (CRC32 por linha, XOR), que não muda com a 011 |
 
-Validação em MySQL real: feita pelo responsável nesta revisão (ensaio da 011 e do rollback e o teste de concorrência). As correções acima ainda não foram reexecutadas em MySQL real.
+Validação em MySQL real: feita pelo responsável nesta revisão (ensaio da 011 e do rollback e o teste de concorrência).
+
+**Aprovado em 2026-10-05**, depois do reteste das correções em MySQL 8.0.46 real (concorrência, ensaio completo da 011 com o 2º rollback parando, assinatura estável). Commits da revisão: `0b1b67b`, `d58c070`, `d9d4703`, `abe5a11`. Deploy 8 da fila.
 
 **Roteiro manual por lote no servidor** (o QA local não tem MySQL, Apache nem AD): aplicar a migration, rodar a consulta de verificação, exercitar a tela por perfil. Entregue junto de cada lote, como nos anteriores.
 

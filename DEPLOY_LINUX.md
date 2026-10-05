@@ -643,13 +643,17 @@ O que conferir na 011 (revisado com o ensaio em MySQL 8.0.46):
   consulta) das regras e das excecoes iguais as do estado inicial: a migration
   nao muda linha. O `CHECKSUM TABLE` de `portal_schedule_rules` **muda** depois
   da migration, e isso e esperado: a coluna gerada `open_employee_id` e
-  `STORED` e entra no checksum. Nao use o `CHECKSUM TABLE` das regras para
-  comparar com o estado inicial nesta etapa.
+  `STORED` e entra no checksum. O `CHECKSUM TABLE` de `funcionarios` tambem
+  **muda**, pela coluna nova `fora_mapa_escala`. Nao use o `CHECKSUM TABLE` das
+  regras nem o de `funcionarios` para comparar com o estado inicial nesta
+  etapa; para `funcionarios`, compare as contagens por equipe, perfil e
+  situacao.
 - **Depois do 1o rollback:** `uq_schedule_rule_employee` de volta, sem os
   indices novos, sem `open_employee_id` e sem `fora_mapa_escala`, e as tres
   tabelas `*_bkp_011` criadas. Com os dados atuais (uma regra por colaborador,
   nenhuma excecao de Lideranca) o rollback nao apaga linha: contagens,
-  assinatura e `CHECKSUM TABLE` voltam aos do estado inicial.
+  assinatura e `CHECKSUM TABLE` (das regras e de `funcionarios`) voltam aos do
+  estado inicial.
 - **2o rollback:** **para** com `rollback_011 abortado: ja existe copia
   *_bkp_011 ...` (FALHOU no ensaio, de proposito) e o estado fica igual ao do
   1o rollback. Esse e o comportamento esperado: um segundo rollback apagaria o
