@@ -245,6 +245,10 @@ final class QaScheduleStatement extends PDOStatement {
         }
         // GET de escalas: regras com cadastro (N1 e N2), Lideranca, excecoes e ausencias.
         if (strpos($sql, 'SELECT r.id, r.employee_id, f.nome AS employee_name,') === 0) {
+            // O filtro de periodo so e emulado na forma exata do servico.
+            if (isset($params[':period_from']) && strpos($sql, 'AND (r.effective_until IS NULL OR (r.effective_until >= :period_from AND r.effective_until >= r.effective_from))') === false) {
+                throw new PDOException('SQLSTATE[HY000]: banco simulado: filtro de periodo nao previsto');
+            }
             foreach ($db->rules as $rule) {
                 $employee = $db->employees[$rule['employee_id']] ?? null;
                 if ($employee === null || (int)$employee['ativo'] !== 1 || !in_array(strtolower($employee['equipe']), ['n1', 'n2'], true)
@@ -556,6 +560,39 @@ $audit = end($pdo->audits);
 assert_same(['SCHEDULE_RULE_REMOVED', 'WARNING'], [$audit['action'], $audit['severity']], 'remocao: auditada');
 assert_same(true, strpos($audit['details'], 'apagadas=13:always_onsite 2026-10-20..NULL') !== false, 'remocao: conteudo da apagada na auditoria');
 assert_same('409: Colaborador nao possui regra de escala vigente nem agendada.', qa_outcome(fn () => $service->removeScheduleRule(1, 'qa.lider', 'lideranca')), 'remocao: sem regra vigente nem agendada');
+
+// GET: vigente e agendada por padrao; encerrada antes do periodo so com
+// include_history=1. Cada data usa a regra que vigorava nela.
+$pdo = qa_schedule_db([
+    qa_rule(20, 'always_remote', '2026-08-01', '2026-09-30'),
+    qa_rule(21, 'odd_days', '2026-10-01', '2026-10-19'),
+    qa_rule(22, 'always_onsite', '2026-10-20', null),
+    qa_rule(23, 'undefined', '2026-10-25', '2026-10-04'),
+]);
+$service = new OperationalService($pdo, $today);
+// Ordem: o banco simulado nao ordena; compara o conjunto.
+$flags = static function (array $view): array {
+    $flags = array_map(
+        static fn (array $rule): string => $rule['id'] . ':' . ($rule['is_current'] ? 'vigente' : ($rule['is_future'] ? 'agendada' : 'encerrada')),
+        array_values(array_filter($view['rules'], static fn (array $rule): bool => !$rule['implicit']))
+    );
+    sort($flags);
+    return $flags;
+};
+$view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-23']);
+assert_same(['21:vigente', '22:agendada'], $flags($view), 'GET: vigente e agendada, sem encerrada nem linha vazia');
+assert_same([$today, null], [$view['today'], $view['rules'][0]['config']], 'GET: data de hoje do servidor e config');
+$history = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-23', 'include_history' => '1']);
+assert_same(['20:encerrada', '21:vigente', '22:agendada', '23:encerrada'], $flags($history), 'GET: include_history traz o historico inteiro');
+$days = [];
+foreach ($view['generated'] as $item) {
+    if ($item['employee_id'] === 1 && in_array($item['date'], ['2026-10-19', '2026-10-20'], true)) {
+        $days[$item['date']] = $item['rule_type'];
+    }
+}
+assert_same(['2026-10-19' => 'odd_days', '2026-10-20' => 'always_onsite'], $days, 'GET: cada data usa a regra que vigorava nela');
+$view = $service->scheduleData(['from' => '2026-09-25', 'to' => '2026-10-05']);
+assert_same(['20:encerrada', '21:vigente', '22:agendada'], $flags($view), 'GET: regra encerrada dentro do periodo aparece');
 
 // Rollback da transacao: violacao desfaz tudo (UNIQUE de regra aberta simulada).
 $pdo = qa_schedule_db([qa_rule(10, 'odd_days', '2026-09-01', null), qa_rule(11, 'even_days', '2026-08-01', '2026-08-31')]);

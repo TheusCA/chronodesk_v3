@@ -81,6 +81,20 @@ assert.doesNotMatch(operationalService, /SET rule_type = "undefined"/, 'Remocao 
 assert.match(operationalPage, /item\.is_current \|\| item\.is_future/, 'Tela deve listar regras vigentes e agendadas pelo servidor')
 assert.doesNotMatch(operationalPage, /filter\(\(item\) => !item\.effective_until\)/, 'Tela nao deve inferir regra ativa por effective_until vazio')
 
+// F1 (P12, L9): Liderança com regra fixa, cadastro fora do Mapa PA e da escala.
+const adminPage = readFrontend('src/pages/AdminPage.jsx')
+const formSchemas = readFrontend('src/lib/formSchemas.ts')
+assert.match(operationalPage, /const ruleEmployees = allEmployees\.filter\(\(employee\) => !isLeadershipTeam\(employee\.equipe\)\)/, 'Regra de escala nao oferece cadastro da Lideranca')
+assert.match(operationalPage, /hasPermission\(session, 'escalas\.lideranca'\) \? allEmployees : ruleEmployees/, 'Excecao de lider so para quem tem escalas.lideranca (L9)')
+assert.match(operationalPage, /\{!exceptionIsLeadership && <option value="remote">/, 'Excecao remota nao e oferecida para lider')
+assert.match(operationalPage, /employee\.fora_mapa_escala !== true/, 'Cadastro fora do Mapa PA e da escala nao aparece nos selects de escala')
+assert.match(operationalPage, /item\.implicit \? <span>Regra fixa da Liderança/, 'Regra implicita sem editar nem remover')
+assert.match(operationalPage, /min=\{canRetroactiveRule \? undefined : today\}/, 'Data retroativa so para quem tem escalas.retroativa (P10, L6)')
+assert.match(adminPage, /const canEditOutsideMap = permissions\.has\('funcionarios\.fora_mapa'\)/, 'Campo fora do Mapa por permissao, nao por nome de perfil')
+assert.match(adminPage, /<input disabled=\{!canEditOutsideMap\} type="checkbox" \{\.\.\.register\('fora_mapa_escala'\)\} \/>/, 'Campo fora do Mapa so editavel por quem tem a permissao')
+assert.match(adminPage, /fora_mapa_escala: item\.fora_mapa_escala === true/, 'Edicao reenvia o valor atual do campo fora do Mapa')
+assert.match(formSchemas, /fora_mapa_escala: z\.boolean\(/, 'Schema do funcionario envia fora_mapa_escala')
+
 assert.match(paMapService, /'fixed_weekdays'/, 'Mapa de PA deve reconhecer fixed_weekdays')
 assert.match(paMapService, /schedule_rule_config/, 'Mapa de PA deve persistir snapshot da configuracao')
 assert.match(paMapService, /OperationalService::presenceForRule\(\$ruleType, \$date, \$weekdays\)/, 'Mapa de PA deve calcular fixed_weekdays por data')
