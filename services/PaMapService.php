@@ -50,9 +50,10 @@ final class PaMapService {
     public function eligibleEmployees(string $date, ?string $team = null): array {
         $date = $this->date($date, 'Data');
         $team = $this->team($team, true);
+        // [P12, F1] Cadastro fora do Mapa PA e da escala nao e elegivel.
         $sql = 'SELECT id, nome AS name, equipe AS team, ad_login
                 FROM funcionarios
-                WHERE ativo = 1';
+                WHERE ativo = 1 AND fora_mapa_escala = 0';
         $params = [];
         if ($team) {
             $sql .= ' AND LOWER(equipe) IN (' . $this->teamSqlAliases($team) . ')';
@@ -91,6 +92,9 @@ final class PaMapService {
             $id = $this->positiveInt($data['id'] ?? null, true);
             $paNumber = $this->paNumber($data['pa_number'] ?? null);
             $employee = $this->employee($data['employee_id'] ?? null);
+            if ((int)$employee['fora_mapa_escala'] === 1) {
+                throw new DomainException('Cadastro marcado como fora do Mapa PA e da escala: não recebe vínculo de PA.');
+            }
             $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? date('Y-m-d'), 'Inicio da validade');
             $validUntil = $this->nullableDate($data['valid_until'] ?? null, 'Fim da validade');
             if ($validUntil !== null && $validUntil < $validFrom) {
@@ -369,10 +373,11 @@ final class PaMapService {
     private function employee($id): array {
         $employeeId = $this->positiveInt($id);
         $stmt = $this->pdo->prepare(
-            'SELECT id, nome AS name, equipe AS team, ad_login
+            'SELECT id, nome AS name, equipe AS team, ad_login, fora_mapa_escala
              FROM funcionarios
              WHERE id = :id AND ativo = 1
-             LIMIT 1'
+             LIMIT 1
+             FOR UPDATE'
         );
         $stmt->execute([':id' => $employeeId]);
         $employee = $stmt->fetch();

@@ -254,7 +254,8 @@ export function SchedulePage({ session, notify }) {
   })
   const rule = watchRule()
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
-  const allEmployees = employees.data?.funcionarios || []
+  // Fora do Mapa PA e da escala: sem regra nem exceção (P12).
+  const allEmployees = (employees.data?.funcionarios || []).filter((employee) => employee.fora_mapa_escala !== true)
   // Regra: só N1 e N2. Exceção de líder: só admin (L9), nunca remota.
   const ruleEmployees = allEmployees.filter((employee) => !isLeadershipTeam(employee.equipe))
   const exceptionEmployees = hasPermission(session, 'escalas.lideranca') ? allEmployees : ruleEmployees

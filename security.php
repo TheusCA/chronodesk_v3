@@ -943,6 +943,8 @@ function portal_permissions_for_role(?string $role): array {
             'usuarios_locais.manage', 'perfis.promote',
             // [L9] Escala (excecoes) de quem e da Lideranca (F1, P12).
             'escalas.lideranca',
+            // [P12] Cadastro fora do Mapa PA e da escala (F1).
+            'funcionarios.fora_mapa',
         ]),
         'lideranca' => $lideranca,
         'gestor' => $gestor,
@@ -1103,6 +1105,25 @@ function schedule_change_denied(string $actor_role, ?string $target_team, ?strin
     if (validate_funcionario_equipe((string)$target_team) === 'lideranca'
         || in_array(portal_role_value($target_role), ['lideranca', 'admin'], true)) {
         return [403, 'Somente administradores alteram a escala da Liderança.'];
+    }
+    return null;
+}
+
+/**
+ * [P12, F1] Marcar ou desmarcar "Fora do Mapa PA e da escala": só quem tem
+ * funcionarios.fora_mapa (admin). Marcar com vínculo de PA ativo é recusado:
+ * o admin remove o vínculo antes. Sem mudança de valor, nada a conferir.
+ * Devolve null (pode) ou [status HTTP, mensagem].
+ */
+function fora_mapa_change_denied(string $actor_role, bool $current, bool $new, int $active_pa_links): ?array {
+    if ($current === $new) {
+        return null;
+    }
+    if (!portal_role_can($actor_role, 'funcionarios.fora_mapa')) {
+        return [403, 'Somente administradores alteram "Fora do Mapa PA e da escala".'];
+    }
+    if ($new && $active_pa_links > 0) {
+        return [409, 'O cadastro tem vínculo de PA ativo. Remova o vínculo no Mapa PA antes de marcá-lo como fora do Mapa PA e da escala.'];
     }
     return null;
 }

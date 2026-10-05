@@ -44,6 +44,12 @@ function get_db_connection() {
 
 require_once __DIR__ . '/../services/OperationalService.php';
 
+// Excecao sem captura vai para o STDERR (o log de erros do QA e temporario).
+set_exception_handler(static function (Throwable $e): void {
+    fwrite(STDERR, 'ERRO: ' . get_class($e) . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n");
+    exit(1);
+});
+
 /**
  * Banco simulado: tabelas em memoria e so as consultas que o servico de
  * escala faz. Consulta nao prevista falha como banco fora. Gravacao que
@@ -226,7 +232,7 @@ final class QaScheduleStatement extends PDOStatement {
             return true;
         }
         // Importacao: identificacao por id ou login (as condicoes do servico).
-        if (strpos($sql, 'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login FROM funcionarios WHERE ativo = 1 AND (') === 0) {
+        if (preg_match('/^SELECT id, nome AS name, LOWER\(equipe\) AS team, ad_login(, fora_mapa_escala)? FROM funcionarios WHERE ativo = 1 AND \(/', $sql)) {
             foreach ($db->employees as $id => $row) {
                 $byId = isset($params[':id']) && (int)$params[':id'] === $id;
                 $byLogin = isset($params[':ad_login']) && strtolower((string)$row['ad_login']) === $params[':ad_login'];
@@ -304,6 +310,9 @@ final class QaScheduleStatement extends PDOStatement {
         return 1;
     }
 }
+
+/** Trava do colaborador nas gravacoes de escala (le a marcacao fora do Mapa). */
+const QA_LOCK_SQL = 'SELECT fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE';
 
 /** Banco simulado com um cadastro N1 (1), um N2 (2), um da Lideranca (3) e as regras dadas. */
 function qa_schedule_db(array $rules = []): QaSchedulePdo {
@@ -503,7 +512,7 @@ assert_same([false, 10, '2026-10-04', false], [$saved['unchanged'], $saved['clos
 assert_same('2026-10-04', $pdo->rules[10]['effective_until'], 'servico: regra anterior fechada na vespera');
 assert_same('odd_days', $pdo->rules[10]['rule_type'], 'servico: regra anterior mantem o tipo (historico)');
 assert_same(['even_days', '2026-10-05', null], [$pdo->rules[$saved['id']]['rule_type'], $pdo->rules[$saved['id']]['effective_from'], $pdo->rules[$saved['id']]['effective_until']], 'servico: nova regra aberta');
-$lockAt = array_search('SELECT id FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE', $pdo->events, true);
+$lockAt = array_search(QA_LOCK_SQL, $pdo->events, true);
 $readAt = array_search('SELECT id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE employee_id = :employee_id ORDER BY effective_from, id', $pdo->events, true);
 assert_same(true, $lockAt !== false && $readAt !== false && $lockAt < $readAt, 'servico: trava o colaborador antes de ler o historico');
 $audit = end($pdo->audits);
@@ -519,7 +528,7 @@ assert_same([2, $audits], [count($pdo->rules), count($pdo->audits)], 'servico: n
 $pdo = qa_schedule_db([qa_rule(10, 'odd_days', '2026-09-01', null)]);
 $service = new OperationalService($pdo, $today);
 assert_same('403: Somente administradores e Liderança gravam regra com início retroativo.', qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'even_days', 'effective_from' => '2026-10-04'], 'qa', 'gestor')), 'P10: gestor nao grava retroativa');
-assert_same(false, in_array('SELECT id FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE', $pdo->events, true), 'P10: recusa antes de travar e de ler o historico');
+assert_same(false, in_array(QA_LOCK_SQL, $pdo->events, true), 'P10: recusa antes de travar e de ler o historico');
 assert_same([null], array_column($pdo->rules, 'effective_until'), 'P10: nada gravado na recusa');
 foreach (['lideranca', 'admin'] as $role) {
     $pdo = qa_schedule_db([qa_rule(10, 'odd_days', '2026-09-01', null)]);
@@ -624,7 +633,7 @@ $leaderRule = ['employee_id' => 3, 'rule_type' => 'always_onsite'];
 $pdo = qa_schedule_db();
 $service = new OperationalService($pdo, $today);
 assert_same('409: ' . OperationalService::LEADERSHIP_RULE_MESSAGE, qa_outcome(fn () => $service->saveScheduleRule($leaderRule, 'qa', 'admin')), 'P12: admin nao cadastra regra para a Lideranca');
-assert_same([[], false], [$pdo->rules, in_array('SELECT id FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE', $pdo->events, true)], 'P12: recusa sem gravar nem travar');
+assert_same([[], false], [$pdo->rules, in_array(QA_LOCK_SQL, $pdo->events, true)], 'P12: recusa sem gravar nem travar');
 foreach (['lideranca', 'gestor'] as $role) {
     assert_same('403: Somente administradores alteram a escala da Liderança.', qa_outcome(fn () => $service->saveScheduleRule($leaderRule, 'qa', $role)), "L9: {$role} recebe 403 em regra da Lideranca");
     assert_same('403: Somente administradores alteram a escala da Liderança.', qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 3, 'exception_date' => '2026-10-10', 'exception_type' => 'onsite'], 'qa', $role)), "L9: {$role} recebe 403 em excecao da Lideranca");
@@ -675,5 +684,26 @@ assert_same([1], array_values(array_unique(array_column($pdo->rules, 'employee_i
 assert_same('400: Nenhuma linha a importar: todas foram ignoradas.', qa_outcome(fn () => $service->confirmScheduleImport([['login_ad' => 'qa.lider', 'regra' => 'presencial']], 'qa', 'admin')), 'importacao: so linhas de lider nao importa nada');
 $preview = $service->previewScheduleImport([['login_ad' => 'qa.lider', 'regra' => 'nao existe']]);
 assert_same([true, []], [$preview['rows'][0]['ignored'], $preview['rows'][0]['errors']], 'importacao: regra invalida em linha de lider so gera o aviso');
+
+// ----------------------------------------------------------------------------
+// 5. Cadastro fora do Mapa PA e da escala (P12)
+// ----------------------------------------------------------------------------
+$pdo = qa_schedule_db([qa_rule(10, 'odd_days', '2026-09-01', null)]);
+$pdo->employees[1]['fora_mapa_escala'] = 1;
+$pdo->employees[3]['fora_mapa_escala'] = 1;
+$service = new OperationalService($pdo, $today);
+$outside = '409: ' . OperationalService::OUTSIDE_MAP_MESSAGE;
+assert_same($outside, qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'even_days'], 'qa', 'admin')), 'fora do Mapa: regra recusada (409)');
+assert_same($outside, qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 1, 'exception_date' => '2026-10-06', 'exception_type' => 'onsite'], 'qa', 'gestor')), 'fora do Mapa: excecao recusada (409)');
+assert_same($outside, qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 3, 'exception_date' => '2026-10-10', 'exception_type' => 'onsite'], 'qa', 'admin')), 'fora do Mapa: excecao de lider marcado recusada');
+assert_same([[10 => null], []], [array_column($pdo->rules, 'effective_until', 'id'), $pdo->exceptions], 'fora do Mapa: nada gravado nas recusas');
+assert_same('403: Somente administradores alteram a escala da Liderança.', qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 3, 'exception_date' => '2026-10-10', 'exception_type' => 'onsite'], 'qa', 'gestor')), 'fora do Mapa: L9 continua antes (403)');
+$view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-09']);
+assert_same([[], []], [array_column($view['rules'], 'employee_id'), array_column($view['generated'], 'employee_id')], 'fora do Mapa: fora da tela de escala, inclusive a Lideranca');
+$preview = $service->previewScheduleImport([['login_ad' => 'qa.tecnico1', 'regra' => 'par']]);
+assert_same([false, ['Cadastro fora do Mapa PA e da escala.']], [$preview['rows'][0]['valid'], $preview['rows'][0]['errors']], 'fora do Mapa: linha da importacao invalida');
+assert_same(1, $service->removeScheduleRule(1, 'qa', 'admin'), 'fora do Mapa: remover regra antiga continua permitido');
+$pdo->employees[1]['fora_mapa_escala'] = 0;
+assert_same('ok', qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'even_days'], 'qa', 'gestor')), 'fora do Mapa: desmarcado volta a receber regra');
 
 echo "QA schedule history OK\n";

@@ -40,6 +40,11 @@ final class QaChildPdo extends PDO {
         if (trim($query) === 'SELECT 1 FROM audit_log LIMIT 1') {
             return new QaChildStatement($this, 'SELECT 1 FROM audit_log LIMIT 1');
         }
+        if (trim($query) === 'SELECT id, fora_mapa_escala FROM funcionarios') {
+            $statement = new QaChildStatement($this, trim($query));
+            $statement->execute();
+            return $statement;
+        }
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista');
     }
 
@@ -117,6 +122,24 @@ final class QaChildStatement extends PDOStatement {
                 : [];
             return true;
         }
+        // F1 (P12): marcacao "fora do Mapa PA e da escala" e vinculos de PA
+        // ativos (db['pa_ativos'][id]); a gravacao vai para [QA_WRITE].
+        if ($this->sql === 'SELECT fora_mapa_escala FROM funcionarios WHERE id = :id FOR UPDATE') {
+            $row = $byId($this->pdo, $params[':id'] ?? 0);
+            $this->rows = $row ? [['fora_mapa_escala' => (int)($row['fora_mapa_escala'] ?? 0)]] : [];
+            return true;
+        }
+        if ($this->sql === 'SELECT COUNT(*) FROM portal_pa_assignments WHERE employee_id = :id AND active = 1 AND (valid_until IS NULL OR valid_until >= :today)') {
+            $this->rows = [['n' => (int)($this->pdo->db['pa_ativos'][(string)($params[':id'] ?? 0)] ?? 0)]];
+            return true;
+        }
+        if ($this->sql === 'SELECT id, fora_mapa_escala FROM funcionarios') {
+            $this->rows = [];
+            foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                $this->rows[] = ['id' => (int)$id, 'fora_mapa_escala' => (int)($row['fora_mapa_escala'] ?? 0)];
+            }
+            return true;
+        }
         // Lote 4 (SEC-08): equipe do colaborador e anexos de escala.
         if ($this->sql === 'SELECT equipe FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1') {
             $row = $byId($this->pdo, $params[':id'] ?? 0);
@@ -157,7 +180,7 @@ final class QaChildStatement extends PDOStatement {
         if (strpos($this->sql, 'INSERT INTO funcionarios (') === 0
             || strpos($this->sql, 'UPDATE funcionarios SET nome = :nome') === 0
             || $this->sql === 'UPDATE funcionarios SET ativo = 0 WHERE id = :id') {
-            error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? '?') . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-'));
+            error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? '?') . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-') . ' fora_mapa=' . ($params[':fora_mapa_escala'] ?? '-'));
             return true;
         }
         if ($this->sql === 'INSERT INTO audit_log (user_ip, username, action, details, severity) VALUES (?, ?, ?, ?, ?)') {
@@ -1537,7 +1560,7 @@ foreach ([
     }
 }
 foreach ([
-    'lid_promove_gestor' => ['UPDATE funcionarios SET nome = :nome, equipe = :equipe, access_role = :access_role, ad_login = :ad_login, jornada_entrada = :jornada_entrada, jornada_saida = :jornada_saida, almoco_inicio = :almoco_inicio, almoco_fim = :almoco_fim, ativo = :ativo WHERE id = :id id=1 perfil=gestor', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Perfil do funcionario ID 1 alterado de tecnico para gestor por lideranca'],
+    'lid_promove_gestor' => ['UPDATE funcionarios SET nome = :nome, equipe = :equipe, access_role = :access_role, ad_login = :ad_login, jornada_entrada = :jornada_entrada, jornada_saida = :jornada_saida, almoco_inicio = :almoco_inicio, almoco_fim = :almoco_fim, ativo = :ativo, fora_mapa_escala = :fora_mapa_escala WHERE id = :id id=1 perfil=gestor', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Perfil do funcionario ID 1 alterado de tecnico para gestor por lideranca'],
     'lid_cria_tecnico' => ['INSERT INTO funcionarios id=901 perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
     'lid_desativa_tecnico' => ['UPDATE funcionarios SET ativo = 0 WHERE id = :id id=1', '[QA_AUDIT] FUNCIONARIO_REMOVIDO [CRITICAL]: Funcionario desativado (ID: 1, perfil: tecnico) por lideranca'],
     'admin_cria_lideranca' => ['INSERT INTO funcionarios id=902 perfil=lideranca', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Funcionario ID 902 criado com perfil lideranca por admin'],
@@ -1902,5 +1925,98 @@ foreach ([
     assert_same($visibleFor($scope), $noticeIds($noticeCases[$case]), "SEC-07: {$case} pelo endpoint igual a regra");
 }
 assert_same(true, strpos((string)file_get_contents($root . '/api/portal/announcements.php'), 'portal_list_response(') === false, 'SEC-07: avisos nao usam mais a listagem generica sem escopo');
+
+// ============================================================================
+// 9. F1 (P12) — cadastro "Fora do Mapa PA e da escala": so admin, auditado,
+//    409 com vinculo de PA ativo
+// ============================================================================
+
+// Regra em tabela-verdade (ator x atual x novo x vinculos de PA ativos).
+foreach (['admin', 'lideranca', 'gestor', 'tecnico', 'somente_leitura'] as $actor) {
+    foreach ([false, true] as $current) {
+        foreach ([false, true] as $new) {
+            foreach ([0, 2] as $links) {
+                $expected = match (true) {
+                    $current === $new => null,
+                    $actor !== 'admin' => 403,
+                    $new && $links > 0 => 409,
+                    default => null,
+                };
+                $denied = fora_mapa_change_denied($actor, $current, $new, $links);
+                assert_same($expected, $denied[0] ?? null, "fora do Mapa: ator {$actor}, " . ($current ? 'sim' : 'nao') . ' -> ' . ($new ? 'sim' : 'nao') . ", vinculos {$links}");
+            }
+        }
+    }
+}
+foreach (['admin' => true, 'lideranca' => false, 'gestor' => false, 'tecnico' => false, 'somente_leitura' => false] as $role => $expected) {
+    assert_same($expected, portal_role_can($role, 'funcionarios.fora_mapa'), "permissao funcionarios.fora_mapa para {$role}");
+}
+
+// Ponta a ponta no atualizar_funcionario.php e na listagem.
+$markedDb = QA_DB;
+$markedDb['funcionarios']['1']['fora_mapa_escala'] = 1;
+$withPaDb = QA_DB;
+$withPaDb['pa_ativos'] = ['1' => 1];
+$foraBody = static fn (array $override): string => $employeeBody($override + ['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva']);
+$foraCases = qa_run_endpoints($qaDir, [
+    'admin_marca' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $foraBody(['fora_mapa_escala' => true])),
+    'admin_marca_com_pa' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $foraBody(['fora_mapa_escala' => true]), $withPaDb),
+    'admin_desmarca' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $foraBody(['fora_mapa_escala' => false]), $markedDb),
+    'admin_desmarca_com_pa' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $foraBody(['fora_mapa_escala' => 0]), ['pa_ativos' => ['1' => 1]] + $markedDb),
+    'lid_marca' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $foraBody(['fora_mapa_escala' => true])),
+    'lid_desmarca' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $foraBody(['fora_mapa_escala' => false]), $markedDb),
+    'lid_mantem_marcado' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $foraBody(['fora_mapa_escala' => true]), $markedDb),
+    'lid_sem_campo_marcado' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $foraBody([]), $markedDb),
+    'valor_invalido' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $foraBody(['fora_mapa_escala' => 'sim'])),
+    'gestor_marca' => $employeeSpec('atualizar_funcionario.php', $manager, $foraBody(['fora_mapa_escala' => true])),
+    'lista_admin' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => QA_ADMIN_SESSION, 'db' => $markedDb],
+    'lista_gestor' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => $manager, 'db' => $markedDb],
+    'lista_tecnico' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => $technician, 'db' => $markedDb],
+]);
+foreach ([
+    'admin_marca' => ['fora_mapa=1', '[QA_AUDIT] FUNCIONARIO_FORA_MAPA_ALTERADO [WARNING]: Fora do Mapa PA e da escala do funcionario ID 1 alterado de nao para sim por admin'],
+    'admin_desmarca' => ['fora_mapa=0', '[QA_AUDIT] FUNCIONARIO_FORA_MAPA_ALTERADO [WARNING]: Fora do Mapa PA e da escala do funcionario ID 1 alterado de sim para nao por admin'],
+    'admin_desmarca_com_pa' => ['fora_mapa=0', 'FUNCIONARIO_FORA_MAPA_ALTERADO [WARNING]'],
+    'lid_mantem_marcado' => ['fora_mapa=1', '[QA_AUDIT] FUNCIONARIO_ATUALIZADO'],
+    'lid_sem_campo_marcado' => ['fora_mapa=1', '[QA_AUDIT] FUNCIONARIO_ATUALIZADO'],
+] as $case => [$write, $audit]) {
+    $result = $foraCases[$case];
+    assert_same(false, in_array($result['status'], [400, 401, 403, 409, 500], true), "fora do Mapa {$case}: aceito (HTTP {$result['status']})");
+    assert_same(true, strpos($result['log'], "[QA_WRITE] UPDATE funcionarios SET nome = :nome") !== false && strpos($result['log'], $write) !== false, "fora do Mapa {$case}: grava {$write}");
+    assert_same(true, strpos($result['log'], $audit) !== false, "fora do Mapa {$case}: auditoria '{$audit}'");
+}
+foreach (['lid_mantem_marcado', 'lid_sem_campo_marcado'] as $case) {
+    assert_same(false, strpos($foraCases[$case]['log'], 'FUNCIONARIO_FORA_MAPA_ALTERADO') !== false, "fora do Mapa {$case}: sem mudanca, sem evento");
+}
+foreach ([
+    'admin_marca_com_pa' => [409, 'vínculo de PA ativo', 'contexto=fora_mapa perfil_ator=admin funcionario_id=1 vinculos_pa_ativos=1'],
+    'lid_marca' => [403, 'Somente administradores alteram "Fora do Mapa PA e da escala".', 'contexto=fora_mapa perfil_ator=lideranca'],
+    'lid_desmarca' => [403, 'Somente administradores alteram "Fora do Mapa PA e da escala".', 'contexto=fora_mapa perfil_ator=lideranca'],
+    'valor_invalido' => [400, 'Valor inválido para "Fora do Mapa PA e da escala".', null],
+    'gestor_marca' => [403, 'Seu perfil não possui permissão para gerenciar funcionários.', 'contexto=atualizar perfil_ator=gestor'],
+] as $case => [$status, $message, $audit]) {
+    $result = $foraCases[$case];
+    assert_same($status, $result['status'], "fora do Mapa {$case}: HTTP {$status}");
+    assert_same(true, strpos((string)(json_decode($result['body'], true)['mensagem'] ?? ''), $message) !== false, "fora do Mapa {$case}: mensagem");
+    // A carga inicial do cadastro (fallback JSON) grava INSERT no simulado; o caso nao pode gravar UPDATE.
+    assert_same(false, strpos($result['log'], '[QA_WRITE] UPDATE ') !== false, "fora do Mapa {$case}: nada gravado");
+    if ($audit !== null) {
+        assert_same(true, strpos($result['log'], "[QA_AUDIT] FUNCIONARIO_ALTERACAO_NEGADA [WARNING]: {$audit}") !== false, "fora do Mapa {$case}: recusa auditada");
+    }
+}
+$listed = static fn (array $result): array => array_column(json_decode($result['body'], true)['funcionarios'] ?? [], 'fora_mapa_escala', 'id');
+assert_same(true, ($listed($foraCases['lista_admin'])[1] ?? null) === true && ($listed($foraCases['lista_admin'])[3] ?? null) === false, 'listagem: admin ve a marcacao');
+assert_same(true, ($listed($foraCases['lista_gestor'])[1] ?? null) === true, 'listagem: gestor ve a marcacao (telas de escala)');
+assert_same([], $listed($foraCases['lista_tecnico']), 'listagem: tecnico nao recebe a marcacao');
+
+// Ordem no endpoint: recusa desfaz a transacao antes de auditar (o audit_log
+// usa a mesma conexao) e a gravacao faz commit antes das auditorias.
+$updateSource = (string)file_get_contents($root . '/api/atualizar_funcionario.php');
+assert_same(true, strpos($updateSource, "\$pdo->rollBack();\n        audit_log(\n            'FUNCIONARIO_ALTERACAO_NEGADA'") !== false, 'fora do Mapa: rollback antes da auditoria da recusa');
+assert_same(true, strpos($updateSource, '$pdo->commit();') < strpos($updateSource, "'FUNCIONARIO_FORA_MAPA_ALTERADO'"), 'fora do Mapa: commit antes da auditoria da alteracao');
+assert_same(true, strpos($updateSource, "SELECT fora_mapa_escala FROM funcionarios WHERE id = :id FOR UPDATE") !== false, 'fora do Mapa: cadastro travado na checagem do vinculo');
+$paMapSource = (string)file_get_contents($root . '/services/PaMapService.php');
+assert_same(true, strpos($paMapSource, "LIMIT 1\n             FOR UPDATE'") !== false && strpos($paMapSource, "if ((int)\$employee['fora_mapa_escala'] === 1) {") !== false, 'Mapa PA: vinculo para cadastro marcado recusado, com o cadastro travado');
+assert_same(true, strpos($paMapSource, 'WHERE ativo = 1 AND fora_mapa_escala = 0') !== false, 'Mapa PA: cadastro marcado fora da lista de elegiveis');
 
 echo "qa-security OK\n";

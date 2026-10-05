@@ -24,6 +24,7 @@ final class OperationalService {
     public const LEADERSHIP_RULE_LABEL = 'Presencial (regra fixa)';
     public const LEADERSHIP_RULE_MESSAGE = 'A Liderança tem escala fixa presencial nos dias úteis, na jornada do próprio cadastro: não há regra a cadastrar. Para treinamento, plantão ou sábado, use exceção por data.';
     public const LEADERSHIP_REMOTE_MESSAGE = 'A Liderança tem escala sempre presencial: exceção remota não é aceita.';
+    public const OUTSIDE_MAP_MESSAGE = 'Cadastro marcado como fora do Mapa PA e da escala: não recebe regra nem exceção de escala.';
     public const LEADERSHIP_IMPORT_WARNING = 'Linha ignorada: a Liderança tem escala fixa presencial, sem regra a importar.';
     public const ALLOWED_IMPORT_HEADERS = [
         'id', 'employee_id',
@@ -296,7 +297,7 @@ final class OperationalService {
         // include_history=1, tambem as encerradas antes dele.
         $includeHistory = in_array((string)($filters['include_history'] ?? ''), ['1', 'true'], true);
         $rules = array_merge(
-            $this->scheduleRules($team, $employeeId, $includeHistory ? null : $from),
+            $this->scheduleRules($team, $employeeId, $includeHistory ? null : $from, true),
             $this->leadershipImplicitRules($team, $employeeId)
         );
         $exceptions = $this->scheduleExceptions($from, $to, $team, $employeeId);
@@ -336,7 +337,7 @@ final class OperationalService {
         if ($effectiveFrom < $today && !portal_role_can($actorRole, 'escalas.retroativa')) {
             throw new PortalForbiddenException('Somente administradores e Liderança gravam regra com início retroativo.');
         }
-        $this->lockScheduleEmployee($employee);
+        $this->lockScheduleEmployee($employee, true);
         $rules = $this->employeeScheduleRules((int)$employee['id']);
         $plan = ScheduleRulePlanner::planSave($rules, $effectiveFrom, $rule, $ruleConfig, $today);
         if ($plan['action'] === 'unchanged') {
@@ -462,7 +463,7 @@ final class OperationalService {
         if ($employee['team'] === 'lideranca' && $type === 'remote') {
             throw new DomainException(self::LEADERSHIP_REMOTE_MESSAGE);
         }
-        $this->lockScheduleEmployee($employee);
+        $this->lockScheduleEmployee($employee, true);
         $stmt = $this->pdo->prepare(
             'INSERT INTO portal_schedule_exceptions
                 (employee_id, employee_name, team, exception_date, exception_type, note, created_by)
@@ -590,6 +591,9 @@ final class OperationalService {
             }
             if (!$ignored && $employee && $team && $team !== $employee['team']) {
                 $errors[] = 'Equipe divergente do cadastro.';
+            }
+            if (!$ignored && $employee && (int)($employee['fora_mapa_escala'] ?? 0) === 1) {
+                $errors[] = 'Cadastro fora do Mapa PA e da escala.';
             }
             if ($employee && isset($seen[$employee['id']])) {
                 $errors[] = 'Colaborador duplicado no arquivo.';
@@ -1290,13 +1294,19 @@ final class OperationalService {
 
     /**
      * [F1] Trava o cadastro ate o fim da transacao: serializa as gravacoes de
-     * escala do mesmo colaborador (a nao sobreposicao fica no servico).
+     * escala do mesmo colaborador (a nao sobreposicao fica no servico) e a
+     * marcacao "fora do Mapa PA e da escala". $refuseOutsideMap: regra e
+     * excecao para cadastro marcado recebem 409 (P12); remover continua.
      */
-    private function lockScheduleEmployee(array $employee): void {
-        $stmt = $this->pdo->prepare('SELECT id FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE');
+    private function lockScheduleEmployee(array $employee, bool $refuseOutsideMap = false): void {
+        $stmt = $this->pdo->prepare('SELECT fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE');
         $stmt->execute([':id' => (int)$employee['id']]);
-        if ($stmt->fetchColumn() === false) {
+        $outsideMap = $stmt->fetchColumn();
+        if ($outsideMap === false) {
             throw new InvalidArgumentException('Colaborador nao encontrado ou inativo.');
+        }
+        if ($refuseOutsideMap && (int)$outsideMap === 1) {
+            throw new DomainException(self::OUTSIDE_MAP_MESSAGE);
         }
     }
 
@@ -1373,7 +1383,7 @@ final class OperationalService {
             return null;
         }
         $stmt = $this->pdo->prepare(
-            'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login
+            'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login, fora_mapa_escala
              FROM funcionarios WHERE ativo = 1 AND (' . implode(' OR ', $conditions) . ') LIMIT 2'
         );
         $stmt->execute($params);
@@ -1400,13 +1410,16 @@ final class OperationalService {
     /**
      * $periodFrom: so as regras que vigoram a partir dessa data (e as
      * agendadas); null traz o historico inteiro, inclusive linhas vazias.
+     * $excludeOutsideMap: tela de escala sem os cadastros fora do Mapa PA e
+     * da escala (P12). Calendario e relatorio mudam no motor (F2 e F5).
      */
-    private function scheduleRules(?string $team, ?int $employeeId, ?string $periodFrom = null): array {
+    private function scheduleRules(?string $team, ?int $employeeId, ?string $periodFrom = null, bool $excludeOutsideMap = false): array {
         $sql = 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type, r.rule_config,
                        r.effective_from, r.effective_until, r.created_by, r.updated_by,
                        r.created_at, r.updated_at
                 FROM portal_schedule_rules r
-                JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 1
+                JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 1'
+                . ($excludeOutsideMap ? ' AND f.fora_mapa_escala = 0' : '') . '
                 WHERE LOWER(f.equipe) IN ("n1", "n2")';
         $params = [];
         if ($periodFrom !== null) {
@@ -1438,7 +1451,7 @@ final class OperationalService {
         }
         $sql = 'SELECT id, nome AS employee_name, ad_login, equipe, jornada_entrada, jornada_saida
                 FROM funcionarios
-                WHERE ativo = 1';
+                WHERE ativo = 1 AND fora_mapa_escala = 0';
         $params = [];
         if ($employeeId) {
             $sql .= ' AND id = :employee_id';

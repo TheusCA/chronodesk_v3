@@ -48,6 +48,8 @@ export const employeeFormSchema = z.object({
   almoco_inicio: employeeTimeSchema,
   almoco_fim: employeeTimeSchema,
   ativo: z.boolean({ error: 'Status ativo inválido.' }).default(true),
+  // F1 (P12): só admin altera; os demais reenviam o valor atual.
+  fora_mapa_escala: z.boolean({ error: 'Valor inválido para "Fora do Mapa PA e da escala".' }).default(false),
 }).superRefine((value, ctx) => {
   if (value.jornada_entrada >= value.jornada_saida) {
     ctx.addIssue({

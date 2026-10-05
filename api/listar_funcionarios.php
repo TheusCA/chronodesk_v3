@@ -13,6 +13,21 @@ global $gerenciador;
 $lista = [];
 // [Lote 5b] Inativos, login AD e perfil para quem gerencia funcionários.
 $is_admin = in_array('funcionarios.manage', portal_permissions_for_role(current_portal_role()), true);
+// [P12, F1] "Fora do Mapa PA e da escala" para a gestao (telas de escala e
+// cadastro). Sem a coluna (migration 011 ainda nao aplicada), o campo fica de
+// fora e a lista continua.
+$fora_mapa = null;
+if (portal_role_is_manager(current_portal_role())) {
+    try {
+        $fora_mapa = [];
+        foreach (get_db_connection()->query('SELECT id, fora_mapa_escala FROM funcionarios')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $fora_mapa[(int)$row['id']] = (int)$row['fora_mapa_escala'] === 1;
+        }
+    } catch (Throwable $e) {
+        error_log('[FUNCIONARIO] fora_mapa_escala indisponivel: ' . get_class($e));
+        $fora_mapa = null;
+    }
+}
 
 if ($gerenciador) {
     foreach ($gerenciador->getFuncionarios() as $f) {
@@ -33,6 +48,9 @@ if ($gerenciador) {
             'almoco_fim' => $f->almoco_fim ?? '13:00',
             'disponibilidade' => $f->status_disponibilidade(),
         ];
+        if (is_array($fora_mapa)) {
+            $item['fora_mapa_escala'] = $fora_mapa[(int)$f->id] ?? false;
+        }
         if ($is_admin) {
             $item['ad_login'] = $f->ad_login ?? null;
             $item['access_role'] = $f->access_role ?? 'tecnico';

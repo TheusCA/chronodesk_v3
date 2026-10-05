@@ -262,7 +262,7 @@ function SettingsTab({ resource, notify }) {
 
 const emptyEmployee = {
   id: '', nome: '', ad_login: '', equipe: 'n1', access_role: 'tecnico', jornada_entrada: '08:00',
-  jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ativo: true,
+  jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ativo: true, fora_mapa_escala: false,
 }
 
 function teamLabel(value) {
@@ -289,7 +289,7 @@ function normalizeTeamValue(value) {
 
 // Lote 5b: equipe e perfil são independentes. Promover à Liderança é só do
 // admin (perfis.promote); admin não é perfil de cadastro (allowlist AD_ADMIN_USERS).
-function EmployeeFields({ form, register, setValue, errors = {}, editing = false, canPromote = false }) {
+function EmployeeFields({ form, register, setValue, errors = {}, editing = false, canPromote = false, canEditOutsideMap = false }) {
   function updateRole(role) {
     setValue('access_role', role, { shouldDirty: true })
   }
@@ -351,11 +351,23 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
         <input type="checkbox" {...register('ativo')} />
         <span><strong>Funcionário ativo</strong><small>Permite autenticação e aplica o perfil configurado.</small></span>
       </label>
+      {editing && (
+        <label className="check-row md:col-span-2">
+          <input disabled={!canEditOutsideMap} type="checkbox" {...register('fora_mapa_escala')} />
+          <span>
+            <strong>Fora do Mapa PA e da escala</strong>
+            <small>
+              Não aparece no Mapa PA, na escala nem nas contagens; login, permissões e ausências continuam.
+              {canEditOutsideMap ? ' Com vínculo de PA ativo, remova o vínculo antes de marcar.' : ' Só administradores alteram.'}
+            </small>
+          </span>
+        </label>
+      )}
     </div>
   )
 }
 
-function EmployeesTab({ resource, notify, canPromote = false }) {
+function EmployeesTab({ resource, notify, canPromote = false, canEditOutsideMap = false }) {
   const {
     clearErrors: clearCreateEmployeeErrors,
     formState: { errors: createEmployeeErrors },
@@ -430,6 +442,7 @@ function EmployeesTab({ resource, notify, canPromote = false }) {
       ...item,
       ad_login: item.ad_login ?? '',
       access_role: item.access_role || 'tecnico',
+      fora_mapa_escala: item.fora_mapa_escala === true,
       equipe: normalizeTeam(item.equipe),
     }
     setEditForm(nextForm)
@@ -585,7 +598,7 @@ function EmployeesTab({ resource, notify, canPromote = false }) {
               </div>
               <button className="text-sm text-slate-400 hover:text-white" onClick={() => setEditForm(null)} type="button">Cancelar</button>
             </div>
-            <EmployeeFields canPromote={canPromote} editing errors={editEmployeeErrors} form={editEmployeeForm} register={registerEditEmployee} setValue={setEditEmployeeValue} />
+            <EmployeeFields canEditOutsideMap={canEditOutsideMap} canPromote={canPromote} editing errors={editEmployeeErrors} form={editEmployeeForm} register={registerEditEmployee} setValue={setEditEmployeeValue} />
             <div className="flex justify-end gap-3">
               <button className="btn-secondary" disabled={submitting} onClick={() => setEditForm(null)} type="button">Cancelar</button>
               <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Salvando...' : 'Salvar alterações'}</button>
@@ -801,6 +814,7 @@ export function AdminPage({ session, search, navigate, notify, refreshStatus }) 
   // Lote 5b: a Liderança vê Aprovações e Funcionários; o resto é só do admin.
   const canManageEmployees = permissions.has('funcionarios.manage')
   const canPromote = permissions.has('perfis.promote')
+  const canEditOutsideMap = permissions.has('funcionarios.fora_mapa')
   const availableTabs = isAdmin ? tabs : tabs.filter(([key]) => key === 'aprovacoes' || (key === 'funcionarios' && canManageEmployees))
   const rawRequestedTab = new URLSearchParams(search).get('tab')
   const requestedTab = rawRequestedTab === 'segurança' ? 'seguranca' : rawRequestedTab
@@ -827,7 +841,7 @@ export function AdminPage({ session, search, navigate, notify, refreshStatus }) 
       </div>
       {activeTab === 'aprovacoes' && <ApprovalsTab requests={requests} refresh={requests.refresh} refreshStatus={refreshStatus} notify={notify} />}
       {activeTab === 'configuracoes' && <SettingsTab resource={config} notify={notify} />}
-      {activeTab === 'funcionarios' && <EmployeesTab canPromote={canPromote} resource={employees} notify={notify} />}
+      {activeTab === 'funcionarios' && <EmployeesTab canEditOutsideMap={canEditOutsideMap} canPromote={canPromote} resource={employees} notify={notify} />}
       {activeTab === 'usuarios' && <UsersTab enabled={Boolean(config.data?.configuracoes?.local_admin_enabled)} resource={users} notify={notify} />}
       {activeTab === 'seguranca' && <SecurityTab config={config.data?.configuracoes} notify={notify} />}
     </div>

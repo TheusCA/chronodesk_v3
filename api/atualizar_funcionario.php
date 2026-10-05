@@ -32,6 +32,11 @@ $jornada_saida = isset($data['jornada_saida']) ? trim($data['jornada_saida']) : 
 $almoco_inicio = isset($data['almoco_inicio']) ? trim($data['almoco_inicio']) : '12:00';
 $almoco_fim = isset($data['almoco_fim']) ? trim($data['almoco_fim']) : '13:00';
 $ativo = isset($data['ativo']) ? (bool)$data['ativo'] : true;
+// [P12, F1] Opcional: ausente mantem o valor atual.
+$fora_mapa_input = array_key_exists('fora_mapa_escala', $data) ? $data['fora_mapa_escala'] : null;
+if ($fora_mapa_input !== null && !in_array($fora_mapa_input, [true, false, 0, 1, '0', '1'], true)) {
+    json_response(['sucesso' => false, 'mensagem' => 'Valor inválido para "Fora do Mapa PA e da escala".'], 400);
+}
 
 if ($nome === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Nome inválido. Use de 3 a 100 caracteres válidos.'], 400);
@@ -100,6 +105,35 @@ try {
     $currentRole = (string)$current['access_role'];
     $currentAdLogin = normalizar_ad_login($current['ad_login'] ?? null);
     require_funcionario_change($actor_role, $currentRole, $access_role, 'atualizar');
+
+    // [P12, F1] Fora do Mapa PA e da escala: cadastro travado ate o commit,
+    // como a gravacao de vinculo no Mapa PA, para a checagem do vinculo
+    // ativo valer. Recusa desfaz a transacao ANTES da auditoria (o audit_log
+    // usa a mesma conexao).
+    $pdo->beginTransaction();
+    $foraStmt = $pdo->prepare('SELECT fora_mapa_escala FROM funcionarios WHERE id = :id FOR UPDATE');
+    $foraStmt->execute([':id' => $funcionario_id]);
+    $currentForaMapa = (int)$foraStmt->fetchColumn() === 1;
+    $newForaMapa = $fora_mapa_input === null ? $currentForaMapa : in_array($fora_mapa_input, [true, 1, '1'], true);
+    $activePaLinks = 0;
+    if ($newForaMapa && !$currentForaMapa && portal_role_can($actor_role, 'funcionarios.fora_mapa')) {
+        $paStmt = $pdo->prepare(
+            'SELECT COUNT(*) FROM portal_pa_assignments
+             WHERE employee_id = :id AND active = 1 AND (valid_until IS NULL OR valid_until >= :today)'
+        );
+        $paStmt->execute([':id' => $funcionario_id, ':today' => date('Y-m-d')]);
+        $activePaLinks = (int)$paStmt->fetchColumn();
+    }
+    $foraDenied = fora_mapa_change_denied($actor_role, $currentForaMapa, $newForaMapa, $activePaLinks);
+    if ($foraDenied !== null) {
+        $pdo->rollBack();
+        audit_log(
+            'FUNCIONARIO_ALTERACAO_NEGADA',
+            "contexto=fora_mapa perfil_ator={$actor_role} funcionario_id={$funcionario_id} vinculos_pa_ativos={$activePaLinks}",
+            'WARNING'
+        );
+        json_response(['sucesso' => false, 'mensagem' => $foraDenied[1]], $foraDenied[0]);
+    }
     $stmt = $pdo->prepare(
         "UPDATE funcionarios
          SET nome = :nome,
@@ -110,7 +144,8 @@ try {
              jornada_saida = :jornada_saida,
              almoco_inicio = :almoco_inicio,
              almoco_fim = :almoco_fim,
-             ativo = :ativo
+             ativo = :ativo,
+             fora_mapa_escala = :fora_mapa_escala
          WHERE id = :id"
     );
     $stmt->execute([
@@ -124,7 +159,9 @@ try {
         ':almoco_inicio' => formatar_hora_mysql($almoco_inicio, '12:00:00'),
         ':almoco_fim' => formatar_hora_mysql($almoco_fim, '13:00:00'),
         ':ativo' => $ativo ? 1 : 0,
+        ':fora_mapa_escala' => $newForaMapa ? 1 : 0,
     ]);
+    $pdo->commit();
 
     if ($stmt->rowCount() === 0 && !$gerenciador->getFuncionario($funcionario_id)) {
         json_response(['sucesso' => false, 'mensagem' => 'Funcionário não encontrado.'], 404);
@@ -132,6 +169,9 @@ try {
 
     $resultado = $gerenciador->atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, $ativo, $ad_login, $access_role);
 } catch (Exception $e) {
+    if (isset($pdo) && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log('[FUNCIONARIO] Erro ao atualizar funcionário: ' . $e->getMessage());
     json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao atualizar funcionário.')], 500);
 }
@@ -140,6 +180,13 @@ if (($resultado['sucesso'] ?? false) === true) {
     audit_log('FUNCIONARIO_ATUALIZADO', "Funcionario '{$nome}' atualizado (ID: {$funcionario_id}, equipe: {$equipe}, perfil: {$access_role}, ativo: " . ($ativo ? 'sim' : 'nao') . ")", 'WARNING');
     if ((string)$currentRole !== $access_role) {
         audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Perfil do funcionario ID {$funcionario_id} alterado de {$currentRole} para {$access_role} por {$actor_role}", 'CRITICAL');
+    }
+    if ($currentForaMapa !== $newForaMapa) {
+        audit_log(
+            'FUNCIONARIO_FORA_MAPA_ALTERADO',
+            "Fora do Mapa PA e da escala do funcionario ID {$funcionario_id} alterado de " . ($currentForaMapa ? 'sim' : 'nao') . ' para ' . ($newForaMapa ? 'sim' : 'nao') . " por {$actor_role}",
+            'WARNING'
+        );
     }
     // [A3] Troca de login AD: CRITICAL se o perfil (atual ou novo) for de gestão.
     if ($currentAdLogin !== $ad_login) {
