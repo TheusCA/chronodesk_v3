@@ -1,13 +1,21 @@
 -- Rollback da migration 20261005_011_schedule_history.sql (Parte B, F1).
 -- NAO e migration de deploy. Aplicar so DEPOIS de voltar o codigo (o codigo
 -- do F1 le fora_mapa_escala e grava varias regras por colaborador).
--- Idempotente: cada passo confere information_schema antes de alterar.
 --
--- 0. Copias, so na primeira execucao (as seguintes nao sobrescrevem):
---    portal_schedule_rules_bkp_011 (todas as regras, com o historico),
---    portal_schedule_exceptions_bkp_011 (excecoes da equipe lideranca) e
---    funcionarios_fora_mapa_bkp_011 (so o id dos cadastros marcados).
---    As copias ficam: remover a mao depois de conferir.
+-- 0. Checagem previa: se QUALQUER copia *_bkp_011 ja existir (rollback
+--    anterior), PARA antes de qualquer alteracao, com o erro 45000
+--    "rollback_011 abortado: ja existe copia *_bkp_011 ...". O cliente mysql
+--    em lote para no primeiro erro. Sem essa parada, um segundo rollback
+--    apagaria o historico gravado depois do primeiro e a copia continuaria a
+--    antiga (revisao do F1 em MySQL 8.0.46). Para repetir: conferir as copias,
+--    renomea-las (RENAME TABLE) e rodar de novo. A checagem usa o procedimento
+--    temporario rollback_011_confere_copias (SIGNAL so existe em procedimento);
+--    depois de uma parada ele fica no banco ate a proxima execucao, que o
+--    recria e o apaga no fim.
+-- 0b. Copias: portal_schedule_rules_bkp_011 (todas as regras, com o
+--    historico), portal_schedule_exceptions_bkp_011 (excecoes da equipe
+--    lideranca) e funcionarios_fora_mapa_bkp_011 (so o id dos cadastros
+--    marcados). As copias ficam: remover a mao depois de conferir.
 -- 1. Regras e excecoes com equipe lideranca sao apagadas (estao na copia):
 --    o ENUM original nao tem o valor.
 -- 2. Regras: fica UMA por colaborador, a aberta ou, sem aberta, a de maior
@@ -20,53 +28,45 @@
 --    volta ANTES de sair o indice que sustenta a FK.
 -- 5. ENUMs de rule_type e team voltam ao original.
 -- 6. funcionarios.fora_mapa_escala sai (marcacao na copia).
+-- Os passos 1 a 6 conferem information_schema antes de alterar. O arquivo
+-- inteiro NAO se repete: a segunda execucao para no passo 0, de proposito.
 
 SET time_zone = 'America/Sao_Paulo';
 
--- 0. Copias
-SET @has_rules_bkp := (
-    SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_schedule_rules_bkp_011'
-);
-SET @create_rules_bkp_sql := IF(
-    @has_rules_bkp = 0,
-    'CREATE TABLE portal_schedule_rules_bkp_011 AS
-        SELECT id, employee_id, employee_name, ad_login, team, rule_type, rule_config,
-               effective_from, effective_until, created_by, updated_by, created_at, updated_at
-        FROM portal_schedule_rules',
-    'SELECT 1'
-);
-PREPARE create_rules_bkp_stmt FROM @create_rules_bkp_sql;
-EXECUTE create_rules_bkp_stmt;
-DEALLOCATE PREPARE create_rules_bkp_stmt;
+-- 0. Checagem previa das copias
+DROP PROCEDURE IF EXISTS rollback_011_confere_copias;
+DELIMITER //
+CREATE PROCEDURE rollback_011_confere_copias()
+BEGIN
+    IF (SELECT COUNT(*) FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME IN ('portal_schedule_rules_bkp_011', 'portal_schedule_exceptions_bkp_011', 'funcionarios_fora_mapa_bkp_011')) > 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'rollback_011 abortado: ja existe copia *_bkp_011 de rollback anterior. Nada foi alterado. Renomeie as copias e repita.';
+    END IF;
+END//
+DELIMITER ;
+CALL rollback_011_confere_copias();
+DROP PROCEDURE rollback_011_confere_copias;
 
-SET @has_exceptions_bkp := (
-    SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_schedule_exceptions_bkp_011'
-);
-SET @create_exceptions_bkp_sql := IF(
-    @has_exceptions_bkp = 0,
-    'CREATE TABLE portal_schedule_exceptions_bkp_011 AS
-        SELECT id, employee_id, employee_name, team, exception_date, exception_type, note,
-               created_by, created_at, updated_at
-        FROM portal_schedule_exceptions
-        WHERE team = ''lideranca''',
-    'SELECT 1'
-);
-PREPARE create_exceptions_bkp_stmt FROM @create_exceptions_bkp_sql;
-EXECUTE create_exceptions_bkp_stmt;
-DEALLOCATE PREPARE create_exceptions_bkp_stmt;
+-- 0b. Copias (nenhuma existe: a checagem acima garante)
+CREATE TABLE portal_schedule_rules_bkp_011 AS
+    SELECT id, employee_id, employee_name, ad_login, team, rule_type, rule_config,
+           effective_from, effective_until, created_by, updated_by, created_at, updated_at
+    FROM portal_schedule_rules;
+
+CREATE TABLE portal_schedule_exceptions_bkp_011 AS
+    SELECT id, employee_id, employee_name, team, exception_date, exception_type, note,
+           created_by, created_at, updated_at
+    FROM portal_schedule_exceptions
+    WHERE team = 'lideranca';
 
 SET @has_fora_mapa := (
     SELECT COUNT(*) FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'fora_mapa_escala'
 );
-SET @has_fora_mapa_bkp := (
-    SELECT COUNT(*) FROM information_schema.TABLES
-    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios_fora_mapa_bkp_011'
-);
 SET @create_fora_mapa_bkp_sql := IF(
-    @has_fora_mapa > 0 AND @has_fora_mapa_bkp = 0,
+    @has_fora_mapa > 0,
     'CREATE TABLE funcionarios_fora_mapa_bkp_011 AS
         SELECT id FROM funcionarios WHERE fora_mapa_escala = 1',
     'SELECT 1'

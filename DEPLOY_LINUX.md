@@ -931,7 +931,13 @@ corrigir o problema, aplique o rollback da 011. O rollback guarda tudo em `porta
 uma regra por colaborador (a aberta ou a de inicio mais recente): o historico
 gravado pelo F1 so fica na copia, e as marcacoes "fora do Mapa" se perdem
 (refazer pela tela depois de reaplicar). Apagar as copias a mao, depois de
-conferir.
+conferir. Se ja existir qualquer copia `*_bkp_011` (rollback anterior), o
+rollback **para antes de alterar**, com `rollback_011 abortado: ja existe copia
+*_bkp_011 ...`: conferir as copias, renomea-las (`RENAME TABLE
+portal_schedule_rules_bkp_011 TO portal_schedule_rules_bkp_011_<data>`, e as
+demais) e repetir. Depois dessa parada, o procedimento temporario
+`rollback_011_confere_copias` fica no banco ate a proxima execucao do rollback,
+que o recria e o apaga no fim (ou `DROP PROCEDURE rollback_011_confere_copias;`).
 
 Lote 4 (SEC-08): depois do rollback do codigo, opcional,
 `migrations/rollback/20261002_017_shift_attachment_team_down.sql` (remove a

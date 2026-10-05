@@ -457,6 +457,20 @@ foreach (['portal_schedule_rules_bkp_011', 'portal_schedule_exceptions_bkp_011',
     assert_same(true, $position($rollback, "CREATE TABLE {$backup} AS") > -1, "rollback copia para {$backup}");
     assert_same(true, $position($rollback, "CREATE TABLE {$backup} AS") < $position($rollback, 'DELETE FROM'), "rollback copia {$backup} antes de apagar");
 }
+// Revisao do F1: com qualquer copia *_bkp_011 ja existente, o rollback para
+// antes de alterar (um segundo rollback apagava o historico novo e a copia
+// ficava a antiga).
+$abortAt = $position($rollback, 'CALL rollback_011_confere_copias();');
+assert_same(1, preg_match("/IF \(SELECT COUNT\(\*\) FROM information_schema\.TABLES\s+WHERE TABLE_SCHEMA = DATABASE\(\)\s+AND TABLE_NAME IN \('portal_schedule_rules_bkp_011', 'portal_schedule_exceptions_bkp_011', 'funcionarios_fora_mapa_bkp_011'\)\) > 0 THEN\s+SIGNAL SQLSTATE '45000'/", $rollback), 'rollback: SIGNAL se qualquer copia ja existir');
+assert_same(1, preg_match("/SET MESSAGE_TEXT = '(rollback_011 abortado: [^']+)'/", $rollback, $signalMessage), 'rollback: mensagem da parada');
+assert_same(true, strlen($signalMessage[1]) <= 128 && strpos($signalMessage[1], 'Nada foi alterado') !== false, 'rollback: mensagem clara e dentro do limite de 128 do SIGNAL');
+assert_same(true, $position($rollback, 'DROP PROCEDURE IF EXISTS rollback_011_confere_copias;') < $position($rollback, 'CREATE PROCEDURE rollback_011_confere_copias()'), 'rollback: procedimento de checagem recriado a cada execucao');
+assert_same(true, $abortAt > -1 && $abortAt === min(array_filter([
+    $position($rollback, 'CREATE TABLE portal_schedule_rules_bkp_011'), $position($rollback, 'DELETE FROM'),
+    $position($rollback, 'UPDATE '), $position($rollback, 'ALTER TABLE'), $abortAt,
+], static fn (int $at): bool => $at > -1)), 'rollback: checagem das copias antes de qualquer alteracao');
+assert_same(0, preg_match('/@has_(rules|exceptions|fora_mapa)_bkp|CREATE TABLE IF NOT EXISTS/', $rollback), 'rollback: copia nunca e pulada em silencio');
+assert_same(true, $position($rollback, 'DROP PROCEDURE rollback_011_confere_copias;') < $position($rollback, 'CREATE TABLE portal_schedule_rules_bkp_011'), 'rollback: procedimento removido quando a checagem passa');
 assert_same(true, $position($rollback, "UPDATE portal_schedule_rules SET rule_type = 'undefined', rule_config = NULL WHERE rule_type = 'cycle'") < $position($rollback, '@remove_cycle_sql'), 'rollback converte cycle antes de encolher o ENUM');
 assert_same(true, $position($rollback, "DELETE FROM portal_schedule_exceptions WHERE team = 'lideranca'") < $position($rollback, '@remove_exception_team_sql'), 'rollback tira excecao de lideranca antes de encolher o ENUM');
 assert_same(true, $position($rollback, 'ORDER BY (effective_until IS NULL) DESC, effective_from DESC, id DESC') > -1, 'rollback mantem a regra aberta ou a de inicio mais recente');
