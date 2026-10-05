@@ -632,19 +632,28 @@ cd /var/www/chronodesk
 sudo env DADOS=portal_schedule_rules,portal_schedule_exceptions VERIFICA=migrations/verificacao/20261005_011_schedule_history_check.sql bash scripts/ensaio-migration.sh m011 migrations/20261005_011_schedule_history.sql migrations/rollback/20261005_011_schedule_history_down.sql
 ```
 
-O que conferir na 011: depois da migration, os indices `idx_schedule_rule_employee_period`,
-`uq_schedule_rule_employee_from` e `uq_schedule_rule_open` e a coluna
-`open_employee_id`, sem `uq_schedule_rule_employee`; `fora_mapa_escala` em
-`funcionarios`; as duas execucoes iguais; checksum e contagem das regras e das
-excecoes iguais ao estado inicial (a migration nao muda linha); na verificacao,
-`colaboradores_com_mais_de_uma_aberta`, `sobreposicoes` e `inicio_repetido` em 0.
-Depois do rollback: `uq_schedule_rule_employee` de volta, sem os indices novos e
-sem `fora_mapa_escala`, e as tabelas `*_bkp_011` criadas. Com os dados atuais
-(uma regra por colaborador, nenhuma excecao de Lideranca) o rollback nao apaga
-linha: as contagens das regras e das excecoes voltam as do estado inicial. O
-`CHECKSUM TABLE` tambem deve voltar; se nao voltar com as contagens iguais,
-anotar (o checksum depende do formato da linha depois dos `ALTER`) e trazer
-para analise antes do deploy.
+O que conferir na 011 (revisado com o ensaio em MySQL 8.0.46):
+
+- **Depois da migration:** os indices `idx_schedule_rule_employee_period`,
+  `uq_schedule_rule_employee_from` e `uq_schedule_rule_open` e a coluna
+  `open_employee_id`, sem `uq_schedule_rule_employee`; `fora_mapa_escala` em
+  `funcionarios`; as duas execucoes iguais. Na verificacao,
+  `colaboradores_com_mais_de_uma_aberta`, `sobreposicoes` e `inicio_repetido`
+  em 0, e as **contagens** e a **assinatura das colunas originais** (ultima
+  consulta) das regras e das excecoes iguais as do estado inicial: a migration
+  nao muda linha. O `CHECKSUM TABLE` de `portal_schedule_rules` **muda** depois
+  da migration, e isso e esperado: a coluna gerada `open_employee_id` e
+  `STORED` e entra no checksum. Nao use o `CHECKSUM TABLE` das regras para
+  comparar com o estado inicial nesta etapa.
+- **Depois do 1o rollback:** `uq_schedule_rule_employee` de volta, sem os
+  indices novos, sem `open_employee_id` e sem `fora_mapa_escala`, e as tres
+  tabelas `*_bkp_011` criadas. Com os dados atuais (uma regra por colaborador,
+  nenhuma excecao de Lideranca) o rollback nao apaga linha: contagens,
+  assinatura e `CHECKSUM TABLE` voltam aos do estado inicial.
+- **2o rollback:** **para** com `rollback_011 abortado: ja existe copia
+  *_bkp_011 ...` (FALHOU no ensaio, de proposito) e o estado fica igual ao do
+  1o rollback. Esse e o comportamento esperado: um segundo rollback apagaria o
+  historico gravado depois do primeiro.
 
 ## Acesso de Emergencia (admin local)
 

@@ -476,6 +476,8 @@ assert_same(true, $position($rollback, "DELETE FROM portal_schedule_exceptions W
 assert_same(true, $position($rollback, 'ORDER BY (effective_until IS NULL) DESC, effective_from DESC, id DESC') > -1, 'rollback mantem a regra aberta ou a de inicio mais recente');
 assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE|REPLACE)\b/i', $check), 'verificacao so le');
 assert_same(0, preg_match('/\b(employee_name|nome|ad_login|note)\b/i', $check), 'verificacao nao devolve nome, login nem observacao');
+assert_same(2, preg_match_all('/BIT_XOR\(CRC32\(CONCAT_WS\(/', $check), 'verificacao: assinatura das colunas originais de regras e excecoes (o CHECKSUM TABLE muda com a coluna gerada)');
+assert_same(0, preg_match('/open_employee_id|fora_mapa_escala/', $check), 'verificacao: so colunas que existem antes da 011 e depois do rollback');
 
 // ----------------------------------------------------------------------------
 // 2. Planejador de vigencia (funcao pura)

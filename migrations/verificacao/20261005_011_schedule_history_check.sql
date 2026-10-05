@@ -7,6 +7,9 @@
 -- Esperado: colaboradores_com_mais_de_uma_aberta = 0, sobreposicoes = 0 e
 -- inicio_repetido = 0. vigencia_vazia > 0 so com linhas antigas (escala
 -- removida antes de comecar, codigo anterior ao F1): o motor ignora essas linhas.
+-- A assinatura (no fim) cobre so as colunas originais: nao muda com a 011 nem
+-- com o rollback se nenhuma linha mudar, ao contrario do CHECKSUM TABLE, que
+-- muda com a coluna gerada STORED da 011 (revisao do F1, MySQL 8.0.46).
 
 SELECT
     (SELECT COUNT(*) FROM (
@@ -40,3 +43,14 @@ SELECT rule_type, effective_until IS NULL AS aberta, COUNT(*) AS regras
 SELECT 'regras' AS tabela, team, COUNT(*) AS linhas FROM portal_schedule_rules GROUP BY team
 UNION ALL
 SELECT 'excecoes', team, COUNT(*) FROM portal_schedule_exceptions GROUP BY team;
+
+-- Assinatura das colunas originais (CRC32 por linha, combinado por XOR; sem
+-- nome, login nem observacao)
+SELECT 'regras' AS tabela, COUNT(*) AS linhas,
+       BIT_XOR(CRC32(CONCAT_WS('|', id, employee_id, team, rule_type, COALESCE(rule_config, ''),
+                               effective_from, COALESCE(effective_until, '')))) AS assinatura
+  FROM portal_schedule_rules
+UNION ALL
+SELECT 'excecoes', COUNT(*),
+       BIT_XOR(CRC32(CONCAT_WS('|', id, employee_id, team, exception_date, exception_type)))
+  FROM portal_schedule_exceptions;
