@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. Nenhum código, migration ou teste da Parte B foi escrito. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue em 2026-10-05, aguardando aprovação** (seção 9.1). F2 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -838,6 +838,32 @@ Cada lote: commit local por tema, sem push, parada para aprovação, atualizaç�
 | **F7** Visão Operacional | RF-10; `presence_summary` | Identidade da soma pelo endpoint; Liderança fora dos totais | Código | F2, F3, F4 |
 
 F5, F6 e F7 são independentes entre si e podem mudar de ordem.
+
+### 9.1 F1 — entrega de 2026-10-05 (aguardando aprovação)
+
+Commits `f91c850` (ensaio com `DADOS` e `VERIFICA`), `cc16dc2` (migration 011, rollback e verificação), `aa15d65` (vigência), `5f1fdf0` (escala implícita da Liderança e L9), `2b82eef` (ajuste do `qa:action-runner`), `8a97e5d` (fora do Mapa PA e da escala), `696e541` (testes) e o commit de documentação.
+
+| Item | Como ficou |
+|---|---|
+| Migration 011 | Como na seção 2.1, com os passos 2.6 e `fora_mapa_escala` (`migrations/20261005_011_schedule_history.sql`). Regra do A4. Nenhuma linha muda. Rollback com cópias `*_bkp_011`; verificação em `migrations/verificacao/` (só contagens) |
+| Vigência | `services/ScheduleRulePlanner.php` (funções puras) + `OperationalService`. Colaborador travado (`FOR UPDATE`) antes de ler o histórico; invariantes conferidos antes do commit (violação nova desfaz tudo) |
+| Remover | Fecha a vigente em hoje − 1 sem trocar o tipo; apaga a que começa hoje ou depois, com o conteúdo na auditoria; sem vigente nem agendada: 409 |
+| Importação | Data do PHP; linha igual à vigente não grava; linha de líder com aviso, ignorada; cadastro marcado: linha inválida |
+| P10 com L6 | Início anterior a hoje: admin e Liderança (`escalas.retroativa`); gestor 403 antes de travar; auditoria com `retroativa=sim` |
+| GET | `today`; regras com `is_current`, `is_future`, `config`, `implicit`; padrão = vigentes no período e agendadas; `include_history=1` = tudo |
+| Liderança (P12) | Sem linha no banco: regra implícita "Presencial (regra fixa)", dias úteis, `work_start`/`work_end` da jornada; sábado e domingo só por exceção. Regra para líder: 409 (mesmo admin). Exceção de líder só admin (L9, agora permissão `escalas.lideranca`); remota: 409 |
+| Fora do Mapa PA e da escala | Campo no formulário (só na edição), editável com `funcionarios.fora_mapa` (admin); Liderança vê e reenvia o valor. Marcar com vínculo de PA ativo: 409. Auditoria `FUNCIONARIO_FORA_MAPA_ALTERADO` (WARNING). Marcado: 409 em regra, exceção e vínculo de PA; fora da tela de escala e da lista de elegíveis do Mapa PA |
+
+**Decisões de implementação a aprovar:**
+
+1. **Regra no meio de um período já encerrado** (escala removida e depois regra retroativa dentro dele): a nova termina onde a encerrada terminava, em vez de ficar aberta. A seção 2.1 não tratava o caso; a escolha não reabre uma remoção sem pedido.
+2. **Linha vazia** (fim antes do início, gravada pela remoção antiga quando a regra começava no futuro): não vigora em data nenhuma; se a nova regra começar na mesma data, a linha é reaproveitada (a UNIQUE de início não deixa inserir outra).
+3. **Regra igual à vigente com regra agendada depois:** nada muda (a agendada continua). Para cancelar a agendada, remover a escala e cadastrar de novo.
+4. **Exceção de líder:** aceita os tipos de hoje, menos remoto (os de ausência saem no F3, para todos). Exceção em fim de semana gera o dia; sem exceção, sábado e domingo ficam sem linha só para a Liderança (para N1 e N2 a regra P3 é do F2).
+5. **Cadastro marcado com regra antiga:** a regra fica no banco, some da tela e volta se o cadastro for desmarcado; remover continua permitido. Calendário e relatório mudam no motor (F2 e F5).
+6. **Mapa PA:** além do 409 ao marcar com vínculo ativo (pedido), o vínculo novo para cadastro marcado é recusado (409) e o cadastro sai da lista de elegíveis; sem isso a marcação podia ser contornada logo depois. As duas operações travam o mesmo cadastro.
+7. **Listagem de funcionários:** `fora_mapa_escala` vai para gestor, Liderança e admin (telas de escala); sem a coluna (011 não aplicada), o campo fica de fora e a lista continua.
+8. **Criação de funcionário:** o campo não é aceito em `adicionar_funcionario.php` (nasce 0); marcar é só na edição, como na seção 0.6.
 
 **Roteiro manual por lote no servidor** (o QA local não tem MySQL, Apache nem AD): aplicar a migration, rodar a consulta de verificação, exercitar a tela por perfil. Entregue junto de cada lote, como nos anteriores.
 

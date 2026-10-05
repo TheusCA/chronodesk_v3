@@ -149,6 +149,7 @@ docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /v
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260617_008_dashboard_ci_pa_map.sql
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260617_009_pa_map_recurring_assignments.sql
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20260624_010_schedule_fixed_weekdays.sql
+docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261005_011_schedule_history.sql
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261001_015_login_user_throttle.sql
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261002_016_lideranca_profile.sql
 docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < /var/www/chronodesk/migrations/20261002_017_shift_attachment_team.sql
@@ -161,9 +162,9 @@ linha dele. Por isso a senha e lida antes, sem eco, e passada em `MYSQL_PWD`
 so para o comando. `MYSQL_PWD` e obsoleta no MySQL 8.0, mas funciona na imagem
 `mysql:8.0`; a alternativa e um arquivo de opcoes, como o do backup.
 
-A numeracao pula de 010 para 015 de proposito: 011 a 014 estao reservadas para a
-Parte B (`docs/DESENHO_PA_ESCALA_AUSENCIA.md`) e ainda nao existem. Quando
-existirem, entram nesta lista na ordem numerica. Sem a 015, o codigo atual
+A numeracao pula de 011 para 015 de proposito: 011 a 014 sao da Parte B
+(`docs/DESENHO_PA_ESCALA_AUSENCIA.md`); a 011 (F1, historico de escala) ja
+existe e 012 a 014 entram nesta lista, na ordem numerica, quando existirem. Sem a 015, o codigo atual
 recusa todo login com 503 (`docs/LIMITE_LOGIN_POR_USUARIO.md`). A 016 (perfil de
 Lideranca e login AD unico) para sem alterar nada se houver login AD repetido
 (`docs/DESENHO_PERFIL_LIDERANCA.md`, secao 5). Na instalacao nova, `AD_ADMIN_USERS`
@@ -620,6 +621,31 @@ comandos). Nada de dado pessoal e exibido; a copia fica no mesmo servidor e some
 no `DROP` do ensaio. Variaveis opcionais: `CONTAINER` (padrao `Chrono_Desk_DB`),
 `ORIGEM` (padrao `sistema_pausas`) e `PREPARO`.
 
+`DADOS` (F1) copia tabelas com estrutura, chave estrangeira e dados, pelo
+`mysqldump` direto para o banco de ensaio (nada e exibido); as tabelas extras do
+quarto argumento continuam so com a estrutura (`CREATE TABLE ... LIKE` nao copia
+FK). `VERIFICA` roda, em cada estado, um arquivo de consultas que so devolvem
+contagens. Ensaio da 011:
+
+```bash
+cd /var/www/chronodesk
+sudo env DADOS=portal_schedule_rules,portal_schedule_exceptions VERIFICA=migrations/verificacao/20261005_011_schedule_history_check.sql bash scripts/ensaio-migration.sh m011 migrations/20261005_011_schedule_history.sql migrations/rollback/20261005_011_schedule_history_down.sql
+```
+
+O que conferir na 011: depois da migration, os indices `idx_schedule_rule_employee_period`,
+`uq_schedule_rule_employee_from` e `uq_schedule_rule_open` e a coluna
+`open_employee_id`, sem `uq_schedule_rule_employee`; `fora_mapa_escala` em
+`funcionarios`; as duas execucoes iguais; checksum e contagem das regras e das
+excecoes iguais ao estado inicial (a migration nao muda linha); na verificacao,
+`colaboradores_com_mais_de_uma_aberta`, `sobreposicoes` e `inicio_repetido` em 0.
+Depois do rollback: `uq_schedule_rule_employee` de volta, sem os indices novos e
+sem `fora_mapa_escala`, e as tabelas `*_bkp_011` criadas. Com os dados atuais
+(uma regra por colaborador, nenhuma excecao de Lideranca) o rollback nao apaga
+linha: as contagens das regras e das excecoes voltam as do estado inicial. O
+`CHECKSUM TABLE` tambem deve voltar; se nao voltar com as contagens iguais,
+anotar (o checksum depende do formato da linha depois dos `ALTER`) e trazer
+para analise antes do deploy.
+
 ## Acesso de Emergencia (admin local)
 
 Admin vem do `AD_ADMIN_USERS` (Lote 5, L1). O admin local (`ENABLE_LOCAL_ADMIN`,
@@ -747,6 +773,20 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SHOW INDEX FROM
    e repetir. Idempotente. Ate o item 4, o codigo anterior recebe erro ao gravar
    num cadastro o login AD de outro cadastro inativo (antes era aceito).
 
+   **Migration 011 (Parte B, F1), antes do `git pull`.** Historico de escala,
+   Lideranca nas tabelas de escala e `funcionarios.fora_mapa_escala`. O codigo
+   anterior funciona sobre o schema novo; o codigo do F1 exige a 011 (le
+   `fora_mapa_escala` e grava varias regras por colaborador). Ensaie antes
+   (secao Ensaio de Migration, com `DADOS` e `VERIFICA`) e aplique:
+
+```bash
+cd /var/www/chronodesk
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show origin/<BRANCH>:migrations/20261005_011_schedule_history.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show origin/<BRANCH>:migrations/verificacao/20261005_011_schedule_history_check.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas; unset P
+```
+
+   Esperado: as tres primeiras contagens em 0. A 011 nao altera linha.
+
    **Migration 017 (Lote 4, SEC-08), antes do `git pull`.** Equipe do anexo de
    escala; o codigo anterior nao le a coluna. Ensaie antes (secao Ensaio de
    Migration, com `portal_shift_attachments` nas extras) e aplique:
@@ -811,6 +851,21 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   gestor ve os dois; um tecnico ve os avisos de todos e os da propria equipe,
   e um gestor ve todos. Com o banco fora, as telas recebem 503 com "Banco de dados
   indisponivel no momento" em vez de erro 500 (`docs/DESENHO_LOTE4.md`).
+- Deploy que traz o F1 (Parte B: historico de escala, escala implicita da
+  Lideranca e cadastro fora do Mapa PA e da escala): a 011 ja deve ter sido
+  aplicada no item 3. Depois da recarga, com um tecnico de teste: (1) trocar a
+  regra a partir de hoje e conferir na tela a anterior encerrada ontem e a nova
+  vigente; agendar uma regra futura e ver "Agendada"; (2) remover a escala e
+  conferir que a regra antiga continua com o tipo (`include_history=1`); (3) gestor
+  com data anterior a hoje recebe 403; Lideranca e admin gravam, com
+  `retroativa=sim` no `audit_log`; (4) a Lideranca aparece na escala como
+  "Presencial (regra fixa)", sem editar; regra para lider da 409; excecao de
+  lider so pelo admin, remota recusada; linha de lider na planilha vem com aviso
+  e e ignorada; (5) no cadastro, so o admin marca "Fora do Mapa PA e da
+  escala" (`FUNCIONARIO_FORA_MAPA_ALTERADO`); com vinculo de PA ativo da 409;
+  cadastro marcado some da escala e do Mapa PA e recebe 409 em regra, excecao e
+  vinculo. Os cadastros a marcar sao escolhidos pelo responsavel na tela; nenhum
+  nome ou ID vai no codigo. Rodar a verificacao da 011 de novo no fim.
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -863,6 +918,20 @@ Lote 5 (perfil de Lideranca), sem restaurar backup e nesta ordem:
 2. Rollback do codigo, como acima.
 3. Opcional: `migrations/rollback/20261002_016_lideranca_profile_down.sql` (para
    sem alterar nada se ainda houver `lideranca`).
+
+Parte B, F1: depois do rollback do codigo, opcional,
+`migrations/rollback/20261005_011_schedule_history_down.sql`. O codigo anterior
+funciona com a 011 aplicada enquanto nao houver regra `cycle` (o F1 nao grava
+esse tipo), com uma ressalva lida no codigo e nao testada em banco: depois que o
+F1 gravou historico, o codigo anterior pode receber erro de chave duplicada ao
+salvar regra com o mesmo inicio de uma regra ja encerrada (a 011 permite uma so
+regra aberta). Se o codigo anterior for ficar no ar mais que o tempo de
+corrigir o problema, aplique o rollback da 011. O rollback guarda tudo em `portal_schedule_rules_bkp_011`,
+`portal_schedule_exceptions_bkp_011` e `funcionarios_fora_mapa_bkp_011` e deixa
+uma regra por colaborador (a aberta ou a de inicio mais recente): o historico
+gravado pelo F1 so fica na copia, e as marcacoes "fora do Mapa" se perdem
+(refazer pela tela depois de reaplicar). Apagar as copias a mao, depois de
+conferir.
 
 Lote 4 (SEC-08): depois do rollback do codigo, opcional,
 `migrations/rollback/20261002_017_shift_attachment_team_down.sql` (remove a
