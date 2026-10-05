@@ -90,6 +90,14 @@ if (!$phpExecutable) {
         Pass "QA de horas extras e exportacoes concluido"
     }
 
+    # Sem banco: historico de escala, Lideranca e cadastro fora do Mapa (F1).
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-schedule-history.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do historico de escala falhou"
+    } else {
+        Pass "QA do historico de escala concluido"
+    }
+
     # Sem banco e sem AD: limite de login por usuario e testes negativos.
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-security.php")
     if ($LASTEXITCODE -ne 0) {
