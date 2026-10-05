@@ -55,6 +55,13 @@ set_exception_handler(static function (Throwable $e): void {
  * escala faz. Consulta nao prevista falha como banco fora. Gravacao que
  * violaria uq_schedule_rule_employee_from ou uq_schedule_rule_open falha
  * como o MySQL (erro 1062) e nao muda nada.
+ *
+ * REPEATABLE READ (revisao do F1): a primeira leitura simples da transacao
+ * fixa o snapshot das regras; leitura simples do historico devolve esse
+ * snapshot mais as gravacoes da propria transacao, e so a leitura com trava
+ * (FOR UPDATE) ve o que outra transacao gravou depois. $whileWaitingLock
+ * simula outra transacao que grava e faz commit enquanto esta espera a trava
+ * do colaborador.
  */
 final class QaSchedulePdo extends PDO {
     public array $employees = [];
@@ -64,6 +71,9 @@ final class QaSchedulePdo extends PDO {
     public array $audits = [];
     public array $events = [];
     public int $nextId = 1000;
+    public ?array $readView = null;
+    public array $txWritten = [];
+    public ?Closure $whileWaitingLock = null;
     private ?array $snapshot = null;
 
     public function __construct() {
@@ -82,12 +92,16 @@ final class QaSchedulePdo extends PDO {
 
     public function beginTransaction(): bool {
         $this->snapshot = [$this->rules, $this->exceptions, $this->audits, $this->nextId];
+        $this->readView = null;
+        $this->txWritten = [];
         $this->events[] = 'begin';
         return true;
     }
 
     public function commit(): bool {
         $this->snapshot = null;
+        $this->readView = null;
+        $this->txWritten = [];
         $this->events[] = 'commit';
         return true;
     }
@@ -95,6 +109,8 @@ final class QaSchedulePdo extends PDO {
     public function rollBack(): bool {
         [$this->rules, $this->exceptions, $this->audits, $this->nextId] = $this->snapshot;
         $this->snapshot = null;
+        $this->readView = null;
+        $this->txWritten = [];
         $this->events[] = 'rollback';
         return true;
     }
@@ -121,7 +137,28 @@ final class QaSchedulePdo extends PDO {
                 $open[$rule['employee_id']] = true;
             }
         }
+        foreach (array_unique(array_merge(array_keys($this->rules), array_keys($rules))) as $id) {
+            if (($this->rules[$id] ?? null) !== ($rules[$id] ?? null)) {
+                $this->txWritten[$id] = true;
+            }
+        }
         $this->rules = $rules;
+    }
+
+    /** Regras vistas por uma leitura simples: snapshot da transacao mais as proprias gravacoes. */
+    public function consistentRules(): array {
+        if ($this->snapshot === null || $this->readView === null) {
+            return $this->rules;
+        }
+        $rules = $this->readView;
+        foreach (array_keys($this->txWritten) as $id) {
+            if (isset($this->rules[$id])) {
+                $rules[$id] = $this->rules[$id];
+            } else {
+                unset($rules[$id]);
+            }
+        }
+        return $rules;
     }
 
     /** Linha do tempo de um colaborador: tipo e configuracao vigentes por data. */
@@ -148,6 +185,10 @@ final class QaScheduleStatement extends PDOStatement {
         $db = $this->pdo;
         $this->rows = [];
         $db->events[] = $sql;
+        // Primeira leitura simples da transacao fixa o snapshot (REPEATABLE READ).
+        if ($db->inTransaction() && $db->readView === null && strpos($sql, 'SELECT') === 0 && substr($sql, -10) !== 'FOR UPDATE') {
+            $db->readView = $db->rules;
+        }
         if ($sql === 'SELECT 1') {
             return true;
         }
@@ -166,14 +207,19 @@ final class QaScheduleStatement extends PDOStatement {
             return true;
         }
         if (preg_match('/^SELECT (id|fora_mapa_escala) FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE$/', $sql, $match)) {
+            if ($db->whileWaitingLock !== null) {
+                $concurrent = $db->whileWaitingLock;
+                $db->whileWaitingLock = null;
+                $concurrent($db);
+            }
             $row = $db->employees[(int)$params[':id']] ?? null;
             if ($row !== null && (int)$row['ativo'] === 1) {
                 $this->rows[] = [$match[1] => $match[1] === 'id' ? (int)$params[':id'] : (int)($row['fora_mapa_escala'] ?? 0)];
             }
             return true;
         }
-        if ($sql === 'SELECT id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE employee_id = :employee_id ORDER BY effective_from, id') {
-            foreach ($db->rules as $rule) {
+        if (preg_match('/^SELECT id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE employee_id = :employee_id ORDER BY effective_from, id( FOR UPDATE)?$/', $sql, $match)) {
+            foreach (isset($match[1]) ? $db->rules : $db->consistentRules() as $rule) {
                 if ($rule['employee_id'] === (int)$params[':employee_id']) {
                     $this->rows[] = array_intersect_key($rule, array_flip(['id', 'rule_type', 'rule_config', 'effective_from', 'effective_until']));
                 }
@@ -317,6 +363,8 @@ final class QaScheduleStatement extends PDOStatement {
 
 /** Trava do colaborador nas gravacoes de escala (le a marcacao fora do Mapa). */
 const QA_LOCK_SQL = 'SELECT fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 FOR UPDATE';
+/** Leitura do historico: com trava (revisao do F1). */
+const QA_HISTORY_SQL = 'SELECT id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE employee_id = :employee_id ORDER BY effective_from, id FOR UPDATE';
 
 /** Banco simulado com um cadastro N1 (1), um N2 (2), um da Lideranca (3) e as regras dadas. */
 function qa_schedule_db(array $rules = []): QaSchedulePdo {
@@ -517,7 +565,7 @@ assert_same('2026-10-04', $pdo->rules[10]['effective_until'], 'servico: regra an
 assert_same('odd_days', $pdo->rules[10]['rule_type'], 'servico: regra anterior mantem o tipo (historico)');
 assert_same(['even_days', '2026-10-05', null], [$pdo->rules[$saved['id']]['rule_type'], $pdo->rules[$saved['id']]['effective_from'], $pdo->rules[$saved['id']]['effective_until']], 'servico: nova regra aberta');
 $lockAt = array_search(QA_LOCK_SQL, $pdo->events, true);
-$readAt = array_search('SELECT id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE employee_id = :employee_id ORDER BY effective_from, id', $pdo->events, true);
+$readAt = array_search(QA_HISTORY_SQL, $pdo->events, true);
 assert_same(true, $lockAt !== false && $readAt !== false && $lockAt < $readAt, 'servico: trava o colaborador antes de ler o historico');
 $audit = end($pdo->audits);
 assert_same(['SCHEDULE_RULE_UPDATED', 'WARNING'], [$audit['action'], $audit['severity']], 'servico: troca auditada');
@@ -593,6 +641,29 @@ foreach ($view['generated'] as $item) {
 assert_same(['2026-10-19' => 'odd_days', '2026-10-20' => 'always_onsite'], $days, 'GET: cada data usa a regra que vigorava nela');
 $view = $service->scheduleData(['from' => '2026-09-25', 'to' => '2026-10-05']);
 assert_same(['20:encerrada', '21:vigente', '22:agendada'], $flags($view), 'GET: regra encerrada dentro do periodo aparece');
+
+// Concorrencia (revisao do F1, reproduzida em MySQL 8.0.46): outra gravacao
+// no mesmo colaborador (regra a partir de 10/10) faz commit enquanto esta
+// (regra a partir de 20/10) espera a trava. Sem leitura com trava, esta
+// leria o historico antigo e gravaria sobreposicao (a conferencia tambem).
+$pdo = qa_schedule_db([qa_rule(10, 'odd_days', '2026-09-01', '2026-10-30'), qa_rule(11, 'always_remote', '2026-10-31', null)]);
+$pdo->whileWaitingLock = static function (QaSchedulePdo $db): void {
+    $db->rules[10]['effective_until'] = '2026-10-09';
+    $db->rules[900] = ['id' => 900, 'employee_id' => 1, 'team' => 'n1', 'rule_type' => 'even_days', 'rule_config' => null,
+        'effective_from' => '2026-10-10', 'effective_until' => '2026-10-30'];
+};
+$service = new OperationalService($pdo, $today);
+assert_same('ok', qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite', 'effective_from' => '2026-10-20'], 'qa', 'gestor')), 'concorrencia: gravacao que esperou a trava');
+assert_same(null, $pdo->whileWaitingLock, 'concorrencia: a outra gravacao aconteceu durante a espera');
+assert_same([], ScheduleRulePlanner::violations(array_values($pdo->rules)), 'concorrencia: nenhuma sobreposicao gravada');
+$line = $pdo->timeline(1, '2026-10-09', '2026-10-31');
+assert_same(['odd_days ', 'even_days ', 'even_days ', 'always_onsite ', 'always_onsite ', 'always_remote '], [
+    $line['2026-10-09'], $line['2026-10-10'], $line['2026-10-19'], $line['2026-10-20'], $line['2026-10-30'], $line['2026-10-31'],
+], 'concorrencia: a regra nova fecha a gravada pela outra transacao');
+$historyReads = array_values(array_filter($pdo->events, static fn (string $event): bool => strpos($event, 'FROM portal_schedule_rules WHERE employee_id = :employee_id ORDER BY') !== false));
+assert_same([QA_HISTORY_SQL, QA_HISTORY_SQL], $historyReads, 'concorrencia: planejador e conferencia leem o historico com trava');
+$serviceSource = (string)file_get_contents(__DIR__ . '/../services/OperationalService.php');
+assert_same(1, preg_match('/FROM portal_schedule_rules\s+WHERE employee_id = :employee_id\s+ORDER BY effective_from, id\s+FOR UPDATE\'/', $serviceSource), 'concorrencia: a leitura do historico no servico e com trava');
 
 // Rollback da transacao: violacao desfaz tudo (UNIQUE de regra aberta simulada).
 $pdo = qa_schedule_db([qa_rule(10, 'odd_days', '2026-09-01', null), qa_rule(11, 'even_days', '2026-08-01', '2026-08-31')]);

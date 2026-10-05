@@ -1310,13 +1310,22 @@ final class OperationalService {
         }
     }
 
-    /** [F1] Historico completo de regras do colaborador, para o planejador. */
+    /**
+     * [F1] Historico completo de regras do colaborador, para o planejador e
+     * para a conferencia dos invariantes. Leitura com trava (FOR UPDATE): no
+     * REPEATABLE READ, a leitura simples usaria o snapshot fixado pela
+     * primeira leitura da transacao (o cadastro, antes da trava) e uma
+     * gravacao concorrente que esperou a trava leria o historico antigo.
+     * Revisao do F1 em MySQL 8.0.46: sem a trava, duas gravacoes
+     * simultaneas no mesmo colaborador gravaram sobreposicao.
+     */
     private function employeeScheduleRules(int $employeeId): array {
         $stmt = $this->pdo->prepare(
             'SELECT id, rule_type, rule_config, effective_from, effective_until
              FROM portal_schedule_rules
              WHERE employee_id = :employee_id
-             ORDER BY effective_from, id'
+             ORDER BY effective_from, id
+             FOR UPDATE'
         );
         $stmt->execute([':employee_id' => $employeeId]);
         return $stmt->fetchAll();
