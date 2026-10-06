@@ -877,6 +877,31 @@ Validação em MySQL real: feita pelo responsável nesta revisão (ensaio da 011
 
 **Aprovado em 2026-10-05**, depois do reteste das correções em MySQL 8.0.46 real (concorrência, ensaio completo da 011 com o 2º rollback parando, assinatura estável). Commits da revisão: `0b1b67b`, `d58c070`, `d9d4703`, `abe5a11`. Deploy 8 da fila.
 
+### 9.2 F2 — plano aprovado (2026-10-05) e base da medição do polling (2026-10-06)
+
+**Plano do F2 aprovado em 2026-10-05, com escopo reduzido:** `generatedSchedule` continua no cálculo antigo (a troca fica no F2B, F5 e F6). Decisões do responsável:
+
+1. Data de corte dos relatórios: registrada no deploy do F5, não no F2.
+2. Até o F3, as exceções `day_off`, `absence`, `vacation` e `leave` contam como ausente o dia inteiro (origem `ausencia`); `training` e `oncall` não são ausência.
+3. Interruptor `STATUS_PRESENCE_ENABLED` no `.env`, **ligado por padrão no deploy** (variável ausente = ligado). Critério de piora: o p95 sobe **mais de 50 ms e mais de 20%** em relação à base, as duas condições ao mesmo tempo. Com piora, desligar o interruptor e recarregar o PHP-FPM, sem voltar o código.
+
+Medição: `scripts/medir-polling.sh` (`f91d2d0`), roteiro em `DEPLOY_LINUX.md`, "Medição do Polling".
+
+**Base (antes do F2), medida pelo responsável:**
+
+| Item | Valor |
+|---|---|
+| Data e hora | 2026-10-06 10:07 (-03), horário de uso normal |
+| Condições | Conta do responsável; sem `CONSULTAS=1` (sem senha root disponível); `HOST_HEADER` = ServerName do vhost; `N=200`, aquecimento 5 |
+| Respostas | HTTP 200 em 200/200 |
+| Tempo | p50 4,3 ms; **p95 26,8 ms**; máx. 39,7 ms; média 8,6 ms |
+| Tamanho médio da resposta | 12.208 bytes |
+| Limite de piora | **p95 acima de 76,8 ms** (26,8 + 50; os 20% dariam 32,2 ms, então vale o maior) |
+
+A medição depois do deploy do F2 repete as mesmas condições: mesma conta, sem `CONSULTAS`, `N=200`, horário parecido. A base também é o "antes" da medição pendente do PERF-01 (pendência 10 do estado da sessão).
+
+**Ressalva (registrada pela IA, decisão do responsável):** a base foi tomada antes do deploy 2. Entre ela e o deploy do F2 (depois do deploy 8 da fila) entram os deploys 2 a 8, e dois deles mudam o mesmo caminho do `status.php`: o PERF-01 (trava do estado de pausas, deploy 2) e a revalidação da sessão por requisição (Lote 5a, deploy 6). Comparada com esta base, a medição depois do F2 soma o efeito de todos. Para isolar o F2, a recomendação é repetir a medição logo antes do deploy do F2, nas mesmas condições, e usá-la como base do critério; para fechar o PERF-01, medir de novo logo depois do deploy 2.
+
 **Roteiro manual por lote no servidor** (o QA local não tem MySQL, Apache nem AD): aplicar a migration, rodar a consulta de verificação, exercitar a tela por perfil. Entregue junto de cada lote, como nos anteriores.
 
 ---
@@ -893,7 +918,7 @@ Validação em MySQL real: feita pelo responsável nesta revisão (ensaio da 011
 | QAs antigos com checagem por `git diff` e "arquivos protegidos" podem disparar durante F2B–F7 | Dívida técnica já registrada; tratar caso a caso, com aprovação, como no Lote 2 |
 | `qa:schedule-rules` fixa a lista de tipos de regra e dias | Atualização deliberada em F1 e F2B, descrita na entrega |
 | `AdminPage.jsx` denso, alterado de novo em F4 | Mudança restrita à aba Funcionários; sem refatoração junto |
-| Carga extra no polling de 15 s (P14) | Medir antes e depois, com a medição pendente do PERF-01 |
+| Carga extra no polling de 15 s (P14) | Base medida em 2026-10-06 (p95 26,8 ms; seção 9.2); medir de novo depois do deploy do F2, nas mesmas condições; piora acima de 76,8 ms desliga `STATUS_PRESENCE_ENABLED` |
 
 **Pendências fora desta entrega:** feriados; política de retenção e anonimização (LGPD); BIZ-05 (paridade na virada do mês); SEC-04 (Liderança ⇒ admin); PERF-02 (listas truncadas); remoção das tabelas legadas `portal_schedules` e `portal_pa_map`; horário de jornada que cruza a meia-noite.
 

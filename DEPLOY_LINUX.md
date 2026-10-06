@@ -664,9 +664,16 @@ O que conferir na 011 (revisado com o ensaio em MySQL 8.0.46):
 O F2 acrescenta a presenca de hoje ao `api/status.php`, que toda sessao consulta
 a cada 15 s. `scripts/medir-polling.sh` mede o tempo de resposta visto da propria
 VM (loopback, sem rede no meio) **antes** e **depois** do deploy do F2, nas mesmas
-condicoes: mesma conta, mesmo tipo de sessao, mesmo `N`, fora do horario de uso.
-O script nao depende do codigo da aplicacao, entao a base pode ser medida antes
-do deploy, lendo o script da versao nova.
+condicoes. O script nao depende do codigo da aplicacao, entao a base pode ser
+medida antes do deploy, lendo o script da versao nova.
+
+**Base registrada** (`docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 9.2): 2026-10-06,
+horario de uso normal, conta do responsavel, sem `CONSULTAS=1`, `HOST_HEADER` =
+ServerName do vhost, `N=200`, aquecimento 5; **p95 26,8 ms**; limite de piora:
+**p95 acima de 76,8 ms**. A medicao depois do deploy repete essas condicoes
+(mesma conta, sem `CONSULTAS`, `N=200`, horario parecido). Ela tambem e o
+"antes" do PERF-01. Os deploys 2 a 8 mudam o mesmo caminho do `status.php`;
+para isolar o F2, repetir a base logo antes do deploy dele (secao 9.2).
 
 **De onde vem a sessao.** O script nao faz login, nao pede senha de AD e nao
 cria sessao. A sessao nasce no login normal do ChronoDesk feito no navegador:
@@ -729,7 +736,7 @@ Variaveis: `N` (padrao 200), `AQUECIMENTO` (5, fora da conta), `INTERVALO`
 `HOST_HEADER` (padrao `chronodesk.interno.local`), `COOKIE_NOME` (padrao
 `PHPSESSID`). Rodar cada medicao duas ou tres vezes e anotar p50, p95, maximo,
 tamanho medio e, com `CONSULTAS=1`, consultas por requisicao (o numero inclui
-outro trafego no banco; por isso, fora do horario de uso).
+outro trafego no banco; so compara medicoes feitas no mesmo horario).
 
 **Criterio (decisao de 2026-10-05):** ha piora quando o p95 sobe **mais de
 50 ms e mais de 20%** em relacao a base, as duas condicoes ao mesmo tempo. Com
