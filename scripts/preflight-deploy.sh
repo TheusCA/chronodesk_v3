@@ -121,6 +121,14 @@ check_int_range() {
 check_int_range LOGIN_USER_MAX_FAILURES 1 20 5
 check_int_range LOGIN_USER_WINDOW_SECONDS 60 86400 900
 
+# [F2, P14] Presenca no status.php. Valor fora da lista fica ligado no PHP
+# (so avisa no log), mas indica configuracao diferente da pretendida.
+case $(printf %s "$(gv STATUS_PRESENCE_ENABLED)" | tr "A-Z" "a-z" | tr -d " ") in
+    ""|1|true|on|yes) echo "STATUS_PRESENCE_ENABLED: OK (ligado)" ;;
+    0|false|off|no) echo "STATUS_PRESENCE_ENABLED: OK (desligado)" ;;
+    *) echo "STATUS_PRESENCE_ENABLED: FALHA (use true ou false)"; F=1 ;;
+esac
+
 # FORCE_HTTPS ligado sem vhost HTTPS proprio derruba o portal (301 em loop).
 case $(printf %s "$(gv FORCE_HTTPS)" | tr 'A-Z' 'a-z') in
     1|true|yes|on) echo "FORCE_HTTPS: FALHA"; F=1 ;;
