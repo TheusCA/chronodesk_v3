@@ -667,13 +667,16 @@ VM (loopback, sem rede no meio) **antes** e **depois** do deploy do F2, nas mesm
 condicoes. O script nao depende do codigo da aplicacao, entao a base pode ser
 medida antes do deploy, lendo o script da versao nova.
 
-**Base registrada** (`docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 9.2): 2026-10-06,
-horario de uso normal, conta do responsavel, sem `CONSULTAS=1`, `HOST_HEADER` =
-ServerName do vhost, `N=200`, aquecimento 5; **p95 26,8 ms**; limite de piora:
-**p95 acima de 76,8 ms**. A medicao depois do deploy repete essas condicoes
-(mesma conta, sem `CONSULTAS`, `N=200`, horario parecido). Ela tambem e o
-"antes" do PERF-01. Os deploys 2 a 8 mudam o mesmo caminho do `status.php`;
-para isolar o F2, repetir a base logo antes do deploy dele (secao 9.2).
+**Referencia registrada** (`docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 9.2):
+2026-10-06, horario de uso normal, conta do responsavel, sem `CONSULTAS=1`,
+`HOST_HEADER` = ServerName do vhost, `N=200`, aquecimento 5; **p95 26,8 ms**
+(limite dessa medicao: 76,8 ms). Ela e o "antes" do PERF-01.
+
+**Base do criterio do F2 (decisao de 2026-10-06):** a medicao repetida **logo
+antes do deploy do F2**, nas mesmas condicoes (mesma conta, sem `CONSULTAS`,
+`N=200`, horario parecido), porque os deploys 2 a 8 mudam o mesmo caminho do
+`status.php`. O limite de piora e recalculado sobre ela: o maior entre p95 +
+50 ms e p95 + 20%. A medicao depois do deploy repete as mesmas condicoes.
 
 **De onde vem a sessao.** O script nao faz login, nao pede senha de AD e nao
 cria sessao. A sessao nasce no login normal do ChronoDesk feito no navegador:
@@ -969,9 +972,9 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
 - Deploy que traz o F2 (Parte B: motor de presenca, `portal/presence.php` e
   presenca no `status.php`): sem migration, mas exige a 011 (deploy do F1). Sem
   ela, o `status.php` continua respondendo com `presenca_disponivel: false` e
-  o `presence.php` falha. **Antes do `git pull`:** repetir a base da medicao
-  do polling (secao "Medicao do Polling"; recomendacao da secao 9.2 do
-  desenho). O preflight mostra `STATUS_PRESENCE_ENABLED` (ligado se ausente).
+  o `presence.php` falha. **Antes do `git pull`:** repetir a medicao do
+  polling e anota-la como **base do criterio** (secao "Medicao do Polling";
+  decisao de 2026-10-06, secao 9.2 do desenho). O preflight mostra `STATUS_PRESENCE_ENABLED` (ligado se ausente).
   Depois da recarga, logado no navegador: (1) abrir
   `/api/portal/presence.php?from=AAAA-MM-DD&to=AAAA-MM-DD` de uma semana com fim
   de semana e conferir que sabado e domingo vem como "Fim de semana", que

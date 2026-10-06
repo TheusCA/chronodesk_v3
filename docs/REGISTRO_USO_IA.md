@@ -312,7 +312,7 @@ Base da afirmação:
 | **Validacao executada pela IA** | `qa-medir-polling`: 12 verificacoes (sessao valida, `bash -x` sem vazamento, nada gravado no diretorio de trabalho nem no HOME, 401 para sem medir, valor com nome, aspas ou curto recusado). Mutacao: **6/6** no `qa-medir-polling` (inclusive o `-x` original) e 5/6 no `qa-security` (o sexto, nao parar no 401, e so comportamental). QAs em PHP e os 14 `qa:*` com saida OK. |
 | **Base medida pelo responsavel** | 2026-10-06 10:07 (-03), horario de uso normal; conta do responsavel; sem `CONSULTAS=1`; `HOST_HEADER` = ServerName do vhost; `N=200`, aquecimento 5. HTTP 200 em 200/200; p50 4,3 ms; **p95 26,8 ms**; max. 39,7 ms; media 8,6 ms; 12.208 bytes em media. Limite de piora: **p95 acima de 76,8 ms**. A medicao depois do F2 repete as condicoes. |
 | **Limitacoes declaradas** | Script nunca rodado pela IA contra o servidor real; a base e a primeira execucao real (feita pelo responsavel). Caminho `CONSULTAS=1` (senha do MySQL pelo `docker`) so com checagem estatica. `shellcheck` e `gitleaks` ausentes na estacao. O QA de comportamento usa `rm -rf` so na pasta `mktemp` que ele cria. **Ressalva:** a base e anterior ao deploy 2; os deploys 2 a 8 (PERF-01 e a revalidacao de sessao do 5a mudam o mesmo caminho) entram antes do F2, entao a comparacao direta soma o efeito deles; recomendado repetir a base logo antes do deploy do F2 e medir logo depois do deploy 2 para o PERF-01 (decisao do responsavel). |
-| **Validacao humana** | Base medida pelo responsavel em 2026-10-06. Script ainda nao aprovado formalmente; segue junto com o F2. |
+| **Validacao humana** | Base medida pelo responsavel em 2026-10-06. Script aprovado junto com o F2 em 2026-10-06. **Ressalva aceita:** a base do criterio do F2 passa a ser a medicao repetida logo antes do deploy do F2, nas mesmas condicoes, com o limite recalculado sobre ela; a de 2026-10-06 fica como referencia e como o "antes" do PERF-01. |
 
 ### Parte B, F2 — motor de presenca, presence.php e presenca no status.php — 2026-10-06
 
@@ -324,7 +324,7 @@ Base da afirmação:
 | **Decisoes de implementacao** | As onze da secao 9.2 do desenho, a aprovar. Destaques: excecao de trabalho no fim de semana vale para N1 e N2 (a secao 4.2 punha o fim de semana antes); dado ruim nunca lanca excecao (vira sem escala); `status.php` com 4 consultas a mais (o desenho estimava 3); nenhuma categoria ou observacao de ausencia para nenhum perfil ate o F3; `presenca` null para inativo e fora do Mapa. Decisoes do plano aplicadas: excecoes `day_off`, `absence`, `vacation` e `leave` = ausente o dia inteiro; `training` e `oncall` nao sao ausencia; interruptor ligado por padrao. |
 | **Validacao executada pela IA** | `qa-presence-engine`: 126 verificacoes (criterio de aceite do ciclo 1R/2P, forma fechada contra contagem dia a dia em 4.000 pares, P3, P4, P12, vigencia, precedencia por instante com bordas 07:59/08:00, 12:00/13:00, 17:00, 23:30/00:30, identidade da soma em mais de 200 instantes, 4 consultas para 1 e 50 colaboradores e 1 e 93 dias, validacao dos parametros, interruptor). Mutacao: **23/23** (uma sobreviveu na 1a rodada, horario invalido comparado como texto; teste acrescentado). `qa-security` com o `presence.php` na matriz de perfis. `test-local.ps1 -SkipHttp`, `lint`, `typecheck` e os 14 `qa:*` com saida OK. |
 | **Limitacoes declaradas** | **Sem MySQL local:** as 4 consultas nunca rodaram em banco real; o PDO espiao emula as consultas, nao o MySQL. `presence.php` com dados exercitado so pelo servico; o endpoint, so pela matriz (401 sem sessao; nenhum perfil recebe 403). Nenhuma tela usa a presenca ainda. O impacto no polling so sera conhecido na medicao depois do deploy. Jornada que cruza a meia-noite continua sem suporte (pendencia do desenho). |
-| **Validacao humana** | Pendente. |
+| **Validacao humana** | **Aprovado em 2026-10-06** pelo responsavel, apos revisao e teste em MySQL 8.0.46 real (ciclo, troca de regra, excecoes, ausencias, Lideranca, fora do Mapa, horarios no `status.php`, 93 dias em 5 ms). As onze decisoes de implementacao da secao 9.2 aprovadas. Deploy 9 da fila. |
 
 ### Requisitos novos do item 2 (b, c, d) — 2026-10-06 (somente documentacao)
 
@@ -334,7 +334,16 @@ Base da afirmação:
 | **O que a IA alterou** | `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 11: requisito, proposta de armazenamento (tipo de contrato, migration 018, permissao `funcionarios.almoco_excecao`, auditoria), impacto da equipe Critico levantado no codigo (equipe aceita, `obter_status` so com N1/N2, enums `team` de hora extra, correcao de ponto, plantao e Mapa PA, motivo de pausa fixo, limite simultaneo, alertas de 15/20 min, metricas), tratamento proposto em quatro pontos, mudanca prevista no motor (`lunch_source`) e encaixe proposto em lotes F8 e F9. |
 | **Achados do levantamento** | (1) "Almoco", pela regra atual, contaria no limite simultaneo e ganharia o limite de 20 min e os alertas de 15/20 min; (2) as chaves `alerta_15minutos`/`alerta_20minutos` do `config.json` sao gravadas pela tela mas nenhum codigo as le (os alertas sao fixos em `finalizar_pausa`); (3) hora extra e correcao de ponto de um tecnico do Critico falhariam ao gravar (`team ENUM('n1','n2')`); (4) `PausasPage.jsx` trata limite 0 como 1.200 s. |
 | **Limitacoes declaradas** | Levantamento so por leitura; telas legadas (`index.php`, `static/js`) nao conferidas quanto a ainda serem servidas. |
-| **Validacao humana** | Pendente: decisoes (1) a (4) da secao 11.1, tratamento (1) a (4) da secao 11.3 e encaixe em lotes; pendencias da Lideranca listadas na secao 11. |
+| **Validacao humana** | Pendente: tratamento (1) a (4) da secao 11.3 e encaixe em lotes; pendencias da Lideranca listadas na secao 11. |
+
+### Decisoes do item 2b e registros do item 2d — 2026-10-06 (somente documentacao)
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar no desenho (secao 11.1) as decisoes do responsavel sobre o almoco por contrato e, na secao 11.3, dois pontos do item 2d apontados por ele. |
+| **Decisoes registradas** | 2b: (1) tipo de contrato; (2) so o admin edita a tabela de duracoes; (3) cadastro sem contrato mantem o fim manual com aviso; (4) mudar a duracao recalcula na mesma transacao os cadastros sem excecao do contrato, com 409 e nada alterado se algum ficar fora da jornada; se a excecao exigir motivo, lista fechada, sem texto livre. **A migration 018 nao e escrita antes da lista de contratos e duracoes e da resposta sobre o motivo.** Permissao `funcionarios.almoco_excecao` e eventos de auditoria conferidos item a item na entrega do F8. |
+| **Registros do 2d** | `obter_status()` ignora equipes fora de N1/N2: um tecnico do Critico sumiria do painel. `pausa_conta_para_limite` pode ser usada para o almoco do Critico nao disparar os alertas de 15/20 min; a IA anotou que a mesma funcao decide o limite simultaneo e o `duracao_limite_segundos`, e que precisa ser dividida se o almoco entrar no limite simultaneo (pendente da Lideranca). |
+| **Validacao humana** | Decisoes do responsavel em 2026-10-06. |
 
 ---
 

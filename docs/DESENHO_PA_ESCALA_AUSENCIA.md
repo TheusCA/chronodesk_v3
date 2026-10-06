@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue em 2026-10-06, com escopo reduzido, aguardando aprovação** (seção 9.2). F2B a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). F2B a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -900,7 +900,7 @@ Medição: `scripts/medir-polling.sh` (`f91d2d0`), roteiro em `DEPLOY_LINUX.md`,
 
 A medição depois do deploy do F2 repete as mesmas condições: mesma conta, sem `CONSULTAS`, `N=200`, horário parecido. A base também é o "antes" da medição pendente do PERF-01 (pendência 10 do estado da sessão).
 
-**Entrega do F2 (2026-10-06, aguardando aprovação):** commits `60da301` (motor, repositório, serviço, `portal/presence.php`, `status.php`, `qa-presence-engine`), `f204ca6` (interruptor nos exemplos e no preflight) e o de documentação.
+**Entrega do F2 (2026-10-06; aprovada em 2026-10-06):** commits `60da301` (motor, repositório, serviço, `portal/presence.php`, `status.php`, `qa-presence-engine`), `f204ca6` (interruptor nos exemplos e no preflight) e o de documentação.
 
 | Item | Como ficou |
 |---|---|
@@ -910,7 +910,7 @@ A medição depois do deploy do F2 repete as mesmas condições: mesma conta, se
 | `status.php` | `presenca` em cada item de N1/N2 e `presenca_disponivel`, atrás do interruptor; falha no cálculo não derruba o status |
 | Fora do escopo (plano aprovado) | `generatedSchedule` (Calendário, Escala, Relatórios), Mapa PA e `technicians.php` continuam no cálculo antigo |
 
-**Decisões de implementação a aprovar:**
+**Decisões de implementação (aprovadas em 2026-10-06):**
 
 1. **Exceção de trabalho no fim de semana vale para todos.** Remoto, presencial, treinamento e plantão num sábado ou domingo geram o dia também para N1 e N2; sem exceção, fim de semana é dia não útil (P3). A seção 4.2 punha o fim de semana antes da exceção; inverti para coincidir com a regra da Liderança (seção 0.6) e com a decisão 4 do F1.
 2. **Ausência vence fim de semana e fora do expediente**, pela precedência literal da seção 4.3.
@@ -926,7 +926,9 @@ A medição depois do deploy do F2 repete as mesmas condições: mesma conta, se
 
 Validação pela IA: `qa-presence-engine` com 126 verificações (critério de aceite do ciclo, forma fechada contra contagem dia a dia em 4.000 pares, precedência por instante, 23:30/00:30, identidade da soma em mais de 200 instantes, 4 consultas para 1 e 50 colaboradores e para 1 e 93 dias); mutação **23/23**; `presence.php` na matriz de perfis do `qa-security` (sem sessão 401; todos os perfis passam). Limitações: consultas nunca rodaram em MySQL real; `presence.php` com dados só pelo serviço (o endpoint, só pela matriz); nenhuma tela usa a presença ainda.
 
-**Ressalva (registrada pela IA, decisão do responsável):** a base foi tomada antes do deploy 2. Entre ela e o deploy do F2 (depois do deploy 8 da fila) entram os deploys 2 a 8, e dois deles mudam o mesmo caminho do `status.php`: o PERF-01 (trava do estado de pausas, deploy 2) e a revalidação da sessão por requisição (Lote 5a, deploy 6). Comparada com esta base, a medição depois do F2 soma o efeito de todos. Para isolar o F2, a recomendação é repetir a medição logo antes do deploy do F2, nas mesmas condições, e usá-la como base do critério; para fechar o PERF-01, medir de novo logo depois do deploy 2.
+**Aprovado em 2026-10-06** pelo responsável, após revisão e teste em MySQL 8.0.46 real: ciclo, troca de regra, exceções, ausências, Liderança, fora do Mapa, horários no `status.php` e 93 dias em 5 ms. As onze decisões de implementação acima ficam aprovadas. Deploy 9 da fila.
+
+**Ressalva (registrada pela IA; aceita pelo responsável em 2026-10-06):** a base foi tomada antes do deploy 2. Entre ela e o deploy do F2 (depois do deploy 8 da fila) entram os deploys 2 a 8, e dois deles mudam o mesmo caminho do `status.php`: o PERF-01 (trava do estado de pausas, deploy 2) e a revalidação da sessão por requisição (Lote 5a, deploy 6). Comparada com esta base, a medição depois do F2 soma o efeito de todos. Para isolar o F2, a recomendação é repetir a medição logo antes do deploy do F2, nas mesmas condições, e usá-la como base do critério; para fechar o PERF-01, medir de novo logo depois do deploy 2. **Decisão:** a base do critério do F2 é a medição repetida logo antes do deploy do F2, nas mesmas condições; o limite de piora é recalculado sobre ela (o maior entre p95 + 50 ms e p95 + 20%). A base de 2026-10-06 fica como referência e como o "antes" do PERF-01.
 
 **Roteiro manual por lote no servidor** (o QA local não tem MySQL, Apache nem AD): aplicar a migration, rodar a consulta de verificação, exercitar a tela por perfil. Entregue junto de cada lote, como nos anteriores.
 
@@ -944,7 +946,7 @@ Validação pela IA: `qa-presence-engine` com 126 verificações (critério de a
 | QAs antigos com checagem por `git diff` e "arquivos protegidos" podem disparar durante F2B–F7 | Dívida técnica já registrada; tratar caso a caso, com aprovação, como no Lote 2 |
 | `qa:schedule-rules` fixa a lista de tipos de regra e dias | Atualização deliberada em F1 e F2B, descrita na entrega |
 | `AdminPage.jsx` denso, alterado de novo em F4 | Mudança restrita à aba Funcionários; sem refatoração junto |
-| Carga extra no polling de 15 s (P14) | Base medida em 2026-10-06 (p95 26,8 ms; seção 9.2); medir de novo depois do deploy do F2, nas mesmas condições; piora acima de 76,8 ms desliga `STATUS_PRESENCE_ENABLED` |
+| Carga extra no polling de 15 s (P14) | Referência de 2026-10-06 (p95 26,8 ms; seção 9.2). Base do critério: medição repetida logo antes do deploy do F2 (decisão de 2026-10-06); medir de novo depois, nas mesmas condições; piora (p95 + 50 ms **e** + 20% sobre essa base) desliga `STATUS_PRESENCE_ENABLED` |
 
 **Pendências fora desta entrega:** feriados; política de retenção e anonimização (LGPD); BIZ-05 (paridade na virada do mês); SEC-04 (Liderança ⇒ admin); PERF-02 (listas truncadas); remoção das tabelas legadas `portal_schedules` e `portal_pa_map`; horário de jornada que cruza a meia-noite.
 
@@ -954,13 +956,13 @@ Validação pela IA: `qa-presence-engine` com 126 verificações (critério de a
 
 Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem código nesta data**; o F2 segue aguardando aprovação. Levantamento de impacto feito por leitura do código em 2026-10-06.
 
-### 11.1 b) Almoço por início e duração contratual
+### 11.1 b) Almoço por início e duração contratual (desenho aprovado em 2026-10-06; migration só depois da Liderança)
 
 **Requisito.** No cadastro, o usuário informa só o início do almoço; o fim é calculado pela duração do contrato do técnico. A opção "Exceção (jornada pré-acordada)" libera o fim manual. A duração **varia por contrato** e fica numa tabela configurável; a lista de contratos e durações vem da Liderança. **Liderança e admin** marcam a exceção. A marcação fica em coluna própria (migration nova, fora da 012 a 014), é auditada, e o almoço tem de ficar dentro da jornada.
 
-**Proposta (a aprovar):**
+**Desenho:**
 
-| Ponto | Proposta |
+| Ponto | Desenho |
 |---|---|
 | Onde guardar a duração | **Tipo de contrato**, não carga horária: a carga sozinha não define a duração (dois contratos de 40 h podem ter intervalos diferentes por acordo) e a lista da Liderança já é de contratos |
 | Migration 018 | Tabela `contratos_trabalho` (`id`, `nome` único, `almoco_minutos` com faixa no banco, `ativo`, autoria); em `funcionarios`, `contrato_id` (nulo, FK `RESTRICT`) e `almoco_excecao` (0/1, padrão 0). Regra do A4, idempotente, rollback com cópia `*_bkp_018`, ensaio e verificação só com contagens (sem contrato, com exceção, almoço fora da jornada, almoço diferente da duração). **Nenhuma duração no código nem na migration** |
@@ -970,9 +972,9 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 | Auditoria | `FUNCIONARIO_ALMOCO_EXCECAO_ALTERADO` (WARNING, como `FUNCIONARIO_FORA_MAPA_ALTERADO`: ID, antes e depois, perfil do ator, horários; sem nome); `FUNCIONARIO_CONTRATO_ALTERADO` (INFO); `CONTRATO_DURACAO_ALTERADA` (WARNING) |
 | Motor (F2, P2) | **Sem mudança.** O motor lê `almoco_inicio`/`almoco_fim` de `funcionarios` (`PresenceRepository::employees`), como a tela de Pausas (`Funcionario::esta_disponivel`); o fim calculado é gravado nessas colunas |
 
-**A decidir pelo responsável:** (1) tipo de contrato (recomendado) ou carga horária; (2) quem edita a tabela de durações: só admin (recomendado) ou também a Liderança; (3) cadastro sem contrato (hoje, todos): manter fim manual com aviso (recomendado) ou exigir contrato; (4) mudar a duração de um contrato recalcula, na mesma transação, o fim dos cadastros sem exceção (recomendado; 409 com a contagem se algum sair da jornada) ou só vale na próxima edição.
+**Decisões do responsável (2026-10-06):** (1) **tipo de contrato** (tabela `contratos_trabalho`); (2) **só o admin** edita a tabela de durações; (3) cadastro **sem contrato mantém o fim manual, com aviso** na tela; (4) mudar a duração de um contrato **recalcula na mesma transação** o fim dos cadastros sem exceção daquele contrato; se algum ficar fora da jornada, **409 com a contagem e nada é alterado**. A permissão `funcionarios.almoco_excecao` e os três eventos de auditoria seguem o desenho acima e são conferidos item a item na entrega do F8 (regra de aprovação de RBAC e auditoria).
 
-**Pendente da Liderança:** lista de contratos e durações; se a exceção exige motivo. Se exigir, a proposta é lista fechada de motivos (por exemplo acordo coletivo, jornada reduzida, outro), não texto livre, que tende a receber dado de saúde (LGPD). A coluna do motivo entra na mesma 018, então a resposta é necessária antes da migration.
+**Pendente da Liderança:** lista de contratos e durações; se a exceção exige motivo. Se exigir, **lista fechada de motivos, sem texto livre** (decisão do responsável, 2026-10-06; texto livre tende a receber dado de saúde, LGPD). A coluna do motivo entra na mesma 018: **a migration 018 não é escrita antes dessas duas respostas.**
 
 ### 11.2 c) Excluir = arquivar
 
@@ -991,7 +993,7 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 | Área | Hoje | Impacto |
 |---|---|---|
 | Equipe | `validate_funcionario_equipe` aceita `n1`, `n2`, `lideranca`; `funcionarios.equipe` é `VARCHAR(10)` | Aceitar `critico` (cabe na coluna); formulário, schema Zod e filtros |
-| Painel | `obter_status()` só monta `n1` e `n2` (pula outras equipes); `useLivePauses`, `PausasPage` e `DashboardPage` só têm N1 e N2 | Chave `critico` no `status.php`, seção própria com destaque, contagens do dashboard |
+| Painel | `obter_status()` só monta `n1` e `n2` e ignora as outras equipes: **um técnico do Crítico sumiria do painel**; `useLivePauses`, `PausasPage` e `DashboardPage` só têm N1 e N2 | Chave `critico` no `status.php`, seção própria com destaque, contagens do dashboard |
 | Tabelas com `team ENUM` | `portal_overtime_entries`, `portal_time_adjustments`, `portal_oncall_shifts` e `portal_pa_map` (`n1`, `n2`); regras e exceções de escala e `portal_pa_assignments` (`n1`, `n2`, `lideranca`) | Hora extra e correção de ponto de um técnico do Crítico falhariam ao gravar: ampliar o enum numa migration nova (019) nas tabelas que o Crítico usar. Escala e Mapa PA dependem da resposta sobre a jornada do Crítico |
 | Motivo de pausa | `validate_motivo_pausa` aceita `Café`, `Pessoal`, `Reunião`; `iniciar_pausa.php`, `PausasPage.jsx` e telas legadas (`index.php`, `static/js`) com a lista fixa | Ver tratamento (4) abaixo |
 | Limite simultâneo | `pausa_conta_para_limite`: tudo conta, menos Pessoal e Reunião. **"Almoço" contaria** e ganharia o limite de tempo de `duracao_pausa_minutos` (20 min) no status | Ver tratamento (1) e (2) |
@@ -1000,7 +1002,7 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 
 **Tratamento proposto (a aprovar):**
 
-1. **Alertas.** Para "Almoço", `alerta_15min` e `alerta_20min` ficam sempre 0. O limite passa a ser a duração do contrato (11.1): o item do `status.php` leva `duracao_limite_segundos` = duração do contrato, e a tela já marca "Tempo excedido" acima dele. Ao finalizar, a pausa grava o limite aplicado numa coluna nova `pausas.limite_segundos` (nula para os outros motivos), para o excesso ser calculado depois mesmo que a duração do contrato mude. Sem contrato: sem limite automático, com aviso na tela. Ajuste necessário no frontend: hoje `PausasPage.jsx:23` trata limite 0 como 1.200 s (`|| 1200`) e só "Pessoal" e "Reunião" ficam sem limite.
+1. **Alertas.** Para "Almoço", `alerta_15min` e `alerta_20min` ficam sempre 0. O limite passa a ser a duração do contrato (11.1): o item do `status.php` leva `duracao_limite_segundos` = duração do contrato, e a tela já marca "Tempo excedido" acima dele. Ao finalizar, a pausa grava o limite aplicado numa coluna nova `pausas.limite_segundos` (nula para os outros motivos), para o excesso ser calculado depois mesmo que a duração do contrato mude. Sem contrato: sem limite automático, com aviso na tela. Ajuste necessário no frontend: hoje `PausasPage.jsx:23` trata limite 0 como 1.200 s (`|| 1200`) e só "Pessoal" e "Reunião" ficam sem limite. **Mecanismo** (registrado a pedido do responsável): `GerenciadorPausas::pausa_conta_para_limite` já decide, por motivo, os alertas de 15/20 min gravados em `finalizar_pausa`; devolver `false` para "Almoço" basta para a pausa de almoço do Crítico não disparar esses alertas. Atenção: a mesma função decide também o limite simultâneo da equipe (`iniciar_pausa`) e o `duracao_limite_segundos` do `status.php` (0 para quem não conta). Se a Liderança decidir que o almoço **entra** no limite simultâneo (pendente), a função precisa ser dividida em duas (limite simultâneo e alerta de tempo).
 2. **Limite simultâneo.** Proposta: "Almoço" **não** conta no limite da equipe (o limite existe para cobrir pausa de café). O limite próprio do Crítico e a confirmação dependem da Liderança (pendente).
 3. **Métricas.** "Almoço" sai do total e da média por funcionário e por equipe e das contagens de alerta; continua em "por motivo" (quantidade e duração), para a gestão ver, e no ZIP de pausas (todas as linhas, com o motivo).
 4. **Validação do motivo, só no servidor como regra.** `validate_motivo_pausa($motivo, $equipe)` aceita "Almoço" só com equipe `critico`; a equipe vem do cadastro (sessão e banco), nunca do cliente. Conferência repetida em `GerenciadorPausas::iniciar_pausa`, que tem o cadastro carregado. O frontend mostra a opção só para a sessão do Crítico (conveniência, não controle). Teste negativo: técnico de N1 com "Almoço" → 400. Telas legadas a conferir (se ainda servidas, recebem a mesma regra).
@@ -1013,8 +1015,8 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 
 | Lote proposto | Conteúdo | Depende de |
 |---|---|---|
-| F8 — Almoço por contrato | 11.1: migration 018, tabela de contratos e tela de durações, cadastro, validação, auditoria | Decisões (1) a (4) de 11.1; lista e motivo da Liderança |
-| F9 — Equipe Crítico | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration 019 (enums e `pausas.limite_segundos`) | F2 aprovado; F8 (duração do contrato para o alerta); pendências da Liderança |
+| F8 — Almoço por contrato | 11.1: migration 018, tabela de contratos e tela de durações (só admin), cadastro, validação, auditoria | Decisões de 11.1 tomadas em 2026-10-06; **lista de contratos e durações e resposta sobre o motivo (Liderança): sem elas, a 018 não é escrita** |
+| F9 — Equipe Crítico | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration 019 (enums e `pausas.limite_segundos`) | F2 (aprovado em 2026-10-06); F8 (duração do contrato para o alerta); pendências da Liderança |
 
 O item c) já está no F4. A ordem entre F8, F9 e F2B a F7 fica com o responsável.
 
