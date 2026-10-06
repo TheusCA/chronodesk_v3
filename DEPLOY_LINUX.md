@@ -659,6 +659,86 @@ O que conferir na 011 (revisado com o ensaio em MySQL 8.0.46):
   1o rollback. Esse e o comportamento esperado: um segundo rollback apagaria o
   historico gravado depois do primeiro.
 
+## Medicao do Polling (F2, P14 e PERF-01)
+
+O F2 acrescenta a presenca de hoje ao `api/status.php`, que toda sessao consulta
+a cada 15 s. `scripts/medir-polling.sh` mede o tempo de resposta visto da propria
+VM (loopback, sem rede no meio) **antes** e **depois** do deploy do F2, nas mesmas
+condicoes: mesma conta, mesmo tipo de sessao, mesmo `N`, fora do horario de uso.
+O script nao depende do codigo da aplicacao, entao a base pode ser medida antes
+do deploy, lendo o script da versao nova.
+
+**De onde vem a sessao.** O script nao faz login, nao pede senha de AD e nao
+cria sessao. A sessao nasce no login normal do ChronoDesk feito no navegador:
+o PHP grava o arquivo da sessao no servidor (no `session.save_path` do PHP-FPM
+ou, se ele nao for gravavel, em `sessions/` do projeto) e o navegador guarda so
+o ID no cookie `PHPSESSID`. O script reaproveita esse ID, enviado do loopback,
+como se fosse a aba do navegador.
+
+Sobre a conta: login de tecnico (`api/login_ci.php`) exige conta no AD **e**
+cadastro ativo em `funcionarios`, e todo cadastro ativo de N1/N2 aparece no
+proprio `status.php` (painel de todos). Por isso nao criar um "tecnico de
+teste" so para a medicao, e nunca usar a credencial de um tecnico real. Usar
+a propria conta do responsavel: o `status.php` devolve o mesmo conteudo para
+todos os perfis, e o que importa e repetir a mesma conta e o mesmo tipo de
+login na base e na medicao depois do deploy (anotar qual foi). Se ja existir
+conta de teste com cadastro de tecnico (**TO CONFIRM**), pode ser ela.
+
+1. Entrar no ChronoDesk no navegador **imediatamente antes** de medir. O ID da
+   sessao troca a cada 30 min de idade da sessao (`security.php`) e a sessao
+   de tecnico cai com 30 min sem uso; se o ID trocar no meio, o script recebe
+   401 e avisa no fim.
+2. F12 > Aplicativo (Application) > Cookies > o endereco do ChronoDesk > copiar
+   o **valor** de `PHPSESSID` (so o valor). Fechar a aba do ChronoDesk: o
+   polling dela entraria na conta e poderia disparar a troca do ID.
+3. Na VM, rodar o script e colar o valor quando ele pedir (nao aparece na tela).
+4. Ao terminar: abrir o ChronoDesk de novo e **sair** (o logout apaga a sessao
+   no servidor, entao o valor copiado deixa de valer) e limpar a area de
+   transferencia (no Windows, Win+V > Limpar tudo).
+
+O valor do cookie vale como a senha enquanto a sessao estiver aberta: nao colar
+em chat, chamado ou documento.
+
+**O que o script faz com o cookie.** Le do terminal sem eco; aceita so os
+caracteres de um ID de sessao do PHP; entrega ao `curl` pela entrada padrao
+(`curl -K -`), nunca como argumento (nao aparece no `ps`); nao exporta a
+variavel; apaga a variavel no fim. Nada e gravado: o `curl` roda sem `-c`
+(sem arquivo de cookies), o corpo das respostas vai para `/dev/null` e a saida
+tem so numeros. O xtrace fica desligado dentro do script, entao nem
+`bash -x scripts/medir-polling.sh` mostra o valor. O cookie nao passa pelo
+git: o script e versionado, o valor nunca. Se a primeira requisicao nao der
+HTTP 200 (sessao expirada ou valor errado), o script para sem medir. Com o
+redirecionamento HTTP para HTTPS ligado no VirtualHost, a primeira resposta e
+301/302: usar `URL=https://chronodesk.interno.local/api/status.php`.
+
+Teste do script (na estacao ou na VM, com `php` e `curl`; sobe um servidor PHP
+falso no loopback com um cookie ficticio): `bash scripts/qa-medir-polling.sh`.
+
+```bash
+cd /var/www/chronodesk
+# Base, antes do deploy do F2 (script lido da versao nova, sem gravar arquivo):
+bash <(sudo git show origin/<BRANCH>:scripts/medir-polling.sh)
+# Depois do deploy:
+bash scripts/medir-polling.sh
+# Opcional: consultas ao MySQL por requisicao (performance_schema; pede a senha do root):
+CONSULTAS=1 bash scripts/medir-polling.sh
+```
+
+Variaveis: `N` (padrao 200), `AQUECIMENTO` (5, fora da conta), `INTERVALO`
+(segundos entre requisicoes, 0), `URL` (padrao `http://127.0.0.1/api/status.php`),
+`HOST_HEADER` (padrao `chronodesk.interno.local`), `COOKIE_NOME` (padrao
+`PHPSESSID`). Rodar cada medicao duas ou tres vezes e anotar p50, p95, maximo,
+tamanho medio e, com `CONSULTAS=1`, consultas por requisicao (o numero inclui
+outro trafego no banco; por isso, fora do horario de uso).
+
+**Criterio (decisao de 2026-10-05):** ha piora quando o p95 sobe **mais de
+50 ms e mais de 20%** em relacao a base, as duas condicoes ao mesmo tempo. Com
+piora, desligar `STATUS_PRESENCE_ENABLED` no `.env` e recarregar o PHP-FPM (a
+presenca sai do `status.php` sem voltar o codigo), medir de novo e trazer os
+numeros para decidir a alternativa do desenho (presenca so no `dashboard.php`).
+O interruptor entra no F2; o valor padrao no deploy e **ligado** (variavel
+ausente = ligado), para a medicao depois do deploy ja incluir a presenca.
+
 ## Acesso de Emergencia (admin local)
 
 Admin vem do `AD_ADMIN_USERS` (Lote 5, L1). O admin local (`ENABLE_LOCAL_ADMIN`,

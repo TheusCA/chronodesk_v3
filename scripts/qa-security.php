@@ -2019,4 +2019,22 @@ $paMapSource = (string)file_get_contents($root . '/services/PaMapService.php');
 assert_same(true, strpos($paMapSource, "LIMIT 1\n             FOR UPDATE'") !== false && strpos($paMapSource, "if ((int)\$employee['fora_mapa_escala'] === 1) {") !== false, 'Mapa PA: vinculo para cadastro marcado recusado, com o cadastro travado');
 assert_same(true, strpos($paMapSource, 'WHERE ativo = 1 AND fora_mapa_escala = 0') !== false, 'Mapa PA: cadastro marcado fora da lista de elegiveis');
 
+// ============================================================================
+// 10. F2 — medicao do polling: o cookie de sessao nunca vai para argumento,
+//     arquivo, ambiente exportado nem saida
+// ============================================================================
+$pollingScript = (string)file_get_contents($root . '/scripts/medir-polling.sh');
+$pollingCode = (string)preg_replace('/^\s*#.*$/m', '', $pollingScript);
+assert_same(true, strpos($pollingCode, 'read -rsp "Valor do cookie ${COOKIE_NOME} (nao aparece na tela): " COOKIE') !== false, 'medicao: cookie lido sem eco');
+assert_same(1, preg_match("/grep -Eq '\\^\\[A-Za-z0-9,-\\]\\{16,256\\}\\$'/", $pollingCode), 'medicao: cookie so com caracteres de ID de sessao');
+assert_same(1, preg_match('/printf \'cookie = "%s=%s"\\\\n\' "\$COOKIE_NOME" "\$COOKIE" \\\\\s+\| curl -K - -s -o \/dev\/null/', $pollingCode), 'medicao: cookie entra no curl pela entrada padrao e o corpo vai para /dev/null');
+assert_same(2, substr_count($pollingCode, '$COOKIE"'), 'medicao: o cookie so aparece na validacao e na entrada do curl');
+$pollingCurl = substr($pollingCode, (int)strpos($pollingCode, 'requisicao() {'), (int)strpos($pollingCode, 'consultas_total() {') - (int)strpos($pollingCode, 'requisicao() {'));
+assert_same(true, strpos($pollingCurl, 'curl -K -') !== false, 'medicao: le a funcao que chama o curl');
+assert_same(0, preg_match('/(^|\s)(-c|--cookie-jar|-b|--cookie|-D|--dump-header|--trace\S*|-v|--verbose|--libcurl)(\s|$)/m', $pollingCurl), 'medicao: curl sem arquivo de cookie, cabecalho gravado, trace nem modo verboso');
+assert_same(0, preg_match('/export\s+COOKIE|\bset\s+-[A-Za-z]*x|\bset\s+-o\s+xtrace|\btee\b|>\s*[^&\s\/]/m', $pollingCode), 'medicao: sem export, xtrace (set -x em qualquer combinacao ou -o xtrace), tee nem gravacao em arquivo');
+assert_same(true, strpos($pollingScript, "#!/usr/bin/env bash\n") === 0 && preg_match('/^set \+x$/m', $pollingCode) === 1 && strpos($pollingCode, "\nset +x\n") < strpos($pollingCode, 'read -rsp'), 'medicao: xtrace desligado antes de ler o cookie, mesmo com bash -x');
+assert_same(true, strpos($pollingCode, "trap 'COOKIE=\"\"; P=\"\"; unset COOKIE P' EXIT") !== false, 'medicao: cookie e senha apagados no fim');
+assert_same(true, strpos($pollingCode, 'MYSQL_PWD="$P" docker exec -i -e MYSQL_PWD "$CONTAINER"') !== false && strpos($pollingCode, '-e MYSQL_PWD="$P"') === false, 'medicao: senha do MySQL fora dos argumentos');
+
 echo "qa-security OK\n";

@@ -12,7 +12,8 @@ done
 echo "== Shell syntax =="
 bash -n scripts/backup-chronodesk.sh
 sh -n scripts/preflight-deploy.sh
-echo "OK scripts/backup-chronodesk.sh scripts/preflight-deploy.sh"
+bash -n scripts/medir-polling.sh
+echo "OK scripts/backup-chronodesk.sh scripts/preflight-deploy.sh scripts/medir-polling.sh"
 
 echo "== PHP auth QA =="
 # Exige php-ldap; o script falha se a extensao estiver ausente.
