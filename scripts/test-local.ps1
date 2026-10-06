@@ -98,6 +98,14 @@ if (!$phpExecutable) {
         Pass "QA do historico de escala concluido"
     }
 
+    # Sem banco: motor de presenca, presence.php e presenca no status.php (F2).
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-presence-engine.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do motor de presenca falhou"
+    } else {
+        Pass "QA do motor de presenca concluido"
+    }
+
     # Sem banco e sem AD: limite de login por usuario e testes negativos.
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-security.php")
     if ($LASTEXITCODE -ne 0) {

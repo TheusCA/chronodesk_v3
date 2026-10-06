@@ -1348,6 +1348,8 @@ $matrix = [
     'api/portal/schedules.php GET' => [[], $expect['TODOS']],
     'api/portal/schedules.php POST' => [['content_type' => $json, 'body' => '{"action":"rule"}'], $expect['GESTAO']],
     'api/portal/schedules.php POST remove_rule' => [['content_type' => $json, 'body' => '{"action":"remove_rule"}'], $expect['ADMIN_LIDERANCA']],
+    // F2: presenca para qualquer perfil autenticado (desenho, secao 3.2).
+    'api/portal/presence.php GET' => [[], $expect['TODOS']],
     'api/portal/sdk_responsibles.php GET' => [[], $expect['TODOS']],
     'api/portal/shift_attachments.php GET' => [[], $expect['TODOS']],
     // Lote 5c: o perfil e conferido antes de qualquer validacao do arquivo.
