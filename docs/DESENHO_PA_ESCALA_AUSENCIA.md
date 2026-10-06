@@ -950,4 +950,74 @@ Validação pela IA: `qa-presence-engine` com 126 verificações (critério de a
 
 ---
 
+## 11. Requisitos novos de 2026-10-06 (item 2: b, c, d)
+
+Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem código nesta data**; o F2 segue aguardando aprovação. Levantamento de impacto feito por leitura do código em 2026-10-06.
+
+### 11.1 b) Almoço por início e duração contratual
+
+**Requisito.** No cadastro, o usuário informa só o início do almoço; o fim é calculado pela duração do contrato do técnico. A opção "Exceção (jornada pré-acordada)" libera o fim manual. A duração **varia por contrato** e fica numa tabela configurável; a lista de contratos e durações vem da Liderança. **Liderança e admin** marcam a exceção. A marcação fica em coluna própria (migration nova, fora da 012 a 014), é auditada, e o almoço tem de ficar dentro da jornada.
+
+**Proposta (a aprovar):**
+
+| Ponto | Proposta |
+|---|---|
+| Onde guardar a duração | **Tipo de contrato**, não carga horária: a carga sozinha não define a duração (dois contratos de 40 h podem ter intervalos diferentes por acordo) e a lista da Liderança já é de contratos |
+| Migration 018 | Tabela `contratos_trabalho` (`id`, `nome` único, `almoco_minutos` com faixa no banco, `ativo`, autoria); em `funcionarios`, `contrato_id` (nulo, FK `RESTRICT`) e `almoco_excecao` (0/1, padrão 0). Regra do A4, idempotente, rollback com cópia `*_bkp_018`, ensaio e verificação só com contagens (sem contrato, com exceção, almoço fora da jornada, almoço diferente da duração). **Nenhuma duração no código nem na migration** |
+| Cálculo | Sem exceção: `almoco_fim = almoco_inicio + duração`, calculado no servidor; o fim enviado é ignorado e a tela o mostra só para leitura. Com exceção: fim manual, validado |
+| Validação nova, para todos | `jornada_entrada ≤ almoco_inicio < almoco_fim ≤ jornada_saida` (400). Cadastros que hoje violam a regra só são barrados ao editar; a verificação conta quantos antes do deploy |
+| Permissão | `funcionarios.almoco_excecao` (Liderança e admin). Hoje coincide com quem tem `funcionarios.manage` (o gestor não edita cadastro), mas fica separada para RBAC e auditoria claros. A Liderança continua sem alterar cadastro de Liderança ou admin (Lote 5b) |
+| Auditoria | `FUNCIONARIO_ALMOCO_EXCECAO_ALTERADO` (WARNING, como `FUNCIONARIO_FORA_MAPA_ALTERADO`: ID, antes e depois, perfil do ator, horários; sem nome); `FUNCIONARIO_CONTRATO_ALTERADO` (INFO); `CONTRATO_DURACAO_ALTERADA` (WARNING) |
+| Motor (F2, P2) | **Sem mudança.** O motor lê `almoco_inicio`/`almoco_fim` de `funcionarios` (`PresenceRepository::employees`), como a tela de Pausas (`Funcionario::esta_disponivel`); o fim calculado é gravado nessas colunas |
+
+**A decidir pelo responsável:** (1) tipo de contrato (recomendado) ou carga horária; (2) quem edita a tabela de durações: só admin (recomendado) ou também a Liderança; (3) cadastro sem contrato (hoje, todos): manter fim manual com aviso (recomendado) ou exigir contrato; (4) mudar a duração de um contrato recalcula, na mesma transação, o fim dos cadastros sem exceção (recomendado; 409 com a contagem se algum sair da jornada) ou só vale na próxima edição.
+
+**Pendente da Liderança:** lista de contratos e durações; se a exceção exige motivo. Se exigir, a proposta é lista fechada de motivos (por exemplo acordo coletivo, jornada reduzida, outro), não texto livre, que tende a receber dado de saúde (LGPD). A coluna do motivo entra na mesma 018, então a resposta é necessária antes da migration.
+
+### 11.2 c) Excluir = arquivar
+
+**Requisito aprovado:** "excluir" técnico na tela é arquivar (RF-07, F4, seção 2.5). Hoje `api/remover_funcionario.php` já só faz `ativo = 0`; o F4 completa o arquivamento (colunas `arquivado_em`/`arquivado_por`, efeitos no PA e na escala, restauração). Nenhuma exclusão física.
+
+### 11.3 d) Equipe Crítico
+
+**Requisito decidido:**
+
+- A equipe Crítico aparece no painel do `status.php` junto com N1 e N2, com destaque visual.
+- O almoço do Crítico fica **fora** do almoço automático do cadastro: o cadastro guarda só um horário previsto, informativo. Eles lançam o próprio almoço no painel por um motivo de pausa novo, **"Almoço", só para a equipe Crítico** (hoje: Café, Pessoal e Reunião com aprovação).
+- No motor (P2): para o Crítico, `almoco` vem da pausa de almoço em andamento, não do intervalo do cadastro.
+
+**Impacto levantado:**
+
+| Área | Hoje | Impacto |
+|---|---|---|
+| Equipe | `validate_funcionario_equipe` aceita `n1`, `n2`, `lideranca`; `funcionarios.equipe` é `VARCHAR(10)` | Aceitar `critico` (cabe na coluna); formulário, schema Zod e filtros |
+| Painel | `obter_status()` só monta `n1` e `n2` (pula outras equipes); `useLivePauses`, `PausasPage` e `DashboardPage` só têm N1 e N2 | Chave `critico` no `status.php`, seção própria com destaque, contagens do dashboard |
+| Tabelas com `team ENUM` | `portal_overtime_entries`, `portal_time_adjustments`, `portal_oncall_shifts` e `portal_pa_map` (`n1`, `n2`); regras e exceções de escala e `portal_pa_assignments` (`n1`, `n2`, `lideranca`) | Hora extra e correção de ponto de um técnico do Crítico falhariam ao gravar: ampliar o enum numa migration nova (019) nas tabelas que o Crítico usar. Escala e Mapa PA dependem da resposta sobre a jornada do Crítico |
+| Motivo de pausa | `validate_motivo_pausa` aceita `Café`, `Pessoal`, `Reunião`; `iniciar_pausa.php`, `PausasPage.jsx` e telas legadas (`index.php`, `static/js`) com a lista fixa | Ver tratamento (4) abaixo |
+| Limite simultâneo | `pausa_conta_para_limite`: tudo conta, menos Pessoal e Reunião. **"Almoço" contaria** e ganharia o limite de tempo de `duracao_pausa_minutos` (20 min) no status | Ver tratamento (1) e (2) |
+| Alertas 15/20 min | Gravados em `finalizar_pausa` (`pausas.alerta_15min`/`alerta_20min`, fixos em 15 e 20 min) para motivos que contam no limite; contados nas métricas. As chaves `alerta_15minutos`/`alerta_20minutos` do `config.json` são gravadas pela tela de configurações mas **nenhum código as lê** | Ver tratamento (1) |
+| Métricas | `processar_linha_metrica` soma toda pausa no total e na média por funcionário e equipe | Ver tratamento (3) |
+
+**Tratamento proposto (a aprovar):**
+
+1. **Alertas.** Para "Almoço", `alerta_15min` e `alerta_20min` ficam sempre 0. O limite passa a ser a duração do contrato (11.1): o item do `status.php` leva `duracao_limite_segundos` = duração do contrato, e a tela já marca "Tempo excedido" acima dele. Ao finalizar, a pausa grava o limite aplicado numa coluna nova `pausas.limite_segundos` (nula para os outros motivos), para o excesso ser calculado depois mesmo que a duração do contrato mude. Sem contrato: sem limite automático, com aviso na tela. Ajuste necessário no frontend: hoje `PausasPage.jsx:23` trata limite 0 como 1.200 s (`|| 1200`) e só "Pessoal" e "Reunião" ficam sem limite.
+2. **Limite simultâneo.** Proposta: "Almoço" **não** conta no limite da equipe (o limite existe para cobrir pausa de café). O limite próprio do Crítico e a confirmação dependem da Liderança (pendente).
+3. **Métricas.** "Almoço" sai do total e da média por funcionário e por equipe e das contagens de alerta; continua em "por motivo" (quantidade e duração), para a gestão ver, e no ZIP de pausas (todas as linhas, com o motivo).
+4. **Validação do motivo, só no servidor como regra.** `validate_motivo_pausa($motivo, $equipe)` aceita "Almoço" só com equipe `critico`; a equipe vem do cadastro (sessão e banco), nunca do cliente. Conferência repetida em `GerenciadorPausas::iniciar_pausa`, que tem o cadastro carregado. O frontend mostra a opção só para a sessão do Crítico (conveniência, não controle). Teste negativo: técnico de N1 com "Almoço" → 400. Telas legadas a conferir (se ainda servidas, recebem a mesma regra).
+
+**Motor preparado, sem implementar agora.** Mudança prevista em `PresenceEngine::nowPresence`, isolada: o colaborador passa a ter `lunch_source` (`cadastro` ou `pausa`, derivado da equipe no repositório). Com `pausa`, o intervalo do cadastro não gera `almoco`, e pausa em andamento com motivo "Almoço" vira `situacao = almoco`, `origem = pausa`, detalhe com o início. A precedência da seção 4.3 e a identidade da soma (4.5) não mudam: `almoco` continua parcela própria. Hoje, sem a mudança, uma pausa "Almoço" apareceria como `pausa` com detalhe "Almoço". Testes a acrescentar no `qa-presence-engine`: Crítico às 12:30 sem pausa não fica em almoço; com pausa "Almoço" fica `almoco`/`pausa`; N1 com pausa "Café" no intervalo do cadastro continua `pausa`.
+
+**Pendente da Liderança:** limite de pausas do Crítico e se o almoço entra nele; origem da jornada do Crítico (qual planilha; muda por dia ou não). Jornada por dia seria uma fonte nova de expediente para o motor (hoje a jornada é fixa no cadastro) e decide se o Crítico entra em escala e Mapa PA.
+
+### 11.4 Encaixe proposto nos lotes
+
+| Lote proposto | Conteúdo | Depende de |
+|---|---|---|
+| F8 — Almoço por contrato | 11.1: migration 018, tabela de contratos e tela de durações, cadastro, validação, auditoria | Decisões (1) a (4) de 11.1; lista e motivo da Liderança |
+| F9 — Equipe Crítico | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration 019 (enums e `pausas.limite_segundos`) | F2 aprovado; F8 (duração do contrato para o alerta); pendências da Liderança |
+
+O item c) já está no F4. A ordem entre F8, F9 e F2B a F7 fica com o responsável.
+
+---
+
 **Fim da Fase de Desenho.** Aprovado em 2026-09-30; P2, P12 e o tratamento dos relatórios decididos em 2026-10-02 (seção 0.6). As propostas de 0.6 para a escala implícita da Liderança e para o atributo `fora_mapa_escala` foram aprovadas em 2026-10-02, com os esclarecimentos registrados na seção.

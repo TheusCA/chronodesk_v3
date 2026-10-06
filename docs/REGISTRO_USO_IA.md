@@ -326,6 +326,16 @@ Base da afirmação:
 | **Limitacoes declaradas** | **Sem MySQL local:** as 4 consultas nunca rodaram em banco real; o PDO espiao emula as consultas, nao o MySQL. `presence.php` com dados exercitado so pelo servico; o endpoint, so pela matriz (401 sem sessao; nenhum perfil recebe 403). Nenhuma tela usa a presenca ainda. O impacto no polling so sera conhecido na medicao depois do deploy. Jornada que cruza a meia-noite continua sem suporte (pendencia do desenho). |
 | **Validacao humana** | Pendente. |
 
+### Requisitos novos do item 2 (b, c, d) — 2026-10-06 (somente documentacao)
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar no desenho da Parte B (secao 11) as respostas da Liderança: almoco por inicio e duracao contratual com excecao marcada por Lideranca e admin (b); excluir = arquivar (c, F4); equipe Critico no painel, com almoco lancado como pausa propria (d). Sem codigo; F2 segue aguardando aprovacao. |
+| **O que a IA alterou** | `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 11: requisito, proposta de armazenamento (tipo de contrato, migration 018, permissao `funcionarios.almoco_excecao`, auditoria), impacto da equipe Critico levantado no codigo (equipe aceita, `obter_status` so com N1/N2, enums `team` de hora extra, correcao de ponto, plantao e Mapa PA, motivo de pausa fixo, limite simultaneo, alertas de 15/20 min, metricas), tratamento proposto em quatro pontos, mudanca prevista no motor (`lunch_source`) e encaixe proposto em lotes F8 e F9. |
+| **Achados do levantamento** | (1) "Almoco", pela regra atual, contaria no limite simultaneo e ganharia o limite de 20 min e os alertas de 15/20 min; (2) as chaves `alerta_15minutos`/`alerta_20minutos` do `config.json` sao gravadas pela tela mas nenhum codigo as le (os alertas sao fixos em `finalizar_pausa`); (3) hora extra e correcao de ponto de um tecnico do Critico falhariam ao gravar (`team ENUM('n1','n2')`); (4) `PausasPage.jsx` trata limite 0 como 1.200 s. |
+| **Limitacoes declaradas** | Levantamento so por leitura; telas legadas (`index.php`, `static/js`) nao conferidas quanto a ainda serem servidas. |
+| **Validacao humana** | Pendente: decisoes (1) a (4) da secao 11.1, tratamento (1) a (4) da secao 11.3 e encaixe em lotes; pendencias da Lideranca listadas na secao 11. |
+
 ---
 
 ## 5. Responsabilidade
