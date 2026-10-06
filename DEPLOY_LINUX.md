@@ -966,6 +966,23 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   cadastro marcado some da escala e do Mapa PA e recebe 409 em regra, excecao e
   vinculo. Os cadastros a marcar sao escolhidos pelo responsavel na tela; nenhum
   nome ou ID vai no codigo. Rodar a verificacao da 011 de novo no fim.
+- Deploy que traz o F2 (Parte B: motor de presenca, `portal/presence.php` e
+  presenca no `status.php`): sem migration, mas exige a 011 (deploy do F1). Sem
+  ela, o `status.php` continua respondendo com `presenca_disponivel: false` e
+  o `presence.php` falha. **Antes do `git pull`:** repetir a base da medicao
+  do polling (secao "Medicao do Polling"; recomendacao da secao 9.2 do
+  desenho). O preflight mostra `STATUS_PRESENCE_ENABLED` (ligado se ausente).
+  Depois da recarga, logado no navegador: (1) abrir
+  `/api/portal/presence.php?from=AAAA-MM-DD&to=AAAA-MM-DD` de uma semana com fim
+  de semana e conferir que sabado e domingo vem como "Fim de semana", que
+  quem tem regra `undefined` ou nenhuma vem "Sem escala definida" e que a
+  Lideranca vem "Presencial (regra fixa)"; (2) quem tem excecao de folga,
+  ausencia, ferias ou licenca no dia vem "Ausente (dia todo)", sem a categoria;
+  (3) `/api/status.php` traz `presenca` em cada item e `presenca_disponivel:
+  true`; (4) medir o polling nas condicoes da base. Piora (p95 sobe mais de
+  50 ms **e** mais de 20%): `STATUS_PRESENCE_ENABLED=false` no `.env`, recarga
+  do PHP-FPM e nova medicao. Calendario, Escala, Relatorios e Mapa PA nao mudam
+  neste deploy. Rollback: so codigo (o F2 nao grava nada).
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois

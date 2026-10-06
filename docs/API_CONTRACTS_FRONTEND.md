@@ -18,7 +18,8 @@ Mapa inicial dos contratos consumidos pelo frontend. Este documento descreve o u
 | `session.php` | GET | nenhum | `csrf_token`, `role` (`admin`, `lideranca`, `gestor`, `tecnico`, `somente_leitura`), `permissions`, `ci`, `gestor` | `App.jsx` | Alto: sessao/RBAC | Build/lint | Matriz de perfis no `qa-security` (Lote 5a) |
 | `login_ci.php` | POST | `login_ad`, `senha_ad` | `mensagem`, sessao valida | Login | Alto: AD | Backend smoke parcial | Teste manual AD |
 | `logout.php` | POST | `{}` | `csrf_token`, `mensagem` | App/logout | Medio | Backend smoke | Smoke manual |
-| `status.php` | GET | nenhum | `n1`, `n2`, `server_now` | Pausas/live | Alto: timers | QA operacional parcial | Contrato tipado |
+| `status.php` | GET | nenhum | `n1`, `n2`, `server_now`; desde o F2, `presenca` em cada item (`{ situacao, origem, detalhe }` de hoje, ou `null` para inativo e fora do Mapa) e `presenca_disponivel` (ausente com `STATUS_PRESENCE_ENABLED` desligado; `false` se o calculo falhar) | Pausas/live | Alto: timers | QA operacional parcial; `qa-presence-engine` | Contrato tipado |
+| `portal/presence.php` | GET | `from`, `to` (`AAAA-MM-DD`; padrao hoje; maximo 93 dias), `team` (`n1`, `n2`, `lideranca`), `employee_id` | `server_now`, `today`, `period`, `employees[]` (`id`, `name`, `team`), `days[]` (`employee_id`, `date`, `situacao`, `origem`, `detalhe`, `escala`, `ausencias[]` com `origem`, `period_type`, `ativa`; `em_almoco`), `meta.pausas_disponiveis`; 400 para parametro invalido | Nenhuma tela ainda (F5 a F7) | Medio | `qa-presence-engine`; matriz de perfis | Contrato tipado ao entrar na tela |
 | `iniciar_pausa.php` | POST | `funcionario_id`, `motivo_pausa` | `mensagem` | Pausas | Alto: regras de pausa | Backend smoke | Teste por motivo |
 | `solicitar_pausa_com_aprovacao.php` | POST | `funcionario_id`, `motivo_pausa`, `observacao` | `mensagem` | Pausas | Alto: N1/N2 | Backend smoke | Teste por equipe |
 | `finalizar_pausa.php` | POST | `funcionario_id` | `mensagem` | Pausas | Alto | Backend smoke | Smoke manual |
@@ -61,12 +62,12 @@ Mapa inicial dos contratos consumidos pelo frontend. Este documento descreve o u
 
 ## Contratos propostos - Parte B (NAO IMPLEMENTADOS)
 
-Desenho aprovado em 2026-09-30; P2, P12 e o tratamento dos relatorios decididos em 2026-10-02. **F1 implementado (2026-10-05):** em `portal/schedules.php`, `is_current`, `is_future`, `config` e `include_history=1` (tabela acima); o restante da linha (ciclo, dias de home, `rule_preview`, excecao sem tipos de ausencia) continua proposto. Fora isso, nada desta secao existe no codigo. A tabela acima continua sendo o contrato em uso; cada linha so muda no lote que implementar o endpoint. Especificacao completa em `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 3.
+Desenho aprovado em 2026-09-30; P2, P12 e o tratamento dos relatorios decididos em 2026-10-02. **F2 implementado (2026-10-06):** `portal/presence.php` e `presenca` no `status.php` (tabela acima); Calendario, Escala, Relatorios e Mapa PA continuam no calculo antigo ate F2B, F5 e F6. **F1 implementado (2026-10-05):** em `portal/schedules.php`, `is_current`, `is_future`, `config` e `include_history=1` (tabela acima); o restante da linha (ciclo, dias de home, `rule_preview`, excecao sem tipos de ausencia) continua proposto. Fora isso, nada desta secao existe no codigo. A tabela acima continua sendo o contrato em uso; cada linha so muda no lote que implementar o endpoint. Especificacao completa em `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 3.
 
 | Endpoint | Situacao | Mudanca proposta | Lote |
 | --- | --- | --- | --- |
-| `portal/presence.php` | Novo | GET `from`, `to`, `team`, `employee_id`; devolve `server_now`, `days[]` com `situacao`, `origem`, `detalhe`, `escala`, `ausencias` | F2 |
-| `status.php` | Alterado | Cada item ganha `presenca` de hoje; deixa de incluir arquivados | F2, F4 |
+| `portal/presence.php` | **Implementado no F2** (tabela acima). Ate o F3, sem categoria nem observacao de ausencia e so ausencia de dia inteiro | — | F2 |
+| `status.php` | Alterado | `presenca` de hoje **implementada no F2** (tabela acima); deixa de incluir arquivados no F4 | F4 |
 | `portal/schedules.php` | Alterado | `rule_type=cycle` com `cycle{onsite_days, remote_days, starts_with, anchor_date}`; `fixed_weekdays` com `input_mode` e `home_weekdays`; `action=rule_preview`; excecao sem tipos de ausencia (`is_current`, `is_future`, `config` e `include_history=1` ja implementados no F1) | F2B, F3 |
 | `portal/absences.php` | Alterado | GET com filtros e escopo por perfil (tecnico e somente leitura so as proprias); POST `action=create/update/cancel` para admin e gestor; retroativo so admin | F3 |
 | `portal/calendar.php` | Alterado | Escala vinda do motor; ausencia deixa de ser evento separado e de expor `reason` | F3, F5 |
@@ -76,7 +77,7 @@ Desenho aprovado em 2026-09-30; P2, P12 e o tratamento dos relatorios decididos 
 | `portal/technicians.php` | Alterado | Acrescenta `presence` | F4 |
 | `portal/pa_map.php` | Alterado | GET com `presence` por vinculo, `conflicts`, `has_conflict`, `absences_week`, `week`, `server_now`; `save` deixa de devolver 409 por conflito de escala e passa a devolver `warnings` e `conflicts` | F6 |
 | `portal/dashboard.php` | Alterado | Acrescenta `server_now` e `presence_summary` por equipe | F7 |
-| `portal/reports.php` | Alterado | Escala vinda do motor; `absence_days`, `no_schedule_days`; fim de semana e `undefined` deixam de contar como presencial/remoto | F2 |
+| `portal/reports.php` | Alterado | Escala vinda do motor; `absence_days`, `no_schedule_days`; fim de semana e `undefined` deixam de contar como presencial/remoto | F5 (decisao de 2026-10-05; data de corte registrada no deploy do F5) |
 
 ## Campos que merecem tipos primeiro
 

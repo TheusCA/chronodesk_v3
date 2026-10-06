@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). F2 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue em 2026-10-06, com escopo reduzido, aguardando aprovação** (seção 9.2). F2B a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -877,7 +877,7 @@ Validação em MySQL real: feita pelo responsável nesta revisão (ensaio da 011
 
 **Aprovado em 2026-10-05**, depois do reteste das correções em MySQL 8.0.46 real (concorrência, ensaio completo da 011 com o 2º rollback parando, assinatura estável). Commits da revisão: `0b1b67b`, `d58c070`, `d9d4703`, `abe5a11`. Deploy 8 da fila.
 
-### 9.2 F2 — plano aprovado (2026-10-05) e base da medição do polling (2026-10-06)
+### 9.2 F2 — plano aprovado (2026-10-05), base da medição e entrega (2026-10-06)
 
 **Plano do F2 aprovado em 2026-10-05, com escopo reduzido:** `generatedSchedule` continua no cálculo antigo (a troca fica no F2B, F5 e F6). Decisões do responsável:
 
@@ -899,6 +899,32 @@ Medição: `scripts/medir-polling.sh` (`f91d2d0`), roteiro em `DEPLOY_LINUX.md`,
 | Limite de piora | **p95 acima de 76,8 ms** (26,8 + 50; os 20% dariam 32,2 ms, então vale o maior) |
 
 A medição depois do deploy do F2 repete as mesmas condições: mesma conta, sem `CONSULTAS`, `N=200`, horário parecido. A base também é o "antes" da medição pendente do PERF-01 (pendência 10 do estado da sessão).
+
+**Entrega do F2 (2026-10-06, aguardando aprovação):** commits `60da301` (motor, repositório, serviço, `portal/presence.php`, `status.php`, `qa-presence-engine`), `f204ca6` (interruptor nos exemplos e no preflight) e o de documentação.
+
+| Item | Como ficou |
+|---|---|
+| Motor | `services/PresenceEngine.php`: funções puras, relógio por parâmetro. Ciclo pela forma fechada (seção 4.2); vigência por `ScheduleRulePlanner::ruleAt` (a do F1) |
+| Carga | `services/PresenceRepository.php`: 4 consultas por chamada (funcionários, regras, exceções, ausências aprovadas), sem relógio do banco, sem observação, motivo ou categoria |
+| `presence.php` | Contrato da seção 3.2, qualquer perfil autenticado; 400 para parâmetro inválido; fora do Mapa e equipe inválida ficam de fora; Liderança entra |
+| `status.php` | `presenca` em cada item de N1/N2 e `presenca_disponivel`, atrás do interruptor; falha no cálculo não derruba o status |
+| Fora do escopo (plano aprovado) | `generatedSchedule` (Calendário, Escala, Relatórios), Mapa PA e `technicians.php` continuam no cálculo antigo |
+
+**Decisões de implementação a aprovar:**
+
+1. **Exceção de trabalho no fim de semana vale para todos.** Remoto, presencial, treinamento e plantão num sábado ou domingo geram o dia também para N1 e N2; sem exceção, fim de semana é dia não útil (P3). A seção 4.2 punha o fim de semana antes da exceção; inverti para coincidir com a regra da Liderança (seção 0.6) e com a decisão 4 do F1.
+2. **Ausência vence fim de semana e fora do expediente**, pela precedência literal da seção 4.3.
+3. **Dado ruim não lança exceção.** Tipo desconhecido, `undefined` e ciclo mal configurado viram "Sem escala definida"; horário de jornada ou almoço inválido ou nulo desliga só a checagem correspondente. O `presenceForRule` antigo lança exceção (400); o motor não, para o `status.php` não cair por uma linha.
+4. **Fim de semana em outra data** sai como `fora_expediente`, origem `expediente`, "Fim de semana", igual a hoje; `escala.situacao` fica `dia_nao_util`.
+5. **`status.php`:** `presenca` é `null` para inativo e para cadastro fora do Mapa PA e da escala; campo novo `presenca_disponivel` (`false` se o cálculo falhar, com log só da classe do erro); **4 consultas a mais** por requisição, não 3 como estimado na seção 4.6: a quarta é a de funcionários, para jornada e marcação "fora do Mapa" virem da mesma fonte do `presence.php`.
+6. **Sem categoria nem observação de ausência para nenhum perfil até o F3.** `ausencias[]` só tem `origem` (`excecao` ou `ausencia`), `period_type` e `ativa`; a regra P9 (gestão vê a categoria) entra com as ausências no F3.
+7. **Ausências aprovadas de `portal_absences`** (0 linhas hoje) já contam como dia inteiro, como o `generatedSchedule` atual faz.
+8. **Exceção remota de líder gravada antes do F1** aparece como remoto: o F1 recusa criar, o motor mostra o dado que existe.
+9. **`meta.pausas_disponiveis`** é `false` só quando o período inclui hoje e o `estado.json` existe mas não pôde ser lido; arquivo ausente conta como sem pausas.
+10. **Interruptor com valor fora da lista** fica ligado no PHP, com aviso no log; o preflight reprova o valor.
+11. **Contadores** (seção 4.5): `PresenceEngine::summarize` já está no motor e testado; o `dashboard.php` passa a usá-lo no F7.
+
+Validação pela IA: `qa-presence-engine` com 126 verificações (critério de aceite do ciclo, forma fechada contra contagem dia a dia em 4.000 pares, precedência por instante, 23:30/00:30, identidade da soma em mais de 200 instantes, 4 consultas para 1 e 50 colaboradores e para 1 e 93 dias); mutação **23/23**; `presence.php` na matriz de perfis do `qa-security` (sem sessão 401; todos os perfis passam). Limitações: consultas nunca rodaram em MySQL real; `presence.php` com dados só pelo serviço (o endpoint, só pela matriz); nenhuma tela usa a presença ainda.
 
 **Ressalva (registrada pela IA, decisão do responsável):** a base foi tomada antes do deploy 2. Entre ela e o deploy do F2 (depois do deploy 8 da fila) entram os deploys 2 a 8, e dois deles mudam o mesmo caminho do `status.php`: o PERF-01 (trava do estado de pausas, deploy 2) e a revalidação da sessão por requisição (Lote 5a, deploy 6). Comparada com esta base, a medição depois do F2 soma o efeito de todos. Para isolar o F2, a recomendação é repetir a medição logo antes do deploy do F2, nas mesmas condições, e usá-la como base do critério; para fechar o PERF-01, medir de novo logo depois do deploy 2.
 
