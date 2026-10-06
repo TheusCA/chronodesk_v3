@@ -896,7 +896,7 @@ Medição: `scripts/medir-polling.sh` (`f91d2d0`), roteiro em `DEPLOY_LINUX.md`,
 | Respostas | HTTP 200 em 200/200 |
 | Tempo | p50 4,3 ms; **p95 26,8 ms**; máx. 39,7 ms; média 8,6 ms |
 | Tamanho médio da resposta | 12.208 bytes |
-| Limite de piora | **p95 acima de 76,8 ms** (26,8 + 50; os 20% dariam 32,2 ms, então vale o maior) |
+| Limite de piora | p95 acima de 76,8 ms (26,8 + 50; os 20% dariam 32,2 ms, então vale o maior). **Só referência:** o limite do critério é recalculado sobre a medição repetida logo antes do deploy do F2 (decisão de 2026-10-06) |
 
 A medição depois do deploy do F2 repete as mesmas condições: mesma conta, sem `CONSULTAS`, `N=200`, horário parecido. A base também é o "antes" da medição pendente do PERF-01 (pendência 10 do estado da sessão).
 
@@ -954,7 +954,7 @@ Validação pela IA: `qa-presence-engine` com 126 verificações (critério de a
 
 ## 11. Requisitos novos de 2026-10-06 (item 2: b, c, d)
 
-Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem código nesta data**; o F2 segue aguardando aprovação. Levantamento de impacto feito por leitura do código em 2026-10-06.
+Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem código nesta data.** Levantamento de impacto feito por leitura do código em 2026-10-06.
 
 ### 11.1 b) Almoço por início e duração contratual (desenho aprovado em 2026-10-06; migration só depois da Liderança)
 
@@ -1000,7 +1000,7 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 | Alertas 15/20 min | Gravados em `finalizar_pausa` (`pausas.alerta_15min`/`alerta_20min`, fixos em 15 e 20 min) para motivos que contam no limite; contados nas métricas. As chaves `alerta_15minutos`/`alerta_20minutos` do `config.json` são gravadas pela tela de configurações mas **nenhum código as lê** | Ver tratamento (1) |
 | Métricas | `processar_linha_metrica` soma toda pausa no total e na média por funcionário e equipe | Ver tratamento (3) |
 
-**Tratamento proposto (a aprovar):**
+**Tratamento (aprovado em 2026-10-06; o item 2 sujeito à confirmação da Liderança):**
 
 1. **Alertas.** Para "Almoço", `alerta_15min` e `alerta_20min` ficam sempre 0. O limite passa a ser a duração do contrato (11.1): o item do `status.php` leva `duracao_limite_segundos` = duração do contrato, e a tela já marca "Tempo excedido" acima dele. Ao finalizar, a pausa grava o limite aplicado numa coluna nova `pausas.limite_segundos` (nula para os outros motivos), para o excesso ser calculado depois mesmo que a duração do contrato mude. Sem contrato: sem limite automático, com aviso na tela. Ajuste necessário no frontend: hoje `PausasPage.jsx:23` trata limite 0 como 1.200 s (`|| 1200`) e só "Pessoal" e "Reunião" ficam sem limite. **Mecanismo** (registrado a pedido do responsável): `GerenciadorPausas::pausa_conta_para_limite` já decide, por motivo, os alertas de 15/20 min gravados em `finalizar_pausa`; devolver `false` para "Almoço" basta para a pausa de almoço do Crítico não disparar esses alertas. Atenção: a mesma função decide também o limite simultâneo da equipe (`iniciar_pausa`) e o `duracao_limite_segundos` do `status.php` (0 para quem não conta). Se a Liderança decidir que o almoço **entra** no limite simultâneo (pendente), a função precisa ser dividida em duas (limite simultâneo e alerta de tempo).
 2. **Limite simultâneo.** Proposta: "Almoço" **não** conta no limite da equipe (o limite existe para cobrir pausa de café). O limite próprio do Crítico e a confirmação dependem da Liderança (pendente).
@@ -1018,7 +1018,7 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 | F8 — Almoço por contrato | 11.1: migration 018, tabela de contratos e tela de durações (só admin), cadastro, validação, auditoria | Decisões de 11.1 tomadas em 2026-10-06; **lista de contratos e durações e resposta sobre o motivo (Liderança): sem elas, a 018 não é escrita** |
 | F9 — Equipe Crítico | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration 019 (enums e `pausas.limite_segundos`) | F2 (aprovado em 2026-10-06); F8 (duração do contrato para o alerta); pendências da Liderança |
 
-O item c) já está no F4. A ordem entre F8, F9 e F2B a F7 fica com o responsável.
+O item c) já está no F4. **Ordem decidida em 2026-10-06:** F2B agora; F3 a F7 na ordem do desenho; F8 assim que a Liderança mandar contratos e a resposta sobre o motivo; F9 depois do F8.
 
 ---
 
