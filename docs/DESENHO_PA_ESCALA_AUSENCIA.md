@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 (serviço e endpoint de ausências) em andamento.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 (serviço e endpoint de ausências) entregue em 2026-10-07, aguardando aprovação.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -1095,6 +1095,28 @@ Validação pela IA (frontend): `lint`, `typecheck`, `build` e os 14 `qa:*`; mut
 Validação pela IA: `qa-absences` seção 4 (ordem da parada, idempotência por `information_schema`, regra do A4, ENUMs, FK, CHECKs, ordem do rollback, toda variável de `PREPARE` atribuída antes, verificação só leitura e sem nome nem observação, ensaio só em `ensaio_*` e idempotente); mutação **16/16** nos arquivos SQL (um sobrevivente na 1ª rodada, `PREPARE` de variável sem `SET`, levou à checagem genérica) e **12/12** na leitura.
 
 **Aprovados em 2026-10-07** (`0b0f951`, `c69c5ec`) pelo responsável, após os três ensaios no MySQL 8.0.46 com o `ensaio-migration.sh`: (a) tabela vazia: migration duas vezes idêntica, rollback volta tudo, 2º rollback para de propósito; (b) linha antiga: a 012 para nas duas execuções sem alterar nada; (c) rollback com 4 ausências do F3: volta com a cancelada como `rejected`, 2º para de propósito. Conferido também que o banco recusa fim antes do início, horário em vários dias, intervalo invertido, categoria `atestado`, colaborador inexistente (FK) e status `pending`. **As cinco decisões da 012 ficam aprovadas.** No roteiro de deploy do F3: **a 012 e o `git pull` do F3 rodam em sequência, sem pausa** (janela de 503 na tela de ausências, decisão 3).
+
+**Commit 3 entregue (2026-10-07, `833c0cf`; aguardando aprovação):** serviço e endpoint de ausências.
+
+| Item | Como ficou |
+|---|---|
+| Regras puras | `services/AbsenceRules.php`: validação do payload (datas, até 366 dias, P5, `from_time` com início, `interval` com início < fim, categoria, observação até 500 caracteres), jornada (P1), sobreposição (P6, como aprovada), mensagem do 409 só com o período |
+| Serviço | `services/AbsenceService.php`: `list` (filtros e escopo da seção 3.3), `create`, `update`, `cancel`. Ordem nas gravações: retroativo recusado antes do banco (quando decidível pelo payload) → transação → trava do colaborador → (edição e cancelamento) releitura da ausência com `FOR UPDATE` → A4 → status → retroativo pela ausência já iniciada → jornada → sobreposição com leitura `FOR UPDATE` → gravação → auditoria |
+| Endpoint | `GET` = lista; `POST` nega por perfil (`ausencias.manage`) antes de ler o corpo e de abrir o banco, com `ABSENCE_WRITE_DENIED`; recusa do serviço (403) também auditada; `create` 201 |
+| Permissões | `ausencias.retroativa` (Liderança e admin); `absence_change_denied` (A4) com `escalas.lideranca`, como a L9 |
+| Removido | Lista genérica de ausências do `PortalService` (substituída pelo serviço) |
+
+**Decisões de implementação do commit 3 a aprovar:**
+
+1. **Ausência que começa hoje já está iniciada:** editar ou cancelar é retroativo (gestor 403; Liderança e admin gravam marcada). Lançar começando hoje não é retroativo.
+2. **`retroactive` nunca volta a 0:** editar ou cancelar mantém a marca e a acrescenta quando a operação é retroativa.
+3. **Ausência de cadastro desativado:** lançar nova dá 400; **editar e cancelar continuam** (o F4 cancela as futuras no arquivamento; até lá, a gestão consegue corrigir).
+4. **Autorização antes do estado do registro:** na edição e no cancelamento, a regra A4 é conferida antes de dizer se a ausência está cancelada ou se o colaborador mudou.
+5. **Equipe sem suporte** (por exemplo, `critico`, antes do F9) e **cadastro sem jornada válida com ausência por horário**: 400 com mensagem; dia inteiro continua para quem não tem jornada.
+6. **A lista não é auditada** (leitura); as recusas de escrita são.
+7. **Observação contada em caracteres UTF-8 sem depender da `mbstring`.** Achado: esta estação não tem a extensão, e o padrão do projeto (`function_exists('mb_strlen') ? ... : strlen(...)`) conta bytes no fallback, em sete serviços; texto acentuado perto do limite seria recusado à toa. Só o `AbsenceRules` mudou; **confirmar se o PHP do servidor tem `mbstring`** (se não tiver, os outros seis ficam como pendência).
+
+Validação pela IA: `qa-absences` (lista com filtros, escopo e limite; regras; escrita com retroativo, A4, cadastro, jornada, P6, edição, cancelamento; concorrência com o REPEATABLE READ emulado: a edição que esperou a trava vê a ausência gravada por outra transação e a cancelada por outra) e `qa-security` (matriz com `POST`, permissões, A4 em tabela-verdade, ponta a ponta: técnico e somente leitura 403 com auditoria, retroativa do gestor 403, sem CSRF 403). Mutação **43/45**; os dois restantes são equivalentes (dia inteiro e vários dias já cobrem a janela inteira na comparação de horário; ausência de vários dias é sempre de dia inteiro pela validação e pelo CHECK). Nada rodou em MySQL real.
 
 **Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 
