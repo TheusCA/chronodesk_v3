@@ -132,7 +132,13 @@ for (const [value, label] of [
   )
 }
 
-const saveRuleSource = operationalSource.match(/async function saveRule\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
+// F2B: validacao em parseRule, payload em buildRulePayload (rule e rule_preview), gravacao em saveRule.
+const ruleFlowSource = [
+  /\n  function parseRule\(values\) \{[\s\S]*?\n  \}/,
+  /\nfunction buildRulePayload\(data, action\) \{[\s\S]*?\n\}/,
+  /async function saveRule\(values\) \{[\s\S]*?\n  \}/,
+].map((pattern) => operationalSource.match(pattern)?.[0] || '').join('\n')
+const saveRuleSource = ruleFlowSource
 assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/, 'Validacao canonica de rule_type preservada')
 assert.match(saveRuleSource, /rule_type: ruleType/, 'Payload de escala envia rule_type canonico')
 assert.doesNotMatch(saveRuleSource, /\.\.\.rule/, 'Payload de escala nao deve enviar objeto rule cru')

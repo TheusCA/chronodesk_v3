@@ -104,7 +104,9 @@ for (const [source, pattern, label] of [
   [adminSource, /ACTION_FEEDBACK\.userCreated[\s\S]*\(\) => setForm\(\{ username: '', password: '', role: 'gestor' \}\)/, 'Usuario criado deve limpar formulario via onSuccess'],
   // F1: regra igual a vigente nao grava nada e o servidor avisa (unchanged);
   // o onSuccess limpa o formulario e escolhe a mensagem.
-  [operationalSource, /resetRule\(emptyScheduleRule\(parsed\.data\.effective_from \|\| today\)\)[\s\S]*result\?\.unchanged \? result\.mensagem : ACTION_FEEDBACK\.scheduleSaved/, 'Escala salva deve limpar rule e weekdays via onSuccess'],
+  [operationalSource, /resetRule\(emptyScheduleRule\(data\.effective_from \|\| today\)\)[\s\S]*result\?\.unchanged \? result\.mensagem : ACTION_FEEDBACK\.scheduleSaved/, 'Escala salva deve limpar rule e weekdays via onSuccess'],
+  // F2B: a previa passa pelo runAction sem mensagem de sucesso (so guarda o resultado).
+  [operationalSource, /async function previewRule\(\) \{[\s\S]*submit\(\s*\(\) => post\('portal\/schedules\.php', buildRulePayload\(data, 'rule_preview'\)\),\s*null,\s*notify,\s*null,/, 'Previa da regra deve passar pelo runAction sem feedback de sucesso'],
   [operationalSource, /ACTION_FEEDBACK\.scheduleRuleRemoved[\s\S]*resetRule\(emptyScheduleRule\(\)\)/, 'Remocao de escala deve limpar rule e weekdays quando aplicavel'],
   [operationalSource, /ACTION_FEEDBACK\.scheduleExceptionSaved[\s\S]*setException\(\{ employee_id: '', exception_date: exception\.exception_date \|\| today, exception_type: 'remote', note: '' \}\)/, 'Excecao deve limpar campos transacionais'],
   [operationalSource, /successMessage[\s\S]*null[\s\S]*notify\(importFeedback\(result\)\)/, 'Importacao deve preservar feedback resumido sem notificacao duplicada'],

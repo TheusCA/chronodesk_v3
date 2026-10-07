@@ -38,6 +38,7 @@ const SCHEDULE_RULE_OPTIONS = [
   { value: 'always_onsite', label: 'Sempre presencial' },
   { value: 'always_remote', label: 'Sempre remoto' },
   { value: 'fixed_weekdays', label: 'Dias fixos da semana' },
+  { value: 'cycle', label: 'Ciclo presencial/remoto' },
   { value: 'undefined', label: 'Sem escala definida' },
 ]
 const SCHEDULE_RULE_VALUES = new Set(SCHEDULE_RULE_OPTIONS.map((option) => option.value))
@@ -57,6 +58,7 @@ function Status({ value }) {
     onsite: 'status-success',
     pending: 'status-warning',
     remote: 'status-info',
+    absence: 'status-danger',
     rejected: 'status-danger',
     sync_error: 'status-danger',
     cancelled: 'status-neutral',
@@ -77,6 +79,7 @@ function statusLabel(value) {
     cancelled: 'Cancelado',
     day_off: 'Folga',
     absence: 'Ausência',
+    no_schedule: 'Sem escala',
   }[value] || String(value || 'Não informado').replaceAll('_', ' ')
 }
 
@@ -102,7 +105,73 @@ function weekdaySummary(weekdays = []) {
 }
 
 function emptyScheduleRule(effectiveFrom = today) {
-  return { employee_id: '', rule_type: 'undefined', effective_from: effectiveFrom, weekdays: [] }
+  return {
+    employee_id: '',
+    rule_type: 'undefined',
+    effective_from: effectiveFrom,
+    weekdays: [],
+    input_mode: 'onsite',
+    home_weekdays: [],
+    cycle_onsite_days: '2',
+    cycle_remote_days: '1',
+    cycle_starts_with: 'onsite',
+  }
+}
+
+// Dias de seg a sex que não estão na lista (home -> presenciais e vice-versa).
+function otherWeekdays(weekdays = []) {
+  return WEEKDAY_OPTIONS.map((option) => option.value).filter((value) => !weekdays.includes(value))
+}
+
+// F2B: payload comum ao "rule" e à prévia (mesmo contrato no servidor). No
+// ciclo, a data inicial é o início da vigência; o servidor monta o pattern.
+function buildRulePayload(data, action) {
+  const ruleType = String(data.rule_type || '')
+  const payload = {
+    action,
+    employee_id: Number(data.employee_id),
+    rule_type: ruleType,
+    effective_from: data.effective_from,
+  }
+  if (ruleType === 'fixed_weekdays') {
+    if (data.input_mode === 'home') {
+      payload.input_mode = 'home'
+      payload.home_weekdays = data.home_weekdays
+    } else {
+      payload.weekdays = data.weekdays
+    }
+  }
+  if (ruleType === 'cycle') {
+    payload.cycle = {
+      onsite_days: Number(data.cycle_onsite_days),
+      remote_days: Number(data.cycle_remote_days),
+      starts_with: data.cycle_starts_with,
+      anchor_date: data.effective_from,
+    }
+  }
+  return payload
+}
+
+// Chave da prévia: qualquer campo que muda o payload deixa a prévia desatualizada.
+function rulePreviewKey(values) {
+  return JSON.stringify(buildRulePayload(values, 'rule_preview'))
+}
+
+// Histórico de um colaborador: sem a regra implícita da Liderança e sem linha
+// vazia (fim antes do início, gravada pelo código anterior ao F1), mais recente primeiro.
+function scheduleHistoryRows(rules, employeeId) {
+  return (rules || [])
+    .filter((item) => !item.implicit && String(item.employee_id) === String(employeeId))
+    .filter((item) => !item.effective_until || item.effective_until >= item.effective_from)
+    .sort((a, b) => String(b.effective_from).localeCompare(String(a.effective_from)))
+}
+
+function scheduleSourceLabel(item) {
+  if (item.presence_type === 'absence') return item.source === 'absence' ? 'Ausência lançada' : 'Exceção de ausência'
+  if (item.source === 'exception') return `Exceção: ${item.label}`
+  if (item.source === 'implicit') return 'Regra fixa da Liderança'
+  if (item.source === 'none') return 'Sem regra cadastrada'
+  return 'Regra fixa'
 }
 
 function scheduleRuleLabel(value, weekdays = []) {
@@ -118,6 +187,7 @@ function scheduleRuleTone(value) {
     even_days: 'status-warning',
     odd_days: 'status-warning',
     fixed_weekdays: 'status-info',
+    cycle: 'status-info',
     undefined: 'status-neutral',
   }[value] || 'status-neutral'
 }
@@ -232,6 +302,39 @@ export function CalendarPage({ session, notify }) {
   )
 }
 
+// F2B: prévia calculada pelo servidor (próximos dias úteis), o que será
+// encerrado e o aviso de prévia desatualizada.
+function RulePreviewPanel({ preview, fresh }) {
+  const days = preview?.preview || []
+  return (
+    <div className={`space-y-3 rounded-lg border p-3 ${fresh ? 'border-white/10 bg-slate-950/35' : 'border-amber-400/40 bg-amber-500/5'}`}>
+      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Prévia das próximas 2 semanas (calculada pelo servidor)</p>
+      {!fresh && (
+        <InlineAlert tone="warning" title="Prévia desatualizada">
+          Um campo mudou depois da prévia. Gere a prévia de novo para poder salvar.
+        </InlineAlert>
+      )}
+      <p className="text-sm font-semibold text-slate-200">{preview.rule_label}</p>
+      <div className="grid grid-cols-5 gap-1">
+        {days.map((day) => (
+          <span className={`status-badge justify-center ${day.presence_type === 'onsite' ? 'status-success' : day.presence_type === 'remote' ? 'status-info' : 'status-neutral'}`} key={day.date} title={day.rule_label}>
+            {day.weekday} {day.date.slice(8, 10)} {day.presence_type === 'onsite' ? 'P' : day.presence_type === 'remote' ? 'R' : '—'}
+          </span>
+        ))}
+      </div>
+      <p className="text-xs text-slate-500">P = presencial, R = remoto, — = sem escala.</p>
+      {preview.unchanged && <InlineAlert tone="info" title="Regra igual à vigente">Ao salvar, nada será alterado.</InlineAlert>}
+      {!preview.unchanged && preview.closes && (
+        <p className="text-sm text-slate-300">Ao salvar: a regra atual “{preview.closes.rule_label}” será encerrada em {formatDate(preview.closes.effective_until)}.</p>
+      )}
+      {!preview.unchanged && preview.effective_until && (
+        <p className="text-sm text-slate-300">A nova regra vale até {formatDate(preview.effective_until)}, véspera da regra já agendada.</p>
+      )}
+      {preview.retroactive && <InlineAlert tone="warning" title="Início retroativo">Reescreve o histórico e fica auditado.</InlineAlert>}
+    </div>
+  )
+}
+
 export function SchedulePage({ session, notify }) {
   const canManage = isManagerRole(session.role)
   const canRemoveRule = hasPermission(session, 'escalas.manage')
@@ -253,6 +356,16 @@ export function SchedulePage({ session, notify }) {
     defaultValues: emptyScheduleRule(),
   })
   const rule = watchRule()
+  // F2B: Salvar só com a prévia do servidor para os valores atuais do formulário.
+  const [rulePreview, setRulePreview] = useState(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewFresh = rulePreview !== null && rulePreview.key === rulePreviewKey(rule)
+  // F2B: histórico de um colaborador, em painel recolhido (include_history=1).
+  const [historyEmployee, setHistoryEmployee] = useState(null)
+  const history = useResource(
+    `portal/schedules.php${queryString({ from: filters.from, to: filters.to, employee_id: historyEmployee?.id ?? '', include_history: 1 })}`,
+    { enabled: historyEmployee !== null },
+  )
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
   // Fora do Mapa PA e da escala: sem regra nem exceção (P12).
   const allEmployees = (employees.data?.funcionarios || []).filter((employee) => employee.fora_mapa_escala !== true)
@@ -268,7 +381,7 @@ export function SchedulePage({ session, notify }) {
 
   function applyScheduleRuleErrors(error) {
     clearRuleErrors()
-    const focusableFields = ['employee_id', 'rule_type', 'effective_from']
+    const focusableFields = ['employee_id', 'rule_type', 'effective_from', 'cycle_onsite_days', 'cycle_remote_days']
     let firstField = null
     for (const issue of error.issues) {
       const field = issue.path?.[0] || 'employee_id'
@@ -278,51 +391,69 @@ export function SchedulePage({ session, notify }) {
     if (focusableFields.includes(firstField)) setRuleFocus(firstField)
   }
 
-  async function saveRule(values) {
+  // Zod no cliente (o servidor valida de novo); devolve os dados ou null.
+  function parseRule(values) {
     const parsed = scheduleRuleSchema.safeParse({
       ...values,
       weekdays: Array.isArray(values.weekdays) ? values.weekdays : [],
+      home_weekdays: Array.isArray(values.home_weekdays) ? values.home_weekdays : [],
     })
     if (!parsed.success) {
       applyScheduleRuleErrors(parsed.error)
-      return
+      return null
     }
     clearRuleErrors()
-    const employeeId = Number(parsed.data.employee_id)
     const ruleType = String(parsed.data.rule_type || '')
     if (!SCHEDULE_RULE_VALUES.has(ruleType)) {
       setRuleError('rule_type', { type: 'validate', message: 'Tipo de escala invalido.' })
       setRuleFocus('rule_type')
+      return null
+    }
+    return parsed.data
+  }
+
+  async function previewRule() {
+    const values = watchRule()
+    const data = parseRule(values)
+    if (!data) return
+    setPreviewLoading(true)
+    try {
+      await submit(
+        () => post('portal/schedules.php', buildRulePayload(data, 'rule_preview')),
+        null,
+        notify,
+        null,
+        (result) => setRulePreview({ key: rulePreviewKey(values), data: result }),
+      )
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  async function saveRule(values) {
+    const data = parseRule(values)
+    if (!data) return
+    if (!previewFresh) {
+      notify('Gere a prévia com os valores atuais antes de salvar a regra.', 'warning')
       return
-    }
-    if (ruleType === 'fixed_weekdays' && parsed.data.weekdays.length === 0) {
-      setRuleError('weekdays', { type: 'validate', message: 'Selecione ao menos um dia da semana.' })
-      return
-    }
-    const payload = {
-      action: 'rule',
-      employee_id: employeeId,
-      rule_type: ruleType,
-      effective_from: parsed.data.effective_from,
-    }
-    if (ruleType === 'fixed_weekdays') {
-      payload.weekdays = parsed.data.weekdays
     }
     await submit(
-      () => post('portal/schedules.php', payload),
-      resource.refresh,
+      () => post('portal/schedules.php', buildRulePayload(data, 'rule')),
+      [resource.refresh, history.refresh],
       notify,
       null,
       (result) => {
-        resetRule(emptyScheduleRule(parsed.data.effective_from || today))
+        setRulePreview(null)
+        resetRule(emptyScheduleRule(data.effective_from || today))
         // Regra igual à vigente: o servidor não grava nada e avisa.
         notify(result?.unchanged ? result.mensagem : ACTION_FEEDBACK.scheduleSaved, result?.unchanged ? 'info' : undefined)
       },
     )
   }
 
-  function toggleRuleWeekday(weekday) {
-    const currentWeekdays = Array.isArray(watchRule('weekdays')) ? watchRule('weekdays') : []
+  // field: 'weekdays' (presenciais) ou 'home_weekdays' (modo home).
+  function toggleRuleWeekday(weekday, field = 'weekdays') {
+    const currentWeekdays = Array.isArray(watchRule(field)) ? watchRule(field) : []
     const enabled = currentWeekdays.includes(weekday)
     const selected = enabled
       ? currentWeekdays.filter((value) => value !== weekday)
@@ -330,18 +461,28 @@ export function SchedulePage({ session, notify }) {
     const ordered = WEEKDAY_OPTIONS
       .map((option) => option.value)
       .filter((value) => selected.includes(value))
-    setRuleValue('weekdays', ordered, { shouldDirty: true })
-    if (ordered.length > 0) clearRuleErrors('weekdays')
+    setRuleValue(field, ordered, { shouldDirty: true })
+    clearRuleErrors(field)
   }
 
   function editRule(item) {
     // Regra vigente: a edição vira uma versão nova a partir de hoje (o
     // histórico fica). Regra agendada: corrige no próprio início.
+    const config = item.config || {}
+    const pattern = Array.isArray(config.pattern) ? config.pattern : []
+    const homeMode = item.rule_type === 'fixed_weekdays' && config.input_mode === 'home'
+    setRulePreview(null)
     resetRule({
+      ...emptyScheduleRule(),
       employee_id: String(item.employee_id),
       rule_type: item.rule_type || 'undefined',
       effective_from: item.effective_from && item.effective_from > today ? item.effective_from : today,
-      weekdays: item.weekdays || [],
+      weekdays: homeMode ? [] : item.weekdays || [],
+      input_mode: homeMode ? 'home' : 'onsite',
+      home_weekdays: homeMode ? otherWeekdays(item.weekdays || []) : [],
+      cycle_onsite_days: pattern.length ? String(pattern.filter((value) => value === 'onsite').length) : '2',
+      cycle_remote_days: pattern.length ? String(pattern.filter((value) => value === 'remote').length) : '1',
+      cycle_starts_with: pattern[0] === 'remote' ? 'remote' : 'onsite',
     })
   }
 
@@ -444,7 +585,9 @@ export function SchedulePage({ session, notify }) {
                   onChange: (event) => {
                     if (event.target.value !== 'fixed_weekdays') {
                       setRuleValue('weekdays', [], { shouldDirty: true })
-                      clearRuleErrors('weekdays')
+                      setRuleValue('home_weekdays', [], { shouldDirty: true })
+                      setRuleValue('input_mode', 'onsite', { shouldDirty: true })
+                      clearRuleErrors(['weekdays', 'home_weekdays'])
                     }
                   },
                 })}
@@ -455,17 +598,22 @@ export function SchedulePage({ session, notify }) {
             </label>
             {rule.rule_type === 'fixed_weekdays' && (
               <div className="space-y-3 rounded-lg border border-white/10 bg-slate-950/35 p-3">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Dias presenciais</p>
+                <fieldset className="flex flex-wrap gap-4 text-sm text-slate-300">
+                  <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Informar</legend>
+                  <label className="inline-flex items-center gap-2"><input type="radio" value="onsite" {...registerRule('input_mode', { onChange: () => clearRuleErrors(['weekdays', 'home_weekdays']) })} />dias presenciais</label>
+                  <label className="inline-flex items-center gap-2"><input type="radio" value="home" {...registerRule('input_mode', { onChange: () => clearRuleErrors(['weekdays', 'home_weekdays']) })} />dias de home office</label>
+                </fieldset>
                 <div className="flex flex-wrap gap-2">
                   {WEEKDAY_OPTIONS.map((option) => {
-                    const selected = (rule.weekdays || []).includes(option.value)
+                    const field = rule.input_mode === 'home' ? 'home_weekdays' : 'weekdays'
+                    const selected = (rule[field] || []).includes(option.value)
                     return (
                       <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${selected ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200' : 'border-white/10 bg-slate-900/60 text-slate-400 hover:border-white/20'}`} key={option.value}>
                         <input
                           checked={selected}
                           className="sr-only"
-                          name="weekdays"
-                          onChange={() => toggleRuleWeekday(option.value)}
+                          name={field}
+                          onChange={() => toggleRuleWeekday(option.value, field)}
                           type="checkbox"
                           value={option.value}
                         />
@@ -475,21 +623,49 @@ export function SchedulePage({ session, notify }) {
                   })}
                 </div>
                 {ruleErrors.weekdays && <span className="block text-xs text-red-300">{ruleErrors.weekdays.message}</span>}
-                <p className="text-xs text-slate-500">Presencial: {weekdaySummary(rule.weekdays || [])}.</p>
+                {ruleErrors.home_weekdays && <span className="block text-xs text-red-300">{ruleErrors.home_weekdays.message}</span>}
+                <p className="text-xs text-slate-500">
+                  {rule.input_mode === 'home'
+                    ? `Resultado: presencial ${weekdaySummary(otherWeekdays(rule.home_weekdays || []))} · home ${weekdaySummary(rule.home_weekdays || [])}.`
+                    : `Resultado: presencial ${weekdaySummary(rule.weekdays || [])} · home ${weekdaySummary(otherWeekdays(rule.weekdays || []))}.`}
+                </p>
               </div>
             )}
-            <label className="label">Início da vigência
+            {rule.rule_type === 'cycle' && (
+              <div className="space-y-3 rounded-lg border border-white/10 bg-slate-950/35 p-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="label">Dias presenciais
+                    <input aria-invalid={Boolean(ruleErrors.cycle_onsite_days)} className="field mt-2" inputMode="numeric" max="19" min="1" type="number" {...registerRule('cycle_onsite_days')} />
+                    {ruleErrors.cycle_onsite_days && <span className="mt-1 block text-xs text-red-300">{ruleErrors.cycle_onsite_days.message}</span>}
+                  </label>
+                  <label className="label">Dias remotos
+                    <input aria-invalid={Boolean(ruleErrors.cycle_remote_days)} className="field mt-2" inputMode="numeric" max="19" min="1" type="number" {...registerRule('cycle_remote_days')} />
+                    {ruleErrors.cycle_remote_days && <span className="mt-1 block text-xs text-red-300">{ruleErrors.cycle_remote_days.message}</span>}
+                  </label>
+                </div>
+                <fieldset className="flex flex-wrap gap-4 text-sm text-slate-300">
+                  <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Começa por</legend>
+                  <label className="inline-flex items-center gap-2"><input type="radio" value="onsite" {...registerRule('cycle_starts_with')} />Presencial</label>
+                  <label className="inline-flex items-center gap-2"><input type="radio" value="remote" {...registerRule('cycle_starts_with')} />Remoto</label>
+                </fieldset>
+                <p className="text-xs text-slate-500">Conta só dias úteis (segunda a sexta); feriado conta como dia útil. Até 20 dias no ciclo.</p>
+              </div>
+            )}
+            <label className="label">{rule.rule_type === 'cycle' ? 'Data inicial do ciclo' : 'Início da vigência'}
               <input aria-invalid={Boolean(ruleErrors.effective_from)} className="field mt-2" min={canRetroactiveRule ? undefined : today} required type="date" {...registerRule('effective_from')} />
               {ruleErrors.effective_from && <span className="mt-1 block text-xs text-red-300">{ruleErrors.effective_from.message}</span>}
               <span className="mt-1 block text-xs text-slate-500">
+                {rule.rule_type === 'cycle' ? 'Precisa ser dia útil; o ciclo vale a partir dela. ' : ''}
                 A regra vigente termina na véspera e o histórico fica guardado.
                 {canRetroactiveRule ? ' Data anterior a hoje reescreve o histórico e fica auditada.' : ' Data anterior a hoje: só administradores e Liderança.'}
               </span>
             </label>
-            <InlineAlert tone="info" title="Contrato preservado">
-              O frontend envia `rule_type` com o valor canônico selecionado. Não há fallback silencioso para “Sem escala definida”.
-            </InlineAlert>
-            <button className="btn-primary" type="submit">Salvar regra</button>
+            {rulePreview && <RulePreviewPanel fresh={previewFresh} preview={rulePreview.data} />}
+            <div className="flex flex-wrap gap-2">
+              <button className="btn-secondary" disabled={previewLoading} onClick={previewRule} type="button">{previewLoading ? 'Calculando...' : 'Ver prévia'}</button>
+              <button className="btn-primary" disabled={!previewFresh} type="submit">Salvar regra</button>
+            </div>
+            {!previewFresh && <p className="text-xs text-slate-500">Salvar fica disponível depois da prévia calculada pelo servidor.</p>}
           </form>
           <form className="card space-y-4" onSubmit={saveException}>
             <SectionHeader
@@ -559,6 +735,7 @@ export function SchedulePage({ session, notify }) {
                     <div className="flex flex-wrap gap-2">
                       {canManage && <button className="table-action" onClick={() => editRule(item)} type="button">Editar</button>}
                       {canRemoveRule ? <button className="table-action text-red-300" onClick={() => removeRule(item)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
+                      <button aria-expanded={String(historyEmployee?.id) === String(item.employee_id)} className="table-action" onClick={() => setHistoryEmployee(String(historyEmployee?.id) === String(item.employee_id) ? null : { id: item.employee_id, name: item.employee_name })} type="button">Histórico</button>
                     </div>
                     )}
                   </td>
@@ -567,12 +744,34 @@ export function SchedulePage({ session, notify }) {
             </table>
           </section>
         )}
+        {historyEmployee && (
+          <section className="card table-wrap">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-bold text-white">Histórico de {historyEmployee.name}</h2>
+              <button className="table-action" onClick={() => setHistoryEmployee(null)} type="button">Fechar</button>
+            </div>
+            <OperationalShell resource={history}>
+              <table className="data-table">
+                <thead><tr><th>Regra</th><th>Vigência</th><th>Situação</th><th>Alterada por</th></tr></thead>
+                <tbody>{scheduleHistoryRows(history.data?.rules, historyEmployee.id).map((item) => (
+                  <tr key={item.id}>
+                    <td><span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span></td>
+                    <td>{formatDate(item.effective_from)}{item.effective_until ? ` até ${formatDate(item.effective_until)}` : ' em diante'}</td>
+                    <td><span className={`status-badge ${item.is_current ? 'status-success' : item.is_future ? 'status-info' : 'status-neutral'}`}>{item.is_current ? 'Vigente' : item.is_future ? 'Agendada' : 'Encerrada'}</span></td>
+                    <td>{item.updated_by || item.created_by || '—'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </OperationalShell>
+          </section>
+        )}
         {(resource.data?.generated || []).length === 0 ? <EmptyState title="Nenhuma escala gerada" description="Cadastre regras fixas para gerar automaticamente os dias presenciais e remotos." /> : (
           <section className="card table-wrap">
             <table className="data-table">
               <thead><tr><th>Data</th><th>Colaborador</th><th>Equipe</th><th>Modalidade</th><th>Origem</th></tr></thead>
-              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td>{teamLabel(item.team)}</td><td><Status value={item.presence_type} /></td><td>{item.source === 'exception' ? `Exceção: ${item.label}` : item.source === 'implicit' ? 'Regra fixa da Liderança' : 'Regra fixa'}</td></tr>)}</tbody>
+              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td>{teamLabel(item.team)}</td><td><Status value={item.presence_type} />{item.presence_type === 'absence' && item.detalhe && <small className="block">{item.detalhe}</small>}</td><td>{scheduleSourceLabel(item)}</td></tr>)}</tbody>
             </table>
+            <p className="mt-3 text-xs text-slate-500">Dias úteis de segunda a sexta; sábado e domingo só aparecem com exceção de trabalho. Quem não tem regra aparece como “Sem escala”. Ausência aparece sem a categoria.</p>
           </section>
         )}
       </OperationalShell>

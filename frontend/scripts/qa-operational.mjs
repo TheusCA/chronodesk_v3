@@ -118,12 +118,18 @@ for (const [value, label] of [
   )
 }
 
-const saveRuleSource = operationalPagesSource.match(/async function saveRule\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
+// F2B: validacao em parseRule, payload em buildRulePayload (rule e rule_preview), gravacao em saveRule.
+const ruleFlowSource = [
+  /\n  function parseRule\(values\) \{[\s\S]*?\n  \}/,
+  /\nfunction buildRulePayload\(data, action\) \{[\s\S]*?\n\}/,
+  /async function saveRule\(values\) \{[\s\S]*?\n  \}/,
+].map((pattern) => operationalPagesSource.match(pattern)?.[0] || '').join('\n')
+const saveRuleSource = ruleFlowSource
 assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/)
 assert.match(saveRuleSource, /scheduleRuleSchema\.safeParse\(/)
-assert.match(saveRuleSource, /ruleType === 'fixed_weekdays' && parsed\.data\.weekdays\.length === 0/)
-assert.match(saveRuleSource, /payload\.weekdays = parsed\.data\.weekdays/)
-assert.match(saveRuleSource, /post\('portal\/schedules\.php', payload\)/)
+assert.match(readFileSync(new URL('../src/lib/formSchemas.ts', import.meta.url), 'utf8'), /value\.rule_type === 'fixed_weekdays' && value\.input_mode === 'onsite' && value\.weekdays\.length === 0/)
+assert.match(saveRuleSource, /payload\.weekdays = data\.weekdays/)
+assert.match(saveRuleSource, /post\('portal\/schedules\.php', buildRulePayload\(data, 'rule'\)\)/)
 assert.doesNotMatch(saveRuleSource, /\.\.\.rule/)
 assert.doesNotMatch(saveRuleSource, /\brule:\s*/)
 assert.doesNotMatch(saveRuleSource, /\bschedule_rule:\s*/)

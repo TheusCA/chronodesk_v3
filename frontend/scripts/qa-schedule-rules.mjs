@@ -49,6 +49,11 @@ for (const ruleType of [
 }
 
 assert.match(operationalPage, /\{ value: 'fixed_weekdays', label: 'Dias fixos da semana' \}/, 'UI deve oferecer Dias fixos da semana')
+// F2B: ciclo e modo home na tela; tom do ciclo no Mapa PA.
+assert.match(operationalPage, /\{ value: 'cycle', label: 'Ciclo presencial\/remoto' \}/, 'UI deve oferecer Ciclo (F2B)')
+assert.match(operationalPage, /registerRule\('cycle_onsite_days'\)[\s\S]*registerRule\('cycle_remote_days'\)[\s\S]*registerRule\('cycle_starts_with'\)/, 'UI do ciclo: dias presenciais, remotos e comeca por (F2B)')
+assert.match(operationalPage, /value="home" \{\.\.\.registerRule\('input_mode'/, 'UI de dias fixos com modo home (F2B)')
+assert.match(paMapPage, /cycle: 'border-fuchsia/, 'Mapa de PA deve ter tom visual para cycle (F2B)')
 assert.match(operationalPage, /const WEEKDAY_OPTIONS = \[/, 'UI deve declarar dias permitidos')
 for (const weekday of ['mon', 'tue', 'wed', 'thu', 'fri']) {
   assert.match(operationalPage, new RegExp(`value: '${weekday}'`), `UI deve permitir ${weekday}`)
@@ -56,12 +61,18 @@ for (const weekday of ['mon', 'tue', 'wed', 'thu', 'fri']) {
 }
 assert.doesNotMatch(operationalPage, /value: 'sat'|value: 'sun'/, 'UI inicial nao deve expor fim de semana')
 
-const saveRuleSource = operationalPage.match(/async function saveRule\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
+// F2B: validacao em parseRule, payload em buildRulePayload (rule e rule_preview), gravacao em saveRule.
+const ruleFlowSource = [
+  /\n  function parseRule\(values\) \{[\s\S]*?\n  \}/,
+  /\nfunction buildRulePayload\(data, action\) \{[\s\S]*?\n\}/,
+  /async function saveRule\(values\) \{[\s\S]*?\n  \}/,
+].map((pattern) => operationalPage.match(pattern)?.[0] || '').join('\n')
+const saveRuleSource = ruleFlowSource
 assert.match(saveRuleSource, /SCHEDULE_RULE_VALUES\.has\(ruleType\)/, 'Frontend deve validar rule_type canonico')
 assert.match(saveRuleSource, /scheduleRuleSchema\.safeParse\(/, 'Frontend deve validar regra de escala com Zod')
-assert.match(saveRuleSource, /ruleType === 'fixed_weekdays' && parsed\.data\.weekdays\.length === 0/, 'Frontend deve rejeitar fixed_weekdays sem dias')
-assert.match(saveRuleSource, /payload\.weekdays = parsed\.data\.weekdays/, 'Frontend deve enviar weekdays apenas para fixed_weekdays')
-assert.match(saveRuleSource, /post\('portal\/schedules\.php', payload\)/, 'Frontend deve manter endpoint de escala')
+assert.match(readFrontend('src/lib/formSchemas.ts'), /value\.rule_type === 'fixed_weekdays' && value\.input_mode === 'onsite' && value\.weekdays\.length === 0/, 'Frontend deve rejeitar fixed_weekdays sem dias')
+assert.match(saveRuleSource, /payload\.weekdays = data\.weekdays/, 'Frontend deve enviar weekdays apenas para fixed_weekdays')
+assert.match(saveRuleSource, /post\('portal\/schedules\.php', buildRulePayload\(data, 'rule'\)\)/, 'Frontend deve manter endpoint de escala')
 assert.doesNotMatch(saveRuleSource, /fetch\(/, 'Frontend nao deve criar fetch direto')
 assert.doesNotMatch(saveRuleSource, /postForm\(/, 'Regra fixa nao deve usar upload/formdata')
 

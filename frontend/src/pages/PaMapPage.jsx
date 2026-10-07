@@ -24,6 +24,8 @@ const ruleTone = {
   always_onsite: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
   always_remote: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
   fixed_weekdays: 'border-cyan-500/25 bg-cyan-500/10 text-cyan-300',
+  // F2B: ciclo; o dia presencial ou remoto vem do servidor (active_on_date).
+  cycle: 'border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-300',
   undefined: 'border-slate-600/50 bg-slate-800 text-slate-400',
 }
 

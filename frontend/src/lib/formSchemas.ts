@@ -4,6 +4,22 @@ const scheduleWeekdaySchema = z.enum(['mon', 'tue', 'wed', 'thu', 'fri'], {
   error: 'Dia da semana invalido.',
 })
 
+export const CYCLE_MAX_DAYS = 20
+const SCHEDULE_WEEKDAY_COUNT = 5
+
+/** Dias de um bloco do ciclo: inteiro de 1 a 19 (so digitos), ou null. */
+export function cycleDays(value: string): number | null {
+  if (!/^\d{1,2}$/.test(value)) return null
+  const days = Number(value)
+  return days >= 1 && days <= CYCLE_MAX_DAYS - 1 ? days : null
+}
+
+/** Segunda a sexta, pela data do calendario (sem fuso: meio-dia UTC). */
+export function isBusinessDay(date: string): boolean {
+  const weekday = new Date(`${date}T12:00:00Z`).getUTCDay()
+  return weekday >= 1 && weekday <= 5
+}
+
 const employeeIdSchema = z.preprocess(
   (value) => (value === '' || value === null || value === undefined ? undefined : Number(value)),
   z.number({ error: 'Informe o ID do funcionário.' })
@@ -82,6 +98,7 @@ export const scheduleRuleSchema = z.object({
     'always_onsite',
     'always_remote',
     'fixed_weekdays',
+    'cycle',
   ], {
     error: 'Tipo de escala invalido.',
   }),
@@ -89,13 +106,52 @@ export const scheduleRuleSchema = z.object({
     .min(1, 'Informe a data de vigencia.')
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Data de vigencia invalida.'),
   weekdays: z.array(scheduleWeekdaySchema).default([]),
+  // F2B: dias fixos informados como presenciais (padrao) ou como home office.
+  input_mode: z.enum(['onsite', 'home'], { error: 'Modo de informar os dias invalido.' }).default('onsite'),
+  home_weekdays: z.array(scheduleWeekdaySchema).default([]),
+  // F2B: ciclo. A data inicial e o effective_from (o servidor forca o inicio nela).
+  cycle_onsite_days: z.string().default('2'),
+  cycle_remote_days: z.string().default('1'),
+  cycle_starts_with: z.enum(['onsite', 'remote'], { error: 'Informe se o ciclo comeca por dia presencial ou remoto.' }).default('onsite'),
 }).superRefine((value, ctx) => {
-  if (value.rule_type === 'fixed_weekdays' && value.weekdays.length === 0) {
+  if (value.rule_type === 'fixed_weekdays' && value.input_mode === 'onsite' && value.weekdays.length === 0) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['weekdays'],
       message: 'Selecione ao menos um dia da semana.',
     })
+  }
+  // Espelha OperationalService::ruleDefinitionForPayload (o servidor valida).
+  if (value.rule_type === 'fixed_weekdays' && value.input_mode === 'home') {
+    if (value.home_weekdays.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['home_weekdays'],
+        message: 'Nenhum dia de home office marcado: para presencial em todos os dias uteis, use a regra "Sempre presencial".',
+      })
+    } else if (value.home_weekdays.length === SCHEDULE_WEEKDAY_COUNT) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['home_weekdays'],
+        message: 'Todos os dias em home office: use a regra "Sempre remoto".',
+      })
+    }
+  }
+  if (value.rule_type === 'cycle') {
+    const onsite = cycleDays(value.cycle_onsite_days)
+    const remote = cycleDays(value.cycle_remote_days)
+    if (onsite === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cycle_onsite_days'], message: `Dias presenciais do ciclo: informe um numero inteiro de 1 a ${CYCLE_MAX_DAYS - 1}.` })
+    }
+    if (remote === null) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cycle_remote_days'], message: `Dias remotos do ciclo: informe um numero inteiro de 1 a ${CYCLE_MAX_DAYS - 1}.` })
+    }
+    if (onsite !== null && remote !== null && onsite + remote > CYCLE_MAX_DAYS) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cycle_remote_days'], message: `O ciclo pode ter no maximo ${CYCLE_MAX_DAYS} dias.` })
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value.effective_from) && !isBusinessDay(value.effective_from)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['effective_from'], message: 'A data inicial do ciclo precisa ser dia util (segunda a sexta).' })
+    }
   }
 })
 
