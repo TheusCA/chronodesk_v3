@@ -257,6 +257,10 @@ final class QaLegacyStatement extends PDOStatement {
             return true;
         }
         if (strpos($sql, 'INSERT INTO portal_pa_assignments (') === 0) {
+            // ENUM de schedule_rule_type (migrations 009 e 010), como o MySQL em modo estrito.
+            if (!in_array($params[':schedule_rule_type'], ['even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined', 'fixed_weekdays'], true)) {
+                throw new PDOException("SQLSTATE[01000]: Warning: 1265 Data truncated for column 'schedule_rule_type'");
+            }
             $db->paAssignments[] = [
                 'id' => $db->nextId++, 'active' => 1, 'pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'],
                 'employee_name' => $params[':employee_name'], 'employee_login' => $params[':employee_login'], 'team' => $params[':team'],
@@ -566,7 +570,8 @@ assert_same([
 ], $eligible, 'Mapa PA: elegivel com ciclo pelo motor (remoto, presencial, fim de semana)');
 $saved = $map->save(['pa_number' => '1730', 'employee_id' => 11, 'valid_from' => '2026-10-06'], 'qa');
 assert_same([], $saved['warnings'], 'Mapa PA: ciclo em dia presencial nao gera aviso de remoto');
-assert_same(['cycle', $cycleConfig], [$pdo->paAssignments[0]['schedule_rule_type'], $pdo->paAssignments[0]['schedule_rule_config']], 'Mapa PA: copia guarda o tipo e a configuracao do ciclo');
+// O ENUM da copia nao tem 'cycle': grava 'undefined' com a configuracao, e a leitura reconhece o ciclo.
+assert_same(['undefined', $cycleConfig], [$pdo->paAssignments[0]['schedule_rule_type'], $pdo->paAssignments[0]['schedule_rule_config']], 'Mapa PA: copia do ciclo dentro do ENUM, com a configuracao');
 $active = [];
 foreach (['2026-10-06', '2026-10-08', '2026-10-10'] as $date) {
     $item = $map->list(['date' => $date])['items'][0];
@@ -577,6 +582,13 @@ assert_same([
     '2026-10-08' => [false, 'remote', 'Ciclo 2P/1R'],
     '2026-10-10' => [false, 'offsite', 'Ciclo 2P/1R'],
 ], $active, 'Mapa PA: presencial no dia certo do ciclo, remoto no dia remoto, fora no fim de semana');
+// Copia 'undefined' sem pattern (vinculo antigo) continua "Sem escala".
+$pdo->paAssignments[] = ['id' => 999, 'active' => 1, 'pa_number' => '1727', 'employee_id' => 12, 'employee_name' => 'Tecnico L', 'employee_login' => 'qa.l', 'team' => 'n1',
+    'schedule_rule_type' => 'undefined', 'schedule_rule_config' => null, 'valid_from' => '2026-09-01', 'valid_until' => null, 'notes' => null,
+    'created_by' => 'qa', 'updated_by' => 'qa', 'created_at' => '2026-09-01 08:00:00', 'updated_at' => '2026-09-01 08:00:00'];
+$types = array_column(array_map(static fn (array $item): array => [$item['employee_id'], $item['schedule_rule_type'] . ' / ' . $item['schedule_rule_label']], $map->list(['date' => '2026-10-06'])['items']), 1, 0);
+assert_same([11 => 'cycle / Ciclo 2P/1R', 12 => 'undefined / Sem escala'], $types, 'Mapa PA: copia reconhecida como ciclo pelo pattern; undefined antigo continua sem escala');
+$pdo->paAssignments = array_values(array_filter($pdo->paAssignments, static fn (array $row): bool => $row['id'] !== 999));
 assert_same('409: Conflito de escala no PA com Tecnico K.', (static function () use ($map): string {
     try {
         $map->save(['pa_number' => '1730', 'employee_id' => 12, 'valid_from' => '2026-10-06'], 'qa');
@@ -585,6 +597,17 @@ assert_same('409: Conflito de escala no PA com Tecnico K.', (static function () 
         return '409: ' . $e->getMessage();
     }
 })(), 'Mapa PA: conflito conservador (ciclo x dias pares no mesmo PA) ate o F6');
+$conflictPdo = $withCycle();
+$conflictMap = new PaMapService($conflictPdo);
+$conflictMap->save(['pa_number' => '1726', 'employee_id' => 12, 'valid_from' => '2026-10-06'], 'qa');
+assert_same('409: Conflito de escala no PA com Tecnico L.', (static function () use ($conflictMap): string {
+    try {
+        $conflictMap->save(['pa_number' => '1726', 'employee_id' => 11, 'valid_from' => '2026-10-06'], 'qa');
+        return 'ok';
+    } catch (DomainException $e) {
+        return '409: ' . $e->getMessage();
+    }
+})(), 'Mapa PA: conflito conservador tambem quando o vinculo novo e o de ciclo');
 $remoteSaved = $map->save(['pa_number' => '1730', 'employee_id' => 13, 'valid_from' => '2026-10-06', 'confirm_remote_allocation' => true], 'qa');
 assert_same(['Colaborador marcado como remoto nesta data.'], $remoteSaved['warnings'], 'Mapa PA: sempre remoto continua avisando e sem conflito');
 // Ciclo em dia remoto: mesmo aviso e confirmacao do sempre remoto.

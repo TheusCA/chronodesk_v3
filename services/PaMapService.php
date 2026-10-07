@@ -126,7 +126,10 @@ final class PaMapService {
                 ':employee_name' => $employee['name'],
                 ':employee_login' => $employee['ad_login'],
                 ':team' => $employee['team'],
-                ':schedule_rule_type' => $schedule['rule_type'],
+                // [F2B] O ENUM da copia (migrations 009 e 010) nao tem 'cycle':
+                // o ciclo e gravado como 'undefined' com a configuracao, e a
+                // leitura o reconhece pelo pattern (storedRuleType). F6 troca a copia pelo motor.
+                ':schedule_rule_type' => $schedule['rule_type'] === 'cycle' ? 'undefined' : $schedule['rule_type'],
                 ':schedule_rule_config' => $schedule['rule_config'] ?? null,
                 ':valid_from' => $validFrom,
                 ':valid_until' => $validUntil,
@@ -288,17 +291,17 @@ final class PaMapService {
     }
 
     private function assignmentView(array $row, string $date, string $source): array {
-        $ruleType = $this->ruleType($row['schedule_rule_type'] ?? 'undefined');
-        $weekdays = $ruleType === 'fixed_weekdays'
-            ? OperationalService::scheduleRuleConfigWeekdays($row['schedule_rule_config'] ?? null)
-            : [];
         $config = $row['schedule_rule_config'] ?? null;
+        $ruleType = $this->storedRuleType($row['schedule_rule_type'] ?? 'undefined', $config);
+        $weekdays = $ruleType === 'fixed_weekdays'
+            ? OperationalService::scheduleRuleConfigWeekdays($config)
+            : [];
         $activeOnDate = $this->ruleActiveOnDate($ruleType, $date, $weekdays, $config);
         $remote = in_array($ruleType, ['always_remote', 'fixed_weekdays'], true)
             || ($ruleType === 'cycle' && self::cyclePresence($config, $date) === 'remote');
-        return $row + [
+        // O tipo reconhecido prevalece sobre o gravado (o ciclo e gravado como 'undefined').
+        return ['schedule_rule_type' => $ruleType] + $row + [
             'source' => $source,
-            'schedule_rule_type' => $ruleType,
             'schedule_rule_label' => $this->ruleLabel($ruleType, $weekdays, $config),
             'schedule_weekdays' => $weekdays,
             'active_on_date' => $activeOnDate,
@@ -565,6 +568,15 @@ final class PaMapService {
     private static function decodedConfig(?string $config): array {
         $decoded = is_string($config) ? json_decode($config, true) : null;
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /** [F2B] Tipo da copia: 'undefined' com configuracao de ciclo valida e o ciclo gravado no vinculo. */
+    private function storedRuleType($value, ?string $config): string {
+        $ruleType = $this->ruleType($value);
+        if ($ruleType === 'undefined' && PresenceEngine::cycleConfig(self::decodedConfig($config)) !== null) {
+            return 'cycle';
+        }
+        return $ruleType;
     }
 
     private function ruleType($value): string {
