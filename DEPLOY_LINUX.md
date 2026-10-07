@@ -986,6 +986,33 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   50 ms **e** mais de 20%): `STATUS_PRESENCE_ENABLED=false` no `.env`, recarga
   do PHP-FPM e nova medicao. Calendario, Escala, Relatorios e Mapa PA nao mudam
   neste deploy. Rollback: so codigo (o F2 nao grava nada).
+- Deploy que traz o F2B (Parte B: ciclo, dias de home, previa e tela Escala no
+  motor): sem migration, mas exige a 011 (deploy do F1: o ENUM de
+  `rule_type` com `cycle`) e o F2 (motor). **Antes do `git pull`, opcional:**
+  ensaio do rollback do ciclo em banco descartavel (comando no cabecalho de
+  `migrations/rollback/20261007_f2b_cycle_ensaio_preparo.sql`; esperado:
+  `regras_cycle` 1 -> 0 -> 1 e `undefined_com_pattern` 0 -> 1 -> 0, iguais na
+  2a execucao de cada script). Depois da recarga, logado como gestor:
+  (1) Escala: nova regra "Ciclo presencial/remoto" 2 presenciais, 1 remoto,
+  comeca por remoto, data inicial numa segunda; "Ver previa" mostra
+  R P P R P | P R P P R e a regra que sera encerrada; Salvar so habilita depois
+  da previa e volta a desabilitar se um campo mudar; salvar e repetir da
+  "nada foi alterado"; (2) data inicial num sabado: recusada; 11 + 10 dias:
+  recusado; data passada como gestor: 403 (Lideranca e admin passam);
+  (3) "Dias fixos" informando home ter e qui grava presencial seg, qua e sex;
+  todos os dias como home: recusado sugerindo "Sempre remoto"; (4) tela
+  Escala: sabado e domingo so com excecao de trabalho; quem nao tem regra
+  aparece "Sem escala"; folga, ausencia, ferias e licenca aparecem
+  "Ausência" com "Ausente (dia todo)"; (5) Relatorios, CSV e Calendario de um periodo com o
+  ciclo: sem erro, ciclo so nos dias uteis; os demais colaboradores com os
+  mesmos numeros de antes; (6) "Historico" na linha da regra mostra as
+  versoes; (7) Mapa PA (admin ou Lideranca): vincular quem tem ciclo num dia
+  presencial nao pede confirmacao; num dia remoto pede, como o sempre remoto;
+  o cartao mostra "Ciclo 2P/1R" e fica presencial so nos dias certos; (8)
+  importacao com linha "ciclo": recusada com a orientacao de usar a tela;
+  (9) `migrations/verificacao/20261007_f2b_cycle_check.sql`:
+  `cycle_sem_pattern = 0` e `undefined_com_pattern = 0`. Rollback: ver
+  "Rollback", Parte B, F2B.
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -1058,6 +1085,23 @@ portal_schedule_rules_bkp_011 TO portal_schedule_rules_bkp_011_<data>`, e as
 demais) e repetir. Depois dessa parada, o procedimento temporario
 `rollback_011_confere_copias` fica no banco ate a proxima execucao do rollback,
 que o recria e o apaga no fim (ou `DROP PROCEDURE rollback_011_confere_copias;`).
+
+Parte B, F2B (so se houver regra `cycle` gravada; sem ela, so o codigo), nesta
+ordem:
+1. Com o codigo do F2B **ainda no ar**, trocar `cycle` por `undefined`
+   mantendo a configuracao:
+   `read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas < migrations/rollback/20261007_f2b_cycle_down.sql; unset P`.
+   O codigo do F2B le essas linhas como "Sem escala", sem erro. Conferir com
+   `migrations/verificacao/20261007_f2b_cycle_check.sql`: `regras_cycle = 0`.
+2. Rollback do codigo, como acima. O codigo anterior le `undefined` como antes
+   (Sem escala na tela, remoto nos relatorios antigos). Vinculos de PA de quem
+   tinha ciclo ja estao gravados como `undefined`: nada a fazer.
+3. Volta, quando o F2B voltar ao ar: primeiro o codigo, depois
+   `migrations/rollback/20261007_f2b_cycle_up.sql` (reaplica `cycle` onde a
+   configuracao tem `pattern`); conferir `undefined_com_pattern = 0`.
+Os dois scripts so fazem UPDATE, sao idempotentes e nao apagam historico (o
+rollback da 011 apagaria; nao use para isso). Aplicar o `up` com o codigo
+anterior no ar quebra Calendario, Escala e Relatorios (400).
 
 Lote 4 (SEC-08): depois do rollback do codigo, opcional,
 `migrations/rollback/20261002_017_shift_attachment_team_down.sql` (remove a

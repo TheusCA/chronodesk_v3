@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend em andamento** (seção 9.3). F3 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend entregue em 2026-10-07, aguardando aprovação** (seção 9.3). F3 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -984,6 +984,26 @@ Validação pela IA: `qa-presence-engine` com 126 verificações (critério de a
 Validação pela IA (backend): `qa-schedule-history`, `qa-schedule-legacy-output`, `qa-security` (matriz com `POST rule_preview`, prévia no serviço e de ponta a ponta: L9 e retroativo com 403) e a bateria completa; mutação **49/49** no backend; três mutantes de sanidade no caminho antigo (rótulo, ausência, `undefined`) mortos pela referência. Limitações: nada rodou em MySQL real (consultas, `JSON_VALID`/`JSON_CONTAINS_PATH` dos scripts de rollback e o ensaio); frontend do F2B em andamento.
 
 **Backend aprovado em 2026-10-07** (`fb53485` a `6b078cd`) pelo responsável, após teste em MySQL 8.0.46 em modo estrito: prévia sem gravar; ciclo salvo e "sem alteração" na repetição; recusas (âncora no sábado, 21 dias, retroativo do gestor); modo home; tela Escala com ciclo; relatório antigo com ciclo sem 400; vínculo de PA de quem tem ciclo (cópia `undefined` + configuração) e confirmação no dia remoto; scripts down/up do F2B idempotentes, com a verificação batendo. **As nove decisões de implementação acima ficam aprovadas.**
+
+**Entrega do frontend (2026-10-07; aguardando aprovação):** `2339988` (tela) e o commit de documentação (contratos, `DEPLOY_LINUX.md`, registro).
+
+| Item | Como ficou |
+|---|---|
+| Formulário | Tipo "Ciclo presencial/remoto" com dias presenciais, dias remotos e "começa por"; o campo de data vira "Data inicial do ciclo". "Dias fixos" com "Informar: dias presenciais / dias de home office" e o resultado "presencial … · home …". Schema Zod espelha as recusas do servidor (mesmas mensagens) |
+| Prévia | "Ver prévia" chama `rule_preview` pelo `runAction` (sem mensagem de sucesso); mostra a semana em P/R, o rótulo, a regra que será encerrada, "regra igual à vigente", o fim antes de uma regra agendada e o aviso de retroativo. **Salvar só habilita com a prévia dos valores atuais**: a chave da prévia é o payload; mudar qualquer campo marca "Prévia desatualizada" |
+| Regras | Botão "Histórico" por colaborador abre um painel com todas as versões (`include_history=1`): vigente, agendada e encerrada, com quem alterou; "Editar" de um ciclo ou de dias em modo home volta com os campos preenchidos |
+| Escala gerada | Status "Ausência" (com "Ausente (dia todo)") e "Sem escala"; origem "Ausência lançada", "Exceção de ausência", "Sem regra cadastrada"; nota sobre fim de semana e sem escala |
+| Mapa PA | Tom visual do ciclo; o aviso de remoto do ciclo usa a confirmação que a tela já tem |
+| QAs | `qa:schedule-form` (estrutura do fluxo, prévia obrigatória, histórico e testes de comportamento do schema por `safeParse`), `qa:schedule-rules` (ciclo e modo home na tela e no Mapa PA); `qa:operational`, `qa:visual`, `qa:action-runner` e `qa:action-feedback` atualizados de forma deliberada: o fluxo saiu de `saveRule` para `parseRule` (validação) e `buildRulePayload` (payload do `rule` e da prévia), com as mesmas garantias (rule_type canônico, Zod, payload sem objeto cru) |
+
+**Decisões de implementação do frontend a aprovar:**
+
+1. **Prévia obrigatória para todos os tipos**, não só ciclo e modo home (a seção 5.3 a mostra no ciclo; o plano dizia "Salvar só fica habilitado depois da prévia"). O servidor não exige a prévia: é conveniência da tela.
+2. **`src/lib/operational.ts` não mudou:** o tipo `ScheduleRuleType` não tem `cycle`, mas não é usado em lugar nenhum e o arquivo é protegido pelo `qa:schedule-form` (trava por `git diff`, dívida técnica registrada). Os cinco lugares da lista de tipos ficaram quatro com `cycle` (serviço, Mapa PA, schema e tela) mais esse tipo sem uso.
+3. **Histórico** abre um colaborador por vez, com o período do filtro da tela (o `include_history=1` traz todas as versões do colaborador independentemente do período); linhas vazias antigas (fim antes do início) não aparecem.
+4. **Legenda única da seção 5.1** fica para o F5 (Calendário); no F2B a tela Escala usa os status com texto ("Presencial", "Remoto", "Ausência", "Sem escala").
+
+Validação pela IA (frontend): `lint`, `typecheck`, `build` e os 14 `qa:*`; mutação **17/17** (prévia sempre atual, salvar sem prévia, botão sempre habilitado, data inicial e dias do ciclo no payload, modo home, prévia gravando, prévia não limpa, opção do ciclo, histórico, cinco regras do schema, tom do Mapa PA). Limitação: **a tela não foi aberta no navegador** (sem PHP com MySQL local); comportamento visual e de interação só pelo roteiro "Deploy que traz o F2B" no servidor.
 
 ---
 

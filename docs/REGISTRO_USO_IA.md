@@ -358,6 +358,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL local: consultas, `JSON_VALID`/`JSON_CONTAINS_PATH` dos scripts de rollback e o ensaio so no servidor. Frontend do F2B entregue depois, em registro proprio. |
 | **Validacao humana** | **Backend aprovado em 2026-10-07** (`fb53485` a `6b078cd`) pelo responsavel, apos teste em MySQL 8.0.46 em modo estrito: previa sem gravar; ciclo salvo e "sem alteracao" na repeticao; recusas (ancora no sabado, 21 dias, retroativo do gestor); modo home; tela Escala com ciclo; relatorio antigo com ciclo sem 400; vinculo de PA de quem tem ciclo (copia `undefined` + configuracao) e confirmacao no dia remoto; scripts down/up do F2B idempotentes, com a verificacao batendo. As nove decisoes da secao 9.3 aprovadas. |
 
+### Parte B, F2B — frontend, contratos e roteiro de deploy — 2026-10-07
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Tela Escala do F2B (desenho, secao 5.3) sobre o backend aprovado: ciclo, dias de home, previa obrigatoria antes de salvar, historico por colaborador; QAs estruturais; contratos da API; roteiro "Deploy que traz o F2B" e rollback do ciclo no `DEPLOY_LINUX.md`. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `2339988` (frontend e QAs) e o commit deste registro (desenho 9.3, contratos, `DEPLOY_LINUX.md`). Sem push. |
+| **O que a IA alterou** | `frontend/src/lib/formSchemas.ts` (`cycle`, `input_mode`, `home_weekdays`, campos do ciclo, `cycleDays`, `isBusinessDay`), `frontend/src/pages/OperationalPages.jsx` (`parseRule`, `buildRulePayload`, `previewRule`, `RulePreviewPanel`, historico, status e origem da escala gerada), `frontend/src/pages/PaMapPage.jsx` (tom do ciclo). QAs: `qa:schedule-form`, `qa:schedule-rules`, `qa:operational`, `qa:visual`, `qa:action-runner`, `qa:action-feedback`. Docs: `docs/API_CONTRACTS_FRONTEND.md`, `DEPLOY_LINUX.md`, desenho 9.3. |
+| **Decisoes de implementacao** | As quatro do frontend na secao 9.3 (previa obrigatoria para todos os tipos; `operational.ts` sem `cycle` por ser tipo sem uso e arquivo protegido; historico de um colaborador por vez; legenda unica so no F5). |
+| **Validacao executada pela IA** | `lint`, `typecheck`, `build`, os 14 `qa:*` e a bateria PHP antes de cada commit. Testes de comportamento do schema por `safeParse` (ciclo valido, sabado, 21 e 20 dias, seis valores invalidos de dias, modo home com nenhum e todos os dias, regra antiga sem `input_mode`). Mutacao **17/17** no frontend. |
+| **Limitacoes declaradas** | A tela nao foi aberta no navegador (sem PHP com MySQL local): layout, foco e interacao so pelo roteiro de deploy no servidor. Os QAs estruturais conferem o texto do codigo; o comportamento do payload e coberto por regex, nao por execucao. `operational.ts` segue com o tipo sem `cycle` (sem uso). |
+| **Validacao humana** | Pendente. |
+
 ---
 
 ## 5. Responsabilidade
