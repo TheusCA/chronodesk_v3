@@ -21,6 +21,12 @@ declare(strict_types=1);
 // com --gravar-referencia. Nao regravar depois do F2B: se a comparacao
 // falhar, a saida mudou e isso precisa de decisao do responsavel.
 //
+// F3 (commit 1, SEC-07 e L-01): o bloco de ausencias do Calendario mudou
+// por RBAC aprovado. As tres saidas completas do Calendario que trazem
+// ausencias ficam na referencia como registro, e a comparacao passa para as
+// versoes "_sem_ausencia", gravadas tambem com o codigo de c941f6c (as 14
+// assinaturas antigas sairam identicas nessa gravacao).
+//
 // Secao 2: os consumidores do ciclo fora da tela Escala (Relatorio, CSV,
 // Calendario e Mapa PA), que antes do F2B davam 400 com uma regra cycle.
 //
@@ -178,8 +184,10 @@ final class QaLegacyStatement extends PDOStatement {
             }
             return true;
         }
-        // Bloco de ausencias do calendario (SEC-07 fica para o F3).
-        if (strpos($sql, 'SELECT id, employee_name AS title, reason AS description,') === 0) {
+        // Bloco de ausencias do calendario: forma anterior ao F3 (com o motivo)
+        // e a do F3 commit 1 (com o tipo, sem o motivo; SEC-07 e L-01).
+        $absenceBeforeF3 = strpos($sql, 'SELECT id, employee_name AS title, reason AS description,') === 0;
+        if ($absenceBeforeF3 || strpos($sql, 'SELECT id, employee_name AS title, absence_type,') === 0) {
             foreach ($db->absences as $row) {
                 if ($row['starts_on'] > $params[':date_to'] || $row['ends_on'] < $params[':date_from']
                     || (isset($params[':employee_id']) && $row['employee_id'] !== $params[':employee_id'])
@@ -187,7 +195,8 @@ final class QaLegacyStatement extends PDOStatement {
                     continue;
                 }
                 $this->rows[] = [
-                    'id' => $row['id'], 'title' => $db->employees[$row['employee_id']]['nome'], 'description' => 'motivo ficticio',
+                    'id' => $row['id'], 'title' => $db->employees[$row['employee_id']]['nome'],
+                ] + ($absenceBeforeF3 ? ['description' => 'motivo ficticio'] : ['absence_type' => $row['absence_type']]) + [
                     'starts_at' => $row['starts_on'] . ' 00:00:00', 'ends_at' => $row['ends_on'] . ' 23:59:59',
                     'team' => null, 'employee_id' => $row['employee_id'], 'status' => $row['status'],
                 ];
@@ -367,10 +376,10 @@ function qa_legacy_db(): QaLegacyPdo {
         ];
     }
     $pdo->absences = [
-        ['id' => 301, 'employee_id' => 2, 'starts_on' => '2026-10-12', 'ends_on' => '2026-10-14', 'status' => 'approved'],
-        ['id' => 302, 'employee_id' => 3, 'starts_on' => '2026-09-25', 'ends_on' => '2026-09-25', 'status' => 'pending'],
-        ['id' => 303, 'employee_id' => 8, 'starts_on' => '2026-09-28', 'ends_on' => '2026-09-30', 'status' => 'approved'],
-        ['id' => 304, 'employee_id' => 1, 'starts_on' => '2026-09-10', 'ends_on' => '2026-09-18', 'status' => 'approved'],
+        ['id' => 301, 'employee_id' => 2, 'starts_on' => '2026-10-12', 'ends_on' => '2026-10-14', 'status' => 'approved', 'absence_type' => 'ferias'],
+        ['id' => 302, 'employee_id' => 3, 'starts_on' => '2026-09-25', 'ends_on' => '2026-09-25', 'status' => 'pending', 'absence_type' => 'atestado'],
+        ['id' => 303, 'employee_id' => 8, 'starts_on' => '2026-09-28', 'ends_on' => '2026-09-30', 'status' => 'approved', 'absence_type' => 'folga'],
+        ['id' => 304, 'employee_id' => 1, 'starts_on' => '2026-09-10', 'ends_on' => '2026-09-18', 'status' => 'approved', 'absence_type' => 'justificada'],
     ];
     $GLOBALS['qa_pdo'] = $pdo;
     return $pdo;
@@ -399,7 +408,13 @@ function qa_legacy_outputs(OperationalService $service): array {
         'calendar_n1' => ['from' => '2026-09-16', 'to' => '2026-10-15', 'team' => 'n1'],
         'calendar_colaborador_3' => ['from' => '2026-09-16', 'to' => '2026-10-15', 'employee_id' => '3'],
     ] as $name => $filters) {
-        $outputs[$name] = $service->listCalendar($filters);
+        // Visao da gestao (o codigo anterior ao F3 ignora o ator).
+        $calendar = $service->listCalendar($filters, ['role' => 'gestor', 'employee_id' => null]);
+        $outputs[$name] = $calendar;
+        // [F3] O bloco de ausencias mudou por RBAC aprovado (SEC-07, L-01):
+        // a escala do Calendario e comparada sem os eventos de ausencia.
+        $calendar['items'] = array_values(array_filter($calendar['items'], static fn (array $item): bool => $item['event_type'] !== 'absence'));
+        $outputs[$name . '_sem_ausencia'] = $calendar;
     }
     return $outputs;
 }
@@ -497,7 +512,19 @@ $weekendRows = array_filter($schedule, static fn (array $row): bool => (int)(new
 assert_same(true, count($weekendRows) > 0, 'massa: cobre fim de semana (a regra antiga gera sabado e domingo)');
 
 assert_same(array_keys($expected), array_keys($signature), 'mesmas saidas da referencia');
+// [F3 commit 1] Saidas completas do Calendario que trazem ausencias: o bloco
+// de ausencias mudou (sem o motivo; tipo so para a gestao e o proprio; SEC-07
+// e L-01, aprovados em 2026-09-30). Elas ficam na referencia como registro e
+// a comparacao passa para as versoes "_sem_ausencia", gravadas com o codigo de
+// c941f6c (decisao 6 do plano do F3, secao 9.4 do desenho).
+$changedByF3 = ['calendar_outubro', 'calendar_n1', 'calendar_colaborador_3'];
+foreach ($changedByF3 as $name) {
+    assert_same(true, ($signature[$name . '_sem_ausencia']['linhas'] ?? 0) < ($signature[$name]['linhas'] ?? 0), "{$name}: a saida completa tem eventos de ausencia");
+}
 foreach ($expected as $name => $reference) {
+    if (in_array($name, $changedByF3, true)) {
+        continue;
+    }
     assert_same($reference, $signature[$name], "saida {$name} identica a referencia anterior ao F2B (sha256, bytes, linhas)");
 }
 
@@ -627,4 +654,5 @@ assert_same(['Colaborador marcado como remoto nesta data.'], $saved['warnings'],
 // Dias pares (tipo antigo) sem mudanca: nao pede confirmacao em dia remoto.
 assert_same('ok', $outcome(fn () => $map->save(['pa_number' => '1728', 'employee_id' => 12, 'valid_from' => '2026-10-07'], 'qa')), 'Mapa PA: dias pares em dia impar segue sem confirmacao (como antes)');
 
-echo 'QA schedule legacy output OK (' . count($expected) . " saidas identicas a referencia anterior ao F2B)\n";
+echo 'QA schedule legacy output OK (' . (count($expected) - count($changedByF3)) . ' saidas identicas a referencia; '
+    . count($changedByF3) . " do Calendario com ausencias comparadas sem esses eventos, F3)\n";

@@ -111,7 +111,11 @@ final class OperationalService {
         return $this->pdo->query($sql)->fetchAll();
     }
 
-    public function listCalendar(array $filters): array {
+    /**
+     * $actor: portal_actor() de quem consulta. [SEC-07, L-01, F3 commit 1] Sem
+     * ator, vale a visão mais restrita (nenhum tipo de ausência).
+     */
+    public function listCalendar(array $filters, array $actor = []): array {
         [$from, $to] = $this->period($filters, 62);
         $team = $this->team($filters['team'] ?? null, true);
         $employeeId = $this->positiveInt($filters['employee_id'] ?? null, true);
@@ -185,7 +189,10 @@ final class OperationalService {
         }
 
         if (!$type || $type === 'absence') {
-            $sql = 'SELECT id, employee_name AS title, reason AS description,
+            // [SEC-07, L-01] O motivo (reason) nunca sai no calendário, para
+            // nenhum perfil (decisão 4 do F3). Todos veem quem está ausente e
+            // o período (P9); o tipo, só a gestão e o próprio colaborador.
+            $sql = 'SELECT id, employee_name AS title, absence_type,
                            CONCAT(starts_on, " 00:00:00") AS starts_at,
                            CONCAT(ends_on, " 23:59:59") AS ends_at,
                            NULL AS team, employee_id, status
@@ -202,7 +209,12 @@ final class OperationalService {
             }
             $stmt = $this->pdo->prepare($sql . ' ORDER BY starts_at');
             $stmt->execute($params);
+            $seesAllTypes = portal_role_is_manager($actor['role'] ?? null);
+            $ownEmployeeId = (int)($actor['employee_id'] ?? 0);
             foreach ($stmt->fetchAll() as $row) {
+                $row['description'] = $seesAllTypes || ($ownEmployeeId > 0 && (int)$row['employee_id'] === $ownEmployeeId)
+                    ? self::absenceTypeLabel((string)$row['absence_type'])
+                    : '';
                 $events[] = $this->calendarRow('absence', $row);
             }
         }
@@ -2138,6 +2150,21 @@ final class OperationalService {
             'sync_error' => 'Erro de sincronizacao',
             '' => 'Sem status',
             default => ucfirst(str_replace('_', ' ', $status)),
+        };
+    }
+
+    /**
+     * [SEC-07, F3 commit 1] Rótulo do tipo de ausência da tabela atual.
+     * "atestado" sai como "Ausência justificada": o calendário não indica
+     * dado de saúde (D4, P8; o tipo deixa de existir na migration 012).
+     */
+    public static function absenceTypeLabel(string $type): string {
+        return match ($type) {
+            'ferias' => 'Férias',
+            'folga' => 'Folga',
+            'treinamento' => 'Treinamento',
+            'atestado', 'justificada' => 'Ausência justificada',
+            default => 'Ausência',
         };
     }
 

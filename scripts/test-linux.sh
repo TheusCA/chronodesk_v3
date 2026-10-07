@@ -34,6 +34,10 @@ echo "== PHP presence engine QA =="
 # Motor de presenca (F2); sem banco.
 php scripts/qa-presence-engine.php
 
+echo "== PHP absences QA =="
+# Ausencias (F3); sem banco.
+php scripts/qa-absences.php
+
 echo "== PHP legacy schedule output QA =="
 # Relatorio, CSV e Calendario iguais a referencia anterior ao F2B; sem banco.
 php scripts/qa-schedule-legacy-output.php

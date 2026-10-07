@@ -92,6 +92,42 @@ class PortalService {
         }
     }
 
+    /**
+     * [SEC-07, F3 commit 1] Ausências visíveis ao ator: gestão (gestor,
+     * Liderança, admin) vê todas; técnico e somente leitura, só as próprias,
+     * pelo employee_id da sessão, nunca pelo parâmetro (desenho, seção 3.3).
+     * Sem colaborador vinculado à sessão: lista vazia, sem consultar o banco.
+     * A observação (reason) vai só para a gestão e para o próprio (decisão 4
+     * do plano do F3), que é o que esta lista devolve.
+     */
+    public function absences(array $actor, int $limit = 100): array {
+        $limit = max(1, min($limit, 200));
+        $employeeId = null;
+        if (!portal_role_is_manager($actor['role'] ?? null)) {
+            $employeeId = (int)($actor['employee_id'] ?? 0);
+            if ($employeeId < 1) {
+                return db_limit_rows([], $limit);
+            }
+        }
+        try {
+            $pdo = get_db_connection();
+            $sql = 'SELECT ' . self::TABLES['absences']['columns'] . ' FROM portal_absences';
+            if ($employeeId !== null) {
+                $sql .= ' WHERE employee_id = :employee_id';
+            }
+            $stmt = $pdo->prepare($sql . ' ORDER BY updated_at DESC, id DESC LIMIT :limit');
+            if ($employeeId !== null) {
+                $stmt->bindValue(':employee_id', $employeeId, PDO::PARAM_INT);
+            }
+            $stmt->bindValue(':limit', $limit + 1, PDO::PARAM_INT);
+            $stmt->execute();
+            return db_limit_rows($stmt->fetchAll(), $limit);
+        } catch (Throwable $e) {
+            error_log('[PORTAL] Recurso indisponível: absences');
+            throw new PortalStorageException('A base do portal ainda não está disponível.', 0, $e);
+        }
+    }
+
     public function schedules(?string $type = null, int $limit = 100): array {
         $allowed = ['turno', 'home_office', 'presencial', 'folga', 'ferias', 'sobreaviso', 'plantao', 'ausencia'];
         if ($type !== null && !in_array($type, $allowed, true)) {

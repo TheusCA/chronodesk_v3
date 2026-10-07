@@ -9,7 +9,8 @@ try {
     // portal_operational_error(), sem excecao sem captura.
     $service = new OperationalService();
     if ($method === 'GET') {
-        json_response(['sucesso' => true] + $service->listCalendar($_GET));
+        // [SEC-07, L-01] Ausencias sem o motivo; tipo so para a gestao e o proprio.
+        json_response(['sucesso' => true] + $service->listCalendar($_GET, portal_actor($role)));
     }
 
     if (!portal_role_is_manager($role)) {

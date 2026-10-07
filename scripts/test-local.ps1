@@ -106,6 +106,14 @@ if (!$phpExecutable) {
         Pass "QA da saida antiga de escala concluido"
     }
 
+    # Sem banco: ausencias (F3): escopo de leitura e, depois, escrita.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-absences.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA de ausencias falhou"
+    } else {
+        Pass "QA de ausencias concluido"
+    }
+
     # Sem banco: motor de presenca, presence.php e presenca no status.php (F2).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-presence-engine.php")
     if ($LASTEXITCODE -ne 0) {

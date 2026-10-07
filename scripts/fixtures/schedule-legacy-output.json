@@ -44,7 +44,17 @@
         "bytes": 49613,
         "linhas": 215
     },
+    "calendar_outubro_sem_ausencia": {
+        "sha256": "1281430cfcbae9dcd305ebbfcd3994f75715fc43568d74fdb861e05ac2d0e9e8",
+        "bytes": 49403,
+        "linhas": 214
+    },
     "calendar_schedule": {
+        "sha256": "42b45057e13c3b2ad3b1fd5cdb30796160a25d0f9a576ea3bcced601d26d736f",
+        "bytes": 48302,
+        "linhas": 210
+    },
+    "calendar_schedule_sem_ausencia": {
         "sha256": "42b45057e13c3b2ad3b1fd5cdb30796160a25d0f9a576ea3bcced601d26d736f",
         "bytes": 48302,
         "linhas": 210
@@ -54,7 +64,17 @@
         "bytes": 23235,
         "linhas": 100
     },
+    "calendar_onsite_sem_ausencia": {
+        "sha256": "13e108b37c71590fd251018d39369c30799b082a0838774f1d60d78c8eaf47f3",
+        "bytes": 23235,
+        "linhas": 100
+    },
     "calendar_remote": {
+        "sha256": "5c97586d53189e4944b13407edbc010c36b6e4960b232bd8239873439d58281f",
+        "bytes": 24202,
+        "linhas": 106
+    },
+    "calendar_remote_sem_ausencia": {
         "sha256": "5c97586d53189e4944b13407edbc010c36b6e4960b232bd8239873439d58281f",
         "bytes": 24202,
         "linhas": 106
@@ -64,9 +84,19 @@
         "bytes": 23241,
         "linhas": 101
     },
+    "calendar_n1_sem_ausencia": {
+        "sha256": "438465bf185203a8d6260e77bac4d868fba48dea756707b23889f6727f93468e",
+        "bytes": 22402,
+        "linhas": 97
+    },
     "calendar_colaborador_3": {
         "sha256": "687ec8d01b10eb8224e26b2cb0a66d4aff30111804e7f2e339330753a80e6aa3",
         "bytes": 7254,
         "linhas": 31
+    },
+    "calendar_colaborador_3_sem_ausencia": {
+        "sha256": "db605e4405c3a16a19b603f951846814487acc59b214090537dddab0bbfc9f34",
+        "bytes": 7045,
+        "linhas": 30
     }
 }

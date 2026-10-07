@@ -95,6 +95,18 @@ final class QaChildStatement extends PDOStatement {
             }
             return true;
         }
+        // F3 commit 1 (SEC-07): ausencias. Emula o filtro do SQL: sem WHERE,
+        // todas; com WHERE employee_id, so as do colaborador ligado.
+        if (strpos($this->sql, 'SELECT id, employee_id, employee_name, absence_type, starts_on, ends_on, reason, status, approved_by, created_at, updated_at FROM portal_absences') === 0) {
+            $own = strpos($this->sql, 'FROM portal_absences WHERE employee_id = :employee_id ORDER BY') !== false ? (int)$params[':employee_id'] : null;
+            $this->rows = [];
+            foreach ($this->pdo->db['ausencias'] ?? [] as $id => $employeeId) {
+                if ($own === null || $own === (int)$employeeId) {
+                    $this->rows[] = ['id' => (int)$id, 'employee_id' => (int)$employeeId, 'reason' => 'motivo ' . $id];
+                }
+            }
+            return true;
+        }
         if ($this->sql === 'SELECT ativo, access_role, equipe, ad_login FROM funcionarios WHERE id = ?') {
             $row = $this->pdo->db['funcionarios'][(string)$params[0]] ?? null;
             $this->rows = is_array($row) ? [$row] : [];
@@ -1951,6 +1963,23 @@ foreach ([
     assert_same($visibleFor($scope), $noticeIds($noticeCases[$case]), "SEC-07: {$case} pelo endpoint igual a regra");
 }
 assert_same(true, strpos((string)file_get_contents($root . '/api/portal/announcements.php'), 'portal_list_response(') === false, 'SEC-07: avisos nao usam mais a listagem generica sem escopo');
+
+// F3 commit 1 (SEC-07): ausencias por perfil, de ponta a ponta. Gestao ve
+// todas; tecnico e somente leitura, so as proprias, mesmo pedindo outro
+// colaborador pelo parametro.
+$absenceDb = QA_DB;
+$absenceDb['ausencias'] = ['101' => 1, '102' => 7, '103' => 4, '104' => 1];
+$absenceCases = qa_run_endpoints($qaDir, [
+    'gestor' => ['endpoint' => 'api/portal/absences.php', 'method' => 'GET', 'session' => $manager, 'db' => $absenceDb],
+    'lideranca' => ['endpoint' => 'api/portal/absences.php', 'method' => 'GET', 'session' => $leaderSession, 'db' => $absenceDb],
+    'tecnico' => ['endpoint' => 'api/portal/absences.php', 'method' => 'GET', 'session' => $technician, 'db' => $absenceDb, 'query' => ['employee_id' => '7']],
+    'somente_leitura' => ['endpoint' => 'api/portal/absences.php', 'method' => 'GET', 'session' => qa_ci_session(4, 'qa.leitura', 'somente_leitura'), 'db' => $absenceDb],
+]);
+foreach (['gestor' => [101, 102, 103, 104], 'lideranca' => [101, 102, 103, 104], 'tecnico' => [101, 104], 'somente_leitura' => [103]] as $case => $ids) {
+    assert_same(200, $absenceCases[$case]['status'], "SEC-07 ausencias: {$case} lista");
+    assert_same($ids, $noticeIds($absenceCases[$case]), "SEC-07 ausencias: {$case} ve so o permitido");
+}
+assert_same(true, strpos((string)file_get_contents($root . '/api/portal/absences.php'), 'portal_list_response(') === false, 'SEC-07: ausencias nao usam mais a listagem generica sem escopo');
 
 // ============================================================================
 // 9. F1 (P12) — cadastro "Fora do Mapa PA e da escala": so admin, auditado,
