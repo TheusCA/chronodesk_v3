@@ -1,0 +1,72 @@
+{
+    "report_competencia": {
+        "sha256": "2af0af3ec101c56c997e79968b62ab16294352f3d7cf81fe9eae3a3d0fb8df36",
+        "bytes": 45002,
+        "linhas": 210
+    },
+    "report_competencia_csv": {
+        "sha256": "1f10c58c339418b0a7400e06bfc13b3165c13c959a5f65539ec276b89a9cc400",
+        "bytes": 10959,
+        "linhas": 211
+    },
+    "report_n2": {
+        "sha256": "18e83aea8186593c7b9e8523778b863cda06bfbd859eb16e2b492b04eca8f8c7",
+        "bytes": 24255,
+        "linhas": 113
+    },
+    "report_n2_csv": {
+        "sha256": "f16995be9255c8f5971fc0094d1fb56a60e49b3c913d10b8aefd9eb4a9bf7ed1",
+        "bytes": 5886,
+        "linhas": 114
+    },
+    "report_colaborador_1": {
+        "sha256": "af9085f67e6916ca6dc7b6cc3ec128c4a2b357492b9ee0c559c4d7dfdf8a1a2c",
+        "bytes": 6397,
+        "linhas": 27
+    },
+    "report_colaborador_1_csv": {
+        "sha256": "b80a48c9ef98734616677010365326dd6dc778bf28ade099eabab85512b52e56",
+        "bytes": 1448,
+        "linhas": 28
+    },
+    "report_ano": {
+        "sha256": "2930c6cceb280b56578276c578822eb0c0d23a79c9d1fe1cc7955a25dfb103c6",
+        "bytes": 213469,
+        "linhas": 1002
+    },
+    "report_ano_csv": {
+        "sha256": "72550c82e21a52b9848f912a9cf5ee6a3f184ce5f5bf870fffd687cf4110bdc5",
+        "bytes": 52131,
+        "linhas": 1003
+    },
+    "calendar_outubro": {
+        "sha256": "ba120b50684459a908a9bc02f1d09c24df4c342f1e4baf6bb677253e026f6b33",
+        "bytes": 49613,
+        "linhas": 215
+    },
+    "calendar_schedule": {
+        "sha256": "42b45057e13c3b2ad3b1fd5cdb30796160a25d0f9a576ea3bcced601d26d736f",
+        "bytes": 48302,
+        "linhas": 210
+    },
+    "calendar_onsite": {
+        "sha256": "13e108b37c71590fd251018d39369c30799b082a0838774f1d60d78c8eaf47f3",
+        "bytes": 23235,
+        "linhas": 100
+    },
+    "calendar_remote": {
+        "sha256": "5c97586d53189e4944b13407edbc010c36b6e4960b232bd8239873439d58281f",
+        "bytes": 24202,
+        "linhas": 106
+    },
+    "calendar_n1": {
+        "sha256": "466bd0907dc067384796b53af6b98f1164e877f3833560ecf35e7f94162b95c3",
+        "bytes": 23241,
+        "linhas": 101
+    },
+    "calendar_colaborador_3": {
+        "sha256": "687ec8d01b10eb8224e26b2cb0a66d4aff30111804e7f2e339330753a80e6aa3",
+        "bytes": 7254,
+        "linhas": 31
+    }
+}

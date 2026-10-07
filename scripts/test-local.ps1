@@ -98,6 +98,14 @@ if (!$phpExecutable) {
         Pass "QA do historico de escala concluido"
     }
 
+    # Sem banco: relatorio, CSV e Calendario iguais a referencia anterior ao F2B.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-schedule-legacy-output.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA da saida antiga de escala falhou"
+    } else {
+        Pass "QA da saida antiga de escala concluido"
+    }
+
     # Sem banco: motor de presenca, presence.php e presenca no status.php (F2).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-presence-engine.php")
     if ($LASTEXITCODE -ne 0) {
