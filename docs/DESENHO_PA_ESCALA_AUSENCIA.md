@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend entregue, frontend em andamento** (seção 9.3). F3 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend em andamento** (seção 9.3). F3 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -969,7 +969,7 @@ Validação pela IA: `qa-presence-engine` com 126 verificações (critério de a
 | Mapa PA | Ciclo pelo motor na lista de elegíveis, na exibição do vínculo (`active_on_date`, `presence_status`, rótulo) e no aviso/confirmação de alocação remota; conflito pelo tipo, conservador (ciclo conflita com tudo, menos sempre remoto) |
 | Rollback | `migrations/rollback/20261007_f2b_cycle_down.sql` e `_up.sql`, preparo do ensaio (só muda banco `ensaio_*`) e `migrations/verificacao/20261007_f2b_cycle_check.sql` |
 
-**Decisões de implementação a aprovar:**
+**Decisões de implementação (aprovadas em 2026-10-07):**
 
 1. **Cópia do ciclo no Mapa PA.** O ENUM de `portal_pa_assignments.schedule_rule_type` (migrations 009 e 010) não tem `cycle`: gravar o vínculo de quem tem ciclo daria erro 1265 no MySQL estrito (500). Sem migration nova, a cópia grava `undefined` com a configuração do ciclo, e a leitura reconhece o ciclo pelo `pattern` válido; vínculo `undefined` antigo, sem `pattern`, continua "Sem escala". Alternativa: migration ampliando o ENUM (custa ensaio e rollback, e o F6 tira a cópia de cena).
 2. **Ciclo em dia remoto no Mapa PA** recebe a mesma confirmação e o mesmo aviso do "sempre remoto" (a mensagem já diz "nesta data"). Dias fixos e pares/ímpares em dia remoto continuam sem confirmação, como hoje, até o F6.
@@ -982,6 +982,8 @@ Validação pela IA: `qa-presence-engine` com 126 verificações (critério de a
 9. **Fila:** a chave `pattern` só entra no payload do ciclo; os demais tipos mantêm o payload de antes.
 
 Validação pela IA (backend): `qa-schedule-history`, `qa-schedule-legacy-output`, `qa-security` (matriz com `POST rule_preview`, prévia no serviço e de ponta a ponta: L9 e retroativo com 403) e a bateria completa; mutação **49/49** no backend; três mutantes de sanidade no caminho antigo (rótulo, ausência, `undefined`) mortos pela referência. Limitações: nada rodou em MySQL real (consultas, `JSON_VALID`/`JSON_CONTAINS_PATH` dos scripts de rollback e o ensaio); frontend do F2B em andamento.
+
+**Backend aprovado em 2026-10-07** (`fb53485` a `6b078cd`) pelo responsável, após teste em MySQL 8.0.46 em modo estrito: prévia sem gravar; ciclo salvo e "sem alteração" na repetição; recusas (âncora no sábado, 21 dias, retroativo do gestor); modo home; tela Escala com ciclo; relatório antigo com ciclo sem 400; vínculo de PA de quem tem ciclo (cópia `undefined` + configuração) e confirmação no dia remoto; scripts down/up do F2B idempotentes, com a verificação batendo. **As nove decisões de implementação acima ficam aprovadas.**
 
 ---
 
