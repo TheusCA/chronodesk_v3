@@ -95,9 +95,9 @@ final class QaChildStatement extends PDOStatement {
             }
             return true;
         }
-        // F3 commit 1 (SEC-07): ausencias. Emula o filtro do SQL: sem WHERE,
+        // F3 (SEC-07; colunas da 012): ausencias. Emula o filtro do SQL: sem WHERE,
         // todas; com WHERE employee_id, so as do colaborador ligado.
-        if (strpos($this->sql, 'SELECT id, employee_id, employee_name, absence_type, starts_on, ends_on, reason, status, approved_by, created_at, updated_at FROM portal_absences') === 0) {
+        if (strpos($this->sql, 'SELECT id, employee_id, employee_name, team, category, starts_on, ends_on, period_type, start_time, end_time, reason, status, retroactive, created_by, updated_by, cancelled_by, cancelled_at, created_at, updated_at FROM portal_absences') === 0) {
             $own = strpos($this->sql, 'FROM portal_absences WHERE employee_id = :employee_id ORDER BY') !== false ? (int)$params[':employee_id'] : null;
             $this->rows = [];
             foreach ($this->pdo->db['ausencias'] ?? [] as $id => $employeeId) {

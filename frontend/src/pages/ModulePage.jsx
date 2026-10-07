@@ -10,7 +10,8 @@ const modules = {
   '/tecnicos': { endpoint: 'portal/technicians.php', noun: 'técnico', columns: ['name', 'team', 'shift', 'status'] },
   '/escala-turnos': { endpoint: 'portal/schedules.php?type=turno', noun: 'turno', columns: ['employee_name', 'team', 'schedule_type', 'starts_at'] },
   '/escala-presencial': { endpoint: 'portal/schedules.php?type=presencial', noun: 'escala presencial', columns: ['employee_name', 'team', 'schedule_type', 'starts_at'] },
-  '/ausencias': { endpoint: 'portal/absences.php', noun: 'ausência', columns: ['employee_name', 'absence_type', 'starts_on', 'status'] },
+  // F3: colunas da migration 012 (absence_type saiu); a pagina propria entra no commit 6.
+  '/ausencias': { endpoint: 'portal/absences.php', noun: 'ausência', columns: ['employee_name', 'category', 'starts_on', 'status'] },
   '/horas-extras': { endpoint: 'portal/overtime.php', noun: 'hora extra', columns: ['employee_name', 'work_date', 'minutes', 'status'] },
   '/correcao-ponto': { endpoint: 'portal/time_corrections.php', noun: 'correção', columns: ['employee_name', 'correction_date', 'reason', 'status'] },
   '/avisos': { endpoint: 'portal/announcements.php', noun: 'aviso', columns: ['title', 'category', 'severity', 'created_at'] },

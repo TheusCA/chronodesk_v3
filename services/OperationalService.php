@@ -194,7 +194,7 @@ final class OperationalService {
             // [SEC-07, L-01] O motivo (reason) nunca sai no calendário, para
             // nenhum perfil (decisão 4 do F3). Todos veem quem está ausente e
             // o período (P9); o tipo, só a gestão e o próprio colaborador.
-            $sql = 'SELECT id, employee_name AS title, absence_type,
+            $sql = 'SELECT id, employee_name AS title, category,
                            CONCAT(starts_on, " 00:00:00") AS starts_at,
                            CONCAT(ends_on, " 23:59:59") AS ends_at,
                            NULL AS team, employee_id, status
@@ -212,7 +212,7 @@ final class OperationalService {
             $ownEmployeeId = (int)($actor['employee_id'] ?? 0);
             foreach ($stmt->fetchAll() as $row) {
                 $row['description'] = $seesAllTypes || ($ownEmployeeId > 0 && (int)$row['employee_id'] === $ownEmployeeId)
-                    ? self::absenceTypeLabel((string)$row['absence_type'])
+                    ? self::absenceCategoryLabel((string)$row['category'])
                     : '';
                 $events[] = $this->calendarRow('absence', $row);
             }
@@ -2152,17 +2152,14 @@ final class OperationalService {
         };
     }
 
-    /**
-     * [SEC-07, F3 commit 1] Rótulo do tipo de ausência da tabela atual.
-     * "atestado" sai como "Ausência justificada": o calendário não indica
-     * dado de saúde (D4, P8; o tipo deixa de existir na migration 012).
-     */
-    public static function absenceTypeLabel(string $type): string {
-        return match ($type) {
-            'ferias' => 'Férias',
+    /** [F3] Rótulo da categoria de ausência (migration 012; D4, sem dado de saúde). */
+    public static function absenceCategoryLabel(string $category): string {
+        return match ($category) {
             'folga' => 'Folga',
-            'treinamento' => 'Treinamento',
-            'atestado', 'justificada' => 'Ausência justificada',
+            'ferias' => 'Férias',
+            'ausencia_justificada' => 'Ausência justificada',
+            'compromisso' => 'Compromisso',
+            'outro' => 'Outro',
             default => 'Ausência',
         };
     }

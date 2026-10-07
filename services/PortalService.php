@@ -17,7 +17,8 @@ class PortalService {
         ],
         'absences' => [
             'table' => 'portal_absences',
-            'columns' => 'id, employee_id, employee_name, absence_type, starts_on, ends_on, reason, status, approved_by, created_at, updated_at',
+            // [F3] Colunas da migration 012 (absence_type saiu; P8).
+            'columns' => 'id, employee_id, employee_name, team, category, starts_on, ends_on, period_type, start_time, end_time, reason, status, retroactive, created_by, updated_by, cancelled_by, cancelled_at, created_at, updated_at',
         ],
         'overtime' => [
             'table' => 'portal_overtime',

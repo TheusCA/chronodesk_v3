@@ -187,7 +187,7 @@ final class QaLegacyStatement extends PDOStatement {
         // Bloco de ausencias do calendario: forma anterior ao F3 (com o motivo)
         // e a do F3 commit 1 (com o tipo, sem o motivo; SEC-07 e L-01).
         $absenceBeforeF3 = strpos($sql, 'SELECT id, employee_name AS title, reason AS description,') === 0;
-        if ($absenceBeforeF3 || strpos($sql, 'SELECT id, employee_name AS title, absence_type,') === 0) {
+        if ($absenceBeforeF3 || strpos($sql, 'SELECT id, employee_name AS title, category,') === 0) {
             foreach ($db->absences as $row) {
                 if ($row['starts_on'] > $params[':date_to'] || $row['ends_on'] < $params[':date_from']
                     || (isset($params[':employee_id']) && $row['employee_id'] !== $params[':employee_id'])
@@ -197,7 +197,7 @@ final class QaLegacyStatement extends PDOStatement {
                 }
                 $this->rows[] = [
                     'id' => $row['id'], 'title' => $db->employees[$row['employee_id']]['nome'],
-                ] + ($absenceBeforeF3 ? ['description' => 'motivo ficticio'] : ['absence_type' => $row['absence_type']]) + [
+                ] + ($absenceBeforeF3 ? ['description' => 'motivo ficticio'] : ['category' => $row['category']]) + [
                     'starts_at' => $row['starts_on'] . ' 00:00:00', 'ends_at' => $row['ends_on'] . ' 23:59:59',
                     'team' => null, 'employee_id' => $row['employee_id'], 'status' => $row['status'],
                 ];
@@ -377,10 +377,10 @@ function qa_legacy_db(): QaLegacyPdo {
         ];
     }
     $pdo->absences = [
-        ['id' => 301, 'employee_id' => 2, 'starts_on' => '2026-10-12', 'ends_on' => '2026-10-14', 'status' => 'approved', 'absence_type' => 'ferias'],
-        ['id' => 302, 'employee_id' => 3, 'starts_on' => '2026-09-25', 'ends_on' => '2026-09-25', 'status' => 'pending', 'absence_type' => 'atestado'],
-        ['id' => 303, 'employee_id' => 8, 'starts_on' => '2026-09-28', 'ends_on' => '2026-09-30', 'status' => 'approved', 'absence_type' => 'folga'],
-        ['id' => 304, 'employee_id' => 1, 'starts_on' => '2026-09-10', 'ends_on' => '2026-09-18', 'status' => 'approved', 'absence_type' => 'justificada'],
+        ['id' => 301, 'employee_id' => 2, 'starts_on' => '2026-10-12', 'ends_on' => '2026-10-14', 'status' => 'approved', 'absence_type' => 'ferias', 'category' => 'ferias'],
+        ['id' => 302, 'employee_id' => 3, 'starts_on' => '2026-09-25', 'ends_on' => '2026-09-25', 'status' => 'pending', 'absence_type' => 'atestado', 'category' => 'ausencia_justificada'],
+        ['id' => 303, 'employee_id' => 8, 'starts_on' => '2026-09-28', 'ends_on' => '2026-09-30', 'status' => 'approved', 'absence_type' => 'folga', 'category' => 'folga'],
+        ['id' => 304, 'employee_id' => 1, 'starts_on' => '2026-09-10', 'ends_on' => '2026-09-18', 'status' => 'approved', 'absence_type' => 'justificada', 'category' => 'ausencia_justificada'],
     ];
     $GLOBALS['qa_pdo'] = $pdo;
     return $pdo;
