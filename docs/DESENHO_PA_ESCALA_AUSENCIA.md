@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 (serviço e endpoint de ausências) aprovado; commit 4 (ausência parcial no motor) em andamento.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) entregue em 2026-10-07, aguardando aprovação.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -1119,6 +1119,28 @@ Validação pela IA: `qa-absences` seção 4 (ordem da parada, idempotência por
 Validação pela IA: `qa-absences` (lista com filtros, escopo e limite; regras; escrita com retroativo, A4, cadastro, jornada, P6, edição, cancelamento; concorrência com o REPEATABLE READ emulado: a edição que esperou a trava vê a ausência gravada por outra transação e a cancelada por outra) e `qa-security` (matriz com `POST`, permissões, A4 em tabela-verdade, ponta a ponta: técnico e somente leitura 403 com auditoria, retroativa do gestor 403, sem CSRF 403). Mutação **43/45**; os dois restantes são equivalentes (dia inteiro e vários dias já cobrem a janela inteira na comparação de horário; ausência de vários dias é sempre de dia inteiro pela validação e pelo CHECK).
 
 **Aprovado em 2026-10-07** (`833c0cf`) pelo responsável, após teste em MySQL 8.0.46 com a 012 aplicada: permissões (gestor lança; retroativa do gestor 403 e da Liderança gravada como retroativa; ausência de líder só pelo admin), sobreposição (dia inteiro × parcial 409; "a partir de 14:00" × 10–12 grava; × 13–15 409; relançar depois de cancelar), jornada e categoria `atestado` recusadas, lista do técnico só com as próprias, duas gravações simultâneas (a segunda viu a primeira e recebeu 409) e auditoria sem o texto da observação. **As sete decisões do commit 3 ficam aprovadas.** **`mbstring`:** presente no PHP-FPM 8.4 e no CLI 8.4 do servidor (conferido pelo responsável em 2026-10-07); a falta da extensão é só da estação de desenvolvimento, e os outros seis serviços não viram pendência.
+
+**Commit 4 entregue (2026-10-07, `f89c443`; aguardando aprovação):** ausência parcial no motor, no `status.php`, no `presence.php` e na tela Escala.
+
+| Item | Como ficou |
+|---|---|
+| Motor | "A partir de" ativa do horário até o fim do expediente; "intervalo" em início ≤ agora < fim. Precedência da seção 4.3: ausência ativa vence fim de semana, fora do expediente, pausa e almoço; dia inteiro vence parcial; entre parciais ativas, a primeira por id. Ativa: "Ausente desde 14:00" ou "Ausente 10:00–12:00" |
+| Marcador | Parcial que ainda vai começar hoje, ou de outra data: a escala do dia continua e o detalhe ganha " · Ausente a partir de 14:00" ou " · Ausente 10:00–12:00"; em `ausencias[]`, inativa e com horário |
+| P9 | `presence.php` recebe quem consulta: categoria para gestor, Liderança, admin e o próprio colaborador; para os demais e sem quem consulta, nenhuma. `status.php` nunca leva categoria. Observação nunca entra no motor |
+| Repositório | Ausências com período e categoria, ordenadas por id; continua com 4 consultas e sem a observação |
+| Tela Escala | Parcial como marcador no detalhe; dia inteiro continua "Ausência" |
+| Cálculo antigo (decisão 7) | Relatório, CSV e Calendário até o F5: só ausência de dia inteiro tira o dia; a saída antiga continua idêntica à referência |
+
+**Decisões de implementação do commit 4 a aprovar:**
+
+1. **Marcador acrescentado ao detalhe da escala** ("Presencial (sempre presencial) · Ausente a partir de 14:00"), em vez de substituí-lo, para a tela mostrar a escala e a ausência futura juntas.
+2. **"A partir de" sem jornada válida** no cadastro vale até o fim do dia (o serviço só deixa lançar parcial com jornada válida; o caso é de dado antigo ou jornada apagada depois).
+3. **Parcial com horário inválido no banco** nunca fica ativa e não gera marcador (o CHECK da 012 impede esse dado; o motor não falha).
+4. **Fim de semana:** parcial ativa vence ("Ausente 10:00–12:00", como o dia inteiro na decisão 2 do F2); parcial futura no fim de semana mostra só "Fim de semana", sem marcador.
+5. **Intervalo encerrado** não deixa marcador: volta à precedência seguinte (almoço, escala).
+6. **`ausencias[]`:** `start_time`/`end_time` só nas parciais, `category` só quando visível; o formato do dia inteiro não mudou (contrato do F2).
+
+Validação pela IA: `qa-presence-engine` com **162 verificações** (36 novas: bordas 13:59/14:00, 09:59/10:00/11:59/12:00, 16:59/17:00 e 07:30, precedência, fim de semana, sem jornada, horário inválido, outra data, contadores, P9 por perfil, `status.php`, 4 consultas), `qa-schedule-history` (tela com parcial) e `qa-schedule-legacy-output` (decisão 7 no relatório antigo, referência idêntica). Mutação **18/20**; os dois restantes são equivalentes (colaborador de id 0 nunca está na carga; a exceção de ausência vem sempre primeiro e as parciais têm a mesma origem das de dia inteiro, por isso a função auxiliar que criei para isso foi removida). Nada rodou em MySQL real.
 
 **Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 
