@@ -394,6 +394,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL local: o SQL so foi provado pelos ensaios do responsavel. |
 | **Validacao humana** | **Aprovado em 2026-10-07** apos os tres ensaios no MySQL 8.0.46 (tabela vazia; parada com linha antiga; rollback com 4 ausencias do F3, cancelada como `rejected`; 2o rollback para de proposito) e recusas do banco conferidas (fim antes do inicio, horario em varios dias, intervalo invertido, `atestado`, colaborador inexistente, `pending`). As cinco decisoes aprovadas. Roteiro do deploy do F3: 012 e `git pull` em sequencia, sem pausa. |
 
+### Parte B, F3 — commit 3: servico e endpoint de ausencias — 2026-10-07
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Lancar, editar e cancelar ausencia (RF-04; desenho, secoes 3.3 e 9.4) sobre a tabela da 012, com a lista filtrada por perfil. |
+| **Branch e commits** | `833c0cf` (codigo e testes), `a857768` (entrega na 9.4). Sem push. |
+| **O que a IA alterou** | Novos: `services/AbsenceRules.php` (funcoes puras), `services/AbsenceService.php`. Alterados: `api/portal/absences.php` (GET e POST), `security.php` (`ausencias.retroativa`, `absence_change_denied`), `services/PortalService.php` (sem a lista generica de ausencias). QAs: `qa-absences`, `qa-security`. |
+| **Decisoes de implementacao** | Sete, na secao 9.4: ausencia que comeca hoje ja iniciada; `retroactive` nunca volta a 0; cadastro desativado so edita e cancela; A4 antes do estado do registro; equipe sem suporte e jornada invalida com horario 400; lista sem auditoria; observacao contada em caracteres UTF-8 sem depender da `mbstring`. |
+| **Achado** | A estacao nao tem a extensao `mbstring`, e o fallback do projeto conta bytes em sete servicos. Conferido pelo responsavel: o servidor tem `mbstring` (PHP-FPM 8.4 e CLI 8.4); a falta e so da estacao de desenvolvimento. |
+| **Validacao executada pela IA** | `qa-absences` (lista, regras, escrita, concorrencia no REPEATABLE READ emulado) e `qa-security` (matriz, permissoes, A4, ponta a ponta); mutacao **43/45** (dois equivalentes). |
+| **Limitacoes declaradas** | Sem MySQL local. |
+| **Validacao humana** | **Aprovado em 2026-10-07** apos teste em MySQL 8.0.46 com a 012: permissoes, sobreposicao (dia inteiro x parcial; "a partir de" x intervalos; relancar depois de cancelar), jornada e `atestado` recusados, lista do tecnico, duas gravacoes simultaneas (a segunda recebeu 409), auditoria sem a observacao. Sete decisoes aprovadas. |
+
 ---
 
 ## 5. Responsabilidade
