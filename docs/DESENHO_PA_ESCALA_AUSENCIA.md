@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend entregue em 2026-10-07, aguardando aprovação** (seção 9.3). F3 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). F3 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -833,7 +833,7 @@ Cada lote: commit local por tema, sem push, parada para aprovação, atualizaç�
 | **F2B** Escalas na tela | Ciclo com prévia, dias de home, histórico (RF-01, RF-02) | `qa:schedule-form` e `qa:schedule-rules` ampliados; "home ter e qui" grava seg/qua/sex; regras `fixed_weekdays` antigas intactas | Frontend + validador | F2 |
 | **F3** Ausências | **Primeiro** o escopo de leitura (SEC-07 e L-01); migrations 012 e 013; serviço; página; inventário LGPD | `qa-absences`: validações, sobreposição, retroativo, matriz de perfis; negativo de CI → 403 em subprocesso | Scripts da 012 e 013 + código | F2; aprovação de RBAC; P5–P9 |
 | **F4** Técnicos e PA | Migration 014; arquivar e restaurar; sincronização do PA (RF-06); sessão (P11); `status.php` sem arquivados | Plano de efeitos do arquivamento como função pura; negativo de gestor e CI → 403; histórico preservado | Script da 014 + código | F3; P11, P16 |
-| **F5** Calendário | RF-09; L-13 e L-14 | QA de legenda e rótulos; nenhuma cor sem texto | Frontend | F2, F3 |
+| **F5** Calendário | RF-09; L-13 e L-14; pendências da tela Escala anotadas no F2B (seção 9.3: filtro "ocultar sem escala", acentos dos rótulos, quebra de "Liderança") | QA de legenda e rótulos; nenhuma cor sem texto | Frontend | F2, F3 |
 | **F6** Mapa PA | RF-05 e RF-08; motor no lugar da cópia; fim do N+1; data local | `qa-pa-conflicts`: dois presenciais → conflito; um ausente o dia todo → sem conflito; parcial → mantém; `fixed_weekdays` disjuntos → sem conflito | Código. As colunas de cópia continuam gravadas | F2, F3, F4; P13 |
 | **F7** Visão Operacional | RF-10; `presence_summary` | Identidade da soma pelo endpoint; Liderança fora dos totais | Código | F2, F3, F4 |
 
@@ -985,7 +985,7 @@ Validação pela IA (backend): `qa-schedule-history`, `qa-schedule-legacy-output
 
 **Backend aprovado em 2026-10-07** (`fb53485` a `6b078cd`) pelo responsável, após teste em MySQL 8.0.46 em modo estrito: prévia sem gravar; ciclo salvo e "sem alteração" na repetição; recusas (âncora no sábado, 21 dias, retroativo do gestor); modo home; tela Escala com ciclo; relatório antigo com ciclo sem 400; vínculo de PA de quem tem ciclo (cópia `undefined` + configuração) e confirmação no dia remoto; scripts down/up do F2B idempotentes, com a verificação batendo. **As nove decisões de implementação acima ficam aprovadas.**
 
-**Entrega do frontend (2026-10-07; aguardando aprovação):** `2339988` (tela) e o commit de documentação (contratos, `DEPLOY_LINUX.md`, registro).
+**Entrega do frontend (2026-10-07; aprovada em 2026-10-07):** `2339988` (tela) e o commit de documentação (contratos, `DEPLOY_LINUX.md`, registro).
 
 | Item | Como ficou |
 |---|---|
@@ -996,7 +996,7 @@ Validação pela IA (backend): `qa-schedule-history`, `qa-schedule-legacy-output
 | Mapa PA | Tom visual do ciclo; o aviso de remoto do ciclo usa a confirmação que a tela já tem |
 | QAs | `qa:schedule-form` (estrutura do fluxo, prévia obrigatória, histórico e testes de comportamento do schema por `safeParse`), `qa:schedule-rules` (ciclo e modo home na tela e no Mapa PA); `qa:operational`, `qa:visual`, `qa:action-runner` e `qa:action-feedback` atualizados de forma deliberada: o fluxo saiu de `saveRule` para `parseRule` (validação) e `buildRulePayload` (payload do `rule` e da prévia), com as mesmas garantias (rule_type canônico, Zod, payload sem objeto cru) |
 
-**Decisões de implementação do frontend a aprovar:**
+**Decisões de implementação do frontend (aprovadas em 2026-10-07):**
 
 1. **Prévia obrigatória para todos os tipos**, não só ciclo e modo home (a seção 5.3 a mostra no ciclo; o plano dizia "Salvar só fica habilitado depois da prévia"). O servidor não exige a prévia: é conveniência da tela.
 2. **`src/lib/operational.ts` não mudou:** o tipo `ScheduleRuleType` não tem `cycle`, mas não é usado em lugar nenhum e o arquivo é protegido pelo `qa:schedule-form` (trava por `git diff`, dívida técnica registrada). Os cinco lugares da lista de tipos ficaram quatro com `cycle` (serviço, Mapa PA, schema e tela) mais esse tipo sem uso.
@@ -1004,6 +1004,10 @@ Validação pela IA (backend): `qa-schedule-history`, `qa-schedule-legacy-output
 4. **Legenda única da seção 5.1** fica para o F5 (Calendário); no F2B a tela Escala usa os status com texto ("Presencial", "Remoto", "Ausência", "Sem escala").
 
 Validação pela IA (frontend): `lint`, `typecheck`, `build` e os 14 `qa:*`; mutação **17/17** (prévia sempre atual, salvar sem prévia, botão sempre habilitado, data inicial e dias do ciclo no payload, modo home, prévia gravando, prévia não limpa, opção do ciclo, histórico, cinco regras do schema, tom do Mapa PA). Limitação: **a tela não foi aberta no navegador** (sem PHP com MySQL local); comportamento visual e de interação só pelo roteiro "Deploy que traz o F2B" no servidor.
+
+**Frontend aprovado em 2026-10-07** (`2339988`, `6354c8d`), após validação do responsável no navegador, com a tela ligada ao backend real e MySQL 8.0.46: prévia obrigatória (Salvar trava sem prévia e com "Prévia desatualizada"), ciclo com prévia e aviso de encerramento, sábado recusado na tela, modo home com resumo e prévia corretos, payload no formato do contrato, lista com Vigente/Agendada, Editar de ciclo recarregando os campos, histórico e regra fixa da Liderança; sem erro de JavaScript. **As quatro decisões do frontend ficam aprovadas. F2B completo**; entra na fila como deploy 10, depois do F2.
+
+**Pendências anotadas para o F5** (sem mudança no F2B): (1) filtro "ocultar sem escala" na escala gerada (a lista cresce com a P4); (2) rótulos sem acento ("Dias impares", "Ciclo com configuracao invalida"), junto com o L-14; (3) quebra da palavra "Liderança" na coluna Equipe.
 
 ---
 
