@@ -382,6 +382,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL local; consultas so pelos bancos simulados ate o teste do responsavel. |
 | **Validacao humana** | **Aprovado em 2026-10-07** apos teste em MySQL 8.0.46 real: lista com escopo por perfil (gestor ve todas com observacao; tecnico so as proprias; somente leitura sem colaborador, lista vazia sem consulta), calendario sem motivo para nenhum perfil, tipo so para gestao e o proprio, atestado como "Ausencia justificada". Plano do F3 aprovado por inteiro: decisoes 1 a 8, regra de sobreposicao e trava com leitura `FOR UPDATE`. |
 
+### Parte B, F3 — filtro "so aprovada" e migration 012 — 2026-10-07
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Decisao 5 do F3 (calendario so com ausencia aprovada) e migration 012 com a tabela vazia (P8, decisoes 1 e 8). |
+| **Branch e commits** | `0b0f951` (filtro), `c69c5ec` (012, rollback, verificacao, ensaio; leitura em `category`), `52107e8` (entrega na 9.4). Sem push. |
+| **O que a IA alterou** | `services/OperationalService.php` (filtro e `absenceCategoryLabel`), `services/PortalService.php` (colunas da 012), `frontend/src/pages/ModulePage.jsx` (coluna categoria na tela generica); novos: `migrations/20261007_012_absences.sql`, `migrations/rollback/20261007_012_absences_down.sql`, `migrations/rollback/20261007_012_ensaio_linha_antiga.sql`, `migrations/rollback/20261007_012_ensaio_linhas_f3.sql`, `migrations/verificacao/20261007_012_absences_check.sql`; QAs `qa-absences` (secao 4), `qa-security`, `qa-schedule-legacy-output`. |
+| **Decisoes de implementacao** | Cinco, na secao 9.4: CHECKs do periodo no banco; `team`, `category` e `created_by` NOT NULL; janela de 503 em `/ausencias` entre a 012 e o `git pull`; parada so antes de aplicada; `approved_by` mantido. |
+| **Validacao executada pela IA** | `qa-absences` (estrutura dos cinco arquivos SQL), bateria completa; mutacao **16/16** nos arquivos SQL e **12/12** na leitura e no filtro. |
+| **Limitacoes declaradas** | Sem MySQL local: o SQL so foi provado pelos ensaios do responsavel. |
+| **Validacao humana** | **Aprovado em 2026-10-07** apos os tres ensaios no MySQL 8.0.46 (tabela vazia; parada com linha antiga; rollback com 4 ausencias do F3, cancelada como `rejected`; 2o rollback para de proposito) e recusas do banco conferidas (fim antes do inicio, horario em varios dias, intervalo invertido, `atestado`, colaborador inexistente, `pending`). As cinco decisoes aprovadas. Roteiro do deploy do F3: 012 e `git pull` em sequencia, sem pausa. |
+
 ---
 
 ## 5. Responsabilidade

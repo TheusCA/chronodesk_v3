@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1 (escopo de leitura) aprovado; filtro "só aprovada" e migration 012 entregues, aguardando o teste do responsável em MySQL.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 (serviço e endpoint de ausências) em andamento.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -1074,7 +1074,7 @@ Validação pela IA (frontend): `lint`, `typecheck`, `build` e os 14 `qa:*`; mut
 
 **Achado fora do escopo → lote SEC-07b (decisão de 2026-10-07):** o `calendar.php` também envia a todos os perfis o texto livre de hora extra (`reason`), de correção de ponto (`justification`) e de plantão (`note`) como `description`, além do motivo das pausas. **SEC-07b, logo depois do F3 e antes do F4:** esses textos só para a gestão (gestor, Liderança, admin) e para o próprio colaborador, com o mesmo padrão de teste do commit 1 (serviço, ponta a ponta no `qa-security`, mutação).
 
-**Filtro "só aprovada" e migration 012 (2026-10-07; aguardando teste em MySQL):** `0b0f951` (calendário só com ausência aprovada; `status` de outro valor não traz ausência nem consulta a tabela) e `c69c5ec` (012, rollback, verificação, ensaio).
+**Filtro "só aprovada" e migration 012 (2026-10-07; aprovados em 2026-10-07):** `0b0f951` (calendário só com ausência aprovada; `status` de outro valor não traz ausência nem consulta a tabela) e `c69c5ec` (012, rollback, verificação, ensaio).
 
 | Item | Como ficou |
 |---|---|
@@ -1084,7 +1084,7 @@ Validação pela IA (frontend): `lint`, `typecheck`, `build` e os 14 `qa:*`; mut
 | Ensaio | Três variantes, com os comandos nos cabeçalhos: (a) tabela vazia (012 duas vezes; o 2º rollback para de propósito); (b) `..._ensaio_linha_antiga.sql` como PREPARO: a 012 deve parar nas duas vezes sem alterar; (c) a 012 como PREPARO e `..._ensaio_linhas_f3.sql` no lugar da migration: rollback com quatro ausências no formato do F3 (uma cancelada, duas parciais). Os dois arquivos só gravam em banco `ensaio_*` |
 | Leitura | Lista e calendário passaram a `category` (o HEAD fica coerente com o esquema da 012); a tela genérica de `/ausencias` mostra a categoria até a página própria (commit 6) |
 
-**Decisões de implementação da 012 a aprovar:**
+**Decisões de implementação da 012 (aprovadas em 2026-10-07):**
 
 1. **CHECKs no banco** (`ck_absence_range`: fim ≥ início; `ck_absence_period`: horário só com um dia, `from_time` com início e sem fim, `interval` com início < fim, dia inteiro sem horário). Não estavam na tabela da P8; seguem a regra de integridade no banco. A sobreposição (P6) continua no serviço.
 2. **`team`, `category` e `created_by` `NOT NULL`** (a seção 2.3 previa `team` e `category` nulos por causa do legado, que não existe).
@@ -1092,7 +1092,9 @@ Validação pela IA (frontend): `lint`, `typecheck`, `build` e os 14 `qa:*`; mut
 4. **Parada condicionada à coluna antiga:** a 012 só para com linha **antes** de ser aplicada; depois, repete sem parar (senão a 2ª execução falharia assim que o F3 gravasse a primeira ausência).
 5. **`approved_by`** fica como está (sem uso; remover não estava no plano).
 
-Validação pela IA: `qa-absences` seção 4 (ordem da parada, idempotência por `information_schema`, regra do A4, ENUMs, FK, CHECKs, ordem do rollback, toda variável de `PREPARE` atribuída antes, verificação só leitura e sem nome nem observação, ensaio só em `ensaio_*` e idempotente); mutação **16/16** nos arquivos SQL (um sobrevivente na 1ª rodada, `PREPARE` de variável sem `SET`, levou à checagem genérica) e **12/12** na leitura. **Nada rodou em MySQL real.**
+Validação pela IA: `qa-absences` seção 4 (ordem da parada, idempotência por `information_schema`, regra do A4, ENUMs, FK, CHECKs, ordem do rollback, toda variável de `PREPARE` atribuída antes, verificação só leitura e sem nome nem observação, ensaio só em `ensaio_*` e idempotente); mutação **16/16** nos arquivos SQL (um sobrevivente na 1ª rodada, `PREPARE` de variável sem `SET`, levou à checagem genérica) e **12/12** na leitura.
+
+**Aprovados em 2026-10-07** (`0b0f951`, `c69c5ec`) pelo responsável, após os três ensaios no MySQL 8.0.46 com o `ensaio-migration.sh`: (a) tabela vazia: migration duas vezes idêntica, rollback volta tudo, 2º rollback para de propósito; (b) linha antiga: a 012 para nas duas execuções sem alterar nada; (c) rollback com 4 ausências do F3: volta com a cancelada como `rejected`, 2º para de propósito. Conferido também que o banco recusa fim antes do início, horário em vários dias, intervalo invertido, categoria `atestado`, colaborador inexistente (FK) e status `pending`. **As cinco decisões da 012 ficam aprovadas.** No roteiro de deploy do F3: **a 012 e o `git pull` do F3 rodam em sequência, sem pausa** (janela de 503 na tela de ausências, decisão 3).
 
 **Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 
