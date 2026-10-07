@@ -18,13 +18,18 @@ require_once __DIR__ . '/ScheduleRulePlanner.php';
  *               vir com segundos ou nulo).
  * Regra: como em ScheduleRulePlanner, mais 'rule_config' (JSON ou array).
  * Excecao do dia: ['exception_type' => string] ou null.
- * Ausencias do dia: lista de ['origem' => 'excecao'|'ausencia',
- *                   'period_type' => 'full_day'].
+ * Ausencias do dia, na ordem de prioridade (a primeira vale, secao 4.4):
+ *   lista de ['origem' => 'excecao'|'ausencia',
+ *   'period_type' => 'full_day'|'from_time'|'interval',
+ *   'start_time' => ?'H:i', 'end_time' => ?'H:i', 'category' => ?string].
+ *   'category' so vem quando quem consulta pode ve-la (P9); a observacao
+ *   nunca entra no motor (decisao 4 do F3).
  * Pausa: ['em_pausa' => bool, 'motivo' => ?string] ou null.
  *
- * Ate o F3 (decisao do plano do F2), so existe ausencia de dia inteiro: as
- * excecoes day_off, absence, vacation e leave e as linhas aprovadas de
- * portal_absences. Categoria e observacao nao saem do motor (P9, F3).
+ * Ausencia (F3, secoes 4.3 e 4.4): dia inteiro vale o dia todo; "a partir
+ * de" vale do horario ate o fim do expediente; "intervalo" vale em
+ * inicio <= agora < fim. As excecoes day_off, absence, vacation e leave
+ * antigas continuam como ausencia de dia inteiro (decisao 2 do F3).
  */
 final class PresenceEngine {
     public const ABSENCE_EXCEPTIONS = ['day_off', 'absence', 'vacation', 'leave'];
@@ -105,18 +110,20 @@ final class PresenceEngine {
 
     /**
      * Situacao de uma data que nao e hoje (secao 4.3, ultimo paragrafo):
-     * ausente se houver ausencia de dia inteiro; senao, a escala do dia.
+     * ausente se houver ausencia de dia inteiro; senao, a escala do dia, com
+     * a ausencia parcial como marcador (no detalhe e em ausencias[], inativa).
      * Pausa e expediente nao entram.
      */
     public static function dayPresence(array $employee, string $date, array $rules, ?array $exception, array $absences): array {
         $schedule = self::scheduleForDay($employee, $date, $rules, $exception);
+        $items = self::absenceItems($absences, static fn (array $absence): bool => self::isFullDay($absence));
         if (self::hasFullDayAbsence($absences)) {
-            return self::result('ausente', 'ausencia', 'Ausente (dia todo)', $schedule, $absences, true, false);
+            return self::result('ausente', 'ausencia', 'Ausente (dia todo)', $schedule, $items, false);
         }
         if ($schedule['situacao'] === 'dia_nao_util') {
-            return self::result('fora_expediente', 'expediente', 'Fim de semana', $schedule, $absences, false, false);
+            return self::result('fora_expediente', 'expediente', 'Fim de semana', $schedule, $items, false);
         }
-        return self::result($schedule['situacao'], 'regra_escala', self::scheduleDetail($schedule), $schedule, $absences, false, false);
+        return self::result($schedule['situacao'], 'regra_escala', self::scheduleDetail($schedule) . self::partialMarker($absences, null), $schedule, $items, false);
     }
 
     /**
@@ -139,24 +146,33 @@ final class PresenceEngine {
         $lunchStart = self::time($employee['lunch_start'] ?? null);
         $lunchEnd = self::time($employee['lunch_end'] ?? null);
         $inLunch = $lunchStart !== null && $lunchEnd !== null && $time >= $lunchStart && $time < $lunchEnd;
+        $isActive = static fn (array $absence): bool => self::absenceActive($absence, $time, $workEnd);
+        $items = self::absenceItems($absences, $isActive);
 
+        // 1. Ausencia ativa: dia inteiro primeiro; senao, a primeira parcial ativa.
         if (self::hasFullDayAbsence($absences)) {
-            return self::result('ausente', 'ausencia', 'Ausente (dia todo)', $schedule, $absences, true, $inLunch);
+            return self::result('ausente', 'ausencia', 'Ausente (dia todo)', $schedule, $items, $inLunch);
+        }
+        foreach ($absences as $absence) {
+            if ($isActive($absence)) {
+                return self::result('ausente', 'ausencia', self::activeDetail($absence), $schedule, $items, $inLunch);
+            }
         }
         if ($schedule['situacao'] === 'dia_nao_util') {
-            return self::result('fora_expediente', 'expediente', 'Fim de semana', $schedule, $absences, false, $inLunch);
+            return self::result('fora_expediente', 'expediente', 'Fim de semana', $schedule, $items, $inLunch);
         }
         if ($workStart !== null && $workEnd !== null && ($time < $workStart || $time >= $workEnd)) {
-            return self::result('fora_expediente', 'expediente', 'Expediente ' . $workStart . '–' . $workEnd, $schedule, $absences, false, $inLunch);
+            return self::result('fora_expediente', 'expediente', 'Expediente ' . $workStart . '–' . $workEnd, $schedule, $items, $inLunch);
         }
         if (($pause['em_pausa'] ?? false) === true) {
             $reason = trim((string)($pause['motivo'] ?? ''));
-            return self::result('pausa', 'pausa', $reason !== '' ? $reason : 'Pausa', $schedule, $absences, false, $inLunch);
+            return self::result('pausa', 'pausa', $reason !== '' ? $reason : 'Pausa', $schedule, $items, $inLunch);
         }
         if ($inLunch) {
-            return self::result('almoco', 'expediente', 'Almoço ' . $lunchStart . '–' . $lunchEnd, $schedule, $absences, false, true);
+            return self::result('almoco', 'expediente', 'Almoço ' . $lunchStart . '–' . $lunchEnd, $schedule, $items, true);
         }
-        return self::result($schedule['situacao'], 'regra_escala', self::scheduleDetail($schedule), $schedule, $absences, false, false);
+        // 4. Escala; ausencia parcial que ainda vai comecar hoje vira marcador.
+        return self::result($schedule['situacao'], 'regra_escala', self::scheduleDetail($schedule) . self::partialMarker($absences, $time), $schedule, $items, false);
     }
 
     /**
@@ -266,8 +282,7 @@ final class PresenceEngine {
         string $origin,
         string $detail,
         array $schedule,
-        array $absences,
-        bool $absenceActive,
+        array $items,
         bool $inLunch
     ): array {
         return [
@@ -275,22 +290,89 @@ final class PresenceEngine {
             'origem' => $origin,
             'detalhe' => $detail,
             'escala' => $schedule,
-            'ausencias' => array_map(static fn(array $absence): array => [
-                'origem' => $absence['origem'],
-                'period_type' => 'full_day',
-                'ativa' => $absenceActive,
-            ], $absences),
+            'ausencias' => $items,
             'em_almoco' => $inLunch,
         ];
     }
 
+    /**
+     * ausencias[] da resposta: origem, periodo e se esta ativa; horario so na
+     * parcial; categoria so quando veio (P9). Nunca a observacao.
+     */
+    private static function absenceItems(array $absences, callable $isActive): array {
+        return array_map(static function (array $absence) use ($isActive): array {
+            $item = [
+                'origem' => $absence['origem'],
+                'period_type' => self::isFullDay($absence) ? 'full_day' : $absence['period_type'],
+                'ativa' => $isActive($absence),
+            ];
+            if (!self::isFullDay($absence)) {
+                $item['start_time'] = self::time($absence['start_time'] ?? null);
+                $item['end_time'] = self::time($absence['end_time'] ?? null);
+            }
+            if (isset($absence['category'])) {
+                $item['category'] = $absence['category'];
+            }
+            return $item;
+        }, $absences);
+    }
+
     private static function hasFullDayAbsence(array $absences): bool {
         foreach ($absences as $absence) {
-            if (($absence['period_type'] ?? 'full_day') === 'full_day') {
+            if (self::isFullDay($absence)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Periodo desconhecido conta como dia inteiro (falha para o lado de ausente). */
+    private static function isFullDay(array $absence): bool {
+        return !in_array($absence['period_type'] ?? 'full_day', ['from_time', 'interval'], true);
+    }
+
+    /**
+     * Ausencia ativa em $time: dia inteiro sempre; "a partir de" do horario ate
+     * o fim do expediente (sem jornada valida, ate o fim do dia); "intervalo"
+     * em inicio <= $time < fim. Horario invalido: parcial nunca ativa.
+     */
+    private static function absenceActive(array $absence, string $time, ?string $workEnd): bool {
+        if (self::isFullDay($absence)) {
+            return true;
+        }
+        $start = self::time($absence['start_time'] ?? null);
+        if ($start === null || $time < $start) {
+            return false;
+        }
+        if ($absence['period_type'] === 'from_time') {
+            return $workEnd === null || $time < $workEnd;
+        }
+        $end = self::time($absence['end_time'] ?? null);
+        return $end !== null && $time < $end;
+    }
+
+    private static function activeDetail(array $absence): string {
+        $start = self::time($absence['start_time'] ?? null);
+        return $absence['period_type'] === 'from_time'
+            ? 'Ausente desde ' . $start
+            : 'Ausente ' . $start . '–' . self::time($absence['end_time'] ?? null);
+    }
+
+    /**
+     * Marcador da primeira ausencia parcial que ainda vai comecar ($time nulo
+     * em outra data: qualquer parcial do dia).
+     */
+    private static function partialMarker(array $absences, ?string $time): string {
+        foreach ($absences as $absence) {
+            $start = self::time($absence['start_time'] ?? null);
+            if (self::isFullDay($absence) || $start === null || ($time !== null && $start <= $time)) {
+                continue;
+            }
+            return $absence['period_type'] === 'from_time'
+                ? ' · Ausente a partir de ' . $start
+                : ' · Ausente ' . $start . '–' . self::time($absence['end_time'] ?? null);
+        }
+        return '';
     }
 
     private static function isoWeekday(string $date): int {

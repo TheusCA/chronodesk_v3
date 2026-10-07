@@ -8,7 +8,8 @@ declare(strict_types=1);
  * colaboradores e de dias: funcionarios, regras que cruzam o intervalo,
  * excecoes do intervalo e ausencias aprovadas que cruzam o intervalo. Sem
  * NOW()/CURRENT_DATE (a data vem do PHP) e sem a observacao das excecoes nem
- * o motivo das ausencias (dado que o motor nao usa nao e lido).
+ * a das ausencias (dado que o motor nao usa nao e lido). A categoria da
+ * ausencia e lida para a P9 (F3): o servico so a repassa a quem pode ve-la.
  */
 final class PresenceRepository {
     private PDO $pdo;
@@ -96,11 +97,11 @@ final class PresenceRepository {
     }
 
     /**
-     * Ausencias aprovadas que cruzam [de, ate], por colaborador, como
-     * intervalos de datas (ate o F3 todas sao de dia inteiro).
+     * Ausencias aprovadas que cruzam [de, ate], por colaborador, em ordem de
+     * id (a primeira vale, secao 4.4), com o periodo do dia (F3).
      */
-    public function absenceRangesByEmployee(string $from, string $to, ?int $employeeId = null): array {
-        $sql = 'SELECT employee_id, starts_on, ends_on
+    public function absencesByEmployee(string $from, string $to, ?int $employeeId = null): array {
+        $sql = 'SELECT id, employee_id, starts_on, ends_on, period_type, start_time, end_time, category
                 FROM portal_absences
                 WHERE status = \'approved\'
                   AND starts_on <= :date_to
@@ -110,12 +111,19 @@ final class PresenceRepository {
             $sql .= ' AND employee_id = :employee_id';
             $params[':employee_id'] = $employeeId;
         }
-        $stmt = $this->pdo->prepare($sql);
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY id');
         $stmt->execute($params);
-        $ranges = [];
+        $absences = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-            $ranges[(int)$row['employee_id']][] = [(string)$row['starts_on'], (string)$row['ends_on']];
+            $absences[(int)$row['employee_id']][] = [
+                'starts_on' => (string)$row['starts_on'],
+                'ends_on' => (string)$row['ends_on'],
+                'period_type' => (string)$row['period_type'],
+                'start_time' => $row['start_time'] === null ? null : (string)$row['start_time'],
+                'end_time' => $row['end_time'] === null ? null : (string)$row['end_time'],
+                'category' => (string)$row['category'],
+            ];
         }
-        return $ranges;
+        return $absences;
     }
 }

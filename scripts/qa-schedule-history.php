@@ -344,11 +344,11 @@ final class QaScheduleStatement extends PDOStatement {
             }
             return true;
         }
-        if (strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on FROM portal_absences a') === 0) {
+        if (strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a') === 0) {
             foreach ($db->absences as $row) {
                 if ($row['starts_on'] <= $params[':date_to'] && $row['ends_on'] >= $params[':date_from']
                     && (!isset($params[':employee_id']) || $row['employee_id'] === $params[':employee_id'])) {
-                    $this->rows[] = $row;
+                    $this->rows[] = $row + ['period_type' => 'full_day', 'start_time' => null, 'end_time' => null];
                 }
             }
             return true;
@@ -1059,6 +1059,21 @@ assert_same(['no_schedule', 'none', null, 'Sem escala definida'], [$byKey['4:202
 assert_same(['absence', 'exception', 'Ausente (dia todo)', 'Dias pares'], [$byKey['1:2026-10-06']['presence_type'], $byKey['1:2026-10-06']['source'], $byKey['1:2026-10-06']['detalhe'], $byKey['1:2026-10-06']['rule_label']], 'motor: folga vira ausente (dia todo), sem categoria');
 assert_same(false, strpos((string)json_encode($view['generated']), 'texto da observacao') !== false, 'motor: observacao da excecao fora da escala gerada');
 assert_same(['absence', 'absence'], [$byKey['1:2026-10-08']['presence_type'], $byKey['1:2026-10-08']['source']], 'motor: ausencia aprovada aparece como ausente (antes sumia)');
+// [F3] Ausencia parcial: a escala do dia continua, com o marcador; a de dia
+// inteiro continua ausente.
+$pdo->absences = [
+    ['employee_id' => 1, 'starts_on' => '2026-10-07', 'ends_on' => '2026-10-07', 'period_type' => 'from_time', 'start_time' => '14:00:00', 'end_time' => null],
+    ['employee_id' => 1, 'starts_on' => '2026-10-08', 'ends_on' => '2026-10-08', 'period_type' => 'interval', 'start_time' => '10:00:00', 'end_time' => '12:00:00'],
+    ['employee_id' => 1, 'starts_on' => '2026-10-08', 'ends_on' => '2026-10-08', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null],
+];
+$partialView = [];
+foreach ($service->scheduleData(['from' => '2026-10-07', 'to' => '2026-10-08', 'employee_id' => '1'])['generated'] as $item) {
+    $partialView[$item['date']] = [$item['presence_type'], $item['source'], $item['detalhe']];
+}
+assert_same([
+    '2026-10-07' => ['remote', 'rule', 'Remoto (dias pares) · Ausente a partir de 14:00'],
+    '2026-10-08' => ['absence', 'absence', 'Ausente (dia todo)'],
+], $partialView, 'motor: parcial vira marcador; dia inteiro continua ausente');
 assert_same(['onsite', 'implicit', 'always_onsite', OperationalService::LEADERSHIP_RULE_LABEL], [$byKey['3:2026-10-05']['presence_type'], $byKey['3:2026-10-05']['source'], $byKey['3:2026-10-05']['rule_type'], $byKey['3:2026-10-05']['rule_label']], 'motor: Lideranca presencial (regra fixa)');
 $monday = array_values(array_filter($view['generated'], static fn (array $item): bool => $item['date'] === '2026-10-05'));
 assert_same([3, 1, 2, 4], array_column($monday, 'employee_id'), 'motor: um item por cadastro por dia, por nome');

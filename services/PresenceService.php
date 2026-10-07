@@ -44,9 +44,11 @@ final class PresenceService {
 
     /**
      * Resposta do GET portal/presence.php (desenho, secao 3.2). $pauseState:
-     * entradas do estado.json por id, ou null quando ilegivel.
+     * entradas do estado.json por id, ou null quando ilegivel. $viewer:
+     * portal_actor() de quem consulta; a categoria da ausencia so vai para a
+     * gestao e para o proprio colaborador (P9, F3). Sem $viewer, nenhuma.
      */
-    public function period(array $query, DateTimeImmutable $now, ?array $pauseState): array {
+    public function period(array $query, DateTimeImmutable $now, ?array $pauseState, array $viewer = []): array {
         $today = $now->format('Y-m-d');
         $from = self::queryDate($query['from'] ?? null, $today, 'from');
         $to = self::queryDate($query['to'] ?? null, $from, 'to');
@@ -67,7 +69,9 @@ final class PresenceService {
         ));
         $rules = $this->repository->rulesByEmployee($from, $to, $employeeId);
         $exceptions = $this->repository->exceptionsByDay($from, $to, $employeeId);
-        $absences = $this->repository->absenceRangesByEmployee($from, $to, $employeeId);
+        $absences = $this->repository->absencesByEmployee($from, $to, $employeeId);
+        $seesAllCategories = portal_role_is_manager($viewer['role'] ?? null);
+        $viewerEmployeeId = (int)($viewer['employee_id'] ?? 0);
 
         $days = [];
         $start = new DateTimeImmutable($from);
@@ -77,7 +81,8 @@ final class PresenceService {
             foreach ($employees as $employee) {
                 $id = $employee['id'];
                 $exception = $exceptions[$id . ':' . $dateKey] ?? null;
-                $dayAbsences = self::absencesForDay($dateKey, $exception, $absences[$id] ?? []);
+                $showCategory = $seesAllCategories || ($viewerEmployeeId > 0 && $viewerEmployeeId === $id);
+                $dayAbsences = self::absencesForDay($dateKey, $exception, $absences[$id] ?? [], $showCategory);
                 $presence = $dateKey === $today
                     ? PresenceEngine::nowPresence($employee, $now, $rules[$id] ?? [], $exception, $dayAbsences, $pauseState === null ? null : self::pause($pauseState[$id] ?? null))
                     : PresenceEngine::dayPresence($employee, $dateKey, $rules[$id] ?? [], $exception, $dayAbsences);
@@ -112,7 +117,7 @@ final class PresenceService {
         }
         $rules = $this->repository->rulesByEmployee($today, $today);
         $exceptions = $this->repository->exceptionsByDay($today, $today);
-        $absences = $this->repository->absenceRangesByEmployee($today, $today);
+        $absences = $this->repository->absencesByEmployee($today, $today);
 
         foreach (['n1', 'n2'] as $team) {
             foreach ($status[$team] ?? [] as $index => $item) {
@@ -141,15 +146,24 @@ final class PresenceService {
         return $status;
     }
 
-    /** Ausencias de um dia: excecao de ausencia (ate o F3) e linhas aprovadas que cobrem a data. */
-    private static function absencesForDay(string $date, ?array $exception, array $ranges): array {
+    /**
+     * Ausencias de um dia: excecao de ausencia antiga (dia inteiro, decisao 2
+     * do F3) e as aprovadas que cobrem a data, com o periodo. $showCategory:
+     * P9; a observacao nunca entra.
+     */
+    private static function absencesForDay(string $date, ?array $exception, array $rows, bool $showCategory = false): array {
         $absences = [];
         if (in_array($exception['exception_type'] ?? null, PresenceEngine::ABSENCE_EXCEPTIONS, true)) {
             $absences[] = ['origem' => 'excecao', 'period_type' => 'full_day'];
         }
-        foreach ($ranges as [$startsOn, $endsOn]) {
-            if ($startsOn <= $date && $endsOn >= $date) {
-                $absences[] = ['origem' => 'ausencia', 'period_type' => 'full_day'];
+        foreach ($rows as $row) {
+            if ($row['starts_on'] <= $date && $row['ends_on'] >= $date) {
+                $absences[] = [
+                    'origem' => 'ausencia',
+                    'period_type' => $row['period_type'],
+                    'start_time' => $row['start_time'],
+                    'end_time' => $row['end_time'],
+                ] + ($showCategory ? ['category' => $row['category']] : []);
             }
         }
         return $absences;

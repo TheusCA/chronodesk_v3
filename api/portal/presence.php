@@ -1,14 +1,15 @@
 <?php
 /**
  * GET portal/presence.php (Parte B, F2; desenho, secao 3.2): situacao de
- * presenca por colaborador e data. Qualquer perfil autenticado; categoria e
- * observacao de ausencia nao saem daqui (P9, F3).
+ * presenca por colaborador e data. Qualquer perfil autenticado. Categoria da
+ * ausencia so para a gestao e o proprio colaborador (P9, F3); observacao
+ * nunca (decisao 4 do F3).
  */
 require_once __DIR__ . '/_bootstrap.php';
 require_once __DIR__ . '/../../services/PresenceService.php';
 
 require_get_method();
-require_portal_auth();
+$viewer = portal_actor(require_portal_auth());
 
 try {
     $now = new DateTimeImmutable('now');
@@ -21,7 +22,7 @@ try {
         $pauseState = ler_estado_pausas(ESTADO_JSON);
     }
     $service = new PresenceService(get_db_connection());
-    json_response(['sucesso' => true] + $service->period($_GET, $now, $pauseState === null ? null : $pauseState['funcionarios']));
+    json_response(['sucesso' => true] + $service->period($_GET, $now, $pauseState === null ? null : $pauseState['funcionarios'], $viewer));
 } catch (Throwable $error) {
     portal_operational_error($error);
 }

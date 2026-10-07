@@ -171,7 +171,9 @@ final class QaLegacyStatement extends PDOStatement {
             return true;
         }
         // Ausencias aprovadas que tiram o dia da escala (cadastro ativo).
-        if (strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1') === 0) {
+        // Desde o F3 (commit 4) a consulta traz o periodo; a massa e toda de dia inteiro.
+        if (strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1') === 0
+            || strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1') === 0) {
             foreach ($db->absences as $row) {
                 $employee = $db->employees[$row['employee_id']];
                 if ((int)$employee['ativo'] !== 1 || $row['status'] !== 'approved'
@@ -180,7 +182,8 @@ final class QaLegacyStatement extends PDOStatement {
                     || (isset($params[':employee_id']) && $row['employee_id'] !== $params[':employee_id'])) {
                     continue;
                 }
-                $this->rows[] = ['employee_id' => $row['employee_id'], 'starts_on' => $row['starts_on'], 'ends_on' => $row['ends_on']];
+                $this->rows[] = ['employee_id' => $row['employee_id'], 'starts_on' => $row['starts_on'], 'ends_on' => $row['ends_on']]
+                    + ($row['period_type'] ?? null ? ['period_type' => $row['period_type'], 'start_time' => $row['start_time'] ?? null, 'end_time' => $row['end_time'] ?? null] : []);
             }
             return true;
         }
@@ -574,6 +577,16 @@ $pdo = $withCycle();
 $pdo->rules[111]['rule_config'] = '{"pattern":["onsite"],"anchor_date":"2026-10-05"}';
 $report = (new OperationalService($pdo, '2026-10-07'))->report(['from' => '2026-10-05', 'to' => '2026-10-09', 'employee_id' => '11']);
 assert_same([], $report['schedule'], 'ciclo invalido no banco: relatorio sem linha e sem 400');
+// [F3, decisao 7] No calculo antigo (Relatorio, CSV e Calendario ate o F5), so
+// a ausencia de dia inteiro tira o dia; a parcial nao.
+$pdo = $withCycle();
+$pdo->absences = [
+    ['id' => 401, 'employee_id' => 12, 'starts_on' => '2026-10-06', 'ends_on' => '2026-10-06', 'status' => 'approved', 'absence_type' => 'folga', 'category' => 'compromisso', 'period_type' => 'from_time', 'start_time' => '14:00:00', 'end_time' => null],
+    ['id' => 402, 'employee_id' => 12, 'starts_on' => '2026-10-07', 'ends_on' => '2026-10-07', 'status' => 'approved', 'absence_type' => 'folga', 'category' => 'outro', 'period_type' => 'interval', 'start_time' => '10:00:00', 'end_time' => '11:00:00'],
+    ['id' => 403, 'employee_id' => 12, 'starts_on' => '2026-10-08', 'ends_on' => '2026-10-08', 'status' => 'approved', 'absence_type' => 'folga', 'category' => 'folga', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null],
+];
+$report = (new OperationalService($pdo, '2026-10-07'))->report(['from' => '2026-10-06', 'to' => '2026-10-09', 'employee_id' => '12']);
+assert_same(['2026-10-06', '2026-10-07', '2026-10-09'], array_column($report['schedule'], 'date'), 'decisao 7: parcial mantem o dia; dia inteiro tira (relatorio antigo)');
 // Com o ciclo no banco, os demais colaboradores saem iguais a referencia.
 $pdo = $withCycle();
 unset($pdo->employees[11], $pdo->employees[12], $pdo->employees[13], $pdo->rules[111], $pdo->rules[121], $pdo->rules[131]);

@@ -1632,7 +1632,9 @@ final class OperationalService {
                     continue;
                 }
                 $key = $rule['employee_id'] . ':' . $dateKey;
-                if (isset($absenceMap[$key])) {
+                // [F3, decisao 7] So ausencia de dia inteiro tira o dia; a
+                // parcial nao (o calculo antigo nao conhece horario).
+                if (in_array('full_day', array_column($absenceMap[$key] ?? [], 'period_type'), true)) {
                     continue;
                 }
                 $exception = $exceptionMap[$key] ?? null;
@@ -1710,8 +1712,8 @@ final class OperationalService {
                 if (in_array($exception['exception_type'] ?? null, PresenceEngine::ABSENCE_EXCEPTIONS, true)) {
                     $absences[] = ['origem' => 'excecao', 'period_type' => 'full_day'];
                 }
-                if (isset($absenceMap[$key])) {
-                    $absences[] = ['origem' => 'ausencia', 'period_type' => 'full_day'];
+                foreach ($absenceMap[$key] ?? [] as $absence) {
+                    $absences[] = ['origem' => 'ausencia'] + $absence;
                 }
                 $employeeRules = $rulesByEmployee[$employee['id']] ?? [];
                 $presence = PresenceEngine::dayPresence($employee, $dateKey, $employeeRules, $exception, $absences);
@@ -1830,8 +1832,13 @@ final class OperationalService {
         };
     }
 
+    /**
+     * Ausencias aprovadas por "employee_id:data", em ordem de id, com o
+     * periodo do dia (F3): a tela Escala (motor) mostra a parcial como
+     * marcador; o calculo antigo so tira o dia com a de dia inteiro.
+     */
     private function scheduleBlockingAbsences(string $from, string $to, ?string $team, ?int $employeeId): array {
-        $sql = 'SELECT a.employee_id, a.starts_on, a.ends_on
+        $sql = 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time
                 FROM portal_absences a
                 JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1
                 WHERE a.starts_on <= :date_to
@@ -1846,7 +1853,7 @@ final class OperationalService {
             $sql .= ' AND a.employee_id = :employee_id';
             $params[':employee_id'] = $employeeId;
         }
-        $stmt = $this->pdo->prepare($sql);
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY a.id');
         $stmt->execute($params);
 
         $map = [];
@@ -1862,7 +1869,11 @@ final class OperationalService {
                 $end = $rangeEnd;
             }
             for ($date = $start; $date <= $end; $date = $date->modify('+1 day')) {
-                $map[$row['employee_id'] . ':' . $date->format('Y-m-d')] = true;
+                $map[$row['employee_id'] . ':' . $date->format('Y-m-d')][] = [
+                    'period_type' => (string)($row['period_type'] ?? 'full_day'),
+                    'start_time' => $row['start_time'] ?? null,
+                    'end_time' => $row['end_time'] ?? null,
+                ];
             }
         }
         return $map;

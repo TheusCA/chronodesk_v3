@@ -325,9 +325,11 @@ final class QaPresenceStatement extends PDOStatement {
                 && $row['exception_date'] >= $params[':date_from'] && $row['exception_date'] <= $params[':date_to']));
             return true;
         }
-        if (str_starts_with($this->sql, "SELECT employee_id, starts_on, ends_on FROM portal_absences WHERE status = 'approved' AND starts_on <= :date_to AND ends_on >= :date_from")) {
+        if (str_starts_with($this->sql, "SELECT id, employee_id, starts_on, ends_on, period_type, start_time, end_time, category FROM portal_absences WHERE status = 'approved' AND starts_on <= :date_to AND ends_on >= :date_from")) {
             $this->rows = array_values(array_filter($this->pdo->absences, static fn(array $row): bool => $match($row)
                 && $row['status'] === 'approved' && $row['starts_on'] <= $params[':date_to'] && $row['ends_on'] >= $params[':date_from']));
+            $this->rows = array_map(static fn(array $row): array => $row + ['id' => 0, 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'category' => 'folga'], $this->rows);
+            usort($this->rows, static fn(array $a, array $b): int => $a['id'] <=> $b['id']);
             return true;
         }
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $this->sql);
@@ -450,6 +452,89 @@ foreach (['' => true, '1' => true, 'true' => true, 'ON' => true, 'yes' => true, 
 }
 putenv('STATUS_PRESENCE_ENABLED');
 assert_same(true, PresenceService::statusPresenceEnabled(), 'interruptor: ausente = ligado');
+
+/// ============================================================================
+// 6. F3: ausencia parcial (secoes 4.3 e 4.4) e categoria so para quem pode (P9)
+// ============================================================================
+$onsiteRule = [rule('always_onsite')];
+$fromTwo = ['origem' => 'ausencia', 'period_type' => 'from_time', 'start_time' => '14:00:00', 'end_time' => null];
+$tenToNoon = ['origem' => 'ausencia', 'period_type' => 'interval', 'start_time' => '10:00:00', 'end_time' => '12:00:00'];
+$monday = '2026-10-05';
+// "A partir de 14:00": 13:59 escala com marcador; 14:00 ausente; fim do expediente volta para fora do expediente.
+assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial) · Ausente a partir de 14:00'], situation(employee(), "{$monday} 13:59", $onsiteRule, null, [$fromTwo]), 'parcial: 13:59 com marcador');
+assert_same(['ausente', 'ausencia', 'Ausente desde 14:00'], situation(employee(), "{$monday} 14:00", $onsiteRule, null, [$fromTwo]), 'parcial: 14:00 ausente');
+assert_same(['ausente', 'ausencia', 'Ausente desde 14:00'], situation(employee(), "{$monday} 16:59", $onsiteRule, null, [$fromTwo]), 'parcial: ate o fim do expediente');
+assert_same(['fora_expediente', 'expediente', 'Expediente 08:00–17:00'], situation(employee(), "{$monday} 17:00", $onsiteRule, null, [$fromTwo]), 'parcial: depois do expediente, fora do expediente');
+assert_same(['fora_expediente', 'expediente', 'Expediente 08:00–17:00'], situation(employee(), "{$monday} 07:30", $onsiteRule, null, [$fromTwo]), 'parcial: antes do expediente, fora do expediente');
+$now = PresenceEngine::nowPresence(employee(), at("{$monday} 13:59"), $onsiteRule, null, [$fromTwo], null);
+assert_same([['origem' => 'ausencia', 'period_type' => 'from_time', 'ativa' => false, 'start_time' => '14:00', 'end_time' => null]], $now['ausencias'], 'parcial: marcador inativo com horario, sem categoria nem observacao');
+assert_same(true, PresenceEngine::nowPresence(employee(), at("{$monday} 14:00"), $onsiteRule, null, [$fromTwo], null)['ausencias'][0]['ativa'], 'parcial: ativa as 14:00');
+// Intervalo 10:00-12:00: 09:59 marcador; 10:00 e 11:59 ausente; 12:00 volta (almoco da jornada).
+assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial) · Ausente 10:00–12:00'], situation(employee(), "{$monday} 09:59", $onsiteRule, null, [$tenToNoon]), 'intervalo: 09:59 com marcador');
+assert_same(['ausente', 'ausencia', 'Ausente 10:00–12:00'], situation(employee(), "{$monday} 10:00", $onsiteRule, null, [$tenToNoon]), 'intervalo: 10:00 ausente');
+assert_same(['ausente', 'ausencia', 'Ausente 10:00–12:00'], situation(employee(), "{$monday} 11:59", $onsiteRule, null, [$tenToNoon]), 'intervalo: 11:59 ausente');
+assert_same(['almoco', 'expediente', 'Almoço 12:00–13:00'], situation(employee(), "{$monday} 12:00", $onsiteRule, null, [$tenToNoon]), 'intervalo: no fim volta a precedencia seguinte');
+assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial)'], situation(employee(), "{$monday} 15:00", $onsiteRule, null, [$tenToNoon]), 'intervalo: encerrado nao deixa marcador');
+// Precedencia: parcial ativa vence pausa; dia inteiro vence parcial; a primeira parcial ativa vale.
+assert_same(['ausente', 'ausencia', 'Ausente 10:00–12:00'], situation(employee(), "{$monday} 10:30", $onsiteRule, null, [$tenToNoon], ['em_pausa' => true, 'motivo' => 'Café']), 'parcial ativa vence pausa');
+assert_same(['ausente', 'ausencia', 'Ausente (dia todo)'], situation(employee(), "{$monday} 10:30", $onsiteRule, null, [$tenToNoon, ['origem' => 'excecao', 'period_type' => 'full_day']]), 'dia inteiro vence parcial, em qualquer ordem');
+assert_same(['ausente', 'ausencia', 'Ausente desde 09:00'], situation(employee(), "{$monday} 10:30", $onsiteRule, null, [['start_time' => '09:00'] + $fromTwo, $tenToNoon]), 'duas parciais ativas: vale a primeira (por id)');
+// Fim de semana e cadastro sem jornada.
+assert_same(['ausente', 'ausencia', 'Ausente 10:00–12:00'], situation(employee(), '2026-10-10 10:30', $onsiteRule, null, [$tenToNoon]), 'parcial ativa vence fim de semana');
+assert_same(['fora_expediente', 'expediente', 'Fim de semana'], situation(employee(), '2026-10-10 09:00', $onsiteRule, null, [$tenToNoon]), 'parcial futura no fim de semana: fim de semana, sem marcador');
+assert_same(['ausente', 'ausencia', 'Ausente desde 14:00'], situation(employee(['work_start' => null, 'work_end' => null]), "{$monday} 23:30", $onsiteRule, null, [$fromTwo]), 'sem jornada valida: "a partir de" vale ate o fim do dia');
+assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial)'], situation(employee(), "{$monday} 15:00", $onsiteRule, null, [['start_time' => '25:00'] + $fromTwo]), 'horario invalido: parcial nunca ativa e sem marcador');
+// Outra data: parcial e so marcador; dia inteiro continua ausente.
+$day = PresenceEngine::dayPresence(employee(), '2026-10-06', $onsiteRule, null, [$fromTwo]);
+assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial) · Ausente a partir de 14:00', false], [$day['situacao'], $day['origem'], $day['detalhe'], $day['ausencias'][0]['ativa']], 'outra data: parcial como marcador');
+$day = PresenceEngine::dayPresence(employee(), '2026-10-06', $onsiteRule, null, [$tenToNoon, ['origem' => 'ausencia', 'period_type' => 'full_day', 'category' => 'ferias']]);
+assert_same(['ausente', 'Ausente (dia todo)', [false, true], 'ferias'], [$day['situacao'], $day['detalhe'], array_column($day['ausencias'], 'ativa'), $day['ausencias'][1]['category']], 'outra data: dia inteiro ausente; categoria so quando veio');
+// Contadores: parcial ativa conta como ausente; futura, como disponivel.
+$counted = PresenceEngine::summarize([
+    PresenceEngine::nowPresence(employee(), at("{$monday} 14:30"), $onsiteRule, null, [$fromTwo], null),
+    PresenceEngine::nowPresence(employee(['id' => 2]), at("{$monday} 13:30"), $onsiteRule, null, [$fromTwo], null),
+]);
+assert_same([2, 1, 1], [$counted['escalados'], $counted['ausentes'], $counted['disponiveis']], 'contadores: parcial ativa e ausente; futura e disponivel');
+
+// Servico: periodo com parcial e P9; status.php com parcial e sem categoria.
+$pdo = presence_db(3);
+$pdo->absences = [
+    ['id' => 11, 'employee_id' => 1, 'starts_on' => '2026-10-05', 'ends_on' => '2026-10-05', 'status' => 'approved', 'period_type' => 'from_time', 'start_time' => '14:00:00', 'end_time' => null, 'category' => 'compromisso'],
+    ['id' => 12, 'employee_id' => 2, 'starts_on' => '2026-10-06', 'ends_on' => '2026-10-06', 'status' => 'approved', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'category' => 'ferias'],
+];
+$service = new PresenceService($pdo);
+$categories = static function (array $result): array {
+    $found = [];
+    foreach ($result['days'] as $day) {
+        foreach ($day['ausencias'] as $absence) {
+            $found[$day['employee_id'] . ':' . $day['date']] = $absence['category'] ?? null;
+        }
+    }
+    return $found;
+};
+$query = ['from' => '2026-10-05', 'to' => '2026-10-06'];
+foreach (['gestor', 'lideranca', 'admin'] as $role) {
+    assert_same(['1:2026-10-05' => 'compromisso', '2:2026-10-06' => 'ferias'], $categories($service->period($query, at('2026-10-05 15:00'), [], ['role' => $role, 'employee_id' => null])), "P9: {$role} ve a categoria de todos");
+}
+foreach (['tecnico', 'somente_leitura'] as $role) {
+    assert_same(['1:2026-10-05' => 'compromisso', '2:2026-10-06' => null], $categories($service->period($query, at('2026-10-05 15:00'), [], ['role' => $role, 'employee_id' => 1])), "P9: {$role} ve so a categoria da propria");
+}
+assert_same(['1:2026-10-05' => null, '2:2026-10-06' => null], $categories($service->period($query, at('2026-10-05 15:00'), [])), 'P9: sem quem consulta, nenhuma categoria');
+assert_same(['1:2026-10-05' => null, '2:2026-10-06' => null], $categories($service->period($query, at('2026-10-05 15:00'), [], ['role' => 'tecnico', 'employee_id' => 0])), 'P9: tecnico sem colaborador na sessao, nenhuma categoria');
+$result = $service->period($query, at('2026-10-05 15:00'), [], ['role' => 'admin']);
+assert_same(['ausente', 'Ausente desde 14:00'], [$result['days'][0]['situacao'], $result['days'][0]['detalhe']], 'periodo: hoje com parcial ativa');
+assert_same(['ausente', 'Ausente (dia todo)'], [$result['days'][4]['situacao'], $result['days'][4]['detalhe']], 'periodo: outra data com dia inteiro');
+assert_same(0, preg_match('/note|reason|observ/i', (string)json_encode($result)), 'periodo: observacao nunca sai (decisao 4)');
+$attached = $service->attachToStatus(['n1' => [['id' => 1, 'em_pausa' => false, 'motivo_pausa' => null]], 'n2' => []], at('2026-10-05 15:00'));
+assert_same(['situacao' => 'ausente', 'origem' => 'ausencia', 'detalhe' => 'Ausente desde 14:00'], $attached['n1'][0]['presenca'], 'status: parcial ativa, sem categoria');
+$attached = $service->attachToStatus(['n1' => [['id' => 1, 'em_pausa' => false, 'motivo_pausa' => null]], 'n2' => []], at('2026-10-05 10:00'));
+assert_same('Presencial (sempre presencial) · Ausente a partir de 14:00', $attached['n1'][0]['presenca']['detalhe'], 'status: parcial ainda nao iniciada como marcador');
+$pdo = presence_db(50);
+(new PresenceService($pdo))->period(['from' => '2026-10-05'], at('2026-10-05 10:00'), [], ['role' => 'admin']);
+$absenceSql = implode("\n", array_filter($pdo->statements, static fn (string $sql): bool => strpos($sql, 'portal_absences') !== false));
+assert_same([4, true, 0], [count($pdo->statements), strpos($absenceSql, 'ORDER BY id') !== false, preg_match('/\bnote\b|\breason\b/i', $absenceSql)], 'repositorio: ainda 4 comandos; ausencias por id, sem observacao');
+$presenceSource = (string)file_get_contents(__DIR__ . '/../api/portal/presence.php');
+assert_same(true, strpos($presenceSource, '$viewer = portal_actor(require_portal_auth());') !== false && strpos($presenceSource, ", \$viewer));") !== false, 'presence.php: passa quem consulta (P9)');
 
 // Estrutura: o motor nao le relogio, banco nem arquivo.
 $engineSource = (string)file_get_contents(__DIR__ . '/../services/PresenceEngine.php');
