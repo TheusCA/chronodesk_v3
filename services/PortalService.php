@@ -15,11 +15,6 @@ class PortalService {
             'table' => 'portal_schedules',
             'columns' => 'id, employee_id, employee_name, team, schedule_type, starts_at, ends_at, phone, status, created_by, created_at, updated_at',
         ],
-        'absences' => [
-            'table' => 'portal_absences',
-            // [F3] Colunas da migration 012 (absence_type saiu; P8).
-            'columns' => 'id, employee_id, employee_name, team, category, starts_on, ends_on, period_type, start_time, end_time, reason, status, retroactive, created_by, updated_by, cancelled_by, cancelled_at, created_at, updated_at',
-        ],
         'overtime' => [
             'table' => 'portal_overtime',
             'columns' => 'id, employee_id, employee_name, work_date, minutes, reason, status, approved_by, created_at, updated_at',
@@ -89,42 +84,6 @@ class PortalService {
             return db_limit_rows($stmt->fetchAll(), $limit);
         } catch (Throwable $e) {
             error_log('[PORTAL] Recurso indisponível: announcements');
-            throw new PortalStorageException('A base do portal ainda não está disponível.', 0, $e);
-        }
-    }
-
-    /**
-     * [SEC-07, F3 commit 1] Ausências visíveis ao ator: gestão (gestor,
-     * Liderança, admin) vê todas; técnico e somente leitura, só as próprias,
-     * pelo employee_id da sessão, nunca pelo parâmetro (desenho, seção 3.3).
-     * Sem colaborador vinculado à sessão: lista vazia, sem consultar o banco.
-     * A observação (reason) vai só para a gestão e para o próprio (decisão 4
-     * do plano do F3), que é o que esta lista devolve.
-     */
-    public function absences(array $actor, int $limit = 100): array {
-        $limit = max(1, min($limit, 200));
-        $employeeId = null;
-        if (!portal_role_is_manager($actor['role'] ?? null)) {
-            $employeeId = (int)($actor['employee_id'] ?? 0);
-            if ($employeeId < 1) {
-                return db_limit_rows([], $limit);
-            }
-        }
-        try {
-            $pdo = get_db_connection();
-            $sql = 'SELECT ' . self::TABLES['absences']['columns'] . ' FROM portal_absences';
-            if ($employeeId !== null) {
-                $sql .= ' WHERE employee_id = :employee_id';
-            }
-            $stmt = $pdo->prepare($sql . ' ORDER BY updated_at DESC, id DESC LIMIT :limit');
-            if ($employeeId !== null) {
-                $stmt->bindValue(':employee_id', $employeeId, PDO::PARAM_INT);
-            }
-            $stmt->bindValue(':limit', $limit + 1, PDO::PARAM_INT);
-            $stmt->execute();
-            return db_limit_rows($stmt->fetchAll(), $limit);
-        } catch (Throwable $e) {
-            error_log('[PORTAL] Recurso indisponível: absences');
             throw new PortalStorageException('A base do portal ainda não está disponível.', 0, $e);
         }
     }

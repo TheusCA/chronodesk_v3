@@ -97,12 +97,12 @@ final class QaChildStatement extends PDOStatement {
         }
         // F3 (SEC-07; colunas da 012): ausencias. Emula o filtro do SQL: sem WHERE,
         // todas; com WHERE employee_id, so as do colaborador ligado.
-        if (strpos($this->sql, 'SELECT id, employee_id, employee_name, team, category, starts_on, ends_on, period_type, start_time, end_time, reason, status, retroactive, created_by, updated_by, cancelled_by, cancelled_at, created_at, updated_at FROM portal_absences') === 0) {
-            $own = strpos($this->sql, 'FROM portal_absences WHERE employee_id = :employee_id ORDER BY') !== false ? (int)$params[':employee_id'] : null;
+        if (strpos($this->sql, 'SELECT id, employee_id, employee_name, team, category, starts_on, ends_on, period_type, start_time, end_time, reason AS note, status, retroactive, created_by, created_at, updated_by, updated_at, cancelled_by, cancelled_at FROM portal_absences') === 0) {
+            $own = strpos($this->sql, ' AND employee_id = :employee_id ORDER BY') !== false ? (int)$params[':employee_id'] : null;
             $this->rows = [];
             foreach ($this->pdo->db['ausencias'] ?? [] as $id => $employeeId) {
                 if ($own === null || $own === (int)$employeeId) {
-                    $this->rows[] = ['id' => (int)$id, 'employee_id' => (int)$employeeId, 'reason' => 'motivo ' . $id];
+                    $this->rows[] = ['id' => (int)$id, 'employee_id' => (int)$employeeId, 'note' => 'motivo ' . $id];
                 }
             }
             return true;
@@ -1144,8 +1144,16 @@ foreach (['configuracoes.manage', 'integracoes.manage', 'usuarios_locais.manage'
     assert_same(false, in_array($permission, $leaderPermissions, true), "Lideranca nao recebe {$permission}");
     assert_same(true, in_array($permission, $adminPermissions, true), "admin recebe {$permission}");
 }
-foreach (['funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end'] as $permission) {
+foreach (['funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end', 'escalas.retroativa', 'ausencias.retroativa'] as $permission) {
     assert_same(false, in_array($permission, $gestorPermissions, true), "gestor nao recebe {$permission}");
+}
+// F3 (D3, L6): ausencia retroativa para Lideranca e admin; ausencias.manage para gestor.
+assert_same([true, true, true], [in_array('ausencias.retroativa', $leaderPermissions, true), in_array('ausencias.retroativa', $adminPermissions, true), in_array('ausencias.manage', $gestorPermissions, true)], 'F3: ausencias.retroativa na Lideranca e no admin; gestor lanca ausencia');
+foreach ([
+    ['admin', 'lideranca', 'tecnico', null], ['lideranca', 'lideranca', 'tecnico', 403], ['gestor', 'lideranca', 'tecnico', 403],
+    ['lideranca', 'n1', 'lideranca', 403], ['gestor', 'n2', 'admin', 403], ['gestor', 'n1', 'tecnico', null], ['lideranca', 'n2', 'gestor', null],
+] as [$actorRole, $targetTeam, $targetRole, $status]) {
+    assert_same($status, absence_change_denied($actorRole, $targetTeam, $targetRole)[0] ?? null, "A4: {$actorRole} e ausencia de {$targetTeam}/{$targetRole}");
 }
 assert_same(true, portal_role_is_manager('lideranca'), 'Lideranca passa onde o gestor passa');
 assert_same(false, portal_role_is_manager('tecnico'), 'tecnico nao e perfil de gestao');
@@ -1335,6 +1343,8 @@ $matrix = [
     'api/status.php GET' => [[], $expect['TODOS']],
     'api/usuarios.php GET' => [[], [[403, 'usuarios locais esta desativado']] + $expect['ADMIN_LEGADO']],
     'api/portal/absences.php GET' => [[], $expect['TODOS']],
+    // F3: lancar, editar e cancelar (ausencias.manage), negado por perfil antes do banco.
+    'api/portal/absences.php POST' => [$emptyJson, $expect['GESTAO']],
     'api/portal/admin_force_end_break.php POST' => [$emptyJson, $expect['ADMIN_LIDERANCA']],
     'api/portal/announcements.php GET' => [[], $expect['TODOS']],
     'api/portal/calendar.php GET' => [[], $expect['TODOS']],
@@ -1980,6 +1990,21 @@ foreach (['gestor' => [101, 102, 103, 104], 'lideranca' => [101, 102, 103, 104],
     assert_same($ids, $noticeIds($absenceCases[$case]), "SEC-07 ausencias: {$case} ve so o permitido");
 }
 assert_same(true, strpos((string)file_get_contents($root . '/api/portal/absences.php'), 'portal_list_response(') === false, 'SEC-07: ausencias nao usam mais a listagem generica sem escopo');
+// F3: escrita negada por perfil antes do banco (sem 'db'), com auditoria; o
+// retroativo do gestor e recusado pelo servico antes de abrir transacao.
+$absenceWrites = qa_run_endpoints($qaDir, [
+    'tecnico_cria' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"create","employee_id":1,"starts_on":"2030-01-07","category":"folga"}', 'session' => $technician, 'db' => $absenceDb],
+    'leitura_cancela' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"cancel","id":101}', 'session' => qa_ci_session(4, 'qa.leitura', 'somente_leitura'), 'db' => $absenceDb],
+    'gestor_retroativa' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"create","employee_id":1,"starts_on":"2020-01-06","category":"folga"}', 'session' => $manager, 'db' => $absenceDb],
+    'gestor_sem_csrf' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'csrf' => 'missing', 'body' => '{"action":"create"}', 'session' => $manager, 'db' => $absenceDb],
+]);
+foreach (['tecnico_cria', 'leitura_cancela'] as $case) {
+    assert_same(403, $absenceWrites[$case]['status'], "F3: {$case} recebe 403");
+    assert_same(true, strpos($absenceWrites[$case]['log'], '[QA_AUDIT] ABSENCE_WRITE_DENIED [WARNING]') !== false, "F3: {$case} auditado");
+}
+assert_same([403, true], [$absenceWrites['gestor_retroativa']['status'], strpos($absenceWrites['gestor_retroativa']['body'], 'início anterior a hoje') !== false], 'F3: ausencia retroativa do gestor recebe 403 (D3, L6)');
+assert_same(true, strpos($absenceWrites['gestor_retroativa']['log'], '[QA_AUDIT] ABSENCE_WRITE_DENIED [WARNING]') !== false, 'F3: retroativa do gestor auditada');
+assert_same(403, $absenceWrites['gestor_sem_csrf']['status'], 'F3: POST de ausencia sem CSRF recebe 403');
 
 // ============================================================================
 // 9. F1 (P12) — cadastro "Fora do Mapa PA e da escala": so admin, auditado,

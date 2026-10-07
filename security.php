@@ -936,6 +936,9 @@ function portal_permissions_for_role(?string $role): array {
         'funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end',
         // [P10, L6] Regra de escala com inicio retroativo (F1).
         'escalas.retroativa',
+        // [D3, L6] Ausencia retroativa: lancar com inicio anterior a hoje,
+        // editar ou cancelar ausencia ja iniciada (F3, decisao 3).
+        'ausencias.retroativa',
     ]);
     $permissions = [
         'admin' => array_merge($lideranca, [
@@ -1105,6 +1108,22 @@ function schedule_change_denied(string $actor_role, ?string $target_team, ?strin
     if (validate_funcionario_equipe((string)$target_team) === 'lideranca'
         || in_array(portal_role_value($target_role), ['lideranca', 'admin'], true)) {
         return [403, 'Somente administradores alteram a escala da Liderança.'];
+    }
+    return null;
+}
+
+/**
+ * [A4 do Lote 5, F3] Ausência de quem é da equipe Liderança ou tem perfil
+ * Liderança ou admin: só o admin lança, edita ou cancela (mesma regra e
+ * permissão da L9). Devolve null (pode) ou [status HTTP, mensagem].
+ */
+function absence_change_denied(string $actor_role, ?string $target_team, ?string $target_role): ?array {
+    if (portal_role_can($actor_role, 'escalas.lideranca')) {
+        return null;
+    }
+    if (validate_funcionario_equipe((string)$target_team) === 'lideranca'
+        || in_array(portal_role_value($target_role), ['lideranca', 'admin'], true)) {
+        return [403, 'Somente administradores lançam ausência da Liderança.'];
     }
     return null;
 }
