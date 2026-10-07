@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). F2B a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend entregue, frontend em andamento** (seção 9.3). F3 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -931,6 +931,57 @@ Validação pela IA: `qa-presence-engine` com 126 verificações (critério de a
 **Ressalva (registrada pela IA; aceita pelo responsável em 2026-10-06):** a base foi tomada antes do deploy 2. Entre ela e o deploy do F2 (depois do deploy 8 da fila) entram os deploys 2 a 8, e dois deles mudam o mesmo caminho do `status.php`: o PERF-01 (trava do estado de pausas, deploy 2) e a revalidação da sessão por requisição (Lote 5a, deploy 6). Comparada com esta base, a medição depois do F2 soma o efeito de todos. Para isolar o F2, a recomendação é repetir a medição logo antes do deploy do F2, nas mesmas condições, e usá-la como base do critério; para fechar o PERF-01, medir de novo logo depois do deploy 2. **Decisão:** a base do critério do F2 é a medição repetida logo antes do deploy do F2, nas mesmas condições; o limite de piora é recalculado sobre ela (o maior entre p95 + 50 ms e p95 + 20%). A base de 2026-10-06 fica como referência e como o "antes" do PERF-01.
 
 **Roteiro manual por lote no servidor** (o QA local não tem MySQL, Apache nem AD): aplicar a migration, rodar a consulta de verificação, exercitar a tela por perfil. Entregue junto de cada lote, como nos anteriores.
+
+### 9.3 F2B — plano aprovado (2026-10-07) e entrega
+
+**Ponto que define o escopo.** A partir do F2B dá para gravar regra `cycle`, e o `presenceForRule` antigo lança exceção para esse tipo: Calendário, Escala e Relatórios dariam 400 com a primeira regra de ciclo. Por isso o F2B cobre esses consumidores, mesmo que Calendário e Relatórios só troquem de vez no F5.
+
+**Plano** (seções 2.2, 3.4 e 5.3):
+
+| Item | Plano |
+|---|---|
+| Ciclo | Payload `cycle: { onsite_days, remote_days, starts_with, anchor_date }`; o servidor monta `pattern` (`starts_with` define o bloco que vem primeiro); cada número ≥ 1, total de 2 a 20; `anchor_date` em dia útil; `effective_from = anchor_date`; `rule_config` em ordem fixa (`pattern`, `anchor_date`, `business_days_only: true`), para salvar de novo a mesma regra não criar histórico. P10/L6 vale para a data inicial |
+| Dias fixos em modo home | `input_mode: "home"` + `home_weekdays`; presenciais = seg a sex menos os dias de home; `weekdays` continua sendo a lista de presenciais; regras antigas sem `input_mode` ficam como estão |
+| `action=rule_preview` | Mesmo payload, validações e permissões do `rule`; não grava; devolve `preview[]` dos próximos 10 dias úteis pelo motor, `rule_label` e `closes` (pelo planejador do F1) |
+| Rótulos | "Ciclo 2P/1R"; "Presencial: seg, qua e sex · home ter e qui" |
+| Tela Escala | `generated` pelo motor (`dayPresence` por data, sem relógio), com os campos antigos e mais `situacao`, `origem`, `detalhe` e `escala` |
+| Calendário e Relatórios | Cálculo antigo até o F5; só o ciclo muda: dia útil pela posição do motor, fim de semana sem linha |
+| Importação | Linha com ciclo recusada ("cadastre pela tela"): a planilha não tem colunas de configuração |
+| Fila `portal_sync_queue` | Payload da regra de ciclo leva o `pattern` (não existe consumidor da fila hoje) |
+| Rollback | Script reversível no lugar do rollback da 011 (que apagaria o histórico): ida `cycle` → `undefined` mantendo `rule_config`; volta reaplica `cycle` onde `rule_config` tem `pattern`; ensaio, regra do A4 e verificação só com contagens |
+| Fora do F2B | Exceção só com remoto, presencial, treinamento e plantão (F3); Mapa PA no motor (F6); Calendário e Relatórios no motor, com a data de corte (F5) |
+
+**Aprovado em 2026-10-07, com ajustes:**
+
+1. **Decisão 6 corrigida:** `rule_preview` espelha exatamente as permissões do `rule`. Gestor, Liderança e admin passam (`portal_role_is_manager` no `schedules.php`); técnico e somente leitura, 403; prévia com início retroativo segue `escalas.retroativa` (Liderança e admin). Linha do `qa-security` ajustada.
+2. **Decisão 1 aprovada, com teste obrigatório:** relatório operacional, CSV e Calendário com o mesmo resultado de antes para todas as regras que não são `cycle`, comparando a saída antes e depois do F2B. P3, P4 e ausência valem só na tela Escala neste lote.
+3. **Decisão 2 ajustada:** no `PaMapService`, `ruleActiveOnDate` usa o motor para `cycle` (dia presencial ou não, para exibição e para o aviso de alocação remota). A checagem de conflito continua conservadora até o F6. Teste: pessoa com ciclo aparece presencial no dia certo e não gera aviso de remoto nesse dia.
+4. **Decisões 3, 4 e 5 aprovadas** (importação recusa ciclo; modo home sem nenhum dia de home: 400 sugerindo "Sempre presencial"; rollback reversível). Na 4, todos os dias como home também dá 400, sugerindo "Sempre remoto".
+5. **`pattern` no payload da `portal_sync_queue`:** aprovado.
+
+**Entrega do backend (2026-10-07):** `fb53485` (referência da saída antiga, gravada **antes** de qualquer mudança, com o código de `c941f6c`), `2f8201e` (ciclo, modo home, prévia, tela Escala no motor, Calendário/Relatórios/Mapa PA com ciclo, importação, fila), `ee59899` (cópia do ciclo no Mapa PA dentro do ENUM) e `86c8d92` (rollback reversível, ensaio e verificação).
+
+| Item | Como ficou |
+|---|---|
+| Teste obrigatório (ajuste 2) | `scripts/qa-schedule-legacy-output.php`: massa fictícia com todos os tipos antigos, histórico (troca no meio do período, escala removida, linha vazia), exceções de todos os tipos (inclusive no sábado), ausências aprovadas e pendentes, inativo, fora do Mapa e Liderança. Catorze saídas (relatório em quatro filtros, os quatro CSVs, Calendário em seis filtros) comparadas byte a byte, por sha256, tamanho e linhas, com a referência de `fb53485`. `--despejar DIR` grava as saídas para comparar arquivo a arquivo com o commit `c941f6c` |
+| Prévia | `previewScheduleRule`: o mesmo `scheduleRuleRequest` do `rule` (L9, Liderança 409, tipo, configuração, retroativo, trava do colaborador e 409 de fora do Mapa) e o mesmo planejador; o histórico "como ficaria" vem de `ScheduleRulePlanner::applyPlan` (função pura, testada contra a gravação em 800 passos aleatórios) |
+| Tela Escala | `engineSchedule`: todos os cadastros ativos de N1, N2 e Liderança fora da marcação "fora do Mapa", inclusive os sem regra; `presence_type` ganha `absence` (ausente, dia todo) e `no_schedule` (sem escala) |
+| Mapa PA | Ciclo pelo motor na lista de elegíveis, na exibição do vínculo (`active_on_date`, `presence_status`, rótulo) e no aviso/confirmação de alocação remota; conflito pelo tipo, conservador (ciclo conflita com tudo, menos sempre remoto) |
+| Rollback | `migrations/rollback/20261007_f2b_cycle_down.sql` e `_up.sql`, preparo do ensaio (só muda banco `ensaio_*`) e `migrations/verificacao/20261007_f2b_cycle_check.sql` |
+
+**Decisões de implementação a aprovar:**
+
+1. **Cópia do ciclo no Mapa PA.** O ENUM de `portal_pa_assignments.schedule_rule_type` (migrations 009 e 010) não tem `cycle`: gravar o vínculo de quem tem ciclo daria erro 1265 no MySQL estrito (500). Sem migration nova, a cópia grava `undefined` com a configuração do ciclo, e a leitura reconhece o ciclo pelo `pattern` válido; vínculo `undefined` antigo, sem `pattern`, continua "Sem escala". Alternativa: migration ampliando o ENUM (custa ensaio e rollback, e o F6 tira a cópia de cena).
+2. **Ciclo em dia remoto no Mapa PA** recebe a mesma confirmação e o mesmo aviso do "sempre remoto" (a mensagem já diz "nesta data"). Dias fixos e pares/ímpares em dia remoto continuam sem confirmação, como hoje, até o F6.
+3. **`input_mode` não conta na comparação de regra igual.** Os mesmos dias informados como presenciais ou como home são a mesma regra: "nada foi alterado", sem histórico novo; o modo exibido continua o gravado.
+4. **`effective_from` enviado junto com ciclo é ignorado:** vale a data inicial (seção 2.2).
+5. **Limites do ciclo:** cada bloco de 1 a 19 dias, total até 20; números como inteiro ou texto só com dígitos (booleano e fração: 400).
+6. **Prévia:** sem exceções (é a prévia da regra); começa no primeiro dia útil a partir do início; com regra agendada depois, os dias dela saem com o rótulo dela; trava o colaborador como o `rule` (para os 409 serem os mesmos); sem auditoria (não grava).
+7. **Tela Escala:** fim de semana só aparece com exceção de trabalho (plantão no sábado), como a Liderança já fazia; ausência em fim de semana não aparece; ausência de `portal_absences` sai com `source = "absence"` e a de exceção com `source = "exception"`.
+8. **Calendário e Relatórios com ciclo:** exceção vence o ciclo também no fim de semana (como nos outros tipos); ciclo com configuração inválida no banco não gera linha (sem 400) e aparece na tela como "Ciclo com configuracao invalida" (rótulo do código, sem acento como os demais).
+9. **Fila:** a chave `pattern` só entra no payload do ciclo; os demais tipos mantêm o payload de antes.
+
+Validação pela IA (backend): `qa-schedule-history`, `qa-schedule-legacy-output`, `qa-security` (matriz com `POST rule_preview`, prévia no serviço e de ponta a ponta: L9 e retroativo com 403) e a bateria completa; mutação **49/49** no backend; três mutantes de sanidade no caminho antigo (rótulo, ausência, `undefined`) mortos pela referência. Limitações: nada rodou em MySQL real (consultas, `JSON_VALID`/`JSON_CONTAINS_PATH` dos scripts de rollback e o ensaio); frontend do F2B em andamento.
 
 ---
 
