@@ -191,7 +191,8 @@ final class QaLegacyStatement extends PDOStatement {
             foreach ($db->absences as $row) {
                 if ($row['starts_on'] > $params[':date_to'] || $row['ends_on'] < $params[':date_from']
                     || (isset($params[':employee_id']) && $row['employee_id'] !== $params[':employee_id'])
-                    || (isset($params[':status']) && $row['status'] !== $params[':status'])) {
+                    || (isset($params[':status']) && $row['status'] !== $params[':status'])
+                    || (strpos($sql, 'AND status = "approved"') !== false && $row['status'] !== 'approved')) {
                     continue;
                 }
                 $this->rows[] = [
@@ -519,7 +520,8 @@ assert_same(array_keys($expected), array_keys($signature), 'mesmas saidas da ref
 // c941f6c (decisao 6 do plano do F3, secao 9.4 do desenho).
 $changedByF3 = ['calendar_outubro', 'calendar_n1', 'calendar_colaborador_3'];
 foreach ($changedByF3 as $name) {
-    assert_same(true, ($signature[$name . '_sem_ausencia']['linhas'] ?? 0) < ($signature[$name]['linhas'] ?? 0), "{$name}: a saida completa tem eventos de ausencia");
+    // So pula saida que, na referencia de c941f6c, trazia eventos de ausencia.
+    assert_same(true, ($expected[$name . '_sem_ausencia']['linhas'] ?? 0) < ($expected[$name]['linhas'] ?? 0), "{$name}: na referencia, a saida completa tinha eventos de ausencia");
 }
 foreach ($expected as $name => $reference) {
     if (in_array($name, $changedByF3, true)) {

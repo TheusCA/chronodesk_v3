@@ -101,9 +101,11 @@ final class QaAbsencesStatement extends PDOStatement {
         // Bloco de ausencias do Calendario (listCalendar com type=absence).
         if (strpos($this->sql, 'SELECT id, employee_name AS title, absence_type, CONCAT(starts_on, " 00:00:00") AS starts_at,') === 0) {
             foreach (QA_ABSENCES as $row) {
+                $onlyApproved = strpos($this->sql, 'AND status = "approved"') !== false;
                 if ($row['starts_on'] > $params[':date_to'] || $row['ends_on'] < $params[':date_from']
                     || (isset($params[':employee_id']) && $row['employee_id'] !== $params[':employee_id'])
-                    || (isset($params[':status']) && $row['status'] !== $params[':status'])) {
+                    || (isset($params[':status']) && $row['status'] !== $params[':status'])
+                    || ($onlyApproved && $row['status'] !== 'approved')) {
                     continue;
                 }
                 $this->rows[] = [
@@ -176,15 +178,16 @@ $calendar = static function (array $actor, array $filters = []): array {
     $result = $service->listCalendar($filters + ['from' => '2026-10-01', 'to' => '2026-10-31', 'type' => 'absence'], $actor);
     return array_column($result['items'], 'description', 'id');
 };
-$labels = ['absence-1' => 'Férias', 'absence-2' => 'Ausência justificada', 'absence-3' => 'Ausência justificada', 'absence-4' => 'Folga', 'absence-5' => 'Férias'];
+// A ausencia 3 esta pendente: fora do calendario (decisao 5).
+$labels = ['absence-1' => 'Férias', 'absence-2' => 'Ausência justificada', 'absence-4' => 'Folga', 'absence-5' => 'Férias'];
 foreach (['gestor', 'lideranca', 'admin'] as $role) {
     assert_same($labels, $calendar(['role' => $role, 'employee_id' => null]), "calendario: {$role} ve o tipo de todas, sem o motivo");
 }
 foreach (['tecnico', 'somente_leitura'] as $role) {
-    assert_same(['absence-1' => 'Férias', 'absence-2' => '', 'absence-3' => '', 'absence-4' => 'Folga', 'absence-5' => ''], $calendar(['role' => $role, 'employee_id' => 1]), "calendario: {$role} ve quem esta ausente e o periodo; o tipo so das proprias (P9)");
+    assert_same(['absence-1' => 'Férias', 'absence-2' => '', 'absence-4' => 'Folga', 'absence-5' => ''], $calendar(['role' => $role, 'employee_id' => 1]), "calendario: {$role} ve quem esta ausente e o periodo; o tipo so das proprias (P9)");
 }
-assert_same(['absence-1' => '', 'absence-2' => '', 'absence-3' => '', 'absence-4' => '', 'absence-5' => ''], $calendar([]), 'calendario: sem ator, nenhum tipo (padrao restrito)');
-assert_same(['absence-1' => '', 'absence-2' => '', 'absence-3' => '', 'absence-4' => '', 'absence-5' => ''], $calendar(['role' => 'tecnico', 'employee_id' => 0]), 'calendario: tecnico sem colaborador na sessao nao ve tipo (nem de linha sem cadastro)');
+assert_same(['absence-1' => '', 'absence-2' => '', 'absence-4' => '', 'absence-5' => ''], $calendar([]), 'calendario: sem ator, nenhum tipo (padrao restrito)');
+assert_same(['absence-1' => '', 'absence-2' => '', 'absence-4' => '', 'absence-5' => ''], $calendar(['role' => 'tecnico', 'employee_id' => 0]), 'calendario: tecnico sem colaborador na sessao nao ve tipo (nem de linha sem cadastro)');
 $pdo = qa_db();
 $service = new OperationalService($pdo, '2026-10-07');
 $full = $service->listCalendar(['from' => '2026-10-01', 'to' => '2026-10-31', 'type' => 'absence'], ['role' => 'admin', 'employee_id' => null]);
@@ -194,6 +197,15 @@ assert_same(false, stripos($encoded, 'atestado') !== false, 'calendario: o tipo 
 assert_same(false, array_key_exists('absence_type', $full['items'][0]), 'calendario: coluna crua do tipo fora da resposta');
 assert_same(['Tecnico A', '2026-10-05 00:00:00', '2026-10-09 23:59:59', 'approved'], [$full['items'][0]['title'], $full['items'][0]['starts_at'], $full['items'][0]['ends_at'], $full['items'][0]['status']], 'calendario: nome, periodo e status como antes');
 assert_same(false, strpos($pdo->queries[0][0], 'reason') !== false, 'calendario: o motivo nem e lido do banco');
+// [Decisao 5] So ausencia aprovada: o filtro esta no SQL; com status de outro
+// valor, a consulta de ausencias nem roda.
+assert_same(true, strpos($pdo->queries[0][0], 'AND status = "approved"') !== false, 'calendario: so aprovada, no SQL');
+assert_same($labels, $calendar(['role' => 'gestor'], ['status' => 'approved']), 'calendario: filtro approved igual ao padrao');
+foreach (['pending', 'rejected', 'cancelled'] as $otherStatus) {
+    $pdo = qa_db();
+    $result = (new OperationalService($pdo, '2026-10-07'))->listCalendar(['from' => '2026-10-01', 'to' => '2026-10-31', 'type' => 'absence', 'status' => $otherStatus], ['role' => 'admin']);
+    assert_same([[], []], [$result['items'], $pdo->queries], "calendario: filtro {$otherStatus} nao traz ausencia nem consulta");
+}
 
 // ----------------------------------------------------------------------------
 // 3. Endpoints (estrutura; o comportamento de ponta a ponta esta no qa-security)

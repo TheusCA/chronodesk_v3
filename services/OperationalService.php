@@ -188,7 +188,9 @@ final class OperationalService {
             }
         }
 
-        if (!$type || $type === 'absence') {
+        // [F3, decisão 5] Só ausência aprovada aparece no calendário; filtro de
+        // outro status não traz ausência nenhuma.
+        if ((!$type || $type === 'absence') && (!$status || $status === 'approved')) {
             // [SEC-07, L-01] O motivo (reason) nunca sai no calendário, para
             // nenhum perfil (decisão 4 do F3). Todos veem quem está ausente e
             // o período (P9); o tipo, só a gestão e o próprio colaborador.
@@ -197,15 +199,12 @@ final class OperationalService {
                            CONCAT(ends_on, " 23:59:59") AS ends_at,
                            NULL AS team, employee_id, status
                     FROM portal_absences
-                    WHERE starts_on <= :date_to AND ends_on >= :date_from';
+                    WHERE starts_on <= :date_to AND ends_on >= :date_from
+                      AND status = "approved"';
             $params = [':date_from' => $from, ':date_to' => $to];
             if ($employeeId) {
                 $sql .= ' AND employee_id = :employee_id';
                 $params[':employee_id'] = $employeeId;
-            }
-            if ($status) {
-                $sql .= ' AND status = :status';
-                $params[':status'] = $status;
             }
             $stmt = $this->pdo->prepare($sql . ' ORDER BY starts_at');
             $stmt->execute($params);
