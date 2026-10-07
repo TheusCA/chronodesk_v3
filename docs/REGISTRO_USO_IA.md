@@ -370,6 +370,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | A tela nao foi aberta no navegador (sem PHP com MySQL local): layout, foco e interacao so pelo roteiro de deploy no servidor. Os QAs estruturais conferem o texto do codigo; o comportamento do payload e coberto por regex, nao por execucao. `operational.ts` segue com o tipo sem `cycle` (sem uso). |
 | **Validacao humana** | **Aprovado em 2026-10-07** (`2339988`, `6354c8d`) pelo responsavel, apos validacao no navegador com a tela ligada ao backend real e MySQL 8.0.46: previa obrigatoria (Salvar trava sem previa e com "Previa desatualizada"), ciclo com previa e aviso de encerramento, sabado recusado na tela, modo home com resumo e previa corretos, payload no formato do contrato, lista com Vigente/Agendada, Editar de ciclo recarregando os campos, historico e regra fixa da Lideranca; sem erro de JavaScript. As quatro decisoes do frontend aprovadas. F2B completo; deploy 10 da fila. Pendencias anotadas para o F5: filtro "ocultar sem escala" na escala gerada; rotulos sem acento ("Dias impares", "Ciclo com configuracao invalida"), junto com o L-14; quebra de "Lideranca" na coluna Equipe. |
 
+### Parte B, F3 — commit 1: escopo de leitura de ausencias e calendario — 2026-10-07
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Primeiro passo do F3 (desenho, secao 9.4): fechar a leitura de ausencias (SEC-07 em `portal/absences.php`, L-01 no `portal/calendar.php`) antes de criar a escrita, compativel com a tabela de hoje. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `ad387e4` (plano na 9.4), `faaea06` (codigo e testes), `2ebab63` (entrega e achado). Sem push. |
+| **O que a IA alterou** | `services/PortalService.php` (`absences` com escopo por perfil), `api/portal/absences.php` (fora da listagem generica), `services/OperationalService.php` (`listCalendar` com o ator; bloco de ausencias sem o motivo, tipo so para gestao e o proprio, `absenceTypeLabel`), `api/portal/calendar.php`. QAs: `scripts/qa-absences.php` (novo), `qa-security` (ponta a ponta), `qa-schedule-legacy-output` (Calendario comparado sem os eventos de ausencia; 6 assinaturas novas gravadas com o codigo de `c941f6c`, as 14 antigas identicas), `test-local.ps1` e `test-linux.sh`. |
+| **Validacao executada pela IA** | `qa-absences`, `qa-security` e a bateria completa; mutacao **10/10** (dois sobreviventes da 1a rodada: um levou a caso de linha sem colaborador valido, o outro mostrou um `unset` redundante, removido). |
+| **Achado** | `calendar.php` envia a todos o texto livre de hora extra, correcao de ponto, plantao e o motivo de pausa: registrado como lote **SEC-07b**, logo depois do F3 e antes do F4 (decisao do responsavel). |
+| **Limitacoes declaradas** | Sem MySQL local; consultas so pelos bancos simulados ate o teste do responsavel. |
+| **Validacao humana** | **Aprovado em 2026-10-07** apos teste em MySQL 8.0.46 real: lista com escopo por perfil (gestor ve todas com observacao; tecnico so as proprias; somente leitura sem colaborador, lista vazia sem consulta), calendario sem motivo para nenhum perfil, tipo so para gestao e o proprio, atestado como "Ausencia justificada". Plano do F3 aprovado por inteiro: decisoes 1 a 8, regra de sobreposicao e trava com leitura `FOR UPDATE`. |
+
 ---
 
 ## 5. Responsabilidade
