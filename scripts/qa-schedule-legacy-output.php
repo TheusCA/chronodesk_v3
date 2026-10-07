@@ -21,6 +21,9 @@ declare(strict_types=1);
 // com --gravar-referencia. Nao regravar depois do F2B: se a comparacao
 // falhar, a saida mudou e isso precisa de decisao do responsavel.
 //
+// Secao 2: os consumidores do ciclo fora da tela Escala (Relatorio, CSV,
+// Calendario e Mapa PA), que antes do F2B davam 400 com uma regra cycle.
+//
 // Uso: php scripts/qa-schedule-legacy-output.php [--gravar-referencia | --despejar DIR]
 // ============================================================================
 
@@ -66,6 +69,10 @@ final class QaLegacyPdo extends PDO {
     public array $rules = [];
     public array $exceptions = [];
     public array $absences = [];
+    /** [F2B] Vinculos de PA (secao 2 deste QA: Mapa PA com ciclo). */
+    public array $paAssignments = [];
+    public int $nextId = 1000;
+    private bool $transaction = false;
 
     public function __construct() {
     }
@@ -78,8 +85,26 @@ final class QaLegacyPdo extends PDO {
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $query);
     }
 
+    public function beginTransaction(): bool {
+        return $this->transaction = true;
+    }
+
+    public function commit(): bool {
+        $this->transaction = false;
+        return true;
+    }
+
+    public function rollBack(): bool {
+        $this->transaction = false;
+        return true;
+    }
+
     public function inTransaction(): bool {
-        return false;
+        return $this->transaction;
+    }
+
+    public function lastInsertId(?string $name = null): string|false {
+        return (string)($this->nextId - 1);
     }
 }
 
@@ -166,6 +191,88 @@ final class QaLegacyStatement extends PDOStatement {
                     'starts_at' => $row['starts_on'] . ' 00:00:00', 'ends_at' => $row['ends_on'] . ' 23:59:59',
                     'team' => null, 'employee_id' => $row['employee_id'], 'status' => $row['status'],
                 ];
+            }
+            return true;
+        }
+        // [F2B] Mapa PA: so as consultas do PaMapService.
+        if ($sql === 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name') {
+            $this->rows[] = ['total' => $params[':table_name'] === 'portal_pa_map' ? 0 : 1];
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, nome AS name, equipe AS team, ad_login FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 0') === 0) {
+            foreach ($db->employees as $id => $row) {
+                if ((int)$row['ativo'] === 1 && (int)$row['fora_mapa_escala'] === 0) {
+                    $this->rows[] = ['id' => $id, 'name' => $row['nome'], 'team' => $row['equipe'], 'ad_login' => $row['ad_login']];
+                }
+            }
+            return true;
+        }
+        if ($sql === 'SELECT id, nome AS name, equipe AS team, ad_login, fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1 FOR UPDATE') {
+            $row = $db->employees[(int)$params[':id']] ?? null;
+            if ($row !== null && (int)$row['ativo'] === 1) {
+                $this->rows[] = ['id' => (int)$params[':id'], 'name' => $row['nome'], 'team' => $row['equipe'], 'ad_login' => $row['ad_login'], 'fora_mapa_escala' => $row['fora_mapa_escala']];
+            }
+            return true;
+        }
+        if ($sql === 'SELECT exception_type FROM portal_schedule_exceptions WHERE employee_id = :employee_id AND exception_date = :work_date LIMIT 1') {
+            foreach ($db->exceptions as $row) {
+                if ($row['employee_id'] === $params[':employee_id'] && $row['exception_date'] === $params[':work_date']) {
+                    $this->rows[] = ['exception_type' => $row['exception_type']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE employee_id = :employee_id AND effective_from <= :work_date_from') === 0) {
+            $found = null;
+            foreach ($db->rules as $rule) {
+                if ($rule['employee_id'] === $params[':employee_id'] && $rule['effective_from'] <= $params[':work_date_from']
+                    && ($rule['effective_until'] === null || $rule['effective_until'] >= $params[':work_date_until'])
+                    && ($found === null || $rule['effective_from'] > $found['effective_from'])) {
+                    $found = $rule;
+                }
+            }
+            if ($found !== null) {
+                $this->rows[] = ['rule_type' => $found['rule_type'], 'rule_config' => $found['rule_config']];
+            }
+            return true;
+        }
+        $overlaps = static fn (array $row, array $params): bool => $row['active'] === 1
+            && (int)$row['id'] !== (int)($params[':id'] ?? 0)
+            && $row['valid_from'] <= $params[':new_until']
+            && ($row['valid_until'] === null || $row['valid_until'] >= $params[':new_from']);
+        if (strpos($sql, 'SELECT id, pa_number FROM portal_pa_assignments WHERE active = 1 AND employee_id = :employee_id') === 0) {
+            foreach ($db->paAssignments as $row) {
+                if ($row['employee_id'] === $params[':employee_id'] && $overlaps($row, $params)) {
+                    $this->rows[] = ['id' => $row['id'], 'pa_number' => $row['pa_number']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, schedule_rule_type, employee_name FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number') === 0) {
+            foreach ($db->paAssignments as $row) {
+                if ($row['pa_number'] === $params[':pa_number'] && $overlaps($row, $params)) {
+                    $this->rows[] = ['id' => $row['id'], 'schedule_rule_type' => $row['schedule_rule_type'], 'employee_name' => $row['employee_name']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'INSERT INTO portal_pa_assignments (') === 0) {
+            $db->paAssignments[] = [
+                'id' => $db->nextId++, 'active' => 1, 'pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'],
+                'employee_name' => $params[':employee_name'], 'employee_login' => $params[':employee_login'], 'team' => $params[':team'],
+                'schedule_rule_type' => $params[':schedule_rule_type'], 'schedule_rule_config' => $params[':schedule_rule_config'],
+                'valid_from' => $params[':valid_from'], 'valid_until' => $params[':valid_until'], 'notes' => $params[':notes'],
+                'created_by' => $params[':created_by'], 'updated_by' => $params[':updated_by'],
+                'created_at' => '2026-10-07 08:00:00', 'updated_at' => '2026-10-07 08:00:00',
+            ];
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, pa_number, employee_id, employee_name, employee_login, team, schedule_rule_type, schedule_rule_config, valid_from, valid_until, notes,') === 0) {
+            foreach ($db->paAssignments as $row) {
+                if ($row['active'] === 1 && $row['valid_from'] <= $params[':date_until']
+                    && ($row['valid_until'] === null || $row['valid_until'] >= $params[':date_from'])) {
+                    $this->rows[] = array_diff_key($row, ['active' => true]);
+                }
             }
             return true;
         }
@@ -389,5 +496,112 @@ assert_same(array_keys($expected), array_keys($signature), 'mesmas saidas da ref
 foreach ($expected as $name => $reference) {
     assert_same($reference, $signature[$name], "saida {$name} identica a referencia anterior ao F2B (sha256, bytes, linhas)");
 }
+
+// ----------------------------------------------------------------------------
+// 2. Consumidores do ciclo fora da tela Escala (F2B, decisoes 1 e 2)
+// ----------------------------------------------------------------------------
+// Relatorio, CSV e Calendario: o dia util do ciclo vem do motor; fim de
+// semana nao gera linha. Antes do F2B, uma regra cycle dava 400 nos tres.
+$cycleConfig = '{"pattern":["remote","onsite","onsite"],"anchor_date":"2026-10-05","business_days_only":true}';
+$withCycle = static function () use ($cycleConfig): QaLegacyPdo {
+    $pdo = qa_legacy_db();
+    $pdo->employees[11] = ['nome' => 'Tecnico K', 'equipe' => 'n1', 'ad_login' => 'qa.k', 'ativo' => 1, 'fora_mapa_escala' => 0];
+    $pdo->employees[12] = ['nome' => 'Tecnico L', 'equipe' => 'n1', 'ad_login' => 'qa.l', 'ativo' => 1, 'fora_mapa_escala' => 0];
+    $pdo->employees[13] = ['nome' => 'Tecnico M', 'equipe' => 'n1', 'ad_login' => 'qa.m', 'ativo' => 1, 'fora_mapa_escala' => 0];
+    $pdo->rules[111] = ['id' => 111, 'employee_id' => 11, 'rule_type' => 'cycle', 'rule_config' => $cycleConfig, 'effective_from' => '2026-10-05', 'effective_until' => null];
+    $pdo->rules[121] = ['id' => 121, 'employee_id' => 12, 'rule_type' => 'even_days', 'rule_config' => null, 'effective_from' => '2026-09-01', 'effective_until' => null];
+    $pdo->rules[131] = ['id' => 131, 'employee_id' => 13, 'rule_type' => 'always_remote', 'rule_config' => null, 'effective_from' => '2026-09-01', 'effective_until' => null];
+    return $pdo;
+};
+$service = new OperationalService($withCycle(), '2026-10-07');
+$days = static fn (array $rows): string => implode(' ', array_map(
+    static fn (array $row): string => substr($row['date'], 8, 2) . ($row['presence_type'] === 'onsite' ? 'P' : 'R'),
+    $rows
+));
+$report = $service->report(['from' => '2026-10-01', 'to' => '2026-10-16', 'employee_id' => '11']);
+assert_same('05R 06P 07P 08R 09P 12P 13R 14P 15P 16R', $days($report['schedule']), 'ciclo no relatorio: criterio de aceite, sem fim de semana e nada antes da data inicial');
+assert_same([['Ciclo 2P/1R'], ['rule']], [array_values(array_unique(array_column($report['schedule'], 'rule_label'))), array_values(array_unique(array_column($report['schedule'], 'source')))], 'ciclo no relatorio: rotulo e origem');
+assert_same([6, 4], [$report['summary']['onsite_days'], $report['summary']['remote_days']], 'ciclo no relatorio: totais');
+ob_start();
+$service->streamReportCsv($report);
+$csv = (string)ob_get_clean();
+assert_same(true, strpos($csv, "escala;\"Tecnico K\";N1;2026-10-05;Remoto;remote\n") !== false || strpos($csv, "escala;Tecnico K;N1;2026-10-05;Remoto;remote\n") !== false, 'ciclo no CSV: linha do dia remoto');
+assert_same(10, substr_count($csv, "\nescala;"), 'ciclo no CSV: uma linha por dia util');
+$calendar = $service->listCalendar(['from' => '2026-10-01', 'to' => '2026-10-16', 'employee_id' => '11', 'type' => 'onsite']);
+assert_same(['2026-10-06', '2026-10-07', '2026-10-09', '2026-10-12', '2026-10-14', '2026-10-15'], array_map(static fn (array $event): string => substr($event['starts_at'], 0, 10), $calendar['items']), 'ciclo no Calendario: dias presenciais');
+assert_same('Ciclo 2P/1R', $calendar['items'][0]['description'], 'ciclo no Calendario: descricao');
+// Excecao em dia de ciclo continua vencendo, como nos outros tipos.
+$pdo = $withCycle();
+$pdo->exceptions[901] = ['id' => 901, 'employee_id' => 11, 'employee_name' => 'Tecnico K', 'team' => 'n1', 'exception_date' => '2026-10-06', 'exception_type' => 'remote'];
+$pdo->exceptions[902] = ['id' => 902, 'employee_id' => 11, 'employee_name' => 'Tecnico K', 'team' => 'n1', 'exception_date' => '2026-10-10', 'exception_type' => 'oncall'];
+$report = (new OperationalService($pdo, '2026-10-07'))->report(['from' => '2026-10-05', 'to' => '2026-10-11', 'employee_id' => '11']);
+assert_same('05R 06R 07P 08R 09P 10P', $days($report['schedule']), 'ciclo no relatorio: excecao vence (remota na terca, plantao no sabado)');
+// Configuracao de ciclo invalida no banco: sem linha, sem 400.
+$pdo = $withCycle();
+$pdo->rules[111]['rule_config'] = '{"pattern":["onsite"],"anchor_date":"2026-10-05"}';
+$report = (new OperationalService($pdo, '2026-10-07'))->report(['from' => '2026-10-05', 'to' => '2026-10-09', 'employee_id' => '11']);
+assert_same([], $report['schedule'], 'ciclo invalido no banco: relatorio sem linha e sem 400');
+// Com o ciclo no banco, os demais colaboradores saem iguais a referencia.
+$pdo = $withCycle();
+unset($pdo->employees[11], $pdo->employees[12], $pdo->employees[13], $pdo->rules[111], $pdo->rules[121], $pdo->rules[131]);
+assert_same($signature, qa_legacy_signature(qa_legacy_outputs(new OperationalService($pdo, '2026-10-07'))), 'referencia estavel entre execucoes');
+
+// Mapa PA (decisao 2 ajustada): o ciclo vem do motor na exibicao e no aviso
+// de alocacao remota; o conflito continua pelo tipo (conservador) ate o F6.
+require_once __DIR__ . '/../services/PaMapService.php';
+$pdo = $withCycle();
+$map = new PaMapService($pdo);
+$eligible = [];
+foreach (['2026-10-05', '2026-10-06', '2026-10-10'] as $date) {
+    foreach ($map->eligibleEmployees($date) as $employee) {
+        if ((int)$employee['id'] === 11) {
+            $eligible[$date] = [$employee['schedule_rule_type'], $employee['schedule_rule_label'], $employee['schedule_status']];
+        }
+    }
+}
+assert_same([
+    '2026-10-05' => ['cycle', 'Ciclo 2P/1R', 'remote'],
+    '2026-10-06' => ['cycle', 'Ciclo 2P/1R', 'onsite'],
+    '2026-10-10' => ['cycle', 'Ciclo 2P/1R', 'no_schedule'],
+], $eligible, 'Mapa PA: elegivel com ciclo pelo motor (remoto, presencial, fim de semana)');
+$saved = $map->save(['pa_number' => '1730', 'employee_id' => 11, 'valid_from' => '2026-10-06'], 'qa');
+assert_same([], $saved['warnings'], 'Mapa PA: ciclo em dia presencial nao gera aviso de remoto');
+assert_same(['cycle', $cycleConfig], [$pdo->paAssignments[0]['schedule_rule_type'], $pdo->paAssignments[0]['schedule_rule_config']], 'Mapa PA: copia guarda o tipo e a configuracao do ciclo');
+$active = [];
+foreach (['2026-10-06', '2026-10-08', '2026-10-10'] as $date) {
+    $item = $map->list(['date' => $date])['items'][0];
+    $active[$date] = [$item['active_on_date'], $item['presence_status'], $item['schedule_rule_label']];
+}
+assert_same([
+    '2026-10-06' => [true, 'onsite', 'Ciclo 2P/1R'],
+    '2026-10-08' => [false, 'remote', 'Ciclo 2P/1R'],
+    '2026-10-10' => [false, 'offsite', 'Ciclo 2P/1R'],
+], $active, 'Mapa PA: presencial no dia certo do ciclo, remoto no dia remoto, fora no fim de semana');
+assert_same('409: Conflito de escala no PA com Tecnico K.', (static function () use ($map): string {
+    try {
+        $map->save(['pa_number' => '1730', 'employee_id' => 12, 'valid_from' => '2026-10-06'], 'qa');
+        return 'ok';
+    } catch (DomainException $e) {
+        return '409: ' . $e->getMessage();
+    }
+})(), 'Mapa PA: conflito conservador (ciclo x dias pares no mesmo PA) ate o F6');
+$remoteSaved = $map->save(['pa_number' => '1730', 'employee_id' => 13, 'valid_from' => '2026-10-06', 'confirm_remote_allocation' => true], 'qa');
+assert_same(['Colaborador marcado como remoto nesta data.'], $remoteSaved['warnings'], 'Mapa PA: sempre remoto continua avisando e sem conflito');
+// Ciclo em dia remoto: mesmo aviso e confirmacao do sempre remoto.
+$pdo = $withCycle();
+$map = new PaMapService($pdo);
+$outcome = static function (callable $call): string {
+    try {
+        $call();
+        return 'ok';
+    } catch (DomainException $e) {
+        return '409: ' . $e->getMessage();
+    }
+};
+assert_same('409: Colaborador marcado como remoto nesta data. Confirme para alocar mesmo assim.', $outcome(fn () => $map->save(['pa_number' => '1729', 'employee_id' => 11, 'valid_from' => '2026-10-05'], 'qa')), 'Mapa PA: ciclo em dia remoto pede confirmacao');
+$saved = $map->save(['pa_number' => '1729', 'employee_id' => 11, 'valid_from' => '2026-10-05', 'confirm_remote_allocation' => true], 'qa');
+assert_same(['Colaborador marcado como remoto nesta data.'], $saved['warnings'], 'Mapa PA: ciclo em dia remoto confirmado avisa');
+// Dias pares (tipo antigo) sem mudanca: nao pede confirmacao em dia remoto.
+assert_same('ok', $outcome(fn () => $map->save(['pa_number' => '1728', 'employee_id' => 12, 'valid_from' => '2026-10-07'], 'qa')), 'Mapa PA: dias pares em dia impar segue sem confirmacao (como antes)');
 
 echo 'QA schedule legacy output OK (' . count($expected) . " saidas identicas a referencia anterior ao F2B)\n";

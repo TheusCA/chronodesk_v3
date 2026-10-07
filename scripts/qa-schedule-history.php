@@ -68,6 +68,8 @@ final class QaSchedulePdo extends PDO {
     public array $rules = [];
     public array $exceptions = [];
     public array $paAssignments = [];
+    public array $absences = [];
+    public array $sync = [];
     public array $audits = [];
     public array $events = [];
     public int $nextId = 1000;
@@ -197,6 +199,7 @@ final class QaScheduleStatement extends PDOStatement {
             return true;
         }
         if (strpos($sql, 'INSERT INTO portal_sync_queue') === 0) {
+            $db->sync[] = $params;
             return true;
         }
         if ($sql === 'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login, access_role FROM funcionarios WHERE id = :id AND ativo = 1') {
@@ -320,6 +323,18 @@ final class QaScheduleStatement extends PDOStatement {
             }
             return true;
         }
+        // [F2B] Cadastros da tela Escala (motor): ativos, sem os fora do Mapa.
+        if (strpos($sql, 'SELECT id, nome AS employee_name, equipe FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 0') === 0) {
+            foreach ($db->employees as $id => $row) {
+                if ((int)$row['ativo'] !== 1 || (int)$row['fora_mapa_escala'] === 1
+                    || (isset($params[':employee_id']) && $params[':employee_id'] !== $id)) {
+                    continue;
+                }
+                $this->rows[] = ['id' => $id, 'employee_name' => $row['nome'], 'equipe' => $row['equipe']];
+            }
+            usort($this->rows, static fn (array $a, array $b): int => [$a['employee_name'], $a['id']] <=> [$b['employee_name'], $b['id']]);
+            return true;
+        }
         if (strpos($sql, 'SELECT id, employee_id, employee_name, team, exception_date,') === 0) {
             foreach ($db->exceptions as $row) {
                 if ($row['exception_date'] >= $params[':date_from'] && $row['exception_date'] <= $params[':date_to']) {
@@ -329,6 +344,12 @@ final class QaScheduleStatement extends PDOStatement {
             return true;
         }
         if (strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on FROM portal_absences a') === 0) {
+            foreach ($db->absences as $row) {
+                if ($row['starts_on'] <= $params[':date_to'] && $row['ends_on'] >= $params[':date_from']
+                    && (!isset($params[':employee_id']) || $row['employee_id'] === $params[':employee_id'])) {
+                    $this->rows[] = $row;
+                }
+            }
             return true;
         }
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $sql);
@@ -823,11 +844,207 @@ assert_same($outside, qa_outcome(fn () => $service->saveScheduleException(['empl
 assert_same([[10 => null], []], [array_column($pdo->rules, 'effective_until', 'id'), $pdo->exceptions], 'fora do Mapa: nada gravado nas recusas');
 assert_same('403: Somente administradores alteram a escala da Liderança.', qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 3, 'exception_date' => '2026-10-10', 'exception_type' => 'onsite'], 'qa', 'gestor')), 'fora do Mapa: L9 continua antes (403)');
 $view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-09']);
-assert_same([[], []], [array_column($view['rules'], 'employee_id'), array_column($view['generated'], 'employee_id')], 'fora do Mapa: fora da tela de escala, inclusive a Lideranca');
+// [F2B] Tela no motor: o cadastro 2, sem regra, aparece "Sem escala" (P4);
+// os marcados (1 e o lider 3) continuam fora.
+assert_same([[], [2, 2, 2, 2, 2], ['no_schedule']], [
+    array_column($view['rules'], 'employee_id'),
+    array_column($view['generated'], 'employee_id'),
+    array_values(array_unique(array_column($view['generated'], 'presence_type'))),
+], 'fora do Mapa: fora da tela de escala, inclusive a Lideranca');
 $preview = $service->previewScheduleImport([['login_ad' => 'qa.tecnico1', 'regra' => 'par']]);
 assert_same([false, ['Cadastro fora do Mapa PA e da escala.']], [$preview['rows'][0]['valid'], $preview['rows'][0]['errors']], 'fora do Mapa: linha da importacao invalida');
 assert_same(1, $service->removeScheduleRule(1, 'qa', 'admin'), 'fora do Mapa: remover regra antiga continua permitido');
 $pdo->employees[1]['fora_mapa_escala'] = 0;
 assert_same('ok', qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'even_days'], 'qa', 'gestor')), 'fora do Mapa: desmarcado volta a receber regra');
+
+// ----------------------------------------------------------------------------
+// 6. F2B: ciclo, dias de home, previa, tela Escala no motor, importacao e fila
+// ----------------------------------------------------------------------------
+$cycle = static fn (array $overrides = []): array => [
+    'employee_id' => 1,
+    'rule_type' => 'cycle',
+    'cycle' => $overrides + ['onsite_days' => 2, 'remote_days' => 1, 'starts_with' => 'remote', 'anchor_date' => '2026-10-05'],
+];
+$letters = static fn (array $days): string => implode(' ', array_map(
+    static fn (array $day): string => substr($day['date'], 8, 2) . ($day['situacao'] === 'presencial' ? 'P' : ($day['situacao'] === 'remoto' ? 'R' : '-')),
+    $days
+));
+
+// Ciclo: o servidor monta o pattern, forca o inicio na data inicial e grava
+// a configuracao em ordem fixa.
+$pdo = qa_schedule_db([qa_rule(10, 'even_days', '2026-09-01', null)]);
+$service = new OperationalService($pdo, $today);
+$saved = $service->saveScheduleRule($cycle() + ['effective_from' => '2026-11-02'], 'qa', 'gestor');
+$row = $pdo->rules[$saved['id']];
+assert_same(['cycle', '{"pattern":["remote","onsite","onsite"],"anchor_date":"2026-10-05","business_days_only":true}', '2026-10-05', null],
+    [$row['rule_type'], $row['rule_config'], $row['effective_from'], $row['effective_until']], 'ciclo: pattern montado, inicio = data inicial (effective_from enviado e ignorado), JSON em ordem fixa');
+assert_same([10, '2026-10-04'], [$saved['closed_rule_id'], $saved['closed_until']], 'ciclo: regra anterior encerrada na vespera da data inicial');
+$payload = json_decode(end($pdo->sync)[':payload_json'], true);
+assert_same([['remote', 'onsite', 'onsite'], '2026-10-05'], [$payload['pattern'] ?? null, $payload['effective_from']], 'ciclo: pattern no payload da portal_sync_queue');
+$before = count($pdo->rules);
+$again = $service->saveScheduleRule($cycle(['onsite_days' => '2', 'remote_days' => '1']), 'qa', 'gestor');
+assert_same([true, $before], [$again['unchanged'], count($pdo->rules)], 'ciclo: salvar de novo a mesma regra nao cria historico');
+$view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-16', 'employee_id' => '1']);
+assert_same('05R 06P 07P 08R 09P 12P 13R 14P 15P 16R', $letters($view['generated']), 'ciclo: criterio de aceite (1R/2P a partir de seg 05/10) na tela Escala');
+assert_same(['Ciclo 2P/1R'], array_values(array_unique(array_column($view['generated'], 'rule_label'))), 'ciclo: rotulo "Ciclo 2P/1R"');
+$current = array_values(array_filter($view['rules'], static fn (array $rule): bool => $rule['is_current']));
+assert_same(['Ciclo 2P/1R', ['remote', 'onsite', 'onsite']], [$current[0]['rule_label'], $current[0]['config']['pattern']], 'ciclo: GET devolve rotulo e configuracao');
+
+$pdo = qa_schedule_db();
+$service = new OperationalService($pdo, $today);
+foreach ([
+    ['data inicial no sabado', $cycle(['anchor_date' => '2026-10-10']), '400: A data inicial do ciclo precisa ser dia util (segunda a sexta).'],
+    ['data inicial invalida', $cycle(['anchor_date' => '2026-02-30']), '400: Data inicial do ciclo invalida.'],
+    ['sem configuracao', ['employee_id' => 1, 'rule_type' => 'cycle'], '400: Informe a configuracao do ciclo.'],
+    ['zero dia presencial', $cycle(['onsite_days' => 0]), '400: Dias presenciais do ciclo: informe um numero inteiro de 1 a 19.'],
+    ['dia remoto fracionado', $cycle(['remote_days' => '1.5']), '400: Dias remotos do ciclo: informe um numero inteiro de 1 a 19.'],
+    ['dia remoto negativo', $cycle(['remote_days' => -1]), '400: Dias remotos do ciclo: informe um numero inteiro de 1 a 19.'],
+    ['dia remoto como booleano', $cycle(['remote_days' => true]), '400: Dias remotos do ciclo: informe um numero inteiro de 1 a 19.'],
+    ['mais de 20 dias', $cycle(['onsite_days' => 11, 'remote_days' => 10]), '400: O ciclo pode ter no maximo 20 dias.'],
+    ['comeca por valor desconhecido', $cycle(['starts_with' => 'home']), '400: Informe se o ciclo comeca por dia presencial ou remoto.'],
+    ['data inicial passada pelo gestor', $cycle(['anchor_date' => '2026-09-28']), '403: Somente administradores e Liderança gravam regra com início retroativo.'],
+] as [$label, $payload, $expected]) {
+    assert_same($expected, qa_outcome(fn () => $service->saveScheduleRule($payload, 'qa', 'gestor')), "ciclo: {$label}");
+}
+assert_same([], $pdo->rules, 'ciclo: nada gravado nas recusas');
+assert_same('ok', qa_outcome(fn () => $service->saveScheduleRule($cycle(['onsite_days' => 10, 'remote_days' => 10, 'starts_with' => 'onsite']), 'qa', 'gestor')), 'ciclo: limite de 20 dias aceito');
+assert_same(20, count(json_decode(end($pdo->rules)['rule_config'], true)['pattern']), 'ciclo: 20 posicoes gravadas');
+assert_same('ok', qa_outcome(fn () => $service->saveScheduleRule($cycle(['anchor_date' => '2026-09-28', 'onsite_days' => 1]), 'qa', 'lideranca')), 'ciclo: data inicial passada pela Lideranca (escalas.retroativa)');
+assert_same(true, strpos(end($pdo->audits)['details'], 'retroativa=sim') !== false, 'ciclo: retroativo auditado');
+
+// Dias fixos informados como home: o servidor converte em presenciais.
+$pdo = qa_schedule_db();
+$service = new OperationalService($pdo, $today);
+$home = ['employee_id' => 1, 'rule_type' => 'fixed_weekdays', 'input_mode' => 'home', 'home_weekdays' => ['thu', 'tue']];
+$saved = $service->saveScheduleRule($home, 'qa', 'gestor');
+assert_same('{"weekdays":["mon","wed","fri"],"input_mode":"home"}', $pdo->rules[$saved['id']]['rule_config'], 'home: "ter e qui" grava seg, qua e sex');
+$payload = json_decode(end($pdo->sync)[':payload_json'], true);
+assert_same([['mon', 'wed', 'fri'], false], [$payload['weekdays'], array_key_exists('pattern', $payload)], 'home: fila com os dias presenciais e sem pattern (so o ciclo leva)');
+$view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-09', 'employee_id' => '1']);
+assert_same('Presencial: seg, qua e sex · home ter e qui', $view['rules'][0]['rule_label'], 'home: rotulo com presenciais e home');
+assert_same('05P 06R 07P 08R 09P', $letters($view['generated']), 'home: dias calculados');
+$sameAsOnsite = $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'fixed_weekdays', 'weekdays' => ['mon', 'wed', 'fri']], 'qa', 'gestor');
+assert_same([true, 1], [$sameAsOnsite['unchanged'], count($pdo->rules)], 'home: os mesmos dias informados como presenciais sao a mesma regra (input_mode so de exibicao)');
+foreach ([
+    ['todos os dias em home', ['home_weekdays' => ['mon', 'tue', 'wed', 'thu', 'fri']], '400: Todos os dias em home office: use a regra "Sempre remoto".'],
+    ['nenhum dia de home', ['home_weekdays' => []], '400: Nenhum dia de home office marcado: para presencial em todos os dias uteis, use a regra "Sempre presencial".'],
+    ['dia de home invalido', ['home_weekdays' => ['sat']], '400: Dia da semana invalido.'],
+    ['modo desconhecido', ['input_mode' => 'misto'], '400: Modo de informar os dias invalido.'],
+] as [$label, $overrides, $expected]) {
+    assert_same($expected, qa_outcome(fn () => $service->saveScheduleRule($overrides + $home + ['effective_from' => '2026-10-12'], 'qa', 'gestor')), "home: {$label}");
+}
+assert_same(1, count($pdo->rules), 'home: nada gravado nas recusas');
+// Regra antiga, sem input_mode, continua igual.
+$pdo = qa_schedule_db([qa_rule(10, 'fixed_weekdays', '2026-09-01', null, $weekdaysMonWed)]);
+$service = new OperationalService($pdo, $today);
+$view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-09', 'employee_id' => '1']);
+assert_same(['Presencial: seg e qua', $weekdaysMonWed, '05P 06R 07P 08R 09R'], [$view['rules'][0]['rule_label'], $pdo->rules[10]['rule_config'], $letters($view['generated'])], 'home: fixed_weekdays antigo intacto');
+
+// Previa: mesmo payload, nao grava nada e devolve o mesmo "closes" que o
+// "rule" aplica.
+$pdo = qa_schedule_db([qa_rule(10, 'even_days', '2026-09-01', null)]);
+$service = new OperationalService($pdo, $today);
+$state = static fn (QaSchedulePdo $db): array => [$db->rules, $db->exceptions, $db->audits, $db->sync];
+$snapshot = $state($pdo);
+$preview = $service->previewScheduleRule($cycle(), 'gestor');
+assert_same($snapshot, $state($pdo), 'previa: nada gravado (regras, excecoes, auditoria e fila)');
+assert_same([], array_values(array_filter($pdo->events, static fn (string $sql): bool => preg_match('/^(INSERT|UPDATE|DELETE)/', $sql) === 1)), 'previa: nenhum comando de escrita');
+assert_same('05R 06P 07P 08R 09P 12P 13R 14P 15P 16R', $letters($preview['preview']), 'previa: 10 dias uteis pelo motor (criterio de aceite)');
+assert_same(['seg', 'ter', 'onsite'], [$preview['preview'][0]['weekday'], $preview['preview'][1]['weekday'], $preview['preview'][1]['presence_type']], 'previa: dia da semana e presence_type');
+assert_same(['Ciclo 2P/1R', '2026-10-05', null, false, false], [$preview['rule_label'], $preview['effective_from'], $preview['effective_until'], $preview['unchanged'], $preview['retroactive']], 'previa: rotulo, vigencia e marcas');
+assert_same(['rule_id' => 10, 'rule_type' => 'even_days', 'rule_label' => 'Dias pares', 'effective_until' => '2026-10-04'], $preview['closes'], 'previa: regra que sera encerrada');
+$saved = $service->saveScheduleRule($cycle(), 'qa', 'gestor');
+assert_same([$preview['closes']['rule_id'], $preview['closes']['effective_until']], [$saved['closed_rule_id'], $saved['closed_until']], 'previa: closes igual ao que o rule aplicou');
+$preview = $service->previewScheduleRule($cycle(), 'gestor');
+assert_same([true, null], [$preview['unchanged'], $preview['closes']], 'previa: regra igual a vigente');
+// Regra agendada depois: a previa mostra os dias dela com o rotulo dela.
+$pdo = qa_schedule_db([qa_rule(13, 'always_onsite', '2026-10-12', null)]);
+$service = new OperationalService($pdo, $today);
+$preview = $service->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'always_remote', 'effective_from' => '2026-10-07'], 'gestor');
+assert_same(['07R 08R 09R 12P 13P 14P 15P 16P 19P 20P', null, '2026-10-11'], [$letters($preview['preview']), $preview['closes'], $preview['effective_until']], 'previa: regra no meio termina antes da agendada');
+assert_same(['Sempre remoto', 'Sempre presencial'], [$preview['preview'][0]['rule_label'], $preview['preview'][3]['rule_label']], 'previa: rotulo por dia');
+$preview = $service->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'always_remote', 'effective_from' => '2026-10-10'], 'gestor');
+assert_same('2026-10-12', $preview['preview'][0]['date'], 'previa: inicio no sabado comeca no proximo dia util');
+// Mesmas recusas do rule.
+$pdo->employees[2]['fora_mapa_escala'] = 1;
+assert_same('409: ' . OperationalService::LEADERSHIP_RULE_MESSAGE, qa_outcome(fn () => $service->previewScheduleRule(['employee_id' => 3, 'rule_type' => 'always_onsite'], 'admin')), 'previa: Lideranca 409');
+assert_same('409: ' . OperationalService::OUTSIDE_MAP_MESSAGE, qa_outcome(fn () => $service->previewScheduleRule(['employee_id' => 2, 'rule_type' => 'always_onsite'], 'admin')), 'previa: fora do Mapa 409');
+assert_same('400: Todos os dias em home office: use a regra "Sempre remoto".', qa_outcome(fn () => $service->previewScheduleRule(['home_weekdays' => ['mon', 'tue', 'wed', 'thu', 'fri']] + $home, 'gestor')), 'previa: mesmas validacoes');
+assert_same('403: Somente administradores e Liderança gravam regra com início retroativo.', qa_outcome(fn () => $service->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'always_remote', 'effective_from' => '2026-10-02'], 'gestor')), 'previa: retroativo do gestor 403');
+
+// Propriedade: o historico da previa (applyPlan) e o que a gravacao deixa no banco.
+$timeline = static function (array $rules): array {
+    $result = [];
+    for ($date = '2026-09-01'; $date <= '2026-12-31'; $date = ScheduleRulePlanner::addDays($date, 1)) {
+        $rule = ScheduleRulePlanner::ruleAt($rules, $date);
+        $result[$date] = $rule === null ? null : $rule['rule_type'] . ' ' . ($rule['rule_config'] ?? '');
+    }
+    return $result;
+};
+mt_srand(2026);
+$types = ['even_days', 'odd_days', 'always_onsite', 'always_remote', 'cycle'];
+for ($round = 0; $round < 200; $round++) {
+    $pdo = qa_schedule_db([qa_rule(10, 'odd_days', '2026-09-01', '2026-10-19'), qa_rule(11, 'always_remote', '2026-10-20', null)]);
+    $service = new OperationalService($pdo, $today);
+    for ($step = 0; $step < 4; $step++) {
+        $type = $types[mt_rand(0, 4)];
+        $from = ScheduleRulePlanner::addDays('2026-10-05', mt_rand(0, 30));
+        if ($type === 'cycle' && !PresenceEngine::isBusinessDay($from)) {
+            $from = '2026-10-05';
+        }
+        $onsiteDays = mt_rand(1, 3);
+        $payload = $type === 'cycle'
+            ? $cycle(['anchor_date' => $from, 'onsite_days' => $onsiteDays])
+            : ['employee_id' => 1, 'rule_type' => $type, 'effective_from' => $from];
+        $config = $type === 'cycle'
+            ? json_encode(['pattern' => array_merge(['remote'], array_fill(0, $onsiteDays, 'onsite')), 'anchor_date' => $from, 'business_days_only' => true], JSON_UNESCAPED_SLASHES)
+            : null;
+        $rules = array_values($pdo->rules);
+        $plan = ScheduleRulePlanner::planSave($rules, $from, $type, $config, $today);
+        $expected = ScheduleRulePlanner::applyPlan($rules, $plan, ['rule_type' => $type, 'rule_config' => $config]);
+        $service->saveScheduleRule($payload, 'qa', 'gestor');
+        assert_same($timeline($expected), $timeline(array_values($pdo->rules)), "previa: applyPlan igual a gravacao (rodada {$round}, passo {$step})");
+    }
+}
+
+// Tela Escala no motor (P3, P4, ausencia); Lideranca como antes.
+$pdo = qa_schedule_db([
+    qa_rule(10, 'even_days', '2026-09-01', null),
+    ['employee_id' => 2, 'team' => 'n2'] + qa_rule(20, 'undefined', '2026-09-01', null),
+]);
+$pdo->employees[4] = ['nome' => 'Tecnico QA 4', 'equipe' => 'n1', 'ad_login' => 'qa.tecnico4', 'access_role' => 'tecnico', 'ativo' => 1, 'fora_mapa_escala' => 0];
+$pdo->exceptions['1:2026-10-06'] = ['id' => 500, 'employee_id' => 1, 'employee_name' => 'Tecnico QA 1', 'team' => 'n1', 'exception_date' => '2026-10-06', 'exception_type' => 'day_off', 'note' => 'texto da observacao'];
+$pdo->exceptions['1:2026-10-10'] = ['id' => 501, 'employee_id' => 1, 'employee_name' => 'Tecnico QA 1', 'team' => 'n1', 'exception_date' => '2026-10-10', 'exception_type' => 'oncall', 'note' => null];
+$pdo->absences = [['employee_id' => 1, 'starts_on' => '2026-10-08', 'ends_on' => '2026-10-08']];
+$service = new OperationalService($pdo, $today);
+$view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-11']);
+$byKey = [];
+foreach ($view['generated'] as $item) {
+    $byKey[$item['employee_id'] . ':' . $item['date']] = $item;
+}
+assert_same([false, false, false], [isset($byKey['1:2026-10-11']), isset($byKey['2:2026-10-10']), isset($byKey['3:2026-10-10'])], 'motor: fim de semana sem excecao fora da tela (P3)');
+assert_same(['onsite', 'exception', 'Exceção: plantão'], [$byKey['1:2026-10-10']['presence_type'], $byKey['1:2026-10-10']['source'], $byKey['1:2026-10-10']['escala']['rule_label']], 'motor: plantao no sabado aparece');
+assert_same(['no_schedule', 'Sem escala', 'Sem escala definida', 'sem_escala', 'undefined'], [$byKey['2:2026-10-05']['presence_type'], $byKey['2:2026-10-05']['label'], $byKey['2:2026-10-05']['detalhe'], $byKey['2:2026-10-05']['situacao'], $byKey['2:2026-10-05']['rule_type']], 'motor: undefined vira sem escala, nao remoto (P4)');
+assert_same(['no_schedule', 'none', null, 'Sem escala definida'], [$byKey['4:2026-10-05']['presence_type'], $byKey['4:2026-10-05']['source'], $byKey['4:2026-10-05']['rule_type'], $byKey['4:2026-10-05']['rule_label']], 'motor: cadastro sem regra aparece sem escala (P4)');
+assert_same(['absence', 'exception', 'Ausente (dia todo)', 'Dias pares'], [$byKey['1:2026-10-06']['presence_type'], $byKey['1:2026-10-06']['source'], $byKey['1:2026-10-06']['detalhe'], $byKey['1:2026-10-06']['rule_label']], 'motor: folga vira ausente (dia todo), sem categoria');
+assert_same(false, strpos((string)json_encode($view['generated']), 'texto da observacao') !== false, 'motor: observacao da excecao fora da escala gerada');
+assert_same(['absence', 'absence'], [$byKey['1:2026-10-08']['presence_type'], $byKey['1:2026-10-08']['source']], 'motor: ausencia aprovada aparece como ausente (antes sumia)');
+assert_same(['onsite', 'implicit', 'always_onsite', OperationalService::LEADERSHIP_RULE_LABEL], [$byKey['3:2026-10-05']['presence_type'], $byKey['3:2026-10-05']['source'], $byKey['3:2026-10-05']['rule_type'], $byKey['3:2026-10-05']['rule_label']], 'motor: Lideranca presencial (regra fixa)');
+$monday = array_values(array_filter($view['generated'], static fn (array $item): bool => $item['date'] === '2026-10-05'));
+assert_same([3, 1, 2, 4], array_column($monday, 'employee_id'), 'motor: um item por cadastro por dia, por nome');
+$teamView = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-05', 'team' => 'n1']);
+assert_same([1, 4], array_column($teamView['generated'], 'employee_id'), 'motor: filtro de equipe (sem a Lideranca, como antes)');
+
+// Importacao: ciclo recusado (a planilha nao tem a configuracao).
+$preview = $service->previewScheduleImport([['login_ad' => 'qa.tecnico1', 'regra' => 'Ciclo']]);
+assert_same([false, [OperationalService::CYCLE_IMPORT_MESSAGE]], [$preview['rows'][0]['valid'], $preview['rows'][0]['errors']], 'importacao: ciclo recusado com orientacao');
+$preview = $service->previewScheduleImport([['login_ad' => 'qa.tecnico1', 'regra' => 'qualquer']]);
+assert_same(['Regra invalida.'], $preview['rows'][0]['errors'], 'importacao: regra desconhecida com a mensagem de antes');
+
+// Ciclo gravado com configuracao invalida (dado ruim): rotulo explicito e
+// "Sem escala" na tela, sem 400.
+$pdo = qa_schedule_db([qa_rule(10, 'cycle', '2026-10-05', null, '{"pattern":["onsite"],"anchor_date":"2026-10-05"}')]);
+$view = (new OperationalService($pdo, $today))->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-05', 'employee_id' => '1']);
+assert_same(['Ciclo com configuracao invalida', 'no_schedule', 'Ciclo com configuracao invalida'], [$view['rules'][0]['rule_label'], $view['generated'][0]['presence_type'], $view['generated'][0]['rule_label']], 'ciclo invalido: rotulo explicito e sem escala');
 
 echo "QA schedule history OK\n";

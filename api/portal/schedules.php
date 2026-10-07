@@ -53,6 +53,11 @@ try {
         audit_log('SCHEDULE_RULE_SAVED', 'Regra de escala salva. ID ' . $saved['id'], 'WARNING');
         json_response(['sucesso' => true, 'mensagem' => 'Regra de escala salva.'] + $saved);
     }
+    if ($action === 'rule_preview') {
+        // [F2B] Mesmas permissoes do "rule" (gestor, Lideranca e admin; inicio
+        // retroativo so com escalas.retroativa), mesmas validacoes; nao grava.
+        json_response(['sucesso' => true] + $service->previewScheduleRule($data, $role));
+    }
     if ($action === 'remove_rule') {
         if (!portal_role_can($role, 'escalas.manage')) {
             audit_log('SCHEDULE_RULE_REMOVE_DENIED', 'Perfil sem permissao tentou remover regra de escala.', 'WARNING');

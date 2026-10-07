@@ -1347,6 +1347,8 @@ $matrix = [
     'api/portal/reports.php GET' => [[], $expect['GESTAO']],
     'api/portal/schedules.php GET' => [[], $expect['TODOS']],
     'api/portal/schedules.php POST' => [['content_type' => $json, 'body' => '{"action":"rule"}'], $expect['GESTAO']],
+    // [F2B] Previa com as mesmas permissoes do "rule" (aprovacao de 2026-10-07).
+    'api/portal/schedules.php POST rule_preview' => [['content_type' => $json, 'body' => '{"action":"rule_preview"}'], $expect['GESTAO']],
     'api/portal/schedules.php POST remove_rule' => [['content_type' => $json, 'body' => '{"action":"remove_rule"}'], $expect['ADMIN_LIDERANCA']],
     // F2: presenca para qualquer perfil autenticado (desenho, secao 3.2).
     'api/portal/presence.php GET' => [[], $expect['TODOS']],
@@ -1663,15 +1665,37 @@ foreach ([
 ] as [$label, $call]) {
     assert_same(0, strpos($scheduleCall($call), 'passou da checagem'), "L9 no servico: {$label}");
 }
+// [F2B] Previa: L9 e retroativo (P10/L6) iguais aos do "rule".
+$retroactive = '403: Somente administradores e Liderança gravam regra com início retroativo.';
+foreach ([
+    ['previa de cadastro Lideranca pela Lideranca', fn () => $scheduleService->previewScheduleRule(['employee_id' => 10, 'rule_type' => 'always_onsite'], 'lideranca'), $forbidden],
+    ['previa de cadastro Lideranca pelo gestor', fn () => $scheduleService->previewScheduleRule(['employee_id' => 10, 'rule_type' => 'always_onsite'], 'gestor'), $forbidden],
+    ['previa retroativa pelo gestor', fn () => $scheduleService->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite', 'effective_from' => '2020-01-06'], 'gestor'), $retroactive],
+    ['previa de ciclo com data inicial passada pelo gestor', fn () => $scheduleService->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['onsite_days' => 2, 'remote_days' => 1, 'starts_with' => 'onsite', 'anchor_date' => '2020-01-06']], 'gestor'), $retroactive],
+] as [$label, $call, $expected]) {
+    assert_same($expected, $scheduleCall($call), "F2B no servico: {$label}");
+}
+foreach ([
+    ['previa de tecnico pelo gestor', fn () => $scheduleService->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite'], 'gestor')],
+    ['previa retroativa pela Lideranca', fn () => $scheduleService->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite', 'effective_from' => '2020-01-06'], 'lideranca')],
+    ['previa retroativa pelo admin', fn () => $scheduleService->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite', 'effective_from' => '2020-01-06'], 'admin')],
+] as [$label, $call]) {
+    assert_same(0, strpos($scheduleCall($call), 'passou da checagem'), "F2B no servico: {$label}");
+}
 $operationalSource = (string)file_get_contents($root . '/services/OperationalService.php');
-assert_same(3, substr_count($operationalSource, '$this->assertScheduleChangeAllowed($employee, $actorRole);'), 'L9: regra, remocao e excecao conferem o alvo (a importacao passa pela regra)');
+assert_same(3, substr_count($operationalSource, '$this->assertScheduleChangeAllowed($employee, $actorRole);'), 'L9: regra (e previa), remocao e excecao conferem o alvo (a importacao passa pela regra)');
 assert_same(true, strpos($operationalSource, "], \$actor, \$actorRole, 'import');") !== false, 'L9: importacao repassa o perfil do ator');
 
 // L9 de ponta a ponta: 403 com auditoria.
 $scheduleCases = qa_run_endpoints($qaDir, [
     'lider_regra_lider' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"rule","employee_id":10,"rule_type":"always_onsite"}', 'session' => $leaderSession, 'db' => $scheduleDb],
     'gestor_regra_tecnico' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"rule","employee_id":1,"rule_type":"always_onsite"}', 'session' => $manager, 'db' => $scheduleDb],
+    // [F2B] A previa chega ao servico pela rota real e recebe as recusas do "rule".
+    'lider_previa_lider' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"rule_preview","employee_id":10,"rule_type":"always_onsite"}', 'session' => $leaderSession, 'db' => $scheduleDb],
+    'gestor_previa_retroativa' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"rule_preview","employee_id":1,"rule_type":"always_onsite","effective_from":"2020-01-06"}', 'session' => $manager, 'db' => $scheduleDb],
 ]);
+assert_same([403, true], [$scheduleCases['lider_previa_lider']['status'], strpos($scheduleCases['lider_previa_lider']['body'], 'Somente administradores alteram a escala da Liderança') !== false], 'F2B: previa de cadastro Lideranca pela Lideranca recebe 403 (L9)');
+assert_same([403, true], [$scheduleCases['gestor_previa_retroativa']['status'], strpos($scheduleCases['gestor_previa_retroativa']['body'], 'início retroativo') !== false], 'F2B: previa retroativa do gestor recebe 403 (P10/L6)');
 assert_same(403, $scheduleCases['lider_regra_lider']['status'], 'L9: Lideranca editando escala de cadastro Lideranca recebe 403');
 assert_same(true, strpos($scheduleCases['lider_regra_lider']['body'], 'Somente administradores alteram a escala da Liderança') !== false, 'L9: mensagem');
 assert_same(true, strpos($scheduleCases['lider_regra_lider']['log'], '[QA_AUDIT] PORTAL_ACCESS_DENIED [WARNING]') !== false, 'L9: recusa auditada');

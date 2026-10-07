@@ -10,7 +10,7 @@ final class PaMapService {
         '1724', '1723', '1722', '1721', '1720', '1719', '1718', '1717',
     ];
     private const RULE_TYPES = [
-        'even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined', 'fixed_weekdays',
+        'even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined', 'fixed_weekdays', 'cycle',
     ];
 
     private PDO $pdo;
@@ -75,7 +75,7 @@ final class PaMapService {
             $row['team'] = $normalizedTeam;
             $items[] = $row + [
                 'schedule_rule_type' => $schedule['rule_type'],
-                'schedule_rule_label' => $this->ruleLabel($schedule['rule_type']),
+                'schedule_rule_label' => $this->ruleLabel($schedule['rule_type'], [], $schedule['rule_config']),
                 'schedule_status' => $schedule['status'],
                 'schedule_label' => $schedule['label'],
                 'schedule_source' => $schedule['source'],
@@ -107,7 +107,7 @@ final class PaMapService {
             if ($schedule['block']) {
                 throw new DomainException($schedule['message']);
             }
-            if ($schedule['rule_type'] === 'always_remote' && empty($data['confirm_remote_allocation'])) {
+            if ($schedule['remote_on_date'] && empty($data['confirm_remote_allocation'])) {
                 throw new DomainException('Colaborador marcado como remoto nesta data. Confirme para alocar mesmo assim.');
             }
 
@@ -292,14 +292,17 @@ final class PaMapService {
         $weekdays = $ruleType === 'fixed_weekdays'
             ? OperationalService::scheduleRuleConfigWeekdays($row['schedule_rule_config'] ?? null)
             : [];
-        $activeOnDate = $this->ruleActiveOnDate($ruleType, $date, $weekdays);
+        $config = $row['schedule_rule_config'] ?? null;
+        $activeOnDate = $this->ruleActiveOnDate($ruleType, $date, $weekdays, $config);
+        $remote = in_array($ruleType, ['always_remote', 'fixed_weekdays'], true)
+            || ($ruleType === 'cycle' && self::cyclePresence($config, $date) === 'remote');
         return $row + [
             'source' => $source,
             'schedule_rule_type' => $ruleType,
-            'schedule_rule_label' => $this->ruleLabel($ruleType, $weekdays),
+            'schedule_rule_label' => $this->ruleLabel($ruleType, $weekdays, $config),
             'schedule_weekdays' => $weekdays,
             'active_on_date' => $activeOnDate,
-            'presence_status' => $activeOnDate ? 'onsite' : (in_array($ruleType, ['always_remote', 'fixed_weekdays'], true) ? 'remote' : 'offsite'),
+            'presence_status' => $activeOnDate ? 'onsite' : ($remote ? 'remote' : 'offsite'),
         ];
     }
 
@@ -406,6 +409,7 @@ final class PaMapService {
                     'source' => 'exception',
                     'block' => true,
                     'message' => 'Colaborador com ausencia/ferias nesta data.',
+                    'remote_on_date' => false,
                 ];
             }
         }
@@ -420,6 +424,7 @@ final class PaMapService {
                 'source' => 'none',
                 'block' => false,
                 'message' => null,
+                'remote_on_date' => false,
             ];
         }
 
@@ -448,26 +453,38 @@ final class PaMapService {
                 'source' => 'none',
                 'block' => false,
                 'message' => null,
+                'remote_on_date' => false,
             ];
         }
         $ruleType = $this->ruleType((string)$rule['rule_type']);
         $weekdays = $ruleType === 'fixed_weekdays'
             ? OperationalService::scheduleRuleConfigWeekdays($rule['rule_config'] ?? null)
             : [];
-        $presence = $ruleType === 'undefined'
-            ? 'no_schedule'
-            : OperationalService::presenceForRule($ruleType, $date, $weekdays);
+        if ($ruleType === 'cycle') {
+            // [F2B] Ciclo pelo motor: a copia guarda a configuracao, e o dia
+            // da data diz presencial ou remoto (fim de semana: sem escala).
+            $ruleConfig = (string)$rule['rule_config'];
+            $presence = self::cyclePresence($ruleConfig, $date) ?? 'no_schedule';
+        } else {
+            $ruleConfig = $ruleType === 'fixed_weekdays' && $weekdays !== []
+                ? json_encode(['weekdays' => $weekdays], JSON_UNESCAPED_SLASHES)
+                : null;
+            $presence = $ruleType === 'undefined'
+                ? 'no_schedule'
+                : OperationalService::presenceForRule($ruleType, $date, $weekdays);
+        }
         return [
             'rule_type' => $ruleType,
-            'rule_config' => $ruleType === 'fixed_weekdays' && $weekdays !== []
-                ? json_encode(['weekdays' => $weekdays], JSON_UNESCAPED_SLASHES)
-                : null,
+            'rule_config' => $ruleConfig,
             'weekdays' => $weekdays,
             'status' => $presence,
-            'label' => $this->ruleLabel($ruleType, $weekdays),
+            'label' => $this->ruleLabel($ruleType, $weekdays, $ruleConfig),
             'source' => 'rule',
             'block' => false,
             'message' => null,
+            // Aviso e confirmacao de alocacao remota: sempre remoto, ou ciclo
+            // em dia remoto na data de inicio (o ciclo em dia presencial nao avisa).
+            'remote_on_date' => $ruleType === 'always_remote' || ($ruleType === 'cycle' && $presence === 'remote'),
         ];
     }
 
@@ -487,7 +504,7 @@ final class PaMapService {
     }
 
     private function scheduleWarnings(array $schedule): array {
-        if ($schedule['rule_type'] === 'always_remote') {
+        if ($schedule['remote_on_date']) {
             return ['Colaborador marcado como remoto nesta data.'];
         }
         if ($schedule['rule_type'] === 'undefined') {
@@ -496,8 +513,15 @@ final class PaMapService {
         return [];
     }
 
-    private function ruleActiveOnDate(string $ruleType, string $date, array $weekdays = []): bool {
+    /**
+     * $config: copia da configuracao (JSON); usada so no ciclo, que vem do
+     * motor (F2B, decisao 2 ajustada). O conflito continua pelo tipo ate o F6.
+     */
+    private function ruleActiveOnDate(string $ruleType, string $date, array $weekdays = [], ?string $config = null): bool {
         $ruleType = $this->ruleType($ruleType);
+        if ($ruleType === 'cycle') {
+            return self::cyclePresence($config, $date) === 'onsite';
+        }
         if ($ruleType === 'always_onsite') {
             return true;
         }
@@ -517,7 +541,11 @@ final class PaMapService {
         return false;
     }
 
-    private function ruleLabel(string $ruleType, array $weekdays = []): string {
+    private function ruleLabel(string $ruleType, array $weekdays = [], ?string $config = null): string {
+        if ($this->ruleType($ruleType) === 'cycle') {
+            $cycle = PresenceEngine::cycleConfig(self::decodedConfig($config));
+            return $cycle === null ? 'Ciclo com configuracao invalida' : ucfirst(PresenceEngine::cycleLabel($cycle['pattern']));
+        }
         $labels = [
             'even_days' => 'Dias pares',
             'odd_days' => 'Dias impares',
@@ -527,6 +555,16 @@ final class PaMapService {
             'fixed_weekdays' => 'Presencial: ' . OperationalService::weekdayListLabel($weekdays),
         ];
         return $labels[$this->ruleType($ruleType)];
+    }
+
+    /** [F2B] Dia do ciclo na data pelo motor: 'onsite', 'remote' ou null. */
+    private static function cyclePresence(?string $config, string $date): ?string {
+        return OperationalService::cyclePresence(self::decodedConfig($config), $date);
+    }
+
+    private static function decodedConfig(?string $config): array {
+        $decoded = is_string($config) ? json_decode($config, true) : null;
+        return is_array($decoded) ? $decoded : [];
     }
 
     private function ruleType($value): string {

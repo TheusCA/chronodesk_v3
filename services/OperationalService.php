@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/SharePointSyncService.php';
 require_once __DIR__ . '/ScheduleRulePlanner.php';
+require_once __DIR__ . '/PresenceEngine.php';
 
 final class OperationalService {
     public const MAX_IMPORT_ROWS = 500;
@@ -10,8 +11,13 @@ final class OperationalService {
     public const MAX_IMPORT_PAYLOAD_BYTES = 1048576;
     public const LIST_LIMIT = 500;
     private const RULE_TYPES = [
-        'even_days', 'odd_days', 'always_remote', 'always_onsite', 'undefined', 'fixed_weekdays',
+        'even_days', 'odd_days', 'always_remote', 'always_onsite', 'undefined', 'fixed_weekdays', 'cycle',
     ];
+    /** [F2B] Ciclo: 2 a 20 posicoes (desenho, secao 2.2). */
+    public const CYCLE_MAX_DAYS = 20;
+    /** [F2B] Dias uteis devolvidos pela previa da regra. */
+    public const RULE_PREVIEW_DAYS = 10;
+    public const CYCLE_IMPORT_MESSAGE = 'Ciclo não é importado pela planilha: cadastre pela tela de Escala.';
     private const WEEKDAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri'];
     private const WEEKDAY_LABELS = [
         'mon' => 'seg',
@@ -306,7 +312,9 @@ final class OperationalService {
             'today' => $this->today(),
             'rules' => $rules,
             'exceptions' => $exceptions,
-            'generated' => $this->generatedSchedule($from, $to, $team, $employeeId, $rules, $exceptions),
+            // [F2B] Tela Escala no motor (decisao 1 do plano): P3, P4 e ausencia
+            // valem aqui; Calendario e Relatorios ficam no calculo antigo ate o F5.
+            'generated' => $this->engineSchedule($from, $to, $team, $employeeId, $rules, $exceptions),
         ];
     }
 
@@ -319,7 +327,58 @@ final class OperationalService {
         return $this->atomic(fn(): array => $this->saveScheduleRuleUnsafe($data, $actor, $actorRole));
     }
 
-    private function saveScheduleRuleUnsafe(array $data, string $actor, string $actorRole, string $origin = 'manual'): array {
+    /**
+     * [F2B] Previa da regra (action=rule_preview): mesmo payload, mesmas
+     * validacoes e permissoes do "rule" (inclusive a trava do colaborador e os
+     * 409 de Lideranca e de cadastro fora do Mapa), sem gravar. Devolve os
+     * proximos dias uteis a partir do inicio, calculados pelo motor sobre o
+     * historico como ficaria, o rotulo e o que sera encerrado (closes).
+     */
+    public function previewScheduleRule(array $data, string $actorRole): array {
+        return $this->atomic(function () use ($data, $actorRole): array {
+            $request = $this->scheduleRuleRequest($data, $actorRole);
+            $plan = ScheduleRulePlanner::planSave(
+                $request['rules'],
+                $request['effective_from'],
+                $request['rule_type'],
+                $request['rule_config'],
+                $this->today()
+            );
+            $newRule = [
+                'rule_type' => $request['rule_type'],
+                'rule_config' => $request['rule_config'],
+            ];
+            $previous = $plan['close'] === null ? null : $plan['previous'];
+            return [
+                'employee_id' => (int)$request['employee']['id'],
+                'rule_type' => $request['rule_type'],
+                'rule_label' => $this->ruleRowLabel($newRule),
+                'effective_from' => $request['effective_from'],
+                'effective_until' => $plan['effective_until'],
+                'unchanged' => $plan['action'] === 'unchanged',
+                'retroactive' => $plan['retroactive'],
+                'closes' => $previous === null ? null : [
+                    'rule_id' => (int)$previous['id'],
+                    'rule_type' => $previous['rule_type'],
+                    'rule_label' => $this->ruleRowLabel($previous),
+                    'effective_until' => $plan['close']['effective_until'],
+                ],
+                'preview' => $this->rulePreviewDays(
+                    $request['employee'],
+                    ScheduleRulePlanner::applyPlan($request['rules'], $plan, $newRule),
+                    $request['effective_from']
+                ),
+            ];
+        });
+    }
+
+    /**
+     * [F2B] Payload de "rule" e "rule_preview" validado, com as permissoes e
+     * a trava do colaborador, na ordem de antes do F2B: colaborador, L9,
+     * Lideranca (409), tipo, configuracao, retroativo (P10/L6), trava e
+     * historico. No ciclo, o inicio e a data inicial (desenho, secao 2.2).
+     */
+    private function scheduleRuleRequest(array $data, string $actorRole): array {
         $employee = $this->scheduleEmployee($data['employee_id'] ?? null);
         $this->assertScheduleChangeAllowed($employee, $actorRole);
         if ($employee['team'] === 'lideranca') {
@@ -329,17 +388,35 @@ final class OperationalService {
         if (!in_array($rule, self::RULE_TYPES, true)) {
             throw new InvalidArgumentException('Regra de escala invalida.');
         }
-        $weekdays = $this->weekdaysForRulePayload($rule, $data['weekdays'] ?? null);
-        $ruleConfig = $weekdays === [] ? null : json_encode(['weekdays' => $weekdays], JSON_UNESCAPED_SLASHES);
+        $definition = $this->ruleDefinitionForPayload($rule, $data);
         $today = $this->today();
-        $effectiveFrom = self::dateValue($data['effective_from'] ?? $today, 'Inicio da vigencia')->format('Y-m-d');
+        $effectiveFrom = $definition['effective_from']
+            ?? self::dateValue($data['effective_from'] ?? $today, 'Inicio da vigencia')->format('Y-m-d');
         // [P10, L6] Inicio retroativo reescreve historico: admin e Lideranca.
         if ($effectiveFrom < $today && !portal_role_can($actorRole, 'escalas.retroativa')) {
             throw new PortalForbiddenException('Somente administradores e Liderança gravam regra com início retroativo.');
         }
         $this->lockScheduleEmployee($employee, true);
-        $rules = $this->employeeScheduleRules((int)$employee['id']);
-        $plan = ScheduleRulePlanner::planSave($rules, $effectiveFrom, $rule, $ruleConfig, $today);
+        return [
+            'employee' => $employee,
+            'rule_type' => $rule,
+            'rule_config' => $definition['config'],
+            'weekdays' => $definition['weekdays'],
+            'pattern' => $definition['pattern'],
+            'effective_from' => $effectiveFrom,
+            'rules' => $this->employeeScheduleRules((int)$employee['id']),
+        ];
+    }
+
+    private function saveScheduleRuleUnsafe(array $data, string $actor, string $actorRole, string $origin = 'manual'): array {
+        $request = $this->scheduleRuleRequest($data, $actorRole);
+        $employee = $request['employee'];
+        $rule = $request['rule_type'];
+        $ruleConfig = $request['rule_config'];
+        $weekdays = $request['weekdays'];
+        $effectiveFrom = $request['effective_from'];
+        $rules = $request['rules'];
+        $plan = ScheduleRulePlanner::planSave($rules, $effectiveFrom, $rule, $ruleConfig, $this->today());
         if ($plan['action'] === 'unchanged') {
             return ['id' => $plan['target_id'], 'unchanged' => true, 'closed_rule_id' => null, 'closed_until' => null, 'retroactive' => false];
         }
@@ -391,7 +468,7 @@ final class OperationalService {
             'effective_from' => $effectiveFrom,
             'effective_until' => $plan['effective_until'],
         ], $actor);
-        $this->sync->enqueue($this->pdo, 'schedule', $id, [
+        $syncPayload = [
             'employee_id' => (int)$employee['id'],
             'employee_name' => $employee['name'],
             'team' => $employee['team'],
@@ -399,7 +476,12 @@ final class OperationalService {
             'weekdays' => $weekdays,
             'effective_from' => $effectiveFrom,
             'effective_until' => $plan['effective_until'],
-        ], $actor);
+        ];
+        // [F2B] O ciclo leva o pattern; os demais tipos, o payload de antes.
+        if ($request['pattern'] !== null) {
+            $syncPayload['pattern'] = $request['pattern'];
+        }
+        $this->sync->enqueue($this->pdo, 'schedule', $id, $syncPayload, $actor);
         return [
             'id' => $id,
             'unchanged' => false,
@@ -587,7 +669,9 @@ final class OperationalService {
                 $errors[] = 'Colaborador nao encontrado.';
             }
             if (!$ignored && !$rule) {
-                $errors[] = 'Regra invalida.';
+                // [F2B] A planilha nao tem colunas de configuracao do ciclo.
+                $rawRule = strtolower(trim((string)($row['regra'] ?? $row['rule_type'] ?? '')));
+                $errors[] = in_array($rawRule, ['cycle', 'ciclo'], true) ? self::CYCLE_IMPORT_MESSAGE : 'Regra invalida.';
             }
             if (!$ignored && $employee && $team && $team !== $employee['team']) {
                 $errors[] = 'Equipe divergente do cadastro.';
@@ -1549,6 +1633,15 @@ final class OperationalService {
                     $presence = $this->presenceForException($exception['exception_type']);
                     $label = $this->scheduleStatusLabel($presence);
                     $source = 'exception';
+                } elseif ($rule['rule_type'] === 'cycle') {
+                    // [F2B] Ciclo: dia util pela posicao do motor; fim de semana
+                    // e ciclo invalido nao geram linha. Demais tipos: calculo antigo.
+                    $presence = self::cyclePresence($rule['config'] ?? null, $dateKey);
+                    if ($presence === null) {
+                        continue;
+                    }
+                    $label = $this->scheduleStatusLabel($presence);
+                    $source = 'rule';
                 } else {
                     $presence = self::presenceForRule($rule['rule_type'], $dateKey, $rule['weekdays'] ?? []);
                     $label = $this->scheduleStatusLabel($presence);
@@ -1556,7 +1649,7 @@ final class OperationalService {
                 }
                 $ruleLabel = $implicit
                     ? $rule['rule_label']
-                    : $this->scheduleRuleLabel($rule['rule_type'], $rule['weekdays'] ?? []);
+                    : $this->scheduleRuleLabel($rule['rule_type'], $rule['weekdays'] ?? [], $rule['config'] ?? null);
                 $items[] = [
                     'employee_id' => (int)$rule['employee_id'],
                     'employee_name' => $rule['employee_name'],
@@ -1572,6 +1665,148 @@ final class OperationalService {
             }
         }
         return $items;
+    }
+
+    /**
+     * [F2B] Escala da tela pelo motor (PresenceEngine::dayPresence, sem
+     * relogio): todos os cadastros ativos de N1, N2 e Lideranca que nao estao
+     * fora do Mapa, inclusive os sem regra ("Sem escala definida", P4); fim de
+     * semana sem excecao de trabalho fica de fora (P3); ausencia (excecao ate
+     * o F3 ou portal_absences aprovada) aparece como ausente, sem categoria.
+     * Mantem os campos antigos e acrescenta situacao, origem, detalhe e escala.
+     */
+    private function engineSchedule(string $from, string $to, ?string $team, ?int $employeeId, array $rules, array $exceptions): array {
+        $rulesByEmployee = [];
+        foreach ($rules as $rule) {
+            if (($rule['implicit'] ?? false) !== true) {
+                $rulesByEmployee[(int)$rule['employee_id']][] = $rule;
+            }
+        }
+        $exceptionMap = [];
+        foreach ($exceptions as $exception) {
+            $exceptionMap[$exception['employee_id'] . ':' . $exception['exception_date']] = $exception;
+        }
+        $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId);
+        $employees = $this->scheduleScreenEmployees($team, $employeeId);
+        $items = [];
+        $end = self::dateValue($to, 'Fim');
+        for ($date = self::dateValue($from, 'Inicio'); $date <= $end; $date = $date->modify('+1 day')) {
+            $dateKey = $date->format('Y-m-d');
+            foreach ($employees as $employee) {
+                $key = $employee['id'] . ':' . $dateKey;
+                $exception = $exceptionMap[$key] ?? null;
+                $absences = [];
+                if (in_array($exception['exception_type'] ?? null, PresenceEngine::ABSENCE_EXCEPTIONS, true)) {
+                    $absences[] = ['origem' => 'excecao', 'period_type' => 'full_day'];
+                }
+                if (isset($absenceMap[$key])) {
+                    $absences[] = ['origem' => 'ausencia', 'period_type' => 'full_day'];
+                }
+                $employeeRules = $rulesByEmployee[$employee['id']] ?? [];
+                $presence = PresenceEngine::dayPresence($employee, $dateKey, $employeeRules, $exception, $absences);
+                if ($presence['escala']['situacao'] === 'dia_nao_util') {
+                    continue;
+                }
+                $presenceType = match ($presence['situacao']) {
+                    'presencial' => 'onsite',
+                    'remoto' => 'remote',
+                    'ausente' => 'absence',
+                    default => 'no_schedule',
+                };
+                $source = match (true) {
+                    $presence['situacao'] === 'ausente' => $absences[0]['origem'] === 'excecao' ? 'exception' : 'absence',
+                    $presence['escala']['fonte'] === 'excecao' => 'exception',
+                    $presence['escala']['fonte'] === 'implicita' => 'implicit',
+                    $presence['escala']['fonte'] === 'regra' => 'rule',
+                    default => 'none',
+                };
+                $implicit = $employee['team'] === 'lideranca';
+                $rule = $implicit ? null : ScheduleRulePlanner::ruleAt($employeeRules, $dateKey);
+                $items[] = [
+                    'employee_id' => $employee['id'],
+                    'employee_name' => $employee['name'],
+                    'team' => $employee['team'],
+                    'date' => $dateKey,
+                    'presence_type' => $presenceType,
+                    'label' => $this->scheduleStatusLabel($presenceType),
+                    'source' => $source,
+                    'rule_type' => $implicit ? 'always_onsite' : ($rule['rule_type'] ?? null),
+                    'weekdays' => $rule['weekdays'] ?? [],
+                    'rule_label' => $implicit
+                        ? self::LEADERSHIP_RULE_LABEL
+                        : ($rule === null ? 'Sem escala definida' : $this->ruleRowLabel($rule)),
+                    'situacao' => $presence['situacao'],
+                    'origem' => $presence['origem'],
+                    'detalhe' => $presence['detalhe'],
+                    'escala' => $presence['escala'],
+                ];
+            }
+        }
+        return $items;
+    }
+
+    /** [F2B] Cadastros da tela Escala: ativos, sem os fora do Mapa; N1, N2 e Lideranca. */
+    private function scheduleScreenEmployees(?string $team, ?int $employeeId): array {
+        $sql = 'SELECT id, nome AS employee_name, equipe
+                FROM funcionarios
+                WHERE ativo = 1 AND fora_mapa_escala = 0';
+        $params = [];
+        if ($employeeId) {
+            $sql .= ' AND id = :employee_id';
+            $params[':employee_id'] = $employeeId;
+        }
+        $stmt = $this->pdo->prepare($sql . ' ORDER BY nome, id');
+        $stmt->execute($params);
+        $employees = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $rowTeam = validate_funcionario_equipe((string)$row['equipe']);
+            // O filtro de equipe da tela so tem N1 e N2: com ele, a Lideranca sai (como antes).
+            if ($rowTeam === null || ($team !== null && $rowTeam !== $team)) {
+                continue;
+            }
+            $employees[] = ['id' => (int)$row['id'], 'name' => $row['employee_name'], 'team' => $rowTeam];
+        }
+        return $employees;
+    }
+
+    /**
+     * [F2B] Previa: proximos dias uteis a partir do inicio, pela escala do
+     * motor sobre o historico ja com a regra nova (sem excecoes: a previa e
+     * da regra). Com regra agendada depois, os dias dela saem com o rotulo dela.
+     */
+    private function rulePreviewDays(array $employee, array $rules, string $from): array {
+        $days = [];
+        for ($date = $from; count($days) < self::RULE_PREVIEW_DAYS; $date = ScheduleRulePlanner::addDays($date, 1)) {
+            if (!PresenceEngine::isBusinessDay($date)) {
+                continue;
+            }
+            $schedule = PresenceEngine::scheduleForDay(['team' => $employee['team']], $date, $rules, null);
+            $rule = ScheduleRulePlanner::ruleAt($rules, $date);
+            $days[] = [
+                'date' => $date,
+                'weekday' => self::WEEKDAY_LABELS[self::WEEKDAY_ORDER[(int)(new DateTimeImmutable($date))->format('N') - 1]],
+                'situacao' => $schedule['situacao'],
+                'presence_type' => match ($schedule['situacao']) {
+                    'presencial' => 'onsite',
+                    'remoto' => 'remote',
+                    default => 'no_schedule',
+                },
+                'rule_label' => $rule === null ? 'Sem escala definida' : $this->ruleRowLabel($rule),
+            ];
+        }
+        return $days;
+    }
+
+    /**
+     * [F2B] Presenca do ciclo numa data: 'onsite' ou 'remote' pela posicao do
+     * motor; null em fim de semana ou com configuracao invalida.
+     */
+    public static function cyclePresence(?array $config, string $date): ?string {
+        $cycle = PresenceEngine::cycleConfig($config ?? []);
+        if ($cycle === null || !PresenceEngine::isBusinessDay($date)) {
+            return null;
+        }
+        return $cycle['pattern'][PresenceEngine::cyclePosition($cycle['anchor_date'], $date, count($cycle['pattern']))];
     }
 
     private function presenceForException(string $type): string {
@@ -1628,6 +1863,7 @@ final class OperationalService {
             'remote' => 'Remoto',
             'absence' => 'Ausencia',
             'day_off' => 'Folga',
+            'no_schedule' => 'Sem escala',
             default => ucfirst(str_replace('_', ' ', $status)),
         };
     }
@@ -1702,15 +1938,81 @@ final class OperationalService {
         return implode(', ', $labels) . ' e ' . $last;
     }
 
-    private function weekdaysForRulePayload(string $rule, $value): array {
+    /**
+     * [F2B] Configuracao gravada para o tipo, a partir do payload:
+     * ['config' => ?string, 'weekdays' => list, 'pattern' => ?list,
+     *  'effective_from' => ?string (so no ciclo: a data inicial)].
+     * Ciclo: o servidor monta o pattern (desenho, secao 3.4). Dias fixos:
+     * "weekdays" sao os presenciais; com input_mode "home", o servidor converte
+     * os dias de home (seg a sex menos eles). JSON em ordem fixa, para salvar
+     * de novo a mesma regra nao criar historico.
+     */
+    private function ruleDefinitionForPayload(string $rule, array $data): array {
+        $definition = ['config' => null, 'weekdays' => [], 'pattern' => null, 'effective_from' => null];
+        if ($rule === 'cycle') {
+            $cycle = $data['cycle'] ?? null;
+            if (!is_array($cycle)) {
+                throw new InvalidArgumentException('Informe a configuracao do ciclo.');
+            }
+            $onsite = self::cycleDays($cycle['onsite_days'] ?? null, 'Dias presenciais do ciclo');
+            $remote = self::cycleDays($cycle['remote_days'] ?? null, 'Dias remotos do ciclo');
+            if ($onsite + $remote > self::CYCLE_MAX_DAYS) {
+                throw new InvalidArgumentException('O ciclo pode ter no maximo ' . self::CYCLE_MAX_DAYS . ' dias.');
+            }
+            $startsWith = $cycle['starts_with'] ?? null;
+            if (!in_array($startsWith, ['onsite', 'remote'], true)) {
+                throw new InvalidArgumentException('Informe se o ciclo comeca por dia presencial ou remoto.');
+            }
+            $anchor = self::dateValue($cycle['anchor_date'] ?? null, 'Data inicial do ciclo')->format('Y-m-d');
+            if (!PresenceEngine::isBusinessDay($anchor)) {
+                throw new InvalidArgumentException('A data inicial do ciclo precisa ser dia util (segunda a sexta).');
+            }
+            $onsiteBlock = array_fill(0, $onsite, 'onsite');
+            $remoteBlock = array_fill(0, $remote, 'remote');
+            $pattern = $startsWith === 'onsite' ? array_merge($onsiteBlock, $remoteBlock) : array_merge($remoteBlock, $onsiteBlock);
+            return [
+                'config' => json_encode(['pattern' => $pattern, 'anchor_date' => $anchor, 'business_days_only' => true], JSON_UNESCAPED_SLASHES),
+                'weekdays' => [],
+                'pattern' => $pattern,
+                'effective_from' => $anchor,
+            ];
+        }
         if ($rule !== 'fixed_weekdays') {
-            return [];
+            return $definition;
         }
-        $weekdays = self::normalizeScheduleWeekdays($value);
-        if ($weekdays === []) {
-            throw new InvalidArgumentException('Selecione ao menos um dia presencial.');
+        $mode = $data['input_mode'] ?? null;
+        if ($mode === null || $mode === '' || $mode === 'onsite') {
+            $weekdays = self::normalizeScheduleWeekdays($data['weekdays'] ?? null);
+            if ($weekdays === []) {
+                throw new InvalidArgumentException('Selecione ao menos um dia presencial.');
+            }
+            return ['config' => json_encode(['weekdays' => $weekdays], JSON_UNESCAPED_SLASHES), 'weekdays' => $weekdays] + $definition;
         }
-        return $weekdays;
+        if ($mode !== 'home') {
+            throw new InvalidArgumentException('Modo de informar os dias invalido.');
+        }
+        $home = self::normalizeScheduleWeekdays($data['home_weekdays'] ?? null);
+        if ($home === []) {
+            throw new InvalidArgumentException('Nenhum dia de home office marcado: para presencial em todos os dias uteis, use a regra "Sempre presencial".');
+        }
+        if (count($home) === count(self::WEEKDAY_ORDER)) {
+            throw new InvalidArgumentException('Todos os dias em home office: use a regra "Sempre remoto".');
+        }
+        $weekdays = array_values(array_diff(self::WEEKDAY_ORDER, $home));
+        return [
+            'config' => json_encode(['weekdays' => $weekdays, 'input_mode' => 'home'], JSON_UNESCAPED_SLASHES),
+            'weekdays' => $weekdays,
+        ] + $definition;
+    }
+
+    /** [F2B] Dias de um bloco do ciclo: inteiro de 1 a 19 (o outro bloco tem ao menos 1). */
+    private static function cycleDays($value, string $label): int {
+        $valid = is_int($value) || (is_string($value) && preg_match('/^\d{1,2}$/', $value) === 1);
+        $days = $valid ? (int)$value : 0;
+        if ($days < 1 || $days > self::CYCLE_MAX_DAYS - 1) {
+            throw new InvalidArgumentException($label . ': informe um numero inteiro de 1 a ' . (self::CYCLE_MAX_DAYS - 1) . '.');
+        }
+        return $days;
     }
 
     private function scheduleRuleView(array $row): array {
@@ -1718,17 +2020,30 @@ final class OperationalService {
             ? self::scheduleRuleConfigWeekdays($row['rule_config'] ?? null)
             : [];
         $row['weekdays'] = $weekdays;
-        $row['rule_label'] = $this->scheduleRuleLabel((string)$row['rule_type'], $weekdays);
         // [F1] A tela nao infere "ativa" por effective_until vazio (regra agendada).
         $config = is_string($row['rule_config'] ?? null) ? json_decode($row['rule_config'], true) : null;
         $row['config'] = is_array($config) ? $config : null;
+        $row['rule_label'] = $this->scheduleRuleLabel((string)$row['rule_type'], $weekdays, $row['config']);
         $row['is_current'] = ScheduleRulePlanner::isCurrent($row, $this->today());
         $row['is_future'] = ScheduleRulePlanner::isFuture($row, $this->today());
         $row['implicit'] = false;
         return $row;
     }
 
-    private function scheduleRuleLabel(string $rule, array $weekdays = []): string {
+    /**
+     * $config: configuracao decodificada; usada no ciclo ("Ciclo 2P/1R") e
+     * nos dias fixos informados como home ("Presencial: seg, qua e sex ·
+     * home ter e qui"). Sem ela, os rotulos de antes do F2B.
+     */
+    private function scheduleRuleLabel(string $rule, array $weekdays = [], ?array $config = null): string {
+        if ($rule === 'fixed_weekdays' && ($config['input_mode'] ?? null) === 'home' && $weekdays !== []) {
+            return 'Presencial: ' . self::weekdayListLabel($weekdays)
+                . ' · home ' . self::weekdayListLabel(array_values(array_diff(self::WEEKDAY_ORDER, $weekdays)));
+        }
+        if ($rule === 'cycle') {
+            $cycle = PresenceEngine::cycleConfig($config ?? []);
+            return $cycle === null ? 'Ciclo com configuracao invalida' : ucfirst(PresenceEngine::cycleLabel($cycle['pattern']));
+        }
         return match ($rule) {
             'even_days' => 'Dias pares',
             'odd_days' => 'Dias impares',
@@ -1738,6 +2053,19 @@ final class OperationalService {
             'fixed_weekdays' => 'Presencial: ' . self::weekdayListLabel($weekdays),
             default => 'Regra nao informada',
         };
+    }
+
+    /** [F2B] Rotulo de uma linha de regra (config decodificada ou rule_config em JSON). */
+    private function ruleRowLabel(array $row): string {
+        $config = $row['config'] ?? $row['rule_config'] ?? null;
+        if (is_string($config)) {
+            $config = json_decode($config, true);
+        }
+        $config = is_array($config) ? $config : null;
+        $weekdays = $row['rule_type'] === 'fixed_weekdays'
+            ? self::normalizeScheduleWeekdays($config['weekdays'] ?? [], false)
+            : [];
+        return $this->scheduleRuleLabel((string)$row['rule_type'], $weekdays, $config);
     }
 
     private function auditScheduleRuleChange(string $origin, array $plan, bool $hadRules, array $current, string $actor): void {

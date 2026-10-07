@@ -66,7 +66,12 @@ assert.doesNotMatch(saveRuleSource, /fetch\(/, 'Frontend nao deve criar fetch di
 assert.doesNotMatch(saveRuleSource, /postForm\(/, 'Regra fixa nao deve usar upload/formdata')
 
 assert.match(operationalService, /private const RULE_TYPES = \[[\s\S]*'fixed_weekdays'/, 'Backend deve aceitar fixed_weekdays na lista canonica')
-assert.match(operationalService, /weekdaysForRulePayload\(string \$rule, \$value\)/, 'Backend deve validar weekdays do payload')
+// F2B: a configuracao do payload (dias fixos, modo home e ciclo) passa por
+// ruleDefinitionForPayload; comportamento em scripts/qa-schedule-history.php.
+assert.match(operationalService, /ruleDefinitionForPayload\(string \$rule, array \$data\)/, 'Backend deve validar weekdays do payload')
+assert.match(operationalService, /private const RULE_TYPES = \[[\s\S]*'cycle',\n    \];/, 'Backend deve aceitar cycle na lista canonica (F2B)')
+assert.match(paMapService, /private const RULE_TYPES = \[[\s\S]*'cycle',\n    \];/, 'Mapa de PA deve reconhecer cycle (F2B)')
+assert.match(operationalService, /throw new InvalidArgumentException\('Todos os dias em home office: use a regra "Sempre remoto"\.'\)/, 'Backend deve recusar todos os dias em home (F2B)')
 assert.match(operationalService, /throw new InvalidArgumentException\('Selecione ao menos um dia presencial\.'\)/, 'Backend deve rejeitar fixed_weekdays sem dias')
 assert.match(operationalService, /throw new InvalidArgumentException\('Dia da semana invalido\.'\)/, 'Backend deve rejeitar dia invalido')
 assert.match(operationalService, /throw new InvalidArgumentException\('Dias da semana duplicados\.'\)/, 'Backend deve rejeitar duplicidade de dias')

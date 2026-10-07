@@ -153,6 +153,42 @@ final class ScheduleRulePlanner {
         return $problems;
     }
 
+    /**
+     * [F2B] Historico como ficaria depois de gravar o plano (o que a
+     * gravacao do OperationalService faz no banco), para a previa da regra.
+     * $newRule: ['rule_type' => string, 'rule_config' => ?string]. A linha
+     * inserida tem id 0.
+     */
+    public static function applyPlan(array $rules, array $plan, array $newRule): array {
+        if ($plan['action'] === 'unchanged') {
+            return $rules;
+        }
+        $result = [];
+        foreach ($rules as $rule) {
+            if ($plan['close'] !== null && (int)$rule['id'] === $plan['close']['id']) {
+                $rule['effective_until'] = $plan['close']['effective_until'];
+            }
+            if ($plan['action'] === 'update' && (int)$rule['id'] === $plan['target_id']) {
+                $rule = [
+                    'rule_type' => $newRule['rule_type'],
+                    'rule_config' => $newRule['rule_config'],
+                    'effective_until' => $plan['effective_until'],
+                ] + $rule;
+            }
+            $result[] = $rule;
+        }
+        if ($plan['action'] === 'insert') {
+            $result[] = [
+                'id' => 0,
+                'rule_type' => $newRule['rule_type'],
+                'rule_config' => $newRule['rule_config'],
+                'effective_from' => $plan['effective_from'],
+                'effective_until' => $plan['effective_until'],
+            ];
+        }
+        return $result;
+    }
+
     public static function sameRule(array $rule, string $ruleType, ?string $ruleConfig): bool {
         return $rule['rule_type'] === $ruleType && self::config($rule['rule_config']) === self::config($ruleConfig);
     }
@@ -176,12 +212,23 @@ final class ScheduleRulePlanner {
         return $next;
     }
 
-    /** Configuracao comparavel: JSON decodificado (null quando vazio ou invalido). */
+    /**
+     * Configuracao comparavel: JSON decodificado (null quando vazio ou
+     * invalido). [F2B] Sem input_mode, que e so de exibicao (desenho, secao
+     * 2.2): os mesmos dias informados como presenciais ou como home sao a
+     * mesma regra e nao criam historico.
+     */
     private static function config(?string $config): mixed {
         if ($config === null || trim($config) === '') {
             return null;
         }
         $decoded = json_decode($config, true);
-        return json_last_error() === JSON_ERROR_NONE ? $decoded : $config;
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return $config;
+        }
+        if (is_array($decoded)) {
+            unset($decoded['input_mode']);
+        }
+        return $decoded;
     }
 }
