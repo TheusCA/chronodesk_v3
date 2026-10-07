@@ -5,7 +5,8 @@ declare(strict_types=1);
 // QA do historico de escala (Parte B, F1)
 //
 // Sem banco:
-// 1. estrutura da migration 011, do rollback e da consulta de verificacao;
+// 1. estrutura da migration 011, do rollback e da consulta de verificacao,
+//    e do rollback reversivel do ciclo (F2B);
 // 2. planejador de vigencia (funcao pura) e propriedade do historico em
 //    sequencias aleatorias de gravacao e remocao;
 // 3. OperationalService contra um banco simulado em memoria, que emula as
@@ -499,6 +500,35 @@ assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE|R
 assert_same(0, preg_match('/\b(employee_name|nome|ad_login|note)\b/i', $check), 'verificacao nao devolve nome, login nem observacao');
 assert_same(2, preg_match_all('/BIT_XOR\(CRC32\(CONCAT_WS\(/', $check), 'verificacao: assinatura das colunas originais de regras e excecoes (o CHECKSUM TABLE muda com a coluna gerada)');
 assert_same(0, preg_match('/open_employee_id|fora_mapa_escala/', $check), 'verificacao: so colunas que existem antes da 011 e depois do rollback');
+
+// [F2B] Rollback reversivel do ciclo (decisao 5): ida (cycle -> undefined,
+// mantendo a configuracao), volta (undefined com pattern -> cycle), preparo
+// do ensaio e verificacao so com contagens.
+$f2bDown = qa_sql_without_comments((string)file_get_contents(__DIR__ . '/../migrations/rollback/20261007_f2b_cycle_down.sql'));
+$f2bUp = qa_sql_without_comments((string)file_get_contents(__DIR__ . '/../migrations/rollback/20261007_f2b_cycle_up.sql'));
+$f2bPreparo = qa_sql_without_comments((string)file_get_contents(__DIR__ . '/../migrations/rollback/20261007_f2b_cycle_ensaio_preparo.sql'));
+$f2bCheck = qa_sql_without_comments((string)file_get_contents(__DIR__ . '/../migrations/verificacao/20261007_f2b_cycle_check.sql'));
+foreach (['ida' => $f2bDown, 'volta' => $f2bUp, 'preparo do ensaio' => $f2bPreparo] as $label => $sql) {
+    assert_same(1, preg_match("/^\\s*SET time_zone = 'America\\/Sao_Paulo';/", $sql), "F2B {$label}: comeca com SET time_zone (regra do A4)");
+    assert_same(0, preg_match('/\b(NOW|CURDATE|CURRENT_DATE|CURRENT_TIMESTAMP|SYSDATE|UTC_TIMESTAMP)\b/i', $sql), "F2B {$label}: sem relogio do banco");
+    assert_same(0, preg_match('/\b(ALTER|DROP|CREATE|TRUNCATE|DELETE|INSERT|REPLACE)\b/i', $sql), "F2B {$label}: so UPDATE, nada apagado nem criado");
+    assert_same(1, preg_match_all('/\bUPDATE\b/i', $sql), "F2B {$label}: um UPDATE");
+    assert_same(0, preg_match('/\b(nome|employee_name|ad_login)\b|\bid\s*=\s*\d/i', $sql), "F2B {$label}: sem nome nem id fixo");
+}
+assert_same(1, preg_match("/UPDATE portal_schedule_rules\\s+SET rule_type = 'undefined'\\s+WHERE rule_type = 'cycle';\\s*$/", $f2bDown), 'F2B ida: troca so o tipo (rule_config fica)');
+assert_same(1, preg_match("/UPDATE portal_schedule_rules\\s+SET rule_type = 'cycle'\\s+WHERE rule_type = 'undefined'\\s+AND CASE WHEN JSON_VALID\\(rule_config\\) THEN JSON_CONTAINS_PATH\\(rule_config, 'one', '\\$\\.pattern'\\) ELSE 0 END = 1;\\s*$/", $f2bUp), 'F2B volta: so undefined com pattern (JSON validado antes, por CASE)');
+assert_same(true, strpos($f2bPreparo, "WHERE DATABASE() LIKE 'ensaio\\_%'") !== false, 'F2B preparo: so muda o banco de ensaio');
+assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE|REPLACE)\b/i', $f2bCheck), 'F2B verificacao so le');
+assert_same(0, preg_match('/\b(employee_name|nome|ad_login|note)\b/i', $f2bCheck), 'F2B verificacao sem nome, login nem observacao');
+foreach (['regras_cycle', 'undefined_com_pattern', 'cycle_sem_pattern', 'vinculos_pa_com_ciclo'] as $column) {
+    assert_same(true, strpos($f2bCheck, "AS {$column}") !== false, "F2B verificacao: {$column}");
+}
+// A volta reconhece exatamente o que a ida deixou: o JSON gravado pelo
+// servidor para o ciclo tem a chave pattern; o de dias fixos, nao.
+assert_same([true, false], [
+    array_key_exists('pattern', json_decode('{"pattern":["remote","onsite"],"anchor_date":"2026-10-05","business_days_only":true}', true)),
+    array_key_exists('pattern', json_decode('{"weekdays":["mon","wed","fri"],"input_mode":"home"}', true)),
+], 'F2B: a chave pattern so existe na configuracao do ciclo');
 
 // ----------------------------------------------------------------------------
 // 2. Planejador de vigencia (funcao pura)
