@@ -325,6 +325,8 @@ ALTER TABLE portal_absences
 
 ### 2.4 Exceções com tipo de ausência — migration 013 (P7)
 
+**Dispensada em 2026-10-07** (Q4 com 0 linhas; decisão do responsável): vale só a restrição de tipos no validador. O texto abaixo fica como registro do desenho original.
+
 Copia para `portal_absences` cada exceção `day_off`, `absence`, `vacation` ou `leave` como ausência de dia inteiro `approved`, com `source = 'exception_migration'` e `legacy_exception_id` (a UNIQUE torna a cópia idempotente). Mapeamento: `day_off → folga`, `vacation → ferias`, `absence` e `leave → ausencia_justificada`. Não copia se já houver ausência aprovada cobrindo o dia.
 
 As linhas de exceção **não são apagadas** e o enum da tabela não muda. O motor passa a ignorar esses quatro tipos e o validador deixa de aceitá-los em lançamentos novos. Rollback: apagar as linhas com `source = 'exception_migration'` que não foram editadas depois (`updated_by IS NULL`); o código antigo volta a ler as exceções, que continuam lá.
@@ -401,6 +403,14 @@ SELECT jornada_entrada, jornada_saida, almoco_inicio, almoco_fim, COUNT(*) n
 ```
 
 O que cada resposta decide: Q1 define se a 011 pode usar os nomes do repositório; Q3 define P8 e se a FK entra; Q4 dimensiona a 013; Q5 diz quantos cartões do mapa vão mudar de aparência no deploy de F6; Q6 sustenta P1 e P12.
+
+**Revalidação antes do F3 (responsável, servidor, 2026-10-07)**, com `SET time_zone = 'America/Sao_Paulo'` e a Q4 ampliada (equipe, futuras, com observação) e uma Q4b (exceções de inativos e de cadastros fora do Mapa):
+
+| Consulta | Resultado | Consequência (decisão do responsável, 2026-10-07) |
+|---|---|---|
+| Q3 (`portal_absences` por tipo e status; órfãs e de inativos) | **0 linhas**; nenhum texto de motivo gravado | A 012 não tem dados a tratar; a FK entra (0 órfãs) |
+| Q4 (`portal_schedule_exceptions` por tipo e equipe) | **0 linhas** | **A 013 fica dispensada**; vale só a restrição de tipos no validador (P7) |
+| Q4b | Erro 1054 em `f.fora_mapa_escala`: a 011 ainda não foi aplicada no servidor (deploy 8 da fila). Com 0 exceções, total 0 | Nenhuma |
 
 ---
 
