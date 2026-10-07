@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). F3 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano registrado na seção 9.4 (decisões 1 a 4 aprovadas em 2026-10-07; 5 a 8 em revisão); commit 1, escopo de leitura, em andamento.** F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -1018,6 +1018,59 @@ Validação pela IA (frontend): `lint`, `typecheck`, `build` e os 14 `qa:*`; mut
 **Frontend aprovado em 2026-10-07** (`2339988`, `6354c8d`), após validação do responsável no navegador, com a tela ligada ao backend real e MySQL 8.0.46: prévia obrigatória (Salvar trava sem prévia e com "Prévia desatualizada"), ciclo com prévia e aviso de encerramento, sábado recusado na tela, modo home com resumo e prévia corretos, payload no formato do contrato, lista com Vigente/Agendada, Editar de ciclo recarregando os campos, histórico e regra fixa da Liderança; sem erro de JavaScript. **As quatro decisões do frontend ficam aprovadas. F2B completo**; entra na fila como deploy 10, depois do F2.
 
 **Pendências anotadas para o F5** (sem mudança no F2B): (1) filtro "ocultar sem escala" na escala gerada (a lista cresce com a P4); (2) rótulos sem acento ("Dias impares", "Ciclo com configuracao invalida"), junto com o L-14; (3) quebra da palavra "Liderança" na coluna Equipe.
+
+### 9.4 F3 — plano (2026-10-07; decisões 1 a 4 aprovadas, 5 a 8 e a regra de sobreposição em revisão pelo responsável)
+
+**Ponto que define o escopo.** Hoje `portal_absences` não tem caminho de escrita (0 linhas no servidor, Q3 de 2026-10-07), mas o motivo vaza para qualquer perfil por dois caminhos: `portal/absences.php` (SEC-07) e o bloco de ausências do `portal/calendar.php` (L-01). O F3 fecha a leitura antes de criar a escrita.
+
+**Ordem dos commits:**
+
+1. **Escopo de leitura (SEC-07, L-01), compatível com a tabela de hoje** (pode ir ao ar sozinho): `absences.php` com técnico e somente leitura vendo só as próprias (o `employee_id` vem da sessão); `calendar.php` sem o texto do motivo para nenhum perfil e com o tipo da ausência só para a gestão e para o próprio técnico (P9 e decisão 4).
+2. **Migration 012**, com rollback, ensaio e verificação só com contagens (abaixo).
+3. **Serviço e endpoint `absences.php`:** `GET` com filtros, escopo por perfil e limite de 500 com `truncated`; `POST` `create`, `update` e `cancel` (seção 3.3).
+4. **Motor:** ausência parcial ("a partir de" e "intervalo") em `nowPresence` e `dayPresence`, com os testes de 13:59/14:00 (seção 4.4); `status.php` passa a mostrar "Ausente desde 14:00"; `presence.php` com a categoria (P9).
+5. **P7:** a exceção de escala aceita só remoto, presencial, treinamento e plantão; tipo de ausência dá 400 apontando a tela de Ausências.
+6. **Frontend:** página Ausências no lugar da tabela genérica, em React Hook Form e Zod (seção 5.4), com o aviso fixo no campo de observação; exceção de escala sem os tipos de ausência; subtítulo do menu sem "atestados".
+7. **QA e documentação:** `qa-absences` (validações, sobreposição, retroativo, matriz de perfis, negativo em subprocesso), motor, matriz do `qa-security`, mutação; contratos, inventário LGPD (`DOCUMENTACAO_TECNICA.md`, 5.3), `DEPLOY_LINUX.md` e registro.
+
+**Migration 012, com a tabela vazia (P8):**
+
+| Item | Proposta |
+|---|---|
+| `absence_type` | **Removida** (sai o valor `atestado`, sem mapeamento) |
+| `category` | `ENUM('folga','ferias','ausencia_justificada','compromisso','outro') NOT NULL` (Folga, Férias, Ausência justificada, Compromisso, Outro) |
+| `status` | `ENUM('approved','cancelled') NOT NULL DEFAULT 'approved'` (`pending` e `rejected` só existiam para linhas legadas, que não há) |
+| Colunas da 013 | **Não entram** (`source`, `legacy_exception_id` e a UNIQUE): a 013 foi dispensada |
+| Colunas que ficam (seção 2.3) | `team ENUM('n1','n2','lideranca')`, `period_type`, `start_time`, `end_time`, `retroactive`, `created_by`, `updated_by`, `cancelled_by`, `cancelled_at`; índice `idx_absence_employee_range`; FK `fk_absence_employee` (`ON DELETE RESTRICT`; 0 órfãs) |
+| Observação | Continua na coluna `reason` (500); na API, `note` |
+| Premissa da tabela vazia | Conferida pela própria migration: com qualquer linha em `portal_absences`, para com `SIGNAL` antes de alterar (padrão do rollback da 011) |
+| Rollback | Copia para `portal_absences_bkp_012`; recria `absence_type` a partir de `category`; `cancelled` vira `rejected`; o código anterior trata toda ausência aprovada como dia inteiro |
+
+**Regras do serviço (seção 3.3, com o que mudou desde o desenho):**
+
+| Regra | Proposta |
+|---|---|
+| Lançar, editar, cancelar | `ausencias.manage` (gestor, Liderança, admin); técnico e somente leitura: 403 antes de tocar no banco |
+| Retroativa | Permissão nova `ausencias.retroativa` (Liderança e admin, L6). Lançar com início anterior a hoje, ou editar e cancelar ausência já iniciada: gestor 403; quem tem a permissão grava com `retroactive = 1` e auditoria WARNING |
+| Ausência de cadastro da Liderança, ou de perfil Liderança ou admin | Só admin (A4 do Lote 5), pela mesma regra da L9 (`escalas.lideranca`) |
+| Validações (400) | Fim ≥ início; no máximo 366 dias; horário só com um dia (P5); `from_time` exige início; `interval` exige início < fim; horário dentro da jornada do técnico (P1); categoria da lista; observação até 500 caracteres; cadastro inativo. Cadastro fora do Mapa continua com ausência (seção 0.6) |
+| **Sobreposição (P6)** | **409** com o período em conflito na mensagem. Duas ausências aprovadas do mesmo colaborador se sobrepõem quando os períodos de datas se cruzam **e**: (a) alguma delas é de dia inteiro ou de mais de um dia, ou (b) as duas são parciais no mesmo dia e os horários se cruzam. "A partir de HH:MM" ocupa de HH:MM até o fim da jornada. Ausência cancelada não conta; na edição, a própria ausência não conta |
+| Concorrência | Trava do colaborador (`FOR UPDATE`) e leitura das ausências dele também com trava (lição do F1: leitura que decide gravação depois da trava é leitura com trava) |
+| Edição | Não troca o colaborador (cancelar e lançar de novo); ausência cancelada não é editada nem cancelada de novo (409) |
+| Auditoria | `ABSENCE_CREATED` (INFO; WARNING se retroativa), `ABSENCE_UPDATED`, `ABSENCE_CANCELLED` e `ABSENCE_WRITE_DENIED` (WARNING): IDs, datas, período e categoria, **nunca o texto da observação** |
+
+**Decisões:**
+
+1. **(Aprovada em 2026-10-07)** P8: remover `absence_type` e `atestado`; `category` com as cinco categorias; `status` só `approved`/`cancelled`; sem as colunas da 013; a migration para com `SIGNAL` se houver linha.
+2. **(Aprovada em 2026-10-07)** Exceções de ausência antigas (`day_off`, `absence`, `vacation`, `leave`) continuam lidas pelo motor como ausência de dia inteiro, só leitura; **repetir a Q4 logo antes do deploy do F3**.
+3. **(Aprovada em 2026-10-07)** Retroativo de escala e de ausência para Liderança e admin (L6), não só admin como dizia a D3.
+4. **(Aprovada em 2026-10-07)** Observação só na lista de Ausências (gestão e o próprio técnico); **nunca** na auditoria, no `presence.php` nem no calendário; aviso fixo no campo de que não se deve informar dado de saúde.
+5. **(Em revisão)** Calendário até o F5: o evento de ausência mostra a categoria (hoje, o tipo) só para a gestão e para o próprio técnico; para os demais, só "Ausência" e o período; **só ausência aprovada** aparece (hoje aparece qualquer status). O commit 1 aplica só a parte já coberta pela P9 e pela decisão 4 (sem motivo; tipo só para gestão e o próprio); o filtro de status espera esta decisão.
+6. **(Em revisão)** Teste da saída antiga do F2B: a referência inclui as ausências no Calendário, e a mudança SEC-07/L-01 altera esse bloco. Proposta: comparar o Calendário **sem os eventos de ausência** (a escala segue idêntica byte a byte), com as assinaturas novas geradas pelo código de `c941f6c` e as antigas mantidas sem alteração no arquivo; o bloco de ausências ganha testes próprios. O commit 1 já usa esta forma, porque sem ela o teste reprovaria por uma mudança de RBAC aprovada em 2026-09-30.
+7. **(Em revisão)** Relatório e Calendário até o F5: ausência parcial **não** tira o dia inteiro da escala (o cálculo antigo tira qualquer ausência aprovada). Com a tabela vazia, nenhum número de hoje muda.
+8. **(Em revisão)** O `team` da ausência nasce com `n1`, `n2` e `lideranca`; a equipe Crítico entra no F9, com os demais ENUMs.
+
+**Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 
 ---
 
