@@ -420,6 +420,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL local; o ajuste nao rodou em MySQL real. |
 | **Validacao humana** | **Aprovado em 2026-10-08** apos teste em MySQL 8.0.46 com a 012 (162 verificacoes): bordas de horario, precedencia sobre pausa e almoco, dia inteiro com parcial, parcial de sabado, categoria por perfil e `status.php` sem categoria; observacao nao vazou. Seis decisoes aprovadas como estao; ajuste do marcador pedido antes do commit 5. |
 
+### Parte B, F3 — commit 5: excecao de escala sem tipos de ausencia (P7) — 2026-10-08
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | P7: ausencia so pela tela de Ausencias; a excecao de escala fica com remoto, presencial, treinamento e plantao (desenho, secao 9.4). |
+| **Branch e commits** | `393c35c` (codigo, testes e contratos) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `services/OperationalService.php` (validador da excecao e `ABSENCE_EXCEPTION_MESSAGE`), `qa-schedule-history`, `qa-security`, `API_CONTRACTS_FRONTEND.md`. |
+| **Decisoes de implementacao** | Cinco, na secao 9.4: autorizacao antes do tipo; lista de tipos de ausencia compartilhada com o motor; recusa sem auditoria propria; sobrescrever excecao antiga com tipo de trabalho continua permitido; tela ainda oferece os tipos ate o commit 6 (mesmo deploy). |
+| **Validacao executada pela IA** | `qa-schedule-history`, `qa-security` (ponta a ponta) e a bateria PHP completa; mutacao **10/10**. |
+| **Limitacoes declaradas** | Sem MySQL local; frontend nao alterado neste commit. |
+| **Validacao humana** | Pendente. |
+
 ---
 
 ## 5. Responsabilidade

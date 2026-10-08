@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commit 5 (P7) em andamento.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commit 5 (P7, exceção sem tipos de ausência) entregue em 2026-10-08, aguardando aprovação.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -1145,6 +1145,26 @@ Validação pela IA: `qa-presence-engine` com **162 verificações** (36 novas: 
 **Aprovado em 2026-10-08** (`f89c443`) pelo responsável, após teste em MySQL 8.0.46 com a 012 (162 verificações): bordas 09:59/10:00/11:59/12:00/13:59/14:00/16:59/17:00, precedência sobre pausa e almoço, dia inteiro com parcial, parcial de sábado, categoria por perfil (gestor, Liderança, admin, próprio, outro técnico, somente leitura) e `status.php` sem categoria; a observação não vazou em nenhum caso. **As seis decisões do commit 4 ficam aprovadas como estão.**
 
 **Ajuste pedido na aprovação (2026-10-08):** o marcador pegava a primeira parcial pela ordem de id, não a próxima no horário. Caso real: "a partir de 14:00" com id menor e intervalo 10:00–12:00 com id maior no mesmo dia; às 09:59 o detalhe mostrava " · Ausente a partir de 14:00", quando o próximo evento é o das 10:00. Agora o marcador é a parcial de menor início que ainda vai começar (início > agora; em outra data, a de menor início do dia), com desempate por id. **Não mudam:** a ordem de `ausencias[]` na resposta (por id) e a regra "a primeira vale" da ausência ativa. `qa-presence-engine` com **166 verificações** (4 novas: hoje às 09:59 e outra data com o id da parcial das 14:00 menor que o da parcial das 10:00; às 13:30, com o intervalo já encerrado, o marcador passa às 14:00; mesmo início, vale a de menor id). Mutação **7/7**: volta à primeira por id (morta pelos dois casos, também separadamente: só hoje e só outra data), maior início, empate pelo último, sem o filtro do horário passado, fim do intervalo lido da parcial errada. Nada rodou em MySQL real.
+
+**Commit 5 entregue (2026-10-08, `393c35c`; aguardando aprovação):** P7 no validador da exceção de escala (`OperationalService::saveScheduleException`, único caminho de gravação, via `schedules.php` `action=exception`).
+
+| Item | Como ficou |
+|---|---|
+| Tipos aceitos | `remote`, `onsite`, `training`, `oncall` |
+| Tipos de ausência | `day_off`, `absence`, `vacation`, `leave`: 400 "Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências." (constante `ABSENCE_EXCEPTION_MESSAGE`) |
+| Tipo desconhecido | 400 "Tipo de excecao invalido.", como antes |
+| Ordem | Cadastro → autorização (L9) → data → tipo → Liderança remota (409) → trava → gravação; a recusa não trava nem grava |
+| Leitura | Sem mudança: exceções desses tipos já gravadas continuam ausência de dia inteiro no motor, no Mapa PA e no cálculo antigo (decisão 2) |
+
+**Decisões de implementação do commit 5 a aprovar:**
+
+1. **Autorização antes do tipo:** gestor lançando folga para cadastro da Liderança recebe 403 (L9), não 400, como na decisão 4 do commit 3.
+2. **Lista de tipos de ausência vem de `PresenceEngine::ABSENCE_EXCEPTIONS`** (mesma lista que o motor lê como ausência), para leitura e recusa não divergirem.
+3. **Sem auditoria própria da recusa:** é validação de payload (400), como os demais 400 da escala; a gravação válida continua com `SCHEDULE_EXCEPTION_SAVED`.
+4. **Sobrescrever exceção antiga de ausência com tipo de trabalho na mesma data continua permitido** (o `ON DUPLICATE KEY UPDATE` não mudou); a Q4 deu 0 linhas, então hoje não há caso.
+5. **Janela entre o commit 5 e o 6:** a tela de exceção ainda oferece os tipos de ausência até o commit 6 (frontend) e, se escolhidos, recebe o 400 com a mensagem. Os dois vão no mesmo deploy (11).
+
+Validação pela IA: `qa-schedule-history` (os quatro tipos de ausência para gestor e admin com 400, sem gravar nem travar; L9 antes do tipo; tipo desconhecido; os quatro tipos de trabalho gravados) e `qa-security` (ponta a ponta: gestor com `day_off` pela rota real recebe 400 com a mensagem). Bateria PHP completa OK. Mutação **10/10** (sem a checagem, lista antiga de volta, tipo antes da autorização, cada tipo de trabalho removido, 409 em vez de 400, mensagem sem a tela, só `day_off`). Nada rodou em MySQL real.
 
 **Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 
