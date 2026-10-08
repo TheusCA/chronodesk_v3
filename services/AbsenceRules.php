@@ -31,48 +31,48 @@ final class AbsenceRules {
      * O horario dentro da jornada (P1) depende do cadastro: withinWorkday().
      */
     public static function normalize(array $data): array {
-        $employeeId = self::positiveInt($data['employee_id'] ?? null, 'Colaborador invalido.');
-        $startsOn = self::date($data['starts_on'] ?? null, 'Data inicial invalida.');
-        $endsOn = self::date($data['ends_on'] ?? $startsOn, 'Data final invalida.');
+        $employeeId = self::positiveInt($data['employee_id'] ?? null, 'Colaborador inválido.');
+        $startsOn = self::date($data['starts_on'] ?? null, 'Data inicial inválida.');
+        $endsOn = self::date($data['ends_on'] ?? $startsOn, 'Data final inválida.');
         if ($endsOn < $startsOn) {
-            throw new InvalidArgumentException('A data final deve ser igual ou posterior a inicial.');
+            throw new InvalidArgumentException('A data final deve ser igual ou posterior à inicial.');
         }
         if (self::daysBetween($startsOn, $endsOn) + 1 > self::MAX_DAYS) {
-            throw new InvalidArgumentException('A ausencia pode ter no maximo ' . self::MAX_DAYS . ' dias.');
+            throw new InvalidArgumentException('A ausência pode ter no máximo ' . self::MAX_DAYS . ' dias.');
         }
         $periodType = $data['period_type'] ?? 'full_day';
         if (!is_string($periodType) || !in_array($periodType, self::PERIOD_TYPES, true)) {
-            throw new InvalidArgumentException('Tipo de periodo invalido.');
+            throw new InvalidArgumentException('Tipo de período inválido.');
         }
-        $startTime = self::time($data['start_time'] ?? null, 'Horario inicial invalido.');
-        $endTime = self::time($data['end_time'] ?? null, 'Horario final invalido.');
+        $startTime = self::time($data['start_time'] ?? null, 'Horário inicial inválido.');
+        $endTime = self::time($data['end_time'] ?? null, 'Horário final inválido.');
         if ($periodType === 'full_day') {
             $startTime = null;
             $endTime = null;
         } else {
             if ($startsOn !== $endsOn) {
-                throw new InvalidArgumentException('Horario so pode ser informado em ausencia de um dia; periodo de varios dias e sempre dia inteiro.');
+                throw new InvalidArgumentException('Horário só pode ser informado em ausência de um dia; período de vários dias é sempre dia inteiro.');
             }
             if ($startTime === null) {
-                throw new InvalidArgumentException('Informe o horario inicial.');
+                throw new InvalidArgumentException('Informe o horário inicial.');
             }
             if ($periodType === 'from_time') {
                 $endTime = null;
             } elseif ($endTime === null || $endTime <= $startTime) {
-                throw new InvalidArgumentException('No intervalo, o horario final deve ser posterior ao inicial.');
+                throw new InvalidArgumentException('No intervalo, o horário final deve ser posterior ao inicial.');
             }
         }
         $category = $data['category'] ?? null;
         if (!is_string($category) || !isset(self::CATEGORIES[$category])) {
-            throw new InvalidArgumentException('Categoria de ausencia invalida.');
+            throw new InvalidArgumentException('Categoria de ausência inválida.');
         }
         $note = $data['note'] ?? null;
         if ($note !== null && !is_string($note)) {
-            throw new InvalidArgumentException('Observacao invalida.');
+            throw new InvalidArgumentException('Observação inválida.');
         }
         $note = $note === null ? null : trim($note);
         if ($note !== null && self::length($note) > self::NOTE_MAX_CHARS) {
-            throw new InvalidArgumentException('A observacao pode ter no maximo ' . self::NOTE_MAX_CHARS . ' caracteres.');
+            throw new InvalidArgumentException('A observação pode ter no máximo ' . self::NOTE_MAX_CHARS . ' caracteres.');
         }
         return [
             'employee_id' => $employeeId,
@@ -97,9 +97,9 @@ final class AbsenceRules {
         $workStart = self::storedTime($workStart);
         $workEnd = self::storedTime($workEnd);
         if ($workStart === null || $workEnd === null || $workStart >= $workEnd) {
-            throw new InvalidArgumentException('A jornada do cadastro e invalida: lance a ausencia como dia inteiro ou corrija a jornada.');
+            throw new InvalidArgumentException('A jornada do cadastro é inválida: lance a ausência como dia inteiro ou corrija a jornada.');
         }
-        $message = 'O horario deve ficar dentro da jornada do colaborador (' . $workStart . '–' . $workEnd . ').';
+        $message = 'O horário deve ficar dentro da jornada do colaborador (' . $workStart . '–' . $workEnd . ').';
         if ($absence['start_time'] < $workStart || $absence['start_time'] >= $workEnd) {
             throw new InvalidArgumentException($message);
         }
@@ -154,7 +154,7 @@ final class AbsenceRules {
 
     /** Mensagem do 409: o periodo em conflito, sem categoria nem observacao. */
     public static function conflictMessage(array $conflict): string {
-        return 'Ja existe ausencia aprovada do colaborador ' . self::periodLabel($conflict) . '.';
+        return 'Já existe ausência aprovada do colaborador ' . self::periodLabel($conflict) . '.';
     }
 
     public static function periodLabel(array $absence): string {
@@ -222,7 +222,7 @@ final class AbsenceRules {
     private static function length(string $value): int {
         $count = preg_match_all('/./su', $value);
         if ($count === false) {
-            throw new InvalidArgumentException('Observacao invalida.');
+            throw new InvalidArgumentException('Observação inválida.');
         }
         return $count;
     }

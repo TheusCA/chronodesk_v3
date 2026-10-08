@@ -43,8 +43,8 @@ final class AbsenceService {
      */
     public function list(array $filters, array $actor): array {
         [$from, $to] = $this->period($filters);
-        $status = $this->enumFilter($filters['status'] ?? null, self::STATUS_FILTERS, 'approved', 'Status invalido.');
-        $team = $this->enumFilter($filters['team'] ?? null, self::TEAMS, null, 'Equipe invalida.');
+        $status = $this->enumFilter($filters['status'] ?? null, self::STATUS_FILTERS, 'approved', 'Status inválido.');
+        $team = $this->enumFilter($filters['team'] ?? null, self::TEAMS, null, 'Equipe inválida.');
         $role = $actor['role'] ?? null;
         $manager = portal_role_is_manager($role);
         $employeeId = $manager
@@ -129,10 +129,10 @@ final class AbsenceService {
             // Autorizacao (A4) antes de qualquer outra resposta sobre o registro.
             $this->assertEmployeeAllowed($employee, $actor);
             if ((int)$current['employee_id'] !== $absence['employee_id']) {
-                throw new InvalidArgumentException('Nao e possivel trocar o colaborador da ausencia: cancele e lance de novo.');
+                throw new InvalidArgumentException('Não é possível trocar o colaborador da ausência: cancele e lance de novo.');
             }
             if ($current['status'] !== 'approved') {
-                throw new DomainException('Ausencia cancelada nao pode ser alterada.');
+                throw new DomainException('Ausência cancelada não pode ser alterada.');
             }
             $retroactive = $startsBeforeToday || AbsenceRules::hasStarted($current, $this->today());
             $this->assertRetroactiveAllowed($retroactive, $actor);
@@ -163,7 +163,7 @@ final class AbsenceService {
             [$current, $employee] = $this->lockAbsence($id);
             $this->assertEmployeeAllowed($employee, $actor);
             if ($current['status'] !== 'approved') {
-                throw new DomainException('Ausencia ja cancelada.');
+                throw new DomainException('Ausência já cancelada.');
             }
             $retroactive = AbsenceRules::hasStarted($current, $this->today());
             $this->assertRetroactiveAllowed($retroactive, $actor);
@@ -196,12 +196,12 @@ final class AbsenceService {
     private function lockAbsence(int $id): array {
         $found = $this->findAbsence($id, false);
         if ($found === null) {
-            throw new DomainException('Ausencia nao encontrada.');
+            throw new DomainException('Ausência não encontrada.');
         }
         $employee = $this->lockEmployee((int)$found['employee_id'], true);
         $current = $this->findAbsence($id, true);
         if ($current === null || (int)$current['employee_id'] !== (int)$found['employee_id']) {
-            throw new DomainException('Ausencia nao encontrada.');
+            throw new DomainException('Ausência não encontrada.');
         }
         return [$current, $employee];
     }
@@ -229,11 +229,11 @@ final class AbsenceService {
         $stmt->execute([':id' => $employeeId]);
         $employee = $stmt->fetch();
         if (!$employee || (!$includeInactive && (int)$employee['ativo'] !== 1)) {
-            throw new InvalidArgumentException('Colaborador nao encontrado ou inativo.');
+            throw new InvalidArgumentException('Colaborador não encontrado ou inativo.');
         }
         $employee['team'] = validate_funcionario_equipe((string)$employee['equipe']);
         if (!in_array($employee['team'], self::TEAMS, true)) {
-            throw new InvalidArgumentException('A equipe do cadastro nao recebe ausencia.');
+            throw new InvalidArgumentException('A equipe do cadastro não recebe ausência.');
         }
         return $employee;
     }
@@ -305,15 +305,15 @@ final class AbsenceService {
         $today = $this->today();
         $from = $filters['from'] ?? null;
         $to = $filters['to'] ?? null;
-        $from = ($from === null || $from === '') ? substr($today, 0, 8) . '01' : $this->filterDate($from, 'Data inicial invalida.');
+        $from = ($from === null || $from === '') ? substr($today, 0, 8) . '01' : $this->filterDate($from, 'Data inicial inválida.');
         $to = ($to === null || $to === '')
             ? (new DateTimeImmutable($from))->modify('last day of this month')->format('Y-m-d')
-            : $this->filterDate($to, 'Data final invalida.');
+            : $this->filterDate($to, 'Data final inválida.');
         if ($to < $from) {
-            throw new InvalidArgumentException('A data final deve ser igual ou posterior a inicial.');
+            throw new InvalidArgumentException('A data final deve ser igual ou posterior à inicial.');
         }
         if ((int)(new DateTimeImmutable($from))->diff(new DateTimeImmutable($to))->days + 1 > AbsenceRules::MAX_DAYS) {
-            throw new InvalidArgumentException('O periodo maximo e de ' . AbsenceRules::MAX_DAYS . ' dias.');
+            throw new InvalidArgumentException('O período máximo é de ' . AbsenceRules::MAX_DAYS . ' dias.');
         }
         return [$from, $to];
     }
@@ -346,7 +346,7 @@ final class AbsenceService {
     private function requiredId($value): int {
         $valid = is_int($value) || (is_string($value) && preg_match('/^\d{1,10}$/', $value) === 1);
         if (!$valid || (int)$value < 1) {
-            throw new InvalidArgumentException('Identificador invalido.');
+            throw new InvalidArgumentException('Identificador inválido.');
         }
         return (int)$value;
     }

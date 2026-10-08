@@ -126,8 +126,26 @@ assert.match(pageSource, /<textarea aria-describedby=\{NOTE_WARNING_ID\}[^>]*\{\
 assert.match(pageSource, /\{\.\.\.register\('note'[^\n]*\/>\s*<span[^>]*>\s*<span[^>]*id=\{NOTE_WARNING_ID\}>⚠ Não registre informação médica ou de saúde neste campo\.<\/span>/, 'Aviso logo abaixo do campo, sempre visível')
 
 // P9: categoria e observação só para a gestão e para o próprio técnico.
-assert.match(pageSource, /const seesAllDetails = isManagerRole\(session\.role\)/, 'Gestão vê categoria e observação')
-assert.match(pageSource, /const canSeeDetails = \(item\) => seesAllDetails \|\| \(ownEmployeeId > 0 && Number\(item\.employee_id\) === ownEmployeeId\)/, 'Técnico vê só as próprias')
+assert.match(pageSource, /const seesAllDetails = isManagerRole\(session\.role\)/, 'Filtros de equipe e técnico pela gestão')
+assert.match(pageSource, /const canSeeDetails = \(item\) => canSeeAbsenceDetails\(session, item\)/, 'P9 da tela pela função testada abaixo')
+
+// P9, segunda camada (commit 7): comportamento por perfil, inclusive linha que
+// não é de quem consulta chegando a técnico ou somente leitura.
+const { canSeeAbsenceDetails } = await import(pathToFileURL(join(srcRoot, 'lib', 'roles.ts')).href)
+const sessionOf = (role, funcionarioId = 0) => ({ role, ci: { funcionario_id: funcionarioId } })
+for (const role of ['gestor', 'lideranca', 'admin']) {
+  assert.equal(canSeeAbsenceDetails(sessionOf(role), { employee_id: 12 }), true, `${role} vê categoria e observação de qualquer linha`)
+}
+for (const role of ['tecnico', 'somente_leitura']) {
+  assert.equal(canSeeAbsenceDetails(sessionOf(role, 11), { employee_id: 11 }), true, `${role}: a própria linha`)
+  assert.equal(canSeeAbsenceDetails(sessionOf(role, 11), { employee_id: '11' }), true, `${role}: a própria linha com id em texto`)
+  assert.equal(canSeeAbsenceDetails(sessionOf(role, 11), { employee_id: 12 }), false, `${role}: linha de outro colaborador`)
+  assert.equal(canSeeAbsenceDetails(sessionOf(role, 0), { employee_id: 0 }), false, `${role} sem colaborador na sessão: nada`)
+  assert.equal(canSeeAbsenceDetails(sessionOf(role, 11), {}), false, `${role}: linha sem colaborador`)
+  assert.equal(canSeeAbsenceDetails({ role }, { employee_id: 11 }), false, `${role} sem bloco ci na sessão`)
+}
+assert.equal(canSeeAbsenceDetails(null, { employee_id: 11 }), false, 'Sem sessão: nada')
+assert.equal(canSeeAbsenceDetails(sessionOf('perfil_desconhecido', 11), { employee_id: 12 }), false, 'Perfil desconhecido: só as próprias')
 const categoryCell = pageSource.match(/function categoryCell\(item\) \{\s*if \(!canSeeDetails\(item\)\) return <span>Ausência<\/span>[\s\S]*?\n {2}\}/)?.[0] || ''
 assert.equal((pageSource.match(/\{categoryCell\(item\)\}/g) || []).length, 2, 'Tabela e cartões usam o mesmo ramo de P9')
 assert.match(categoryCell, /CATEGORY_LABELS\[item\.category\]/, 'Categoria dentro do ramo visível')

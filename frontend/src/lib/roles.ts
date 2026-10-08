@@ -11,3 +11,15 @@ export function isManagerRole(role: unknown): boolean {
 export function hasPermission(session: { permissions?: unknown } | null | undefined, permission: string): boolean {
   return Array.isArray(session?.permissions) && session.permissions.includes(permission)
 }
+
+// [F3, P9] Categoria e observação de ausência: a gestão vê todas; técnico e
+// somente leitura, só as próprias (colaborador da sessão). Segunda camada da
+// tela: o servidor já devolve a esses perfis só as linhas deles.
+export function canSeeAbsenceDetails(
+  session: { role?: unknown, ci?: { funcionario_id?: unknown } | null } | null | undefined,
+  item: { employee_id?: unknown } | null | undefined,
+): boolean {
+  if (isManagerRole(session?.role)) return true
+  const ownEmployeeId = Number(session?.ci?.funcionario_id || 0)
+  return Number.isInteger(ownEmployeeId) && ownEmployeeId > 0 && Number(item?.employee_id) === ownEmployeeId
+}

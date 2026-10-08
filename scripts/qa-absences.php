@@ -390,12 +390,12 @@ foreach (['tecnico', 'somente_leitura'] as $role) {
 $pdo = qa_db();
 assert_same([[], []], [qa_service($pdo)->list([], [])['items'], $pdo->queries], 'lista: sem perfil, vazia (negar por padrao)');
 foreach ([
-    [['status' => 'pending'], '400: Status invalido.'],
-    [['team' => 'n3'], '400: Equipe invalida.'],
-    [['from' => '2026-02-30'], '400: Data inicial invalida.'],
-    [['from' => '2026-10-10', 'to' => '2026-10-01'], '400: A data final deve ser igual ou posterior a inicial.'],
-    [['from' => '2026-01-01', 'to' => '2027-01-02'], '400: O periodo maximo e de 366 dias.'],
-    [['employee_id' => '1 OR 1=1'], '400: Identificador invalido.'],
+    [['status' => 'pending'], '400: Status inválido.'],
+    [['team' => 'n3'], '400: Equipe inválida.'],
+    [['from' => '2026-02-30'], '400: Data inicial inválida.'],
+    [['from' => '2026-10-10', 'to' => '2026-10-01'], '400: A data final deve ser igual ou posterior à inicial.'],
+    [['from' => '2026-01-01', 'to' => '2027-01-02'], '400: O período máximo é de 366 dias.'],
+    [['employee_id' => '1 OR 1=1'], '400: Identificador inválido.'],
 ] as [$filters, $expected]) {
     assert_same($expected, qa_outcome(fn () => qa_service(qa_db())->list($filters, $actor('gestor'))), 'lista: filtro invalido ' . json_encode($filters));
 }
@@ -417,22 +417,22 @@ assert_same([null, null], array_values(array_intersect_key(AbsenceRules::normali
 assert_same('obs', AbsenceRules::normalize(['note' => '  obs  '] + $base)['note'], 'regras: observacao sem espacos nas pontas');
 assert_same(null, AbsenceRules::normalize(['note' => '   '] + $base)['note'], 'regras: observacao vazia vira nula');
 foreach ([
-    [['employee_id' => '0'], 'Colaborador invalido.'],
-    [['employee_id' => '1a'], 'Colaborador invalido.'],
-    [['starts_on' => '2026-13-01'], 'Data inicial invalida.'],
-    [['ends_on' => '2026-10-19'], 'A data final deve ser igual ou posterior a inicial.'],
-    [['starts_on' => '2026-01-01', 'ends_on' => '2027-01-02'], 'A ausencia pode ter no maximo 366 dias.'],
-    [['period_type' => 'meio_dia'], 'Tipo de periodo invalido.'],
-    [['period_type' => 'from_time', 'start_time' => '14:00', 'ends_on' => '2026-10-21'], 'Horario so pode ser informado em ausencia de um dia; periodo de varios dias e sempre dia inteiro.'],
-    [['period_type' => 'from_time'], 'Informe o horario inicial.'],
-    [['period_type' => 'interval', 'start_time' => '10:00'], 'No intervalo, o horario final deve ser posterior ao inicial.'],
-    [['period_type' => 'interval', 'start_time' => '10:00', 'end_time' => '10:00'], 'No intervalo, o horario final deve ser posterior ao inicial.'],
-    [['period_type' => 'interval', 'start_time' => '25:00', 'end_time' => '26:00'], 'Horario inicial invalido.'],
-    [['category' => 'atestado'], 'Categoria de ausencia invalida.'],
-    [['note' => str_repeat('a', 501)], 'A observacao pode ter no maximo 500 caracteres.'],
-    [['note' => ['x']], 'Observacao invalida.'],
-    [['note' => "abc\xC3\x28"], 'Observacao invalida.'],
-    [['note' => str_repeat('é', 501)], 'A observacao pode ter no maximo 500 caracteres.'],
+    [['employee_id' => '0'], 'Colaborador inválido.'],
+    [['employee_id' => '1a'], 'Colaborador inválido.'],
+    [['starts_on' => '2026-13-01'], 'Data inicial inválida.'],
+    [['ends_on' => '2026-10-19'], 'A data final deve ser igual ou posterior à inicial.'],
+    [['starts_on' => '2026-01-01', 'ends_on' => '2027-01-02'], 'A ausência pode ter no máximo 366 dias.'],
+    [['period_type' => 'meio_dia'], 'Tipo de período inválido.'],
+    [['period_type' => 'from_time', 'start_time' => '14:00', 'ends_on' => '2026-10-21'], 'Horário só pode ser informado em ausência de um dia; período de vários dias é sempre dia inteiro.'],
+    [['period_type' => 'from_time'], 'Informe o horário inicial.'],
+    [['period_type' => 'interval', 'start_time' => '10:00'], 'No intervalo, o horário final deve ser posterior ao inicial.'],
+    [['period_type' => 'interval', 'start_time' => '10:00', 'end_time' => '10:00'], 'No intervalo, o horário final deve ser posterior ao inicial.'],
+    [['period_type' => 'interval', 'start_time' => '25:00', 'end_time' => '26:00'], 'Horário inicial inválido.'],
+    [['category' => 'atestado'], 'Categoria de ausência inválida.'],
+    [['note' => str_repeat('a', 501)], 'A observação pode ter no máximo 500 caracteres.'],
+    [['note' => ['x']], 'Observação inválida.'],
+    [['note' => "abc\xC3\x28"], 'Observação inválida.'],
+    [['note' => str_repeat('é', 501)], 'A observação pode ter no máximo 500 caracteres.'],
 ] as [$overrides, $message]) {
     assert_same('400: ' . $message, qa_outcome(fn () => AbsenceRules::normalize($overrides + $base)), 'regras: ' . $message);
 }
@@ -457,20 +457,40 @@ foreach ([
 }
 assert_same(true, AbsenceRules::overlaps($partial('from_time', '15:00'), $partial('interval', '20:00', '21:00'), null), 'sobreposicao: sem jornada, "a partir de" vai ate o fim do dia');
 assert_same(null, AbsenceRules::findConflict($full('2026-10-20', '2026-10-20'), [['id' => 9, 'status' => 'cancelled'] + $full('2026-10-20', '2026-10-20'), ['id' => 10] + $full('2026-10-20', '2026-10-20')], '17:00', 10), 'sobreposicao: cancelada e a propria nao contam');
-assert_same('Ja existe ausencia aprovada do colaborador de 05/10/2026 a 09/10/2026 (dia todo).', AbsenceRules::conflictMessage($full('2026-10-05', '2026-10-09')), 'mensagem: periodo de varios dias');
-assert_same('Ja existe ausencia aprovada do colaborador em 20/10/2026 a partir de 14:00.', AbsenceRules::conflictMessage($partial('from_time', '14:00:00')), 'mensagem: a partir de, hora do banco');
-assert_same('Ja existe ausencia aprovada do colaborador em 20/10/2026, 10:00–12:00.', AbsenceRules::conflictMessage($partial('interval', '10:00', '12:00')), 'mensagem: intervalo');
+assert_same('Já existe ausência aprovada do colaborador de 05/10/2026 a 09/10/2026 (dia todo).', AbsenceRules::conflictMessage($full('2026-10-05', '2026-10-09')), 'mensagem: periodo de varios dias');
+assert_same('Já existe ausência aprovada do colaborador em 20/10/2026 a partir de 14:00.', AbsenceRules::conflictMessage($partial('from_time', '14:00:00')), 'mensagem: a partir de, hora do banco');
+assert_same('Já existe ausência aprovada do colaborador em 20/10/2026, 10:00–12:00.', AbsenceRules::conflictMessage($partial('interval', '10:00', '12:00')), 'mensagem: intervalo');
 foreach ([
     [$partial('interval', '08:00', '17:00'), 'ok'],
-    [$partial('interval', '07:59', '09:00'), '400: O horario deve ficar dentro da jornada do colaborador (08:00–17:00).'],
-    [$partial('interval', '16:00', '17:01'), '400: O horario deve ficar dentro da jornada do colaborador (08:00–17:00).'],
-    [$partial('from_time', '17:00'), '400: O horario deve ficar dentro da jornada do colaborador (08:00–17:00).'],
+    [$partial('interval', '07:59', '09:00'), '400: O horário deve ficar dentro da jornada do colaborador (08:00–17:00).'],
+    [$partial('interval', '16:00', '17:01'), '400: O horário deve ficar dentro da jornada do colaborador (08:00–17:00).'],
+    [$partial('from_time', '17:00'), '400: O horário deve ficar dentro da jornada do colaborador (08:00–17:00).'],
     [$partial('from_time', '16:59'), 'ok'],
 ] as [$absence, $expected]) {
     assert_same($expected, qa_outcome(fn () => AbsenceRules::assertWithinWorkday($absence, '08:00:00', '17:00:00')), 'jornada (P1): ' . json_encode($absence));
 }
-assert_same('400: A jornada do cadastro e invalida: lance a ausencia como dia inteiro ou corrija a jornada.', qa_outcome(fn () => AbsenceRules::assertWithinWorkday($partial('from_time', '10:00'), null, null)), 'jornada: cadastro sem jornada recusa horario');
+assert_same('400: A jornada do cadastro é inválida: lance a ausência como dia inteiro ou corrija a jornada.', qa_outcome(fn () => AbsenceRules::assertWithinWorkday($partial('from_time', '10:00'), null, null)), 'jornada: cadastro sem jornada recusa horario');
 assert_same('ok', qa_outcome(fn () => AbsenceRules::assertWithinWorkday($full('2026-10-20', '2026-10-20'), null, null)), 'jornada: dia inteiro nao depende da jornada');
+
+// Mensagens que chegam ao usuario com acento (F3, commit 7). Varre os textos
+// literais do codigo (sem comentarios), menos SQL e chaves da auditoria
+// ("x=y"), que continuam como estao.
+$userMessages = [];
+foreach (['services/AbsenceRules.php', 'services/AbsenceService.php', 'api/portal/absences.php'] as $file) {
+    foreach (token_get_all((string)file_get_contents($root . '/' . $file)) as $token) {
+        if (!is_array($token) || $token[0] !== T_CONSTANT_ENCAPSED_STRING) {
+            continue;
+        }
+        $text = substr($token[1], 1, -1);
+        if (preg_match('/^[A-Z][a-zà-ú]/u', $text) === 1 && strpos($text, '=') === false
+            && preg_match('/^(SELECT|INSERT|UPDATE|DELETE)\b/', $text) !== 1) {
+            $userMessages[] = $file . ': ' . $text;
+        }
+    }
+}
+assert_same(true, count($userMessages) >= 30, 'mensagens: a varredura encontra as mensagens ao usuario (' . count($userMessages) . ')');
+$unaccented = array_values(preg_grep('/\b(nao|invalid[oa]|ausencia|horario|periodo|maximo|ja|so|observacao|acao|varios|possivel)\b|posterior a inicial/iu', $userMessages));
+assert_same([], $unaccented, 'mensagens: sem texto sem acento para o usuario');
 
 // ----------------------------------------------------------------------------
 // 3. Escrita: create, update, cancel
@@ -510,24 +530,24 @@ foreach ([[3, 'lideranca'], [3, 'gestor'], [6, 'gestor'], [6, 'lideranca']] as [
 assert_same('ok', qa_outcome(fn () => qa_service(qa_db())->create(['employee_id' => 3] + $create, $actor('admin'))), 'A4: admin lanca ausencia de lider');
 
 // Cadastro.
-foreach ([[5, '400: Colaborador nao encontrado ou inativo.'], [99, '400: Colaborador nao encontrado ou inativo.'], [7, '400: A equipe do cadastro nao recebe ausencia.']] as [$employeeId, $expected]) {
+foreach ([[5, '400: Colaborador não encontrado ou inativo.'], [99, '400: Colaborador não encontrado ou inativo.'], [7, '400: A equipe do cadastro não recebe ausência.']] as [$employeeId, $expected]) {
     assert_same($expected, qa_outcome(fn () => qa_service(qa_db())->create(['employee_id' => $employeeId] + $create, $actor('admin'))), "create: cadastro {$employeeId}");
 }
-assert_same('400: A jornada do cadastro e invalida: lance a ausencia como dia inteiro ou corrija a jornada.', qa_outcome(fn () => qa_service(qa_db())->create(['employee_id' => 8, 'ends_on' => '2026-10-21', 'period_type' => 'from_time', 'start_time' => '10:00'] + $create, $actor('gestor'))), 'create: cadastro sem jornada recusa horario');
-assert_same('400: O horario deve ficar dentro da jornada do colaborador (09:00–18:00).', qa_outcome(fn () => qa_service(qa_db())->create(['ends_on' => '2026-10-21', 'period_type' => 'interval', 'start_time' => '08:00', 'end_time' => '10:00'] + $create, $actor('gestor'))), 'create: horario fora da jornada (P1)');
+assert_same('400: A jornada do cadastro é inválida: lance a ausência como dia inteiro ou corrija a jornada.', qa_outcome(fn () => qa_service(qa_db())->create(['employee_id' => 8, 'ends_on' => '2026-10-21', 'period_type' => 'from_time', 'start_time' => '10:00'] + $create, $actor('gestor'))), 'create: cadastro sem jornada recusa horario');
+assert_same('400: O horário deve ficar dentro da jornada do colaborador (09:00–18:00).', qa_outcome(fn () => qa_service(qa_db())->create(['ends_on' => '2026-10-21', 'period_type' => 'interval', 'start_time' => '08:00', 'end_time' => '10:00'] + $create, $actor('gestor'))), 'create: horario fora da jornada (P1)');
 
 // Sobreposicao (P6).
 $pdo = qa_db();
 $service = qa_service($pdo);
-assert_same('409: Ja existe ausencia aprovada do colaborador de 05/10/2026 a 09/10/2026 (dia todo).', qa_outcome(fn () => $service->create(['employee_id' => 1, 'starts_on' => '2026-10-09', 'ends_on' => '2026-10-12', 'category' => 'folga'], $actor('lideranca'))), 'P6: cruza ferias aprovada');
+assert_same('409: Já existe ausência aprovada do colaborador de 05/10/2026 a 09/10/2026 (dia todo).', qa_outcome(fn () => $service->create(['employee_id' => 1, 'starts_on' => '2026-10-09', 'ends_on' => '2026-10-12', 'category' => 'folga'], $actor('lideranca'))), 'P6: cruza ferias aprovada');
 assert_same([[], 'ROLLBACK'], [$writes($pdo), end($pdo->queries)[0]], 'P6: nada gravado, transacao desfeita');
 assert_same('ok', qa_outcome(fn () => $service->create(['employee_id' => 3, 'starts_on' => '2026-10-08', 'ends_on' => '2026-10-08', 'category' => 'folga'], $actor('admin'))), 'P6: ausencia cancelada nao conflita');
 $day = ['employee_id' => 2, 'starts_on' => '2026-10-21', 'ends_on' => '2026-10-21', 'category' => 'compromisso'];
 assert_same('ok', qa_outcome(fn () => $service->create(['period_type' => 'interval', 'start_time' => '10:00', 'end_time' => '12:00'] + $day, $actor('gestor'))), 'P6: intervalo');
 assert_same('ok', qa_outcome(fn () => $service->create(['period_type' => 'interval', 'start_time' => '13:00', 'end_time' => '14:00'] + $day, $actor('gestor'))), 'P6: outro intervalo no mesmo dia');
-assert_same('409: Ja existe ausencia aprovada do colaborador em 21/10/2026, 10:00–12:00.', qa_outcome(fn () => $service->create(['period_type' => 'from_time', 'start_time' => '11:30'] + $day, $actor('gestor'))), 'P6: a partir de dentro do intervalo');
+assert_same('409: Já existe ausência aprovada do colaborador em 21/10/2026, 10:00–12:00.', qa_outcome(fn () => $service->create(['period_type' => 'from_time', 'start_time' => '11:30'] + $day, $actor('gestor'))), 'P6: a partir de dentro do intervalo');
 assert_same('ok', qa_outcome(fn () => $service->create(['period_type' => 'from_time', 'start_time' => '14:00'] + $day, $actor('gestor'))), 'P6: a partir de quando o intervalo termina');
-assert_same('409: Ja existe ausencia aprovada do colaborador em 21/10/2026, 10:00–12:00.', qa_outcome(fn () => $service->create($day, $actor('gestor'))), 'P6: dia inteiro sobre parciais');
+assert_same('409: Já existe ausência aprovada do colaborador em 21/10/2026, 10:00–12:00.', qa_outcome(fn () => $service->create($day, $actor('gestor'))), 'P6: dia inteiro sobre parciais');
 
 // Update.
 $pdo = qa_db();
@@ -538,10 +558,10 @@ assert_same(['2026-10-16', 'compromisso', 'qa.gestor', 'texto sensivel Y', 'qa']
 $audit = end($pdo->audits);
 assert_same(['ABSENCE_UPDATED', 'WARNING', true, false], [$audit['action'], $audit['severity'], strpos($audit['details'], 'antes=em 15/10/2026 (dia todo) folga') !== false, strpos($audit['details'], 'texto sensivel') !== false], 'update: auditada com o antes, sem a observacao');
 assert_same('ok', qa_outcome(fn () => $service->update($update, $actor('gestor'))), 'update: a propria ausencia nao conflita');
-assert_same('400: Nao e possivel trocar o colaborador da ausencia: cancele e lance de novo.', qa_outcome(fn () => $service->update(['employee_id' => 2] + $update, $actor('gestor'))), 'update: nao troca colaborador');
-assert_same('409: Ausencia nao encontrada.', qa_outcome(fn () => $service->update(['id' => 999] + $update, $actor('gestor'))), 'update: inexistente 409');
-assert_same('409: Ausencia cancelada nao pode ser alterada.', qa_outcome(fn () => $service->update(['id' => 3, 'employee_id' => 3, 'starts_on' => '2026-10-20', 'ends_on' => '2026-10-20', 'category' => 'folga'], $actor('admin'))), 'update: cancelada 409');
-assert_same('409: Ja existe ausencia aprovada do colaborador de 05/10/2026 a 09/10/2026 (dia todo).', qa_outcome(fn () => $service->update(['starts_on' => '2026-10-09'] + $update, $actor('lideranca'))), 'update: sobreposicao com outra');
+assert_same('400: Não é possível trocar o colaborador da ausência: cancele e lance de novo.', qa_outcome(fn () => $service->update(['employee_id' => 2] + $update, $actor('gestor'))), 'update: nao troca colaborador');
+assert_same('409: Ausência não encontrada.', qa_outcome(fn () => $service->update(['id' => 999] + $update, $actor('gestor'))), 'update: inexistente 409');
+assert_same('409: Ausência cancelada não pode ser alterada.', qa_outcome(fn () => $service->update(['id' => 3, 'employee_id' => 3, 'starts_on' => '2026-10-20', 'ends_on' => '2026-10-20', 'category' => 'folga'], $actor('admin'))), 'update: cancelada 409');
+assert_same('409: Já existe ausência aprovada do colaborador de 05/10/2026 a 09/10/2026 (dia todo).', qa_outcome(fn () => $service->update(['starts_on' => '2026-10-09'] + $update, $actor('lideranca'))), 'update: sobreposicao com outra');
 $started = ['id' => 1, 'employee_id' => 1, 'starts_on' => '2026-10-05', 'ends_on' => '2026-10-08', 'category' => 'ferias'];
 assert_same('403: Somente administradores e Liderança lançam, editam ou cancelam ausência com início anterior a hoje ou já iniciada.', qa_outcome(fn () => $service->update(['starts_on' => '2026-10-07'] + $started, $actor('gestor'))), 'update: ausencia ja iniciada, gestor 403 (mesmo movendo o inicio para hoje)');
 assert_same(['id' => 1, 'retroactive' => true], $service->update($started, $actor('lideranca')), 'update: Lideranca edita ausencia ja iniciada');
@@ -554,7 +574,7 @@ $service = qa_service($pdo);
 assert_same(['id' => 4, 'retroactive' => false], $service->cancel(['id' => 4], $actor('gestor')), 'cancel: gestor cancela ausencia futura');
 assert_same(['cancelled', 'qa.gestor', '2026-10-07 10:30:00', 'folga'], [$pdo->absences[4]['status'], $pdo->absences[4]['cancelled_by'], $pdo->absences[4]['cancelled_at'], $pdo->absences[4]['category']], 'cancel: registro fica, com autoria e hora do PHP');
 assert_same(['ABSENCE_CANCELLED', 'WARNING'], [end($pdo->audits)['action'], end($pdo->audits)['severity']], 'cancel: auditada');
-assert_same('409: Ausencia ja cancelada.', qa_outcome(fn () => $service->cancel(['id' => 4], $actor('gestor'))), 'cancel: de novo 409');
+assert_same('409: Ausência já cancelada.', qa_outcome(fn () => $service->cancel(['id' => 4], $actor('gestor'))), 'cancel: de novo 409');
 assert_same('403: Somente administradores e Liderança lançam, editam ou cancelam ausência com início anterior a hoje ou já iniciada.', qa_outcome(fn () => $service->cancel(['id' => 1], $actor('gestor'))), 'cancel: ja iniciada, gestor 403');
 assert_same('approved', $pdo->absences[1]['status'], 'cancel: recusa nao altera');
 assert_same(['id' => 1, 'retroactive' => true], $service->cancel(['id' => 1], $actor('admin')), 'cancel: admin cancela ja iniciada');
@@ -562,7 +582,7 @@ assert_same(['id' => 1, 'retroactive' => true], $service->cancel(['id' => 1], $a
 $todayId = $service->create(['employee_id' => 2, 'starts_on' => QA_TODAY, 'ends_on' => QA_TODAY, 'category' => 'compromisso'], $actor('gestor'))['id'];
 assert_same('403: Somente administradores e Liderança lançam, editam ou cancelam ausência com início anterior a hoje ou já iniciada.', qa_outcome(fn () => $service->cancel(['id' => $todayId], $actor('gestor'))), 'cancel: comecando hoje, gestor 403');
 assert_same(['id' => $todayId, 'retroactive' => true], $service->cancel(['id' => $todayId], $actor('lideranca')), 'cancel: comecando hoje, Lideranca cancela (retroativa)');
-assert_same(['400: Identificador invalido.', '409: Ausencia nao encontrada.'], [qa_outcome(fn () => $service->cancel(['id' => 'x'], $actor('admin'))), qa_outcome(fn () => $service->cancel(['id' => 999], $actor('admin')))], 'cancel: id invalido e inexistente');
+assert_same(['400: Identificador inválido.', '409: Ausência não encontrada.'], [qa_outcome(fn () => $service->cancel(['id' => 'x'], $actor('admin'))), qa_outcome(fn () => $service->cancel(['id' => 999], $actor('admin')))], 'cancel: id invalido e inexistente');
 
 // Concorrencia (licao do F1): outra gravacao aprova uma ausencia que cruza a
 // edicao enquanto esta espera a trava do colaborador. A primeira leitura da
@@ -572,13 +592,13 @@ $pdo = qa_db();
 $pdo->whileWaitingLock = static function (QaAbsencesPdo $db): void {
     $db->absences[900] = qa_absence(900, 1, 'outro', '2026-10-16', '2026-10-16');
 };
-assert_same('409: Ja existe ausencia aprovada do colaborador em 16/10/2026 (dia todo).', qa_outcome(fn () => qa_service($pdo)->update($update, $actor('gestor'))), 'concorrencia: a gravacao que esperou a trava ve a ausencia nova');
+assert_same('409: Já existe ausência aprovada do colaborador em 16/10/2026 (dia todo).', qa_outcome(fn () => qa_service($pdo)->update($update, $actor('gestor'))), 'concorrencia: a gravacao que esperou a trava ve a ausencia nova');
 assert_same(['2026-10-15', 'folga', true], [$pdo->absences[4]['ends_on'], $pdo->absences[4]['category'], isset($pdo->absences[900])], 'concorrencia: nada alterado; a gravacao da outra transacao fica');
 $pdo = qa_db();
 $pdo->whileWaitingLock = static function (QaAbsencesPdo $db): void {
     $db->absences[4]['status'] = 'cancelled';
 };
-assert_same('409: Ausencia cancelada nao pode ser alterada.', qa_outcome(fn () => qa_service($pdo)->update($update, $actor('gestor'))), 'concorrencia: cancelada por outra enquanto esperava a trava');
+assert_same('409: Ausência cancelada não pode ser alterada.', qa_outcome(fn () => qa_service($pdo)->update($update, $actor('gestor'))), 'concorrencia: cancelada por outra enquanto esperava a trava');
 
 // ----------------------------------------------------------------------------
 // 4. Bloco de ausencias do Calendario (L-01, decisao 5)

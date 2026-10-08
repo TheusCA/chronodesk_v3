@@ -14,7 +14,7 @@ import {
   absenceFormSchema,
 } from '../lib/formSchemas'
 import { localDate, queryString } from '../lib/operational'
-import { hasPermission, isManagerRole } from '../lib/roles'
+import { canSeeAbsenceDetails, hasPermission, isManagerRole } from '../lib/roles'
 
 // [F3, RF-04] Ausências (docs/DESENHO_PA_ESCALA_AUSENCIA.md, 5.4 e 9.4).
 // A tela só antecipa as regras do servidor; quem decide é portal/absences.php
@@ -78,10 +78,10 @@ export function AbsencesPage({ session, notify }) {
   const canManage = hasPermission(session, 'ausencias.manage')
   const canRetroactive = hasPermission(session, 'ausencias.retroativa')
   const canManageLeadership = hasPermission(session, 'escalas.lideranca')
-  // P9: categoria e observação só para a gestão e para o próprio técnico.
+  // P9: categoria e observação só para a gestão e para o próprio colaborador
+  // (técnico ou somente leitura), mesmo que a resposta traga outra linha.
   const seesAllDetails = isManagerRole(session.role)
-  const ownEmployeeId = Number(session.ci?.funcionario_id || 0)
-  const canSeeDetails = (item) => seesAllDetails || (ownEmployeeId > 0 && Number(item.employee_id) === ownEmployeeId)
+  const canSeeDetails = (item) => canSeeAbsenceDetails(session, item)
 
   const [filters, setFilters] = useState({ ...monthPeriod(today), team: '', employee_id: '', status: 'approved' })
   const resource = useResource(`portal/absences.php${queryString(filters)}`)

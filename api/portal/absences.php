@@ -31,7 +31,7 @@ try {
     if ($action === 'cancel') {
         json_response(['sucesso' => true, 'mensagem' => 'Ausência cancelada.'] + $service->cancel($data, $actor));
     }
-    throw new InvalidArgumentException('Acao de ausencia invalida.');
+    throw new InvalidArgumentException('Ação de ausência inválida.');
 } catch (Throwable $error) {
     if ($error instanceof PortalForbiddenException) {
         audit_log('ABSENCE_WRITE_DENIED', 'Recusa no servico de ausencias: ' . $error->getMessage(), 'WARNING');
