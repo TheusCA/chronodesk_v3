@@ -2000,7 +2000,15 @@ $absenceWrites = qa_run_endpoints($qaDir, [
     'leitura_cancela' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"cancel","id":101}', 'session' => qa_ci_session(4, 'qa.leitura', 'somente_leitura'), 'db' => $absenceDb],
     'gestor_retroativa' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"create","employee_id":1,"starts_on":"2020-01-06","category":"folga"}', 'session' => $manager, 'db' => $absenceDb],
     'gestor_sem_csrf' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'csrf' => 'missing', 'body' => '{"action":"create"}', 'session' => $manager, 'db' => $absenceDb],
+    // F3, commit 7: mensagens acentuadas chegam inteiras pela rota real (400, sem auditoria).
+    'gestor_categoria_invalida' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"create","employee_id":1,"starts_on":"2030-01-07","category":"atestado"}', 'session' => $manager, 'db' => $absenceDb],
+    'gestor_acao_invalida' => ['endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"apagar","id":101}', 'session' => $manager, 'db' => $absenceDb],
 ]);
+foreach (['gestor_categoria_invalida' => 'Categoria de ausência inválida.', 'gestor_acao_invalida' => 'Ação de ausência inválida.'] as $case => $message) {
+    $payload = json_decode($absenceWrites[$case]['body'], true);
+    assert_same([400, $message], [$absenceWrites[$case]['status'], $payload['mensagem'] ?? null], "F3: {$case} recebe 400 com a mensagem acentuada");
+    assert_same(false, strpos($absenceWrites[$case]['log'], 'ABSENCE_WRITE_DENIED') !== false, "F3: {$case} (validacao) nao e auditado");
+}
 foreach (['tecnico_cria', 'leitura_cancela'] as $case) {
     assert_same(403, $absenceWrites[$case]['status'], "F3: {$case} recebe 403");
     assert_same(true, strpos($absenceWrites[$case]['log'], '[QA_AUDIT] ABSENCE_WRITE_DENIED [WARNING]') !== false, "F3: {$case} auditado");
