@@ -822,6 +822,22 @@ foreach (['onsite' => '2026-10-10', 'training' => '2026-10-07', 'oncall' => '202
 assert_same('lideranca', $pdo->exceptions['3:2026-10-10']['team'], 'P12: excecao da Lideranca grava a equipe normalizada (passo 2.6)');
 assert_same('ok', qa_outcome(fn () => $service->saveScheduleException(['employee_id' => 1, 'exception_date' => '2026-10-06', 'exception_type' => 'remote'], 'qa', 'gestor')), 'controle: gestor grava excecao remota de tecnico');
 
+// P7 (F3, commit 5): excecao so com tipos de trabalho; tipo de ausencia 400 apontando a tela de Ausencias.
+$p7Pdo = qa_schedule_db();
+$p7Service = new OperationalService($p7Pdo, $today);
+foreach (['day_off', 'absence', 'vacation', 'leave'] as $type) {
+    foreach (['gestor', 'admin'] as $role) {
+        assert_same('400: ' . OperationalService::ABSENCE_EXCEPTION_MESSAGE, qa_outcome(fn () => $p7Service->saveScheduleException(['employee_id' => 1, 'exception_date' => '2026-10-06', 'exception_type' => $type], 'qa', $role)), "P7: {$role} recebe 400 em excecao {$type}");
+    }
+}
+assert_same([[], false], [$p7Pdo->exceptions, in_array(QA_LOCK_SQL, $p7Pdo->events, true)], 'P7: recusa sem gravar nem travar');
+assert_same('403: Somente administradores alteram a escala da Liderança.', qa_outcome(fn () => $p7Service->saveScheduleException(['employee_id' => 3, 'exception_date' => '2026-10-06', 'exception_type' => 'day_off'], 'qa', 'gestor')), 'P7: autorizacao (L9) antes do tipo');
+assert_same('400: Tipo de excecao invalido.', qa_outcome(fn () => $p7Service->saveScheduleException(['employee_id' => 1, 'exception_date' => '2026-10-06', 'exception_type' => 'folga'], 'qa', 'gestor')), 'P7: tipo desconhecido continua invalido');
+foreach (['remote' => '2026-10-05', 'onsite' => '2026-10-06', 'training' => '2026-10-07', 'oncall' => '2026-10-10'] as $type => $date) {
+    assert_same('ok', qa_outcome(fn () => $p7Service->saveScheduleException(['employee_id' => 1, 'exception_date' => $date, 'exception_type' => $type], 'qa', 'gestor')), "P7: excecao {$type} continua aceita");
+}
+assert_same(['remote', 'onsite', 'training', 'oncall'], array_values(array_column($p7Pdo->exceptions, 'exception_type')), 'P7: os quatro tipos de trabalho gravados');
+
 // GET: Lideranca com regra fixa presencial, dias uteis da jornada; sabado so por excecao.
 $view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-11']);
 $implicit = array_values(array_filter($view['rules'], static fn (array $rule): bool => $rule['implicit']));

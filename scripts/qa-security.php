@@ -1715,7 +1715,10 @@ $scheduleCases = qa_run_endpoints($qaDir, [
     // [F2B] A previa chega ao servico pela rota real e recebe as recusas do "rule".
     'lider_previa_lider' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"rule_preview","employee_id":10,"rule_type":"always_onsite"}', 'session' => $leaderSession, 'db' => $scheduleDb],
     'gestor_previa_retroativa' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"rule_preview","employee_id":1,"rule_type":"always_onsite","effective_from":"2020-01-06"}', 'session' => $manager, 'db' => $scheduleDb],
+    // [F3, P7] Excecao com tipo de ausencia pela rota real.
+    'gestor_excecao_folga' => ['endpoint' => 'api/portal/schedules.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"exception","employee_id":1,"exception_date":"2026-10-06","exception_type":"day_off"}', 'session' => $manager, 'db' => $scheduleDb],
 ]);
+assert_same([400, true], [$scheduleCases['gestor_excecao_folga']['status'], strpos($scheduleCases['gestor_excecao_folga']['body'], 'tela Ausências') !== false], 'P7: excecao de folga pela rota real recebe 400 apontando a tela de Ausencias');
 assert_same([403, true], [$scheduleCases['lider_previa_lider']['status'], strpos($scheduleCases['lider_previa_lider']['body'], 'Somente administradores alteram a escala da Liderança') !== false], 'F2B: previa de cadastro Lideranca pela Lideranca recebe 403 (L9)');
 assert_same([403, true], [$scheduleCases['gestor_previa_retroativa']['status'], strpos($scheduleCases['gestor_previa_retroativa']['body'], 'início retroativo') !== false], 'F2B: previa retroativa do gestor recebe 403 (P10/L6)');
 assert_same(403, $scheduleCases['lider_regra_lider']['status'], 'L9: Lideranca editando escala de cadastro Lideranca recebe 403');

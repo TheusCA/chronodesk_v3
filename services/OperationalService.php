@@ -30,7 +30,9 @@ final class OperationalService {
     public const LEADERSHIP_RULE_LABEL = 'Presencial (regra fixa)';
     public const LEADERSHIP_RULE_MESSAGE = 'A Liderança tem escala fixa presencial nos dias úteis, na jornada do próprio cadastro: não há regra a cadastrar. Para treinamento, plantão ou sábado, use exceção por data.';
     public const LEADERSHIP_REMOTE_MESSAGE = 'A Liderança tem escala sempre presencial: exceção remota não é aceita.';
-    public const OUTSIDE_MAP_MESSAGE = 'Cadastro marcado como fora do Mapa PA e da escala: não recebe regra nem exceção de escala.';
+    /** [P7] Ausencia nao e excecao de escala (F3; desenho, secao 9.4). */
+    public const ABSENCE_EXCEPTION_MESSAGE = 'Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências.';
+    public const OUTSIDE_MAP_MESSAGE ='Cadastro marcado como fora do Mapa PA e da escala: não recebe regra nem exceção de escala.';
     public const LEADERSHIP_IMPORT_WARNING = 'Linha ignorada: a Liderança tem escala fixa presencial, sem regra a importar.';
     public const ALLOWED_IMPORT_HEADERS = [
         'id', 'employee_id',
@@ -549,8 +551,11 @@ final class OperationalService {
         $this->assertScheduleChangeAllowed($employee, $actorRole);
         $date = self::dateValue($data['exception_date'] ?? null, 'Data');
         $type = (string)($data['exception_type'] ?? '');
-        $allowed = ['remote', 'onsite', 'day_off', 'absence', 'training', 'oncall', 'vacation', 'leave'];
-        if (!in_array($type, $allowed, true)) {
+        // [P7] Tipos de ausencia antigos ficam so na leitura (decisao 2 do F3).
+        if (in_array($type, PresenceEngine::ABSENCE_EXCEPTIONS, true)) {
+            throw new InvalidArgumentException(self::ABSENCE_EXCEPTION_MESSAGE);
+        }
+        if (!in_array($type, ['remote', 'onsite', 'training', 'oncall'], true)) {
             throw new InvalidArgumentException('Tipo de excecao invalido.');
         }
         if ($employee['team'] === 'lideranca' && $type === 'remote') {
