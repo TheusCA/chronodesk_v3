@@ -1019,7 +1019,7 @@ Validação pela IA (frontend): `lint`, `typecheck`, `build` e os 14 `qa:*`; mut
 
 **Pendências anotadas para o F5** (sem mudança no F2B): (1) filtro "ocultar sem escala" na escala gerada (a lista cresce com a P4); (2) rótulos sem acento ("Dias impares", "Ciclo com configuracao invalida"), junto com o L-14; (3) quebra da palavra "Liderança" na coluna Equipe.
 
-### 9.4 F3 — plano aprovado (2026-10-07) e entrega
+### 9.4 F3 — plano aprovado (2026-10-07), entrega e F3 completo (2026-10-08; deploy 11)
 
 **Ponto que define o escopo.** Hoje `portal_absences` não tem caminho de escrita (0 linhas no servidor, Q3 de 2026-10-07), mas o motivo vaza para qualquer perfil por dois caminhos: `portal/absences.php` (SEC-07) e o bloco de ausências do `portal/calendar.php` (L-01). O F3 fecha a leitura antes de criar a escrita.
 
@@ -1198,7 +1198,7 @@ Validação pela IA: `qa:absences-form` (novo): limites comparados com `AbsenceR
 
 **Aprovado em 2026-10-08** (`dcfa24c`) pelo responsável, após teste no navegador com o build ligado ao `AbsenceService` real e ao MySQL local com a 012 (sessão simulada por perfil). Gestor: erro de jornada e de data retroativa junto do campo; vários dias desabilitam "A partir de" e "Intervalo" e voltam a "Dia todo"; lançar, editar e cancelar (com confirmação na linha) funcionaram com o payload certo; o 409 de sobreposição apareceu no formulário e no aviso flutuante; ausência já iniciada e da Liderança mostram o motivo no lugar dos botões; no celular, cartões sem rolagem lateral. Exceção de escala só com os quatro tipos de trabalho, com a nota. Técnico vê só as próprias, sem formulário; `POST` de técnico e de somente leitura recebe 403. **As dez decisões do commit 6 ficam aprovadas como estão.** Pedidos para o commit 7: mensagens de `AbsenceRules` e `AbsenceService` que chegam ao usuário com acento (logs e `audit_log` como estão) e conferir a segunda camada da P9 na tela para somente leitura recebendo linha alheia.
 
-**Commit 7 entregue (2026-10-08; aguardando aprovação):** ajustes pedidos (`d184596`), QA final do F3, documentação e roteiro do deploy 11 (commit de documentação).
+**Commit 7 entregue (2026-10-08; aprovado em 2026-10-08):** ajustes pedidos (`d184596`), QA final do F3, documentação e roteiro do deploy 11 (commit de documentação).
 
 | Item | Como ficou |
 |---|---|
@@ -1209,7 +1209,7 @@ Validação pela IA: `qa:absences-form` (novo): limites comparados com `AbsenceR
 | Inventário LGPD | `DOCUMENTACAO_TECNICA.md` 5.3: controles do F3 (sem `absence_type`/`atestado`, observação só na lista para gestão e próprio, aviso junto do campo, SEC-07 fechado) e o que continua a definir (base legal e retenção); perfis com `ausencias.retroativa` e o alcance de `ausencias.manage` |
 | Deploy 11 | `DEPLOY_LINUX.md`, roteiro "Deploy 11 - Parte B, F3 (ausencias)": pré-requisitos (deploys 1 a 10; conferência da 011), backup, ensaio da 012 nas três variantes (`DADOS`, `VERIFICA`, `PREPARO`) com os números esperados, Q4 antes da 012, 012 e `git pull` no mesmo comando, build do frontend, recarga do PHP-FPM, verificação só com contagens, o que fazer em cada falha e rollback da 012. Remissões nos itens 4, "Rollback" e "Ensaio de Migration" |
 
-**Decisões de implementação do commit 7 a aprovar:**
+**Decisões de implementação do commit 7 (aprovadas em 2026-10-08):**
 
 1. **"Ação de ausência inválida." também acentuada** (`api/portal/absences.php`): não estava entre os dois arquivos pedidos, mas chega ao usuário pela mesma rota.
 2. **P9 da tela numa função de `roles.ts`**, para ser testada por comportamento (o pedido era conferir; o teste antigo era só de estrutura). A regra é a mesma do commit 6.
@@ -1223,6 +1223,20 @@ Validação pela IA: `qa:absences-form` (novo): limites comparados com `AbsenceR
 **Achados sem alteração (arquivos aprovados):** o comando de ensaio no cabeçalho de `migrations/20261007_012_absences.sql` saiu numa linha só, com `--` no lugar das quebras `\` (copiado assim, não roda; o roteiro traz o comando certo); o cabeçalho de `migrations/verificacao/20261007_012_absences_check.sql` diz "fk, indice e checks = 1 cada", mas `checks` devolve **2** depois da 012 (duas constraints); o roteiro usa 2.
 
 Validação pela IA (QA final do F3): bateria PHP completa (`qa-absences`, `qa-auth`, `qa-overtime`, `qa-presence-engine` com 166 verificações, `qa-schedule-history`, `qa-schedule-legacy-output`, `qa-security`, `qa-smoke`, `qa-timezone`), os 15 `qa:*` do frontend, lint, typecheck e build. Mutação: mensagens 4/4 (três arquivos e "posterior a inicial") e 1/1 ponta a ponta; P9 da tela 7/7; página e exceção do commit 6 29/29 (a mutação "P9 aberta" do commit 6 virou as 7 da função). Nada rodou em MySQL real nem no servidor; o roteiro do deploy 11 não foi executado.
+
+**Aprovado em 2026-10-08** (`d184596`, `5fb5349`, `f1b28a2`) pelo responsável: mensagens acentuadas e P9 da tela aprovadas; **as oito decisões do commit 7 ficam aprovadas**. Na decisão 8 vale o que o roteiro diz: com `linhas = 0` o rollback do código é seguro; com ausências gravadas, corrigir para frente, e **qualquer rollback só com aprovação prévia do responsável**.
+
+**Ajustes do roteiro do deploy 11 pedidos na aprovação (commit de documentação):**
+
+| Ajuste | Como ficou |
+|---|---|
+| 1. `git show ... \| mysql ... && git pull` deixava o `pull` rodar se o `git show` falhasse (o `mysql` recebe entrada vazia e sai com 0; o responsável reproduziu) | Passo 5 e os dois comandos do rollback da 012: `git cat-file -e` confere o arquivo antes, e a aplicação roda em `bash -o pipefail -c '...'`; o `merge` (ou a mensagem "rollback da 012 aplicado") só vem se o `git show` e o `mysql` derem certo. Simulado na estação com `git` e `mysql` falsos: só o caso sem falha chega ao `merge`; `git show` com falha, `mysql` com erro e arquivo inexistente param; sem `pipefail`, o caso do `git show` com falha chega ao `merge` (o defeito) |
+| 2. `git pull --ff-only` trocado por `git merge --ff-only origin/<BRANCH>` | O código aplicado é o commit do ensaio, sem novo `fetch` no meio. O passo 3 confere o branch atual (`git rev-parse --abbrev-ref HEAD`; para se não for o `<BRANCH>`) e grava `origin/<BRANCH>` em `f3-commit`; depois do `merge`, o passo 5 confere `HEAD = f3-commit`. O item "a 012 terminou mas o `git merge` falhou" manda resolver sem `fetch` nem `pull`, refazer só o `merge` e parar se `origin/<BRANCH>` tiver mudado |
+| 3. Conferência da 011 com `-p` interativo dentro do `docker exec -i` | `read -rsp`, `MYSQL_PWD` e `unset P`, como o resto do roteiro |
+
+As variáveis `P` e `F3` vão para o `bash -c` por `export` (o `unset P` no fim de cada comando continua).
+
+**F3 completo** (2026-10-08): commits `faaea06` a `d184596`, mais `5fb5349` (QA) e a documentação; **deploy 11 da fila**, pelo roteiro "Deploy 11 - Parte B, F3 (ausencias)" do `DEPLOY_LINUX.md`. Repetir a Q4 logo antes da 012 (passo 4). Próximo lote: **SEC-07b**, antes do F4.
 
 **Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 

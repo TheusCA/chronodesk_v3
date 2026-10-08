@@ -455,6 +455,18 @@ Base da afirmação:
 | **Achados** | Rollback do codigo depois de ausencias gravadas reabre SEC-07/L-01 para essas observacoes (o Calendario do codigo anterior le `reason` para todos). Sem alteracao (arquivos aprovados): comando de ensaio do cabecalho da 012 numa linha so com `--`; cabecalho da verificacao da 012 com "checks = 1" (o valor e 2). `DEPLOY_LINUX.md` ja tinha um nome de host de exemplo em secoes antigas; o texto novo usa "ServerName do vhost". |
 | **Validacao executada pela IA** | Bateria PHP completa, 15 `qa:*` do frontend, lint, typecheck e build. Mutacao: mensagens 4/4 e 1/1 ponta a ponta; P9 7/7; pagina e excecao 29/29. |
 | **Limitacoes declaradas** | Sem MySQL local; o roteiro do deploy 11 nao foi executado (comandos conferidos so por leitura do script de ensaio, da 012, do rollback e da verificacao). |
+| **Validacao humana** | **Aprovado em 2026-10-08**: mensagens acentuadas, P9 da tela e as oito decisoes. Decisao 8: com `linhas = 0` o rollback do codigo e seguro; com ausencias gravadas, corrigir para frente; qualquer rollback so com aprovacao previa do responsavel. Tres ajustes pedidos no roteiro (registro abaixo). |
+
+### Parte B, F3 — ajustes do roteiro do deploy 11 e F3 completo — 2026-10-08
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Tres ajustes pedidos na aprovacao do commit 7, no roteiro "Deploy 11 - Parte B, F3 (ausencias)" do `DEPLOY_LINUX.md`; F3 marcado como completo (deploy 11). |
+| **Branch e commits** | O commit deste registro (so documentacao). Sem push. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md`: (1) passo 5 e rollback da 012 com `git cat-file -e` antes e `bash -o pipefail -c`, para o `merge` so acontecer se o `git show` e o `mysql` derem certo; (2) `git merge --ff-only origin/<BRANCH>` no lugar do `git pull`, conferencia do branch atual e gravacao do `f3-commit` antes do ensaio, `HEAD = f3-commit` depois do `merge`, item de falha do `merge` sem `fetch`; (3) conferencia da 011 com `read -rsp`, `MYSQL_PWD` e `unset P`. Desenho 9.4 e este registro. |
+| **Achado confirmado** | O defeito apontado pelo responsavel (com `git show` falhando, o `mysql` recebe entrada vazia, sai com 0 e o `&&` deixa o codigo entrar sem a 012) tambem existia nos dois comandos do rollback da 012, corrigidos juntos. A falha foi da IA no commit 7: o `&&` foi descrito como garantia sem considerar o status do pipe. |
+| **Validacao executada pela IA** | Simulacao na estacao (`git` e `mysql` falsos, script no scratchpad da sessao): so o caso sem falha chega ao `merge`; `git show` com falha, `mysql` com erro e arquivo inexistente param; sem `pipefail`, o `git show` com falha chega ao `merge`. `P` e `F3` chegam ao `bash -c` pelo `export`. |
+| **Limitacoes declaradas** | Simulacao em Git Bash, nao no servidor; `docker`, `git merge` e o `mysql` real nao foram executados. |
 | **Validacao humana** | Pendente. |
 
 ---

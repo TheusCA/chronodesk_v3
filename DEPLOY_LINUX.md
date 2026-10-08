@@ -1019,8 +1019,9 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   `cycle_sem_pattern = 0` e `undefined_com_pattern = 0`. Rollback: ver
   "Rollback", Parte B, F2B.
 - Deploy que traz o F3 (Parte B, ausencias; deploy 11): siga o roteiro
-  "Deploy 11 - Parte B, F3 (ausencias)", abaixo. A 012 e o `git pull` rodam
-  juntos no passo 5 dele (sem pausa), depois do ensaio e da Q4.
+  "Deploy 11 - Parte B, F3 (ausencias)", abaixo. A 012 e o `git merge` do
+  commit ensaiado rodam juntos no passo 5 dele (sem pausa), depois do ensaio e
+  da Q4; nao use o `git pull` deste item.
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -1138,12 +1139,12 @@ do comando (`unset P`); nunca a escreva no comando nem neste documento.
 e o motor do F2 e do F2B (deploys 9 e 10). Conferencia da 011 (esperado `1`):
 
 ```bash
-docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT COUNT(*) AS migration_011 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'fora_mapa_escala';"
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas -e "SELECT COUNT(*) AS migration_011 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'fora_mapa_escala';"; unset P
 ```
 
-**Janela.** Entre a 012 (passo 5) e o `git pull` (no mesmo comando) a tela de
+**Janela.** Entre a 012 (passo 5) e o `git merge` (no mesmo comando) a tela de
 Ausencias do codigo anterior responde 503 ("A base do portal ainda nao esta
-disponivel"); o resto do portal continua no ar. Entre o `git pull` e o build do
+disponivel"); o resto do portal continua no ar. Entre o `git merge` e o build do
 frontend (passo 6), o navegador ainda carrega a tela anterior: a lista generica
 de ausencias aparece sem a coluna de tipo e a excecao de escala ainda oferece
 folga, falta, ferias e licenca, que o servidor novo recusa com 400 e a mensagem
@@ -1157,12 +1158,17 @@ folga, falta, ferias e licenca, que o servidor novo recusa com 400 e a mensagem
    diretorio (ponto de restauracao do banco).
 
 3. **Ensaio da 012** em banco descartavel, com os arquivos da versao nova (antes
-   do `git pull` eles ainda nao estao na arvore). O `scripts/ensaio-migration.sh`
+   do `git merge` eles ainda nao estao na arvore). O `scripts/ensaio-migration.sh`
    do servidor ja tem `DADOS`, `VERIFICA` e `PREPARO` (deploy 8) e nao mudou no
-   F3:
+   F3. Antes do ensaio, confira que o clone esta no `<BRANCH>` (o `git merge` do
+   passo 5 vale para o branch atual; depois de um rollback o clone fica em
+   *detached HEAD* e a saida e `HEAD`) e grave o commit ensaiado: o passo 5
+   aplica exatamente esse commit, sem novo `fetch` no meio.
 
 ```bash
 cd /var/www/chronodesk
+B=$(sudo git rev-parse --abbrev-ref HEAD); [ "$B" = "<BRANCH>" ] && echo "branch OK: $B" || echo "PARE: o clone esta em $B, nao em <BRANCH>"
+sudo git rev-parse origin/<BRANCH> | sudo tee /var/backups/chronodesk/f3-commit
 E=$(sudo mktemp -d /root/ensaio-f3.XXXXXX); sudo git archive origin/<BRANCH> migrations | sudo tar -x -C "$E"
 M=$E/migrations/20261007_012_absences.sql; R=$E/migrations/rollback/20261007_012_absences_down.sql; V=$E/migrations/verificacao/20261007_012_absences_check.sql
 sudo env DADOS=portal_absences VERIFICA="$V" bash scripts/ensaio-migration.sh f3 "$M" "$R"
@@ -1212,14 +1218,18 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
    - `ausencias` maior que `0`: a 012 vai parar no passo 5 sem alterar nada
      (premissa da tabela vazia). Pare aqui e envie a contagem.
 
-5. **012 e `git pull` em sequencia, sem pausa** (decisao 3 da 012), no mesmo
-   comando: o `pull` so roda se a 012 terminar sem erro. Em seguida, a
-   verificacao estrutural:
+5. **012 e `git merge` em sequencia, sem pausa** (decisao 3 da 012), no mesmo
+   comando. O `git cat-file -e` confere antes que o arquivo existe na versao
+   nova, e a aplicacao roda com `pipefail`: sem ele, se o `git show` falhasse, o
+   `mysql` receberia entrada vazia, sairia com `0` e o `merge` rodaria sem a
+   012. Assim o `merge` so acontece se o `git show` e o `mysql` derem certo. O
+   `merge --ff-only` de `origin/<BRANCH>` aplica o commit do ensaio (sem
+   `fetch`); a linha seguinte confirma. Em seguida, a verificacao estrutural:
 
 ```bash
 cd /var/www/chronodesk
-read -rsp 'Senha root do MySQL: ' P; echo; sudo git show origin/<BRANCH>:migrations/20261007_012_absences.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas && sudo git pull --ff-only; unset P
-sudo git rev-parse HEAD | sudo tee /var/backups/chronodesk/f3-commit
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e origin/<BRANCH>:migrations/20261007_012_absences.sql && bash -o pipefail -c 'sudo git show origin/<BRANCH>:migrations/20261007_012_absences.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && sudo git merge --ff-only origin/<BRANCH>; unset P
+[ "$(sudo git rev-parse HEAD)" = "$(sudo cat /var/backups/chronodesk/f3-commit)" ] && echo "HEAD = commit do ensaio" || echo "PARE: HEAD diferente do commit do ensaio"
 sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261007_012_absences_check.sql; unset P
 ```
@@ -1228,7 +1238,8 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
    `status_tipo = enum('approved','cancelled')`, `fk = 1`, `indice = 1`,
    `checks = 2`, `copia_rollback = 0`, `linhas = 0`; na segunda consulta, tudo
    `0`. O `diff --stat` lista so os arquivos da 012 em `migrations/`. O
-   `f3-commit` guarda a versao do F3, de onde o rollback da 012 le os arquivos.
+   `f3-commit` (passo 3) guarda a versao do F3, de onde o rollback da 012 le os
+   arquivos.
 
 6. **Build do frontend**:
 
@@ -1271,15 +1282,20 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 **Se a verificacao falhar:**
 
 - **A 012 parou com `migration_012 abortada`** (passo 5): nada foi alterado e o
-  `git pull` nao rodou (o `&&` impede). O codigo anterior continua no ar sem
-  janela de 503. Envie a contagem de `portal_absences` (passo 4); o deploy
-  espera a decisao.
-- **A 012 terminou mas o `git pull` falhou** (alteracao local, rede): a tela de
-  Ausencias fica em 503 ate o `pull`. Resolva a causa (item 1 de "Atualizacao
-  de Versao") e rode so `sudo git pull --ff-only` e o resto do roteiro a partir
-  do `f3-commit`; a 012 ja aplicada repete sem mudar nada, se for preciso.
+  `git merge` nao rodou (o `pipefail` e o `&&` impedem). O mesmo vale se o
+  `git cat-file` ou o `git show` falharem: nada e aplicado nem mesclado. O
+  codigo anterior continua no ar sem janela de 503. Envie a contagem de
+  `portal_absences` (passo 4); o deploy espera a decisao.
+- **A 012 terminou mas o `git merge` falhou** (alteracao local na arvore, ou o
+  branch local divergiu e o `--ff-only` recusa): a tela de Ausencias fica em 503
+  ate o `merge`. Resolva a causa (item 1 de "Atualizacao de Versao"), **sem
+  `fetch` e sem `pull`**, rode so `sudo git merge --ff-only origin/<BRANCH>`,
+  confira que `HEAD` e o `f3-commit` (linha seguinte do passo 5) e siga a partir
+  da verificacao do passo 5; a 012 ja aplicada repete sem mudar nada, se for
+  preciso. Se o `origin/<BRANCH>` tiver mudado (alguem rodou `fetch`), pare: o
+  codigo novo nao foi ensaiado.
 - **A 012 falhou por outro motivo, ou a verificacao estrutural do passo 5 nao
-  bate:** se o `git pull` nao rodou, o codigo anterior esta no ar e so a tela
+  bate:** se o `git merge` nao rodou, o codigo anterior esta no ar e so a tela
   de Ausencias responde 503. A 012 confere o `information_schema` antes de cada
   alteracao e pode ser repetida depois de corrigida a causa; para desistir,
   aplique o rollback da 012 (abaixo). Nao rode o build nem a recarga com a
@@ -1306,13 +1322,16 @@ colunas novas):
 
 ```bash
 cd /var/www/chronodesk
-F3=$(sudo cat /var/backups/chronodesk/f3-commit)
-read -rsp 'Senha root do MySQL: ' P; echo; sudo git show "$F3:migrations/rollback/20261007_012_absences_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
-read -rsp 'Senha root do MySQL: ' P; echo; sudo git show "$F3:migrations/verificacao/20261007_012_absences_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas; unset P
+export F3=$(sudo cat /var/backups/chronodesk/f3-commit)
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$F3:migrations/rollback/20261007_012_absences_down.sql" && bash -o pipefail -c 'sudo git show "$F3:migrations/rollback/20261007_012_absences_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 012 aplicado"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$F3:migrations/verificacao/20261007_012_absences_check.sql" && bash -o pipefail -c 'sudo git show "$F3:migrations/verificacao/20261007_012_absences_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P
 ```
 
-Os arquivos sao lidos da versao do F3 (`f3-commit`, passo 5): depois do
-`git checkout` do codigo anterior eles nao estao na arvore. Esperado: `colunas_012 = 0`,
+Os arquivos sao lidos da versao do F3 (`f3-commit`, passo 3): depois do
+`git checkout` do codigo anterior eles nao estao na arvore. O `git cat-file -e`
+e o `pipefail` impedem que uma falha do `git show` passe calada (entrada vazia
+no `mysql`, que sairia com `0`): sem a mensagem "rollback da 012 aplicado", o
+rollback nao rodou. Esperado: `colunas_012 = 0`,
 `absence_type = 1`, `fk = indice = checks = 0`, `copia_rollback = 1`. O rollback
 copia tudo em `portal_absences_bkp_012` (apagar a mao depois de conferir), volta
 `absence_type` a partir da categoria (`folga`, `ferias`; o resto
