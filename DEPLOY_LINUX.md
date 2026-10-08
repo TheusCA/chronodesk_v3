@@ -659,6 +659,11 @@ O que conferir na 011 (revisado com o ensaio em MySQL 8.0.46):
   1o rollback. Esse e o comportamento esperado: um segundo rollback apagaria o
   historico gravado depois do primeiro.
 
+Ensaio da 012 (F3): tres variantes, com `DADOS`, `VERIFICA` e `PREPARO`, e os
+resultados esperados no passo 3 do roteiro "Deploy 11 - Parte B, F3
+(ausencias)". O comando do cabecalho de `migrations/20261007_012_absences.sql`
+saiu numa linha so, com `--` no lugar das quebras: use o do roteiro.
+
 ## Medicao do Polling (F2, P14 e PERF-01)
 
 O F2 acrescenta a presenca de hoje ao `api/status.php`, que toda sessao consulta
@@ -1013,6 +1018,9 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   (9) `migrations/verificacao/20261007_f2b_cycle_check.sql`:
   `cycle_sem_pattern = 0` e `undefined_com_pattern = 0`. Rollback: ver
   "Rollback", Parte B, F2B.
+- Deploy que traz o F3 (Parte B, ausencias; deploy 11): siga o roteiro
+  "Deploy 11 - Parte B, F3 (ausencias)", abaixo. A 012 e o `git pull` rodam
+  juntos no passo 5 dele (sem pausa), depois do ensaio e da Q4.
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -1103,9 +1111,228 @@ Os dois scripts so fazem UPDATE, sao idempotentes e nao apagam historico (o
 rollback da 011 apagaria; nao use para isso). Aplicar o `up` com o codigo
 anterior no ar quebra Calendario, Escala e Relatorios (400).
 
+Parte B, F3: ver "Rollback da 012" e o aviso de LGPD no roteiro "Deploy 11 -
+Parte B, F3 (ausencias)". Com ausencias ja gravadas, o rollback do codigo
+expoe as observacoes no Calendario do codigo anterior.
+
 Lote 4 (SEC-08): depois do rollback do codigo, opcional,
 `migrations/rollback/20261002_017_shift_attachment_team_down.sql` (remove a
 coluna `team`; os anexos voltam a ser visiveis para todos).
+
+### Deploy 11 - Parte B, F3 (ausencias)
+
+Roteiro completo, na ordem. O F3 traz a migration 012 (`portal_absences` no
+formato novo), o servico e o endpoint de ausencias, a ausencia parcial no motor,
+a P7 (excecao de escala so com remoto, presencial, treinamento e plantao) e a
+pagina de Ausencias. Nao traz variavel nova no `.env`, nem mudanca em
+`.htaccess`, vhost ou dependencia do frontend. Desenho:
+`docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 9.4.
+
+Todas as consultas deste roteiro devolvem **so contagens e estrutura**, nunca
+nome nem texto de observacao. Onde aparece `<BRANCH>`, use o branch do deploy;
+onde aparece `<ServerName do vhost>`, o `ServerName` do VirtualHost do portal.
+A senha do root do MySQL e sempre lida sem eco (`read -rsp`) e apagada no fim
+do comando (`unset P`); nunca a escreva no comando nem neste documento.
+
+**Pre-requisitos.** Deploys 1 a 10 no ar, nesta ordem: o F3 usa a 011 (deploy 8)
+e o motor do F2 e do F2B (deploys 9 e 10). Conferencia da 011 (esperado `1`):
+
+```bash
+docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT COUNT(*) AS migration_011 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'fora_mapa_escala';"
+```
+
+**Janela.** Entre a 012 (passo 5) e o `git pull` (no mesmo comando) a tela de
+Ausencias do codigo anterior responde 503 ("A base do portal ainda nao esta
+disponivel"); o resto do portal continua no ar. Entre o `git pull` e o build do
+frontend (passo 6), o navegador ainda carrega a tela anterior: a lista generica
+de ausencias aparece sem a coluna de tipo e a excecao de escala ainda oferece
+folga, falta, ferias e licenca, que o servidor novo recusa com 400 e a mensagem
+"lance na tela Ausencias". Prefira horario de pouco uso.
+
+1. **Ponto de rollback e pre-checagem**: itens 1 e 2 de "Atualizacao de Versao
+   e Rollback" (anota `pre-deploy-commit`, `git status` vazio, `git fetch` e
+   preflight da versao nova com `RESULTADO=0`).
+
+2. **Backup**: item 3 da mesma secao. Esperado `backup concluido`; anote o
+   diretorio (ponto de restauracao do banco).
+
+3. **Ensaio da 012** em banco descartavel, com os arquivos da versao nova (antes
+   do `git pull` eles ainda nao estao na arvore). O `scripts/ensaio-migration.sh`
+   do servidor ja tem `DADOS`, `VERIFICA` e `PREPARO` (deploy 8) e nao mudou no
+   F3:
+
+```bash
+cd /var/www/chronodesk
+E=$(sudo mktemp -d /root/ensaio-f3.XXXXXX); sudo git archive origin/<BRANCH> migrations | sudo tar -x -C "$E"
+M=$E/migrations/20261007_012_absences.sql; R=$E/migrations/rollback/20261007_012_absences_down.sql; V=$E/migrations/verificacao/20261007_012_absences_check.sql
+sudo env DADOS=portal_absences VERIFICA="$V" bash scripts/ensaio-migration.sh f3 "$M" "$R"
+sudo env DADOS=portal_absences PREPARO="$E/migrations/rollback/20261007_012_ensaio_linha_antiga.sql" VERIFICA="$V" bash scripts/ensaio-migration.sh f3_parada "$M" "$R"
+sudo env DADOS=portal_absences PREPARO="$M" VERIFICA="$V" bash scripts/ensaio-migration.sh f3_rollback "$E/migrations/rollback/20261007_012_ensaio_linhas_f3.sql" "$R"
+```
+
+   O que conferir (os mesmos tres ensaios aprovados em 2026-10-07):
+
+   - **(a) `f3`, tabela vazia:** a 1a e a 2a execucao da migration terminam no
+     mesmo estado, com `colunas_012 = 10`, `absence_type = 0`,
+     `status_tipo = enum('approved','cancelled')`, `fk = 1`, `indice = 1`,
+     `checks = 2` (as duas constraints `ck_absence_range` e
+     `ck_absence_period`), `copia_rollback = 0`, e na segunda consulta tudo `0`.
+     O 1o rollback volta a `colunas_012 = 0`, `absence_type = 1`,
+     `fk = indice = checks = 0` e `copia_rollback = 1`. O **2o rollback para**
+     com `rollback_012 abortado: ja existe portal_absences_bkp_012 ...` (FALHOU
+     no ensaio, de proposito) e o estado fica igual ao do 1o.
+   - **(b) `f3_parada`, linha no formato antigo:** a 012 **para nas duas
+     execucoes** com `migration_012 abortada: portal_absences tem linhas ...`,
+     sem alterar nada (`colunas_012 = 0` e `absence_type = 1` em todos os
+     estados).
+   - **(c) `f3_rollback`, rollback com linhas do F3:** depois do arquivo de
+     linhas, `linhas = 4`, `aprovadas = 3`, `canceladas = 1`, `parciais = 2`,
+     `sobreposicoes_aprovadas = 0` (igual na 2a vez); depois do 1o rollback,
+     `colunas_012 = 0`, `absence_type = 1` e `linhas = 4` (a cancelada como
+     `rejected`); o 2o rollback para de proposito.
+
+   Qualquer resultado diferente: **pare o deploy** (nada foi alterado no banco
+   real) e envie as contagens. No fim, apague o diretorio temporario
+   (`sudo rm -r "$E"`; confira antes que `$E` comeca com `/root/ensaio-f3.`).
+
+4. **Q4 imediatamente antes da 012** (decisao 2 do F3: excecoes de ausencia
+   gravadas continuam lidas como ausencia de dia inteiro, so leitura; a 013 foi
+   dispensada com a Q4 de 2026-10-07 em 0) e contagem de `portal_absences`:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT exception_type, COUNT(*) AS n, SUM(exception_date >= CURDATE()) AS futuras FROM portal_schedule_exceptions GROUP BY exception_type; SELECT COUNT(*) AS ausencias FROM portal_absences;"; unset P
+```
+
+   Anote as contagens: a Q4 se repete na verificacao (passo 8).
+   - `day_off`, `absence`, `vacation` ou `leave` com linhas: o deploy pode seguir
+     (decisao 2); essas datas continuam "Ausente (dia todo)", sem categoria, e
+     nao podem mais ser lancadas como excecao. As futuras podem ser relancadas
+     na tela de Ausencias depois do deploy, se a gestao quiser categoria e
+     observacao. Registre o numero no registro do deploy.
+   - `ausencias` maior que `0`: a 012 vai parar no passo 5 sem alterar nada
+     (premissa da tabela vazia). Pare aqui e envie a contagem.
+
+5. **012 e `git pull` em sequencia, sem pausa** (decisao 3 da 012), no mesmo
+   comando: o `pull` so roda se a 012 terminar sem erro. Em seguida, a
+   verificacao estrutural:
+
+```bash
+cd /var/www/chronodesk
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show origin/<BRANCH>:migrations/20261007_012_absences.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas && sudo git pull --ff-only; unset P
+sudo git rev-parse HEAD | sudo tee /var/backups/chronodesk/f3-commit
+sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261007_012_absences_check.sql; unset P
+```
+
+   Esperado: `colunas_012 = 10`, `absence_type = 0`,
+   `status_tipo = enum('approved','cancelled')`, `fk = 1`, `indice = 1`,
+   `checks = 2`, `copia_rollback = 0`, `linhas = 0`; na segunda consulta, tudo
+   `0`. O `diff --stat` lista so os arquivos da 012 em `migrations/`. O
+   `f3-commit` guarda a versao do F3, de onde o rollback da 012 le os arquivos.
+
+6. **Build do frontend**:
+
+```bash
+cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
+```
+
+7. **Recarga do PHP-FPM** (limpa o OPcache; `reload` e gracioso). O F3 nao muda
+   vhost nem `.htaccess`: a recarga do Apache nao e necessaria.
+
+```bash
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+8. **Verificacao pos-deploy, so com contagens.**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: <ServerName do vhost>' http://127.0.0.1/api/health.php
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261007_012_absences_check.sql; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT exception_type, COUNT(*) AS n, SUM(exception_date >= CURDATE()) AS futuras FROM portal_schedule_exceptions GROUP BY exception_type; SELECT action, COUNT(*) AS n FROM audit_log WHERE action LIKE 'ABSENCE\_%' AND timestamp >= CURDATE() GROUP BY action;"; unset P
+```
+
+   Esperado: health `200`; a verificacao da 012 como no passo 5 (com ausencias
+   lancadas depois do deploy, `linhas`, `aprovadas` e `canceladas` crescem, e
+   `orfas`, `periodo_invalido` e `sobreposicoes_aprovadas` continuam `0`); na
+   Q4, os quatro tipos de ausencia com as **mesmas** contagens do passo 4 (a P7
+   nao deixa gravar novos); no `audit_log`, so os eventos `ABSENCE_*` das
+   acoes feitas depois do deploy. Em seguida, a checagem HTTP de
+   `scripts/test-linux.sh` (item 6 de "Atualizacao de Versao").
+
+   Pelo navegador, sem gravar: como gestor, a tela Ausencias abre com filtros,
+   "Nova ausencia" e o aviso de nao registrar informacao de saude junto da
+   observacao; varios dias desabilitam "A partir de" e "Intervalo"; a excecao
+   de escala oferece so os quatro tipos de trabalho, com a nota. Como tecnico:
+   so as proprias ausencias, sem formulario e sem acoes. Opcional, com gravacao
+   (o registro fica, como cancelado): lancar e cancelar uma ausencia futura de
+   um cadastro de teste e conferir no `audit_log` um `ABSENCE_CREATED` e um
+   `ABSENCE_CANCELLED` e, na verificacao da 012, `canceladas = 1`.
+
+**Se a verificacao falhar:**
+
+- **A 012 parou com `migration_012 abortada`** (passo 5): nada foi alterado e o
+  `git pull` nao rodou (o `&&` impede). O codigo anterior continua no ar sem
+  janela de 503. Envie a contagem de `portal_absences` (passo 4); o deploy
+  espera a decisao.
+- **A 012 terminou mas o `git pull` falhou** (alteracao local, rede): a tela de
+  Ausencias fica em 503 ate o `pull`. Resolva a causa (item 1 de "Atualizacao
+  de Versao") e rode so `sudo git pull --ff-only` e o resto do roteiro a partir
+  do `f3-commit`; a 012 ja aplicada repete sem mudar nada, se for preciso.
+- **A 012 falhou por outro motivo, ou a verificacao estrutural do passo 5 nao
+  bate:** se o `git pull` nao rodou, o codigo anterior esta no ar e so a tela
+  de Ausencias responde 503. A 012 confere o `information_schema` antes de cada
+  alteracao e pode ser repetida depois de corrigida a causa; para desistir,
+  aplique o rollback da 012 (abaixo). Nao rode o build nem a recarga com a
+  estrutura incompleta.
+- **Erro 500 ou 503 nas telas, health diferente de `200`, ou falha no build:**
+  rollback do codigo ("Rollback", acima: `git checkout --detach` do
+  `pre-deploy-commit`, build e recarga). A 012 pode ficar aplicada: com ela, o
+  codigo anterior so perde a lista de Ausencias (503); calendario, escala,
+  motor e relatorios nao usam as colunas que sairam. **Antes, confira
+  `linhas` na verificacao da 012:** com `0` (nenhuma ausencia lancada), o
+  rollback do codigo e seguro; com ausencias gravadas, leia o aviso de LGPD
+  abaixo.
+- **`orfas`, `periodo_invalido` ou `sobreposicoes_aprovadas` maior que `0`:** a
+  FK, os CHECKs e a trava do servico deveriam impedir. Nao apague nem altere
+  linha; mantenha o codigo no ar, envie as contagens e trate como incidente.
+- **Q4 com contagem maior nos tipos de ausencia depois do deploy:** a P7 nao
+  esta valendo (OPcache sem recarga ou codigo errado). Confira o `git log -1`
+  e repita o passo 7.
+- Restaurar o backup do passo 2 so como ultimo recurso (secao "Restauracao em
+  Incidente"): perde o que foi gravado depois dele.
+
+**Rollback da 012** (so depois do rollback do codigo; o codigo do F3 le as
+colunas novas):
+
+```bash
+cd /var/www/chronodesk
+F3=$(sudo cat /var/backups/chronodesk/f3-commit)
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show "$F3:migrations/rollback/20261007_012_absences_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; sudo git show "$F3:migrations/verificacao/20261007_012_absences_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas; unset P
+```
+
+Os arquivos sao lidos da versao do F3 (`f3-commit`, passo 5): depois do
+`git checkout` do codigo anterior eles nao estao na arvore. Esperado: `colunas_012 = 0`,
+`absence_type = 1`, `fk = indice = checks = 0`, `copia_rollback = 1`. O rollback
+copia tudo em `portal_absences_bkp_012` (apagar a mao depois de conferir), volta
+`absence_type` a partir da categoria (`folga`, `ferias`; o resto
+`justificada`), troca `cancelled` por `rejected` e tira as colunas novas: no
+codigo anterior, ausencia parcial vira ausencia do dia inteiro. Se ja existir
+`portal_absences_bkp_012` (rollback anterior), **para antes de alterar**: confira
+a copia, renomeie (`RENAME TABLE portal_absences_bkp_012 TO
+portal_absences_bkp_012_<data>`) e repita.
+
+**Atencao antes de qualquer rollback com ausencias gravadas (LGPD, SEC-07 e
+L-01):** o codigo anterior ao F3 mostra a observacao da ausencia (`reason`) a
+**qualquer perfil autenticado** em dois lugares: no Calendario (descricao do
+evento de ausencia, sem filtro de perfil nem de situacao) e na lista de
+Ausencias. O escopo de leitura so entrou no F3. Com a 012 aplicada, a lista
+responde 503, mas o **Calendario continua lendo `reason`**: o rollback so do
+codigo ja expoe as observacoes gravadas depois do deploy; o rollback da 012
+expoe tambem pela lista. Com `linhas = 0` nao ha o que expor. Com ausencias
+gravadas, prefira corrigir para frente com o codigo do F3 no ar; se o rollback
+for inevitavel, o responsavel decide antes como tratar as observacoes (qualquer
+`UPDATE` em producao exige aprovacao explicita e backup verificado).
 
 ## HTTPS Interno
 

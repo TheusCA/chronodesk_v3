@@ -1168,7 +1168,7 @@ Validação pela IA: `qa-schedule-history` (os quatro tipos de ausência para ge
 
 **Aprovado em 2026-10-08** (`393c35c`) pelo responsável, após teste em MySQL 8.0.46 com a 012: `day_off`, `absence`, `vacation` e `leave` dão 400 com a mensagem e não gravam; "folga" continua tipo inválido; `remote` e `oncall` gravam (o segundo sobrescreve); gestor lançando `day_off` na Liderança recebe 403 antes do tipo; a `vacation` antiga gravada continua "Ausente (dia todo)". `qa-presence-engine` com 166 verificações e `qa-schedule-history` OK. O ajuste do marcador (`883f7a4`) foi testado no mesmo dia (às 09:59, "· Ausente 10:00–12:00"; às 13:59, "· Ausente a partir de 14:00") e **aprovado**. **As cinco decisões do commit 5 ficam aprovadas como estão.** Pedido na aprovação: o espaço que faltava em `OUTSIDE_MAP_MESSAGE =` (`OperationalService.php`) entra no commit 6.
 
-**Commit 6 entregue (2026-10-08, `dcfa24c`; aguardando aprovação):** página de Ausências e exceção de escala sem os tipos de ausência.
+**Commit 6 entregue (2026-10-08, `dcfa24c`; aprovado em 2026-10-08):** página de Ausências e exceção de escala sem os tipos de ausência.
 
 | Item | Como ficou |
 |---|---|
@@ -1181,7 +1181,7 @@ Validação pela IA: `qa-schedule-history` (os quatro tipos de ausência para ge
 | Menu | Subtítulo "Folgas, férias, ausências justificadas e compromissos." (sem "atestados") |
 | Ajuste pedido | `OUTSIDE_MAP_MESSAGE = '...'` com o espaço |
 
-**Decisões de implementação do commit 6 a aprovar:**
+**Decisões de implementação do commit 6 (aprovadas em 2026-10-08):**
 
 1. **Celular em cartões.** A tabela (largura mínima de 760 px) escondia categoria, situação e ações atrás da rolagem lateral; abaixo de `md` a lista vira cartões com os mesmos campos e as mesmas regras de P9. Não estava na seção 5.4.
 2. **Jornada do Zod vem de `listar_funcionarios.php`.** Esse endpoint devolve 08:00–17:00 quando o cadastro não tem jornada, e o servidor recusa ausência por horário com jornada inválida: nesse caso raro a tela deixa passar e o 400 do servidor aparece junto do formulário. Sem a jornada na tela (cadastro desativado, na edição), o Zod não confere o horário e o servidor decide.
@@ -1195,6 +1195,34 @@ Validação pela IA: `qa-schedule-history` (os quatro tipos de ausência para ge
 10. **Dois QAs anteriores ajustados:** em `qa-schedule-rules` (F1), "exceção remota não é oferecida para líder" procurava a marcação antiga do `<select>` e passou a procurar o filtro sobre `EXCEPTION_TYPE_OPTIONS` (mesmo comportamento); `qa-forms` passou a aceitar `AbsencesPage.jsx` entre os arquivos com React Hook Form.
 
 Validação pela IA: `qa:absences-form` (novo): limites comparados com `AbsenceRules.php` (categorias e rótulos, 366 dias, 500 caracteres, tipos de período), schema em casos de borda (366/367 dias, 29/02/2028, hoje não é retroativo, 07:59/08:00/16:59/17:00, intervalo até 17:00 e 17:01, jornada invertida, 500 emojis, observação aparada, data inexistente, `atestado`), estrutura da página (RHF, Zod, erro junto de cada campo, aviso ligado ao campo, P9 num único ramo usado pela tabela e pelos cartões, confirmação na linha, permissões pela sessão) e P7 (tipos da tela iguais aos aceitos por `saveScheduleException`; nenhum de `PresenceEngine::ABSENCE_EXCEPTIONS` no formulário). Todos os `qa:*` do frontend, lint, typecheck e build OK; bateria PHP completa OK. Mutação **30/30**. Prints em servidor simulado (dados fictícios, escopo por perfil igual ao do serviço): gestor e técnico, desktop (1366 px) e celular (390 px), incluindo a validação do Zod e o 409 do servidor junto do formulário. **Nada rodou contra o backend real nem em MySQL.**
+
+**Aprovado em 2026-10-08** (`dcfa24c`) pelo responsável, após teste no navegador com o build ligado ao `AbsenceService` real e ao MySQL local com a 012 (sessão simulada por perfil). Gestor: erro de jornada e de data retroativa junto do campo; vários dias desabilitam "A partir de" e "Intervalo" e voltam a "Dia todo"; lançar, editar e cancelar (com confirmação na linha) funcionaram com o payload certo; o 409 de sobreposição apareceu no formulário e no aviso flutuante; ausência já iniciada e da Liderança mostram o motivo no lugar dos botões; no celular, cartões sem rolagem lateral. Exceção de escala só com os quatro tipos de trabalho, com a nota. Técnico vê só as próprias, sem formulário; `POST` de técnico e de somente leitura recebe 403. **As dez decisões do commit 6 ficam aprovadas como estão.** Pedidos para o commit 7: mensagens de `AbsenceRules` e `AbsenceService` que chegam ao usuário com acento (logs e `audit_log` como estão) e conferir a segunda camada da P9 na tela para somente leitura recebendo linha alheia.
+
+**Commit 7 entregue (2026-10-08; aguardando aprovação):** ajustes pedidos (`d184596`), QA final do F3, documentação e roteiro do deploy 11 (commit de documentação).
+
+| Item | Como ficou |
+|---|---|
+| Mensagens acentuadas (`d184596`) | Todas as mensagens de `AbsenceRules` e `AbsenceService` que viram 400 ou 409 ("Já existe ausência aprovada do colaborador...", "Horário só pode ser informado em ausência de um dia...", "A jornada do cadastro é inválida...", "Ausência não encontrada.", "Colaborador não encontrado ou inativo.", "Não é possível trocar o colaborador...", filtros da lista e validações do payload), mais "Ação de ausência inválida." do endpoint. O período da mensagem de conflito é o mesmo texto da auditoria, sem mudança; nenhuma linha de `audit_log` ou `error_log` mudou |
+| Regressão das mensagens | `qa-absences` varre os textos literais dos três arquivos (sem comentários, sem SQL e sem chaves `x=y` da auditoria) e reprova palavra sem acento ("nao", "invalido", "ausencia", "horario"...). `qa-security`: `create` com `atestado` e ação desconhecida pela rota real devolvem 400 com a mensagem acentuada inteira no JSON, sem auditoria |
+| P9 na tela (`d184596`) | A regra sai da página para `canSeeAbsenceDetails(session, item)` em `roles.ts` (sem mudança de comportamento) e ganha teste por perfil: gestão vê tudo; técnico e somente leitura só a própria linha (também com id em texto); linha alheia, sessão sem colaborador, linha sem colaborador, sessão sem o bloco `ci` e perfil desconhecido: nada. A tabela e os cartões usam o mesmo ramo |
+| Contratos | `API_CONTRACTS_FRONTEND.md`: `portal/absences.php` na tabela de contratos em uso (página de Ausências, erros acentuados); limite da lista corrigido para 500 (a lista genérica de 100 não vale mais para ausências) |
+| Inventário LGPD | `DOCUMENTACAO_TECNICA.md` 5.3: controles do F3 (sem `absence_type`/`atestado`, observação só na lista para gestão e próprio, aviso junto do campo, SEC-07 fechado) e o que continua a definir (base legal e retenção); perfis com `ausencias.retroativa` e o alcance de `ausencias.manage` |
+| Deploy 11 | `DEPLOY_LINUX.md`, roteiro "Deploy 11 - Parte B, F3 (ausencias)": pré-requisitos (deploys 1 a 10; conferência da 011), backup, ensaio da 012 nas três variantes (`DADOS`, `VERIFICA`, `PREPARO`) com os números esperados, Q4 antes da 012, 012 e `git pull` no mesmo comando, build do frontend, recarga do PHP-FPM, verificação só com contagens, o que fazer em cada falha e rollback da 012. Remissões nos itens 4, "Rollback" e "Ensaio de Migration" |
+
+**Decisões de implementação do commit 7 a aprovar:**
+
+1. **"Ação de ausência inválida." também acentuada** (`api/portal/absences.php`): não estava entre os dois arquivos pedidos, mas chega ao usuário pela mesma rota.
+2. **P9 da tela numa função de `roles.ts`**, para ser testada por comportamento (o pedido era conferir; o teste antigo era só de estrutura). A regra é a mesma do commit 6.
+3. **Ensaio antes do `git pull` com os arquivos da versão nova** exportados por `git archive origin/<BRANCH> migrations` para um diretório novo em `/root/ensaio-f3.*` (o script do servidor não mudou no F3). Apagar o diretório no fim fica no roteiro, com a conferência do caminho.
+4. **Q4 com a contagem de `portal_absences` junto:** antecipa a parada da 012 (premissa da tabela vazia). Resultado da Q4 com tipos de ausência: o deploy segue (decisão 2) e o número vai para o registro; a mesma Q4 no pós-deploy tem que dar as mesmas contagens (a P7 não deixa crescer).
+5. **012 e `git pull` num só comando, com `&&`:** o `pull` só roda se a 012 terminar sem erro (o cliente `mysql` sai com erro no `SIGNAL`). O commit do F3 fica gravado em `/var/backups/chronodesk/f3-commit`, de onde o rollback da 012 lê os arquivos depois do `git checkout` do código anterior.
+6. **Sem recarga do Apache:** o F3 não muda vhost, `.htaccess` nem `.env` (conferido no `git diff` do F3).
+7. **Pós-deploy com gravação só opcional:** lançar e cancelar uma ausência futura de um cadastro de teste (o registro fica como cancelado; nada é apagado).
+8. **Rollback com ausências gravadas (achado):** o código anterior ao F3 mostra a observação (`reason`) a qualquer perfil no Calendário (lê a coluna sem filtro de perfil nem de situação), e a lista de Ausências também, se a 012 for revertida. O roteiro recomenda corrigir para frente e deixa a decisão sobre as observações com o responsável; com `linhas = 0`, o rollback do código é seguro.
+
+**Achados sem alteração (arquivos aprovados):** o comando de ensaio no cabeçalho de `migrations/20261007_012_absences.sql` saiu numa linha só, com `--` no lugar das quebras `\` (copiado assim, não roda; o roteiro traz o comando certo); o cabeçalho de `migrations/verificacao/20261007_012_absences_check.sql` diz "fk, indice e checks = 1 cada", mas `checks` devolve **2** depois da 012 (duas constraints); o roteiro usa 2.
+
+Validação pela IA (QA final do F3): bateria PHP completa (`qa-absences`, `qa-auth`, `qa-overtime`, `qa-presence-engine` com 166 verificações, `qa-schedule-history`, `qa-schedule-legacy-output`, `qa-security`, `qa-smoke`, `qa-timezone`), os 15 `qa:*` do frontend, lint, typecheck e build. Mutação: mensagens 4/4 (três arquivos e "posterior a inicial") e 1/1 ponta a ponta; P9 da tela 7/7; página e exceção do commit 6 29/29 (a mutação "P9 aberta" do commit 6 virou as 7 da função). Nada rodou em MySQL real nem no servidor; o roteiro do deploy 11 não foi executado.
 
 **Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 

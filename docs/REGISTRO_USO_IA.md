@@ -442,6 +442,19 @@ Base da afirmação:
 | **Decisoes de implementacao** | Dez, na secao 9.4: cartoes no celular; jornada do Zod vinda de `listar_funcionarios.php`; acoes da linha antecipam o 403; P9 tambem na tela; mensagem do servidor junto do formulario e no aviso flutuante; edicao sem troca de tecnico; observacao sem `maxLength`; lancamento so para cadastro ativo; data de hoje do navegador; ajuste de duas assercoes de QA anteriores. |
 | **Validacao executada pela IA** | `qa:absences-form` (limites comparados com `AbsenceRules.php` e com os tipos de `saveScheduleException`; casos de borda do schema; estrutura da pagina), todos os `qa:*` do frontend, lint, typecheck e build; bateria PHP completa. Mutacao **30/30**. Prints de gestor e tecnico, desktop e celular, com servidor simulado e dados ficticios (Chrome headless pelo protocolo DevTools, sem dependencia nova). |
 | **Limitacoes declaradas** | Sem MySQL local nem backend real: a tela nao foi exercida contra `portal/absences.php` de verdade; os prints usam respostas simuladas no formato do servico. |
+| **Validacao humana** | **Aprovado em 2026-10-08** apos teste no navegador com o build ligado ao `AbsenceService` real e ao MySQL local com a 012: validacoes junto do campo, P5 na tela, lancar/editar/cancelar com o payload certo, 409 no formulario e no aviso, motivo no lugar dos botoes, cartoes no celular, excecao com os quatro tipos, tecnico so com as proprias e 403 no `POST` de tecnico e somente leitura. Dez decisoes aprovadas como estao. |
+
+### Parte B, F3 — commit 7: mensagens acentuadas, P9 da tela, QA final e roteiro do deploy 11 — 2026-10-08
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Ajustes pedidos na aprovacao do commit 6 (mensagens ao usuario com acento; segunda camada da P9 para somente leitura), QA final do F3, contratos, inventario LGPD e roteiro do deploy 11 (desenho, secao 9.4). |
+| **Branch e commits** | `d184596` (mensagens e P9), `5fb5349` (QA ponta a ponta no `qa-security`) e o commit deste registro (documentacao e `DEPLOY_LINUX.md`). Sem push. |
+| **O que a IA alterou** | `services/AbsenceRules.php`, `services/AbsenceService.php`, `api/portal/absences.php` (so textos de mensagem), `frontend/src/lib/roles.ts` (`canSeeAbsenceDetails`), `AbsencesPage.jsx`, `qa-absences`, `qa-security`, `qa-absences-form`; `DEPLOY_LINUX.md`, `docs/API_CONTRACTS_FRONTEND.md`, `docs/DOCUMENTACAO_TECNICA.md`, desenho 9.4. |
+| **Decisoes de implementacao** | Oito, na secao 9.4: mensagem do endpoint tambem acentuada; P9 da tela numa funcao testavel; ensaio com arquivos exportados da versao nova; Q4 com a contagem de `portal_absences`; 012 e `git pull` no mesmo comando com `&&` e `f3-commit`; sem recarga do Apache; gravacao opcional no pos-deploy; rollback com ausencias gravadas expoe a observacao no Calendario do codigo anterior (decisao do responsavel). |
+| **Achados** | Rollback do codigo depois de ausencias gravadas reabre SEC-07/L-01 para essas observacoes (o Calendario do codigo anterior le `reason` para todos). Sem alteracao (arquivos aprovados): comando de ensaio do cabecalho da 012 numa linha so com `--`; cabecalho da verificacao da 012 com "checks = 1" (o valor e 2). `DEPLOY_LINUX.md` ja tinha um nome de host de exemplo em secoes antigas; o texto novo usa "ServerName do vhost". |
+| **Validacao executada pela IA** | Bateria PHP completa, 15 `qa:*` do frontend, lint, typecheck e build. Mutacao: mensagens 4/4 e 1/1 ponta a ponta; P9 7/7; pagina e excecao 29/29. |
+| **Limitacoes declaradas** | Sem MySQL local; o roteiro do deploy 11 nao foi executado (comandos conferidos so por leitura do script de ensaio, da 012, do rollback e da verificacao). |
 | **Validacao humana** | Pendente. |
 
 ---
