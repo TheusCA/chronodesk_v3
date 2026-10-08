@@ -57,7 +57,7 @@ export const pageMetadata: PageMetadata = {
   '/tecnicos': ['Técnicos', 'Diretório operacional da equipe.'],
   '/escala-turnos': ['Escalas de Sábado', 'Publicações da escala de sábado disponíveis para consulta da equipe.'],
   '/escala-presencial': ['Escala presencial', 'Presença por data, equipe e colaborador.'],
-  '/ausencias': ['Ausências', 'Férias, atestados, treinamentos e folgas.'],
+  '/ausencias': ['Ausências', 'Folgas, férias, ausências justificadas e compromissos.'],
   '/horas-extras': ['Horas extras', 'Solicitações e aprovações de horas adicionais.'],
   '/correcao-ponto': ['Correção de ponto', 'Solicitações de ajuste de marcação.'],
   '/avisos': ['Avisos', 'Comunicados operacionais e de segurança.'],

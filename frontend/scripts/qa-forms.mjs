@@ -63,7 +63,8 @@ const reportsPageSource = operationalSource.match(/export function OperationalRe
 const rhfFiles = sourceFiles.filter((path) => readFileSync(path, 'utf8').includes('react-hook-form'))
 assert.deepEqual(
   rhfFiles.map((path) => relative(frontendRoot, path).replaceAll('\\', '/')),
-  ['src/pages/AdminPage.jsx', 'src/pages/OperationalPages.jsx'],
+  // F3 (commit 6): pagina de Ausencias aprovada em RHF + Zod.
+  ['src/pages/AbsencesPage.jsx', 'src/pages/AdminPage.jsx', 'src/pages/OperationalPages.jsx'],
   'react-hook-form deve continuar restrito aos formularios aprovados',
 )
 

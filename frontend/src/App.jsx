@@ -12,6 +12,7 @@ import { hasPermission } from './lib/roles'
 
 const lazyPage = (loader, exportName) => lazy(() => loader().then((module) => ({ default: module[exportName] })))
 
+const AbsencesPage = lazyPage(() => import('./pages/AbsencesPage'), 'AbsencesPage')
 const AdminPage = lazyPage(() => import('./pages/AdminPage'), 'AdminPage')
 const DashboardPage = lazyPage(() => import('./pages/DashboardPage'), 'DashboardPage')
 const DocumentsPage = lazyPage(() => import('./pages/DocumentsPage'), 'DocumentsPage')
@@ -180,6 +181,8 @@ export default function App() {
     content = <CalendarPage session={session} notify={notify} />
   } else if (router.path === '/escala-presencial') {
     content = <SchedulePage session={session} notify={notify} />
+  } else if (router.path === '/ausencias') {
+    content = <AbsencesPage session={session} notify={notify} />
   } else if (router.path === '/mapa-pa') {
     content = <PaMapPage notify={notify} />
   } else if (router.path === '/escala-turnos') {

@@ -41,6 +41,14 @@ const SCHEDULE_RULE_OPTIONS = [
   { value: 'cycle', label: 'Ciclo presencial/remoto' },
   { value: 'undefined', label: 'Sem escala definida' },
 ]
+// [P7, F3] Exceção de escala só para trabalho; folga, falta, férias e
+// afastamento vão para a tela Ausências (o servidor recusa com 400).
+const EXCEPTION_TYPE_OPTIONS = [
+  { value: 'remote', label: 'Remoto excepcional' },
+  { value: 'onsite', label: 'Presencial excepcional' },
+  { value: 'training', label: 'Treinamento' },
+  { value: 'oncall', label: 'Plantão' },
+]
 const SCHEDULE_RULE_VALUES = new Set(SCHEDULE_RULE_OPTIONS.map((option) => option.value))
 const WEEKDAY_OPTIONS = [
   { value: 'mon', label: 'Segunda', short: 'seg' },
@@ -222,13 +230,14 @@ function useEmployees() {
   return useResource('listar_funcionarios.php')
 }
 
-async function submit(action, refresh, notify, successMessage = ACTION_FEEDBACK.changesSaved, onSuccess) {
+async function submit(action, refresh, notify, successMessage = ACTION_FEEDBACK.changesSaved, onSuccess, onError) {
   return runAction({
     action,
     refresh,
     notify,
     successMessage,
     onSuccess,
+    onError,
   })
 }
 
@@ -367,6 +376,7 @@ export function SchedulePage({ session, notify }) {
     { enabled: historyEmployee !== null },
   )
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
+  const [exceptionError, setExceptionError] = useState('')
   // Fora do Mapa PA e da escala: sem regra nem exceção (P12).
   const allEmployees = (employees.data?.funcionarios || []).filter((employee) => employee.fora_mapa_escala !== true)
   // Regra: só N1 e N2. Exceção de líder: só admin (L9), nunca remota.
@@ -501,12 +511,15 @@ export function SchedulePage({ session, notify }) {
 
   async function saveException(event) {
     event.preventDefault()
+    setExceptionError('')
     await submit(
       () => post('portal/schedules.php', { action: 'exception', ...exception, employee_id: Number(exception.employee_id) }),
       resource.refresh,
       notify,
       ACTION_FEEDBACK.scheduleExceptionSaved,
       () => setException({ employee_id: '', exception_date: exception.exception_date || today, exception_type: 'remote', note: '' }),
+      // P7: a recusa do servidor (por exemplo, o 400 de tipo de ausência) fica junto do formulário.
+      (error) => setExceptionError(error instanceof Error ? error.message : ''),
     )
   }
 
@@ -679,9 +692,11 @@ export function SchedulePage({ session, notify }) {
             }} /></label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="label">Data<input className="field mt-2" required type="date" value={exception.exception_date} onChange={(event) => setException({ ...exception, exception_date: event.target.value })} /></label>
-              <label className="label">Tipo<select className="field mt-2" value={exception.exception_type} onChange={(event) => setException({ ...exception, exception_type: event.target.value })}>{!exceptionIsLeadership && <option value="remote">Remoto excepcional</option>}<option value="onsite">Presencial excepcional</option><option value="day_off">Folga</option><option value="absence">Ausência</option><option value="training">Treinamento</option><option value="oncall">Plantão</option><option value="vacation">Férias</option><option value="leave">Licença</option></select></label>
+              <label className="label">Tipo<select className="field mt-2" value={exception.exception_type} onChange={(event) => setException({ ...exception, exception_type: event.target.value })}>{EXCEPTION_TYPE_OPTIONS.filter((option) => !(exceptionIsLeadership && option.value === 'remote')).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             </div>
+            <p className="text-xs text-slate-500">Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências.</p>
             <label className="label">Observação<input className="field mt-2" maxLength="1000" value={exception.note} onChange={(event) => setException({ ...exception, note: event.target.value })} /></label>
+            {exceptionError && <InlineAlert tone="danger" title="Exceção não salva">{exceptionError}</InlineAlert>}
             <button className="btn-primary" type="submit">Salvar exceção</button>
           </form>
           <section className="card space-y-4 xl:col-span-2">

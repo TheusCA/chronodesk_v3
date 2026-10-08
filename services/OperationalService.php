@@ -32,7 +32,7 @@ final class OperationalService {
     public const LEADERSHIP_REMOTE_MESSAGE = 'A Liderança tem escala sempre presencial: exceção remota não é aceita.';
     /** [P7] Ausencia nao e excecao de escala (F3; desenho, secao 9.4). */
     public const ABSENCE_EXCEPTION_MESSAGE = 'Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências.';
-    public const OUTSIDE_MAP_MESSAGE ='Cadastro marcado como fora do Mapa PA e da escala: não recebe regra nem exceção de escala.';
+    public const OUTSIDE_MAP_MESSAGE = 'Cadastro marcado como fora do Mapa PA e da escala: não recebe regra nem exceção de escala.';
     public const LEADERSHIP_IMPORT_WARNING = 'Linha ignorada: a Liderança tem escala fixa presencial, sem regra a importar.';
     public const ALLOWED_IMPORT_HEADERS = [
         'id', 'employee_id',
