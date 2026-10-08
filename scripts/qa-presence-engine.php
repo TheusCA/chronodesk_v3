@@ -479,6 +479,10 @@ assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial)'], si
 assert_same(['ausente', 'ausencia', 'Ausente 10:00–12:00'], situation(employee(), "{$monday} 10:30", $onsiteRule, null, [$tenToNoon], ['em_pausa' => true, 'motivo' => 'Café']), 'parcial ativa vence pausa');
 assert_same(['ausente', 'ausencia', 'Ausente (dia todo)'], situation(employee(), "{$monday} 10:30", $onsiteRule, null, [$tenToNoon, ['origem' => 'excecao', 'period_type' => 'full_day']]), 'dia inteiro vence parcial, em qualquer ordem');
 assert_same(['ausente', 'ausencia', 'Ausente desde 09:00'], situation(employee(), "{$monday} 10:30", $onsiteRule, null, [['start_time' => '09:00'] + $fromTwo, $tenToNoon]), 'duas parciais ativas: vale a primeira (por id)');
+// Marcador: a parcial de menor inicio que ainda vai comecar, nao a de menor id; empate pelo id.
+assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial) · Ausente 10:00–12:00'], situation(employee(), "{$monday} 09:59", $onsiteRule, null, [$fromTwo, $tenToNoon]), 'marcador: proxima no horario, mesmo com id maior');
+assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial) · Ausente a partir de 14:00'], situation(employee(), "{$monday} 13:30", $onsiteRule, null, [$fromTwo, $tenToNoon]), 'marcador: intervalo encerrado da lugar a proxima');
+assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial) · Ausente a partir de 10:00'], situation(employee(), "{$monday} 09:59", $onsiteRule, null, [['start_time' => '10:00'] + $fromTwo, $tenToNoon]), 'marcador: mesmo inicio, vale a de menor id');
 // Fim de semana e cadastro sem jornada.
 assert_same(['ausente', 'ausencia', 'Ausente 10:00–12:00'], situation(employee(), '2026-10-10 10:30', $onsiteRule, null, [$tenToNoon]), 'parcial ativa vence fim de semana');
 assert_same(['fora_expediente', 'expediente', 'Fim de semana'], situation(employee(), '2026-10-10 09:00', $onsiteRule, null, [$tenToNoon]), 'parcial futura no fim de semana: fim de semana, sem marcador');
@@ -487,6 +491,8 @@ assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial)'], si
 // Outra data: parcial e so marcador; dia inteiro continua ausente.
 $day = PresenceEngine::dayPresence(employee(), '2026-10-06', $onsiteRule, null, [$fromTwo]);
 assert_same(['presencial', 'regra_escala', 'Presencial (sempre presencial) · Ausente a partir de 14:00', false], [$day['situacao'], $day['origem'], $day['detalhe'], $day['ausencias'][0]['ativa']], 'outra data: parcial como marcador');
+$day = PresenceEngine::dayPresence(employee(), '2026-10-06', $onsiteRule, null, [$fromTwo, $tenToNoon]);
+assert_same(['Presencial (sempre presencial) · Ausente 10:00–12:00', ['14:00', '10:00']], [$day['detalhe'], array_column($day['ausencias'], 'start_time')], 'outra data: marcador de menor inicio; ausencias[] na ordem por id');
 $day = PresenceEngine::dayPresence(employee(), '2026-10-06', $onsiteRule, null, [$tenToNoon, ['origem' => 'ausencia', 'period_type' => 'full_day', 'category' => 'ferias']]);
 assert_same(['ausente', 'Ausente (dia todo)', [false, true], 'ferias'], [$day['situacao'], $day['detalhe'], array_column($day['ausencias'], 'ativa'), $day['ausencias'][1]['category']], 'outra data: dia inteiro ausente; categoria so quando veio');
 // Contadores: parcial ativa conta como ausente; futura, como disponivel.

@@ -359,20 +359,29 @@ final class PresenceEngine {
     }
 
     /**
-     * Marcador da primeira ausencia parcial que ainda vai comecar ($time nulo
-     * em outra data: qualquer parcial do dia).
+     * Marcador da proxima ausencia parcial: a de menor inicio que ainda vai
+     * comecar ($time nulo em outra data: a de menor inicio do dia). Empate
+     * pela ordem de entrada (id), por isso so troca com inicio estritamente menor.
      */
     private static function partialMarker(array $absences, ?string $time): string {
+        $next = null;
+        $nextStart = null;
         foreach ($absences as $absence) {
             $start = self::time($absence['start_time'] ?? null);
             if (self::isFullDay($absence) || $start === null || ($time !== null && $start <= $time)) {
                 continue;
             }
-            return $absence['period_type'] === 'from_time'
-                ? ' · Ausente a partir de ' . $start
-                : ' · Ausente ' . $start . '–' . self::time($absence['end_time'] ?? null);
+            if ($nextStart === null || $start < $nextStart) {
+                $next = $absence;
+                $nextStart = $start;
+            }
         }
-        return '';
+        if ($next === null) {
+            return '';
+        }
+        return $next['period_type'] === 'from_time'
+            ? ' · Ausente a partir de ' . $nextStart
+            : ' · Ausente ' . $nextStart . '–' . self::time($next['end_time'] ?? null);
     }
 
     private static function isoWeekday(string $date): int {

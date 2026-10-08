@@ -407,6 +407,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL local. |
 | **Validacao humana** | **Aprovado em 2026-10-07** apos teste em MySQL 8.0.46 com a 012: permissoes, sobreposicao (dia inteiro x parcial; "a partir de" x intervalos; relancar depois de cancelar), jornada e `atestado` recusados, lista do tecnico, duas gravacoes simultaneas (a segunda recebeu 409), auditoria sem a observacao. Sete decisoes aprovadas. |
 
+### Parte B, F3 — commit 4: ausencia parcial no motor e ajuste do marcador — 2026-10-07 e 2026-10-08
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Ausencia parcial ("a partir de" e "intervalo") no motor, no `status.php`, no `presence.php` (categoria pela P9) e na tela Escala (desenho, secoes 4.3, 4.4 e 9.4). |
+| **Branch e commits** | `f89c443` (codigo e testes), `27997c3` (entrega na 9.4) e o commit deste registro (ajuste do marcador). Sem push. |
+| **O que a IA alterou** | `f89c443`: `services/PresenceEngine.php`, repositorio e servico de presenca, `api/portal/presence.php`, tela Escala, calculo antigo (decisao 7), `API_CONTRACTS_FRONTEND.md`, QAs. Ajuste: `PresenceEngine::partialMarker` e `qa-presence-engine`. |
+| **Decisoes de implementacao** | Seis, na secao 9.4: marcador acrescentado ao detalhe; "a partir de" sem jornada valida ate o fim do dia; horario invalido nunca ativa nem marca; fim de semana (ativa vence, futura sem marcador); intervalo encerrado sem marcador; `ausencias[]` com horario so nas parciais e categoria so quando visivel. |
+| **Ajuste pedido na aprovacao (2026-10-08)** | O marcador pegava a primeira parcial pela ordem de id, nao a proxima no horario ("a partir de 14:00" de id menor e 10:00–12:00 de id maior: as 09:59 mostrava 14:00). Agora: a de menor inicio que ainda vai comecar (em outra data, a de menor inicio do dia), desempate por id. Ordem de `ausencias[]` e "a primeira vale" da ausencia ativa sem mudanca. |
+| **Validacao executada pela IA** | Entrega: `qa-presence-engine` 162 verificacoes, `qa-schedule-history`, `qa-schedule-legacy-output`; mutacao 18/20 (dois equivalentes). Ajuste: 166 verificacoes (hoje as 09:59 e outra data com o id da parcial das 14:00 menor; 13:30 com o intervalo encerrado; empate pelo id); mutacao **7/7**, inclusive a volta a "primeira por id" separada para hoje e para outra data; `qa-schedule-history`, `qa-schedule-legacy-output`, `qa-absences`, `qa-security` e `qa-smoke` OK. |
+| **Limitacoes declaradas** | Sem MySQL local; o ajuste nao rodou em MySQL real. |
+| **Validacao humana** | **Aprovado em 2026-10-08** apos teste em MySQL 8.0.46 com a 012 (162 verificacoes): bordas de horario, precedencia sobre pausa e almoco, dia inteiro com parcial, parcial de sabado, categoria por perfil e `status.php` sem categoria; observacao nao vazou. Seis decisoes aprovadas como estao; ajuste do marcador pedido antes do commit 5. |
+
 ---
 
 ## 5. Responsabilidade
