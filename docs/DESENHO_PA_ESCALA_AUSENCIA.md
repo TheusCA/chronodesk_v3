@@ -1146,7 +1146,7 @@ Validação pela IA: `qa-presence-engine` com **162 verificações** (36 novas: 
 
 **Ajuste pedido na aprovação (2026-10-08):** o marcador pegava a primeira parcial pela ordem de id, não a próxima no horário. Caso real: "a partir de 14:00" com id menor e intervalo 10:00–12:00 com id maior no mesmo dia; às 09:59 o detalhe mostrava " · Ausente a partir de 14:00", quando o próximo evento é o das 10:00. Agora o marcador é a parcial de menor início que ainda vai começar (início > agora; em outra data, a de menor início do dia), com desempate por id. **Não mudam:** a ordem de `ausencias[]` na resposta (por id) e a regra "a primeira vale" da ausência ativa. `qa-presence-engine` com **166 verificações** (4 novas: hoje às 09:59 e outra data com o id da parcial das 14:00 menor que o da parcial das 10:00; às 13:30, com o intervalo já encerrado, o marcador passa às 14:00; mesmo início, vale a de menor id). Mutação **7/7**: volta à primeira por id (morta pelos dois casos, também separadamente: só hoje e só outra data), maior início, empate pelo último, sem o filtro do horário passado, fim do intervalo lido da parcial errada. Nada rodou em MySQL real.
 
-**Commit 5 entregue (2026-10-08, `393c35c`; aguardando aprovação):** P7 no validador da exceção de escala (`OperationalService::saveScheduleException`, único caminho de gravação, via `schedules.php` `action=exception`).
+**Commit 5 entregue (2026-10-08, `393c35c`; aprovado em 2026-10-08):** P7 no validador da exceção de escala (`OperationalService::saveScheduleException`, único caminho de gravação, via `schedules.php` `action=exception`).
 
 | Item | Como ficou |
 |---|---|
@@ -1156,7 +1156,7 @@ Validação pela IA: `qa-presence-engine` com **162 verificações** (36 novas: 
 | Ordem | Cadastro → autorização (L9) → data → tipo → Liderança remota (409) → trava → gravação; a recusa não trava nem grava |
 | Leitura | Sem mudança: exceções desses tipos já gravadas continuam ausência de dia inteiro no motor, no Mapa PA e no cálculo antigo (decisão 2) |
 
-**Decisões de implementação do commit 5 a aprovar:**
+**Decisões de implementação do commit 5 (aprovadas em 2026-10-08):**
 
 1. **Autorização antes do tipo:** gestor lançando folga para cadastro da Liderança recebe 403 (L9), não 400, como na decisão 4 do commit 3.
 2. **Lista de tipos de ausência vem de `PresenceEngine::ABSENCE_EXCEPTIONS`** (mesma lista que o motor lê como ausência), para leitura e recusa não divergirem.
@@ -1165,6 +1165,36 @@ Validação pela IA: `qa-presence-engine` com **162 verificações** (36 novas: 
 5. **Janela entre o commit 5 e o 6:** a tela de exceção ainda oferece os tipos de ausência até o commit 6 (frontend) e, se escolhidos, recebe o 400 com a mensagem. Os dois vão no mesmo deploy (11).
 
 Validação pela IA: `qa-schedule-history` (os quatro tipos de ausência para gestor e admin com 400, sem gravar nem travar; L9 antes do tipo; tipo desconhecido; os quatro tipos de trabalho gravados) e `qa-security` (ponta a ponta: gestor com `day_off` pela rota real recebe 400 com a mensagem). Bateria PHP completa OK. Mutação **10/10** (sem a checagem, lista antiga de volta, tipo antes da autorização, cada tipo de trabalho removido, 409 em vez de 400, mensagem sem a tela, só `day_off`). Nada rodou em MySQL real.
+
+**Aprovado em 2026-10-08** (`393c35c`) pelo responsável, após teste em MySQL 8.0.46 com a 012: `day_off`, `absence`, `vacation` e `leave` dão 400 com a mensagem e não gravam; "folga" continua tipo inválido; `remote` e `oncall` gravam (o segundo sobrescreve); gestor lançando `day_off` na Liderança recebe 403 antes do tipo; a `vacation` antiga gravada continua "Ausente (dia todo)". `qa-presence-engine` com 166 verificações e `qa-schedule-history` OK. O ajuste do marcador (`883f7a4`) foi testado no mesmo dia (às 09:59, "· Ausente 10:00–12:00"; às 13:59, "· Ausente a partir de 14:00") e **aprovado**. **As cinco decisões do commit 5 ficam aprovadas como estão.** Pedido na aprovação: o espaço que faltava em `OUTSIDE_MAP_MESSAGE =` (`OperationalService.php`) entra no commit 6.
+
+**Commit 6 entregue (2026-10-08, `dcfa24c`; aguardando aprovação):** página de Ausências e exceção de escala sem os tipos de ausência.
+
+| Item | Como ficou |
+|---|---|
+| Página | `frontend/src/pages/AbsencesPage.jsx` (carregada sob demanda), no lugar da tabela genérica de `/ausencias`. Filtros: período (padrão: mês corrente, como o servidor), equipe e técnico (só gestão) e situação (Ativas, Canceladas, Todas). "Nova ausência" abre o formulário; "Editar" abre com os dados da linha |
+| Formulário | React Hook Form + `absenceFormSchema` (Zod, `formSchemas.ts`), erro junto de cada campo. Limites do `AbsenceRules`: fim igual ou depois do início; até 366 dias; horário só com um dia (P5: "A partir de" e "Intervalo" desabilitados com vários dias, que voltam a "Dia todo"); intervalo com fim depois do início; horário dentro da jornada do técnico (P1); início anterior a hoje só com `ausencias.retroativa` (data mínima no campo para os demais e marca "Lançamento retroativo (auditado)" para Liderança e admin); categoria da lista; observação até 500 caracteres |
+| Aviso | "⚠ Não registre informação médica ou de saúde neste campo." fixo logo abaixo da observação, ligado ao campo por `aria-describedby`, com contador de caracteres |
+| P9 | Categoria e observação só para a gestão (gestor, Liderança, admin) e para o próprio técnico; para os demais, "Ausência". Técnico e somente leitura: só a lista (o servidor já devolve só as próprias), sem formulário, sem ações e sem os filtros de equipe e técnico |
+| Ações | Editar e Cancelar; cancelar pede confirmação na própria linha (sem `window.confirm`). Recusa do servidor (400, 403, 409) também junto do formulário |
+| Exceção de escala (P7) | Só Remoto excepcional, Presencial excepcional, Treinamento e Plantão (Liderança continua sem remoto), com a nota "Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências". Se o 400 do servidor chegar, a mensagem aparece junto do formulário (além do aviso flutuante) |
+| Menu | Subtítulo "Folgas, férias, ausências justificadas e compromissos." (sem "atestados") |
+| Ajuste pedido | `OUTSIDE_MAP_MESSAGE = '...'` com o espaço |
+
+**Decisões de implementação do commit 6 a aprovar:**
+
+1. **Celular em cartões.** A tabela (largura mínima de 760 px) escondia categoria, situação e ações atrás da rolagem lateral; abaixo de `md` a lista vira cartões com os mesmos campos e as mesmas regras de P9. Não estava na seção 5.4.
+2. **Jornada do Zod vem de `listar_funcionarios.php`.** Esse endpoint devolve 08:00–17:00 quando o cadastro não tem jornada, e o servidor recusa ausência por horário com jornada inválida: nesse caso raro a tela deixa passar e o 400 do servidor aparece junto do formulário. Sem a jornada na tela (cadastro desativado, na edição), o Zod não confere o horário e o servidor decide.
+3. **Ações da linha antecipam o 403:** ausência já iniciada (início até hoje) sem `ausencias.retroativa` e ausência da Liderança sem `escalas.lideranca` mostram o motivo em vez dos botões. Cadastro N1/N2 com perfil de acesso Liderança ou admin o gestor não enxerga (a lista de funcionários não devolve o perfil ao gestor): o 403 vem do servidor e aparece junto do formulário.
+4. **P9 também na tela**, além do servidor: categoria e observação só quando quem vê é gestão ou o próprio (`ci.funcionario_id`), mesmo que a resposta traga a linha.
+5. **Mensagem do servidor duas vezes** (junto do formulário e no aviso flutuante do `runAction`), de propósito: o aviso some em 5 s; o texto do 409 com o período em conflito fica no formulário até a próxima tentativa.
+6. **Edição não troca o técnico:** o campo vira texto com a orientação "cancele e lance de novo" (o servidor recusa a troca).
+7. **Observação sem `maxLength` no navegador:** o atributo conta unidades UTF-16 e recusaria antes do servidor texto com emoji; o contador e o Zod contam pontos de código, como o `AbsenceRules`.
+8. **Lançamento só para cadastro ativo**; cadastro fora do Mapa continua na lista (seção 0.6).
+9. **Data de hoje da tela é a do navegador** (`localDate`); o servidor usa `America/Sao_Paulo`. Estação em outro fuso pode ver a data mínima diferente; o servidor decide.
+10. **Dois QAs anteriores ajustados:** em `qa-schedule-rules` (F1), "exceção remota não é oferecida para líder" procurava a marcação antiga do `<select>` e passou a procurar o filtro sobre `EXCEPTION_TYPE_OPTIONS` (mesmo comportamento); `qa-forms` passou a aceitar `AbsencesPage.jsx` entre os arquivos com React Hook Form.
+
+Validação pela IA: `qa:absences-form` (novo): limites comparados com `AbsenceRules.php` (categorias e rótulos, 366 dias, 500 caracteres, tipos de período), schema em casos de borda (366/367 dias, 29/02/2028, hoje não é retroativo, 07:59/08:00/16:59/17:00, intervalo até 17:00 e 17:01, jornada invertida, 500 emojis, observação aparada, data inexistente, `atestado`), estrutura da página (RHF, Zod, erro junto de cada campo, aviso ligado ao campo, P9 num único ramo usado pela tabela e pelos cartões, confirmação na linha, permissões pela sessão) e P7 (tipos da tela iguais aos aceitos por `saveScheduleException`; nenhum de `PresenceEngine::ABSENCE_EXCEPTIONS` no formulário). Todos os `qa:*` do frontend, lint, typecheck e build OK; bateria PHP completa OK. Mutação **30/30**. Prints em servidor simulado (dados fictícios, escopo por perfil igual ao do serviço): gestor e técnico, desktop (1366 px) e celular (390 px), incluindo a validação do Zod e o 409 do servidor junto do formulário. **Nada rodou contra o backend real nem em MySQL.**
 
 **Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 

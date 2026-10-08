@@ -430,6 +430,18 @@ Base da afirmação:
 | **Decisoes de implementacao** | Cinco, na secao 9.4: autorizacao antes do tipo; lista de tipos de ausencia compartilhada com o motor; recusa sem auditoria propria; sobrescrever excecao antiga com tipo de trabalho continua permitido; tela ainda oferece os tipos ate o commit 6 (mesmo deploy). |
 | **Validacao executada pela IA** | `qa-schedule-history`, `qa-security` (ponta a ponta) e a bateria PHP completa; mutacao **10/10**. |
 | **Limitacoes declaradas** | Sem MySQL local; frontend nao alterado neste commit. |
+| **Validacao humana** | **Aprovado em 2026-10-08** apos teste em MySQL 8.0.46 com a 012: tipos de ausencia com 400 sem gravar; "folga" invalido; `remote` e `oncall` gravam; gestor com `day_off` na Lideranca recebe 403 antes do tipo; `vacation` antiga continua ausente o dia todo. Ajuste do marcador (`883f7a4`) aprovado no mesmo teste. Cinco decisoes aprovadas como estao. |
+
+### Parte B, F3 — commit 6: pagina de Ausencias em RHF + Zod e excecao so com trabalho — 2026-10-08
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Pagina de Ausencias no lugar da tabela generica, formulario em React Hook Form e Zod com os limites do servidor, P9 na tela e excecao de escala so com tipos de trabalho (desenho, secoes 5.4 e 9.4). |
+| **Branch e commits** | `dcfa24c` (codigo e QA) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/pages/AbsencesPage.jsx` (novo), `formSchemas.ts` (`absenceFormSchema`), `actionFeedback.ts`, `App.jsx`, `navigation.ts`, `ModulePage.jsx`, `OperationalPages.jsx` (excecao), `scripts/qa-absences-form.mjs` (novo), `qa-forms`, `qa-schedule-rules`, `package.json`; `services/OperationalService.php` (espaco em `OUTSIDE_MAP_MESSAGE`, pedido na aprovacao do commit 5). |
+| **Decisoes de implementacao** | Dez, na secao 9.4: cartoes no celular; jornada do Zod vinda de `listar_funcionarios.php`; acoes da linha antecipam o 403; P9 tambem na tela; mensagem do servidor junto do formulario e no aviso flutuante; edicao sem troca de tecnico; observacao sem `maxLength`; lancamento so para cadastro ativo; data de hoje do navegador; ajuste de duas assercoes de QA anteriores. |
+| **Validacao executada pela IA** | `qa:absences-form` (limites comparados com `AbsenceRules.php` e com os tipos de `saveScheduleException`; casos de borda do schema; estrutura da pagina), todos os `qa:*` do frontend, lint, typecheck e build; bateria PHP completa. Mutacao **30/30**. Prints de gestor e tecnico, desktop e celular, com servidor simulado e dados ficticios (Chrome headless pelo protocolo DevTools, sem dependencia nova). |
+| **Limitacoes declaradas** | Sem MySQL local nem backend real: a tela nao foi exercida contra `portal/absences.php` de verdade; os prints usam respostas simuladas no formato do servico. |
 | **Validacao humana** | Pendente. |
 
 ---
