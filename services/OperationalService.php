@@ -166,6 +166,12 @@ final class OperationalService {
             $stmt = $this->pdo->prepare($sql . ' ORDER BY p.inicio_pausa');
             $stmt->execute($params);
             foreach ($stmt->fetchAll() as $row) {
+                // [SEC-07b, D2] O motivo da lista fechada ja aparece para todos
+                // no painel ao vivo; valor fora dela (dado antigo, possivel
+                // texto livre) vira "Pausa" para quem nao e gestao nem o proprio.
+                if ((string)$row['description'] !== '' && !self::seesPersonalText($actor, $row['employee_id'])) {
+                    $row['description'] = validate_motivo_pausa($row['description']) ?? 'Pausa';
+                }
                 $events[] = $this->calendarRow('pause', $row);
             }
         }
@@ -210,10 +216,8 @@ final class OperationalService {
             }
             $stmt = $this->pdo->prepare($sql . ' ORDER BY starts_at');
             $stmt->execute($params);
-            $seesAllTypes = portal_role_is_manager($actor['role'] ?? null);
-            $ownEmployeeId = (int)($actor['employee_id'] ?? 0);
             foreach ($stmt->fetchAll() as $row) {
-                $row['description'] = $seesAllTypes || ($ownEmployeeId > 0 && (int)$row['employee_id'] === $ownEmployeeId)
+                $row['description'] = self::seesPersonalText($actor, $row['employee_id'])
                     ? self::absenceCategoryLabel((string)$row['category'])
                     : '';
                 $events[] = $this->calendarRow('absence', $row);
@@ -244,6 +248,11 @@ final class OperationalService {
             $stmt = $this->pdo->prepare($sql . " ORDER BY {$dateColumn}");
             $stmt->execute($params);
             foreach ($stmt->fetchAll() as $row) {
+                // [SEC-07b, D1] Todos veem o evento; o texto livre (motivo,
+                // justificativa, observacao), so a gestao e o proprio.
+                if (!self::seesPersonalText($actor, $row['employee_id'])) {
+                    $row['description'] = '';
+                }
                 $events[] = $this->calendarRow($eventType, $row);
             }
         }
@@ -932,7 +941,7 @@ final class OperationalService {
         ];
     }
 
-    public function listOncall(array $filters): array {
+    public function listOncall(array $filters, array $actor): array {
         [$from, $to] = $this->period($filters, 366);
         $sql = 'SELECT id, employee_id, employee_name, team, starts_on, ends_on,
                        start_time, end_time, shift_type, note, status, created_by,
@@ -945,7 +954,16 @@ final class OperationalService {
         $this->appendEmployeeTeamFilters($sql, $params, $team, $employeeId);
         $stmt = $this->pdo->prepare($sql . ' ORDER BY starts_on DESC, start_time DESC');
         $stmt->execute($params);
-        return $stmt->fetchAll();
+        $rows = $stmt->fetchAll();
+        // [SEC-07b, D3] Observacao e logins de quem cadastrou e alterou, so
+        // para a gestao e o proprio; a tela nao usa esses campos.
+        foreach ($rows as &$row) {
+            if (!self::seesPersonalText($actor, $row['employee_id'])) {
+                unset($row['note'], $row['created_by'], $row['updated_by']);
+            }
+        }
+        unset($row);
+        return $rows;
     }
 
     public function createOncall(array $data, string $actor): int {
@@ -2249,6 +2267,19 @@ final class OperationalService {
                  created_by, updated_by, created_at, updated_at',
             default => throw new LogicException('Tabela de workflow invalida.'),
         };
+    }
+
+    /**
+     * [SEC-07, SEC-07b, D4] Texto pessoal de um registro (tipo de ausencia,
+     * motivo, justificativa, observacao): so a gestao e o proprio colaborador,
+     * pelo employee_id da sessao; sem ele, nenhum.
+     */
+    private static function seesPersonalText(array $actor, $employeeId): bool {
+        if (portal_role_is_manager($actor['role'] ?? null)) {
+            return true;
+        }
+        $ownEmployeeId = (int)($actor['employee_id'] ?? 0);
+        return $ownEmployeeId > 0 && (int)$employeeId === $ownEmployeeId;
     }
 
     private function calendarRow(string $type, array $row): array {

@@ -107,6 +107,29 @@ final class QaChildStatement extends PDOStatement {
             }
             return true;
         }
+        // SEC-07b: blocos de pausa, hora extra, ajuste e plantao do Calendario e
+        // a lista de plantoes. db['calendario'][tipo][id] = [employee_id, texto];
+        // com WHERE employee_id, so os do colaborador pedido.
+        $own = isset($params[':employee_id']) ? (int)$params[':employee_id'] : null;
+        if (preg_match('/^SELECT (?:p\.id, p\.nome_funcionario AS title, p\.motivo_pausa|id, employee_name AS title, (?:reason|justification|note)) AS description, .* FROM (pausas p|portal_overtime_entries|portal_time_adjustments|portal_oncall_shifts) WHERE /', $this->sql, $match) === 1) {
+            $type = ['pausas p' => 'pause', 'portal_overtime_entries' => 'overtime', 'portal_time_adjustments' => 'time_adjustment', 'portal_oncall_shifts' => 'oncall'][$match[1]];
+            $this->rows = [];
+            foreach ($this->pdo->db['calendario'][$type] ?? [] as $id => [$employeeId, $text]) {
+                if ($own === null || $own === $employeeId) {
+                    $this->rows[] = ['id' => (int)$id, 'title' => 'QA', 'description' => $text, 'starts_at' => '2026-10-07 08:00:00', 'ends_at' => '2026-10-07 09:00:00', 'team' => 'n1', 'employee_id' => $employeeId, 'status' => 'approved'];
+                }
+            }
+            return true;
+        }
+        if (strpos($this->sql, 'SELECT id, employee_id, employee_name, team, starts_on, ends_on, start_time, end_time, shift_type, note, status, created_by, updated_by, created_at, updated_at FROM portal_oncall_shifts') === 0) {
+            $this->rows = [];
+            foreach ($this->pdo->db['calendario']['oncall'] ?? [] as $id => [$employeeId, $text]) {
+                if ($own === null || $own === $employeeId) {
+                    $this->rows[] = ['id' => (int)$id, 'employee_id' => $employeeId, 'note' => $text, 'status' => 'active', 'created_by' => 'qa.gestor', 'updated_by' => 'qa.lider'];
+                }
+            }
+            return true;
+        }
         if ($this->sql === 'SELECT ativo, access_role, equipe, ad_login FROM funcionarios WHERE id = ?') {
             $row = $this->pdo->db['funcionarios'][(string)$params[0]] ?? null;
             $this->rows = is_array($row) ? [$row] : [];
@@ -2016,6 +2039,66 @@ foreach (['tecnico_cria', 'leitura_cancela'] as $case) {
 assert_same([403, true], [$absenceWrites['gestor_retroativa']['status'], strpos($absenceWrites['gestor_retroativa']['body'], 'início anterior a hoje') !== false], 'F3: ausencia retroativa do gestor recebe 403 (D3, L6)');
 assert_same(true, strpos($absenceWrites['gestor_retroativa']['log'], '[QA_AUDIT] ABSENCE_WRITE_DENIED [WARNING]') !== false, 'F3: retroativa do gestor auditada');
 assert_same(403, $absenceWrites['gestor_sem_csrf']['status'], 'F3: POST de ausencia sem CSRF recebe 403');
+
+// SEC-07b: texto livre no Calendario e na lista de plantoes, de ponta a ponta.
+// Todos veem os eventos (D1); o texto, so a gestao e o proprio (D4); motivo de
+// pausa fora da lista fechada vira "Pausa" para os demais (D2); plantoes sem
+// observacao e logins para os demais (D3). Tecnico = colaborador 1.
+$textDb = QA_DB;
+$textDb['calendario'] = [
+    'pause' => ['51' => [1, 'texto livre antigo A'], '52' => [7, 'Reunião'], '53' => [7, 'texto livre antigo B']],
+    'overtime' => ['61' => [1, 'motivo HE A'], '62' => [7, 'motivo HE B']],
+    'time_adjustment' => ['71' => [1, 'justificativa A'], '72' => [7, 'justificativa B']],
+    'oncall' => ['81' => [1, 'observacao A'], '82' => [7, 'observacao B']],
+];
+$textPeriod = ['from' => '2026-10-01', 'to' => '2026-10-31'];
+$textSessions = ['gestor' => $manager, 'lideranca' => $leaderSession, 'tecnico' => $technician, 'tecnico_outro' => $technician, 'somente_leitura' => qa_ci_session(4, 'qa.leitura', 'somente_leitura')];
+$textSpecs = [];
+foreach (['pause', 'overtime', 'time_adjustment', 'oncall'] as $type) {
+    foreach ($textSessions as $case => $session) {
+        $query = $textPeriod + ['type' => $type] + ($case === 'tecnico_outro' ? ['employee_id' => '7'] : []);
+        $textSpecs["{$type}_{$case}"] = ['endpoint' => 'api/portal/calendar.php', 'method' => 'GET', 'session' => $session, 'db' => $textDb, 'query' => $query];
+    }
+}
+foreach ($textSessions as $case => $session) {
+    $textSpecs["plantoes_{$case}"] = ['endpoint' => 'api/portal/oncall.php', 'method' => 'GET', 'session' => $session, 'db' => $textDb, 'query' => $textPeriod + ($case === 'tecnico_outro' ? ['employee_id' => '7'] : [])];
+}
+$textCases = qa_run_endpoints($qaDir, $textSpecs);
+$eventTexts = static function (array $result): array {
+    $texts = [];
+    foreach (json_decode($result['body'], true)['items'] ?? [] as $event) {
+        $texts[$event['id']] = $event['description'];
+    }
+    ksort($texts);
+    return $texts;
+};
+$textManages = ['gestor' => true, 'lideranca' => true, 'tecnico' => false, 'tecnico_outro' => false, 'somente_leitura' => false];
+foreach (['pause', 'overtime', 'time_adjustment', 'oncall'] as $type) {
+    foreach ($textManages as $case => $manages) {
+        $expected = [];
+        foreach ($textDb['calendario'][$type] as $id => [$employeeId, $text]) {
+            if ($case === 'tecnico_outro' && $employeeId !== 7) {
+                continue;
+            }
+            $sees = $manages || (in_array($case, ['tecnico', 'tecnico_outro'], true) && $employeeId === 1);
+            $expected["{$type}-{$id}"] = $sees ? $text : ($type === 'pause' ? (validate_motivo_pausa($text) ?? 'Pausa') : '');
+        }
+        assert_same(200, $textCases["{$type}_{$case}"]['status'], "SEC-07b: calendario {$type} por {$case}");
+        assert_same($expected, $eventTexts($textCases["{$type}_{$case}"]), "SEC-07b: calendario {$type} por {$case} ve so o texto permitido");
+    }
+}
+assert_same(['pause-52' => 'Reunião', 'pause-53' => 'Pausa'], $eventTexts($textCases['pause_tecnico_outro']), 'SEC-07b: tecnico pedindo outro colaborador ve as pausas, com "Pausa" fora da lista');
+assert_same(['overtime-62' => ''], $eventTexts($textCases['overtime_tecnico_outro']), 'SEC-07b: tecnico pedindo outro colaborador ve a hora extra sem o motivo');
+foreach ($textManages as $case => $manages) {
+    $rows = json_decode($textCases["plantoes_{$case}"]['body'], true)['items'] ?? [];
+    assert_same(200, $textCases["plantoes_{$case}"]['status'], "SEC-07b: plantoes por {$case}");
+    assert_same($case === 'tecnico_outro' ? [82] : [81, 82], array_column($rows, 'id'), "SEC-07b: plantoes por {$case} listados");
+    foreach ($rows as $row) {
+        $sees = $manages || ($case === 'tecnico' && $row['employee_id'] === 1);
+        assert_same($sees ? ['note', 'created_by', 'updated_by'] : [], array_values(array_intersect(['note', 'created_by', 'updated_by'], array_keys($row))), "SEC-07b: plantao {$row['id']} por {$case} sem observacao e logins de terceiros");
+    }
+    assert_same($manages, strpos($textCases["plantoes_{$case}"]['body'], 'observacao B') !== false, "SEC-07b: observacao de outro colaborador na resposta so para a gestao ({$case})");
+}
 
 // ============================================================================
 // 9. F1 (P12) — cadastro "Fora do Mapa PA e da escala": so admin, auditado,

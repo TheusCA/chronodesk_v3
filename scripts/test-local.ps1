@@ -114,6 +114,14 @@ if (!$phpExecutable) {
         Pass "QA de ausencias concluido"
     }
 
+    # Sem banco: texto livre no Calendario e na lista de plantoes (SEC-07b).
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-calendar-text.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do texto livre do Calendario falhou"
+    } else {
+        Pass "QA do texto livre do Calendario concluido"
+    }
+
     # Sem banco: motor de presenca, presence.php e presenca no status.php (F2).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-presence-engine.php")
     if ($LASTEXITCODE -ne 0) {

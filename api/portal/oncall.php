@@ -9,7 +9,7 @@ try {
     // portal_operational_error(), sem excecao sem captura.
     $service = new OperationalService();
     if ($method === 'GET') {
-        json_response(['sucesso' => true, 'items' => $service->listOncall($_GET)]);
+        json_response(['sucesso' => true, 'items' => $service->listOncall($_GET, portal_actor($role))]);
     }
     if (!portal_role_is_manager($role)) {
         json_response(['sucesso' => false, 'mensagem' => 'Apenas gestores podem cadastrar plantoes.'], 403);

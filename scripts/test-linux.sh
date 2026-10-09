@@ -38,6 +38,10 @@ echo "== PHP absences QA =="
 # Ausencias (F3); sem banco.
 php scripts/qa-absences.php
 
+echo "== PHP calendar text QA =="
+# Texto livre no Calendario e na lista de plantoes (SEC-07b); sem banco.
+php scripts/qa-calendar-text.php
+
 echo "== PHP legacy schedule output QA =="
 # Relatorio, CSV e Calendario iguais a referencia anterior ao F2B; sem banco.
 php scripts/qa-schedule-legacy-output.php
