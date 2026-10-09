@@ -1022,6 +1022,14 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   "Deploy 11 - Parte B, F3 (ausencias)", abaixo. A 012 e o `git merge` do
   commit ensaiado rodam juntos no passo 5 dele (sem pausa), depois do ensaio e
   da Q4; nao use o `git pull` deste item.
+- Deploy que traz o SEC-07b (texto livre do Calendario; deploy 12): so
+  codigo, sem migration nem build do frontend. Depois da recarga: (1) como
+  tecnico, o Calendario do mes mostra horas extras, ajustes e plantoes dos
+  colegas sem o texto e os proprios com o texto; (2) pausa com motivo fora de
+  Cafe, Pessoal e Reuniao aparece como "Pausa" para o tecnico e com o valor
+  gravado para a gestao; (3) `portal/oncall.php` (DevTools) sem `note`,
+  `created_by` e `updated_by` dos plantoes de outros; (4) gestor e Lideranca
+  sem mudanca. Rollback: so codigo; reabre o envio dos textos a todos.
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois

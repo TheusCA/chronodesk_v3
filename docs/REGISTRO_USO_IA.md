@@ -467,6 +467,19 @@ Base da afirmação:
 | **Achado confirmado** | O defeito apontado pelo responsavel (com `git show` falhando, o `mysql` recebe entrada vazia, sai com 0 e o `&&` deixa o codigo entrar sem a 012) tambem existia nos dois comandos do rollback da 012, corrigidos juntos. A falha foi da IA no commit 7: o `&&` foi descrito como garantia sem considerar o status do pipe. |
 | **Validacao executada pela IA** | Simulacao na estacao (`git` e `mysql` falsos, script no scratchpad da sessao): so o caso sem falha chega ao `merge`; `git show` com falha, `mysql` com erro e arquivo inexistente param; sem `pipefail`, o `git show` com falha chega ao `merge`. `P` e `F3` chegam ao `bash -c` pelo `export`. |
 | **Limitacoes declaradas** | Simulacao em Git Bash, nao no servidor; `docker`, `git merge` e o `mysql` real nao foram executados. |
+| **Validacao humana** | **Aprovado em 2026-10-09**: cat-file e pipefail na 012, no rollback e na verificacao, merge do commit do ensaio e conferencia de branch e HEAD. F3 fechado. |
+
+### SEC-07b — texto livre no Calendario e na lista de plantoes — 2026-10-09
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Achado do F3 (decisao de 2026-10-07): o `calendar.php` enviava a todos os perfis o motivo da hora extra, a justificativa do ajuste de ponto, a observacao do plantao e o motivo da pausa; o `oncall.php` GET devolvia a todos a observacao e os logins de quem cadastrou e alterou (desenho, secao 9.5). |
+| **Branch e commits** | `93d659d` (codigo e testes) e o commit deste registro (documentacao). Sem push. |
+| **Plano** | Entregue no chat em 2026-10-08 e reenviado em 2026-10-09 (o de 2026-10-08 nao foi gravado); aprovado em 2026-10-09 com D1, D3, D4 e D6 como propostas, ajuste na D2 (motivo da lista fechada fica para todos; fora dela vira "Pausa") e D5 resolvida sem mudanca no `presence.php`. Gravado na secao 9.5 do desenho. |
+| **O que a IA alterou** | `services/OperationalService.php` (`seesPersonalText`, blocos de pausa, hora extra, ajuste e plantao do `listCalendar`, bloco de ausencias usando a mesma funcao, `listOncall` com ator), `api/portal/oncall.php`, `scripts/qa-calendar-text.php` (novo), `scripts/qa-security.php`, `scripts/test-linux.sh`, `scripts/test-local.ps1`; `DEPLOY_LINUX.md`, `docs/API_CONTRACTS_FRONTEND.md`, `docs/DOCUMENTACAO_TECNICA.md` (5.3), desenho 9.5. |
+| **Decisoes de implementacao** | Motivo de pausa vazio continua vazio para todos; chaves do plantao retiradas da linha (nao `null`); ator obrigatorio em `listOncall`; registro sem colaborador nunca e "o proprio". |
+| **Validacao executada pela IA** | `qa-calendar-text` (perfis, pausa fora da lista, tecnico pedindo outro colaborador, registro sem colaborador, `listOncall`, estrutura); `qa-security` ponta a ponta (`calendar.php` por tipo e `oncall.php` por perfil); bateria PHP completa, 15 `qa:*` do frontend e lint. Mutacao **19/19** nos ramos de perfil; o `qa-security` sozinho tambem mata os mutantes do `oncall.php`, da negacao do bloco de hora extra e do vazamento fora da lista. |
+| **Limitacoes declaradas** | Sem MySQL local: as consultas nao mudaram, mas o comportamento so foi exercido com banco simulado e endpoints reais em processo filho. `gitleaks` ausente na estacao. Um branch vazio `feat/sec-07b-calendar-text` (no `7d4cb27`, sem commits) foi criado por engano e ficou: a remocao foi bloqueada pela politica da estacao. |
 | **Validacao humana** | Pendente. |
 
 ---

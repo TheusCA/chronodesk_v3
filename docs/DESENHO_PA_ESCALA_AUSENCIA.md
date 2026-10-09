@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commit 5 (P7, exceção sem tipos de ausência) entregue em 2026-10-08, aguardando aprovação.** Depois do F3, o lote SEC-07b (texto livre do calendário), antes do F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado em 2026-10-09, aguardando aprovação; deploy 12 da fila** (seção 9.5). Depois, F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -1240,6 +1240,41 @@ As variáveis `P` e `F3` vão para o `bash -c` por `export` (o `unset P` no fim 
 
 **Fora do F3:** arquivamento e cancelamento de ausências futuras (F4); legenda única e ausência como situação no Calendário (F5); conflito e ausências da semana no Mapa PA (F6); contadores (F7).
 
+### 9.5 SEC-07b — texto livre no Calendário e na lista de plantões: plano aprovado (2026-10-09) e entrega
+
+Achado do F3 (seção 9.4, decisão de 2026-10-07). O plano foi entregue no chat em 2026-10-08 e reenviado em 2026-10-09; fica gravado aqui com o ajuste da aprovação.
+
+**Escopo.** (a) `listCalendar`: hoje o `calendar.php` envia a todos os perfis, em `description`, o motivo da hora extra (`reason`), a justificativa do ajuste de ponto (`justification`), a observação do plantão (`note`) e o motivo da pausa (`motivo_pausa`). (b) `oncall.php` GET: `listOncall($_GET)` devolve a todos `note`, `created_by` e `updated_by` (a tela não mostra, o JSON traz). **Fica como está:** eventos manuais e sala de guerra (texto da gestão para divulgar), relatórios e CSV (já só da gestão, `PORTAL_MANAGER_ROLES`), escala gerada.
+
+**Arquivos.** `services/OperationalService.php` (`listCalendar`, `listOncall`, `seesPersonalText`), `api/portal/oncall.php` (passa o ator), `scripts/qa-calendar-text.php` (novo, nos dois runners), `scripts/qa-security.php`; frontend sem mudança (`CalendarPage.jsx` já esconde a descrição vazia).
+
+**Riscos.** Saída antiga do F2B: o `qa-schedule-legacy-output` chama o Calendário como gestor e a chamada sem ator é só `type=onsite`, sem texto livre; referência não regenerada. Técnico sem `ci_funcionario_id` na sessão não vê nem os próprios textos (falha fechada, como nas ausências). Rollback: só código, sem migration; reabre o vazamento, sem efeito no banco.
+
+**Decisões (aprovadas em 2026-10-09):**
+
+| # | Decisão | Situação |
+|---|---|---|
+| D1 | Evento de hora extra, ajuste e plantão de outro colaborador continua visível para todos (nome, período, status), sem o texto, como a P9 das ausências | Aprovada |
+| D2 | Motivo da pausa | **Aprovada com ajuste:** o motivo da lista fechada de `validate_motivo_pausa` (`security.php`: Café, Pessoal, Reunião) **não** é escondido, porque já aparece para todos no painel ao vivo e escondê-lo no Calendário não protege nada. Para quem não é gestão nem o próprio, valor fora da lista (dado antigo, possível texto livre) vira "Pausa". A gestão e o próprio veem o valor gravado. Comparação pela mesma função, sem lista duplicada (comparação estrita: "café" minúsculo vira "Pausa") |
+| D3 | `oncall.php` tira `note`, `created_by` e `updated_by` de quem não é gestão nem o próprio (minimização, LGPD) | Aprovada |
+| D4 | "Próprio" só pelo `employee_id` da sessão, sem a busca por `ad_login` do `actorEmployeeId`; mesmo critério das ausências | Aprovada |
+| D5 | Motivo da pausa no `presence.php` | **Resolvida sem mudança:** o motivo ali vem da pausa ao vivo, que só aceita a lista fechada (`iniciar_pausa.php` e `solicitar_pausa_com_aprovacao.php` validam com `validate_motivo_pausa`). Não é pendência |
+| D6 | Um commit de código e testes e outro de documentação; deploy 12 da fila, só código; com o deploy único da Parte B, entra no merge único do roteiro consolidado (pendência 16 do estado da sessão) | Aprovada |
+
+**Entrega (2026-10-09, `93d659d`):**
+
+| Item | Como ficou |
+|---|---|
+| Regra | `OperationalService::seesPersonalText($actor, $employeeId)`: gestão (`portal_role_is_manager`) ou `employee_id` da sessão maior que zero e igual ao do registro. O bloco de ausências do F3 passou a usar a mesma função (sem mudança de comportamento) |
+| Calendário | Hora extra, ajuste e plantão: `description = ''` para os demais. Pausa: para os demais, `validate_motivo_pausa($motivo) ?? 'Pausa'`; motivo vazio continua vazio (nada a esconder; a gestão também vê vazio) |
+| Plantões | `listOncall($filters, $actor)` (ator obrigatório; único chamador é o `oncall.php`): as três chaves saem da linha (não vêm como `null`) |
+| Registro sem colaborador | `employee_id` 0 ou nulo nunca é "o próprio", nem para sessão sem colaborador |
+| F9 | Quando o motivo "Almoço" entrar em `validate_motivo_pausa` (seção 11.3), passa a aparecer para todos no Calendário, coerente com o painel; nenhuma mudança aqui |
+
+**Testes.** `qa-calendar-text` (novo): os quatro tipos por perfil (gestor, Liderança, admin, técnico com e sem colaborador, somente leitura com e sem colaborador, sem ator), pausa com motivo fora da lista (técnico vê "Pausa"; gestão e o próprio veem o valor), motivo vazio, registro sem colaborador, técnico pedindo outro colaborador pelo `employee_id` (eventos aparecem, textos vazios), `listOncall` por perfil (chaves presentes só para gestão e o próprio) e estrutura (ator no `oncall.php`, lista de motivos não duplicada). `qa-security`, ponta a ponta pelos endpoints reais: `calendar.php` por tipo (`pause`, `overtime`, `time_adjustment`, `oncall`) para gestor, Liderança, técnico, técnico pedindo o colaborador 7 e somente leitura; `oncall.php` para os mesmos perfis, sem `note`, `created_by` e `updated_by` de terceiros. **Mutação 19/19** nos ramos de perfil (gestão, `> 0`, igualdade do próprio, negações, lista fechada, guarda do vazio, chaves do plantão, ator do `oncall.php`); o `qa-security` sozinho também mata os mutantes do `oncall.php`, da negação do bloco de hora extra e do vazamento fora da lista. Bateria PHP completa, 15 `qa:*` do frontend e lint passando.
+
+**Validação humana pendente:** com MySQL real, um técnico abre o Calendário do mês e vê as horas extras, ajustes e plantões dos colegas sem o texto, e os próprios com o texto; pausa antiga com motivo fora da lista aparece como "Pausa"; `oncall.php` no DevTools sem `note`, `created_by` e `updated_by` de terceiros; gestor e Liderança sem mudança.
+
 ---
 
 ## 10. Riscos e pendências
@@ -1325,7 +1360,7 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 |---|---|---|
 | F8 — Almoço por contrato | 11.1: migration 018, tabela de contratos e tela de durações (só admin), cadastro, validação, auditoria | Decisões de 11.1 tomadas em 2026-10-06; **lista de contratos e durações e resposta sobre o motivo (Liderança): sem elas, a 018 não é escrita** |
 | F9 — Equipe Crítico | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration 019 (enums e `pausas.limite_segundos`) | F2 (aprovado em 2026-10-06); F8 (duração do contrato para o alerta); pendências da Liderança |
-| SEC-07b — Texto livre no calendário (decisão de 2026-10-07) | `calendar.php` sem o texto livre de hora extra, correção de ponto, plantão e motivo de pausa para quem não é gestão nem o próprio colaborador (seção 9.4) | Logo depois do F3, antes do F4 |
+| SEC-07b — Texto livre no calendário (decisão de 2026-10-07) | `calendar.php` sem o texto livre de hora extra, correção de ponto, plantão e motivo de pausa para quem não é gestão nem o próprio colaborador (seção 9.4) | Logo depois do F3, antes do F4. **Implementado em 2026-10-09** (seção 9.5; `oncall.php` junto, D3) |
 
 O item c) já está no F4. **Ordem decidida em 2026-10-06:** F2B agora; F3 a F7 na ordem do desenho; F8 assim que a Liderança mandar contratos e a resposta sobre o motivo; F9 depois do F8.
 
