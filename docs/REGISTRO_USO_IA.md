@@ -507,6 +507,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | O planejador ainda nao e chamado por endpoint nenhum (commit 3); nada foi exercido contra MySQL. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-13**, com as seis decisoes como estao: `qa-archive` rodado pelo responsavel (381 verificacoes) e caso com dados no formato real (ids e `ativo` em texto; inicio da pausa com `format('c')`): pausa das 23:50 arquivada as 00:05 finaliza com 900 s e inicio no dia anterior; parcial do dia cancelada; ausencia de varios dias iniciada ontem cortada em ontem; PA de hoje sai. Conferido que pausas automaticas nascem `aprovado` e que o estado grava `format('c')`: o `clear_invalid` nao pega pausa real. |
 
+### Parte B, F4 — commit 3 (servico, endpoints, L-11, `funcionarios.restaurar`) — 2026-10-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Arquivar e restaurar tecnicos pelo servico, com os efeitos do planejador aplicados numa transacao e o estado de pausas gravado dentro do lock (desenho, secao 9.6). |
+| **Branch e commits** | `dfc6b28` (codigo e testes) e o commit deste registro (documentacao). Sem push. |
+| **Pedidos do responsavel atendidos** | Instante no fuso do PHP com teste que falha em UTC e em outro fuso; `clear_invalid` no `error_log` e na auditoria (so ids e a acao); `UnexpectedValueException` e `LogicException` como 500 generico com `error_log` da classe e da mensagem, rollback e estado intacto; leituras com `FOR UPDATE` na ordem estado.json -> banco; regularizacao (D5) no endpoint e 409 do planejador para arquivado pelo F4; `efeitos` com as nove chaves. |
+| **O que a IA alterou** | `services/EmployeeArchiveService.php` (novo), `api/restaurar_funcionario.php` (novo), `api/remover_funcionario.php`, `api/atualizar_funcionario.php`, `api/adicionar_funcionario.php`, `classes/GerenciadorPausas.php`, `security.php`, `scripts/qa-archive.php` (secao 3), `scripts/qa-security.php`; desenho 9.6. |
+| **Decisoes de implementacao** | Doze, a aprovar (desenho 9.6); destaques: L9 tambem no arquivamento; proprio cadastro tambem pelo login AD; `adicionar` sem a gravacao do estado fora do lock (mesmo padrao do L-11, fora do texto original); toda gravacao afeta exatamente uma linha; conferencia de escala so com violacao nova; teste de regressao da D2 antecipado para este commit. |
+| **Validacao executada pela IA** | `qa-archive` (518 verificacoes, com banco simulado com transacao, falhas injetadas e estado em diretorio temporario); `qa-security` com 24 casos novos de ponta a ponta e a matriz de perfis; mutacao **40/40** (dois sobreviventes na 1a rodada, por teste fraco, mortos depois de reforcar os testes); bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: o SQL do servico so rodou contra o banco simulado (as consultas seguem as colunas das migrations 003, 009, 011, 012 e 014). A tela ainda nao mudou (commit 5). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao antes do commit 4. |
+
 ---
 
 ## 5. Responsabilidade
