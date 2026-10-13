@@ -568,6 +568,18 @@ Base da afirmação:
 | **O que a IA fez** | Levantamento no codigo e plano com catorze decisoes; nenhum codigo antes da aprovacao. |
 | **Validacao humana** | **Aprovado em 2026-10-13** com o ajuste da D2 (corte no 1o dia da competencia seguinte ao deploy, de 16 a 15; pode estar no futuro) e o complemento da D3 (registro recusa data anterior ao dia em que roda e data que nao seja dia 16; codigo trata corte no futuro); D1 e D4 a D14 como estao; a D9 muda a secao 5.5. |
 
+### Parte B, F5 — commit 1 (migration 019 e registro da data de corte) — 2026-10-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Tabela da data de corte do motor (vazia; sem linha, nada muda) e o script de registro do corte no deploy, com as recusas da D3 (desenho, secao 9.7). |
+| **Branch e commits** | `03359b5` (codigo e testes) e o commit deste registro (documentacao). Sem push. |
+| **O que a IA alterou** | `migrations/20261013_019_presence_cutoff.sql`, `migrations/20261013_019_registrar_corte.sql`, `migrations/rollback/20261013_019_presence_cutoff_down.sql`, `migrations/verificacao/20261013_019_presence_cutoff_check.sql`, `scripts/qa-presence-cutoff.php` (novo), `scripts/test-linux.sh`, `scripts/test-local.ps1`; desenho 9.7. |
+| **Decisoes de implementacao** | Oito, a aprovar (desenho 9.7); destaques: `registered_at` saiu (o quando fica no `audit_log`, regra do A4); data montada sem conversao de texto; recusa tambem sem a 019; procedimento que sobra de recusa contado na verificacao; ensaio do registro com arquivo temporario. |
+| **Validacao executada pela IA** | `qa-presence-cutoff` (131 verificacoes, estrutura SQL e a data da D2 contra a `competencyRange`); mutacao **24/24** no SQL (dois sobreviventes na 1a rodada, por teste fraco, mortos depois de reforcar os testes); bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: a 019, o registro, o rollback e a verificacao nao foram executados; ficam para o teste do responsavel e o ensaio. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: teste no MySQL local antes do commit 2. |
+
 ---
 
 ## 5. Responsabilidade
