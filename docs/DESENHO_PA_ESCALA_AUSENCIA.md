@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8; commit 1 (migration 014) aprovado em 2026-10-13; commit 2 (planejador puro) aprovado em 2026-10-13; commit 3 (serviço e endpoints) aprovado em 2026-10-13; commit 4 (L-07) aprovado em 2026-10-13, com a decisão 8 (conflito do Mapa PA sem inativos); commit 5 (tela de Funcionários) aprovado em 2026-10-13; commit 6 (ponta a ponta e documentação) aprovado em 2026-10-13: **F4 completo**, no deploy único da Parte B** (seção 9.6). **F5: plano em preparação** (seção 9.7). F5 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8; commit 1 (migration 014) aprovado em 2026-10-13; commit 2 (planejador puro) aprovado em 2026-10-13; commit 3 (serviço e endpoints) aprovado em 2026-10-13; commit 4 (L-07) aprovado em 2026-10-13, com a decisão 8 (conflito do Mapa PA sem inativos); commit 5 (tela de Funcionários) aprovado em 2026-10-13; commit 6 (ponta a ponta e documentação) aprovado em 2026-10-13: **F4 completo**, no deploy único da Parte B** (seção 9.6). **F5: plano entregue em 2026-10-13, aguardando aprovação** (seção 9.7). F5 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -1548,6 +1548,102 @@ O `qa-archive` confere, em todos os planos da tabela de casos, que nenhum gera `
 **F4 completo (2026-10-13):** commit 1 `1abb37a` (014), commit 2 `3944cc7` (planejador), commit 3 `dfc6b28` (serviço e endpoints), commit 4 `85813e1` e decisão 8 `d15f132` (L-07 e conflito do Mapa PA), commit 5 `47f4412` (tela), commit 6 `7389af2` (ponta a ponta e documentação); documentação de cada passo nos commits seguintes. Deploy: dentro do deploy único da Parte B, depois do F9, pelo roteiro "Deploy que traz o F4" do `DEPLOY_LINUX.md`.
 
 **Aprovado em 2026-10-13**, com as sete decisões como estão, após revisão do responsável do commit 6 e do roteiro "Deploy que traz o F4": conferência de branch e `f4-commit`, ensaio com os arquivos da versão nova, Q-F4 antes, 014 e `merge` com `cat-file` e `pipefail`, `HEAD` conferido, passo da D5 só com o ID interno, rollback e verificação com a mesma proteção. **F4 completo.**
+
+### 9.7 F5 — Calendário e relatórios no motor, com a data de corte: plano entregue (2026-10-13), aguardando aprovação
+
+Plano entregue em 2026-10-13 e gravado aqui antes de qualquer código (lição do F4: plano só no chat se perde). **Sem código até a aprovação.**
+
+**Fatos lidos no código (2026-10-13):**
+
+| Fato | Onde |
+|---|---|
+| Calendário e relatório ainda usam o cálculo antigo: `generatedSchedule` (fim de semana conta, `undefined` vira remoto pelo `presenceForRule`, só ausência de dia inteiro tira o dia) | `OperationalService::listCalendar` (`OperationalService.php:260`), `report` (`:1027`), `generatedSchedule` (`:1629`) |
+| A tela Escala já está no motor desde o F2B (`engineSchedule`, `PresenceEngine::dayPresence`): P3, P4, ausência, Liderança implícita, fora do Mapa | `OperationalService.php:1714` |
+| O cálculo antigo só lê cadastro ativo (`JOIN funcionarios ... ativo = 1`): o arquivado some de todo o histórico de escala e de ausências | `scheduleRules` (`:1548`), `scheduleBlockingAbsences` (`:1866`), `scheduleScreenEmployees` (`:1788`) |
+| No Calendário, a ausência é um evento à parte (`event_type = absence`), só aprovada; categoria só para a gestão e o próprio (P9, F3); observação nunca | `listCalendar` (`:199-225`) |
+| Os rótulos sem acento ("Dias impares", "Ciclo com configuracao invalida", "Regra nao informada", "Ausencia") vêm do backend e entram nas saídas antigas | `scheduleRuleLabel` (`:2083`), `scheduleStatusLabel` (`:1905`) |
+| `qa-schedule-legacy-output` compara **byte a byte** (sha256, bytes, linhas) 17 saídas de `report()`, `streamReportCsv()` e `listCalendar()` com a referência gravada antes do F2B, com o "hoje" injetado (`2026-10-07`) e dados de 2026 | `scripts/qa-schedule-legacy-output.php`, `scripts/fixtures/schedule-legacy-output.json` |
+| Não existe data de corte no código nem no banco. O corte do BIZ-02 fica em `manutencao_marcadores`, tabela da manutenção do fuso | `migrations/correcao_dados/biz02_01_registrar_corte.sql` |
+| Frontend: tons do Calendário locais, War Room em vermelho e ausência em laranja; `CalendarPage` duplicada sem uso (L-13); "Carregando mÃ³dulo..." (L-14); relatório mostra só "Dias presenciais" e "Dias remotos" | `CalendarPage.jsx:20-28`, `OperationalPages.jsx:255`, `App.jsx:226`, `OperationalPages.jsx:1087` |
+| Pendência 8a da tela Escala (F2B): filtro "ocultar sem escala", rótulos sem acento, quebra de "Liderança" na coluna Equipe | Seção 9.3 |
+| Migrations: 011, 012, 014 a 017 usadas; 013 dispensada; 018 reservada ao contrato de almoço (F8, depois da Liderança). Próximo número livre: **019** | `migrations/` |
+
+**Escopo.** (1) Data de corte do motor: guardada no banco, registrada no deploy com valor explícito, auditada e somente leitura para a aplicação. (2) Relatório operacional (JSON) e CSV: dias antes do corte pelo cálculo antigo, sem nenhuma mudança; dias a partir do corte pelo motor (P3, P4, ausência, histórico do arquivado). (3) Calendário: a partir do corte, escala pelo motor e ausência como situação do técnico (P9 mantida); antes do corte, como hoje. (4) Histórico do arquivado até `arquivado_em` no relatório e no Calendário (F4). (5) Frontend: legenda única (seção 5.1) no Calendário e na tela Escala, mês com resumo por dia (P15), War Room em outro tom, relatório com os campos novos e o aviso do corte, L-13, L-14 e a pendência 8a. **Fora:** Mapa PA no motor e datas passadas do Mapa PA (F6, ver D12); contadores e Visão Operacional (F7); `presence` no `technicians.php` (F7, D14 do F4); legenda no Mapa PA (F6) e na Visão Operacional (F7).
+
+**Commits:**
+
+| # | Commit | Arquivos |
+|---|---|---|
+| 1 | Migration 019, registro do corte, rollback, verificação e ensaio | `migrations/20261014_019_presence_cutoff.sql`; `migrations/20261014_019_registrar_corte.sql` (script do deploy, com a data explícita); `migrations/rollback/20261014_019_presence_cutoff_down.sql`; `migrations/verificacao/20261014_019_presence_cutoff_check.sql`; `scripts/qa-presence-cutoff.php` (novo, estrutura SQL; nos dois runners) |
+| 2 | Corte e relatório | `services/PresenceCutoff.php` (novo: leitura do corte e divisão do período, função pura para a divisão); `services/OperationalService.php` (`report`, `streamReportCsv`, escala do motor com o histórico do arquivado, rótulos com acento só no caminho do motor); `qa-presence-cutoff` (divisão, relatório, CSV) e `qa-schedule-legacy-output` (seção nova: saída antiga com o corte depois do período e com o corte no meio) |
+| 3 | Calendário | `OperationalService::listCalendar` (escala do motor a partir do corte, ausência como situação, P9, fora do Mapa); `qa-presence-cutoff` (Calendário por perfil); `qa-schedule-legacy-output` |
+| 4 | Frontend | `frontend/src/lib/presenceLegend.ts` (novo, legenda única); `CalendarPage.jsx` (mês com resumo, semana e dia com cartão por técnico, legenda, War Room); `OperationalPages.jsx` (tela Escala com a legenda, "Ocultar sem escala", "Liderança" sem quebra; relatório com ausência, sem escala e aviso do corte; sai a `CalendarPage` duplicada, L-13); `App.jsx` (L-14); QAs estruturais e de comportamento |
+| 5 | Ponta a ponta e documentação | `qa-security` (Calendário e relatório por perfil com o corte), mutação; `API_CONTRACTS_FRONTEND.md`, `DEPLOY_LINUX.md` ("Deploy que traz o F5": ensaio da 019, 019 antes do `merge`, registro do corte depois da recarga, verificação), LGPD 5.3 se couber, registro, esta seção |
+
+**Migration 019 (tabela do corte):**
+
+| Item | Proposta |
+|---|---|
+| Tabela | `portal_presence_cutoff`: `id TINYINT` (PK, `CHECK (id = 1)`: no máximo uma linha), `cutoff_date DATE NOT NULL`, `registered_at DATETIME NOT NULL`, `registered_by VARCHAR(100) NOT NULL`. Regra do A4 (`SET time_zone`, sem `NOW()` nas gravações), idempotente pelo `information_schema` |
+| Migration | Só cria a tabela, **vazia**. Sem linha, a aplicação usa o cálculo antigo em todas as datas: nada muda até o registro |
+| Registro do corte | Script à parte, rodado no deploy depois da recarga, com a data e o autor explícitos (`SET @corte := 'AAAA-MM-DD'; SET @autor := '<login>';` antes do arquivo). Para com `SIGNAL` se `@corte` ou `@autor` faltarem, se a data for inválida ou se já houver corte (imutável). Grava a linha e um evento `PRESENCE_CUTOFF_REGISTERED` (`CRITICAL`) no `audit_log` com a data (sem outro dado) |
+| Rollback | Para com `SIGNAL` se a cópia `portal_presence_cutoff_bkp_019` existir; copia a linha e remove a tabela. Sem a tabela, a aplicação volta ao cálculo antigo em todas as datas |
+| Verificação | Só contagens e a data: `tabela_019`, `cortes` (0 ou 1), `corte` (a data), `eventos_registro` no `audit_log` |
+| Ensaio | Três variantes no `ensaio-migration.sh`: (a) 019 duas vezes, rollback, 2º rollback para; (b) registro do corte duas vezes (o 2º para); (c) rollback com o corte registrado (a cópia guarda a linha) |
+
+**Como a aplicação usa o corte.** `PresenceCutoff::date()` lê a linha uma vez por requisição; tabela ausente ou vazia dá `null`. `PresenceCutoff::split(from, to, corte)`, pura, devolve a parte antiga (`from` até a véspera do corte) e a parte nova (do corte até `to`), cada uma podendo ser vazia. Com `null`, tudo é parte antiga.
+
+**Relatório e CSV:**
+
+| Período | Saída |
+|---|---|
+| Inteiro antes do corte (ou sem corte) | **Byte a byte igual à de hoje**: mesmas chaves, mesmas linhas, mesmos rótulos (é o que o `qa-schedule-legacy-output` confere). Nenhum campo novo |
+| Cruza o corte | Linhas da escala antes do corte iguais às do cálculo antigo; a partir do corte, do motor. Totais somam as duas partes. JSON ganha `cutoff` (`{ date, split: true }`), `absence_days` e `no_schedule_days` (em `summary`, `by_employee` e `by_team`). CSV ganha, logo depois do cabeçalho, uma linha `aviso` com o texto "Escala pelo cálculo antigo até DD/MM/AAAA e pelas regras novas a partir de DD/MM/AAAA" |
+| Inteiro a partir do corte | Só o motor; `cutoff` com `split: false`; sem linha de aviso no CSV |
+
+Regras novas (a partir do corte): fim de semana não conta, salvo exceção de trabalho (P3); sem regra é "Sem escala" e conta em `no_schedule_days`, não como remoto (P4); ausência aprovada de dia inteiro conta em `absence_days` e sai no CSV com o rótulo "Ausência", **sem a categoria**; ausência parcial não tira o dia (o dia conta pela escala); fora do Mapa fica fora da seção de escala; Liderança como "Presencial (regra fixa)"; arquivado até a véspera de `arquivado_em` (D7). Horas extras, ajustes e plantões não mudam.
+
+**Calendário:**
+
+| Período | Saída |
+|---|---|
+| Antes do corte | Como hoje: escala do cálculo antigo e ausência como evento à parte, com a regra de leitura do F3 |
+| A partir do corte | Um evento `schedule` por técnico e dia útil, com os campos de hoje (`title`, `description`, `status` = `onsite`, `remote`, `absence` ou `no_schedule`) e mais `situacao`, `origem` e `detalhe` do motor. Ausência deixa de ser evento à parte: vira a situação ("Ausente (dia todo)") ou o marcador da parcial ("Ausente a partir de HH:MM"). Categoria só para a gestão e o próprio (P9); observação nunca. Fim de semana sem evento, salvo exceção de trabalho. Fora do Mapa: sem escala, e a ausência dele continua como evento `absence` (tabela da P12) |
+
+Ausência que cruza o corte: o evento `absence` antigo vai até a véspera do corte; do corte em diante, vira situação. Filtros: `type=absence` traz também as situações de ausência; `type=onsite` e `type=remote` filtram pela situação; `status` segue o mesmo mapa. Os demais tipos (manual, pausa, War Room, hora extra, ajuste, plantão) não mudam.
+
+**Frontend:**
+
+| Tela | Mudança |
+|---|---|
+| Legenda única | `frontend/src/lib/presenceLegend.ts`: situação → rótulo, ícone, cor e forma (seção 5.1); nenhuma situação só pela cor; usada no Calendário e na tela Escala neste lote |
+| Calendário | Mês com resumo por dia ("P 9 · R 6 · A 2 · S 1", com ícone e cor da legenda; P15); semana e detalhe do dia com um cartão por técnico; legenda fixa no rodapé; War Room em outro tom (violeta), para não se confundir com ausente; dias antes do corte com os cartões de hoje |
+| Relatório | "Dias de ausência" e "Dias sem escala" quando o JSON trouxer os campos; aviso do corte quando o período cruzar a data |
+| Tela Escala (pendência 8a) | Filtro "Ocultar sem escala" (desligado por padrão); rótulos com acento; "Liderança" sem quebra na coluna Equipe; status com a legenda única |
+| L-13 e L-14 | Sai a `CalendarPage` duplicada de `OperationalPages.jsx`; "Carregando módulo..." corrigido |
+
+**Riscos.** (1) Números do relatório mudam a partir do corte (P3, P4, ausência, arquivado): validar com quem consome o CSV antes do deploy (risco já registrado na seção 10). (2) Rollback do código depois do corte: o relatório volta ao cálculo antigo em todas as datas, sem perda de dado; a 019 pode ficar (o código anterior não a lê). (3) Corte registrado na data errada: o registro é imutável; corrigir exige o rollback do registro e um registro novo, os dois auditados e com aprovação. (4) Carga: relatório de até 366 dias passa pelo motor (cadastros × dias, sem consulta a mais por dia); medir no teste do responsável com um ano de dados. (5) O contrato do relatório tem campos opcionais (só aparecem quando o período alcança o corte): o frontend trata a ausência. (6) QAs com `git diff` podem disparar em `CalendarPage.jsx` e `OperationalPages.jsx` (dívida técnica registrada). (7) Sem MySQL na estação: 019 e registro do corte só ficam provados no ensaio e no teste do responsável.
+
+**Testes.** `qa-presence-cutoff` (novo): estrutura SQL da 019, do registro, do rollback e da verificação (regra do A4, `SIGNAL`, auditoria sem dado pessoal); `split` em tabela de casos (sem corte, período antes, depois, cruzando, corte no primeiro e no último dia, um dia); relatório e CSV com o corte no meio (linhas antes idênticas às do cálculo antigo, totais, aviso, campos novos só quando o período alcança o corte); arquivado até a véspera de `arquivado_em` e inativo antigo fora; fora do Mapa fora; Calendário por perfil (gestão, próprio, outro técnico, somente leitura): categoria só para quem pode, observação nunca, ausência sem evento duplicado. `qa-schedule-legacy-output`: as 17 saídas continuam idênticas à referência **sem corte e com o corte depois de cada período**; seção nova com o corte no meio, conferindo que a parte antiga é igual linha a linha. `qa-security`: matriz sem mudança; Calendário e relatório ponta a ponta com o corte. Frontend: legenda (toda situação com rótulo e ícone), Calendário, relatório, tela Escala, os 15 `qa:*` e lint. Mutação no `split`, no relatório, no Calendário e na legenda. Validação humana em MySQL 8.0.46.
+
+**Decisões a aprovar:**
+
+| # | Decisão | Recomendação |
+|---|---|---|
+| D1 | Onde fica o corte | Tabela própria (019), uma linha, gravada só pelo script de registro do deploy, auditada; a aplicação só lê. Recusadas: variável no `.env` (sem trilha no banco, muda sem rastro) e configuração pela tela (um admin poderia mover o corte e reescrever períodos fechados) |
+| D2 | Qual data | O dia do deploy da Parte B, informado no registro. Alternativa: 1º dia da competência seguinte (o mês inteiro numa regra só, mas o motor espera até 30 dias) |
+| D3 | Corte imutável | O registro para se já houver corte; trocar só com rollback do registro e registro novo, os dois auditados e com aprovação |
+| D4 | Contrato do relatório | Período inteiro antes do corte: saída byte a byte igual (sem campo novo). Período que alcança o corte: `cutoff`, `absence_days` e `no_schedule_days`; CSV com linha `aviso` só quando cruza |
+| D5 | Regras do relatório a partir do corte | P3, P4, ausência de dia inteiro em `absence_days` (CSV "Ausência", sem categoria), parcial não tira o dia, fora do Mapa fora, Liderança regra fixa |
+| D6 | Período que cruza o corte | Divide no corte: antes pelo cálculo antigo (linhas idênticas), depois pelo motor; totais somados |
+| D7 | Histórico do arquivado (F4) | No relatório e no Calendário, a partir do corte, o cadastro com `arquivado_em` entra nas datas anteriores ao arquivamento; inativo antigo (data nula) não entra depois do corte; antes do corte, como hoje (sem inativo). A tela Escala continua só com ativos |
+| D8 | Calendário a partir do corte | Um evento por técnico e dia útil com a situação do motor; ausência vira situação (categoria pela P9, observação nunca); fora do Mapa mantém o evento de ausência; filtros `type` e `status` pelo mapa da situação |
+| D9 | Dia atual no Calendário | **Sem relógio** (`dayPresence`): o Calendário não se atualiza sozinho, então "Fora do expediente" e "Em pausa" ficam no painel ao vivo e na Visão Operacional (F7). **Muda a seção 5.5**, que previa "Fora do expediente" no dia atual |
+| D10 | Legenda e mês | Legenda única em `frontend/src/lib/presenceLegend.ts`, no Calendário e na tela Escala neste lote; mês com resumo por dia, incluindo "S" (sem escala); War Room em violeta |
+| D11 | Acentos (pendência 8a) | Só no caminho do motor (tela Escala; relatório e Calendário a partir do corte). O cálculo antigo fica com os rótulos de hoje, para a saída antiga continuar idêntica |
+| D12 | Datas passadas do Mapa PA (D13 do F4) | Nada no F5: fica no F6, que põe o Mapa PA no motor. O passado já é consistente: o arquivamento fecha o PA em ontem, e o inativo antigo com PA aberto deixa de existir no passo da D5 |
+| D13 | "Ocultar sem escala" (pendência 8a) | Filtro só da tela, desligado por padrão, sem mudar o contrato do `schedules.php` |
+| D14 | Registro do corte no deploy | Depois da recarga do PHP-FPM, com a data do dia; antes dele o código novo funciona no cálculo antigo (tabela vazia), então não há janela |
 
 ---
 
