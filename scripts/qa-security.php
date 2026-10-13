@@ -40,7 +40,7 @@ final class QaChildPdo extends PDO {
         if (trim($query) === 'SELECT 1 FROM audit_log LIMIT 1') {
             return new QaChildStatement($this, 'SELECT 1 FROM audit_log LIMIT 1');
         }
-        if (trim($query) === 'SELECT id, fora_mapa_escala FROM funcionarios') {
+        if (trim($query) === 'SELECT id, fora_mapa_escala FROM funcionarios' || trim($query) === 'SELECT id, arquivado_em FROM funcionarios WHERE ativo = 0') {
             $statement = new QaChildStatement($this, trim($query));
             $statement->execute();
             return $statement;
@@ -166,6 +166,15 @@ final class QaChildStatement extends PDOStatement {
         }
         if ($this->sql === 'SELECT COUNT(*) FROM portal_pa_assignments WHERE employee_id = :id AND active = 1 AND (valid_until IS NULL OR valid_until >= :today)') {
             $this->rows = [['n' => (int)($this->pdo->db['pa_ativos'][(string)($params[':id'] ?? 0)] ?? 0)]];
+            return true;
+        }
+        if ($this->sql === 'SELECT id, arquivado_em FROM funcionarios WHERE ativo = 0') {
+            $this->rows = [];
+            foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                if ((int)($row['ativo'] ?? 1) === 0) {
+                    $this->rows[] = ['id' => (int)$id, 'arquivado_em' => $row['arquivado_em'] ?? null];
+                }
+            }
             return true;
         }
         if ($this->sql === 'SELECT id, fora_mapa_escala FROM funcionarios') {
@@ -2323,6 +2332,14 @@ $listed = static fn (array $result): array => array_column(json_decode($result['
 assert_same(true, ($listed($foraCases['lista_admin'])[1] ?? null) === true && ($listed($foraCases['lista_admin'])[3] ?? null) === false, 'listagem: admin ve a marcacao');
 assert_same(true, ($listed($foraCases['lista_gestor'])[1] ?? null) === true, 'listagem: gestor ve a marcacao (telas de escala)');
 assert_same([], $listed($foraCases['lista_tecnico']), 'listagem: tecnico nao recebe a marcacao');
+// F4: data do arquivamento so para quem gerencia funcionarios (ativo: nulo).
+$archivedAt = static fn (array $result): array => array_map(
+    static fn (array $item): array => array_key_exists('arquivado_em', $item) ? [$item['arquivado_em']] : [],
+    json_decode($result['body'], true)['funcionarios'] ?? []
+);
+assert_same(true, $archivedAt($foraCases['lista_admin']) !== [] && array_unique(array_map('json_encode', $archivedAt($foraCases['lista_admin']))) === ['[null]'], 'listagem: admin recebe arquivado_em (nulo nos ativos)');
+assert_same(['[]'], array_values(array_unique(array_map('json_encode', $archivedAt($foraCases['lista_gestor'])))), 'listagem: gestor nao recebe arquivado_em');
+assert_same(['[]'], array_values(array_unique(array_map('json_encode', $archivedAt($foraCases['lista_tecnico'])))), 'listagem: tecnico nao recebe arquivado_em');
 
 // Ordem no endpoint: recusa desfaz a transacao antes de auditar (o audit_log
 // usa a mesma conexao) e a gravacao faz commit antes das auditorias.

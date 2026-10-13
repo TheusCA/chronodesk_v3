@@ -1138,6 +1138,11 @@ assert_same([1, 1, [true, true, true]], [
 $dashboardSource = (string)file_get_contents($root . '/api/portal/dashboard.php');
 assert_same([true, false], [strpos($dashboardSource, '$status = $gerenciador->obter_status();') !== false, strpos($dashboardSource, 'getFuncionarios(') !== false], 'dashboard.php: contadores e active_pauses so a partir do obter_status()');
 assert_same(true, strpos((string)file_get_contents($root . '/api/status.php'), '$status = $gerenciador->obter_status();') !== false, 'status.php: lista a partir do obter_status()');
+// Listagem (commit 5): data do arquivamento so para quem gerencia
+// funcionarios, so a data (sem autor), nula no ativo (ponta a ponta no qa-security).
+$listSource = (string)file_get_contents($root . '/api/listar_funcionarios.php');
+assert_same(true, strpos($listSource, "if (\$is_admin) {\n    try {\n        \$arquivado_em = [];\n        foreach (get_db_connection()->query('SELECT id, arquivado_em FROM funcionarios WHERE ativo = 0')") !== false, 'listagem: arquivado_em lido so para quem gerencia funcionarios, sem o autor');
+assert_same(true, strpos($listSource, "substr((string)\$row['arquivado_em'], 0, 10)") !== false && strpos($listSource, "\$item['arquivado_em'] = \$ativo ? null : (\$arquivado_em[(int)\$f->id] ?? null);") !== false, 'listagem: so a data, nula no ativo');
 $pendingSource = (string)file_get_contents($root . '/api/solicitacoes_pendentes.php');
 assert_same(true, strpos($pendingSource, 'if (($funcionario->ativo ?? true) && $funcionario->status_aprovacao == "pendente") {') !== false, 'solicitacoes_pendentes: inativo fora, mesma regra do obter_status()');
 

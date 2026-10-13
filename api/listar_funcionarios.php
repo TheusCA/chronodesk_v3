@@ -29,6 +29,23 @@ if (portal_role_is_manager(current_portal_role())) {
     }
 }
 
+// [F4] Data do arquivamento (so a data, sem o autor) para quem gerencia
+// funcionarios: a tela separa o arquivado do inativo antigo, sem data, que
+// ainda pode ser arquivado (D5). Sem a coluna (migration 014 ainda nao
+// aplicada), o campo fica de fora e a lista continua.
+$arquivado_em = null;
+if ($is_admin) {
+    try {
+        $arquivado_em = [];
+        foreach (get_db_connection()->query('SELECT id, arquivado_em FROM funcionarios WHERE ativo = 0')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $arquivado_em[(int)$row['id']] = $row['arquivado_em'] === null ? null : substr((string)$row['arquivado_em'], 0, 10);
+        }
+    } catch (Throwable $e) {
+        error_log('[FUNCIONARIO] arquivado_em indisponivel: ' . get_class($e));
+        $arquivado_em = null;
+    }
+}
+
 if ($gerenciador) {
     foreach ($gerenciador->getFuncionarios() as $f) {
         $ativo = $f->ativo ?? true;
@@ -50,6 +67,9 @@ if ($gerenciador) {
         ];
         if (is_array($fora_mapa)) {
             $item['fora_mapa_escala'] = $fora_mapa[(int)$f->id] ?? false;
+        }
+        if (is_array($arquivado_em)) {
+            $item['arquivado_em'] = $ativo ? null : ($arquivado_em[(int)$f->id] ?? null);
         }
         if ($is_admin) {
             $item['ad_login'] = $f->ad_login ?? null;

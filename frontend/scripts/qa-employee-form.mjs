@@ -45,7 +45,9 @@ assert.match(adminSource, /handleCreateEmployeeSubmit\(create\)/, 'Criacao deve 
 assert.match(adminSource, /handleEditEmployeeSubmit\(update\)/, 'Edicao deve usar handleSubmit')
 assert.match(adminSource, /employeeFormSchema\.safeParse\(values\)/, 'AdminPage deve validar funcionario com safeParse')
 assert.match(adminSource, /setError\(field, \{ type: 'zod'/, 'Erros Zod devem ir para formState.errors')
-assert.match(adminSource, /register\('id'\)[\s\S]*register\('nome'\)[\s\S]*register\('jornada_entrada'\)[\s\S]*register\('jornada_saida'\)[\s\S]*register\('almoco_inicio'\)[\s\S]*register\('almoco_fim'\)[\s\S]*register\('ativo'\)/, 'Campos de funcionario devem ser registrados no RHF')
+assert.match(adminSource, /register\('id'\)[\s\S]*register\('nome'\)[\s\S]*register\('jornada_entrada'\)[\s\S]*register\('jornada_saida'\)[\s\S]*register\('almoco_inicio'\)[\s\S]*register\('almoco_fim'\)/, 'Campos de funcionario devem ser registrados no RHF')
+// F4 (D4): sem o checkbox "Funcionário ativo"; ativo nao e campo do formulario.
+assert.doesNotMatch(adminSource, /register\('ativo'\)|Funcionário ativo/, 'Formulario sem o campo ativo (arquivar e restaurar sao acoes da linha)')
 assert.match(adminSource, /readOnly=\{editing\}[\s\S]*\{\.\.\.register\('id'\)\}/, 'Edicao deve preservar id no submit sem disabled')
 
 const createSource = adminSource.match(/async function create\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
@@ -60,15 +62,34 @@ assert.match(updateSource, /post\('atualizar_funcionario\.php', \{ \.\.\.parsed\
 assert.match(updateSource, /ACTION_FEEDBACK\.employeeUpdated/, 'Edicao deve preservar feedback')
 assert.match(updateSource, /\(\) => setEditForm\(null\)/, 'Edicao deve fechar modo edicao apos sucesso')
 
-const deactivateSource = adminSource.match(/async function deactivate\(id\) \{[\s\S]*?\n  \}/)?.[0] || ''
-assert.match(deactivateSource, /post\('remover_funcionario\.php', \{ funcionario_id: id \}\)/, 'Remocao deve preservar endpoint e payload')
-assert.match(deactivateSource, /ACTION_FEEDBACK\.employeeRemoved/, 'Remocao deve preservar feedback')
-assert.match(deactivateSource, /if \(editForm && Number\(editForm\.id\) === Number\(id\)\) setEditForm\(null\)/, 'Remocao deve fechar edicao quando aplicavel')
+// F4 (desenho 9.6): arquivar (remover_funcionario.php, mesmo endereco) e
+// restaurar (so admin), confirmados na propria linha.
+const archiveSource = adminSource.match(/async function archiveOrRestore\(item, kind\) \{[\s\S]*?\n  \}/)?.[0] || ''
+assert.match(archiveSource, /post\(archiving \? 'remover_funcionario\.php' : 'restaurar_funcionario\.php', \{ funcionario_id: item\.id \}\)/, 'Arquivar e restaurar pelos endpoints do F4, com funcionario_id')
+assert.match(archiveSource, /ACTION_FEEDBACK\.employeeArchived\} \$\{archiveEffectsSummary\(result\?\.efeitos\)\}/, 'Arquivar mostra a mensagem e o resumo dos efeitos')
+assert.match(archiveSource, /ACTION_FEEDBACK\.employeeRestored/, 'Restaurar com feedback proprio')
+assert.match(archiveSource, /for \(const warning of result\?\.avisos \|\| \[\]\) notify\(warning, 'warning'\)/, 'Avisos da resposta (allowlist, estado) aparecem como alerta')
+assert.match(archiveSource, /if \(editForm && Number\(editForm\.id\) === Number\(item\.id\)\) setEditForm\(null\)/, 'Arquivar fecha a edicao do mesmo cadastro')
+assert.match(archiveSource, /error: error\?\.message/, 'Recusa do servidor aparece no painel da linha')
+const rowActionsSource = adminSource.match(/function rowActions\(item\) \{[\s\S]*?\n  \}/)?.[0] || ''
+assert.match(rowActionsSource, /if \(state === 'ativo' && canManageRecord\(item\)\)[\s\S]*Editar/, 'Editar so em cadastro ativo (arquivado da 409 no servidor)')
+assert.match(rowActionsSource, /if \(state !== 'arquivado' && canArchive\(item\)\)[\s\S]*state === 'inativo_antigo' \? 'Arquivar \(regularizar\)' : 'Arquivar'/, 'Arquivar no ativo e no inativo antigo sem data (D5); arquivado pelo F4 nao')
+assert.match(rowActionsSource, /if \(state !== 'ativo' && canRestore\)[\s\S]*Restaurar/, 'Restaurar so com a permissao e so em inativo')
+assert.match(adminSource, /const canRestore = permissions\.has\('funcionarios\.restaurar'\)/, 'Restaurar pela permissao do servidor (D1)')
+assert.match(adminSource, /const canManageLeadershipTeam = permissions\.has\('escalas\.lideranca'\)/, 'Equipe Lideranca pela permissao da L9')
+const canArchiveSource = adminSource.match(/function canArchive\(item\) \{[\s\S]*?\n  \}/)?.[0] || ''
+assert.match(canArchiveSource, /canManageRecord\(item\)[\s\S]*canManageLeadershipTeam \|\| normalizeTeam\(item\.equipe\) !== 'lideranca'[\s\S]*!isOwnRecord\(item\)/, 'Arquivar: regra do 5b, L9 e nunca o proprio cadastro (D3)')
+assert.match(adminSource, /\{pendingAction\?\.id === item\.id && \([\s\S]*<EmployeeActionConfirmation[\s\S]*onConfirm=\{\(\) => archiveOrRestore\(item, pendingAction\.kind\)\}/, 'Confirmacao na propria linha antes de arquivar ou restaurar')
+assert.match(adminSource, /<option value="ativos">Ativos<\/option><option value="arquivados">Arquivados<\/option><option value="">Ativos e arquivados<\/option>/, 'Filtro Ativos/Arquivados')
+assert.match(adminSource, /useState\('ativos'\)/, 'A lista abre nos ativos')
+const archivePanelSource = adminSource.match(/function EmployeeActionConfirmation\([\s\S]*?\n}\n/)?.[0] || ''
+assert.doesNotMatch(archivePanelSource + archiveSource + rowActionsSource, /\bconfirm\(|\balert\(|\bprompt\(/, 'Arquivar e restaurar sem dialogo do navegador')
 
 assert.match(adminSource, /const result = await runAction\(\{[\s\S]*action,[\s\S]*refresh: refreshers,[\s\S]*notify,[\s\S]*successMessage,[\s\S]*onSuccess/, 'perform deve continuar delegando ao runAction')
 assert.match(actionFeedbackSource, /employeeCreated: 'Funcionário adicionado com sucesso\.'/u, 'ACTION_FEEDBACK.employeeCreated deve existir')
 assert.match(actionFeedbackSource, /employeeUpdated: 'Funcionário atualizado com sucesso\.'/u, 'ACTION_FEEDBACK.employeeUpdated deve existir')
-assert.match(actionFeedbackSource, /employeeRemoved: 'Funcionário removido com sucesso\.'/u, 'ACTION_FEEDBACK.employeeRemoved deve existir')
+assert.match(actionFeedbackSource, /employeeArchived: 'Funcionário arquivado\.'/u, 'ACTION_FEEDBACK.employeeArchived deve existir')
+assert.doesNotMatch(actionFeedbackSource, /employeeRemoved/, 'Sem a mensagem de remocao (o cadastro e arquivado)')
 assert.match(operationalSource, /scheduleRuleSchema\.safeParse\(/, 'Formulario de escala da Fase 20 deve continuar usando Zod')
 
 for (const allowedDependency of [
@@ -129,7 +150,8 @@ const confirmInventory = Object.fromEntries(sourceFiles
 assert.deepEqual(confirmInventory, {
   'src/App.jsx': 1,
   // Lote 5b: saiu o aviso de "sair de Lideranca" (equipe nao define mais o perfil).
-  'src/pages/AdminPage.jsx': 3,
+  // F4: saiu o confirm do "Desativar" (arquivar confirma na linha).
+  'src/pages/AdminPage.jsx': 2,
   'src/pages/DocumentsPage.jsx': 1,
   'src/pages/OperationalPages.jsx': 1,
   'src/pages/PaMapPage.jsx': 1,
@@ -151,7 +173,6 @@ const validEmployee = {
   jornada_saida: '17:00',
   almoco_inicio: '12:00',
   almoco_fim: '13:00',
-  ativo: true,
 }
 
 function issuesFor(overrides) {
@@ -162,6 +183,42 @@ function issuesFor(overrides) {
 const validResult = employeeFormSchema.safeParse(validEmployee)
 assert.equal(validResult.success, true, 'Funcionario valido deve passar')
 assert.equal(validResult.data.id, 12, 'ID deve ser convertido para numero')
+// F4 (D4): ativo vindo da listagem (edicao) nao vai no corpo do salvar.
+for (const ativo of [true, false, 'x']) {
+  const result = employeeFormSchema.safeParse({ ...validEmployee, ativo, arquivado_em: '2026-10-13' })
+  assert.equal(result.success, true, `ativo=${String(ativo)} da listagem nao invalida o formulario`)
+  assert.equal('ativo' in result.data || 'arquivado_em' in result.data, false, 'ativo e arquivado_em fora do corpo enviado')
+}
+
+// F4: estado do cadastro e resumo dos efeitos (comportamento).
+const { archiveEffectsSummary, employeeArchiveState, matchesArchiveFilter } = await import(pathToFileURL(join(srcRoot, 'lib', 'employeeArchive.ts')).href)
+for (const [item, expected] of [
+  [{ ativo: true }, 'ativo'],
+  [{ ativo: true, arquivado_em: null }, 'ativo'],
+  [{}, 'ativo'],
+  [{ ativo: false, arquivado_em: '2026-10-13' }, 'arquivado'],
+  [{ ativo: 0, arquivado_em: '2026-10-13' }, 'arquivado'],
+  [{ ativo: false, arquivado_em: null }, 'inativo_antigo'],
+  [{ ativo: false }, 'inativo_antigo'],
+  [{ ativo: '0', arquivado_em: '' }, 'inativo_antigo'],
+]) {
+  assert.equal(employeeArchiveState(item), expected, `estado de ${JSON.stringify(item)}`)
+}
+const noEffects = { pa_encerrados: 0, pa_removidos: 0, regras_encerradas: 0, regras_removidas: 0, excecoes_removidas: 0, ausencias_canceladas: 0, ausencias_cortadas: 0, pausa_finalizada: false, solicitacao_descartada: false }
+assert.equal(archiveEffectsSummary(noEffects), 'Nada em aberto para encerrar.', 'Sem efeitos')
+assert.equal(archiveEffectsSummary(undefined), 'Nada em aberto para encerrar.', 'Resposta sem efeitos')
+assert.equal(
+  archiveEffectsSummary({ ...noEffects, pa_encerrados: 1, pa_removidos: 2, regras_encerradas: 1, regras_removidas: 1, excecoes_removidas: 3, ausencias_canceladas: 2, ausencias_cortadas: 1, pausa_finalizada: true }),
+  '1 vínculo de PA encerrado; 2 vínculos de PA futuros removidos; 1 regra de escala encerrada; 1 regra de escala futura removida; 3 exceções de escala futuras removidas; 2 ausências futuras canceladas; 1 ausência em curso encerrada ontem; pausa aberta finalizada.',
+  'Resumo com singular, plural e pausa',
+)
+assert.equal(archiveEffectsSummary({ ...noEffects, solicitacao_descartada: true, pa_encerrados: 'x', pa_removidos: 1.5 }), 'solicitação de pausa descartada.', 'Solicitacao descartada; contagem invalida ou fracionada ignorada')
+assert.equal(archiveEffectsSummary({ ...noEffects, pausa_finalizada: 'false', solicitacao_descartada: 1 }), 'Nada em aberto para encerrar.', 'Pausa e solicitacao so com true (contrato booleano)')
+const filterItems = [{ id: 1, ativo: true }, { id: 2, ativo: false, arquivado_em: '2026-10-10' }, { id: 3, ativo: false, arquivado_em: null }]
+for (const [status, ids] of [['ativos', [1]], ['arquivados', [2, 3]], ['', [1, 2, 3]]]) {
+  assert.deepEqual(filterItems.filter((item) => matchesArchiveFilter(item, status)).map((item) => item.id), ids, `filtro "${status}"`)
+}
+assert.match(adminSource, /&& matchesArchiveFilter\(item, status\)/, 'A lista usa o filtro testado')
 
 for (const adLogin of [null, undefined, '']) {
   const result = employeeFormSchema.safeParse({ ...validEmployee, ad_login: adLogin })
@@ -200,14 +257,13 @@ for (const [overrides, path] of [
   [{ id: '1.5' }, 'id'],
   [{ nome: '  ab ' }, 'nome'],
   [{ nome: null }, 'nome'],
-  [{ ativo: 'sim' }, 'ativo'],
 ]) {
   assert.deepEqual(issuesFor(overrides).map((issue) => issue.path), [path], `${JSON.stringify(overrides)} deve falhar em ${path}`)
 }
 
 const allMessages = [
   { id: '' }, { id: '0' }, { id: 'x' }, { nome: '' }, { nome: null }, { ad_login: 5 }, { ad_login: 'a b' },
-  { equipe: 'x' }, { access_role: 'x' }, { jornada_entrada: null }, { jornada_entrada: '99:99' }, { ativo: 'x' },
+  { equipe: 'x' }, { access_role: 'x' }, { jornada_entrada: null }, { jornada_entrada: '99:99' },
 ].flatMap((overrides) => issuesFor(overrides).map((issue) => issue.message))
 for (const message of allMessages) {
   assert.doesNotMatch(message, /\b(Invalid|expected|received|Required|Too small|Too big)\b/, `Mensagem de validacao deve estar em portugues: ${message}`)

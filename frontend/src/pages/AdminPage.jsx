@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useResource } from '../hooks/useResource'
 import { post } from '../lib/api'
 import { ACTION_FEEDBACK, decisionFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
-import { formatDateTime } from '../lib/format'
+import { formatDate, formatDateTime } from '../lib/format'
+import { archiveEffectsSummary, employeeArchiveState, matchesArchiveFilter } from '../lib/employeeArchive'
 import { employeeFormSchema } from '../lib/formSchemas'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
@@ -27,13 +28,14 @@ const tabs = [
   ['seguranca', 'Segurança'],
 ]
 
-async function perform(action, refreshers, notify, successMessage = ACTION_FEEDBACK.changesSaved, onSuccess) {
+async function perform(action, refreshers, notify, successMessage = ACTION_FEEDBACK.changesSaved, onSuccess, onError) {
   const result = await runAction({
     action,
     refresh: refreshers,
     notify,
     successMessage,
     onSuccess,
+    onError,
   })
   return result !== null
 }
@@ -262,7 +264,7 @@ function SettingsTab({ resource, notify }) {
 
 const emptyEmployee = {
   id: '', nome: '', ad_login: '', equipe: 'n1', access_role: 'tecnico', jornada_entrada: '08:00',
-  jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ativo: true, fora_mapa_escala: false,
+  jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', fora_mapa_escala: false,
 }
 
 function teamLabel(value) {
@@ -347,10 +349,6 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
         <input aria-invalid={Boolean(errors.almoco_fim)} className="field mt-2" required type="time" {...register('almoco_fim')} />
         {errors.almoco_fim && <span className="mt-1 block text-xs text-red-300">{errors.almoco_fim.message}</span>}
       </label>
-      <label className="check-row md:col-span-2">
-        <input type="checkbox" {...register('ativo')} />
-        <span><strong>Funcionário ativo</strong><small>Permite autenticação e aplica o perfil configurado.</small></span>
-      </label>
       {editing && (
         <label className="check-row md:col-span-2">
           <input disabled={!canEditOutsideMap} type="checkbox" {...register('fora_mapa_escala')} />
@@ -367,7 +365,59 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
   )
 }
 
-function EmployeesTab({ resource, notify, canPromote = false, canEditOutsideMap = false }) {
+const archiveStateLabels = {
+  ativo: ['Ativo', 'status-success'],
+  arquivado: ['Arquivado', 'status-neutral'],
+  inativo_antigo: ['Inativo sem data', 'status-warning'],
+}
+
+function EmployeeStatusBadge({ item }) {
+  const state = employeeArchiveState(item)
+  const [label, tone] = archiveStateLabels[state]
+  return (
+    <div>
+      <span className={`status-badge ${tone}`}>{label}</span>
+      {state === 'arquivado' && <small>Em {formatDate(item.arquivado_em)}</small>}
+      {state === 'inativo_antigo' && <small>Desativado antes do arquivamento</small>}
+    </div>
+  )
+}
+
+// F4 (desenho 9.6): confirmação na própria linha, sem diálogo do navegador.
+function EmployeeActionConfirmation({ item, kind, error, busy, onConfirm, onCancel }) {
+  const legacy = employeeArchiveState(item) === 'inativo_antigo'
+  const title = kind === 'restore'
+    ? `Restaurar ${item.nome}?`
+    : legacy ? `Regularizar e arquivar ${item.nome}?` : `Arquivar ${item.nome}?`
+  const text = kind === 'restore'
+    ? 'O cadastro volta a ativo e pode autenticar de novo. PA, escala e ausências não voltam: cadastre-os de novo depois.'
+    : legacy
+      ? 'O cadastro já está inativo, mas foi desativado antes do arquivamento. O que ainda estiver aberto é encerrado a partir de hoje: PA e escala encerrados, exceções futuras apagadas, ausências futuras canceladas e a ausência em curso termina ontem.'
+      : 'A partir de hoje: PA e escala encerrados, exceções futuras apagadas, ausências futuras canceladas (a ausência em curso termina ontem) e pausa aberta finalizada. A sessão do colaborador é encerrada. O histórico fica; só um administrador restaura.'
+  return (
+    <div aria-label={title} className="space-y-3" role="group">
+      <InlineAlert title={title} tone={kind === 'restore' ? 'info' : 'warning'}>{text}</InlineAlert>
+      {error && <p className="text-sm text-red-300" role="alert">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button className={kind === 'restore' ? 'btn-primary' : 'btn-danger'} disabled={busy} onClick={onConfirm} type="button">
+          {busy ? 'Aguarde...' : kind === 'restore' ? 'Confirmar restauração' : 'Confirmar arquivamento'}
+        </button>
+        <button className="btn-secondary" disabled={busy} onClick={onCancel} type="button">Voltar</button>
+      </div>
+    </div>
+  )
+}
+
+function EmployeesTab({
+  resource,
+  notify,
+  canPromote = false,
+  canEditOutsideMap = false,
+  canRestore = false,
+  canManageLeadershipTeam = false,
+  ownEmployeeId = 0,
+  ownLogins = [],
+}) {
   const {
     clearErrors: clearCreateEmployeeErrors,
     formState: { errors: createEmployeeErrors },
@@ -401,7 +451,10 @@ function EmployeesTab({ resource, notify, canPromote = false, canEditOutsideMap 
   const [search, setSearch] = useState('')
   const [team, setTeam] = useState('')
   const [role, setRole] = useState('')
-  const [active, setActive] = useState('')
+  // F4: a lista abre nos ativos; arquivados (e inativos antigos) num filtro próprio.
+  const [status, setStatus] = useState('ativos')
+  const [pendingAction, setPendingAction] = useState(null)
+  const [acting, setActing] = useState(false)
   const filtered = useMemo(() => {
     const items = resource.data?.funcionarios || []
     const term = search.toLowerCase()
@@ -409,9 +462,10 @@ function EmployeesTab({ resource, notify, canPromote = false, canEditOutsideMap 
       (!term || item.nome.toLowerCase().includes(term) || (item.ad_login || '').toLowerCase().includes(term) || teamLabel(item.equipe).toLowerCase().includes(term))
       && (!team || normalizeTeam(item.equipe) === team)
       && (!role || item.access_role === role)
-      && (!active || String(item.ativo) === active)
+      && matchesArchiveFilter(item, status)
     ))
-  }, [active, resource.data, role, search, team])
+  }, [resource.data, role, search, status, team])
+  const allEmployees = resource.data?.funcionarios || []
 
   if (resource.loading) return <LoadingState />
   if (resource.error) return <ErrorState message={resource.error.message} onRetry={resource.refresh} />
@@ -509,26 +563,70 @@ function EmployeesTab({ resource, notify, canPromote = false, canEditOutsideMap 
     setSubmitting(false)
   }
 
-  async function deactivate(id) {
-    if (!window.confirm('Confirma a desativação deste funcionário?')) return
+  function isOwnRecord(item) {
+    if (ownEmployeeId && Number(item.id) === Number(ownEmployeeId)) return true
+    const login = String(item.ad_login || '').trim().toLowerCase()
+    return Boolean(login) && ownLogins.includes(login)
+  }
+
+  // Lote 5b: cadastro de Liderança/admin só para quem promove.
+  function canManageRecord(item) {
+    return canPromote || !['lideranca', 'admin'].includes(item.access_role)
+  }
+
+  // L9 no arquivamento (decisão 1 do commit 3): cadastro da equipe Liderança só
+  // pelo admin; o próprio cadastro nunca (D3). O servidor confere de novo.
+  function canArchive(item) {
+    return canManageRecord(item)
+      && (canManageLeadershipTeam || normalizeTeam(item.equipe) !== 'lideranca')
+      && !isOwnRecord(item)
+  }
+
+  async function archiveOrRestore(item, kind) {
+    const archiving = kind === 'archive'
+    setActing(true)
     await perform(
-      () => post('remover_funcionario.php', { funcionario_id: id }),
+      () => post(archiving ? 'remover_funcionario.php' : 'restaurar_funcionario.php', { funcionario_id: item.id }),
       [resource.refresh],
       notify,
-      ACTION_FEEDBACK.employeeRemoved,
-      () => {
-        if (editForm && Number(editForm.id) === Number(id)) setEditForm(null)
+      null,
+      (result) => {
+        setPendingAction(null)
+        if (editForm && Number(editForm.id) === Number(item.id)) setEditForm(null)
+        notify(archiving
+          ? `${result?.mensagem || ACTION_FEEDBACK.employeeArchived} ${archiveEffectsSummary(result?.efeitos)}`
+          : result?.mensagem || ACTION_FEEDBACK.employeeRestored)
+        for (const warning of result?.avisos || []) notify(warning, 'warning')
       },
+      (error) => setPendingAction((current) => (current && current.id === item.id ? { ...current, error: error?.message || 'Não foi possível concluir a ação.' } : current)),
     )
+    setActing(false)
+  }
+
+  function rowActions(item) {
+    const state = employeeArchiveState(item)
+    const actions = []
+    if (state === 'ativo' && canManageRecord(item)) {
+      actions.push(<button className="table-action" key="edit" onClick={() => edit(item)} type="button">Editar</button>)
+    }
+    if (state !== 'arquivado' && canArchive(item)) {
+      actions.push(<button className="table-action text-red-300" key="archive" onClick={() => setPendingAction({ id: item.id, kind: 'archive', error: '' })} type="button">{state === 'inativo_antigo' ? 'Arquivar (regularizar)' : 'Arquivar'}</button>)
+    }
+    if (state !== 'ativo' && canRestore) {
+      actions.push(<button className="table-action" key="restore" onClick={() => setPendingAction({ id: item.id, kind: 'restore', error: '' })} type="button">Restaurar</button>)
+    }
+    if (actions.length > 0) return <div className="flex flex-wrap gap-2">{actions}</div>
+    if (state === 'ativo' && isOwnRecord(item)) return <span className="text-xs text-slate-500">Seu cadastro</span>
+    return <span className="text-xs text-slate-500">{state === 'ativo' ? 'Só administradores' : 'Só administradores restauram'}</span>
   }
 
   return (
     <div className="space-y-5">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard detail="Funcionários visíveis nesta consulta" icon="users" label="Listados" value={filtered.length} />
-        <MetricCard detail="Ativos podem autenticar e operar" icon="shield" label="Ativos" tone="success" value={filtered.filter((item) => item.ativo).length} />
+        <MetricCard detail="Ativos podem autenticar e operar" icon="shield" label="Ativos" tone="success" value={allEmployees.filter((item) => employeeArchiveState(item) === 'ativo').length} />
         <MetricCard detail="Perfil Liderança (admin vem da lista AD_ADMIN_USERS)" icon="settings" label="Liderança" tone="warning" value={filtered.filter((item) => item.access_role === 'lideranca').length} />
-        <MetricCard detail="Filtragem por nome, login, equipe e perfil" icon="chart" label="Filtros aplicados" value={[search, team, role, active].filter(Boolean).length} />
+        <MetricCard detail="Filtragem por nome, login, equipe e perfil" icon="chart" label="Filtros aplicados" value={[search, team, role, status !== 'ativos'].filter(Boolean).length} />
       </section>
 
       <form onSubmit={handleCreateEmployeeSubmit(create)}>
@@ -549,11 +647,11 @@ function EmployeesTab({ resource, notify, canPromote = false, canEditOutsideMap 
           <input className="field" placeholder="Buscar nome, login ou equipe" value={search} onChange={(event) => setSearch(event.target.value)} />
           <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select>
           <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="lideranca">Liderança</option><option value="admin">Admin (legado)</option><option value="somente_leitura">Somente leitura</option></select>
-          <select className="field" value={active} onChange={(event) => setActive(event.target.value)}><option value="">Ativos e inativos</option><option value="true">Ativos</option><option value="false">Inativos</option></select>
+          <select aria-label="Situação do cadastro" className="field" value={status} onChange={(event) => { setStatus(event.target.value); setPendingAction(null) }}><option value="ativos">Ativos</option><option value="arquivados">Arquivados</option><option value="">Ativos e arquivados</option></select>
         </FilterBar>
         <section className="card table-wrap">
           <SectionHeader
-            description="Ações de edição e desativação continuam restritas e auditadas pelo backend."
+            description="Editar, arquivar e restaurar continuam restritos e auditados pelo backend. Arquivados ficam fora do painel, do Mapa PA e da escala; o histórico fica."
             meta={<span className="status-badge status-neutral">{filtered.length} resultado(s)</span>}
             title="Funcionários"
           />
@@ -562,7 +660,8 @@ function EmployeesTab({ resource, notify, canPromote = false, canEditOutsideMap 
             <thead><tr><th>Funcionário</th><th>Equipe</th><th>Perfil</th><th>Jornada</th><th>Status</th><th>Ações</th></tr></thead>
             <tbody>
               {filtered.map((item) => (
-                <tr key={item.id}>
+                <Fragment key={item.id}>
+                <tr>
                   <td>
                     <div className="flex min-w-0 items-start gap-3">
                       <UserAvatar name={item.nome} />
@@ -575,9 +674,27 @@ function EmployeesTab({ resource, notify, canPromote = false, canEditOutsideMap 
                   <td><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></td>
                   <td><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></td>
                   <td>{item.jornada_entrada} - {item.jornada_saida}</td>
-                  <td><span className={`status-badge ${item.ativo ? 'status-success' : 'status-neutral'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>
-                  <td>{canPromote || !['lideranca', 'admin'].includes(item.access_role) ? <div className="flex gap-2"><button className="table-action" onClick={() => edit(item)} type="button">Editar</button>{item.ativo && <button className="table-action text-red-300" onClick={() => deactivate(item.id)} type="button">Desativar</button>}</div> : <span className="text-xs text-slate-500">Só administradores</span>}</td>
+                  <td><EmployeeStatusBadge item={item} /></td>
+                  <td>{rowActions(item)}</td>
                 </tr>
+                {pendingAction?.id === item.id && (
+                  <tr>
+                    <td className="bg-slate-950/40" colSpan={6}>
+                      {/* No celular a tabela rola na horizontal: o painel fica preso à esquerda, na largura da tela. */}
+                      <div className="sticky left-0 max-w-[calc(100vw-5rem)] md:max-w-3xl">
+                        <EmployeeActionConfirmation
+                          busy={acting}
+                          error={pendingAction.error}
+                          item={item}
+                          kind={pendingAction.kind}
+                          onCancel={() => setPendingAction(null)}
+                          onConfirm={() => archiveOrRestore(item, pendingAction.kind)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -815,6 +932,12 @@ export function AdminPage({ session, search, navigate, notify, refreshStatus }) 
   const canManageEmployees = permissions.has('funcionarios.manage')
   const canPromote = permissions.has('perfis.promote')
   const canEditOutsideMap = permissions.has('funcionarios.fora_mapa')
+  // F4: restaurar só admin (D1); arquivar cadastro da equipe Liderança segue a L9.
+  const canRestore = permissions.has('funcionarios.restaurar')
+  const canManageLeadershipTeam = permissions.has('escalas.lideranca')
+  const ownLogins = [session.ci?.username, session.gestor?.username]
+    .map((login) => String(login || '').trim().toLowerCase())
+    .filter(Boolean)
   const availableTabs = isAdmin ? tabs : tabs.filter(([key]) => key === 'aprovacoes' || (key === 'funcionarios' && canManageEmployees))
   const rawRequestedTab = new URLSearchParams(search).get('tab')
   const requestedTab = rawRequestedTab === 'segurança' ? 'seguranca' : rawRequestedTab
@@ -841,7 +964,18 @@ export function AdminPage({ session, search, navigate, notify, refreshStatus }) 
       </div>
       {activeTab === 'aprovacoes' && <ApprovalsTab requests={requests} refresh={requests.refresh} refreshStatus={refreshStatus} notify={notify} />}
       {activeTab === 'configuracoes' && <SettingsTab resource={config} notify={notify} />}
-      {activeTab === 'funcionarios' && <EmployeesTab canEditOutsideMap={canEditOutsideMap} canPromote={canPromote} resource={employees} notify={notify} />}
+      {activeTab === 'funcionarios' && (
+        <EmployeesTab
+          canEditOutsideMap={canEditOutsideMap}
+          canManageLeadershipTeam={canManageLeadershipTeam}
+          canPromote={canPromote}
+          canRestore={canRestore}
+          notify={notify}
+          ownEmployeeId={session.ci?.funcionario_id || 0}
+          ownLogins={ownLogins}
+          resource={employees}
+        />
+      )}
       {activeTab === 'usuarios' && <UsersTab enabled={Boolean(config.data?.configuracoes?.local_admin_enabled)} resource={users} notify={notify} />}
       {activeTab === 'seguranca' && <SecurityTab config={config.data?.configuracoes} notify={notify} />}
     </div>

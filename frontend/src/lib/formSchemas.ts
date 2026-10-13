@@ -63,7 +63,7 @@ export const employeeFormSchema = z.object({
   jornada_saida: employeeTimeSchema,
   almoco_inicio: employeeTimeSchema,
   almoco_fim: employeeTimeSchema,
-  ativo: z.boolean({ error: 'Status ativo inválido.' }).default(true),
+  // F4 (D4): ativo não é campo do formulário; arquivar e restaurar são ações da linha.
   // F1 (P12): só admin altera; os demais reenviam o valor atual.
   fora_mapa_escala: z.boolean({ error: 'Valor inválido para "Fora do Mapa PA e da escala".' }).default(false),
 }).superRefine((value, ctx) => {

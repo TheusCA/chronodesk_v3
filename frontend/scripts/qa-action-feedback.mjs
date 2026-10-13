@@ -61,7 +61,9 @@ for (const forbidden of [
 
 assert.match(actionFeedbackSource, /employeeCreated: 'Funcionário adicionado com sucesso\.'/u, 'Mensagem de funcionario criado deve existir')
 assert.match(actionFeedbackSource, /employeeUpdated: 'Funcionário atualizado com sucesso\.'/u, 'Mensagem de funcionario atualizado deve existir')
-assert.match(actionFeedbackSource, /employeeRemoved: 'Funcionário removido com sucesso\.'/u, 'Mensagem de funcionario removido deve existir')
+// F4: "remover" virou arquivar; restaurar e acao nova (so admin).
+assert.match(actionFeedbackSource, /employeeArchived: 'Funcionário arquivado\.'/u, 'Mensagem de funcionario arquivado deve existir')
+assert.match(actionFeedbackSource, /employeeRestored: 'Cadastro restaurado\. PA e escala precisam ser cadastrados de novo\.'/u, 'Mensagem de cadastro restaurado deve existir')
 assert.match(actionFeedbackSource, /scheduleSaved: 'Escala salva com sucesso\.'/u, 'Mensagem de escala salva deve existir')
 assert.match(actionFeedbackSource, /paLinked: 'Vínculo realizado com sucesso\.'/u, 'Mensagem de vinculo criado deve existir')
 assert.match(actionFeedbackSource, /paUnlinked: 'Vínculo removido com sucesso\.'/u, 'Mensagem de vinculo removido deve existir')
@@ -72,7 +74,8 @@ assert.match(actionFeedbackSource, /importFeedback/, 'Resumo de importacao deve 
 for (const [source, messageKey] of [
   [adminSource, 'ACTION_FEEDBACK.employeeCreated'],
   [adminSource, 'ACTION_FEEDBACK.employeeUpdated'],
-  [adminSource, 'ACTION_FEEDBACK.employeeRemoved'],
+  [adminSource, 'ACTION_FEEDBACK.employeeArchived'],
+  [adminSource, 'ACTION_FEEDBACK.employeeRestored'],
   [adminSource, 'decisionFeedback(decision)'],
   [operationalSource, 'ACTION_FEEDBACK.scheduleSaved'],
   [operationalSource, 'ACTION_FEEDBACK.scheduleRuleRemoved'],
