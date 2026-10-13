@@ -505,7 +505,7 @@ Base da afirmação:
 | **Decisoes de implementacao** | Seis, a aprovar (desenho 9.6): hoje vem do instante; tipos de erro (409 so para ja arquivado; dado fora do formato e invariante violada viram 500 generico); pausa ilegivel limpa sem historico; duracao nunca negativa e inicio no fuso de agora; `regularizacao` no plano; ids em texto como o PDO devolve. |
 | **Validacao executada pela IA** | `qa-archive` (381 verificacoes: tabela de casos, virada 23:59/00:00 com o instante injetado, varredura da invariante com mais de 100 planos, dado fora do formato, pureza); mutacao **36/36** no planejador (dois sobreviventes na 1a rodada, por teste fraco, mortos depois de reforcar os testes); mutacao do SQL repetida (27/27); bateria PHP completa, 15 `qa:*` do frontend e lint. |
 | **Limitacoes declaradas** | O planejador ainda nao e chamado por endpoint nenhum (commit 3); nada foi exercido contra MySQL. `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: revisao antes do commit 3. |
+| **Validacao humana** | **Aprovado em 2026-10-13**, com as seis decisoes como estao: `qa-archive` rodado pelo responsavel (381 verificacoes) e caso com dados no formato real (ids e `ativo` em texto; inicio da pausa com `format('c')`): pausa das 23:50 arquivada as 00:05 finaliza com 900 s e inicio no dia anterior; parcial do dia cancelada; ausencia de varios dias iniciada ontem cortada em ontem; PA de hoje sai. Conferido que pausas automaticas nascem `aprovado` e que o estado grava `format('c')`: o `clear_invalid` nao pega pausa real. |
 
 ---
 
