@@ -493,7 +493,7 @@ Base da afirmação:
 | **Decisoes de implementacao** | Seis, a aprovar (desenho 9.6): colunas no fim, sem `AFTER` (sem dependencia da 011); `CURDATE()` uma vez na verificacao, depois do `SET time_zone` (so leitura); copia do rollback minima e nunca pulada; `pa_periodo_invertido` na verificacao; ensaio (c) tambem regulariza um inativo antigo; comandos de ensaio em varias linhas. |
 | **Validacao executada pela IA** | `qa-archive` (103 verificacoes de estrutura); mutacao **27/27** nos arquivos SQL (o 28o mutante e equivalente de proposito); bateria PHP completa, 15 `qa:*` do frontend e lint. |
 | **Limitacoes declaradas** | Sem MySQL na estacao: nenhum dos quatro arquivos SQL foi executado; a sintaxe so foi conferida por leitura e pelo QA estrutural. `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: revisao e teste do responsavel no MySQL local antes do commit 2. |
+| **Validacao humana** | Q-F4 no servidor (2026-10-13): inativos 5, com PA aberto 1, com regra 0, excecoes 0; D5 fechada sem regularizacao em massa (so o cadastro com PA, pela tela, no pos-deploy; passo registrado na 9.6). Revisao e teste do commit 1 no MySQL local: pendentes antes do commit 2. |
 
 ---
 

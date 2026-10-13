@@ -1326,6 +1326,8 @@ O plano foi entregue no chat em 2026-10-09 e se perdeu (ficou só no chat). Reen
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 0) AS inativos, (SELECT COUNT(DISTINCT a.employee_id) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 0 WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE())) AS inativos_com_pa, (SELECT COUNT(DISTINCT r.employee_id) FROM portal_schedule_rules r JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 0 WHERE (r.effective_until IS NULL OR r.effective_until >= CURDATE()) AND (r.effective_until IS NULL OR r.effective_until >= r.effective_from)) AS inativos_com_regra, (SELECT COUNT(*) FROM portal_schedule_exceptions e JOIN funcionarios f ON f.id = e.employee_id AND f.ativo = 0 WHERE e.exception_date >= CURDATE()) AS excecoes_de_inativos;"; unset P
 ```
 
+**Resultado da Q-F4 (responsável, servidor, 2026-10-13):** `inativos = 5`, `inativos_com_pa = 1`, `inativos_com_regra = 0`, `excecoes_de_inativos = 0`. **D5 fechada: sem regularização em massa.** Só o cadastro com vínculo de PA aberto é arquivado de novo, pela tela, depois do deploy (passo pós-deploy abaixo); os outros 4 inativos ficam com `arquivado_em` nulo ("data desconhecida", seção 2.5). Consequência para os commits 3 e 5: o arquivamento de inativo antigo (data nula) tem de estar disponível no endpoint e na tela de Funcionários, só para esse caso; inativo com data (arquivado pelo F4) continua 409.
+
 **Efeitos do arquivamento — função pura, plano antes de aplicar.** `EmployeeArchivePlanner::plan(cadastro, regras, exceções, ausências, vínculos de PA, entrada do estado de pausa, hoje, agora)` devolve o plano e as contagens de `efeitos`; não consulta banco, arquivo nem relógio.
 
 | Efeito | Regra aprovada |
@@ -1357,7 +1359,7 @@ O `qa-archive` confere, em todos os planos da tabela de casos, que nenhum gera `
 | D2 | P11: revalidação do A1 por requisição, sem código novo de autenticação; só o teste de regressão | Aprovada (opção a) |
 | D3 | Admin da allowlist: arquivar permitido, com aviso na resposta de que o acesso administrativo continua pela allowlist; arquivar o **próprio** cadastro → 409 | Aprovada |
 | D4 | `ativo` ausente mantém o valor; mudar `ativo` pelo formulário → 409 apontando Arquivar/Restaurar; editar arquivado → 409 ("restaure antes"); cadastro novo sempre ativo | Aprovada |
-| D5 | Arquivar de novo um inativo antigo (data nula) aplica os efeitos e grava a data (regularização) | Aprovada; Q-F4 acima |
+| D5 | Arquivar de novo um inativo antigo (data nula) aplica os efeitos e grava a data (regularização) | Aprovada; **fechada com a Q-F4 de 2026-10-13**: sem regularização em massa; só o cadastro com PA aberto, pela tela, no pós-deploy |
 | D6 | PA: iniciado antes de hoje fecha ontem; de hoje ou futuro sai (`active = 0`) | Aprovada |
 | D7 | Exceções de hoje em diante apagadas, tipo e data na auditoria, sem a `note` | Aprovada |
 | D8 | Ausências: iniciada antes de hoje e em curso → `ends_on = ontem`; começa hoje ou depois (inclusive parcial e de vários dias) → cancelada; nenhum plano gera período invertido | **Aprovada com ajuste** |
@@ -1370,7 +1372,7 @@ O `qa-archive` confere, em todos os planos da tabela de casos, que nenhum gera `
 
 **Contrato de `efeitos` (proposta para o commit 3, a aprovar na entrega dele):** `{ pa_encerrados, pa_removidos, regras_encerradas, regras_removidas, excecoes_removidas, ausencias_canceladas, ausencias_cortadas, pausa_finalizada, solicitacao_descartada }` (contagens e booleanos), no lugar da lista curta da 3.6, para cada efeito da tabela acima ter a sua contagem.
 
-**Deploy.** Entra no deploy único da Parte B (pendência 16 do estado da sessão): no roteiro consolidado, Q-F4 e 014 antes do `git pull`, com o ensaio nas três variantes e a verificação. **Ritmo combinado:** depois do commit 1, parar para revisão e teste do responsável no MySQL local antes do commit 2.
+**Deploy.** Entra no deploy único da Parte B (pendência 16 do estado da sessão): no roteiro consolidado, Q-F4 e 014 antes do `git pull`, com o ensaio nas três variantes e a verificação. **Passo pós-deploy obrigatório (D5, pedido em 2026-10-13)**, no item "Deploy que traz o F4" do `DEPLOY_LINUX.md` (escrito no commit 6) e depois no roteiro consolidado: (1) rodar a verificação da 014 e conferir `inativos_com_pa = 1` (se o número for outro, parar e avisar o responsável antes de arquivar); (2) arquivar de novo esse cadastro pela tela de Funcionários (admin); (3) rodar a verificação de novo e conferir `inativos_com_pa = 0`, `arquivados_f4 = 1` e `inativos_sem_data = 4`. Os outros inativos não são tocados. **Ritmo combinado:** depois do commit 1, parar para revisão e teste do responsável no MySQL local antes do commit 2.
 
 **Commit 1 entregue (2026-10-13, `1abb37a`; aguardando revisão e teste do responsável):**
 
