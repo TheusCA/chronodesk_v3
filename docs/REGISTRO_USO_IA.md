@@ -520,6 +520,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: o SQL do servico so rodou contra o banco simulado (as consultas seguem as colunas das migrations 003, 009, 011, 012 e 014). A tela ainda nao mudou (commit 5). `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-13**, com as doze decisoes como estao: teste do responsavel no MySQL local com a 014, chamando o servico real com um tecnico de teste. Efeitos conferidos (regra vigente fechada em ontem e futura apagada; excecao de amanha apagada e a de ontem mantida; ausencia de varios dias cortada em ontem, futura e parcial canceladas, a passada intacta; PA aberto fechado em ontem e o futuro com `active = 0`; pausa virou historico com 720 s, motivo em UTF-8 correto e `admin_archive`; so a entrada do tecnico limpa no estado; auditoria e fila sem nome nem observacao). 2o arquivamento 409 com a data; restaurar com login em uso 409; restaurar ok sem devolver PA, escala nem ausencias; restaurar de novo 409; dois arquivamentos simultaneos: um ok, um 409; regularizacao com `regularizacao = true`. Falha injetada (trigger com `SIGNAL` no `UPDATE` de `portal_absences`): rollback completo e `estado.json` identico byte a byte. Pedido para o commit 4: SQLSTATE e codigo do driver no `error_log` da `PDOException`, sem a mensagem. |
 
+### Parte B, F4 — commit 4 (L-07: status, pendentes e Mapa PA sem inativos) — 2026-10-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Tirar o cadastro inativo do `status.php`, dos contadores do `dashboard.php`, das solicitacoes pendentes e do Mapa PA de hoje em diante (L-07, D13; desenho, secao 9.6). |
+| **Branch e commits** | `85813e1` (codigo e testes) e o commit deste registro (documentacao). Sem push. |
+| **Pedidos do responsavel atendidos** | SQLSTATE e codigo do driver no `error_log` da `PDOException` do `httpError`, sem a mensagem do banco; 503 ao usuario como antes. |
+| **O que a IA alterou** | `classes/GerenciadorPausas.php` (`obter_status`), `api/solicitacoes_pendentes.php`, `services/PaMapService.php`, `services/EmployeeArchiveService.php` (`httpError`), `scripts/qa-archive.php` (secao 4); desenho 9.6. |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.6); destaques: pendentes e tabela antiga do Mapa PA tambem filtradas (fora do texto do plano); nulo conta como ativo; `errorInfo` prevalece e so codigos com formato valido entram no log; ponta a ponta no `qa-security` mantido no commit 6. Observacao sem mudanca: a conferencia de conflito do Mapa PA ainda ve o PA aberto do inativo antigo da Q-F4 ate o passo pos-deploy da D5. |
+| **Validacao executada pela IA** | `qa-archive` (563 verificacoes, secao 4 nova); mutacao **24/24** (seis sobreviventes na 1a rodada, por teste fraco, mortos depois de reforcar os testes); bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: o filtro `EXISTS` so rodou contra o banco simulado. Ponta a ponta pelos endpoints no commit 6. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao antes do commit 5. |
+
 ---
 
 ## 5. Responsabilidade
