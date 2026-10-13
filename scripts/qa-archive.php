@@ -1157,6 +1157,30 @@ final class QaMapPdo extends PDO {
     public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
         throw new PDOException('SQLSTATE[42S02]: inventario ausente no banco simulado');
     }
+
+    public bool $transaction = false;
+
+    public function beginTransaction(): bool {
+        return $this->transaction = true;
+    }
+
+    public function commit(): bool {
+        $this->transaction = false;
+        return true;
+    }
+
+    public function rollBack(): bool {
+        $this->transaction = false;
+        return true;
+    }
+
+    public function inTransaction(): bool {
+        return $this->transaction;
+    }
+
+    public function lastInsertId(?string $name = null): string|false {
+        return (string)count($this->assignments);
+    }
 }
 
 final class QaMapStatement extends PDOStatement {
@@ -1201,6 +1225,43 @@ final class QaMapStatement extends PDOStatement {
             return true;
         }
         if (strpos($sql, 'SELECT exception_type FROM portal_schedule_exceptions WHERE ') === 0 || strpos($sql, 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE ') === 0) {
+            return true;
+        }
+        // save(): cadastro, conferencia de conflito e gravacao.
+        if ($sql === 'SELECT id, nome AS name, equipe AS team, ad_login, fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1 FOR UPDATE') {
+            $id = (int)$params[':id'];
+            if (isset($db->employees[$id]) && (int)$db->employees[$id]['ativo'] === 1) {
+                $this->rows[] = ['id' => $id, 'name' => "Tecnico {$id}", 'team' => 'n1', 'ad_login' => null, 'fora_mapa_escala' => 0];
+            }
+            return true;
+        }
+        $overlaps = static fn (array $row): bool => (int)$row['id'] !== (int)$params[':id']
+            && $row['valid_from'] <= $params[':new_until'] && ($row['valid_until'] === null || $row['valid_until'] >= $params[':new_from']);
+        if ($sql === 'SELECT id, pa_number FROM portal_pa_assignments WHERE active = 1 AND employee_id = :employee_id AND id <> :id AND valid_from <= :new_until AND (valid_until IS NULL OR valid_until >= :new_from) LIMIT 1 FOR UPDATE') {
+            foreach ($db->assignments as $row) {
+                if ((int)$row['employee_id'] === (int)$params[':employee_id'] && $overlaps($row)) {
+                    $this->rows[] = ['id' => $row['id'], 'pa_number' => $row['pa_number']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, schedule_rule_type, employee_name FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number AND id <> :id AND valid_from <= :new_until AND (valid_until IS NULL OR valid_until >= :new_from)') === 0) {
+            $onlyActive = strpos($sql, ' AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = portal_pa_assignments.employee_id AND f.ativo = 1) FOR UPDATE') !== false;
+            if (!$onlyActive && substr($sql, -11) !== ' FOR UPDATE') {
+                throw new PDOException('SQLSTATE[HY000]: banco simulado: conferencia de conflito sem trava');
+            }
+            foreach ($db->assignments as $row) {
+                if ($row['pa_number'] === $params[':pa_number'] && $overlaps($row) && (!$onlyActive || $active($row))) {
+                    $this->rows[] = ['id' => $row['id'], 'schedule_rule_type' => $row['schedule_rule_type'], 'employee_name' => $row['employee_name']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'INSERT INTO portal_pa_assignments (') === 0) {
+            $db->assignments[] = [
+                'id' => count($db->assignments) + 1, 'pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'],
+                'valid_from' => $params[':valid_from'], 'valid_until' => $params[':valid_until'],
+            ];
             return true;
         }
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $sql);
@@ -1271,6 +1332,27 @@ foreach (['hoje' => $today, 'amanha' => $tomorrow] as $label => $date) {
 }
 $filtered = array_values(array_filter($mapPdo->sql, static fn (string $sql): bool => strpos($sql, 'FROM portal_pa_') !== false));
 assert_same(6, count($filtered), 'Mapa PA: duas leituras de vinculo por data');
+// Decisao 8 do commit 4: a conferencia de conflito do save() segue a regra
+// do mapa. De hoje em diante, PA ocupado so por inativo aceita vinculo novo
+// (sem o nome do arquivado na resposta); ocupado por ativo continua em
+// conflito; vinculo que comeca no passado e conferido contra todos.
+$saveOutcome = static function (int $employeeId, string $pa, string $validFrom) use ($mapRow, $recurring): array {
+    $pdo = new QaMapPdo(
+        [41 => ['ativo' => 1], 42 => ['ativo' => 0], 43 => ['ativo' => '0'], 44 => ['ativo' => 1]],
+        [$mapRow(1, 41, '1732', $recurring), $mapRow(2, 42, '1731', $recurring), $mapRow(3, 43, '1730', $recurring)],
+        []
+    );
+    $outcome = qa_service_outcome(static fn () => (new PaMapService($pdo))->save(['pa_number' => $pa, 'employee_id' => $employeeId, 'valid_from' => $validFrom], 'qa.lider'));
+    return [$outcome[0] === 'ok' ? 'ok' : $outcome[0] . ': ' . $outcome[1], count($pdo->assignments)];
+};
+foreach (['hoje' => $today, 'amanha' => $tomorrow] as $label => $date) {
+    assert_same(['ok', 4], $saveOutcome(44, '1731', $date), "Mapa PA: PA ocupado por inativo aceita vinculo novo de {$label} (decisao 8)");
+    assert_same(['ok', 4], $saveOutcome(44, '1730', $date), "Mapa PA: PA ocupado por inativo com ativo em texto ('0') aceita vinculo novo de {$label}");
+    assert_same([DomainException::class . ': Conflito de escala no PA com Tecnico 41.', 3], $saveOutcome(44, '1732', $date), "Mapa PA: PA ocupado por ativo continua em conflito ({$label})");
+}
+assert_same([DomainException::class . ': Conflito de escala no PA com Tecnico 42.', 3], $saveOutcome(44, '1731', $yesterday), 'Mapa PA: vinculo que comeca ontem continua conferido contra o inativo (passado sem mudanca)');
+assert_same([DomainException::class . ': Conflito de escala no PA com Tecnico 41.', 3], $saveOutcome(44, '1732', $yesterday), 'Mapa PA: vinculo que comeca ontem em PA de ativo continua em conflito');
+
 $filter = new ReflectionMethod(PaMapService::class, 'activeEmployeeFilter');
 $filter->setAccessible(true);
 assert_same('', $filter->invoke($map, 'portal_pa_assignments', $yesterday), 'Mapa PA: sem filtro antes de hoje');

@@ -355,6 +355,10 @@ final class PaMapService {
             throw new DomainException('Este colaborador ja possui vinculo ativo em outro PA no periodo.');
         }
 
+        // [F4, decisao 8 do commit 4] Ocupacao do PA pela mesma regra do mapa:
+        // vinculo novo de hoje em diante ignora o de cadastro inativo (o mapa
+        // mostra o PA livre e a mensagem nao expoe o nome do arquivado);
+        // vinculo que comeca no passado continua conferido contra todos.
         $stmt = $this->pdo->prepare(
             'SELECT id, schedule_rule_type, employee_name
              FROM portal_pa_assignments
@@ -362,8 +366,9 @@ final class PaMapService {
                AND pa_number = :pa_number
                AND id <> :id
                AND valid_from <= :new_until
-               AND (valid_until IS NULL OR valid_until >= :new_from)
-             FOR UPDATE'
+               AND (valid_until IS NULL OR valid_until >= :new_from)'
+            . $this->activeEmployeeFilter('portal_pa_assignments', $validFrom)
+            . ' FOR UPDATE'
         );
         $stmt->execute([
             ':pa_number' => $paNumber,
