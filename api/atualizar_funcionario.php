@@ -31,7 +31,12 @@ $jornada_entrada = isset($data['jornada_entrada']) ? trim($data['jornada_entrada
 $jornada_saida = isset($data['jornada_saida']) ? trim($data['jornada_saida']) : '17:00';
 $almoco_inicio = isset($data['almoco_inicio']) ? trim($data['almoco_inicio']) : '12:00';
 $almoco_fim = isset($data['almoco_fim']) ? trim($data['almoco_fim']) : '13:00';
-$ativo = isset($data['ativo']) ? (bool)$data['ativo'] : true;
+// [F4, D4] Situacao do cadastro so por Arquivar e Restaurar: ausente mantem;
+// valor diferente do atual da 409 (conferido com o cadastro travado).
+$ativo_input = array_key_exists('ativo', $data) ? $data['ativo'] : null;
+if ($ativo_input !== null && !in_array($ativo_input, [true, false, 0, 1, '0', '1'], true)) {
+    json_response(['sucesso' => false, 'mensagem' => 'Valor inválido para a situação do cadastro.'], 400);
+}
 // [P12, F1] Opcional: ausente mantem o valor atual.
 $fora_mapa_input = array_key_exists('fora_mapa_escala', $data) ? $data['fora_mapa_escala'] : null;
 if ($fora_mapa_input !== null && !in_array($fora_mapa_input, [true, false, 0, 1, '0', '1'], true)) {
@@ -111,9 +116,19 @@ try {
     // ativo valer. Recusa desfaz a transacao ANTES da auditoria (o audit_log
     // usa a mesma conexao).
     $pdo->beginTransaction();
-    $foraStmt = $pdo->prepare('SELECT fora_mapa_escala FROM funcionarios WHERE id = :id FOR UPDATE');
+    $foraStmt = $pdo->prepare('SELECT fora_mapa_escala, ativo FROM funcionarios WHERE id = :id FOR UPDATE');
     $foraStmt->execute([':id' => $funcionario_id]);
-    $currentForaMapa = (int)$foraStmt->fetchColumn() === 1;
+    $locked = $foraStmt->fetch(PDO::FETCH_ASSOC) ?: ['fora_mapa_escala' => 0, 'ativo' => 0];
+    // [F4, D4] Arquivado nao e editado (restaurar antes); ativo nao muda por aqui.
+    if ((int)$locked['ativo'] !== 1) {
+        $pdo->rollBack();
+        json_response(['sucesso' => false, 'mensagem' => 'Cadastro arquivado: restaure-o antes de editar.'], 409);
+    }
+    if ($ativo_input !== null && !in_array($ativo_input, [true, 1, '1'], true)) {
+        $pdo->rollBack();
+        json_response(['sucesso' => false, 'mensagem' => 'Para arquivar o cadastro, use o botão Arquivar.'], 409);
+    }
+    $currentForaMapa = (int)$locked['fora_mapa_escala'] === 1;
     $newForaMapa = $fora_mapa_input === null ? $currentForaMapa : in_array($fora_mapa_input, [true, 1, '1'], true);
     $activePaLinks = 0;
     if ($newForaMapa && !$currentForaMapa && portal_role_can($actor_role, 'funcionarios.fora_mapa')) {
@@ -144,7 +159,6 @@ try {
              jornada_saida = :jornada_saida,
              almoco_inicio = :almoco_inicio,
              almoco_fim = :almoco_fim,
-             ativo = :ativo,
              fora_mapa_escala = :fora_mapa_escala
          WHERE id = :id"
     );
@@ -158,7 +172,6 @@ try {
         ':jornada_saida' => formatar_hora_mysql($jornada_saida, '17:00:00'),
         ':almoco_inicio' => formatar_hora_mysql($almoco_inicio, '12:00:00'),
         ':almoco_fim' => formatar_hora_mysql($almoco_fim, '13:00:00'),
-        ':ativo' => $ativo ? 1 : 0,
         ':fora_mapa_escala' => $newForaMapa ? 1 : 0,
     ]);
     $pdo->commit();
@@ -167,7 +180,7 @@ try {
         json_response(['sucesso' => false, 'mensagem' => 'Funcionário não encontrado.'], 404);
     }
 
-    $resultado = $gerenciador->atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, $ativo, $ad_login, $access_role);
+    $resultado = $gerenciador->atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, null, $ad_login, $access_role);
 } catch (Exception $e) {
     if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
@@ -177,7 +190,7 @@ try {
 }
 
 if (($resultado['sucesso'] ?? false) === true) {
-    audit_log('FUNCIONARIO_ATUALIZADO', "Funcionario '{$nome}' atualizado (ID: {$funcionario_id}, equipe: {$equipe}, perfil: {$access_role}, ativo: " . ($ativo ? 'sim' : 'nao') . ")", 'WARNING');
+    audit_log('FUNCIONARIO_ATUALIZADO', "Funcionario '{$nome}' atualizado (ID: {$funcionario_id}, equipe: {$equipe}, perfil: {$access_role})", 'WARNING');
     if ((string)$currentRole !== $access_role) {
         audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Perfil do funcionario ID {$funcionario_id} alterado de {$currentRole} para {$access_role} por {$actor_role}", 'CRITICAL');
     }

@@ -29,7 +29,15 @@ $jornada_entrada = isset($data['jornada_entrada']) ? trim($data['jornada_entrada
 $jornada_saida = isset($data['jornada_saida']) ? trim($data['jornada_saida']) : '17:00';
 $almoco_inicio = isset($data['almoco_inicio']) ? trim($data['almoco_inicio']) : '12:00';
 $almoco_fim = isset($data['almoco_fim']) ? trim($data['almoco_fim']) : '13:00';
-$ativo = isset($data['ativo']) ? (bool)$data['ativo'] : true;
+// [F4, D4] Cadastro novo e sempre ativo; arquivar e outra acao.
+$ativo_input = array_key_exists('ativo', $data) ? $data['ativo'] : true;
+if (!in_array($ativo_input, [true, false, 0, 1, '0', '1'], true)) {
+    json_response(['sucesso' => false, 'mensagem' => 'Valor inválido para a situação do cadastro.'], 400);
+}
+if (!in_array($ativo_input, [true, 1, '1'], true)) {
+    json_response(['sucesso' => false, 'mensagem' => 'Cadastro novo é sempre ativo. Para arquivar, use Arquivar depois de salvar.'], 400);
+}
+$ativo = true;
 
 if ($id < 1 || $id > 999) {
     json_response(['sucesso' => false, 'mensagem' => 'ID inválido (deve estar entre 1 e 999)'], 400);
@@ -125,7 +133,8 @@ try {
     // Adicionar ao gerenciador em memória
     $funcionario = new Funcionario($id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, $ativo, $ad_login, $access_role);
     $gerenciador->adicionar_funcionario($funcionario);
-    $gerenciador->salvar_estado();
+    // [F4, L-11] Sem salvar_estado(): cadastro novo nao tem pausa, e regravar o
+    // estado.json daqui, fora do lock, podia desfazer uma pausa em andamento.
     audit_log('FUNCIONARIO_ADICIONADO', "Funcionario '{$nome}' adicionado (ID: {$id}, equipe: {$equipe}, perfil: {$access_role})", 'WARNING');
     if (funcionario_role_is_elevated($access_role)) {
         audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Funcionario ID {$id} criado com perfil {$access_role} por {$actor_role}", 'CRITICAL');

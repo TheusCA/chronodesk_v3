@@ -1,11 +1,14 @@
 <?php
 require_once __DIR__ . '/../config.php';
-require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../services/EmployeeArchiveService.php';
 
-// [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
+// [F4] "Remover" e arquivar (RF-07; desenho, secao 9.6): o endereco e o corpo
+// continuam os mesmos. D1: admin e Liderança, pela regra do Lote 5b; a regra
+// com o perfil atual e a L9 sao conferidas no servico, com o cadastro travado.
+// Inativo anterior ao F4 (sem data) e regularizado (D5); arquivado pelo F4 da 409.
 $actor_role = require_portal_auth();
-require_funcionario_change($actor_role, null, null, 'remover');
+require_funcionario_change($actor_role, null, null, 'arquivar');
 require_csrf_token();
 require_json_content_type();
 
@@ -24,32 +27,23 @@ if (!$funcionario_id) {
     json_response(['sucesso' => false, 'mensagem' => 'ID do funcionário inválido'], 400);
 }
 
-global $gerenciador;
-if (!$gerenciador) {
-    json_response(['sucesso' => false, 'mensagem' => 'Gerenciador não inicializado'], 500);
-}
-
 try {
-    $pdo = get_db_connection();
-    $currentStmt = $pdo->prepare('SELECT access_role FROM funcionarios WHERE id = :id LIMIT 1');
-    $currentStmt->execute([':id' => $funcionario_id]);
-    $currentRole = $currentStmt->fetchColumn();
-    if ($currentRole === false) {
-        json_response(['sucesso' => false, 'mensagem' => 'Funcionário não encontrado.'], 404);
+    $resultado = (new EmployeeArchiveService())->archive(
+        (int)$funcionario_id,
+        EmployeeArchiveService::sessionActor($actor_role, $_SESSION ?? [])
+    );
+} catch (Throwable $e) {
+    [$status, $mensagem] = EmployeeArchiveService::httpError($e);
+    if ($status === 403) {
+        audit_log('FUNCIONARIO_ALTERACAO_NEGADA', "contexto=arquivar perfil_ator={$actor_role} funcionario_id={$funcionario_id}", 'WARNING');
     }
-    require_funcionario_change($actor_role, (string)$currentRole, null, 'remover');
-    $stmt = $pdo->prepare("UPDATE funcionarios SET ativo = 0 WHERE id = :id");
-    $stmt->execute([':id' => $funcionario_id]);
-} catch (Exception $e) {
-    error_log('[FUNCIONARIO] Erro ao desativar funcionário: ' . $e->getMessage());
-    json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao desativar funcionário.')], 500);
+    json_response(['sucesso' => false, 'mensagem' => $mensagem], $status);
 }
 
-$resultado = $gerenciador->remover_funcionario($funcionario_id);
-
-if (($resultado['sucesso'] ?? false) === true) {
-    audit_log('FUNCIONARIO_REMOVIDO', "Funcionario desativado (ID: {$funcionario_id}, perfil: {$currentRole}) por {$actor_role}", 'CRITICAL');
-}
-
-json_response($resultado);
-?>
+json_response([
+    'sucesso' => true,
+    'mensagem' => $resultado['regularizacao'] ? 'Cadastro inativo regularizado e arquivado.' : 'Funcionário arquivado.',
+    'efeitos' => $resultado['efeitos'],
+    'regularizacao' => $resultado['regularizacao'],
+    'avisos' => $resultado['avisos'],
+]);

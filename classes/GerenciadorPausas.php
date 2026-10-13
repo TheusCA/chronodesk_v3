@@ -675,6 +675,11 @@ class GerenciadorPausas {
     }
 
     private function pausa_conta_para_limite($motivo): bool {
+        return self::motivo_conta_para_limite($motivo);
+    }
+
+    /** Motivo que conta no limite de tempo e nos alertas de 15/20 min (Pessoal e Reunião nao contam). */
+    public static function motivo_conta_para_limite($motivo): bool {
         $motivo = strtolower((string)$motivo);
         return !($motivo === 'pessoal' || strpos($motivo, 'reuni') === 0);
     }
@@ -713,15 +718,6 @@ class GerenciadorPausas {
         return $this->funcionarios;
     }
 
-    public function remover_funcionario($funcionario_id) {
-        if (isset($this->funcionarios[$funcionario_id])) {
-            $this->funcionarios[$funcionario_id]->ativo = false;
-            $this->salvar_estado();
-            return ["sucesso" => true, "mensagem" => "Funcionário desativado com sucesso."];
-        }
-        return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];
-    }
-
     public function atualizar_funcionario($funcionario_id, $nome, $equipe, $jornada_entrada = null, $jornada_saida = null, $almoco_inicio = null, $almoco_fim = null, $ativo = null, $ad_login = null, $access_role = null) {
         if (isset($this->funcionarios[$funcionario_id])) {
             $func = $this->funcionarios[$funcionario_id];
@@ -736,8 +732,10 @@ class GerenciadorPausas {
             if ($ativo !== null) $func->ativo = $ativo;
             $func->ad_login = $ad_login;
             if ($access_role !== null) $func->access_role = $access_role;
-            
-            $this->salvar_estado();
+
+            // [F4, L-11] Sem salvar_estado(): o estado.json so guarda a pausa, e
+            // regrava-lo daqui, fora do lock, podia desfazer uma pausa iniciada
+            // no mesmo instante.
             return ["sucesso" => true, "mensagem" => "Funcionário atualizado com sucesso."];
         }
         return ["sucesso" => false, "mensagem" => "Funcionário não encontrado."];

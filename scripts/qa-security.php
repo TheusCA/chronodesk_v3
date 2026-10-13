@@ -159,9 +159,9 @@ final class QaChildStatement extends PDOStatement {
         }
         // F1 (P12): marcacao "fora do Mapa PA e da escala" e vinculos de PA
         // ativos (db['pa_ativos'][id]); a gravacao vai para [QA_WRITE].
-        if ($this->sql === 'SELECT fora_mapa_escala FROM funcionarios WHERE id = :id FOR UPDATE') {
+        if ($this->sql === 'SELECT fora_mapa_escala, ativo FROM funcionarios WHERE id = :id FOR UPDATE') {
             $row = $byId($this->pdo, $params[':id'] ?? 0);
-            $this->rows = $row ? [['fora_mapa_escala' => (int)($row['fora_mapa_escala'] ?? 0)]] : [];
+            $this->rows = $row ? [['fora_mapa_escala' => (int)($row['fora_mapa_escala'] ?? 0), 'ativo' => (int)$row['ativo']]] : [];
             return true;
         }
         if ($this->sql === 'SELECT COUNT(*) FROM portal_pa_assignments WHERE employee_id = :id AND active = 1 AND (valid_until IS NULL OR valid_until >= :today)') {
@@ -216,6 +216,34 @@ final class QaChildStatement extends PDOStatement {
             || strpos($this->sql, 'UPDATE funcionarios SET nome = :nome') === 0
             || $this->sql === 'UPDATE funcionarios SET ativo = 0 WHERE id = :id') {
             error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? '?') . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-') . ' fora_mapa=' . ($params[':fora_mapa_escala'] ?? '-'));
+            return true;
+        }
+        // F4: arquivamento e restauracao (EmployeeArchiveService). Cadastro
+        // travado de db['funcionarios']; regras, excecoes, ausencias e PA de
+        // db['arquivamento'][tabela] (vazias por padrao); gravacoes no log.
+        if ($this->sql === 'SELECT id, nome, equipe, access_role, ad_login, ativo, arquivado_em FROM funcionarios WHERE id = :id FOR UPDATE') {
+            $row = $byId($this->pdo, $params[':id'] ?? 0);
+            $this->rows = $row ? [[
+                'id' => (int)$params[':id'], 'nome' => 'QA', 'equipe' => $row['equipe'], 'access_role' => $row['access_role'],
+                'ad_login' => $row['ad_login'], 'ativo' => (int)$row['ativo'], 'arquivado_em' => $row['arquivado_em'] ?? null,
+            ]] : [];
+            return true;
+        }
+        if (preg_match('/^SELECT id, employee_id, .* FROM (portal_schedule_rules|portal_schedule_exceptions|portal_absences|portal_pa_assignments) WHERE employee_id = :employee_id .* FOR UPDATE$/', $this->sql, $table) === 1) {
+            $this->rows = array_values($this->pdo->db['arquivamento'][$table[1]] ?? []);
+            return true;
+        }
+        if ($this->sql === 'SELECT id FROM funcionarios WHERE id <> :id AND ativo = 1 AND ad_login = :ad_login LIMIT 1 FOR UPDATE') {
+            $this->rows = [];
+            foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                if ((string)$id !== (string)$params[':id'] && (int)$row['ativo'] === 1 && strcasecmp((string)$row['ad_login'], (string)$params[':ad_login']) === 0) {
+                    $this->rows[] = ['id' => (int)$id];
+                }
+            }
+            return true;
+        }
+        if (preg_match('/^(UPDATE funcionarios SET ativo = [01],|UPDATE portal_(pa_assignments|schedule_rules|absences) SET|DELETE FROM portal_(schedule_rules|schedule_exceptions)|INSERT INTO (pausas|portal_sync_queue) )/', $this->sql) === 1) {
+            error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? $params[':id_funcionario'] ?? $params[':record_id'] ?? '?'));
             return true;
         }
         if ($this->sql === 'INSERT INTO audit_log (user_ip, username, action, details, severity) VALUES (?, ?, ?, ?, ?)') {
@@ -436,6 +464,7 @@ define('CHRONODESK_STATELESS', true);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../auth_ldap.php';
 require_once __DIR__ . '/../services/OperationalService.php';
+require_once __DIR__ . '/../services/EmployeeArchiveService.php';
 // config.php manda os erros para o log do QA, apagado ao final; erro fatal do
 // proprio QA precisa aparecer na saida.
 ini_set('display_errors', 'stderr');
@@ -1361,6 +1390,8 @@ $matrix = [
     'api/metricas.php GET' => [[], $expect['GESTAO']],
     'api/rejeitar_pausa.php POST' => [$emptyJson, $expect['GESTAO']],
     'api/remover_funcionario.php POST' => [$emptyJson, $expect['FUNCIONARIOS']],
+    // F4 (D1): restaurar so admin (funcionarios.restaurar), antes do CSRF e do banco.
+    'api/restaurar_funcionario.php POST' => [$emptyJson, $expect['ADMIN']],
     'api/salvar_configuracao.php POST' => [$emptyJson, $expect['ADMIN_LEGADO']],
     'api/solicitacoes_pendentes.php GET' => [[], $expect['GESTAO']],
     'api/status.php GET' => [[], $expect['TODOS']],
@@ -1609,9 +1640,10 @@ foreach ([
     }
 }
 foreach ([
-    'lid_promove_gestor' => ['UPDATE funcionarios SET nome = :nome, equipe = :equipe, access_role = :access_role, ad_login = :ad_login, jornada_entrada = :jornada_entrada, jornada_saida = :jornada_saida, almoco_inicio = :almoco_inicio, almoco_fim = :almoco_fim, ativo = :ativo, fora_mapa_escala = :fora_mapa_escala WHERE id = :id id=1 perfil=gestor', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Perfil do funcionario ID 1 alterado de tecnico para gestor por lideranca'],
+    'lid_promove_gestor' => ['UPDATE funcionarios SET nome = :nome, equipe = :equipe, access_role = :access_role, ad_login = :ad_login, jornada_entrada = :jornada_entrada, jornada_saida = :jornada_saida, almoco_inicio = :almoco_inicio, almoco_fim = :almoco_fim, fora_mapa_escala = :fora_mapa_escala WHERE id = :id id=1 perfil=gestor', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Perfil do funcionario ID 1 alterado de tecnico para gestor por lideranca'],
     'lid_cria_tecnico' => ['INSERT INTO funcionarios id=901 perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
-    'lid_desativa_tecnico' => ['UPDATE funcionarios SET ativo = 0 WHERE id = :id id=1', '[QA_AUDIT] FUNCIONARIO_REMOVIDO [CRITICAL]: Funcionario desativado (ID: 1, perfil: tecnico) por lideranca'],
+    // F4: desativar virou arquivar (FUNCIONARIO_ARQUIVADO, com data e autor).
+    'lid_desativa_tecnico' => ['UPDATE funcionarios SET ativo = 0, arquivado_em = :arquivado_em, arquivado_por = :arquivado_por WHERE id = :id id=1', '[QA_AUDIT] FUNCIONARIO_ARQUIVADO [CRITICAL]: funcionario_id=1; perfil=tecnico; equipe=n1; ator=lideranca; regularizacao=nao'],
     'admin_cria_lideranca' => ['INSERT INTO funcionarios id=902 perfil=lideranca', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Funcionario ID 902 criado com perfil lideranca por admin'],
     'admin_lideranca_tecnico' => ['INSERT INTO funcionarios id=903 perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
     'login_tecnico' => ['id=1 perfil=tecnico login=joao.novo', '[QA_AUDIT] FUNCIONARIO_AD_LOGIN_ALTERADO [WARNING]: Login AD do funcionario ID 1 alterado de joao.silva para joao.novo por admin'],
@@ -1625,6 +1657,114 @@ foreach ([
 // Criar tecnico ou tecnico na equipe Lideranca nao gera evento de perfil (QA 5).
 foreach (['lid_cria_tecnico', 'admin_lideranca_tecnico', 'login_tecnico'] as $case) {
     assert_same(false, strpos($employeeCases[$case]['log'], 'FUNCIONARIO_PERFIL_ALTERADO') !== false, "funcionario {$case}: sem evento de perfil");
+}
+
+// F4 (desenho 9.6): arquivar e restaurar pelos endpoints reais. O banco
+// simulado devolve o cadastro travado e linhas vazias de escala, excecao,
+// ausencia e PA (os efeitos sao testados no qa-archive); as gravacoes vao
+// para [QA_WRITE] e a auditoria para [QA_AUDIT].
+$archiveDb = static function (array $rows): array {
+    $db = QA_DB;
+    foreach ($rows as $id => $row) {
+        $db['funcionarios'][(string)$id] = $row;
+    }
+    return $db;
+};
+$archivedDb = $archiveDb([1 => ['ativo' => 0, 'access_role' => 'tecnico', 'equipe' => 'n1', 'ad_login' => 'joao.silva', 'arquivado_em' => '2026-10-01 09:00:00']]);
+$legacyDb = $archiveDb([1 => ['ativo' => 0, 'access_role' => 'tecnico', 'equipe' => 'n1', 'ad_login' => 'joao.silva', 'arquivado_em' => null]]);
+$leaderTeamDb = $archiveDb([9 => ['ativo' => 1, 'access_role' => 'tecnico', 'equipe' => 'lideranca', 'ad_login' => 'tecnico.lideranca']]);
+$allowlistDb = $archiveDb([8 => ['ativo' => 1, 'access_role' => 'tecnico', 'equipe' => 'n2', 'ad_login' => 'qa.outro.admin']]);
+$conflictDb = $archiveDb([
+    1 => ['ativo' => 0, 'access_role' => 'tecnico', 'equipe' => 'n1', 'ad_login' => 'joao.silva', 'arquivado_em' => '2026-10-01 09:00:00'],
+    8 => ['ativo' => 1, 'access_role' => 'tecnico', 'equipe' => 'n2', 'ad_login' => 'joao.silva'],
+]);
+$archiveSpec = static fn (string $endpoint, array $session, int $id, array $db = QA_DB, array $env = []): array
+    => ['endpoint' => 'api/' . $endpoint, 'method' => 'POST', 'content_type' => 'application/json', 'body' => '{"funcionario_id":' . $id . '}', 'session' => $session, 'db' => $db, 'env' => $env];
+$archiveCases = qa_run_endpoints($qaDir, [
+    'admin_arquiva' => $archiveSpec('remover_funcionario.php', QA_ADMIN_SESSION, 1),
+    'gestor_arquiva' => $archiveSpec('remover_funcionario.php', $manager, 1),
+    'tecnico_arquiva' => $archiveSpec('remover_funcionario.php', $technician, 4),
+    'leitura_arquiva' => $archiveSpec('remover_funcionario.php', qa_ci_session(4, 'qa.leitura', 'somente_leitura'), 1),
+    'admin_arquiva_arquivado' => $archiveSpec('remover_funcionario.php', QA_ADMIN_SESSION, 1, $archivedDb),
+    'admin_regulariza' => $archiveSpec('remover_funcionario.php', QA_ADMIN_SESSION, 1, $legacyDb),
+    'admin_arquiva_proprio' => $archiveSpec('remover_funcionario.php', QA_ADMIN_SESSION, 7),
+    'lid_arquiva_proprio' => $archiveSpec('remover_funcionario.php', $leaderSession, 2),
+    'lid_arquiva_equipe_lideranca' => $archiveSpec('remover_funcionario.php', $leaderSession, 9, $leaderTeamDb),
+    'admin_arquiva_equipe_lideranca' => $archiveSpec('remover_funcionario.php', QA_ADMIN_SESSION, 9, $leaderTeamDb),
+    'admin_arquiva_allowlist' => $archiveSpec('remover_funcionario.php', QA_ADMIN_SESSION, 8, $allowlistDb, ['AD_ADMIN_USERS' => 'qa.admin,qa.outro.admin']),
+    'admin_arquiva_inexistente' => $archiveSpec('remover_funcionario.php', QA_ADMIN_SESSION, 99),
+    'admin_restaura' => $archiveSpec('restaurar_funcionario.php', QA_ADMIN_SESSION, 1, $archivedDb),
+    'admin_restaura_legado' => $archiveSpec('restaurar_funcionario.php', QA_ADMIN_SESSION, 1, $legacyDb),
+    'admin_restaura_ativo' => $archiveSpec('restaurar_funcionario.php', QA_ADMIN_SESSION, 1),
+    'admin_restaura_login_em_uso' => $archiveSpec('restaurar_funcionario.php', QA_ADMIN_SESSION, 1, $conflictDb),
+    'lid_restaura' => $archiveSpec('restaurar_funcionario.php', $leaderSession, 1, $archivedDb),
+    'gestor_restaura' => $archiveSpec('restaurar_funcionario.php', $manager, 1, $archivedDb),
+    'tecnico_restaura' => $archiveSpec('restaurar_funcionario.php', $technician, 1),
+    // D2 (P11): sem codigo novo de autenticacao; a revalidacao do A1 encerra,
+    // na requisicao seguinte, a sessao CI de quem foi arquivado.
+    'sessao_do_arquivado' => ['endpoint' => 'api/status.php', 'method' => 'GET', 'session' => $technician, 'db' => $archivedDb],
+    'admin_edita_arquivado' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva']), $archivedDb),
+    'admin_desativa_pelo_formulario' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'ativo' => false])),
+    'admin_edita_sem_ativo' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, (string)json_encode(array_diff_key(json_decode($employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva']), true), ['ativo' => true]))),
+    'admin_cria_inativo' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['id' => 905, 'ad_login' => 'novo.inativo', 'ativo' => false])),
+]);
+$archiveBody = static fn (string $case): array => (array)json_decode($archiveCases[$case]['body'], true);
+$effectKeys = ['pa_encerrados', 'pa_removidos', 'regras_encerradas', 'regras_removidas', 'excecoes_removidas', 'ausencias_canceladas', 'ausencias_cortadas', 'pausa_finalizada', 'solicitacao_descartada'];
+foreach (['admin_arquiva' => false, 'admin_regulariza' => true, 'admin_arquiva_equipe_lideranca' => false, 'admin_arquiva_allowlist' => false] as $case => $regularization) {
+    $result = $archiveCases[$case];
+    $body = $archiveBody($case);
+    assert_same(200, $result['status'], "arquivar {$case}: HTTP 200");
+    assert_same($effectKeys, array_keys($body['efeitos'] ?? []), "arquivar {$case}: efeitos com as nove chaves");
+    assert_same($regularization, $body['regularizacao'] ?? null, "arquivar {$case}: regularizacao");
+    assert_same(1, preg_match('/\[QA_WRITE\] UPDATE funcionarios SET ativo = 0, arquivado_em = :arquivado_em, arquivado_por = :arquivado_por WHERE id = :id id=\d+/', $result['log']), "arquivar {$case}: grava ativo, data e autor");
+    assert_same(true, strpos($result['log'], '[QA_AUDIT] FUNCIONARIO_ARQUIVADO [CRITICAL]: funcionario_id=') !== false, "arquivar {$case}: auditoria CRITICAL");
+    assert_same('', $result['stderr'], "arquivar {$case}: sem erro de PHP");
+}
+assert_same('Cadastro inativo regularizado e arquivado.', $archiveBody('admin_regulariza')['mensagem'] ?? null, 'arquivar: regularizacao com mensagem propria (D5)');
+assert_same(true, strpos($archiveCases['admin_regulariza']['log'], 'regularizacao=sim') !== false, 'arquivar: regularizacao na auditoria');
+assert_same([[], [EmployeeArchiveService::ALLOWLIST_WARNING]], [$archiveBody('admin_arquiva')['avisos'] ?? null, $archiveBody('admin_arquiva_allowlist')['avisos'] ?? null], 'arquivar: aviso so para login da allowlist (D3)');
+assert_same(true, strpos($archiveCases['admin_arquiva_allowlist']['log'], 'allowlist=sim') !== false, 'arquivar: allowlist na auditoria');
+foreach ([
+    'gestor_arquiva' => [403, 'não possui permissão para gerenciar funcionários'],
+    'tecnico_arquiva' => [403, 'não possui permissão para gerenciar funcionários'],
+    'leitura_arquiva' => [403, 'não possui permissão para gerenciar funcionários'],
+    'admin_arquiva_arquivado' => [409, 'Este cadastro já foi arquivado em 01/10/2026. Restaure-o antes de arquivar de novo.'],
+    'admin_arquiva_proprio' => [409, EmployeeArchiveService::SELF_ARCHIVE_MESSAGE],
+    'lid_arquiva_proprio' => [403, 'não altera cadastros de Liderança'],
+    'lid_arquiva_equipe_lideranca' => [403, EmployeeArchiveService::LEADERSHIP_TEAM_MESSAGE],
+    'admin_arquiva_inexistente' => [404, EmployeeArchiveService::NOT_FOUND_MESSAGE],
+    'admin_restaura_ativo' => [409, EmployeeArchiveService::ALREADY_ACTIVE_MESSAGE],
+    'admin_restaura_login_em_uso' => [409, EmployeeArchiveService::LOGIN_IN_USE_MESSAGE],
+    'lid_restaura' => [403, EmployeeArchiveService::RESTORE_DENIED_MESSAGE],
+    'gestor_restaura' => [403, EmployeeArchiveService::RESTORE_DENIED_MESSAGE],
+    'tecnico_restaura' => [403, EmployeeArchiveService::RESTORE_DENIED_MESSAGE],
+    'admin_edita_arquivado' => [409, 'Cadastro arquivado: restaure-o antes de editar.'],
+    'admin_desativa_pelo_formulario' => [409, 'Para arquivar o cadastro, use o botão Arquivar.'],
+    'admin_cria_inativo' => [400, 'Cadastro novo é sempre ativo.'],
+] as $case => [$status, $message]) {
+    $result = $archiveCases[$case];
+    assert_same($status, $result['status'], "F4 {$case}: HTTP {$status}");
+    assert_same(true, strpos((string)($archiveBody($case)['mensagem'] ?? ''), $message) !== false, "F4 {$case}: mensagem");
+    // A carga de emergencia do init.php grava os cadastros padrao (ids 1 a 17) sem banco.
+    assert_same(0, preg_match('/\[QA_WRITE\] (UPDATE |DELETE |INSERT INTO (pausas|portal_sync_queue|funcionarios id=90\d))/', $result['log']), "F4 {$case}: nada gravado");
+    assert_same(false, strpos($result['log'], 'FUNCIONARIO_ARQUIVADO') !== false || strpos($result['log'], 'FUNCIONARIO_RESTAURADO') !== false, "F4 {$case}: sem evento de sucesso");
+    if ($status === 403) {
+        assert_same(true, strpos($result['log'], '[QA_AUDIT] FUNCIONARIO_ALTERACAO_NEGADA [WARNING]') !== false, "F4 {$case}: recusa auditada");
+    }
+}
+foreach (['admin_restaura' => '2026-10-01 09:00:00', 'admin_restaura_legado' => 'desconhecida'] as $case => $archivedAt) {
+    $result = $archiveCases[$case];
+    assert_same(200, $result['status'], "restaurar {$case}: HTTP 200");
+    assert_same(true, strpos($result['log'], '[QA_WRITE] UPDATE funcionarios SET ativo = 1, arquivado_em = NULL, arquivado_por = NULL WHERE id = :id AND ativo = 0 id=1') !== false, "restaurar {$case}: limpa data e autor");
+    assert_same(true, strpos($result['log'], "[QA_AUDIT] FUNCIONARIO_RESTAURADO [CRITICAL]: funcionario_id=1; perfil=tecnico; equipe=n1; ator=admin; arquivado_em={$archivedAt}") !== false, "restaurar {$case}: auditoria CRITICAL");
+}
+$result = $archiveCases['sessao_do_arquivado'];
+assert_same(401, $result['status'], 'D2: sessao CI do cadastro arquivado encerrada na requisicao seguinte (401)');
+assert_same(true, strpos($result['log'], '[QA_AUDIT] SESSION_REVOKED [WARNING]: Sessao encerrada (funcionario ID 1): perfil tecnico -> nenhum, motivo cadastro_inativo') !== false, 'D2: SESSION_REVOKED auditado com cadastro_inativo');
+$result = $archiveCases['admin_edita_sem_ativo'];
+assert_same(true, $result['status'] === 200 && strpos($result['log'], '[QA_WRITE] UPDATE funcionarios SET nome = :nome') !== false, 'editar sem o campo ativo: grava e nao reativa nem desativa (D4)');
+foreach ([$archiveCases['admin_arquiva'], $archiveCases['admin_restaura']] as $result) {
+    assert_same(0, preg_match('/FUNCIONARIO_(ARQUIVADO|RESTAURADO) \[CRITICAL\]: [^\n]*(joao\.silva|QA\b)/', $result['log']), 'F4: auditoria sem nome nem login');
 }
 
 // QA 13 e A3, estruturais: so os endpoints de funcionario e a carga de
@@ -1645,7 +1785,8 @@ foreach (['adicionar_funcionario.php', 'atualizar_funcionario.php'] as $file) {
     assert_same(true, preg_match('/require_funcionario_change\(\$actor_role, null, \$access_role, /', $source) === 1, "{$file}: regra do perfil novo antes do banco");
 }
 assert_same(true, strpos((string)file_get_contents($root . '/api/atualizar_funcionario.php'), 'require_funcionario_change($actor_role, $currentRole, $access_role, ') !== false, 'atualizar: regra com o perfil atual lido do banco');
-assert_same(true, strpos((string)file_get_contents($root . '/api/remover_funcionario.php'), 'require_funcionario_change($actor_role, (string)$currentRole, null, ') !== false, 'remover: regra com o perfil atual lido do banco');
+// F4: a regra com o perfil atual fica no servico do arquivamento, sobre o cadastro travado.
+assert_same(true, strpos((string)file_get_contents($root . '/services/EmployeeArchiveService.php'), "funcionario_change_denied(\$role, (string)(\$employee['access_role'] ?? ''), null)") !== false, 'remover (arquivar): regra com o perfil atual lido do banco');
 foreach (['', '   ', null] as $empty) {
     assert_same(null, validate_ad_login($empty), 'login AD vazio vira NULL: ' . var_export($empty, true));
 }
@@ -2188,7 +2329,8 @@ assert_same([], $listed($foraCases['lista_tecnico']), 'listagem: tecnico nao rec
 $updateSource = (string)file_get_contents($root . '/api/atualizar_funcionario.php');
 assert_same(true, strpos($updateSource, "\$pdo->rollBack();\n        audit_log(\n            'FUNCIONARIO_ALTERACAO_NEGADA'") !== false, 'fora do Mapa: rollback antes da auditoria da recusa');
 assert_same(true, strpos($updateSource, '$pdo->commit();') < strpos($updateSource, "'FUNCIONARIO_FORA_MAPA_ALTERADO'"), 'fora do Mapa: commit antes da auditoria da alteracao');
-assert_same(true, strpos($updateSource, "SELECT fora_mapa_escala FROM funcionarios WHERE id = :id FOR UPDATE") !== false, 'fora do Mapa: cadastro travado na checagem do vinculo');
+// F4 (D4): a mesma leitura travada traz ativo, para recusar editar arquivado.
+assert_same(true, strpos($updateSource, "SELECT fora_mapa_escala, ativo FROM funcionarios WHERE id = :id FOR UPDATE") !== false, 'fora do Mapa: cadastro travado na checagem do vinculo');
 $paMapSource = (string)file_get_contents($root . '/services/PaMapService.php');
 assert_same(true, strpos($paMapSource, "LIMIT 1\n             FOR UPDATE'") !== false && strpos($paMapSource, "if ((int)\$employee['fora_mapa_escala'] === 1) {") !== false, 'Mapa PA: vinculo para cadastro marcado recusado, com o cadastro travado');
 assert_same(true, strpos($paMapSource, 'WHERE ativo = 1 AND fora_mapa_escala = 0') !== false, 'Mapa PA: cadastro marcado fora da lista de elegiveis');

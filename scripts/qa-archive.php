@@ -11,10 +11,58 @@ declare(strict_types=1);
 //    com o ajuste de 2026-10-13), pausa (P16, D9), virada 23:59/00:00 com o
 //    instante injetado, invariante de periodo valido em varredura, dado fora
 //    do formato e pureza.
-// O servico e os endpoints entram no commit 3 do F4.
+// 3. Servico (EmployeeArchiveService) com banco simulado com transacao e
+//    rollback e o estado de pausas num diretorio temporario: instante no fuso
+//    do PHP (UTC e outro fuso recusados), ordem estado.json -> banco e
+//    leituras com FOR UPDATE, efeitos gravados, historico da pausa, estado
+//    so com a entrada do colaborador, clear_invalid no log e na auditoria,
+//    falhas no meio (nada gravado, estado intacto), falha do estado depois do
+//    commit (aviso), permissoes (D1, L9, D3), restaurar (D12), httpError,
+//    L-11 e endpoints (estrutura; ponta a ponta no qa-security).
+//
+// Nao acessa banco nem os arquivos de estado da aplicacao.
 //
 // Uso: php scripts/qa-archive.php
 // ============================================================================
+
+putenv('APP_ENV=development');
+putenv('APP_DEBUG=false');
+putenv('SECRET_KEY=qa-only-secret-key');
+putenv('MAIL_ENABLED=false');
+putenv('AD_DOMAIN=corp.local');
+putenv('AD_UPN_SUFFIX=corp.local');
+putenv('AD_ADMIN_USERS=qa.admin,qa.outro.admin');
+$qaStateDir = sys_get_temp_dir() . '/chronodesk-qa-archive-' . bin2hex(random_bytes(6));
+if (!mkdir($qaStateDir, 0700)) {
+    fwrite(STDERR, "FALHOU: nao criou diretorio temporario do QA\n");
+    exit(1);
+}
+$errorLogFile = $qaStateDir . '/php-error.log';
+putenv('PHP_ERROR_LOG=' . $errorLogFile);
+register_shutdown_function(static function () use ($qaStateDir): void {
+    foreach (glob($qaStateDir . '/*') ?: [] as $path) {
+        @unlink($path);
+    }
+    @rmdir($qaStateDir);
+});
+define('ESTADO_JSON', $qaStateDir . '/estado.json');
+define('PAUSAS_CSV', $qaStateDir . '/pausas.csv');
+define('CONFIG_JSON', $qaStateDir . '/config_sistema.json');
+define('FUNCIONARIOS_JSON', $qaStateDir . '/funcionarios.json');
+$_SERVER['REQUEST_METHOD'] = 'POST';
+$_SERVER['REMOTE_ADDR'] = '127.0.0.251';
+define('CHRONODESK_STATELESS', true);
+
+$GLOBALS['qa_pdo'] = null;
+function get_db_connection() {
+    if (!$GLOBALS['qa_pdo'] instanceof PDO) {
+        throw new PDOException('SQLSTATE[HY000]: banco simulado ausente');
+    }
+    return $GLOBALS['qa_pdo'];
+}
+
+require_once dirname(__DIR__) . '/config.php';
+ini_set('error_log', $errorLogFile);
 
 set_exception_handler(static function (Throwable $e): void {
     fwrite(STDERR, 'ERRO: ' . get_class($e) . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n");
@@ -447,6 +495,585 @@ foreach ($formats[1] as $format) {
 assert_same(true, strpos($plannerSource, 'ScheduleRulePlanner::planRemove($rules, $today)') !== false, 'regras pelo planRemove do F1, sem regra duplicada');
 $invariantAt = strpos($plannerSource, 'self::assertValidPeriods($plan,');
 assert_same(true, $invariantAt !== false && $invariantAt < (int)strpos($plannerSource, 'return $plan;'), 'invariante conferida antes de devolver o plano');
+
+// ----------------------------------------------------------------------------
+// 3. Servico (EmployeeArchiveService)
+// ----------------------------------------------------------------------------
+require_once $root . '/services/EmployeeArchiveService.php';
+
+/**
+ * Banco simulado com as tabelas que o arquivamento le e grava. Transacao com
+ * copia e rollback; registro de cada comando; falha injetada por trecho do
+ * SQL ($failOn) e "nenhuma linha afetada" ($zeroRowsOn).
+ */
+final class QaArchivePdo extends PDO {
+    public array $tables;
+    public array $log = [];
+    public ?string $failOn = null;
+    public ?string $zeroRowsOn = null;
+    /** Linha de regra que aparece na 2a leitura do historico (gravacao concorrente simulada). */
+    public ?array $injectRuleOnSecondRead = null;
+    public int $ruleReads = 0;
+    private ?array $snapshot = null;
+
+    public function __construct(array $tables) {
+        $this->tables = $tables + [
+            'funcionarios' => [], 'portal_schedule_rules' => [], 'portal_schedule_exceptions' => [],
+            'portal_absences' => [], 'portal_pa_assignments' => [], 'pausas' => [], 'portal_sync_queue' => [], 'audit_log' => [],
+        ];
+    }
+
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaArchiveStatement($this, (string)preg_replace('/\s+/', ' ', trim($query)));
+    }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
+        if (trim($query) === 'SELECT 1 FROM audit_log LIMIT 1') {
+            $this->log[] = 'QUERY audit_log';
+            return new QaArchiveStatement($this, 'SELECT 1');
+        }
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $query);
+    }
+
+    public function beginTransaction(): bool {
+        $this->snapshot = $this->tables;
+        $this->log[] = 'BEGIN';
+        return true;
+    }
+
+    public function commit(): bool {
+        $this->snapshot = null;
+        $this->log[] = 'COMMIT';
+        return true;
+    }
+
+    public function rollBack(): bool {
+        $this->tables = (array)$this->snapshot;
+        $this->snapshot = null;
+        $this->log[] = 'ROLLBACK';
+        return true;
+    }
+
+    public function inTransaction(): bool {
+        return $this->snapshot !== null;
+    }
+
+    /** Comandos SQL entre o BEGIN e o fim da transacao. */
+    public function transactionStatements(): array {
+        $inside = [];
+        $open = false;
+        foreach ($this->log as $entry) {
+            if ($entry === 'BEGIN') {
+                $open = true;
+            } elseif (in_array($entry, ['COMMIT', 'ROLLBACK'], true)) {
+                $open = false;
+            } elseif ($open) {
+                $inside[] = $entry;
+            }
+        }
+        return $inside;
+    }
+}
+
+final class QaArchiveStatement extends PDOStatement {
+    private array $rows = [];
+    private int $affected = 0;
+
+    public function __construct(private QaArchivePdo $pdo, private string $sql) {
+    }
+
+    public function execute(?array $params = null): bool {
+        $params ??= [];
+        $db = $this->pdo;
+        $sql = $this->sql;
+        $db->log[] = $sql;
+        if ($db->failOn !== null && strpos($sql, $db->failOn) !== false) {
+            throw new PDOException('SQLSTATE[HY000]: falha injetada no QA');
+        }
+        $this->rows = [];
+        $this->affected = 0;
+        $t = &$db->tables;
+        $rulesRead = 'SELECT id, employee_id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE employee_id = :employee_id ORDER BY effective_from, id FOR UPDATE';
+        if ($sql === $rulesRead && ++$db->ruleReads === 2 && $db->injectRuleOnSecondRead !== null) {
+            $t['portal_schedule_rules'][(int)$db->injectRuleOnSecondRead['id']] = $db->injectRuleOnSecondRead;
+        }
+        $byEmployee = static fn (string $table): array => array_values(array_filter($t[$table], static fn (array $row): bool => (int)$row['employee_id'] === (int)$params[':employee_id']));
+        $pick = static fn (array $row, array $columns): array => array_intersect_key($row, array_flip($columns));
+        if ($sql === 'SELECT 1') {
+            return true;
+        }
+        if ($sql === 'INSERT INTO audit_log (user_ip, username, action, details, severity) VALUES (?, ?, ?, ?, ?)') {
+            $t['audit_log'][] = ['action' => $params[2], 'details' => $params[3], 'severity' => $params[4]];
+            return true;
+        }
+        if ($sql === 'SELECT id, nome, equipe, access_role, ad_login, ativo, arquivado_em FROM funcionarios WHERE id = :id FOR UPDATE') {
+            $row = $t['funcionarios'][(int)$params[':id']] ?? null;
+            $this->rows = $row ? [$pick($row, ['id', 'nome', 'equipe', 'access_role', 'ad_login', 'ativo', 'arquivado_em'])] : [];
+            return true;
+        }
+        if ($sql === 'SELECT id, employee_id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE employee_id = :employee_id ORDER BY effective_from, id FOR UPDATE') {
+            $this->rows = array_map(static fn (array $row): array => $pick($row, ['id', 'employee_id', 'rule_type', 'rule_config', 'effective_from', 'effective_until']), $byEmployee('portal_schedule_rules'));
+            return true;
+        }
+        if ($sql === 'SELECT id, employee_id, exception_date, exception_type FROM portal_schedule_exceptions WHERE employee_id = :employee_id AND exception_date >= :today ORDER BY exception_date, id FOR UPDATE') {
+            foreach ($byEmployee('portal_schedule_exceptions') as $row) {
+                if ($row['exception_date'] >= $params[':today']) {
+                    $this->rows[] = $pick($row, ['id', 'employee_id', 'exception_date', 'exception_type']);
+                }
+            }
+            return true;
+        }
+        if ($sql === 'SELECT id, employee_id, starts_on, ends_on, period_type, status FROM portal_absences WHERE employee_id = :employee_id AND status = :status AND ends_on >= :today ORDER BY starts_on, id FOR UPDATE') {
+            foreach ($byEmployee('portal_absences') as $row) {
+                if ($row['status'] === $params[':status'] && $row['ends_on'] >= $params[':today']) {
+                    $this->rows[] = $pick($row, ['id', 'employee_id', 'starts_on', 'ends_on', 'period_type', 'status']);
+                }
+            }
+            return true;
+        }
+        if ($sql === 'SELECT id, employee_id, valid_from, valid_until, active FROM portal_pa_assignments WHERE employee_id = :employee_id AND active = 1 AND (valid_until IS NULL OR valid_until >= :today) ORDER BY valid_from, id FOR UPDATE') {
+            foreach ($byEmployee('portal_pa_assignments') as $row) {
+                if ((int)$row['active'] === 1 && ($row['valid_until'] === null || $row['valid_until'] >= $params[':today'])) {
+                    $this->rows[] = $pick($row, ['id', 'employee_id', 'valid_from', 'valid_until', 'active']);
+                }
+            }
+            return true;
+        }
+        if ($sql === 'SELECT id FROM funcionarios WHERE id <> :id AND ativo = 1 AND ad_login = :ad_login LIMIT 1 FOR UPDATE') {
+            foreach ($t['funcionarios'] as $id => $row) {
+                if ($id !== (int)$params[':id'] && (int)$row['ativo'] === 1 && strcasecmp((string)$row['ad_login'], (string)$params[':ad_login']) === 0) {
+                    $this->rows[] = ['id' => $id];
+                }
+            }
+            return true;
+        }
+        $update = function (string $table, int $id, callable $matches, array $changes) use (&$t, $db, $sql): void {
+            if ($db->zeroRowsOn !== null && strpos($sql, $db->zeroRowsOn) !== false) {
+                return;
+            }
+            if (isset($t[$table][$id]) && $matches($t[$table][$id])) {
+                $t[$table][$id] = $changes + $t[$table][$id];
+                $this->affected = 1;
+            }
+        };
+        $own = static fn (array $row): bool => (int)$row['employee_id'] === (int)$params[':employee_id'];
+        switch ($sql) {
+            case 'UPDATE portal_pa_assignments SET valid_until = :valid_until, updated_by = :updated_by WHERE id = :id AND employee_id = :employee_id AND active = 1':
+                $update('portal_pa_assignments', (int)$params[':id'], static fn (array $row): bool => $own($row) && (int)$row['active'] === 1, ['valid_until' => $params[':valid_until'], 'updated_by' => $params[':updated_by']]);
+                return true;
+            case 'UPDATE portal_pa_assignments SET active = 0, deleted_at = :deleted_at, updated_by = :updated_by WHERE id = :id AND employee_id = :employee_id AND active = 1':
+                $update('portal_pa_assignments', (int)$params[':id'], static fn (array $row): bool => $own($row) && (int)$row['active'] === 1, ['active' => 0, 'deleted_at' => $params[':deleted_at'], 'updated_by' => $params[':updated_by']]);
+                return true;
+            case 'UPDATE portal_schedule_rules SET effective_until = :effective_until, updated_by = :updated_by WHERE id = :id AND employee_id = :employee_id':
+                $update('portal_schedule_rules', (int)$params[':id'], $own, ['effective_until' => $params[':effective_until'], 'updated_by' => $params[':updated_by']]);
+                return true;
+            case 'UPDATE portal_absences SET status = :cancelled, cancelled_by = :cancelled_by, cancelled_at = :cancelled_at, updated_by = :updated_by WHERE id = :id AND employee_id = :employee_id AND status = :approved':
+                $update('portal_absences', (int)$params[':id'], static fn (array $row): bool => $own($row) && $row['status'] === $params[':approved'], ['status' => $params[':cancelled'], 'cancelled_by' => $params[':cancelled_by'], 'cancelled_at' => $params[':cancelled_at'], 'updated_by' => $params[':updated_by']]);
+                return true;
+            case 'UPDATE portal_absences SET ends_on = :ends_on, updated_by = :updated_by WHERE id = :id AND employee_id = :employee_id AND status = :approved':
+                $update('portal_absences', (int)$params[':id'], static fn (array $row): bool => $own($row) && $row['status'] === $params[':approved'], ['ends_on' => $params[':ends_on'], 'updated_by' => $params[':updated_by']]);
+                return true;
+            case 'UPDATE funcionarios SET ativo = 0, arquivado_em = :arquivado_em, arquivado_por = :arquivado_por WHERE id = :id':
+                $update('funcionarios', (int)$params[':id'], static fn (array $row): bool => true, ['ativo' => 0, 'arquivado_em' => $params[':arquivado_em'], 'arquivado_por' => $params[':arquivado_por']]);
+                return true;
+            case 'UPDATE funcionarios SET ativo = 1, arquivado_em = NULL, arquivado_por = NULL WHERE id = :id AND ativo = 0':
+                $update('funcionarios', (int)$params[':id'], static fn (array $row): bool => (int)$row['ativo'] === 0, ['ativo' => 1, 'arquivado_em' => null, 'arquivado_por' => null]);
+                return true;
+        }
+        foreach (['DELETE FROM portal_schedule_rules WHERE id = :id AND employee_id = :employee_id' => 'portal_schedule_rules',
+                  'DELETE FROM portal_schedule_exceptions WHERE id = :id AND employee_id = :employee_id' => 'portal_schedule_exceptions'] as $delete => $table) {
+            if ($sql === $delete) {
+                $row = $t[$table][(int)$params[':id']] ?? null;
+                if ($row !== null && $own($row) && ($db->zeroRowsOn === null || strpos($sql, $db->zeroRowsOn) === false)) {
+                    unset($t[$table][(int)$params[':id']]);
+                    $this->affected = 1;
+                }
+                return true;
+            }
+        }
+        if (strpos($sql, 'INSERT INTO pausas ( id_funcionario,') === 0) {
+            $t['pausas'][] = $params;
+            $this->affected = 1;
+            return true;
+        }
+        if (strpos($sql, 'INSERT INTO portal_sync_queue (record_type, record_id, operation, status, payload_json, created_by)') === 0) {
+            $t['portal_sync_queue'][] = $params;
+            $this->affected = 1;
+            return true;
+        }
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $sql);
+    }
+
+    public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
+        return array_shift($this->rows) ?? false;
+    }
+
+    public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
+        $rows = $this->rows;
+        $this->rows = [];
+        return $rows;
+    }
+
+    public function rowCount(): int {
+        return $this->affected;
+    }
+}
+
+const QA_SP = 'America/Sao_Paulo';
+
+function qa_service_tables(): array {
+    $employee = static fn (int $id, string $team, string $role, string $login, int $active = 1, ?string $archivedAt = null): array
+        => ['id' => $id, 'nome' => "Ficticio {$id}", 'equipe' => $team, 'access_role' => $role, 'ad_login' => $login, 'ativo' => $active, 'arquivado_em' => $archivedAt, 'arquivado_por' => null];
+    return [
+        'funcionarios' => [
+            10 => $employee(10, 'n1', 'tecnico', 'tecnico.dez'),
+            11 => $employee(11, 'n2', 'tecnico', 'tecnico.onze', 0),
+            12 => $employee(12, 'n1', 'tecnico', 'tecnico.doze', 0, '2026-10-01 09:00:00'),
+            13 => $employee(13, 'lideranca', 'tecnico', 'tecnico.lideranca'),
+            14 => $employee(14, 'lideranca', 'lideranca', 'qa.lider'),
+            15 => $employee(15, 'n2', 'tecnico', 'qa.outro.admin'),
+            16 => $employee(16, 'n1', 'tecnico', 'tecnico.doze'),
+        ],
+        'portal_schedule_rules' => [
+            1 => ['id' => 1, 'employee_id' => 10, 'rule_type' => 'fixed_weekdays', 'rule_config' => '{"weekdays":[1,3]}', 'effective_from' => '2026-09-01', 'effective_until' => null, 'updated_by' => null],
+            2 => ['id' => 2, 'employee_id' => 10, 'rule_type' => 'all_onsite', 'rule_config' => null, 'effective_from' => '2026-08-01', 'effective_until' => '2026-08-31', 'updated_by' => null],
+            3 => ['id' => 3, 'employee_id' => 16, 'rule_type' => 'all_onsite', 'rule_config' => null, 'effective_from' => '2026-09-01', 'effective_until' => null, 'updated_by' => null],
+        ],
+        'portal_schedule_exceptions' => [
+            1 => ['id' => 1, 'employee_id' => 10, 'exception_date' => '2026-10-12', 'exception_type' => 'remote', 'note' => 'texto livre'],
+            2 => ['id' => 2, 'employee_id' => 10, 'exception_date' => '2026-10-14', 'exception_type' => 'training', 'note' => 'texto livre'],
+        ],
+        'portal_absences' => [
+            1 => ['id' => 1, 'employee_id' => 10, 'starts_on' => '2026-10-10', 'ends_on' => '2026-10-15', 'period_type' => 'full_day', 'status' => 'approved', 'reason' => 'observacao', 'cancelled_by' => null, 'cancelled_at' => null, 'updated_by' => null],
+            2 => ['id' => 2, 'employee_id' => 10, 'starts_on' => '2026-10-13', 'ends_on' => '2026-10-13', 'period_type' => 'from_time', 'status' => 'approved', 'reason' => 'observacao', 'cancelled_by' => null, 'cancelled_at' => null, 'updated_by' => null],
+            3 => ['id' => 3, 'employee_id' => 10, 'starts_on' => '2026-10-20', 'ends_on' => '2026-10-22', 'period_type' => 'full_day', 'status' => 'approved', 'reason' => 'observacao', 'cancelled_by' => null, 'cancelled_at' => null, 'updated_by' => null],
+            4 => ['id' => 4, 'employee_id' => 10, 'starts_on' => '2026-10-05', 'ends_on' => '2026-10-06', 'period_type' => 'full_day', 'status' => 'approved', 'reason' => 'observacao', 'cancelled_by' => null, 'cancelled_at' => null, 'updated_by' => null],
+        ],
+        'portal_pa_assignments' => [
+            1 => ['id' => 1, 'employee_id' => 10, 'valid_from' => '2026-09-01', 'valid_until' => null, 'active' => 1, 'deleted_at' => null, 'updated_by' => null],
+            2 => ['id' => 2, 'employee_id' => 10, 'valid_from' => '2026-10-13', 'valid_until' => null, 'active' => 1, 'deleted_at' => null, 'updated_by' => null],
+            3 => ['id' => 3, 'employee_id' => 10, 'valid_from' => '2026-08-01', 'valid_until' => '2026-08-31', 'active' => 1, 'deleted_at' => null, 'updated_by' => null],
+        ],
+    ];
+}
+
+/** Estado de pausas com uma entrada por colaborador, como o salvar_estado grava. */
+function qa_write_state(array $entries): string {
+    $state = ['funcionarios' => []];
+    foreach ($entries as $id => $entry) {
+        $state['funcionarios'][$id] = $entry + ['em_pausa' => false, 'inicio_pausa' => null, 'motivo_pausa' => null, 'status_aprovacao' => null, 'solicitacao_timestamp' => null, 'observacao_reuniao' => null];
+    }
+    $content = (string)json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    file_put_contents(ESTADO_JSON, $content);
+    return $content;
+}
+
+function qa_service(QaArchivePdo $pdo, string $instant = '2026-10-13 10:00:00', string $zone = QA_SP, ?Closure $writeState = null): EmployeeArchiveService {
+    $GLOBALS['qa_pdo'] = $pdo;
+    return new EmployeeArchiveService($pdo, ESTADO_JSON, static fn (): DateTimeImmutable => new DateTimeImmutable($instant, new DateTimeZone($zone)), $writeState);
+}
+
+function qa_service_outcome(callable $call): array {
+    try {
+        return ['ok', $call()];
+    } catch (Throwable $error) {
+        return [get_class($error), $error->getMessage()];
+    }
+}
+
+function qa_error_log(): string {
+    global $errorLogFile;
+    clearstatcache(true, $errorLogFile);
+    return is_file($errorLogFile) ? (string)file_get_contents($errorLogFile) : '';
+}
+
+$admin = ['role' => 'admin', 'username' => 'qa.admin', 'session_employee_id' => null];
+$leader = ['role' => 'lideranca', 'username' => 'qa.lider', 'session_employee_id' => 14];
+$pauseEntry = ['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:40:00-03:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado'];
+
+// Instante: so no fuso do PHP. UTC e deslocamento fixo sao recusados antes de
+// qualquer leitura (em UTC, "hoje" vira as 21h e o plano muda).
+assert_same(QA_SP, date_default_timezone_get(), 'config.php fixa o fuso do PHP em America/Sao_Paulo (A4)');
+assert_same(QA_SP, (new EmployeeArchiveService(new QaArchivePdo([]), ESTADO_JSON))->instant()->getTimezone()->getName(), 'instante padrao do servico no fuso do PHP');
+foreach (['UTC' => 'UTC', 'deslocamento -03:00' => '-03:00', 'outro fuso' => 'America/Manaus'] as $label => $zone) {
+    $pdo = new QaArchivePdo(qa_service_tables());
+    $before = $pdo->tables;
+    $stateBefore = qa_write_state([10 => $pauseEntry]);
+    [$class, $message] = qa_service_outcome(static fn () => qa_service($pdo, '2026-10-14 00:30:00', $zone)->archive(10, $admin));
+    assert_same(LogicException::class, $class, "instante em {$label}: recusado (LogicException)");
+    assert_same(true, strpos($message, 'fora do fuso America/Sao_Paulo') !== false, "instante em {$label}: mensagem");
+    assert_same([[], $before, $stateBefore], [$pdo->log, $pdo->tables, (string)file_get_contents(ESTADO_JSON)], "instante em {$label}: nenhuma leitura nem gravacao, estado intacto");
+}
+$serviceSource = (string)file_get_contents($root . '/services/EmployeeArchiveService.php');
+$serviceCode = (string)preg_replace('#/\*.*?\*/|//[^\n]*#s', '', $serviceSource);
+assert_same(1, substr_count($serviceCode, "new DateTimeImmutable('now')"), 'servico cria o instante sem fuso explicito (o do PHP), num lugar so');
+assert_same(0, preg_match("/new DateTime(Immutable)?\((?!'now'\))|(?<![:>\w$])(time|date|strtotime|microtime)\s*\(/", $serviceCode), 'servico sem outra leitura do relogio');
+// As 21:30 locais (00:30 UTC do dia seguinte), "hoje" e o dia local.
+$pdo = new QaArchivePdo(qa_service_tables());
+qa_write_state([]);
+$result = qa_service($pdo, '2026-10-13 21:30:00')->archive(10, $admin);
+assert_same(['2026-10-13 21:30:00', '2026-10-12', 'cancelled'], [$pdo->tables['funcionarios'][10]['arquivado_em'], $pdo->tables['portal_absences'][1]['ends_on'], $pdo->tables['portal_absences'][2]['status']], 'as 21:30 locais: data e cortes pelo dia local, nao pelo de UTC');
+
+// Arquivamento completo com pausa aprovada.
+$pdo = new QaArchivePdo(qa_service_tables());
+qa_write_state([10 => $pauseEntry + ['observacao_reuniao' => 'nota anterior'], 11 => ['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:55:00-03:00', 'motivo_pausa' => 'Pessoal', 'status_aprovacao' => 'aprovado']]);
+$otherBefore = json_decode((string)file_get_contents(ESTADO_JSON), true)['funcionarios'][11];
+$result = qa_service($pdo)->archive(10, $admin);
+assert_same([
+    'efeitos' => [
+        'pa_encerrados' => 1, 'pa_removidos' => 1, 'regras_encerradas' => 1, 'regras_removidas' => 0,
+        'excecoes_removidas' => 1, 'ausencias_canceladas' => 2, 'ausencias_cortadas' => 1,
+        'pausa_finalizada' => true, 'solicitacao_descartada' => false,
+    ],
+    'regularizacao' => false,
+    'avisos' => [],
+], $result, 'arquivar: efeitos com as nove chaves, sem aviso');
+$t = $pdo->tables;
+assert_same(['ativo' => 0, 'arquivado_em' => '2026-10-13 10:00:00', 'arquivado_por' => 'qa.admin'], array_intersect_key($t['funcionarios'][10], array_flip(['ativo', 'arquivado_em', 'arquivado_por'])), 'cadastro: ativo 0, data e autor');
+assert_same([['2026-10-12', 1], [null, 0], ['2026-08-31', 1]], [[$t['portal_pa_assignments'][1]['valid_until'], $t['portal_pa_assignments'][1]['active']], [$t['portal_pa_assignments'][2]['valid_until'], $t['portal_pa_assignments'][2]['active']], [$t['portal_pa_assignments'][3]['valid_until'], $t['portal_pa_assignments'][3]['active']]], 'PA: aberto fecha ontem, o de hoje sai, o encerrado fica');
+assert_same('2026-10-13 10:00:00', $t['portal_pa_assignments'][2]['deleted_at'], 'PA removido com a data do instante (sem relogio do banco)');
+assert_same(['2026-10-12', '2026-08-31', null], [$t['portal_schedule_rules'][1]['effective_until'], $t['portal_schedule_rules'][2]['effective_until'], $t['portal_schedule_rules'][3]['effective_until']], 'regras: vigente fecha ontem; encerrada e a de outro colaborador ficam');
+assert_same([1], array_keys($t['portal_schedule_exceptions']), 'excecao de amanha apagada; a de ontem fica');
+assert_same([['approved', '2026-10-12'], ['cancelled', '2026-10-13'], ['cancelled', '2026-10-22'], ['approved', '2026-10-06']], array_map(static fn (array $row): array => [$row['status'], $row['ends_on']], array_values($t['portal_absences'])), 'ausencias: em curso cortada em ontem; parcial de hoje e futura canceladas; passada fica');
+assert_same(['qa.admin', '2026-10-13 10:00:00'], [$t['portal_absences'][2]['cancelled_by'], $t['portal_absences'][2]['cancelled_at']], 'ausencia cancelada com autor e a data do instante');
+assert_same(1, count($t['pausas']), 'pausa: um registro no historico');
+$pauseRow = $t['pausas'][0];
+assert_same(
+    [10, 'Ficticio 10', 'n1', '2026-10-13 09:40:00', '2026-10-13 10:00:00', 1200, 'Café', 1, 1, 'aprovado', 'nota anterior | ' . EmployeeArchiveService::PAUSE_NOTE . 'qa.admin'],
+    [$pauseRow[':id_funcionario'], $pauseRow[':nome_funcionario'], $pauseRow[':equipe'], $pauseRow[':inicio_pausa'], $pauseRow[':fim_pausa'], $pauseRow[':duracao_segundos'], $pauseRow[':motivo_pausa'], $pauseRow[':alerta_15min'], $pauseRow[':alerta_20min'], $pauseRow[':status_aprovacao'], $pauseRow[':observacao_reuniao']],
+    'pausa: historico com origem admin_archive no texto, alertas de 15 e 20 min pelo motivo'
+);
+assert_same(1, count($t['portal_sync_queue']), 'regra encerrada vai para a fila de sincronizacao, como no F1');
+$state = json_decode((string)file_get_contents(ESTADO_JSON), true);
+assert_same(['em_pausa' => false, 'inicio_pausa' => null, 'motivo_pausa' => null, 'status_aprovacao' => null, 'solicitacao_timestamp' => null, 'observacao_reuniao' => null], $state['funcionarios'][10], 'estado: entrada do arquivado zerada');
+assert_same($otherBefore, $state['funcionarios'][11], 'estado: as outras entradas ficam como foram lidas');
+$audits = array_values(array_filter($t['audit_log'], static fn (array $row): bool => $row['action'] === 'FUNCIONARIO_ARQUIVADO'));
+assert_same(1, count($audits), 'auditoria: um FUNCIONARIO_ARQUIVADO');
+assert_same('CRITICAL', $audits[0]['severity'], 'auditoria: CRITICAL');
+assert_same(
+    'funcionario_id=10; perfil=tecnico; equipe=n1; ator=admin; regularizacao=nao; pa_encerrados=1; pa_removidos=2; regra_encerrada=1 ate 2026-10-12; regras_apagadas=nenhuma; excecoes_apagadas=2:training 2026-10-14; ausencias_canceladas=2,3; ausencias_cortadas=1 ate 2026-10-12 (antes 2026-10-15); pausa=finalizada; allowlist=nao',
+    $audits[0]['details'],
+    'auditoria: ids, datas, tipos e contagens'
+);
+assert_same(0, preg_match('/Ficticio|tecnico\.dez|Caf|nota anterior|texto livre|observacao/', $audits[0]['details']), 'auditoria: sem nome, login, motivo nem observacao');
+
+// Leituras: estado.json antes do banco; dentro da transacao, toda leitura com FOR UPDATE e o cadastro primeiro.
+$inside = $pdo->transactionStatements();
+$selects = array_values(array_filter($inside, static fn (string $sql): bool => strpos($sql, 'SELECT') === 0 && $sql !== 'SELECT 1'));
+assert_same(true, count($selects) >= 5, 'transacao: leituras do cadastro, regras, excecoes, ausencias e PA');
+assert_same([], array_values(array_filter($selects, static fn (string $sql): bool => substr($sql, -10) !== 'FOR UPDATE')), 'transacao: toda leitura com FOR UPDATE (licao do F1)');
+assert_same(0, strpos($inside[0], 'SELECT id, nome, equipe, access_role, ad_login, ativo, arquivado_em FROM funcionarios WHERE id = :id FOR UPDATE'), 'transacao: o cadastro e travado primeiro');
+assert_same(['BEGIN', 'COMMIT'], array_values(array_filter($pdo->log, static fn (string $entry): bool => in_array($entry, ['BEGIN', 'COMMIT', 'ROLLBACK'], true))), 'uma transacao, com commit');
+$archiveBody = substr($serviceSource, (int)strpos($serviceSource, 'public function archive('), (int)strpos($serviceSource, 'public function restore(') - (int)strpos($serviceSource, 'public function archive('));
+$lockAt = strpos($archiveBody, 'with_pause_state_lock(function ()');
+$stateAt = strpos($archiveBody, 'ler_estado_pausas($this->statePath)');
+$beginAt = strpos($archiveBody, '$this->pdo->beginTransaction()');
+$commitAt = strpos($archiveBody, '$this->pdo->commit()');
+$writeAt = strpos($archiveBody, '$this->clearStateEntry($state, $employeeId)');
+assert_same(true, $lockAt !== false && $lockAt < $stateAt && $stateAt < $beginAt && $beginAt < $commitAt && $commitAt < $writeAt && strpos($archiveBody, '}, $this->statePath);') > $writeAt, 'ordem: lock, estado.json, transacao, commit, gravacao do estado ainda dentro do lock');
+assert_same(true, strpos($archiveBody, '$now = $this->instant();') < $lockAt, 'instante conferido antes do lock e do banco');
+
+// Historico antigo com sobreposicao (dado anterior ao F1) nao bloqueia: so violacao nova derruba.
+$tables = qa_service_tables();
+$tables['portal_schedule_rules'][4] = ['id' => 4, 'employee_id' => 10, 'rule_type' => 'all_remote', 'rule_config' => null, 'effective_from' => '2026-08-15', 'effective_until' => '2026-08-20', 'updated_by' => null];
+$pdo = new QaArchivePdo($tables);
+qa_write_state([]);
+assert_same('ok', qa_service_outcome(static fn () => qa_service($pdo)->archive(10, $admin))[0], 'historico antigo com sobreposicao: arquiva (so violacao nova derruba)');
+
+// Alertas do historico pelo motivo e pelo limiar (mesma regra do GerenciadorPausas).
+foreach ([
+    'Pessoal de 30 min' => [['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:30:00-03:00', 'motivo_pausa' => 'Pessoal', 'status_aprovacao' => 'aprovado'], [1800, 0, 0]],
+    'Café de 16 min' => [['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:44:00-03:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado'], [960, 1, 0]],
+    'Café de 14 min' => [['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:46:00-03:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado'], [840, 0, 0]],
+] as $label => [$entry, $expected]) {
+    $pdo = new QaArchivePdo(qa_service_tables());
+    qa_write_state([10 => $entry]);
+    qa_service($pdo)->archive(10, $admin);
+    $row = $pdo->tables['pausas'][0];
+    assert_same($expected, [$row[':duracao_segundos'], $row[':alerta_15min'], $row[':alerta_20min']], "historico da pausa ({$label}): duracao e alertas");
+}
+
+// Violacao NOVA no historico de escala depois de gravar derruba tudo.
+$pdo = new QaArchivePdo(qa_service_tables());
+$pdo->injectRuleOnSecondRead = ['id' => 9, 'employee_id' => 10, 'rule_type' => 'all_remote', 'rule_config' => null, 'effective_from' => '2026-10-01', 'effective_until' => '2026-10-05', 'updated_by' => null];
+$before = $pdo->tables;
+$stateBefore = qa_write_state([10 => $pauseEntry]);
+[$class, $message] = qa_service_outcome(static fn () => qa_service($pdo)->archive(10, $admin));
+assert_same([RuntimeException::class, true], [$class, strpos($message, 'Historico de escala inconsistente') === 0], 'violacao nova no historico de escala: RuntimeException');
+unset($pdo->tables['portal_schedule_rules'][9]);
+assert_same([$before, $stateBefore, 'ROLLBACK'], [$pdo->tables, (string)file_get_contents(ESTADO_JSON), end($pdo->log)], 'violacao nova: rollback, nada gravado, estado intacto');
+
+// Solicitacao pendente: descartada, sem historico.
+$pdo = new QaArchivePdo(qa_service_tables());
+qa_write_state([10 => ['em_pausa' => false, 'motivo_pausa' => 'Reunião', 'status_aprovacao' => 'pendente', 'solicitacao_timestamp' => '2026-10-13T09:50:00-03:00', 'observacao_reuniao' => 'pauta']]);
+$result = qa_service($pdo)->archive(10, $admin);
+assert_same([false, true, []], [$result['efeitos']['pausa_finalizada'], $result['efeitos']['solicitacao_descartada'], $pdo->tables['pausas']], 'pendente: descartada, sem historico');
+assert_same(false, json_decode((string)file_get_contents(ESTADO_JSON), true)['funcionarios'][10]['status_aprovacao'] !== null, 'pendente: estado zerado');
+
+// clear_invalid: estado zerado sem historico, no error_log e na auditoria (so ids e a acao).
+$pdo = new QaArchivePdo(qa_service_tables());
+qa_write_state([10 => ['em_pausa' => true, 'inicio_pausa' => 'now', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado', 'observacao_reuniao' => 'texto qualquer']]);
+$logBefore = strlen(qa_error_log());
+$result = qa_service($pdo)->archive(10, $admin);
+$logAfter = substr(qa_error_log(), $logBefore);
+assert_same([false, false, []], [$result['efeitos']['pausa_finalizada'], $result['efeitos']['solicitacao_descartada'], $pdo->tables['pausas']], 'clear_invalid: sem historico e fora dos efeitos');
+assert_same(false, json_decode((string)file_get_contents(ESTADO_JSON), true)['funcionarios'][10]['em_pausa'], 'clear_invalid: estado zerado');
+assert_same(true, strpos($logAfter, '[ARCHIVE] Entrada ilegivel do estado de pausas limpa sem historico: funcionario ID 10.') !== false, 'clear_invalid: registrado no error_log');
+assert_same(0, preg_match('/Caf|texto qualquer/', $logAfter), 'clear_invalid: log sem motivo nem observacao');
+$audit = array_values(array_filter($pdo->tables['audit_log'], static fn (array $row): bool => $row['action'] === 'FUNCIONARIO_ARQUIVADO'))[0]['details'];
+assert_same(true, strpos($audit, 'pausa=limpa_sem_historico') !== false && preg_match('/Caf|texto qualquer/', $audit) === 0, 'clear_invalid: na auditoria, sem motivo nem observacao');
+
+// Sem pausa: o estado nao e regravado; sem arquivo de estado, nenhum e criado.
+$pdo = new QaArchivePdo(qa_service_tables());
+$content = qa_write_state([10 => [], 11 => $pauseEntry]);
+touch(ESTADO_JSON, 1700000000);
+clearstatcache(true, ESTADO_JSON);
+qa_service($pdo)->archive(10, $admin);
+clearstatcache(true, ESTADO_JSON);
+assert_same([$content, 1700000000], [(string)file_get_contents(ESTADO_JSON), filemtime(ESTADO_JSON)], 'sem pausa: estado.json nao e regravado');
+@unlink(ESTADO_JSON);
+$pdo = new QaArchivePdo(qa_service_tables());
+assert_same('ok', qa_service_outcome(static fn () => qa_service($pdo)->archive(10, $admin))[0], 'sem estado.json: arquiva');
+assert_same(false, is_file(ESTADO_JSON), 'sem estado.json: nenhum arquivo criado');
+
+// Falha no meio: nada gravado (rollback) e estado intacto. httpError por tipo.
+foreach ([
+    'historico da pausa (banco)' => ['failOn' => 'INSERT INTO pausas', 'class' => PDOException::class, 'status' => 503],
+    'cadastro, ultimo passo (banco)' => ['failOn' => 'UPDATE funcionarios SET ativo = 0', 'class' => PDOException::class, 'status' => 503],
+    'fila de sincronizacao (banco)' => ['failOn' => 'INSERT INTO portal_sync_queue', 'class' => PDOException::class, 'status' => 503],
+    'linha mudou (0 afetadas)' => ['zeroRowsOn' => 'UPDATE portal_absences SET ends_on', 'class' => RuntimeException::class, 'status' => 500],
+] as $label => $case) {
+    $pdo = new QaArchivePdo(qa_service_tables());
+    $pdo->failOn = $case['failOn'] ?? null;
+    $pdo->zeroRowsOn = $case['zeroRowsOn'] ?? null;
+    $before = $pdo->tables;
+    $stateBefore = qa_write_state([10 => $pauseEntry]);
+    [$class] = qa_service_outcome(static fn () => qa_service($pdo)->archive(10, $admin));
+    assert_same($case['class'], $class, "falha em {$label}: excecao");
+    assert_same([$before, $stateBefore], [$pdo->tables, (string)file_get_contents(ESTADO_JSON)], "falha em {$label}: nada gravado (rollback) e estado intacto");
+    assert_same('ROLLBACK', end($pdo->log), "falha em {$label}: rollback");
+}
+// Dado fora do formato e instante fora do fuso: 500 generico, error_log com classe e mensagem, nada gravado.
+$tables = qa_service_tables();
+$tables['portal_pa_assignments'][4] = ['id' => 4, 'employee_id' => 10, 'valid_from' => '2026-02-30', 'valid_until' => null, 'active' => 1, 'deleted_at' => null, 'updated_by' => null];
+$pdo = new QaArchivePdo($tables);
+$before = $pdo->tables;
+$stateBefore = qa_write_state([10 => $pauseEntry]);
+$error = null;
+try {
+    qa_service($pdo)->archive(10, $admin);
+} catch (Throwable $caught) {
+    $error = $caught;
+}
+assert_same(UnexpectedValueException::class, $error === null ? null : get_class($error), 'dado fora do formato: UnexpectedValueException do planejador');
+assert_same([$before, $stateBefore, 'ROLLBACK'], [$pdo->tables, (string)file_get_contents(ESTADO_JSON), end($pdo->log)], 'dado fora do formato: rollback, nada gravado, estado intacto');
+$logBefore = strlen(qa_error_log());
+assert_same([500, EmployeeArchiveService::GENERIC_ERROR], EmployeeArchiveService::httpError($error), 'dado fora do formato: 500 generico');
+assert_same(true, strpos(substr(qa_error_log(), $logBefore), '[ARCHIVE] UnexpectedValueException: Data invalida no plano de arquivamento (pa_links.valid_from).') !== false, 'dado fora do formato: error_log com classe e mensagem');
+$logBefore = strlen(qa_error_log());
+assert_same([500, EmployeeArchiveService::GENERIC_ERROR], EmployeeArchiveService::httpError(new LogicException('Plano de arquivamento com periodo invertido: x')), 'LogicException: 500 generico');
+assert_same(true, strpos(substr(qa_error_log(), $logBefore), '[ARCHIVE] LogicException: Plano de arquivamento com periodo invertido: x') !== false, 'LogicException: error_log com classe e mensagem');
+assert_same([409, 'Ja arquivado'], EmployeeArchiveService::httpError(new DomainException('Ja arquivado')), 'DomainException: 409 com a mensagem');
+assert_same([403, 'Negado'], EmployeeArchiveService::httpError(new PortalForbiddenException('Negado')), 'PortalForbiddenException: 403');
+assert_same([404, 'X'], EmployeeArchiveService::httpError(new EmployeeArchiveNotFoundException('X')), 'cadastro inexistente: 404');
+assert_same([503, DATABASE_UNAVAILABLE_MESSAGE], EmployeeArchiveService::httpError(new PDOException('SQLSTATE[HY000]: x')), 'banco: 503');
+assert_same(false, strpos(EmployeeArchiveService::httpError(new RuntimeException('detalhe interno'))[1], 'detalhe interno') !== false, 'erro inesperado: detalhe nunca vai ao usuario');
+
+// Falha so na gravacao do estado, depois do commit: arquivado, com aviso.
+$pdo = new QaArchivePdo(qa_service_tables());
+$stateBefore = qa_write_state([10 => $pauseEntry]);
+$logBefore = strlen(qa_error_log());
+$result = qa_service($pdo, '2026-10-13 10:00:00', QA_SP, static fn (string $path, string $content): bool => false)->archive(10, $admin);
+assert_same([[EmployeeArchiveService::STATE_WARNING], 0, 1], [$result['avisos'], $pdo->tables['funcionarios'][10]['ativo'], count($pdo->tables['pausas'])], 'estado nao gravado depois do commit: arquivado, historico gravado, aviso');
+assert_same([$stateBefore, true], [(string)file_get_contents(ESTADO_JSON), strpos(substr(qa_error_log(), $logBefore), '[ARCHIVE] Estado de pausas nao gravado depois do arquivamento do funcionario ID 10.') !== false], 'estado nao gravado: arquivo como estava e registro no error_log');
+
+// Permissoes (D1, L9), proprio cadastro (D3), arquivado e inexistente: nada gravado.
+foreach ([
+    'gestor' => [10, ['role' => 'gestor', 'username' => 'qa.gestor', 'session_employee_id' => 3], PortalForbiddenException::class, 'Seu perfil não possui permissão para gerenciar funcionários.'],
+    'Liderança em cadastro de Liderança' => [14, ['role' => 'lideranca', 'username' => 'qa.outra', 'session_employee_id' => 20], PortalForbiddenException::class, 'A Liderança não altera cadastros de Liderança ou de administradores.'],
+    'Liderança em técnico da equipe Liderança (L9)' => [13, $leader, PortalForbiddenException::class, EmployeeArchiveService::LEADERSHIP_TEAM_MESSAGE],
+    'próprio cadastro pela sessão CI' => [10, ['role' => 'admin', 'username' => 'qa.admin', 'session_employee_id' => 10], DomainException::class, EmployeeArchiveService::SELF_ARCHIVE_MESSAGE],
+    'próprio cadastro pelo login' => [15, ['role' => 'admin', 'username' => 'QA.Outro.Admin', 'session_employee_id' => null], DomainException::class, EmployeeArchiveService::SELF_ARCHIVE_MESSAGE],
+    'arquivado pelo F4' => [12, $admin, DomainException::class, 'Este cadastro já foi arquivado em 01/10/2026. Restaure-o antes de arquivar de novo.'],
+    'inexistente' => [99, $admin, EmployeeArchiveNotFoundException::class, EmployeeArchiveService::NOT_FOUND_MESSAGE],
+] as $label => [$id, $actor, $class, $message]) {
+    $pdo = new QaArchivePdo(qa_service_tables());
+    $before = $pdo->tables;
+    $stateBefore = qa_write_state([$id => $pauseEntry]);
+    assert_same([$class, $message], qa_service_outcome(static fn () => qa_service($pdo)->archive($id, $actor)), "arquivar: {$label}");
+    assert_same([$before, $stateBefore], [$pdo->tables, (string)file_get_contents(ESTADO_JSON)], "arquivar: {$label}: nada gravado, estado intacto");
+}
+assert_same('ok', qa_service_outcome(static fn () => qa_service(new QaArchivePdo(qa_service_tables()))->archive(13, $admin))[0], 'admin arquiva tecnico da equipe Lideranca');
+assert_same('ok', qa_service_outcome(static fn () => qa_service(new QaArchivePdo(qa_service_tables()))->archive(10, $leader))[0], 'Lideranca arquiva tecnico de N1 (regra do 5b)');
+// Regularizacao (D5) e aviso da allowlist (D3).
+$pdo = new QaArchivePdo(qa_service_tables());
+qa_write_state([]);
+$result = qa_service($pdo)->archive(11, $admin);
+assert_same([true, '2026-10-13 10:00:00'], [$result['regularizacao'], $pdo->tables['funcionarios'][11]['arquivado_em']], 'inativo antigo: regularizado com a data (D5)');
+$pdo = new QaArchivePdo(qa_service_tables());
+$result = qa_service($pdo)->archive(15, $admin);
+assert_same([EmployeeArchiveService::ALLOWLIST_WARNING], $result['avisos'], 'login na allowlist: aviso (D3)');
+assert_same(true, strpos(end($pdo->tables['audit_log'])['details'], 'allowlist=sim') !== false, 'login na allowlist: na auditoria');
+assert_same(['role' => 'lideranca', 'username' => 'qa.lider', 'session_employee_id' => 14], EmployeeArchiveService::sessionActor('lideranca', ['ci_funcionario_id' => 14, 'admin_username' => 'qa.lider', 'ci_username' => 'outro']), 'ator da sessao: usuario de gestao e colaborador da sessao CI');
+assert_same(['role' => 'admin', 'username' => 'qa.admin', 'session_employee_id' => null], EmployeeArchiveService::sessionActor('admin', ['admin_username' => 'qa.admin']), 'ator da sessao: admin pela allowlist sem colaborador');
+
+// Restaurar (D12). O cadastro 16 (ativo, mesmo login do 12) so entra no caso do conflito.
+$tables = qa_service_tables();
+unset($tables['funcionarios'][16]);
+$pdo = new QaArchivePdo($tables);
+qa_write_state([12 => $pauseEntry, 10 => $pauseEntry]);
+$result = qa_service($pdo)->restore(12, $admin);
+assert_same([['avisos' => []], 1, null, null], [$result, $pdo->tables['funcionarios'][12]['ativo'], $pdo->tables['funcionarios'][12]['arquivado_em'], $pdo->tables['funcionarios'][12]['arquivado_por']], 'restaurar: ativo, sem data nem autor');
+$state = json_decode((string)file_get_contents(ESTADO_JSON), true)['funcionarios'];
+assert_same([false, true], [$state[12]['em_pausa'], $state[10]['em_pausa']], 'restaurar: entrada velha do restaurado limpa; as outras ficam');
+assert_same('funcionario_id=12; perfil=tecnico; equipe=n1; ator=admin; arquivado_em=2026-10-01 09:00:00; pa_escala_ausencias=nao_devolvidos', end($pdo->tables['audit_log'])['details'], 'restaurar: auditoria');
+assert_same('CRITICAL', end($pdo->tables['audit_log'])['severity'], 'restaurar: CRITICAL');
+assert_same([[], []], [$pdo->tables['pausas'], $pdo->tables['portal_sync_queue']], 'restaurar: PA, escala e ausencias nao voltam (nada alem do cadastro)');
+foreach ([
+    'Liderança' => [12, $leader, PortalForbiddenException::class, EmployeeArchiveService::RESTORE_DENIED_MESSAGE],
+    'gestor' => [12, ['role' => 'gestor', 'username' => 'qa.gestor', 'session_employee_id' => null], PortalForbiddenException::class, EmployeeArchiveService::RESTORE_DENIED_MESSAGE],
+    'técnico' => [12, ['role' => 'tecnico', 'username' => 'x', 'session_employee_id' => 10], PortalForbiddenException::class, EmployeeArchiveService::RESTORE_DENIED_MESSAGE],
+    'cadastro ativo' => [10, $admin, DomainException::class, EmployeeArchiveService::ALREADY_ACTIVE_MESSAGE],
+    'login em uso por outro ativo' => [12, $admin, DomainException::class, EmployeeArchiveService::LOGIN_IN_USE_MESSAGE],
+    'inexistente' => [99, $admin, EmployeeArchiveNotFoundException::class, EmployeeArchiveService::NOT_FOUND_MESSAGE],
+] as $label => [$id, $actor, $class, $message]) {
+    $tables = qa_service_tables();
+    if ($label !== 'login em uso por outro ativo') {
+        unset($tables['funcionarios'][16]);
+    }
+    $pdo = new QaArchivePdo($tables);
+    $before = $pdo->tables;
+    assert_same([$class, $message], qa_service_outcome(static fn () => qa_service($pdo)->restore($id, $actor)), "restaurar: {$label}");
+    assert_same($before, $pdo->tables, "restaurar: {$label}: nada gravado");
+    if ($class === PortalForbiddenException::class) {
+        assert_same([], $pdo->log, "restaurar: {$label}: recusado antes do banco");
+    }
+}
+assert_same('ok', qa_service_outcome(static fn () => qa_service(new QaArchivePdo(qa_service_tables()))->restore(11, $admin))[0], 'restaurar: inativo antigo (sem data) tambem restaura');
+
+// L-11 e endpoints (estrutura; ponta a ponta no qa-security).
+$managerSource = (string)file_get_contents($root . '/classes/GerenciadorPausas.php');
+$updateMethod = substr($managerSource, (int)strpos($managerSource, 'public function atualizar_funcionario('), 1500);
+$updateMethod = substr($updateMethod, 0, (int)strpos($updateMethod, "\n    public function "));
+assert_same(true, $updateMethod !== '' && strpos($updateMethod, '$this->salvar_estado();') === false, 'L-11: atualizar_funcionario nao regrava o estado');
+assert_same(false, strpos($managerSource, 'public function remover_funcionario(') !== false, 'L-11: remover_funcionario (sem uso) saiu');
+foreach (['api/remover_funcionario.php', 'api/restaurar_funcionario.php', 'api/atualizar_funcionario.php', 'api/adicionar_funcionario.php'] as $file) {
+    $source = (string)file_get_contents($root . '/' . $file);
+    $code = (string)preg_replace('#/\*.*?\*/|//[^\n]*#s', '', $source);
+    assert_same(0, preg_match('/salvar_estado|file_put_contents|estado\.json|ESTADO_JSON/', $code), "{$file}: nao grava o estado de pausas (L-11)");
+}
+$removeSource = (string)file_get_contents($root . '/api/remover_funcionario.php');
+assert_same(true, strpos($removeSource, "require_funcionario_change(\$actor_role, null, null, 'arquivar');") < strpos($removeSource, 'require_csrf_token();'), 'remover: perfil antes do CSRF e do banco');
+assert_same(true, strpos($removeSource, '(new EmployeeArchiveService())->archive(') !== false && strpos($removeSource, 'EmployeeArchiveService::httpError($e)') !== false, 'remover: arquiva pelo servico, erros pelo httpError');
+assert_same(true, strpos($removeSource, "'efeitos' => \$resultado['efeitos'],") !== false, 'remover: devolve os efeitos');
+$restoreSource = (string)file_get_contents($root . '/api/restaurar_funcionario.php');
+assert_same(true, strpos($restoreSource, "if (!portal_role_can(\$actor_role, 'funcionarios.restaurar')) {") < strpos($restoreSource, 'require_csrf_token();'), 'restaurar: permissao antes do CSRF e do banco');
+foreach (['admin' => true, 'lideranca' => false, 'gestor' => false, 'tecnico' => false, 'somente_leitura' => false] as $role => $allowed) {
+    assert_same($allowed, portal_role_can($role, 'funcionarios.restaurar'), "funcionarios.restaurar para {$role} (D1)");
+}
+$updateSource = (string)file_get_contents($root . '/api/atualizar_funcionario.php');
+assert_same(0, preg_match('/ativo = :ativo|\':ativo\'/', $updateSource), 'atualizar: nao grava ativo (D4)');
+assert_same(true, strpos($updateSource, "SELECT fora_mapa_escala, ativo FROM funcionarios WHERE id = :id FOR UPDATE") !== false, 'atualizar: confere ativo no cadastro travado');
 
 // Runners.
 foreach (['scripts/test-linux.sh', 'scripts/test-local.ps1'] as $runner) {

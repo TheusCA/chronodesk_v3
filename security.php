@@ -948,6 +948,8 @@ function portal_permissions_for_role(?string $role): array {
             'escalas.lideranca',
             // [P12] Cadastro fora do Mapa PA e da escala (F1).
             'funcionarios.fora_mapa',
+            // [F4, D1] Restaurar cadastro arquivado; arquivar segue funcionarios.manage.
+            'funcionarios.restaurar',
         ]),
         'lideranca' => $lideranca,
         'gestor' => $gestor,
