@@ -15,7 +15,9 @@ $actor = portal_actor($role);
 global $gerenciador;
 $solicitacoes = [];
 foreach ($gerenciador->getFuncionarios() as $funcionario) {
-    if ($funcionario->status_aprovacao == "pendente") {
+    // [F4, L-07] Mesma regra do obter_status(): inativo nao entra na lista
+    // nem no contador de pendentes do dashboard.
+    if (($funcionario->ativo ?? true) && $funcionario->status_aprovacao == "pendente") {
         $solicitacoes[] = [
             "id" => $funcionario->id,
             "nome" => $funcionario->nome,

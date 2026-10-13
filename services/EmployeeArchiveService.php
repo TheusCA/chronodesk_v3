@@ -96,11 +96,35 @@ final class EmployeeArchiveService {
             return [409, $error->getMessage()];
         }
         if (database_unavailable_error($error)) {
-            error_log('[ARCHIVE] Banco indisponivel: ' . get_class($error));
+            error_log('[ARCHIVE] Banco indisponivel: ' . get_class($error) . self::pdoCodes($error));
             return [503, DATABASE_UNAVAILABLE_MESSAGE];
         }
         error_log('[ARCHIVE] ' . get_class($error) . ': ' . $error->getMessage());
         return [500, self::GENERIC_ERROR];
+    }
+
+    /**
+     * SQLSTATE e codigo do driver da PDOException da cadeia (45000/1644 do
+     * SIGNAL, 1205 da espera de trava, 1213 do deadlock), sem a mensagem, que
+     * pode trazer dados. Na conexao o errorInfo pode vir vazio: os codigos saem
+     * do prefixo "SQLSTATE[HY000] [2002]", e so eles.
+     */
+    private static function pdoCodes(Throwable $error): string {
+        for ($current = $error; $current !== null; $current = $current->getPrevious()) {
+            if (!$current instanceof PDOException) {
+                continue;
+            }
+            $sqlState = $current->errorInfo[0] ?? null;
+            $driverCode = $current->errorInfo[1] ?? null;
+            if (preg_match('/^SQLSTATE\[([0-9A-Z]{5})\](?::[^:]*:\s*(\d{1,5})\b|\s*\[(\d{1,5})\])?/', $current->getMessage(), $match) === 1) {
+                $sqlState = $sqlState ?? $match[1];
+                $driverCode = $driverCode ?? (($match[2] ?? '') !== '' ? $match[2] : (($match[3] ?? '') !== '' ? $match[3] : null));
+            }
+            $sqlState = is_string($sqlState) && preg_match('/^[0-9A-Z]{5}$/', $sqlState) === 1 ? $sqlState : 'desconhecido';
+            $driverCode = is_numeric($driverCode) ? (string)(int)$driverCode : 'desconhecido';
+            return " sqlstate={$sqlState} driver={$driverCode}";
+        }
+        return '';
     }
 
     /** Instante no fuso do PHP; outro fuso e recusado antes de qualquer leitura. */

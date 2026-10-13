@@ -239,6 +239,7 @@ final class PaMapService {
             $sql .= ' AND team = :team';
             $params[':team'] = $team;
         }
+        $sql .= $this->activeEmployeeFilter('portal_pa_assignments', $date);
         $stmt = $this->pdo->prepare($sql . ' ORDER BY pa_number, employee_name');
         $stmt->execute($params);
 
@@ -247,6 +248,21 @@ final class PaMapService {
             $items[] = $this->assignmentView($row, $date, 'assignment');
         }
         return $items;
+    }
+
+    /**
+     * [F4, L-07, D13] De hoje em diante o mapa nao mostra vinculo de cadastro
+     * inativo (arquivado ou antigo); o passado fica como esta ate F5/F6.
+     * Tabela so por lista branca (identificador nao e parametrizavel).
+     */
+    private function activeEmployeeFilter(string $table, string $date): string {
+        if (!in_array($table, ['portal_pa_assignments', 'portal_pa_map'], true)) {
+            throw new LogicException('Tabela fora da lista do Mapa PA.');
+        }
+        if ($date < date('Y-m-d')) {
+            return '';
+        }
+        return " AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = {$table}.employee_id AND f.ativo = 1)";
     }
 
     private function legacySpecificDateAssignments(string $date, ?string $team): array {
@@ -263,6 +279,7 @@ final class PaMapService {
             $sql .= ' AND team = :team';
             $params[':team'] = $team;
         }
+        $sql .= $this->activeEmployeeFilter('portal_pa_map', $date);
         $stmt = $this->pdo->prepare($sql . ' ORDER BY pa_number, employee_name');
         $stmt->execute($params);
 

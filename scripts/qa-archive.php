@@ -19,6 +19,10 @@ declare(strict_types=1);
 //    falhas no meio (nada gravado, estado intacto), falha do estado depois do
 //    commit (aviso), permissoes (D1, L9, D3), restaurar (D12), httpError,
 //    L-11 e endpoints (estrutura; ponta a ponta no qa-security).
+// 4. L-07 (commit 4): obter_status() sem inativos (status.php e contadores do
+//    dashboard.php), solicitacoes pendentes sem inativos e Mapa PA de hoje em
+//    diante sem vinculo de inativo (D13; passado sem mudanca); SQLSTATE e
+//    codigo do driver no error_log da PDOException, sem a mensagem.
 //
 // Nao acessa banco nem os arquivos de estado da aplicacao.
 //
@@ -1074,6 +1078,203 @@ foreach (['admin' => true, 'lideranca' => false, 'gestor' => false, 'tecnico' =>
 $updateSource = (string)file_get_contents($root . '/api/atualizar_funcionario.php');
 assert_same(0, preg_match('/ativo = :ativo|\':ativo\'/', $updateSource), 'atualizar: nao grava ativo (D4)');
 assert_same(true, strpos($updateSource, "SELECT fora_mapa_escala, ativo FROM funcionarios WHERE id = :id FOR UPDATE") !== false, 'atualizar: confere ativo no cadastro travado');
+
+// ============================================================================
+// 4. L-07: status, pendentes e Mapa PA sem inativos; codigos da PDOException
+// ============================================================================
+
+// httpError: SQLSTATE e codigo do driver no error_log, nunca a mensagem do
+// banco (pode trazer dados); o usuario continua com o 503.
+$pdoError = static function (string $message, ?array $errorInfo): PDOException {
+    $error = new PDOException($message);
+    $error->errorInfo = $errorInfo;
+    return $error;
+};
+foreach ([
+    'SIGNAL do trigger' => [$pdoError('SQLSTATE[45000]: <<Unknown error>>: 1644 Nome Secreto da Silva', ['45000', 1644, 'Nome Secreto da Silva']), 'sqlstate=45000 driver=1644'],
+    'espera de trava' => [$pdoError('SQLSTATE[HY000]: General error: 1205 Lock wait timeout exceeded; Nome Secreto da Silva', ['HY000', 1205, 'Lock wait timeout exceeded; Nome Secreto da Silva']), 'sqlstate=HY000 driver=1205'],
+    'deadlock' => [$pdoError('SQLSTATE[40001]: Serialization failure: 1213 Deadlock found; Nome Secreto da Silva', ['40001', 1213, 'Deadlock found; Nome Secreto da Silva']), 'sqlstate=40001 driver=1213'],
+    'conexao sem errorInfo' => [$pdoError('SQLSTATE[HY000] [2002] Connection refused Nome Secreto da Silva', null), 'sqlstate=HY000 driver=2002'],
+    'errorInfo so com SQLSTATE' => [$pdoError('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away Nome Secreto da Silva', ['HY000', null, null]), 'sqlstate=HY000 driver=2006'],
+    'sem codigo nenhum' => [$pdoError('Nome Secreto da Silva', null), 'sqlstate=desconhecido driver=desconhecido'],
+    'so errorInfo, texto sem prefixo' => [$pdoError('Nome Secreto da Silva', ['23000', 1062, 'Nome Secreto da Silva']), 'sqlstate=23000 driver=1062'],
+    'errorInfo prevalece sobre o texto' => [$pdoError('SQLSTATE[HY000]: General error: 1205 Nome Secreto da Silva', ['40001', 1213, 'Nome Secreto da Silva']), 'sqlstate=40001 driver=1213'],
+    'errorInfo vazio' => [$pdoError('Nome Secreto da Silva', ['', null, null]), 'sqlstate=desconhecido driver=desconhecido'],
+    'errorInfo com texto no lugar do codigo' => [$pdoError('Nome Secreto da Silva', ['Nome Secreto', 'Nome Secreto', 'Nome Secreto da Silva']), 'sqlstate=desconhecido driver=desconhecido'],
+    'PDOException dentro do DatabaseUnavailableException' => [new DatabaseUnavailableException('Erro ao conectar ao banco de dados.', 0, $pdoError('SQLSTATE[HY000] [1045] Access denied for user Nome Secreto da Silva', null)), 'sqlstate=HY000 driver=1045'],
+] as $label => [$error, $codes]) {
+    $logBefore = strlen(qa_error_log());
+    assert_same([503, DATABASE_UNAVAILABLE_MESSAGE], EmployeeArchiveService::httpError($error), "httpError ({$label}): 503 de sempre");
+    $logged = substr(qa_error_log(), $logBefore);
+    assert_same(true, strpos($logged, '[ARCHIVE] Banco indisponivel: ' . get_class($error) . ' ' . $codes . PHP_EOL) !== false, "httpError ({$label}): error_log com {$codes}");
+    assert_same(false, strpos($logged, 'Nome Secreto') !== false, "httpError ({$label}): mensagem do banco fora do error_log");
+}
+$logBefore = strlen(qa_error_log());
+EmployeeArchiveService::httpError(new DatabaseUnavailableException('Banco fora.'));
+assert_same(true, strpos(substr(qa_error_log(), $logBefore), '[ARCHIVE] Banco indisponivel: DatabaseUnavailableException' . PHP_EOL) !== false, 'httpError: sem PDOException na cadeia, sem codigos');
+
+// obter_status(): inativo fora (status.php; o dashboard.php conta a partir
+// daqui). Nulo conta como ativo, como no "ativo" => ativo ?? true da saida.
+$GLOBALS['qa_pdo'] = null;
+$manager = new GerenciadorPausas(2, 20);
+foreach ([[31, 'n1', true], [32, 'n1', false], [33, 'n2', 0], [34, 'n2', true], [35, 'n2', null]] as [$id, $team, $active]) {
+    $manager->adicionar_funcionario(new Funcionario($id, "Tecnico {$id}", $team, '00:00', '23:59', '23:58', '23:59', $active));
+}
+qa_write_state([
+    31 => ['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:40:00-03:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado'],
+    32 => ['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:40:00-03:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado'],
+    33 => ['status_aprovacao' => 'pendente', 'motivo_pausa' => 'Reunião', 'solicitacao_timestamp' => '2026-10-13T09:40:00-03:00'],
+    34 => ['status_aprovacao' => 'pendente', 'motivo_pausa' => 'Reunião', 'solicitacao_timestamp' => '2026-10-13T09:40:00-03:00'],
+]);
+$manager->carregar_estado();
+$status = $manager->obter_status();
+assert_same([[31], [34, 35]], [array_column($status['n1'], 'id'), array_column($status['n2'], 'id')], 'obter_status: inativos fora (false e 0); ativo nulo fica (L-07)');
+$listed = array_merge($status['n1'], $status['n2']);
+assert_same([1, 1, [true, true, true]], [
+    count(array_filter($listed, static fn (array $item): bool => !empty($item['em_pausa']))),
+    count(array_filter($listed, static fn (array $item): bool => ($item['status_aprovacao'] ?? null) === 'pendente')),
+    array_map(static fn (array $item): bool => $item['ativo'], $listed),
+], 'obter_status: pausa e pendente do inativo fora dos contadores; contrato com ativo mantido');
+$dashboardSource = (string)file_get_contents($root . '/api/portal/dashboard.php');
+assert_same([true, false], [strpos($dashboardSource, '$status = $gerenciador->obter_status();') !== false, strpos($dashboardSource, 'getFuncionarios(') !== false], 'dashboard.php: contadores e active_pauses so a partir do obter_status()');
+assert_same(true, strpos((string)file_get_contents($root . '/api/status.php'), '$status = $gerenciador->obter_status();') !== false, 'status.php: lista a partir do obter_status()');
+$pendingSource = (string)file_get_contents($root . '/api/solicitacoes_pendentes.php');
+assert_same(true, strpos($pendingSource, 'if (($funcionario->ativo ?? true) && $funcionario->status_aprovacao == "pendente") {') !== false, 'solicitacoes_pendentes: inativo fora, mesma regra do obter_status()');
+
+// Mapa PA (D13): de hoje em diante sem vinculo de inativo (recorrente e da
+// tabela antiga); o passado como esta. O banco simulado so aplica o filtro de
+// ativo quando o SQL traz a clausula exata.
+final class QaMapPdo extends PDO {
+    public array $sql = [];
+
+    public function __construct(public array $employees, public array $assignments, public array $legacy) {
+    }
+
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaMapStatement($this, (string)preg_replace('/\s+/', ' ', trim($query)));
+    }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
+        throw new PDOException('SQLSTATE[42S02]: inventario ausente no banco simulado');
+    }
+}
+
+final class QaMapStatement extends PDOStatement {
+    private array $rows = [];
+
+    public function __construct(private QaMapPdo $pdo, private string $sql) {
+    }
+
+    public function execute(?array $params = null): bool {
+        $db = $this->pdo;
+        $sql = $this->sql;
+        $db->sql[] = $sql;
+        $this->rows = [];
+        $activeOnly = static fn (string $table): bool => strpos($sql, " AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = {$table}.employee_id AND f.ativo = 1) ORDER BY") !== false;
+        $active = static fn (array $row): bool => (int)$db->employees[(int)$row['employee_id']]['ativo'] === 1;
+        if ($sql === 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name') {
+            $this->rows[] = ['total' => 1];
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, pa_number, employee_id, employee_name, employee_login, team, schedule_rule_type, schedule_rule_config, valid_from, valid_until, notes, created_by, updated_by, created_at, updated_at FROM portal_pa_assignments WHERE active = 1 AND valid_from <= :date_until AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {
+            foreach ($db->assignments as $row) {
+                if ($row['valid_from'] <= $params[':date_until'] && ($row['valid_until'] === null || $row['valid_until'] >= $params[':date_from']) && (!$activeOnly('portal_pa_assignments') || $active($row))) {
+                    $this->rows[] = $row;
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, pa_number, employee_id, employee_name, employee_login, team, schedule_status, schedule_label, notes, created_by, updated_by, created_at, updated_at FROM portal_pa_map WHERE record_status = "active" AND work_date = :work_date') === 0) {
+            foreach ($db->legacy as $row) {
+                if ($row['work_date'] === $params[':work_date'] && (!$activeOnly('portal_pa_map') || $active($row))) {
+                    $this->rows[] = array_diff_key($row, ['work_date' => true]);
+                }
+            }
+            return true;
+        }
+        if ($sql === 'SELECT id, nome AS name, equipe AS team, ad_login FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 0 ORDER BY nome') {
+            foreach ($db->employees as $id => $row) {
+                if ((int)$row['ativo'] === 1) {
+                    $this->rows[] = ['id' => $id, 'name' => "Tecnico {$id}", 'team' => 'n1', 'ad_login' => null];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT exception_type FROM portal_schedule_exceptions WHERE ') === 0 || strpos($sql, 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE ') === 0) {
+            return true;
+        }
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $sql);
+    }
+
+    public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
+        return array_shift($this->rows) ?? false;
+    }
+
+    public function fetchColumn(int $column = 0): mixed {
+        $row = array_shift($this->rows);
+        return $row === null ? false : array_values($row)[$column];
+    }
+
+    public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
+        $rows = $this->rows;
+        $this->rows = [];
+        return $rows;
+    }
+}
+
+require_once $root . '/services/PaMapService.php';
+$today = date('Y-m-d');
+$yesterday = (new DateTimeImmutable($today))->modify('-1 day')->format('Y-m-d');
+$tomorrow = (new DateTimeImmutable($today))->modify('+1 day')->format('Y-m-d');
+$mapRow = static fn (int $id, int $employeeId, string $pa, array $extra): array => [
+    'id' => $id, 'pa_number' => $pa, 'employee_id' => $employeeId, 'employee_name' => "Tecnico {$employeeId}", 'employee_login' => null,
+    'team' => 'n1', 'notes' => null, 'created_by' => 'qa', 'updated_by' => 'qa', 'created_at' => '2026-01-01 08:00:00', 'updated_at' => '2026-01-01 08:00:00',
+] + $extra;
+$recurring = ['schedule_rule_type' => 'always_onsite', 'schedule_rule_config' => null, 'valid_from' => '2026-01-01', 'valid_until' => null];
+$legacyRows = [];
+foreach ([$yesterday, $today, $tomorrow] as $index => $date) {
+    $legacyRows[] = $mapRow(100 + $index, 42, '1729', ['schedule_status' => 'onsite', 'schedule_label' => null, 'work_date' => $date]);
+    $legacyRows[] = $mapRow(110 + $index, 43, '1728', ['schedule_status' => 'onsite', 'schedule_label' => null, 'work_date' => $date]);
+    $legacyRows[] = $mapRow(120 + $index, 41, '1727', ['schedule_status' => 'onsite', 'schedule_label' => null, 'work_date' => $date]);
+}
+$mapPdo = new QaMapPdo(
+    [41 => ['ativo' => 1], 42 => ['ativo' => 0], 43 => ['ativo' => '0']],
+    [$mapRow(1, 41, '1732', $recurring), $mapRow(2, 42, '1731', $recurring), $mapRow(3, 43, '1730', $recurring)],
+    $legacyRows
+);
+$map = new PaMapService($mapPdo);
+$mapView = static function (string $date) use ($map): array {
+    $result = $map->list(['date' => $date]);
+    $view = [];
+    foreach ($result['items'] as $item) {
+        $view[] = $item['source'] . ':' . $item['employee_id'];
+    }
+    $byPa = [];
+    foreach ($result['pas'] as $pa) {
+        foreach ($pa['assignments'] as $item) {
+            $byPa[] = $pa['pa_number'] . ':' . $item['employee_id'];
+        }
+    }
+    return [$view, $byPa, array_column($result['employees'], 'id')];
+};
+assert_same([
+    ['assignment:41', 'assignment:42', 'assignment:43', 'legacy:42', 'legacy:43', 'legacy:41'],
+    ['1732:41', '1731:42', '1730:43', '1729:42', '1728:43', '1727:41'],
+    [41],
+], $mapView($yesterday), 'Mapa PA de ontem: vinculos de inativo como estao (D13, passado sem mudanca)');
+foreach (['hoje' => $today, 'amanha' => $tomorrow] as $label => $date) {
+    assert_same([
+        ['assignment:41', 'legacy:41'],
+        ['1732:41', '1727:41'],
+        [41],
+    ], $mapView($date), "Mapa PA de {$label}: sem vinculo de inativo, recorrente e da tabela antiga (L-07, D13)");
+}
+$filtered = array_values(array_filter($mapPdo->sql, static fn (string $sql): bool => strpos($sql, 'FROM portal_pa_') !== false));
+assert_same(6, count($filtered), 'Mapa PA: duas leituras de vinculo por data');
+$filter = new ReflectionMethod(PaMapService::class, 'activeEmployeeFilter');
+$filter->setAccessible(true);
+assert_same('', $filter->invoke($map, 'portal_pa_assignments', $yesterday), 'Mapa PA: sem filtro antes de hoje');
+assert_same([LogicException::class, 'Tabela fora da lista do Mapa PA.'], qa_service_outcome(static fn () => $filter->invoke($map, 'funcionarios', $today)), 'Mapa PA: tabela do filtro so por lista branca');
 
 // Runners.
 foreach (['scripts/test-linux.sh', 'scripts/test-local.ps1'] as $runner) {

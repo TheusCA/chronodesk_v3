@@ -353,6 +353,11 @@ class GerenciadorPausas {
         ];
 
         foreach ($this->funcionarios as $funcionario) {
+            // [F4, L-07] Inativo (arquivado ou antigo) fica fora do status.php
+            // e dos contadores do dashboard.php, que saem daqui.
+            if (!($funcionario->ativo ?? true)) {
+                continue;
+            }
             $status_disp = $funcionario->status_disponibilidade();
             
             // Garantir que a equipe existe e está no formato correto
