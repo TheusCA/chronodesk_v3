@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). Depois, F4. F4 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8** (seção 9.6). F5 a F7 ainda não têm código. Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -1276,6 +1276,101 @@ Achado do F3 (seção 9.4, decisão de 2026-10-07). O plano foi entregue no chat
 **Aprovado em 2026-10-09**, com as decisões de implementação como estão, após teste do responsável no MySQL local com dados reais nas quatro tabelas: gestor, Liderança e admin veem todos os textos; o técnico vê só os próprios, inclusive filtrando o `employee_id` de outro (o evento aparece, o texto vem vazio); o técnico sem colaborador na sessão não vê nenhum; motivo fora da lista vira "Pausa"; o somente leitura com colaborador vê só os próprios; "Pessoal" aparece para todos; no `oncall.php`, quem não é gestão nem o próprio recebe a linha sem `note`, `created_by` e `updated_by`.
 
 **Observação aceita (2026-10-09):** pausas antigas com encoding quebrado (VULN-023) não batem com a lista fechada e aparecem como "Pausa" para quem não é gestão nem o próprio. É falha fechada e fica aceita.
+
+### 9.6 F4 — arquivamento de técnicos: plano aprovado (2026-10-13)
+
+O plano foi entregue no chat em 2026-10-09 e se perdeu (ficou só no chat). Reenviado em 2026-10-13 a partir do código de então e **aprovado em 2026-10-13** com o ajuste da D8 e a regra de período válido nos efeitos. Fica gravado aqui antes de qualquer código.
+
+**Fatos lidos no código (base `bf07c3e`):**
+
+| Fato | Evidência |
+|---|---|
+| A revalidação do A1 (Lote 5a, deploy 6) roda em **toda requisição**; sessão CI com cadastro `ativo <> 1` é encerrada (motivo `cadastro_inativo`, `SESSION_REVOKED`). Custo: 1 consulta por chave primária por requisição | `security.php`, `session_revalidate()` e `session_current_role()`; chamada por `ci_session_is_current()` e `verificar_*` (`config.php`) |
+| Sessão do login administrativo confere só a allowlist: arquivar o cadastro não a encerra nem bloqueia login novo por esse caminho. Sessão CI de login da allowlist depende do cadastro ativo e é encerrada | `session_current_role()`; `api/login_admin.php`; `api/login_ci.php` |
+| Desativar hoje só faz `ativo = 0` e regrava o `estado.json` inteiro fora do lock (L-11); editar faz a mesma gravação. O estado só guarda campos de pausa | `api/remover_funcionario.php`; `GerenciadorPausas::remover_funcionario`, `atualizar_funcionario`, `salvar_estado` |
+| Desativar e editar aceitam Liderança para cadastros fora da Liderança e do admin (Lote 5b); 3.6 e 3.8 diziam só admin | `funcionario_change_denied()` (`security.php`) |
+| `ativo` ausente no `atualizar` vira `true` (editar um inativo o reativa); `adicionar` aceita criar inativo | `api/atualizar_funcionario.php:34`; `api/adicionar_funcionario.php:32` |
+| `pausas` não tem coluna de origem; `admin_force_end` vai como texto em `observacao_reuniao`; `finalizar_pausa` cai no CSV se o INSERT falhar; `admin_force_end_break.php` recusa inativo (409) | `GerenciadorPausas::finalizar_pausa`, `observacao_historico_pausa` |
+| `obter_status()` não filtra inativo: `status.php` e `dashboard.php` contam desativados (L-07). No Mapa PA só `assignmentsForMap` não cruza com `funcionarios`; elegíveis, motor, escala e relatórios já filtram `ativo = 1` | `GerenciadorPausas::obter_status`; `PaMapService::assignmentsForMap` |
+| `ScheduleRulePlanner::planRemove` (puro, F1) já fecha a vigente em ontem e apaga as que começam hoje ou depois; `get_db_connection()` é singleton (o INSERT da pausa entra na mesma transação) | `services/ScheduleRulePlanner.php`; `db.php` |
+| `ad_login_ativo` é coluna gerada STORED com UNIQUE | `database_SECURED.sql` |
+
+**Escopo.** Migration 014; arquivar no lugar de remover, com os efeitos calculados por função pura e o plano montado antes de aplicar; restaurar só por admin; L-11; `status.php`, contadores e Mapa PA de hoje sem arquivados (L-07); tela de Funcionários; P11 pela D2. **Fora:** histórico até `arquivado_em` em relatórios e Calendário (F5); `presence` no `technicians.php` (F7, D14); política de retenção e anonimização (pendência da D7 do desenho).
+
+**Commits:**
+
+| # | Commit | Arquivos |
+|---|---|---|
+| 1 | Migration 014, rollback, verificação e dados de ensaio | `migrations/20261013_014_employee_archive.sql`, `migrations/rollback/20261013_014_employee_archive_down.sql`, `migrations/rollback/20261013_014_ensaio_linhas_f4.sql`, `migrations/verificacao/20261013_014_employee_archive_check.sql`; `scripts/qa-archive.php` (novo, seção da estrutura SQL; nos dois runners) |
+| 2 | Plano do arquivamento como função pura | `services/EmployeeArchivePlanner.php` (novo); `qa-archive` com a tabela de casos |
+| 3 | Serviço e endpoints | `services/EmployeeArchiveService.php` (novo); `api/remover_funcionario.php` (mesmo contrato, com `efeitos`); `api/restaurar_funcionario.php` (novo); `api/atualizar_funcionario.php` e `api/adicionar_funcionario.php` (D4); `classes/GerenciadorPausas.php` (L-11; encerramento sem CSV); `security.php` (permissão `funcionarios.restaurar`, só admin) |
+| 4 | L-07 | `obter_status()` sem inativos (cobre `status.php` e `dashboard.php`); `assignmentsForMap` sem inativos em datas a partir de hoje |
+| 5 | Frontend | `AdminPage.jsx` (aba Funcionários: painel de confirmação na linha, sem `window.confirm`; filtro Ativos/Arquivados; sai o checkbox "Funcionário ativo"); `formSchemas.ts`; QAs estruturais afetados |
+| 6 | Ponta a ponta e documentação | `qa-security`, mutação; `API_CONTRACTS_FRONTEND.md`, `DEPLOY_LINUX.md` ("Deploy que traz o F4"), LGPD 5.3, registro, esta seção |
+
+**Migration 014:**
+
+| Item | Proposta aprovada |
+|---|---|
+| Estrutura | `funcionarios.arquivado_em DATETIME NULL` e `arquivado_por VARCHAR(100) NULL`; `ck_funcionario_arquivado`: `ativo = 0 OR (arquivado_em IS NULL AND arquivado_por IS NULL)` (D11) |
+| Dados | Nenhuma linha alterada; inativos de hoje ficam com data nula ("data desconhecida", seção 2.5) |
+| Regras | A4: `SET time_zone`, sem relógio do banco; a data do arquivamento é gravada pelo PHP como valor explícito; cada passo confere `information_schema` (idempotente) |
+| Ordem | Antes do `git pull` (o código do F4 lê as colunas); o código anterior funciona sobre o esquema novo |
+| Rollback | Passo 0: **para com `SIGNAL`** se `funcionarios_bkp_014` já existir; 0b: copia `id`, `ativo`, `arquivado_em`, `arquivado_por` para `funcionarios_bkp_014`; depois CHECK e colunas saem. Os arquivados continuam com `ativo = 0` |
+| Verificação | Só contagens, sem nome: estrutura (colunas, check, cópia) em qualquer estado; inativos, inativos sem data, ativos com data (0), arquivados sem autor (0); efeitos pendentes de inativos (vínculo de PA, regra, exceção, ausência de hoje em diante) |
+| Ensaio | (a) estrutura: 014 duas vezes, rollback duas vezes (o 2º para de propósito); (b) `DADOS` com as tabelas de PA, escala, exceção e ausência e `VERIFICA`; (c) 014 como `PREPARO` e `..._ensaio_linhas_f4.sql` no lugar da migration (arquiva cadastros, só em banco `ensaio_*`): o rollback guarda os arquivados na cópia; o 2º para |
+
+**Q-F4 no servidor (só contagens; sem depender da 011 nem da 012; para a D5).** Colunas desde as migrations 003 e 009:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 0) AS inativos, (SELECT COUNT(DISTINCT a.employee_id) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 0 WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE())) AS inativos_com_pa, (SELECT COUNT(DISTINCT r.employee_id) FROM portal_schedule_rules r JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 0 WHERE (r.effective_until IS NULL OR r.effective_until >= CURDATE()) AND (r.effective_until IS NULL OR r.effective_until >= r.effective_from)) AS inativos_com_regra, (SELECT COUNT(*) FROM portal_schedule_exceptions e JOIN funcionarios f ON f.id = e.employee_id AND f.ativo = 0 WHERE e.exception_date >= CURDATE()) AS excecoes_de_inativos;"; unset P
+```
+
+**Efeitos do arquivamento — função pura, plano antes de aplicar.** `EmployeeArchivePlanner::plan(cadastro, regras, exceções, ausências, vínculos de PA, entrada do estado de pausa, hoje, agora)` devolve o plano e as contagens de `efeitos`; não consulta banco, arquivo nem relógio.
+
+| Efeito | Regra aprovada |
+|---|---|
+| PA (RF-06) | Vínculo aberto ou futuro (`valid_until` nulo ou ≥ hoje): começou **antes de hoje** → `valid_until = ontem`; começa **hoje ou depois** → `active = 0`. Vínculo já encerrado não muda. **Nunca `valid_until < valid_from`** (D6) |
+| Regras de escala | `planRemove` do F1: a vigente que começou antes de hoje fecha ontem; as que começam hoje ou depois são apagadas, com o conteúdo na auditoria; fila de sincronização `rule_removed`, como no F1. Nunca `effective_until < effective_from` |
+| Exceções de escala | As de hoje em diante são apagadas; tipo e data na auditoria, sem a `note` (D7) |
+| Ausências aprovadas (**D8 com o ajuste de 2026-10-13**) | Começou **antes de hoje** e termina hoje ou depois → `ends_on = ontem` (sempre de dia inteiro: horário só existe em ausência de um dia, `ck_absence_period`). Começa **hoje ou depois** — inclusive a parcial de hoje e a de vários dias começando hoje — → `cancelled`, com `cancelled_by` = ator, como as futuras. Terminada antes de hoje: não muda. **Nunca `ends_on < starts_on`**: senão o `ck_absence_range` da 012 recusa o UPDATE e a transação inteira cai. `retroactive` não muda (o efeito fica na auditoria do arquivamento) |
+| Pausa (P16, D9) | Aprovada em andamento → linha em `pausas` com `Encerrada pelo arquivamento do cadastro (admin_archive) por <usuário>` em `observacao_reuniao` (sem coluna nova); solicitação pendente → descartada, sem histórico; **sem fallback para CSV** |
+| Cadastro | `ativo = 0`, `arquivado_em` = agora do PHP, `arquivado_por` = ator |
+
+O `qa-archive` confere, em todos os planos da tabela de casos, que nenhum gera `ends_on < starts_on`, `valid_until < valid_from` ou `effective_until < effective_from`. Casos obrigatórios das ausências: dia inteiro que começa hoje, parcial de hoje (`from_time` e `interval`), vários dias começando hoje (canceladas); vários dias iniciados antes de hoje e terminando hoje ou depois (cortadas em ontem); terminada ontem e cancelada (sem mudança). No PA: vínculo que começa hoje (`active = 0`), iniciado ontem e aberto (`valid_until = ontem`), futuro, encerrado ontem.
+
+**Aplicação, na ordem (D10):** (1) `with_pause_state_lock` (arquivo, depois banco: mesma ordem dos endpoints de pausa); (2) transação; trava do cadastro e leituras `FOR UPDATE` (lição do F1); `carregar_estado()` dentro do lock; (3) plano e gravações; auditoria `FUNCIONARIO_ARQUIVADO` (`CRITICAL`, só IDs e contagens) na mesma conexão; (4) `commit`; (5) `estado.json` **dentro do lock** (L-11), só a entrada do colaborador. Falha antes do commit desfaz tudo, inclusive a pausa (banco fora: 503, nada muda). Falha ao gravar o estado depois do commit: 200 com aviso e log; o arquivado já está fora do painel, a limpeza de 24 h zera a entrada e restaurar também a limpa. L-11 nos outros caminhos: sai o `salvar_estado()` de `GerenciadorPausas::atualizar_funcionario`, e `remover_funcionario` (sem uso) sai.
+
+**L-07.** `obter_status()` pula inativos: `status.php` e `dashboard.php` (`tecnicos_monitorados`, `pausas_ativas`, `active_pauses`, pendentes), sem mudar contrato. Mapa PA: datas a partir de hoje sem vínculos de inativos; passado sem mudança até F5/F6 (D13).
+
+**P11 (D2, decisão do responsável).** Fica a revalidação do A1 por requisição, **sem mudar código de autenticação**; só o teste de regressão: arquivar → a próxima requisição da sessão CI é encerrada com `cadastro_inativo` e auditada (`SESSION_REVOKED`). Alternativa recusada: checagem no máximo uma vez por minuto (menos consultas, mas janela de até 60 s e afrouxamento do A1 para perfil rebaixado e saída da allowlist). **Admin da allowlist:** a sessão do login administrativo não é atingida pelo arquivamento (o acesso vem de `AD_ADMIN_USERS`); para cortar, tirar o login do `.env` e recarregar o PHP-FPM (D3).
+
+**Riscos.** Rollback de código com arquivados: no código anterior, editar um arquivado manda `ativo = true` e o CHECK recusa (500); falha fechada; para editar, aplicar também o rollback da 014. Ordem de trava arquivo → banco igual à das pausas; o `atualizar` deixa de gravar o estado. Encerramento da sessão depende do A1 no ar (deploy 6). QAs por `git diff` podem disparar em `AdminPage.jsx` e `formSchemas.ts` (dívida técnica registrada). LGPD: `arquivado_por` guarda o usuário do operador, como `created_by`; auditoria só com IDs e contagens. Sem MySQL na estação: 014, consultas e concorrência só ficam provadas no ensaio e no teste do responsável.
+
+**Testes.** `qa-archive` (novo): estrutura SQL da 014 (commit 1); tabela de casos do plano (PA, regras, exceções, ausências com os casos da D8, pausa aprovada/pendente/sem pausa, já arquivado 409, legado pela D5, virada 23:59/00:00 com "hoje" injetado) e a invariante de período válido (commit 2); serviço com PDO espião e estado em arquivo temporário: falha no meio não muda nada e mantém o estado, sem CSV, auditoria sem texto livre; L-11 sem gravação de estado (commit 3). `qa-security` ponta a ponta: arquivar 403 para gestor, técnico e somente leitura; Liderança arquiva N1 e recebe 403 em cadastro da Liderança; restaurar 403 para todos menos admin; CSRF; sessão CI do arquivado encerrada na requisição seguinte; `status.php`, `dashboard.php` e Mapa PA de hoje sem o arquivado; `atualizar` com mudança de `ativo` → 409. Frontend: `qa:employee-form`, `qa:forms` (sem `confirm`), os 15 `qa:*` e lint. Mutação no plano, na permissão e na ordem de aplicação. Validação humana em MySQL 8.0.46.
+
+**Decisões (aprovadas em 2026-10-13):**
+
+| # | Decisão | Situação |
+|---|---|---|
+| D1 | Arquivar pela regra do Lote 5b (admin; Liderança só cadastros fora da Liderança e do admin); **restaurar só admin** (`funcionarios.restaurar`); lista de arquivados para quem gerencia funcionários | Aprovada |
+| D2 | P11: revalidação do A1 por requisição, sem código novo de autenticação; só o teste de regressão | Aprovada (opção a) |
+| D3 | Admin da allowlist: arquivar permitido, com aviso na resposta de que o acesso administrativo continua pela allowlist; arquivar o **próprio** cadastro → 409 | Aprovada |
+| D4 | `ativo` ausente mantém o valor; mudar `ativo` pelo formulário → 409 apontando Arquivar/Restaurar; editar arquivado → 409 ("restaure antes"); cadastro novo sempre ativo | Aprovada |
+| D5 | Arquivar de novo um inativo antigo (data nula) aplica os efeitos e grava a data (regularização) | Aprovada; Q-F4 acima |
+| D6 | PA: iniciado antes de hoje fecha ontem; de hoje ou futuro sai (`active = 0`) | Aprovada |
+| D7 | Exceções de hoje em diante apagadas, tipo e data na auditoria, sem a `note` | Aprovada |
+| D8 | Ausências: iniciada antes de hoje e em curso → `ends_on = ontem`; começa hoje ou depois (inclusive parcial e de vários dias) → cancelada; nenhum plano gera período invertido | **Aprovada com ajuste** |
+| D9 | Pausa: `admin_archive` como texto em `observacao_reuniao`; pendente descartada; sem CSV | Aprovada |
+| D10 | Lock → transação com a auditoria → commit → `estado.json` dentro do lock; falha do estado depois do commit: 200 com aviso | Aprovada |
+| D11 | `ck_funcionario_arquivado` na 014, com o risco de rollback acima | Aprovada |
+| D12 | Restaurar: `ativo = 1`, limpa as duas colunas e a entrada do estado; não devolve PA, escala nem ausências; 409 com login AD em uso por outro ativo; `FUNCIONARIO_RESTAURADO` `CRITICAL` | Aprovada |
+| D13 | Mapa PA de hoje e futuro sem inativos; passado sem mudança até F5/F6 | Aprovada |
+| D14 | `presence` no `technicians.php` vai para o F7 | Aprovada |
+
+**Contrato de `efeitos` (proposta para o commit 3, a aprovar na entrega dele):** `{ pa_encerrados, pa_removidos, regras_encerradas, regras_removidas, excecoes_removidas, ausencias_canceladas, ausencias_cortadas, pausa_finalizada, solicitacao_descartada }` (contagens e booleanos), no lugar da lista curta da 3.6, para cada efeito da tabela acima ter a sua contagem.
+
+**Deploy.** Entra no deploy único da Parte B (pendência 16 do estado da sessão): no roteiro consolidado, Q-F4 e 014 antes do `git pull`, com o ensaio nas três variantes e a verificação. **Ritmo combinado:** depois do commit 1, parar para revisão e teste do responsável no MySQL local antes do commit 2.
 
 ---
 
