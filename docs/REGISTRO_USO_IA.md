@@ -495,6 +495,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: nenhum dos quatro arquivos SQL foi executado; a sintaxe so foi conferida por leitura e pelo QA estrutural. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Q-F4 no servidor (2026-10-13): inativos 5, com PA aberto 1, com regra 0, excecoes 0; D5 fechada sem regularizacao em massa (so o cadastro com PA, pela tela, no pos-deploy; passo registrado na 9.6). **Commit 1 aprovado em 2026-10-13**, com as seis decisoes como estao, apos teste no MySQL local com o `ensaio-migration.sh` nas tres variantes e dois inativos de teste (um com PA aberto, regra, excecao futura e ausencia futura; outro com PA encerrado): 014 duas vezes no mesmo estado; 1o rollback com copia, 2o parou; efeitos pendentes = 1 em cada contagem, PA encerrado fora; `arquivados_f4 = 2` idempotente; CHECK da 3819 ao reativar sem limpar, restaurar limpando funciona, codigo antigo desativa, reativa e insere; Q-F4 roda. Cosmetico aceito: "1" impresso pelos `SELECT 1` na 2a execucao. |
 
+### Parte B, F4 — commit 2 (planejador puro do arquivamento) — 2026-10-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Efeitos do arquivamento como funcao pura, com o plano montado antes de aplicar (desenho, secao 9.6). |
+| **Branch e commits** | `3944cc7` (codigo e testes) e o commit deste registro (documentacao). Sem push. |
+| **O que a IA alterou** | `services/EmployeeArchivePlanner.php` (novo), `scripts/qa-archive.php` (secao 2); desenho 9.6. |
+| **Decisoes de implementacao** | Seis, a aprovar (desenho 9.6): hoje vem do instante; tipos de erro (409 so para ja arquivado; dado fora do formato e invariante violada viram 500 generico); pausa ilegivel limpa sem historico; duracao nunca negativa e inicio no fuso de agora; `regularizacao` no plano; ids em texto como o PDO devolve. |
+| **Validacao executada pela IA** | `qa-archive` (381 verificacoes: tabela de casos, virada 23:59/00:00 com o instante injetado, varredura da invariante com mais de 100 planos, dado fora do formato, pureza); mutacao **36/36** no planejador (dois sobreviventes na 1a rodada, por teste fraco, mortos depois de reforcar os testes); mutacao do SQL repetida (27/27); bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | O planejador ainda nao e chamado por endpoint nenhum (commit 3); nada foi exercido contra MySQL. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao antes do commit 3. |
+
 ---
 
 ## 5. Responsabilidade
