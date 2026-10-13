@@ -546,6 +546,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: a tela so rodou contra o servidor simulado; o caminho "inativo com data" da listagem so tem checagem estrutural (o processo filho do `qa-security` carrega os cadastros padrao, todos ativos). O `npm run build` padrao, rodado no fim da validacao, regravou o `app/` local (nao versionado) com este codigo. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-13**, com as sete decisoes como estao: teste do responsavel no navegador com o servico real e o MySQL local com a 014 (sessao simulada por perfil). Admin: painel de arquivar com o texto dos efeitos, mensagem com o resumo, regularizacao do inativo antigo, recusa de restaurar (login em uso) no painel, proprio cadastro sem Arquivar, data do arquivamento e "Inativo sem data", edicao sem o checkbox. Lideranca: so Aprovacoes e Funcionarios; equipe Lideranca sem Arquivar; arquivados sem Restaurar. Gestor: so Aprovacoes. Pedidos para o commit 6: corrigir o texto do "Adicionar funcionario" (regra do Lote 5b) e registrar como pendencia a tabela de Funcionarios no celular. |
 
+### Parte B, F4 — commit 6 (ponta a ponta e documentacao; F4 completo) — 2026-10-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Fechar o F4: ponta a ponta no `qa-security` com estado por caso, mutacao, contratos, LGPD 5.3 e o roteiro "Deploy que traz o F4" (desenho, secao 9.6). |
+| **Branch e commits** | `7389af2` (codigo, testes e documentacao) e o commit deste registro. Sem push. |
+| **Pedidos do responsavel atendidos** | Texto do "Adicionar funcionario" pela regra do Lote 5b; pendencia da tabela de Funcionarios no celular registrada sem mudanca; ponta a ponta de `status.php`, `dashboard.php` e Mapa PA com arquivado; roteiro com ensaio da 014 nas tres variantes, Q-F4 antes, 014 antes do merge com `cat-file` e `pipefail`, verificacao e passo pos-deploy da D5. |
+| **O que a IA alterou** | `frontend/src/pages/AdminPage.jsx` (texto), `frontend/scripts/qa-employee-form.mjs`, `scripts/qa-security.php`, `docs/API_CONTRACTS_FRONTEND.md`, `docs/DOCUMENTACAO_TECNICA.md` (5.3), `DEPLOY_LINUX.md`; desenho 9.6 e 10. |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.6); destaques: estado por caso e Mapa PA opcional no banco simulado do `qa-security`; `solicitacoes_pendentes.php` sem ponta a ponta (503 do `OperationalService` no simulado); no roteiro, a consulta do passo 9 devolve so o ID interno, e o passo 9 so roda com os numeros da Q-F4 de 2026-10-13. |
+| **Validacao executada pela IA** | `qa-security` com 6 casos novos de ponta a ponta; mutacao **14/14** contra o `qa-security`; bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | O roteiro nao foi executado (sem MySQL nem servidor na estacao); os comandos seguem os do deploy 11 e as consultas da 014 ja rodaram no MySQL local do responsavel. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do commit 6 e do F4 completo. |
+
 ---
 
 ## 5. Responsabilidade
