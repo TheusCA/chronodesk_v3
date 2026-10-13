@@ -1030,6 +1030,11 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   gravado para a gestao; (3) `portal/oncall.php` (DevTools) sem `note`,
   `created_by` e `updated_by` dos plantoes de outros; (4) gestor e Lideranca
   sem mudanca. Rollback: so codigo; reabre o envio dos textos a todos.
+- Deploy que traz o F4 (Parte B, arquivamento de tecnicos): siga o roteiro
+  "Deploy que traz o F4", abaixo. Ensaio da 014 nas tres variantes, Q-F4, a
+  014 e o `git merge` do commit ensaiado juntos (com `cat-file` e `pipefail`),
+  a verificacao e o passo pos-deploy da D5; nao use o `git pull` deste item.
+  Entra no roteiro consolidado da Parte B (deploy unico depois do F9).
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -1360,6 +1365,266 @@ expoe tambem pela lista. Com `linhas = 0` nao ha o que expor. Com ausencias
 gravadas, prefira corrigir para frente com o codigo do F3 no ar; se o rollback
 for inevitavel, o responsavel decide antes como tratar as observacoes (qualquer
 `UPDATE` em producao exige aprovacao explicita e backup verificado).
+
+### Deploy que traz o F4 (Parte B, arquivamento de tecnicos)
+
+Roteiro completo, na ordem. O F4 traz a migration 014 (`arquivado_em`,
+`arquivado_por` e o CHECK `ck_funcionario_arquivado` em `funcionarios`), o
+arquivamento no lugar da remocao (PA, escala, excecoes futuras, ausencias
+futuras e pausa aberta encerrados de hoje em diante; o historico fica),
+restaurar so pelo admin, `status.php`, contadores do dashboard, solicitacoes
+pendentes e Mapa PA de hoje em diante sem arquivados, e a aba Funcionarios com
+Arquivar e Restaurar. Nao traz variavel nova no `.env`, nem mudanca em
+`.htaccess`, vhost ou dependencia do frontend. Desenho:
+`docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao 9.6. **A Parte B entra num deploy
+unico depois do F9:** este roteiro vira a parte do F4 do roteiro consolidado,
+na mesma ordem (Q-F4 e 014 antes do `merge`; o passo da D5 depois da recarga).
+
+Todas as consultas deste roteiro devolvem **so contagens e estrutura**, nunca
+nome, login nem texto; a unica excecao e a consulta do passo 9, que devolve so
+o ID interno do cadastro a regularizar. Onde aparece `<BRANCH>`, use o branch
+do deploy; onde aparece `<ServerName do vhost>`, o `ServerName` do VirtualHost
+do portal. A senha do root do MySQL e sempre lida sem eco (`read -rsp`) e
+apagada no fim do comando (`unset P`); nunca a escreva no comando nem neste
+documento.
+
+**Pre-requisitos.** Deploys 1 a 12 no ar. O codigo do F4 le as colunas da 012
+(ausencias do F3) e da 011 (`fora_mapa_escala`, Mapa PA); o encerramento da
+sessao CI do arquivado depende da revalidacao do A1 (Lote 5a, deploy 6), sem
+codigo novo de autenticacao (D2). Conferencia (esperado `migration_011 = 1` e
+`migration_012 = 3`):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'fora_mapa_escala') AS migration_011, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_absences' AND COLUMN_NAME IN ('category', 'period_type', 'cancelled_by')) AS migration_012;"; unset P
+```
+
+**Janela.** Sem 503: o codigo anterior funciona sobre o esquema da 014 (nao le
+as colunas novas e so grava `ativo = 0`, que o CHECK aceita com as colunas
+nulas). Entre o `git merge` (passo 5) e o build do frontend (passo 6), o
+navegador ainda carrega a tela anterior: o botao "Desativar" passa a arquivar
+(com os efeitos do F4) e desmarcar "Funcionario ativo" na edicao recebe 409
+com a mensagem "use o botao Arquivar". Prefira horario de pouco uso e avise
+quem cuida dos cadastros para nao desativar ninguem durante o deploy.
+
+1. **Ponto de rollback e pre-checagem**: itens 1 e 2 de "Atualizacao de Versao
+   e Rollback" (anota `pre-deploy-commit`, `git status` vazio, `git fetch` e
+   preflight da versao nova com `RESULTADO=0`).
+
+2. **Backup**: item 3 da mesma secao. Esperado `backup concluido`; anote o
+   diretorio (ponto de restauracao do banco).
+
+3. **Ensaio da 014** em banco descartavel, nas tres variantes, com os arquivos
+   da versao nova (antes do `git merge` eles ainda nao estao na arvore). O
+   `scripts/ensaio-migration.sh` do servidor ja tem `DADOS`, `VERIFICA` e
+   `PREPARO` (deploy 8) e nao mudou no F4. Confira que o clone esta no
+   `<BRANCH>` e grave o commit ensaiado: o passo 5 aplica exatamente esse
+   commit, sem novo `fetch` no meio.
+
+```bash
+cd /var/www/chronodesk
+B=$(sudo git rev-parse --abbrev-ref HEAD); [ "$B" = "<BRANCH>" ] && echo "branch OK: $B" || echo "PARE: o clone esta em $B, nao em <BRANCH>"
+sudo git rev-parse origin/<BRANCH> | sudo tee /var/backups/chronodesk/f4-commit
+E=$(sudo mktemp -d /root/ensaio-f4.XXXXXX); sudo git archive origin/<BRANCH> migrations | sudo tar -x -C "$E"
+M=$E/migrations/20261013_014_employee_archive.sql; R=$E/migrations/rollback/20261013_014_employee_archive_down.sql; V=$E/migrations/verificacao/20261013_014_employee_archive_check.sql
+sudo env VERIFICA="$V" bash scripts/ensaio-migration.sh f4 "$M" "$R"
+sudo env DADOS=portal_pa_assignments,portal_schedule_rules,portal_schedule_exceptions,portal_absences VERIFICA="$V" bash scripts/ensaio-migration.sh f4_dados "$M" "$R"
+sudo env PREPARO="$M" VERIFICA="$V" bash scripts/ensaio-migration.sh f4_rollback "$E/migrations/rollback/20261013_014_ensaio_linhas_f4.sql" "$R"
+```
+
+   O que conferir (os mesmos tres ensaios aprovados em 2026-10-13; o numero
+   de inativos e o da origem no dia, 5 na Q-F4 de 2026-10-13):
+
+   - **(a) `f4`, cadastros:** a 1a e a 2a execucao da migration terminam no
+     mesmo estado, com `colunas_014 = 2`, `check_014 = 1`, `copia_rollback = 0`,
+     `arquivados_f4 = 0`, `inativos_sem_data` igual a `inativos`,
+     `ativos_com_data = 0` e `arquivados_sem_autor = 0`; as contagens de efeitos
+     pendentes vem `NULL` (as tabelas de PA, escala e ausencia nao sao copiadas
+     nesta variante). A 2a execucao imprime `1` pelos `SELECT 1` (cosmetico,
+     como nas migrations anteriores). O 1o rollback volta a `colunas_014 = 0`,
+     `check_014 = 0`, `copia_rollback = 1`, com `inativos` igual. O **2o
+     rollback para** com `rollback_014 abortado: ja existe funcionarios_bkp_014
+     ...` (FALHOU no ensaio, de proposito) e o estado fica igual ao do 1o.
+   - **(b) `f4_dados`, linhas reais de PA, escala, excecao e ausencia:**
+     `inativos`, `inativos_com_pa`, `inativos_com_regra` e
+     `excecoes_de_inativos` iguais aos da Q-F4 (passo 4) e iguais em todos os
+     estados (a 014 nao altera linha); `ausencias_de_inativos` so existe na
+     verificacao (anote); `pa_periodo_invertido = 0` (diferente de `0` e dado
+     antigo: anote e envie, nao bloqueia).
+   - **(c) `f4_rollback`, rollback com cadastros arquivados:** depois do
+     arquivo de linhas, `arquivados_f4 = 2` (1 se nao houver inativo),
+     `inativos` = inativos da origem + 1, `ativos_com_data = 0` e
+     `arquivados_sem_autor = 0` (igual na 2a vez); depois do 1o rollback,
+     `colunas_014 = 0`, `check_014 = 0`, `copia_rollback = 1` e `inativos`
+     igual ao de antes do rollback (`ativo = 0` fica); o 2o rollback para de
+     proposito.
+
+   Qualquer resultado diferente: **pare o deploy** (nada foi alterado no banco
+   real) e envie as contagens. No fim, apague o diretorio temporario
+   (`sudo rm -r "$E"`; confira antes que `$E` comeca com `/root/ensaio-f4.`).
+
+4. **Q-F4 imediatamente antes da 014** (D5: so contagens, sem depender da 011
+   nem da 012):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 0) AS inativos, (SELECT COUNT(DISTINCT a.employee_id) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 0 WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE())) AS inativos_com_pa, (SELECT COUNT(DISTINCT r.employee_id) FROM portal_schedule_rules r JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 0 WHERE (r.effective_until IS NULL OR r.effective_until >= CURDATE()) AND (r.effective_until IS NULL OR r.effective_until >= r.effective_from)) AS inativos_com_regra, (SELECT COUNT(*) FROM portal_schedule_exceptions e JOIN funcionarios f ON f.id = e.employee_id AND f.ativo = 0 WHERE e.exception_date >= CURDATE()) AS excecoes_de_inativos;"; unset P
+```
+
+   Referencia (2026-10-13): `inativos = 5`, `inativos_com_pa = 1`,
+   `inativos_com_regra = 0`, `excecoes_de_inativos = 0`. Anote os numeros: o
+   passo 9 depende deles. Numeros diferentes **nao bloqueiam a 014** (ela nao
+   altera linha), mas mudam o passo 9: com `inativos_com_pa` diferente de `1`,
+   ou `inativos_com_regra` ou `excecoes_de_inativos` maior que `0`, envie as
+   contagens ao responsavel antes do passo 9 (D5 fechada so para o caso de
+   2026-10-13: um cadastro com PA aberto).
+
+5. **014 e `git merge` em sequencia**, no mesmo comando. O `git cat-file -e`
+   confere antes que o arquivo existe na versao nova, e a aplicacao roda com
+   `pipefail`: sem ele, se o `git show` falhasse, o `mysql` receberia entrada
+   vazia, sairia com `0` e o `merge` rodaria sem a 014 (o codigo do F4 le as
+   colunas novas). Assim o `merge` so acontece se o `git show` e o `mysql`
+   derem certo. O `merge --ff-only` de `origin/<BRANCH>` aplica o commit do
+   ensaio (sem `fetch`); a linha seguinte confirma. Em seguida, a verificacao:
+
+```bash
+cd /var/www/chronodesk
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e origin/<BRANCH>:migrations/20261013_014_employee_archive.sql && bash -o pipefail -c 'sudo git show origin/<BRANCH>:migrations/20261013_014_employee_archive.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && sudo git merge --ff-only origin/<BRANCH>; unset P
+[ "$(sudo git rev-parse HEAD)" = "$(sudo cat /var/backups/chronodesk/f4-commit)" ] && echo "HEAD = commit do ensaio" || echo "PARE: HEAD diferente do commit do ensaio"
+sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_014_employee_archive_check.sql; unset P
+```
+
+   Esperado: `colunas_014 = 2`, `check_014 = 1`, `copia_rollback = 0`,
+   `arquivados_f4 = 0`, `inativos_sem_data` igual a `inativos` (5 na
+   referencia), `ativos_com_data = 0`, `arquivados_sem_autor = 0`; os efeitos
+   pendentes iguais aos do passo 4 e `pa_periodo_invertido` como no ensaio. O
+   `diff --stat` lista so os arquivos da 014 em `migrations/` (os do F4: a
+   migration, o rollback, as linhas de ensaio e a verificacao). O `f4-commit`
+   (passo 3) guarda a versao do F4, de onde o rollback da 014 le os arquivos.
+
+6. **Build do frontend**:
+
+```bash
+cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
+```
+
+7. **Recarga do PHP-FPM** (limpa o OPcache; `reload` e gracioso). O F4 nao muda
+   vhost nem `.htaccess`: a recarga do Apache nao e necessaria.
+
+```bash
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+8. **Verificacao pos-deploy, so com contagens.**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: <ServerName do vhost>' http://127.0.0.1/api/health.php
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_014_employee_archive_check.sql; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT action, COUNT(*) AS n FROM audit_log WHERE action LIKE 'FUNCIONARIO\_%' AND timestamp >= CURDATE() GROUP BY action;"; unset P
+```
+
+   Esperado: health `200`; a verificacao da 014 como no passo 5; no
+   `audit_log`, so os eventos das acoes feitas hoje (antes do passo 9, nenhum
+   `FUNCIONARIO_ARQUIVADO`). Em seguida, a checagem HTTP de
+   `scripts/test-linux.sh` (item 6 de "Atualizacao de Versao").
+
+   Pelo navegador, sem gravar: como admin, Aprovacoes e admin > Funcionarios
+   abre no filtro "Ativos", sem o checkbox "Funcionario ativo" no formulario;
+   no filtro "Arquivados", os inativos de antes do F4 aparecem como "Inativo
+   sem data", com "Arquivar (regularizar)" e "Restaurar"; clicar em "Arquivar"
+   num ativo abre o painel na linha com o texto dos efeitos (clique em
+   "Voltar", sem confirmar). Como Lideranca: o mesmo, sem "Restaurar" e sem
+   "Arquivar" em cadastro da equipe Lideranca. Como gestor: Administracao so
+   com Aprovacoes. O painel de pausas, o dashboard e o Mapa PA de hoje nao
+   mostram inativo.
+
+9. **Passo pos-deploy obrigatorio (D5): regularizar o inativo com PA aberto.**
+   So com os numeros do passo 4 iguais a referencia (`inativos_com_pa = 1`,
+   `inativos_com_regra = 0`, `excecoes_de_inativos = 0`); com outros numeros,
+   pare e avise o responsavel antes de arquivar. Os outros inativos **nao** sao
+   tocados (ficam "Inativo sem data").
+
+   (1) Confira a verificacao do passo 8: `inativos_com_pa = 1`. (2) Descubra o
+   cadastro: a consulta devolve **so o ID interno**, sem nome nem login:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT DISTINCT a.employee_id AS id_cadastro FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 0 WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE());"; unset P
+```
+
+   (3) Como admin, em Funcionarios > filtro "Arquivados", procure a linha com
+   esse ID ("ID n" abaixo do nome), clique em "Arquivar (regularizar)" e
+   confirme. Esperado: "Cadastro inativo regularizado e arquivado. 1 vinculo de
+   PA encerrado." (ou "removido", se o vinculo comecar depois de hoje).
+   (4) Rode a verificacao da 014 de novo:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_014_employee_archive_check.sql; unset P
+```
+
+   Esperado: `inativos_com_pa = 0`, `arquivados_f4 = 1`,
+   `inativos_sem_data = 4`, `ativos_com_data = 0`, `arquivados_sem_autor = 0`;
+   no `audit_log` (consulta do passo 8), um `FUNCIONARIO_ARQUIVADO`. Registre
+   os numeros no registro do deploy.
+
+**Se a verificacao falhar:**
+
+- **A 014 falhou** (passo 5; ou o `git cat-file` ou o `git show` falharam):
+  nada foi mesclado (o `pipefail` e o `&&` impedem) e o codigo anterior
+  continua no ar, sem janela. A 014 confere o `information_schema` antes de
+  cada alteracao e pode ser repetida depois de corrigida a causa; envie a
+  mensagem de erro.
+- **A 014 terminou mas o `git merge` falhou** (alteracao local na arvore, ou o
+  branch local divergiu e o `--ff-only` recusa): o codigo anterior continua no
+  ar e funciona sobre o esquema novo. Resolva a causa (item 1 de "Atualizacao
+  de Versao"), **sem `fetch` e sem `pull`**, rode so
+  `sudo git merge --ff-only origin/<BRANCH>`, confira que `HEAD` e o
+  `f4-commit` (linha seguinte do passo 5) e siga a partir da verificacao do
+  passo 5. Se o `origin/<BRANCH>` tiver mudado (alguem rodou `fetch`), pare: o
+  codigo novo nao foi ensaiado.
+- **`ativos_com_data` ou `arquivados_sem_autor` maior que `0`:** o CHECK e o
+  servico deveriam impedir. Nao apague nem altere linha; mantenha o codigo no
+  ar, envie as contagens e trate como incidente.
+- **Erro 500 ou 503 nas telas, health diferente de `200`, ou falha no build:**
+  rollback do codigo ("Rollback", acima: `git checkout --detach` do
+  `pre-deploy-commit`, build e recarga). A 014 pode ficar aplicada: o codigo
+  anterior funciona sobre ela. **Limite:** no codigo anterior, editar um
+  cadastro arquivado pelo F4 manda `ativo = true` com a data preenchida e o
+  CHECK recusa (500, falha fechada); para editar esse cadastro, aplique tambem
+  o rollback da 014 (abaixo). Com `arquivados_f4 = 0` isso nao acontece.
+- **Passo 9 com resultado diferente** (por exemplo `inativos_com_pa` continua
+  `1`, ou a tela recusou): nao repita nem arquive outro cadastro; envie a
+  verificacao e a mensagem da tela.
+- Restaurar o backup do passo 2 so como ultimo recurso (secao "Restauracao em
+  Incidente"): perde o que foi gravado depois dele.
+
+**Rollback da 014** (so depois do rollback do codigo; o codigo do F4 le e grava
+as colunas novas):
+
+```bash
+cd /var/www/chronodesk
+export F4=$(sudo cat /var/backups/chronodesk/f4-commit)
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$F4:migrations/rollback/20261013_014_employee_archive_down.sql" && bash -o pipefail -c 'sudo git show "$F4:migrations/rollback/20261013_014_employee_archive_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 014 aplicado"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$F4:migrations/verificacao/20261013_014_employee_archive_check.sql" && bash -o pipefail -c 'sudo git show "$F4:migrations/verificacao/20261013_014_employee_archive_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P
+```
+
+Os arquivos sao lidos da versao do F4 (`f4-commit`, passo 3): depois do
+`git checkout` do codigo anterior eles nao estao na arvore. Sem a mensagem
+"rollback da 014 aplicado", o rollback nao rodou. Esperado: `colunas_014 = 0`,
+`check_014 = 0`, `copia_rollback = 1`, `inativos` igual ao de antes. Nenhuma
+linha muda: quem foi arquivado continua com `ativo = 0` (inativo no codigo
+anterior); PA, escala e ausencias encerrados pelo arquivamento **nao voltam**
+(o rollback so tira colunas). A data e o autor ficam na copia
+`funcionarios_bkp_014` (so `id`, `ativo`, `arquivado_em`, `arquivado_por`) e na
+auditoria. A copia guarda o usuario de quem arquivou (LGPD): apague-a a mao
+(`DROP TABLE funcionarios_bkp_014`) depois de conferir, com aprovacao. Se ja
+existir `funcionarios_bkp_014` (rollback anterior), o rollback **para antes de
+alterar** (`rollback_014 abortado`): confira a copia, renomeie
+(`RENAME TABLE funcionarios_bkp_014 TO funcionarios_bkp_014_<data>`) e repita.
+
+**Operacao depois do deploy.** Arquivar o cadastro de um login que esta em
+`AD_ADMIN_USERS` nao corta o acesso administrativo (a tela avisa): para cortar,
+tire o login do `.env` e recarregue o PHP-FPM (D3). A sessao CI do arquivado e
+encerrada na requisicao seguinte (`SESSION_REVOKED` com `cadastro_inativo`).
+Restaurar nao devolve PA, escala nem ausencias: cadastre-os de novo.
 
 ## HTTPS Interno
 

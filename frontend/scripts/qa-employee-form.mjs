@@ -301,5 +301,8 @@ assert.ok(employeeFieldsSource.includes('Perfil de acesso'), 'Le o componente Em
 assert.doesNotMatch(employeeFieldsSource, /<option value="admin">/, 'Formulario de funcionario nao oferece Admin (a aba de usuarios locais continua com admin)')
 assert.match(adminSource, /canPromote \|\| !\['lideranca', 'admin'\]\.includes\(item\.access_role\)/, 'Editar e desativar Lideranca/admin so para quem promove')
 assert.match(adminSource, /const canPromote = permissions\.has\('perfis\.promote'\)/, 'Promocao pela permissao do servidor')
+// F4 (pedido na aprovacao do commit 5): texto do cadastro pela regra do Lote 5b.
+assert.doesNotMatch(adminSource, /aplica automaticamente o perfil/, 'Equipe nao define o perfil (Lote 5b)')
+assert.match(adminSource, /O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS\. A equipe não concede permissão\./u, 'Texto do cadastro com a regra atual do perfil')
 
 console.log('Employee form RHF/Zod QA OK')

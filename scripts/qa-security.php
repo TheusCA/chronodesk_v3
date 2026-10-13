@@ -251,6 +251,41 @@ final class QaChildStatement extends PDOStatement {
             }
             return true;
         }
+        // F4 (L-07, D13): leitura do Mapa PA (PaMapService::list), so nos casos
+        // com db['pa_map'] (os demais continuam vendo o banco fora). O filtro
+        // de ativo so vale com a clausula exata do servico.
+        if (isset($this->pdo->db['pa_map'])) {
+            $map = $this->pdo->db['pa_map'];
+            if ($this->sql === 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name') {
+                $this->rows = [['total' => in_array($params[':table_name'], ['portal_pa_assignments', 'portal_schedule_rules'], true) ? 1 : 0]];
+                return true;
+            }
+            if (strpos($this->sql, 'SELECT id, pa_number, employee_id, employee_name, employee_login, team, schedule_rule_type, schedule_rule_config, valid_from, valid_until, notes, created_by, updated_by, created_at, updated_at FROM portal_pa_assignments WHERE active = 1 AND valid_from <= :date_until AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {
+                $onlyActive = strpos($this->sql, ' AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = portal_pa_assignments.employee_id AND f.ativo = 1) ORDER BY') !== false;
+                $this->rows = [];
+                foreach ($map as $id => [$employeeId, $pa, $from]) {
+                    if ($from <= $params[':date_until'] && (!$onlyActive || (int)($this->pdo->db['funcionarios'][(string)$employeeId]['ativo'] ?? 0) === 1)) {
+                        $this->rows[] = ['id' => (int)$id, 'pa_number' => $pa, 'employee_id' => $employeeId, 'employee_name' => 'QA ' . $employeeId, 'employee_login' => null, 'team' => 'n1',
+                            'schedule_rule_type' => 'always_onsite', 'schedule_rule_config' => null, 'valid_from' => $from, 'valid_until' => null, 'notes' => null,
+                            'created_by' => 'qa', 'updated_by' => 'qa', 'created_at' => '2026-09-01 08:00:00', 'updated_at' => '2026-09-01 08:00:00'];
+                    }
+                }
+                return true;
+            }
+            if ($this->sql === 'SELECT id, nome AS name, equipe AS team, ad_login FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 0 ORDER BY nome') {
+                $this->rows = [];
+                foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                    if ((int)$row['ativo'] === 1 && $row['equipe'] === 'n1') {
+                        $this->rows[] = ['id' => (int)$id, 'name' => 'QA ' . $id, 'team' => 'n1', 'ad_login' => null];
+                    }
+                }
+                return true;
+            }
+            if (strpos($this->sql, 'SELECT exception_type FROM portal_schedule_exceptions WHERE ') === 0 || strpos($this->sql, 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE ') === 0) {
+                $this->rows = [];
+                return true;
+            }
+        }
         if (preg_match('/^(UPDATE funcionarios SET ativo = [01],|UPDATE portal_(pa_assignments|schedule_rules|absences) SET|DELETE FROM portal_(schedule_rules|schedule_exceptions)|INSERT INTO (pausas|portal_sync_queue) )/', $this->sql) === 1) {
             error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? $params[':id_funcionario'] ?? $params[':record_id'] ?? '?'));
             return true;
@@ -379,7 +414,9 @@ if (($argv[1] ?? '') === QA_RUNNER_FLAG) {
     }
     // Estado de pausas, CSV e configuracao no diretorio do QA: init.php grava
     // nesses arquivos (inicializar_csv, limpar_estado_antigo).
-    $qaStateDir = dirname($spec['error_log']);
+    // F4: caso com 'state' tem diretorio proprio, com os arquivos semeados
+    // (estado.json, funcionarios.json); os demais dividem o do QA.
+    $qaStateDir = $spec['state_dir'] ?? dirname($spec['error_log']);
     define('PAUSAS_CSV', $qaStateDir . '/pausas.csv');
     define('ESTADO_JSON', $qaStateDir . '/estado.json');
     define('CONFIG_JSON', $qaStateDir . '/config_sistema.json');
@@ -1010,6 +1047,14 @@ function qa_start_endpoint(string $qaDir, array $spec): array {
     // simula o banco fora.
     $spec += ['db' => $spec['session'] ? QA_DB : false];
     $spec['error_log'] = $log;
+    if (isset($spec['state'])) {
+        $spec['state_dir'] = $qaDir . "/state-{$run}";
+        mkdir($spec['state_dir'], 0700);
+        foreach ($spec['state'] as $name => $content) {
+            file_put_contents($spec['state_dir'] . '/' . basename((string)$name), (string)$content);
+        }
+        unset($spec['state']);
+    }
     $command = [
         PHP_BINARY,
         '-d', 'display_errors=stderr',
@@ -1775,6 +1820,58 @@ assert_same(true, $result['status'] === 200 && strpos($result['log'], '[QA_WRITE
 foreach ([$archiveCases['admin_arquiva'], $archiveCases['admin_restaura']] as $result) {
     assert_same(0, preg_match('/FUNCIONARIO_(ARQUIVADO|RESTAURADO) \[CRITICAL\]: [^\n]*(joao\.silva|QA\b)/', $result['log']), 'F4: auditoria sem nome nem login');
 }
+
+// F4 (L-07, D13), ponta a ponta com estado por caso: status.php e
+// dashboard.php sem o cadastro arquivado (nem a pausa nem a solicitacao dele);
+// Mapa PA de hoje sem o vinculo do arquivado e o de ontem como estava. Os
+// cadastros vem do funcionarios.json semeado (o banco simulado nao lista
+// cadastros); a sessao continua revalidada pelo QA_DB.
+$recent = date('c', time() - 300);
+$archivedState = [
+    'funcionarios.json' => (string)json_encode([
+        ['id' => 1, 'nome' => 'QA Ativo Pausa', 'equipe' => 'n1', 'ativo' => true, 'jornada_entrada' => '00:00', 'jornada_saida' => '23:59', 'almoco_inicio' => '23:58', 'almoco_fim' => '23:59'],
+        ['id' => 11, 'nome' => 'QA Arquivado Pausa', 'equipe' => 'n1', 'ativo' => false],
+        ['id' => 12, 'nome' => 'QA Arquivado Pendente', 'equipe' => 'n2', 'ativo' => false],
+        ['id' => 13, 'nome' => 'QA Ativo Pendente', 'equipe' => 'n2', 'ativo' => true],
+    ]),
+    'estado.json' => (string)json_encode(['funcionarios' => [
+        '1' => ['em_pausa' => true, 'inicio_pausa' => $recent, 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado', 'solicitacao_timestamp' => null, 'observacao_reuniao' => null],
+        '11' => ['em_pausa' => true, 'inicio_pausa' => $recent, 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado', 'solicitacao_timestamp' => null, 'observacao_reuniao' => null],
+        '12' => ['em_pausa' => false, 'inicio_pausa' => null, 'motivo_pausa' => 'Reunião', 'status_aprovacao' => 'pendente', 'solicitacao_timestamp' => $recent, 'observacao_reuniao' => null],
+        '13' => ['em_pausa' => false, 'inicio_pausa' => null, 'motivo_pausa' => 'Reunião', 'status_aprovacao' => 'pendente', 'solicitacao_timestamp' => $recent, 'observacao_reuniao' => null],
+    ]]),
+];
+$mapDb = $archiveDb([11 => ['ativo' => 0, 'access_role' => 'tecnico', 'equipe' => 'n1', 'ad_login' => 'qa.arquivado', 'arquivado_em' => '2026-10-01 09:00:00']]);
+$mapDb['pa_map'] = ['1' => [1, '1732', '2026-09-01'], '2' => [11, '1731', '2026-09-01']];
+$yesterday = (new DateTimeImmutable('today'))->modify('-1 day')->format('Y-m-d');
+$l07Cases = qa_run_endpoints($qaDir, [
+    'status_tecnico' => ['endpoint' => 'api/status.php', 'method' => 'GET', 'session' => $technician, 'state' => $archivedState],
+    'status_sem_arquivado_no_estado' => ['endpoint' => 'api/status.php', 'method' => 'GET', 'session' => $technician, 'state' => ['funcionarios.json' => $archivedState['funcionarios.json']]],
+    'dashboard_gestor' => ['endpoint' => 'api/portal/dashboard.php', 'method' => 'GET', 'session' => $manager, 'state' => $archivedState],
+    'dashboard_tecnico' => ['endpoint' => 'api/portal/dashboard.php', 'method' => 'GET', 'session' => $technician, 'state' => $archivedState],
+    'mapa_hoje' => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'GET', 'session' => $manager, 'db' => $mapDb],
+    'mapa_ontem' => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'GET', 'session' => $manager, 'db' => $mapDb, 'query' => ['date' => $yesterday]],
+]);
+$l07Body = static fn (string $case): array => (array)json_decode($l07Cases[$case]['body'], true);
+foreach ($l07Cases as $case => $result) {
+    assert_same([200, ''], [$result['status'], $result['stderr']], "L-07 {$case}: HTTP 200 sem erro de PHP");
+}
+$statusIds = static fn (array $body): array => [array_column($body['n1'] ?? [], 'id'), array_column($body['n2'] ?? [], 'id')];
+assert_same([[1], [13]], $statusIds($l07Body('status_tecnico')), 'L-07: status.php sem os arquivados (com pausa e com solicitacao no estado)');
+assert_same([[1], [13]], $statusIds($l07Body('status_sem_arquivado_no_estado')), 'L-07: status.php sem os arquivados (sem estado de pausas)');
+assert_same(false, strpos($l07Cases['status_tecnico']['body'], 'QA Arquivado') !== false, 'L-07: nome do arquivado fora do status.php');
+$dashboard = $l07Body('dashboard_gestor');
+assert_same(
+    [2, 1, 1, [1]],
+    [$dashboard['summary']['tecnicos_monitorados'] ?? null, $dashboard['summary']['pausas_ativas'] ?? null, $dashboard['summary']['solicitacoes_pendentes'] ?? null, array_column($dashboard['active_pauses'] ?? [], 'id')],
+    'L-07: dashboard.php conta so ativos (monitorados, pausas, pendentes e active_pauses)'
+);
+assert_same([2, 1, 0], [$l07Body('dashboard_tecnico')['summary']['tecnicos_monitorados'] ?? null, $l07Body('dashboard_tecnico')['summary']['pausas_ativas'] ?? null, $l07Body('dashboard_tecnico')['summary']['solicitacoes_pendentes'] ?? null], 'L-07: dashboard.php do tecnico sem o arquivado');
+assert_same(false, strpos($l07Cases['dashboard_gestor']['body'], 'QA Arquivado') !== false, 'L-07: nome do arquivado fora do dashboard.php');
+$mapEmployees = static fn (array $body): array => array_column($body['items'] ?? [], 'employee_id');
+assert_same([1], $mapEmployees($l07Body('mapa_hoje')), 'D13: Mapa PA de hoje sem o vinculo do arquivado');
+assert_same([1, 11], $mapEmployees($l07Body('mapa_ontem')), 'D13: Mapa PA de ontem com o vinculo do arquivado, como estava');
+assert_same([true, false], [in_array(1, array_column($l07Body('mapa_hoje')['employees'] ?? [], 'id'), true), in_array(11, array_column($l07Body('mapa_hoje')['employees'] ?? [], 'id'), true)], 'Mapa PA: arquivado fora dos elegiveis');
 
 // QA 13 e A3, estruturais: so os endpoints de funcionario e a carga de
 // emergencia do config.php gravam access_role; ad_login gravado so depois de

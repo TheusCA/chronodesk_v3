@@ -631,7 +631,7 @@ function EmployeesTab({
 
       <form onSubmit={handleCreateEmployeeSubmit(create)}>
         <FormSection
-          description="Equipe Liderança aplica automaticamente o perfil Admin. Revise login AD e jornada antes de salvar."
+          description="O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS. A equipe não concede permissão. Revise login AD e jornada antes de salvar."
           eyebrow="Novo cadastro"
           title="Adicionar funcionário"
         >
