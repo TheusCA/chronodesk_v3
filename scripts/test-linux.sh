@@ -46,6 +46,10 @@ echo "== PHP archive QA =="
 # Arquivamento de tecnicos (F4): migration 014 e, depois, o plano; sem banco.
 php scripts/qa-archive.php
 
+echo "== PHP presence cutoff QA =="
+# Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
+php scripts/qa-presence-cutoff.php
+
 echo "== PHP legacy schedule output QA =="
 # Relatorio, CSV e Calendario iguais a referencia anterior ao F2B; sem banco.
 php scripts/qa-schedule-legacy-output.php

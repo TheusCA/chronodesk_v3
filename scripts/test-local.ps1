@@ -122,6 +122,14 @@ if (!$phpExecutable) {
         Pass "QA do texto livre do Calendario concluido"
     }
 
+    # Sem banco: data de corte do motor (F5): migration 019 e registro do corte.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-presence-cutoff.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA da data de corte falhou"
+    } else {
+        Pass "QA da data de corte concluido"
+    }
+
     # Sem banco: arquivamento de tecnicos (F4): migration 014 e, depois, o plano.
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-archive.php")
     if ($LASTEXITCODE -ne 0) {
