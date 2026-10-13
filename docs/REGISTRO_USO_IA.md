@@ -559,6 +559,15 @@ Base da afirmação:
 | **Limitacoes declaradas** | O roteiro nao foi executado (sem MySQL nem servidor na estacao); os comandos seguem os do deploy 11 e as consultas da 014 ja rodaram no MySQL local do responsavel. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-13**, com as sete decisoes como estao, apos revisao do responsavel do commit 6 e do roteiro "Deploy que traz o F4" (conferencia de branch e `f4-commit`, ensaio com os arquivos da versao nova, Q-F4 antes, 014 e `merge` com `cat-file` e `pipefail`, `HEAD` conferido, passo da D5 so com o ID interno, rollback e verificacao com a mesma protecao). **F4 completo.** |
 
+### Parte B, F5 — plano aprovado (Calendario e relatorios no motor, data de corte) — 2026-10-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Plano do F5 (desenho, secao 9.7): data de corte guardada no banco, relatorio e CSV divididos no corte com a saida antiga identica antes dele, Calendario com a ausencia como situacao (P9), historico do arquivado, legenda unica e pendencia 8a da tela Escala. |
+| **Branch e commits** | `24705f3` (plano) e o commit deste registro (ajuste da aprovacao). Sem push. |
+| **O que a IA fez** | Levantamento no codigo e plano com catorze decisoes; nenhum codigo antes da aprovacao. |
+| **Validacao humana** | **Aprovado em 2026-10-13** com o ajuste da D2 (corte no 1o dia da competencia seguinte ao deploy, de 16 a 15; pode estar no futuro) e o complemento da D3 (registro recusa data anterior ao dia em que roda e data que nao seja dia 16; codigo trata corte no futuro); D1 e D4 a D14 como estao; a D9 muda a secao 5.5. |
+
 ---
 
 ## 5. Responsabilidade
