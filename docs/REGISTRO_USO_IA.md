@@ -557,7 +557,7 @@ Base da afirmação:
 | **Decisoes de implementacao** | Sete, a aprovar (desenho 9.6); destaques: estado por caso e Mapa PA opcional no banco simulado do `qa-security`; `solicitacoes_pendentes.php` sem ponta a ponta (503 do `OperationalService` no simulado); no roteiro, a consulta do passo 9 devolve so o ID interno, e o passo 9 so roda com os numeros da Q-F4 de 2026-10-13. |
 | **Validacao executada pela IA** | `qa-security` com 6 casos novos de ponta a ponta; mutacao **14/14** contra o `qa-security`; bateria PHP completa, 15 `qa:*` do frontend e lint. |
 | **Limitacoes declaradas** | O roteiro nao foi executado (sem MySQL nem servidor na estacao); os comandos seguem os do deploy 11 e as consultas da 014 ja rodaram no MySQL local do responsavel. `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: revisao do commit 6 e do F4 completo. |
+| **Validacao humana** | **Aprovado em 2026-10-13**, com as sete decisoes como estao, apos revisao do responsavel do commit 6 e do roteiro "Deploy que traz o F4" (conferencia de branch e `f4-commit`, ensaio com os arquivos da versao nova, Q-F4 antes, 014 e `merge` com `cat-file` e `pipefail`, `HEAD` conferido, passo da D5 so com o ID interno, rollback e verificacao com a mesma protecao). **F4 completo.** |
 
 ---
 
