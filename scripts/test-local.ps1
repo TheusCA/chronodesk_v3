@@ -122,6 +122,14 @@ if (!$phpExecutable) {
         Pass "QA do texto livre do Calendario concluido"
     }
 
+    # Sem banco: arquivamento de tecnicos (F4): migration 014 e, depois, o plano.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-archive.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do arquivamento falhou"
+    } else {
+        Pass "QA do arquivamento concluido"
+    }
+
     # Sem banco: motor de presenca, presence.php e presenca no status.php (F2).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-presence-engine.php")
     if ($LASTEXITCODE -ne 0) {
