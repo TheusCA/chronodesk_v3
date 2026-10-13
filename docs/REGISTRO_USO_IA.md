@@ -482,6 +482,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL local: as consultas nao mudaram, mas o comportamento so foi exercido com banco simulado e endpoints reais em processo filho. `gitleaks` ausente na estacao. Um branch vazio `feat/sec-07b-calendar-text` (no `7d4cb27`, sem commits) foi criado por engano e ficou: a remocao foi bloqueada pela politica da estacao; o responsavel apaga. |
 | **Validacao humana** | **Aprovado em 2026-10-09**, com as decisoes de implementacao como estao, apos teste no MySQL local com dados reais nas quatro tabelas: gestor, Lideranca e admin veem todos os textos; tecnico so os proprios, inclusive filtrando o `employee_id` de outro (evento aparece, texto vazio); tecnico sem colaborador na sessao nenhum; motivo fora da lista vira "Pausa"; somente leitura com colaborador so os proprios; "Pessoal" para todos; `oncall.php` sem `note`, `created_by` e `updated_by` para quem nao e gestao nem o proprio. **Observacao aceita:** pausas antigas com encoding quebrado (VULN-023) aparecem como "Pausa" para quem nao e gestao; falha fechada. |
 
+### Parte B, F4 — plano aprovado e commit 1 (migration 014) — 2026-10-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Arquivamento de tecnicos (RF-07, item c da secao 11): plano do F4 e migration 014 (desenho, secao 9.6). |
+| **Branch e commits** | `3fa5334` (plano na secao 9.6), `1abb37a` (commit 1: 014, rollback, verificacao, ensaio e `qa-archive`) e o commit deste registro (documentacao). Sem push. |
+| **Plano** | Entregue no chat em 2026-10-09 e perdido (ficou so no chat); reenviado em 2026-10-13 a partir do codigo de `bf07c3e` e aprovado no mesmo dia: D1 (arquivar pela regra do 5b; restaurar so admin), D2 opcao (a) (P11 sem codigo novo de autenticacao: a revalidacao do A1 por requisicao ja encerra a sessao CI de cadastro inativo; so teste de regressao), D5 (inativo antigo arquivado de novo recebe os efeitos e a data), **D8 com ajuste** (ausencia iniciada antes de hoje e em curso cortada em ontem; a que comeca hoje ou depois, inclusive parcial, cancelada; nenhum plano gera `ends_on < starts_on`, que o `ck_absence_range` recusaria; mesma regra no PA), demais como propostas. Gravado na secao 9.6 antes de qualquer codigo, com a Q-F4 para o servidor (so contagens, sem depender da 011 nem da 012). |
+| **O que a IA alterou** | `migrations/20261013_014_employee_archive.sql`, `migrations/rollback/20261013_014_employee_archive_down.sql`, `migrations/rollback/20261013_014_ensaio_linhas_f4.sql`, `migrations/verificacao/20261013_014_employee_archive_check.sql`, `scripts/qa-archive.php` (novo), `scripts/test-linux.sh`, `scripts/test-local.ps1`; desenho 9.6 (plano, entrega, cabecalho). |
+| **Decisoes de implementacao** | Seis, a aprovar (desenho 9.6): colunas no fim, sem `AFTER` (sem dependencia da 011); `CURDATE()` uma vez na verificacao, depois do `SET time_zone` (so leitura); copia do rollback minima e nunca pulada; `pa_periodo_invertido` na verificacao; ensaio (c) tambem regulariza um inativo antigo; comandos de ensaio em varias linhas. |
+| **Validacao executada pela IA** | `qa-archive` (103 verificacoes de estrutura); mutacao **27/27** nos arquivos SQL (o 28o mutante e equivalente de proposito); bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: nenhum dos quatro arquivos SQL foi executado; a sintaxe so foi conferida por leitura e pelo QA estrutural. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao e teste do responsavel no MySQL local antes do commit 2. |
+
 ---
 
 ## 5. Responsabilidade
