@@ -6,8 +6,12 @@ declare(strict_types=1);
 //
 // 1. Migration 014, rollback, verificacao e dados de ensaio (estrutura; o SQL
 //    so roda no servidor e no MySQL do responsavel: ensaio e teste).
-// As secoes do plano (funcao pura), do servico e dos endpoints entram nos
-// commits 2 e 3 do F4.
+// 2. Plano do arquivamento (EmployeeArchivePlanner, funcao pura): cadastro
+//    (D5), PA (D6), regras (planRemove do F1), excecoes (D7), ausencias (D8
+//    com o ajuste de 2026-10-13), pausa (P16, D9), virada 23:59/00:00 com o
+//    instante injetado, invariante de periodo valido em varredura, dado fora
+//    do formato e pureza.
+// O servico e os endpoints entram no commit 3 do F4.
 //
 // Uso: php scripts/qa-archive.php
 // ============================================================================
@@ -141,6 +145,308 @@ assert_same(0, preg_match('/\b(INSERT|DELETE|ALTER|DROP|CREATE|TRUNCATE|REPLACE)
 assert_same(0, preg_match('/\b(nome|ad_login)\b/i', $f4Rows), 'ensaio linhas F4: sem nome nem login');
 assert_same(true, $at($f4Rows, "JOIN (SELECT COUNT(*) AS n FROM funcionarios WHERE arquivado_por = 'qa.ensaio') AS ja ON ja.n = 0") > -1, 'ensaio linhas F4: idempotente');
 assert_same(true, $at($f4Rows, "f.arquivado_em = '2026-10-13 10:00:00'") > -1 && $at($f4Rows, "f.arquivado_por = 'qa.ensaio'") > -1 && $at($f4Rows, 'f.ativo = 0') > -1, 'ensaio linhas F4: arquiva com data e autor (respeita o CHECK)');
+
+// ----------------------------------------------------------------------------
+// 2. Plano do arquivamento (EmployeeArchivePlanner, funcao pura)
+// ----------------------------------------------------------------------------
+require_once $root . '/services/EmployeeArchivePlanner.php';
+
+const QA_EMPLOYEE = 10;
+
+function qa_now(string $local): DateTimeImmutable {
+    return new DateTimeImmutable($local, new DateTimeZone('America/Sao_Paulo'));
+}
+
+function qa_input(array $overrides = []): array {
+    return $overrides + [
+        'employee' => ['id' => QA_EMPLOYEE, 'ativo' => 1, 'arquivado_em' => null],
+        'rules' => [],
+        'exceptions' => [],
+        'absences' => [],
+        'pa_links' => [],
+        'pause' => null,
+    ];
+}
+
+function qa_pa(int $id, string $from, ?string $until, int $active = 1): array {
+    return ['id' => $id, 'employee_id' => QA_EMPLOYEE, 'valid_from' => $from, 'valid_until' => $until, 'active' => $active];
+}
+
+function qa_rule(int $id, string $from, ?string $until, string $type = 'fixed_weekdays'): array {
+    return ['id' => $id, 'employee_id' => QA_EMPLOYEE, 'rule_type' => $type, 'rule_config' => null, 'effective_from' => $from, 'effective_until' => $until];
+}
+
+function qa_exception(int $id, string $date, string $type = 'remote'): array {
+    return ['id' => $id, 'employee_id' => QA_EMPLOYEE, 'exception_date' => $date, 'exception_type' => $type];
+}
+
+function qa_absence(int $id, string $from, string $to, string $period = 'full_day', string $status = 'approved'): array {
+    return ['id' => $id, 'employee_id' => QA_EMPLOYEE, 'starts_on' => $from, 'ends_on' => $to, 'period_type' => $period, 'status' => $status];
+}
+
+/** Nome da excecao lancada (ou 'ok') e a mensagem. */
+function qa_plan_outcome(array $input, DateTimeImmutable $now): array {
+    try {
+        EmployeeArchivePlanner::plan($input, $now);
+        return ['ok', ''];
+    } catch (Throwable $error) {
+        return [get_class($error), $error->getMessage()];
+    }
+}
+
+function qa_ids(array $items): array {
+    return array_map(static fn (array $item): int => (int)$item['id'], $items);
+}
+
+/** Invariante sobre um plano produzido a partir de $input. */
+function qa_assert_valid_periods(array $plan, array $input, string $label): void {
+    $index = static function (array $rows): array {
+        $indexed = [];
+        foreach ($rows as $row) {
+            $indexed[(int)$row['id']] = $row;
+        }
+        return $indexed;
+    };
+    assert_same([], EmployeeArchivePlanner::invertedPeriods($plan, $index($input['pa_links']), $index($input['rules']), $index($input['absences'])), "{$label}: nenhum periodo invertido");
+}
+
+$now = qa_now('2026-10-13 10:00:00');
+
+// Cadastro (D5): ativo arquiva; inativo antigo (data nula) regulariza; arquivado pelo F4 da 409.
+$plan = EmployeeArchivePlanner::plan(qa_input(), $now);
+assert_same(['id' => QA_EMPLOYEE, 'regularizacao' => false, 'arquivado_em' => '2026-10-13 10:00:00'], $plan['employee'], 'cadastro ativo: arquiva com a data de agora');
+assert_same('2026-10-13', $plan['today'], 'hoje vem de $now');
+foreach ([null, ''] as $empty) {
+    $plan = EmployeeArchivePlanner::plan(qa_input(['employee' => ['id' => QA_EMPLOYEE, 'ativo' => 0, 'arquivado_em' => $empty], 'pa_links' => [qa_pa(1, '2026-10-01', null)]]), $now);
+    assert_same(true, $plan['employee']['regularizacao'], 'inativo antigo (data ' . var_export($empty, true) . '): regularizacao');
+    assert_same(1, $plan['efeitos']['pa_encerrados'], 'inativo antigo: os efeitos valem (D5)');
+}
+assert_same(
+    [DomainException::class, 'Este cadastro já foi arquivado em 01/10/2026. Restaure-o antes de arquivar de novo.'],
+    qa_plan_outcome(qa_input(['employee' => ['id' => QA_EMPLOYEE, 'ativo' => 0, 'arquivado_em' => '2026-10-01 09:00:00']]), $now),
+    'arquivado pelo F4: DomainException (409) com a data'
+);
+assert_same(DomainException::class, qa_plan_outcome(qa_input(['employee' => ['id' => QA_EMPLOYEE, 'ativo' => '0', 'arquivado_em' => '2026-10-01 09:00:00']]), $now)[0], 'arquivado pelo F4 com ativo em texto: 409');
+assert_same(false, EmployeeArchivePlanner::plan(qa_input(['employee' => ['id' => QA_EMPLOYEE, 'ativo' => true, 'arquivado_em' => null]]), $now)['employee']['regularizacao'], 'ativo booleano: arquivamento normal');
+
+// PA (D6).
+$input = qa_input(['pa_links' => [
+    qa_pa(1, '2026-10-01', null),          // aberto desde antes: fecha ontem
+    qa_pa(2, '2026-10-12', null),          // comecou ontem: fecha ontem (fim = inicio)
+    qa_pa(3, '2026-10-13', null),          // comeca hoje: sai
+    qa_pa(4, '2026-10-20', null),          // futuro: sai
+    qa_pa(5, '2026-10-01', '2026-10-12'),  // encerrado ontem: nada
+    qa_pa(6, '2026-10-01', '2026-10-13'),  // termina hoje: fecha ontem
+    qa_pa(7, '2026-10-01', null, 0),       // inativo: nada
+    qa_pa(8, '2026-10-13', '2026-10-13'),  // so hoje: sai
+    qa_pa(9, '2026-10-20', '2026-10-25'),  // futuro com fim: sai
+]]);
+$plan = EmployeeArchivePlanner::plan($input, $now);
+assert_same([
+    ['id' => 1, 'valid_until' => '2026-10-12', 'previous_until' => null],
+    ['id' => 2, 'valid_until' => '2026-10-12', 'previous_until' => null],
+    ['id' => 6, 'valid_until' => '2026-10-12', 'previous_until' => '2026-10-13'],
+], $plan['pa']['close'], 'PA: iniciado antes de hoje fecha ontem');
+assert_same([3, 4, 8, 9], qa_ids($plan['pa']['remove']), 'PA: de hoje ou futuro sai (active = 0)');
+assert_same([3, 4], [$plan['efeitos']['pa_encerrados'], $plan['efeitos']['pa_removidos']], 'PA: contagens');
+qa_assert_valid_periods($plan, $input, 'PA');
+
+// Regras (planRemove do F1).
+$input = qa_input(['rules' => [
+    qa_rule(1, '2026-01-01', '2026-08-31'),  // encerrada: nada
+    qa_rule(2, '2026-09-01', '2026-10-19'),  // vigente: fecha ontem
+    qa_rule(3, '2026-10-20', null),          // futura: apagada
+    qa_rule(4, '2026-11-05', '2026-11-04'),  // vazia (removida antes de comecar): nada
+]]);
+$plan = EmployeeArchivePlanner::plan($input, $now);
+assert_same(['id' => 2, 'effective_until' => '2026-10-12', 'previous_until' => '2026-10-19'], $plan['rules']['close'], 'regra vigente fecha ontem');
+assert_same([3], qa_ids($plan['rules']['delete']), 'regra futura apagada; vazia e encerrada ficam');
+assert_same([1, 1], [$plan['efeitos']['regras_encerradas'], $plan['efeitos']['regras_removidas']], 'regras: contagens');
+$plan = EmployeeArchivePlanner::plan(qa_input(['rules' => [qa_rule(5, '2026-10-13', null)]]), $now);
+assert_same([null, [5]], [$plan['rules']['close'], qa_ids($plan['rules']['delete'])], 'regra que comeca hoje: apagada, nunca fechada em ontem');
+qa_assert_valid_periods($plan, qa_input(['rules' => [qa_rule(5, '2026-10-13', null)]]), 'regra de hoje');
+
+// Excecoes (D7): de hoje em diante saem, sem a note.
+$plan = EmployeeArchivePlanner::plan(qa_input(['exceptions' => [
+    qa_exception(1, '2026-10-12'), qa_exception(2, '2026-10-13', 'training'), qa_exception(3, '2026-10-14', 'oncall'),
+]]), $now);
+assert_same([
+    ['id' => 2, 'exception_date' => '2026-10-13', 'exception_type' => 'training'],
+    ['id' => 3, 'exception_date' => '2026-10-14', 'exception_type' => 'oncall'],
+], $plan['exceptions']['delete'], 'excecoes de hoje em diante saem, com tipo e data');
+assert_same(2, $plan['efeitos']['excecoes_removidas'], 'excecoes: contagem');
+
+// Ausencias (D8 com o ajuste de 2026-10-13).
+$input = qa_input(['absences' => [
+    qa_absence(1, '2026-10-13', '2026-10-13'),                 // dia inteiro que comeca hoje: cancelada
+    qa_absence(2, '2026-10-13', '2026-10-13', 'from_time'),    // parcial de hoje: cancelada
+    qa_absence(3, '2026-10-13', '2026-10-13', 'interval'),     // parcial de hoje: cancelada
+    qa_absence(4, '2026-10-13', '2026-10-17'),                 // varios dias comecando hoje: cancelada
+    qa_absence(5, '2026-10-10', '2026-10-15'),                 // em curso, iniciada antes: corta em ontem
+    qa_absence(6, '2026-10-10', '2026-10-13'),                 // iniciada antes, termina hoje: corta em ontem
+    qa_absence(7, '2026-10-12', '2026-10-12'),                 // terminou ontem: nada
+    qa_absence(8, '2026-10-14', '2026-10-14', 'full_day', 'cancelled'), // ja cancelada: nada
+    qa_absence(9, '2026-10-14', '2026-10-14', 'from_time'),    // parcial futura: cancelada
+    qa_absence(10, '2026-10-12', '2026-10-20'),                // comecou ontem: corta em ontem (fim = inicio)
+    qa_absence(11, '2026-10-20', '2026-10-24'),                // futura: cancelada
+    qa_absence(12, '2026-10-12', '2026-10-12', 'interval'),    // parcial de ontem: nada
+]]);
+$plan = EmployeeArchivePlanner::plan($input, $now);
+assert_same([1, 2, 3, 4, 9, 11], qa_ids($plan['absences']['cancel']), 'ausencias que comecam hoje ou depois (inclusive parciais e de varios dias) sao canceladas');
+assert_same([
+    ['id' => 5, 'ends_on' => '2026-10-12', 'previous_ends_on' => '2026-10-15'],
+    ['id' => 6, 'ends_on' => '2026-10-12', 'previous_ends_on' => '2026-10-13'],
+    ['id' => 10, 'ends_on' => '2026-10-12', 'previous_ends_on' => '2026-10-20'],
+], $plan['absences']['cut'], 'ausencias iniciadas antes de hoje e em curso cortadas em ontem');
+assert_same([6, 3], [$plan['efeitos']['ausencias_canceladas'], $plan['efeitos']['ausencias_cortadas']], 'ausencias: contagens');
+qa_assert_valid_periods($plan, $input, 'ausencias');
+
+// Pausa (P16, D9).
+$pause = static fn (array $entry): array => EmployeeArchivePlanner::plan(qa_input(['pause' => $entry]), $now)['pause'];
+assert_same([
+    'action' => 'finalize', 'inicio' => '2026-10-13 09:45:00', 'fim' => '2026-10-13 10:00:00',
+    'duracao_segundos' => 900, 'motivo_pausa' => 'Café',
+], $pause(['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:45:00-03:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado']), 'pausa aprovada: finalizada agora, com a duracao');
+$plan = EmployeeArchivePlanner::plan(qa_input(['pause' => ['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:45:00-03:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado']]), $now);
+assert_same([true, false], [$plan['efeitos']['pausa_finalizada'], $plan['efeitos']['solicitacao_descartada']], 'pausa aprovada: efeitos');
+assert_same(['action' => 'discard_request'], $pause(['em_pausa' => false, 'inicio_pausa' => null, 'motivo_pausa' => 'Reunião', 'status_aprovacao' => 'pendente']), 'solicitacao pendente: descartada');
+$plan = EmployeeArchivePlanner::plan(qa_input(['pause' => ['em_pausa' => false, 'status_aprovacao' => 'pendente']]), $now);
+assert_same([false, true], [$plan['efeitos']['pausa_finalizada'], $plan['efeitos']['solicitacao_descartada']], 'solicitacao pendente: efeitos');
+assert_same(['action' => 'none'], $pause(['em_pausa' => false, 'inicio_pausa' => null, 'motivo_pausa' => null, 'status_aprovacao' => null]), 'sem pausa: nada');
+assert_same(['action' => 'none'], EmployeeArchivePlanner::plan(qa_input(), $now)['pause'], 'sem entrada no estado: nada');
+foreach ([
+    'aprovacao pendente com em_pausa' => ['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:45:00-03:00', 'status_aprovacao' => 'pendente'],
+    'inicio relativo' => ['em_pausa' => true, 'inicio_pausa' => 'now', 'status_aprovacao' => 'aprovado'],
+    'inicio sem fuso' => ['em_pausa' => true, 'inicio_pausa' => '2026-10-13 09:45:00', 'status_aprovacao' => 'aprovado'],
+    'inicio ausente' => ['em_pausa' => true, 'status_aprovacao' => 'aprovado'],
+    'hora que transborda' => ['em_pausa' => true, 'inicio_pausa' => '2026-10-13T24:30:00-03:00', 'status_aprovacao' => 'aprovado'],
+    'em_pausa em texto' => ['em_pausa' => 'true', 'inicio_pausa' => '2026-10-13T09:45:00-03:00', 'status_aprovacao' => 'aprovado'],
+] as $label => $entry) {
+    $expected = $label === 'em_pausa em texto' ? ['action' => 'none'] : ['action' => 'clear_invalid'];
+    assert_same($expected, $pause($entry), "pausa ilegivel ({$label}): sem historico");
+}
+assert_same(0, $pause(['em_pausa' => true, 'inicio_pausa' => '2026-10-13T10:05:00-03:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado'])['duracao_segundos'], 'pausa com inicio depois de agora: duracao 0');
+$otherZone = $pause(['em_pausa' => true, 'inicio_pausa' => '2026-10-13T10:45:00+00:00', 'motivo_pausa' => 'Café', 'status_aprovacao' => 'aprovado']);
+assert_same(['2026-10-13 07:45:00', 8100], [$otherZone['inicio'], $otherZone['duracao_segundos']], 'pausa com inicio em outro fuso: inicio no fuso de agora e duracao pelo instante');
+
+// Virada 23:59:59 / 00:00:00 com o instante injetado.
+$turn = qa_input([
+    'pa_links' => [qa_pa(1, '2026-10-13', null), qa_pa(2, '2026-10-14', null)],
+    'rules' => [qa_rule(1, '2026-10-13', null)],
+    'exceptions' => [qa_exception(1, '2026-10-13'), qa_exception(2, '2026-10-14')],
+    'absences' => [qa_absence(1, '2026-10-13', '2026-10-13', 'from_time'), qa_absence(2, '2026-10-12', '2026-10-14'), qa_absence(3, '2026-10-14', '2026-10-14')],
+]);
+$before = EmployeeArchivePlanner::plan($turn, qa_now('2026-10-13 23:59:59'));
+$after = EmployeeArchivePlanner::plan($turn, qa_now('2026-10-14 00:00:00'));
+assert_same(['2026-10-13', '2026-10-14'], [$before['today'], $after['today']], 'virada: hoje muda a meia-noite');
+assert_same(['2026-10-13 23:59:59', '2026-10-14 00:00:00'], [$before['employee']['arquivado_em'], $after['employee']['arquivado_em']], 'virada: arquivado_em e o instante');
+assert_same([[], [1, 2]], [qa_ids($before['pa']['close']), qa_ids($before['pa']['remove'])], 'virada 23:59: PA de hoje e de amanha saem');
+assert_same([[['id' => 1, 'valid_until' => '2026-10-13', 'previous_until' => null]], [2]], [$after['pa']['close'], qa_ids($after['pa']['remove'])], 'virada 00:00: PA de ontem fecha ontem; o de hoje sai');
+assert_same([null, [1]], [$before['rules']['close'], qa_ids($before['rules']['delete'])], 'virada 23:59: regra de hoje apagada');
+assert_same([['id' => 1, 'effective_until' => '2026-10-13', 'previous_until' => null], []], [$after['rules']['close'], $after['rules']['delete']], 'virada 00:00: a mesma regra fecha ontem');
+assert_same([[1, 2], [2]], [qa_ids($before['exceptions']['delete']), qa_ids($after['exceptions']['delete'])], 'virada: excecao de ontem fica');
+assert_same([[1, 3], [['id' => 2, 'ends_on' => '2026-10-12', 'previous_ends_on' => '2026-10-14']]], [qa_ids($before['absences']['cancel']), $before['absences']['cut']], 'virada 23:59: parcial de hoje cancelada; em curso corta em 12');
+assert_same([[3], [['id' => 2, 'ends_on' => '2026-10-13', 'previous_ends_on' => '2026-10-14']]], [qa_ids($after['absences']['cancel']), $after['absences']['cut']], 'virada 00:00: parcial de ontem fica; em curso corta em 13; a de hoje cancelada');
+qa_assert_valid_periods($before, $turn, 'virada 23:59');
+qa_assert_valid_periods($after, $turn, 'virada 00:00');
+
+// Invariante em varredura: inicio e fim de -3 a +3 dias de hoje (fim aberto
+// tambem), PA, regra e ausencia; nenhum plano grava periodo invertido.
+$base = '2026-10-13';
+$sweep = 0;
+for ($from = -3; $from <= 3; $from++) {
+    foreach (array_merge(range($from, 3), [null]) as $until) {
+        $fromDate = ScheduleRulePlanner::addDays($base, $from);
+        $untilDate = $until === null ? null : ScheduleRulePlanner::addDays($base, $until);
+        $input = qa_input([
+            'pa_links' => [qa_pa(1, $fromDate, $untilDate)],
+            'rules' => [qa_rule(1, $fromDate, $untilDate)],
+            'absences' => $untilDate === null ? [] : [qa_absence(1, $fromDate, $untilDate)],
+        ]);
+        foreach (['2026-10-13 00:00:00', '2026-10-13 12:00:00', '2026-10-13 23:59:59'] as $instant) {
+            $plan = EmployeeArchivePlanner::plan($input, qa_now($instant));
+            qa_assert_valid_periods($plan, $input, "varredura {$from}/" . var_export($until, true) . " {$instant}");
+            foreach ($plan['pa']['close'] as $close) {
+                assert_same(true, $close['valid_until'] < $base && $fromDate < $base, 'varredura: PA so fecha se comecou antes de hoje, e fecha antes de hoje');
+            }
+            foreach ($plan['absences']['cut'] as $cut) {
+                assert_same(true, $cut['ends_on'] === '2026-10-12' && $fromDate < $base, 'varredura: ausencia so e cortada se comecou antes de hoje');
+            }
+            $sweep++;
+        }
+    }
+}
+// Ausencias parciais (um dia) de -3 a +3: canceladas a partir de hoje, nunca cortadas.
+for ($day = -3; $day <= 3; $day++) {
+    $date = ScheduleRulePlanner::addDays($base, $day);
+    $plan = EmployeeArchivePlanner::plan(qa_input(['absences' => [qa_absence(1, $date, $date, 'from_time'), qa_absence(2, $date, $date, 'interval')]]), $now);
+    assert_same([$day >= 0 ? [1, 2] : [], []], [qa_ids($plan['absences']['cancel']), $plan['absences']['cut']], "parciais em {$date}: canceladas a partir de hoje, nunca cortadas");
+    $sweep++;
+}
+assert_same(true, $sweep >= 100, "varredura com {$sweep} planos");
+
+// A invariante reprova plano forjado (o que a checagem final do plan() faz).
+$forged = ['pa' => ['close' => [['id' => 1, 'valid_until' => '2026-10-12']], 'remove' => []], 'rules' => ['close' => ['id' => 1, 'effective_until' => '2026-10-12']], 'absences' => ['cut' => [['id' => 1, 'ends_on' => '2026-10-12']], 'cancel' => []]];
+assert_same(3, count(EmployeeArchivePlanner::invertedPeriods($forged, [1 => ['valid_from' => '2026-10-13']], [1 => ['effective_from' => '2026-10-13']], [1 => ['starts_on' => '2026-10-13']])), 'invariante acusa PA, regra e ausencia invertidas');
+assert_same([], EmployeeArchivePlanner::invertedPeriods($forged, [1 => ['valid_from' => '2026-10-12']], [1 => ['effective_from' => '2026-10-12']], [1 => ['starts_on' => '2026-10-12']]), 'invariante aceita fim igual ao inicio');
+assert_same(3, count(EmployeeArchivePlanner::invertedPeriods($forged, [], [], [])), 'invariante acusa linha do plano sem a linha de origem');
+
+// Contagens com tudo junto.
+$plan = EmployeeArchivePlanner::plan(qa_input([
+    'pa_links' => [qa_pa(1, '2026-10-01', null), qa_pa(2, '2026-10-20', null)],
+    'rules' => [qa_rule(1, '2026-09-01', null), qa_rule(2, '2026-11-01', null)],
+    'exceptions' => [qa_exception(1, '2026-10-14')],
+    'absences' => [qa_absence(1, '2026-10-10', '2026-10-15'), qa_absence(2, '2026-10-20', '2026-10-21')],
+    'pause' => ['em_pausa' => true, 'inicio_pausa' => '2026-10-13T09:50:00-03:00', 'motivo_pausa' => 'Pessoal', 'status_aprovacao' => 'aprovado'],
+]), $now);
+assert_same([
+    'pa_encerrados' => 1, 'pa_removidos' => 1, 'regras_encerradas' => 1, 'regras_removidas' => 1,
+    'excecoes_removidas' => 1, 'ausencias_canceladas' => 1, 'ausencias_cortadas' => 1,
+    'pausa_finalizada' => true, 'solicitacao_descartada' => false,
+], $plan['efeitos'], 'efeitos: uma contagem por efeito');
+$plan = EmployeeArchivePlanner::plan(qa_input(), $now);
+assert_same([0, 0, 0, 0, 0, 0, 0, false, false], array_values($plan['efeitos']), 'sem nada a fazer: efeitos zerados (o cadastro ainda e arquivado)');
+
+// Dado fora do formato: UnexpectedValueException antes de qualquer gravacao (nunca 400 nem 409).
+foreach ([
+    'cadastro ausente' => qa_input(['employee' => null]),
+    'id do cadastro zero' => qa_input(['employee' => ['id' => 0, 'ativo' => 1]]),
+    'id em texto com zero a esquerda' => qa_input(['employee' => ['id' => '010', 'ativo' => 1]]),
+    'data inexistente' => qa_input(['absences' => [qa_absence(1, '2026-02-30', '2026-03-01')]]),
+    'data com hora' => qa_input(['pa_links' => [qa_pa(1, '2026-10-01 00:00:00', null)]]),
+    'linha de outro colaborador' => qa_input(['exceptions' => [['id' => 1, 'employee_id' => 11, 'exception_date' => '2026-10-14', 'exception_type' => 'remote']]]),
+    'linha sem colaborador' => qa_input(['pa_links' => [['id' => 1, 'valid_from' => '2026-10-01', 'valid_until' => null, 'active' => 1]]]),
+    'linha sem id' => qa_input(['absences' => [['employee_id' => QA_EMPLOYEE, 'starts_on' => '2026-10-14', 'ends_on' => '2026-10-14', 'status' => 'approved']]]),
+    'linhas como mapa' => qa_input(['rules' => ['a' => qa_rule(1, '2026-09-01', null)]]),
+    'regra sem fim de vigencia' => qa_input(['rules' => [['id' => 1, 'employee_id' => QA_EMPLOYEE, 'rule_type' => 'fixed_weekdays', 'rule_config' => null, 'effective_from' => '2026-09-01']]]),
+    'linha que nao e lista' => qa_input(['absences' => ['texto']]),
+    'linha repetida' => qa_input(['pa_links' => [qa_pa(1, '2026-10-01', null), qa_pa(1, '2026-10-20', null)]]),
+] as $label => $input) {
+    assert_same(UnexpectedValueException::class, qa_plan_outcome($input, $now)[0], "dado fora do formato ({$label})");
+}
+assert_same('ok', qa_plan_outcome(qa_input(['employee' => ['id' => '10', 'ativo' => '1', 'arquivado_em' => null]]), $now)[0], 'id e ativo em texto, como vem do PDO');
+
+// Funcao pura: sem banco, arquivo, relogio nem entrada externa.
+$plannerSource = (string)preg_replace('#/\*.*?\*/|//[^\n]*#s', '', (string)file_get_contents($root . '/services/EmployeeArchivePlanner.php'));
+// Chamada de funcao global (nao metodo self::/->, nem a declaracao "function date(").
+$impure = '/\b(PDO|carregar_estado|ler_estado_pausas|get_db_connection)\b'
+    . '|(?<!function )(?<![:>\w$])(time|microtime|strtotime|mt_rand|random_int|hrtime|sleep|date|fopen|file_get_contents|file_put_contents|getenv)\s*\('
+    . '|\$_(GET|POST|SERVER|SESSION|COOKIE|ENV)\b|new DateTime(Immutable)?\s*\(/';
+assert_same(0, preg_match($impure, $plannerSource, $impureFound), 'planejador nao le banco, arquivo, relogio nem entrada externa' . ($impureFound ? ': ' . $impureFound[0] : ''));
+foreach (['time()', "date('Y')", "new DateTimeImmutable('now')", "getenv('X')", "\$_SERVER['x']", 'get_db_connection()', 'x = strtotime ($a)'] as $probe) {
+    assert_same(1, preg_match($impure, $probe), "a checagem de pureza pega {$probe}");
+}
+foreach (['self::date($v)', 'private static function date(mixed $value', '$now->format(\'Y\')'] as $probe) {
+    assert_same(0, preg_match($impure, $probe), "a checagem de pureza aceita {$probe}");
+}
+preg_match_all('/createFromFormat\(([^,]+),/', $plannerSource, $formats);
+assert_same(true, count($formats[1]) >= 3, 'planejador le datas so por formato explicito');
+foreach ($formats[1] as $format) {
+    assert_same(true, in_array(trim($format), ["'!Y-m-d'", "'!Y-m-d H:i:s'", 'DATE_ATOM'], true), "createFromFormat({$format}) sem preencher campo com o relogio");
+}
+assert_same(true, strpos($plannerSource, 'ScheduleRulePlanner::planRemove($rules, $today)') !== false, 'regras pelo planRemove do F1, sem regra duplicada');
+$invariantAt = strpos($plannerSource, 'self::assertValidPeriods($plan,');
+assert_same(true, $invariantAt !== false && $invariantAt < (int)strpos($plannerSource, 'return $plan;'), 'invariante conferida antes de devolver o plano');
 
 // Runners.
 foreach (['scripts/test-linux.sh', 'scripts/test-local.ps1'] as $runner) {
