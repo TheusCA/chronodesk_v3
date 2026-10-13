@@ -533,6 +533,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: o filtro `EXISTS` so rodou contra o banco simulado. Ponta a ponta pelos endpoints no commit 6. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-13**, com as sete decisoes como estao: teste do responsavel no MySQL local com a 014 (um ativo e um inativo com PA aberto desde 01/09): Mapa PA de 12/10 com os dois, 13/10 e 14/10 so com o ativo (o `EXISTS` funciona no MySQL real); `obter_status` com o ativo e sem o inativo. Pedido na aprovacao (decisao 8): a conferencia de conflito do `save()` do Mapa PA passa a ignorar vinculo de inativo de hoje em diante (o responsavel reproduziu o 409 com o nome do arquivado num PA que a tela mostrava livre). Entregue em `d15f132`: mesmo `EXISTS ... ativo = 1` pela data de inicio do vinculo novo; passado conferido contra todos; `qa-archive` 571 verificacoes; mutacao 6/6 no ramo novo. |
 
+### Parte B, F4 — commit 5 (tela de Funcionarios: arquivar e restaurar) — 2026-10-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Trocar o "Desativar" da aba Funcionarios por Arquivar e Restaurar confirmados na linha, com filtro Ativos/Arquivados e sem o campo "Funcionario ativo" (desenho, secao 9.6). |
+| **Branch e commits** | `47f4412` (codigo e testes) e o commit deste registro (documentacao). Sem push. |
+| **Pedidos do responsavel atendidos** | Confirmacao na linha, sem `window.confirm`; filtro Ativos/Arquivados; sem o checkbox; Arquivar tambem para o inativo antigo sem data; prints de admin, Lideranca e gestor em desktop e celular. |
+| **O que a IA alterou** | `frontend/src/pages/AdminPage.jsx`, `frontend/src/lib/employeeArchive.ts` (novo), `frontend/src/lib/formSchemas.ts`, `frontend/src/lib/actionFeedback.ts`, `api/listar_funcionarios.php` (`arquivado_em`, so a data), `frontend/scripts/qa-employee-form.mjs`, `frontend/scripts/qa-action-feedback.mjs`, `scripts/qa-security.php`, `scripts/qa-archive.php`; desenho 9.6. |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.6); destaques: `arquivado_em` na listagem so para quem gerencia funcionarios, sem o autor; botoes escondidos pelas regras do servidor (5b, L9, D3, restaurar so admin), que confere de novo; painel em linha propria, preso a esquerda no celular; QAs estruturais atualizados de proposito, sem afrouxar checagem. |
+| **Validacao executada pela IA** | `qa:employee-form` (comportamento e estrutura), `qa-security` (listagem por perfil), `qa-archive` (573 verificacoes); mutacao **18/18** na logica nova da tela (tres sobreviventes na 1a rodada, por teste fraco, mortos depois de reforcar os testes); bateria PHP completa, 15 `qa:*` do frontend, lint e build; 16 prints com servidor simulado e dados ficticios. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: a tela so rodou contra o servidor simulado; o caminho "inativo com data" da listagem so tem checagem estrutural (o processo filho do `qa-security` carrega os cadastros padrao, todos ativos). O `npm run build` padrao, rodado no fim da validacao, regravou o `app/` local (nao versionado) com este codigo. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao antes do commit 6. |
+
 ---
 
 ## 5. Responsabilidade
