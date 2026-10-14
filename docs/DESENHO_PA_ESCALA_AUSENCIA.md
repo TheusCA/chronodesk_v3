@@ -1645,7 +1645,7 @@ Ausência que cruza o corte: o evento `absence` antigo vai até a véspera do co
 | D13 | "Ocultar sem escala" (pendência 8a) | Filtro só da tela, desligado por padrão, sem mudar o contrato do `schedules.php` |
 | D14 | Registro do corte no deploy | No dia do deploy, depois da recarga do PHP-FPM, com a data da D2; antes dele o código novo funciona no cálculo antigo (tabela vazia), então não há janela |
 
-**Commit 1 entregue (2026-10-13, `03359b5`; aguardando o teste do responsável no MySQL local antes do commit 2):** migration 019, registro do corte, rollback, verificação e ensaio.
+**Commit 1 entregue (2026-10-13, `03359b5`; aprovado em 2026-10-14, ver abaixo):** migration 019, registro do corte, rollback, verificação e ensaio.
 
 | Arquivo | Como ficou |
 |---|---|
@@ -1669,6 +1669,21 @@ Ausência que cruza o corte: o evento `absence` antigo vai até a véspera do co
 **Como testar no MySQL local (sugestão):** num banco de teste com `funcionarios` e `audit_log`: (1) a 019 duas vezes e a verificação (`tabela_019 = 1`, `checks_019 = 2`, `cortes = 0`); (2) o registro com `SET @corte := '<próximo dia 16>'; SET @autor := 'qa.teste';` na frente (`cortes = 1`, `corte_no_futuro = 1`, `eventos_registro = 1`); (3) o registro de novo (para: corte já registrado); (4) num banco sem corte, as recusas: sem as variáveis, `'2020-01-16'` (data passada), `'2026-11-15'` (dia 15), `'2026-13-16'` (mês 13), `'16/11/2026'` (formato), e sem a 019; depois de cada recusa, `cortes = 0` e `procedimentos_soltos = 1`; (5) `INSERT` direto com dia 15 ou `id = 2`: recusado pelos `CHECK` (3819); (6) o rollback (`copia_rollback = 1`, `tabela_019 = 0`, `eventos_remocao = 1`) e o 2º rollback (para). Ensaio no servidor nas três variantes pelos cabeçalhos.
 
 **Validação pela IA:** `qa-presence-cutoff` com 131 verificações; **mutação 24/24** no SQL (na 1ª rodada sobreviveram dois mutantes, por teste fraco: a falta do `DROP PROCEDURE IF EXISTS` e o autor exibido por `MAX(registered_by)` na verificação; os testes foram reforçados); bateria PHP completa, 15 `qa:*` do frontend e lint. **Sem MySQL na estação:** a 019, o registro, o rollback e a verificação não foram executados.
+
+**Commit 1 aprovado em 2026-10-14**, com as oito decisões como estão, após teste do responsável no MySQL local, num banco de teste:
+
+| Caso | Resultado |
+|---|---|
+| Registro antes da 019 | Parou ("aplique a migration 019 antes") |
+| 019 duas vezes | Mesmo estado (`tabela_019 = 1`, `checks_019 = 2`) |
+| Recusas | Sem `@corte`, autor em branco, `2020-01-16`, `2026-11-15`, `2026-13-16`, `16/11/2026`: nada gravado |
+| Data futura | Aceita: `cortes = 1`, `corte_no_futuro = 1`, `PRESENCE_CUTOFF_REGISTERED` no `audit_log` |
+| 2º registro | Parou ("corte já registrado") |
+| `INSERT` direto com `id = 2` ou dia 15 | Recusado pelos `CHECK` (3819) |
+| Três registros simultâneos | Um gravou e os outros falharam; nunca dois cortes |
+| Rollback | Cópia, `PRESENCE_CUTOFF_REMOVED` e tabela fora; o 2º rollback parou |
+
+**Ajuste pedido antes do commit 2:** a imutabilidade (D3) dependia só do script de registro: `DELETE` seguido de `INSERT` direto funcionava no banco e só foi barrado porque o dia não era 16. A 019 ganha dois gatilhos em `portal_presence_cutoff`, `BEFORE UPDATE` e `BEFORE DELETE`, que sempre param com `SIGNAL 45000` ("corte imutável: use o rollback da 019"), criados de forma condicional para a 019 continuar idempotente. O rollback continua com `DROP TABLE` (não passa pelos gatilhos). A verificação passa a contar os gatilhos (esperado 2). Testes no `qa-presence-cutoff`: gatilhos presentes, idempotência, rollback sem depender deles; mutação.
 
 ---
 
