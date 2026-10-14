@@ -30,6 +30,11 @@ declare(strict_types=1);
 // Secao 2: os consumidores do ciclo fora da tela Escala (Relatorio, CSV,
 // Calendario e Mapa PA), que antes do F2B davam 400 com uma regra cycle.
 //
+// Secao 3 (F5, commit 2): data de corte do motor. Sem a 019, com a tabela
+// vazia e com o corte depois de cada periodo (inclusive no futuro), as saidas
+// continuam identicas; com o corte no meio do relatorio do ano, a parte antiga
+// e igual linha a linha (JSON e CSV) e o resto vem do motor.
+//
 // Uso: php scripts/qa-schedule-legacy-output.php [--gravar-referencia | --despejar DIR]
 // ============================================================================
 
@@ -77,6 +82,9 @@ final class QaLegacyPdo extends PDO {
     public array $absences = [];
     /** [F2B] Vinculos de PA (secao 2 deste QA: Mapa PA com ciclo). */
     public array $paAssignments = [];
+    /** [F5] portal_presence_cutoff (secao 3): sem a tabela por padrao (019 nao aplicada). */
+    public bool $cutoffTable = false;
+    public ?string $cutoff = null;
     public int $nextId = 1000;
     private bool $transaction = false;
 
@@ -130,15 +138,23 @@ final class QaLegacyStatement extends PDOStatement {
                 return true;
             }
         }
+        // [F5, D7] Cadastro visivel: so ativo; com a clausula do motor, tambem o arquivado (com data).
+        $archivedClause = static fn (string $alias): string => "({$alias}ativo = 1 OR {$alias}arquivado_em IS NOT NULL)";
+        $visible = static fn (array $employee, bool $withArchived): bool => (int)$employee['ativo'] === 1
+            || ($withArchived && ($employee['arquivado_em'] ?? null) !== null);
         // Regras com cadastro (scheduleRules), na forma exata do servico.
         if (strpos($sql, 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type, r.rule_config,') === 0) {
             if (isset($params[':period_from']) && strpos($sql, 'AND (r.effective_until IS NULL OR (r.effective_until >= :period_from AND r.effective_until >= r.effective_from))') === false) {
                 throw new PDOException('SQLSTATE[HY000]: banco simulado: filtro de periodo nao previsto');
             }
+            $withArchived = strpos($sql, 'JOIN funcionarios f ON f.id = r.employee_id AND ' . $archivedClause('f.')) !== false;
+            if (!$withArchived && strpos($sql, 'JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 1') === false) {
+                throw new PDOException('SQLSTATE[HY000]: banco simulado: filtro de cadastro nao previsto');
+            }
             foreach ($db->rules as $rule) {
                 $employee = $db->employees[$rule['employee_id']];
                 $team = strtolower($employee['equipe']);
-                if ((int)$employee['ativo'] !== 1 || !in_array($team, ['n1', 'n2'], true)
+                if (!$visible($employee, $withArchived) || !in_array($team, ['n1', 'n2'], true)
                     || (strpos($sql, 'f.fora_mapa_escala = 0') !== false && (int)$employee['fora_mapa_escala'] === 1)
                     || (isset($params[':team']) && $team !== $params[':team'])
                     || (isset($params[':employee_id']) && $rule['employee_id'] !== $params[':employee_id'])
@@ -172,11 +188,13 @@ final class QaLegacyStatement extends PDOStatement {
         }
         // Ausencias aprovadas que tiram o dia da escala (cadastro ativo).
         // Desde o F3 (commit 4) a consulta traz o periodo; a massa e toda de dia inteiro.
-        if (strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1') === 0
+        $absencesWithArchived = strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND ' . $archivedClause('f.')) === 0;
+        if ($absencesWithArchived
+            || strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1') === 0
             || strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1') === 0) {
             foreach ($db->absences as $row) {
                 $employee = $db->employees[$row['employee_id']];
-                if ((int)$employee['ativo'] !== 1 || $row['status'] !== 'approved'
+                if (!$visible($employee, $absencesWithArchived) || $row['status'] !== 'approved'
                     || $row['starts_on'] > $params[':date_to'] || $row['ends_on'] < $params[':date_from']
                     || (isset($params[':team']) && strtolower($employee['equipe']) !== $params[':team'])
                     || (isset($params[':employee_id']) && $row['employee_id'] !== $params[':employee_id'])) {
@@ -207,9 +225,40 @@ final class QaLegacyStatement extends PDOStatement {
             }
             return true;
         }
-        // [F2B] Mapa PA: so as consultas do PaMapService.
+        // [F2B] Mapa PA: so as consultas do PaMapService. [F5] Tambem a tabela do corte.
         if ($sql === 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name') {
-            $this->rows[] = ['total' => $params[':table_name'] === 'portal_pa_map' ? 0 : 1];
+            $this->rows[] = ['total' => match ($params[':table_name']) {
+                'portal_pa_map' => 0,
+                'portal_presence_cutoff' => $db->cutoffTable ? 1 : 0,
+                default => 1,
+            }];
+            return true;
+        }
+        // [F5] Leitura do corte (PresenceCutoff::read); sem a tabela, erro como no MySQL.
+        if ($sql === 'SELECT cutoff_date FROM portal_presence_cutoff WHERE id = 1') {
+            if (!$db->cutoffTable) {
+                throw new PDOException("SQLSTATE[42S02]: Base table or view not found: 1146 Table 'portal_presence_cutoff' doesn't exist");
+            }
+            if ($db->cutoff !== null) {
+                $this->rows[] = ['cutoff_date' => $db->cutoff];
+            }
+            return true;
+        }
+        // [F2B e F5] Cadastros do motor (scheduleScreenEmployees): tela so com
+        // ativos; relatorio no motor tambem com o arquivado (D7).
+        $screenEmployees = 'SELECT id, nome AS employee_name, equipe FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 0';
+        $reportEmployees = 'SELECT id, nome AS employee_name, equipe, arquivado_em FROM funcionarios WHERE ' . $archivedClause('') . ' AND fora_mapa_escala = 0';
+        if (strpos($sql, $screenEmployees) === 0 || strpos($sql, $reportEmployees) === 0) {
+            $withArchived = strpos($sql, $reportEmployees) === 0;
+            foreach ($db->employees as $id => $row) {
+                if (!$visible($row, $withArchived) || (int)$row['fora_mapa_escala'] === 1
+                    || (isset($params[':employee_id']) && $id !== $params[':employee_id'])) {
+                    continue;
+                }
+                $this->rows[] = ['id' => $id, 'employee_name' => $row['nome'], 'equipe' => $row['equipe']]
+                    + ($withArchived ? ['arquivado_em' => $row['arquivado_em'] ?? null] : []);
+            }
+            usort($this->rows, static fn (array $a, array $b): int => [$a['employee_name'], $a['id']] <=> [$b['employee_name'], $b['id']]);
             return true;
         }
         if (strpos($sql, 'SELECT id, nome AS name, equipe AS team, ad_login FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 0') === 0) {
@@ -669,5 +718,68 @@ assert_same(['Colaborador marcado como remoto nesta data.'], $saved['warnings'],
 // Dias pares (tipo antigo) sem mudanca: nao pede confirmacao em dia remoto.
 assert_same('ok', $outcome(fn () => $map->save(['pa_number' => '1728', 'employee_id' => 12, 'valid_from' => '2026-10-07'], 'qa')), 'Mapa PA: dias pares em dia impar segue sem confirmacao (como antes)');
 
+// ----------------------------------------------------------------------------
+// 3. Data de corte do motor (F5, commit 2; desenho 9.7, D4 e D6)
+// ----------------------------------------------------------------------------
+// A execucao principal ja roda sem a 019 (tabela ausente). Com a tabela vazia,
+// com o corte depois de todos os periodos e com o corte no futuro distante, as
+// saidas sao as mesmas, byte a byte (nenhum campo novo).
+$withCutoff = static function (?string $cutoff): QaLegacyPdo {
+    $pdo = qa_legacy_db();
+    $pdo->cutoffTable = true;
+    $pdo->cutoff = $cutoff;
+    return $pdo;
+};
+foreach (['tabela vazia' => null, 'corte depois de todos os periodos' => '2027-01-16', 'corte no futuro distante' => '2099-12-16'] as $label => $cutoff) {
+    assert_same($signature, qa_legacy_signature(qa_legacy_outputs(new OperationalService($withCutoff($cutoff), '2026-10-07'))), "corte ({$label}): as saidas identicas a referencia");
+}
+// Corte no dia seguinte ao fim das competencias (2026-10-16): elas continuam
+// identicas; o relatorio do ano cruza o corte e e dividido nele.
+$cutoff = '2026-10-16';
+$cutOutputs = qa_legacy_outputs(new OperationalService($withCutoff($cutoff), '2026-10-07'));
+$cutSignature = qa_legacy_signature($cutOutputs);
+foreach ($signature as $name => $reference) {
+    if (strpos($name, 'report_ano') !== 0) {
+        assert_same($reference, $cutSignature[$name], "corte em {$cutoff}: saida {$name} (inteira antes do corte) identica");
+    }
+}
+$before = $outputs['report_ano'];
+$split = $cutOutputs['report_ano'];
+$legacyRows = array_values(array_filter($before['schedule'], static fn (array $row): bool => $row['date'] < $cutoff));
+$splitLegacy = array_values(array_filter($split['schedule'], static fn (array $row): bool => $row['date'] < $cutoff));
+$splitEngine = array_values(array_filter($split['schedule'], static fn (array $row): bool => $row['date'] >= $cutoff));
+assert_same(true, count($legacyRows) > 200 && count($splitEngine) > 50, 'corte no meio: as duas partes com volume');
+assert_same($legacyRows, $splitLegacy, 'corte no meio: parte antiga igual linha a linha ao relatorio sem corte (mesma ordem, mesmos campos)');
+assert_same(array_merge($splitLegacy, $splitEngine), $split['schedule'], 'corte no meio: parte antiga antes, motor depois');
+assert_same(0, count(array_filter($splitLegacy, static fn (array $row): bool => isset($row['situacao']))), 'corte no meio: nenhuma linha do motor antes do corte');
+assert_same(count($splitEngine), count(array_filter($splitEngine, static fn (array $row): bool => isset($row['situacao']))), 'corte no meio: depois do corte, so linhas do motor');
+assert_same(['date' => $cutoff, 'split' => true], $split['cutoff'], 'corte no meio: cutoff com split');
+assert_same(['competency', 'period', 'cutoff', 'summary', 'by_employee', 'by_team', 'overtime', 'time_adjustments', 'oncall', 'schedule'], array_keys($split), 'corte no meio: cutoff logo depois do periodo');
+assert_same(['overtime_count', 'overtime_approved_minutes', 'overtime_pending_minutes', 'adjustments_count', 'oncall_count', 'onsite_days', 'remote_days', 'absence_days', 'no_schedule_days', 'pending', 'rejected', 'sync_errors'], array_keys($split['summary']), 'corte no meio: campos novos no resumo, depois de remote_days');
+$count = static fn (array $rows, string $type): int => count(array_filter($rows, static fn (array $row): bool => $row['presence_type'] === $type));
+assert_same(
+    [$count($splitLegacy, 'onsite') + $count($splitEngine, 'onsite'), $count($splitLegacy, 'remote') + $count($splitEngine, 'remote'), $count($splitEngine, 'absence'), $count($splitEngine, 'no_schedule')],
+    [$split['summary']['onsite_days'], $split['summary']['remote_days'], $split['summary']['absence_days'], $split['summary']['no_schedule_days']],
+    'corte no meio: totais somam as duas partes; ausencia e sem escala so do motor'
+);
+assert_same(true, $count($splitLegacy, 'absence') > 0 && $count($splitLegacy, 'day_off') > 0, 'corte no meio: a parte antiga tem folga e ausencia, que nao entram em absence_days');
+// CSV: cabecalho, aviso e as linhas de escala antigas iguais as do CSV sem corte.
+$csvRows = static fn (string $csv): array => array_map(static fn (string $line): array => str_getcsv($line, ';'), array_values(array_filter(explode("\n", substr($csv, 3)), static fn (string $line): bool => $line !== '')));
+$beforeCsv = $csvRows($outputs['report_ano_csv']);
+$splitCsv = $csvRows($cutOutputs['report_ano_csv']);
+assert_same($beforeCsv[0], $splitCsv[0], 'CSV com corte: mesmo cabecalho');
+assert_same(['aviso', '', '', $cutoff, 'Escala pelo cálculo antigo até 15/10/2026 e pelas regras novas a partir de 16/10/2026', ''], $splitCsv[1], 'CSV com corte: aviso logo depois do cabecalho');
+assert_same(1, count(array_filter($splitCsv, static fn (array $row): bool => $row[0] === 'aviso')), 'CSV com corte: um unico aviso');
+$csvBefore = static fn (array $rows): array => array_values(array_filter($rows, static fn (array $row): bool => $row[0] === 'escala' && $row[3] < '2026-10-16'));
+assert_same($csvBefore($beforeCsv), $csvBefore($splitCsv), 'CSV com corte: linhas de escala antes do corte iguais as do CSV sem corte');
+assert_same(count($split['schedule']), count(array_filter($splitCsv, static fn (array $row): bool => $row[0] === 'escala')), 'CSV com corte: uma linha por dia de escala das duas partes');
+assert_same(0, count(array_filter($beforeCsv, static fn (array $row): bool => $row[0] === 'aviso')), 'CSV sem corte: sem aviso');
+// O corte e lido uma vez por requisicao (servico), mesmo com dois relatorios.
+$pdo = $withCutoff($cutoff);
+$service = new OperationalService($pdo, '2026-10-07');
+$service->report(['competency' => '2026-10']);
+$pdo->cutoff = '2026-09-16';
+assert_same(false, isset($service->report(['competency' => '2026-10'])['cutoff']), 'corte lido uma vez por requisicao: o segundo relatorio usa o mesmo valor');
+
 echo 'QA schedule legacy output OK (' . (count($expected) - count($changedByF3)) . ' saidas identicas a referencia; '
-    . count($changedByF3) . " do Calendario com ausencias comparadas sem esses eventos, F3)\n";
+    . count($changedByF3) . " do Calendario com ausencias comparadas sem esses eventos, F3; corte do F5 conferido)\n";

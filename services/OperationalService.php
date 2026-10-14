@@ -3,6 +3,7 @@ require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/SharePointSyncService.php';
 require_once __DIR__ . '/ScheduleRulePlanner.php';
 require_once __DIR__ . '/PresenceEngine.php';
+require_once __DIR__ . '/PresenceCutoff.php';
 
 final class OperationalService {
     public const MAX_IMPORT_ROWS = 500;
@@ -34,6 +35,17 @@ final class OperationalService {
     public const ABSENCE_EXCEPTION_MESSAGE = 'Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências.';
     public const OUTSIDE_MAP_MESSAGE = 'Cadastro marcado como fora do Mapa PA e da escala: não recebe regra nem exceção de escala.';
     public const LEADERSHIP_IMPORT_WARNING = 'Linha ignorada: a Liderança tem escala fixa presencial, sem regra a importar.';
+    /**
+     * [F5, D11] Rotulos com acento no caminho do motor (tela Escala; relatorio
+     * a partir do corte); o calculo antigo volta a eles sem acento, para a
+     * saida antiga continuar identica (qa-schedule-legacy-output).
+     */
+    private const LEGACY_LABELS = [
+        'Ausência' => 'Ausencia',
+        'Dias ímpares' => 'Dias impares',
+        'Ciclo com configuração inválida' => 'Ciclo com configuracao invalida',
+        'Regra não informada' => 'Regra nao informada',
+    ];
     public const ALLOWED_IMPORT_HEADERS = [
         'id', 'employee_id',
         'login_ad', 'ad_login', 'email',
@@ -45,6 +57,9 @@ final class OperationalService {
     private PDO $pdo;
     private SharePointSyncService $sync;
     private ?string $today;
+    /** [F5] Corte do motor, lido uma vez por requisicao (PresenceCutoff::read). */
+    private bool $presenceCutoffLoaded = false;
+    private ?string $presenceCutoff = null;
 
     /** $today: data de hoje (Y-m-d) fixa, so para teste; padrao e a data do PHP. */
     public function __construct(?PDO $pdo = null, ?string $today = null) {
@@ -268,7 +283,7 @@ final class OperationalService {
                     'title' => $row['label'] . ': ' . $row['employee_name'],
                     'description' => $row['source'] === 'exception'
                         ? 'Excecao de escala'
-                        : ($row['rule_label'] ?? $this->scheduleRuleLabel($row['rule_type'])),
+                        : ($row['rule_label'] ?? self::legacyLabel($this->scheduleRuleLabel($row['rule_type']))),
                     'starts_at' => $row['date'] . ' 00:00:00',
                     'ends_at' => $row['date'] . ' 23:59:59',
                     'team' => $row['team'],
@@ -1024,7 +1039,19 @@ final class OperationalService {
         $overtime = $this->reportRows('portal_overtime_entries', 'work_date', $from, $to, $team, $employeeId);
         $adjustments = $this->reportRows('portal_time_adjustments', 'adjustment_date', $from, $to, $team, $employeeId);
         $oncall = $this->reportOncallRows($from, $to, $team, $employeeId);
-        $schedule = $this->generatedSchedule($from, $to, $team, $employeeId);
+        // [F5, D4 a D6] Escala dividida no corte: antes dele, o calculo antigo
+        // sem nenhuma mudanca; a partir dele, o motor. Sem corte, ou com o
+        // periodo inteiro antes dele (inclusive corte no futuro), a saida e a
+        // de antes do F5, sem campo novo.
+        $cutoff = $this->presenceCutoff();
+        $parts = PresenceCutoff::split($from, $to, $cutoff);
+        $legacySchedule = $parts['legacy'] === null
+            ? []
+            : $this->generatedSchedule($parts['legacy']['from'], $parts['legacy']['to'], $team, $employeeId);
+        $engineSchedule = $parts['engine'] === null
+            ? []
+            : $this->reportEngineSchedule($parts['engine']['from'], $parts['engine']['to'], $team, $employeeId);
+        $schedule = array_merge($legacySchedule, $engineSchedule);
 
         $byEmployee = [];
         $byTeam = [];
@@ -1063,27 +1090,51 @@ final class OperationalService {
             $teamKey = strtoupper($row['team']);
             $byTeam[$teamKey][$key] = ($byTeam[$teamKey][$key] ?? 0) + 1;
         }
+        // [F5, D5] So na parte do motor: ausencia de dia inteiro e sem escala
+        // (P4). Na parte antiga, folga e ausencia continuam fora dos totais.
+        $engineDays = ['absence' => 'absence_days', 'no_schedule' => 'no_schedule_days'];
+        foreach ($engineSchedule as $row) {
+            $key = $engineDays[$row['presence_type']] ?? null;
+            if ($key === null) {
+                continue;
+            }
+            $byEmployee[$row['employee_name']][$key] = ($byEmployee[$row['employee_name']][$key] ?? 0) + 1;
+            $teamKey = strtoupper($row['team']);
+            $byTeam[$teamKey][$key] = ($byTeam[$teamKey][$key] ?? 0) + 1;
+        }
 
         $statuses = array_merge(
             array_column($overtime, 'status'),
             array_column($adjustments, 'status'),
             array_column($oncall, 'status')
         );
-        return [
+        $summary = [
+            'overtime_count' => count($overtime),
+            'overtime_approved_minutes' => $overtimeTotals['approved_minutes'],
+            'overtime_pending_minutes' => $overtimeTotals['pending_minutes'],
+            'adjustments_count' => count($adjustments),
+            'oncall_count' => count($oncall),
+            'onsite_days' => count(array_filter($schedule, static fn(array $row): bool => $row['presence_type'] === 'onsite')),
+            'remote_days' => count(array_filter($schedule, static fn(array $row): bool => $row['presence_type'] === 'remote')),
+        ];
+        $result = [
             'competency' => $competency,
             'period' => ['from' => $from, 'to' => $to],
-            'summary' => [
-                'overtime_count' => count($overtime),
-                'overtime_approved_minutes' => $overtimeTotals['approved_minutes'],
-                'overtime_pending_minutes' => $overtimeTotals['pending_minutes'],
-                'adjustments_count' => count($adjustments),
-                'oncall_count' => count($oncall),
-                'onsite_days' => count(array_filter($schedule, static fn(array $row): bool => $row['presence_type'] === 'onsite')),
-                'remote_days' => count(array_filter($schedule, static fn(array $row): bool => $row['presence_type'] === 'remote')),
-                'pending' => count(array_filter($statuses, static fn(string $status): bool => $status === 'pending')),
-                'rejected' => count(array_filter($statuses, static fn(string $status): bool => $status === 'rejected')),
-                'sync_errors' => count(array_filter($statuses, static fn(string $status): bool => $status === 'sync_error')),
-            ],
+        ];
+        // [F5, D4] Campos novos so quando o periodo alcanca o corte.
+        if ($parts['engine'] !== null) {
+            foreach ($engineDays as $type => $key) {
+                $summary[$key] = count(array_filter($engineSchedule, static fn(array $row): bool => $row['presence_type'] === $type));
+            }
+            $result['cutoff'] = ['date' => $cutoff, 'split' => $parts['legacy'] !== null];
+        }
+        $summary += [
+            'pending' => count(array_filter($statuses, static fn(string $status): bool => $status === 'pending')),
+            'rejected' => count(array_filter($statuses, static fn(string $status): bool => $status === 'rejected')),
+            'sync_errors' => count(array_filter($statuses, static fn(string $status): bool => $status === 'sync_error')),
+        ];
+        return $result + [
+            'summary' => $summary,
             'by_employee' => $byEmployee,
             'by_team' => $byTeam,
             'overtime' => $overtime,
@@ -1102,6 +1153,10 @@ final class OperationalService {
         $handle = fopen('php://output', 'wb');
         fwrite($handle, "\xEF\xBB\xBF");
         fputcsv($handle, ['tipo', 'colaborador', 'equipe', 'data', 'detalhe', 'status'], ';');
+        // [F5, D4] Periodo que cruza o corte: aviso logo depois do cabecalho.
+        if (($report['cutoff']['split'] ?? false) === true) {
+            $this->csvRow($handle, ['aviso', '', '', $report['cutoff']['date'], PresenceCutoff::splitNotice($report['cutoff']['date']), '']);
+        }
         foreach ($report['overtime'] as $row) {
             $this->csvRow($handle, ['hora_extra', $row['employee_name'], strtoupper($row['team']), $row['work_date'], $row['total_minutes'] . ' min - ' . $row['reason'], $row['status']]);
         }
@@ -1539,13 +1594,17 @@ final class OperationalService {
      * agendadas); null traz o historico inteiro, inclusive linhas vazias.
      * $excludeOutsideMap: tela de escala sem os cadastros fora do Mapa PA e
      * da escala (P12). Calendario e relatorio mudam no motor (F2 e F5).
+     * $withArchived: [F5, D7] relatorio no motor, com as regras do arquivado
+     * (o filtro por data fica no engineSchedule); o inativo antigo, sem data
+     * de arquivamento, continua fora.
      */
-    private function scheduleRules(?string $team, ?int $employeeId, ?string $periodFrom = null, bool $excludeOutsideMap = false): array {
+    private function scheduleRules(?string $team, ?int $employeeId, ?string $periodFrom = null, bool $excludeOutsideMap = false, bool $withArchived = false): array {
         $sql = 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type, r.rule_config,
                        r.effective_from, r.effective_until, r.created_by, r.updated_by,
                        r.created_at, r.updated_at
                 FROM portal_schedule_rules r
-                JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 1'
+                JOIN funcionarios f ON f.id = r.employee_id AND '
+                . ($withArchived ? '(f.ativo = 1 OR f.arquivado_em IS NOT NULL)' : 'f.ativo = 1')
                 . ($excludeOutsideMap ? ' AND f.fora_mapa_escala = 0' : '') . '
                 WHERE LOWER(f.equipe) IN ("n1", "n2")';
         $params = [];
@@ -1667,7 +1726,6 @@ final class OperationalService {
                 }
                 if ($exception) {
                     $presence = $this->presenceForException($exception['exception_type']);
-                    $label = $this->scheduleStatusLabel($presence);
                     $source = 'exception';
                 } elseif ($rule['rule_type'] === 'cycle') {
                     // [F2B] Ciclo: dia util pela posicao do motor; fim de semana
@@ -1676,16 +1734,15 @@ final class OperationalService {
                     if ($presence === null) {
                         continue;
                     }
-                    $label = $this->scheduleStatusLabel($presence);
                     $source = 'rule';
                 } else {
                     $presence = self::presenceForRule($rule['rule_type'], $dateKey, $rule['weekdays'] ?? []);
-                    $label = $this->scheduleStatusLabel($presence);
                     $source = $implicit ? 'implicit' : 'rule';
                 }
+                $label = self::legacyLabel($this->scheduleStatusLabel($presence));
                 $ruleLabel = $implicit
                     ? $rule['rule_label']
-                    : $this->scheduleRuleLabel($rule['rule_type'], $rule['weekdays'] ?? [], $rule['config'] ?? null);
+                    : self::legacyLabel($this->scheduleRuleLabel($rule['rule_type'], $rule['weekdays'] ?? [], $rule['config'] ?? null));
                 $items[] = [
                     'employee_id' => (int)$rule['employee_id'],
                     'employee_name' => $rule['employee_name'],
@@ -1711,7 +1768,15 @@ final class OperationalService {
      * o F3 ou portal_absences aprovada) aparece como ausente, sem categoria.
      * Mantem os campos antigos e acrescenta situacao, origem, detalhe e escala.
      */
-    private function engineSchedule(string $from, string $to, ?string $team, ?int $employeeId, array $rules, array $exceptions): array {
+    private function engineSchedule(
+        string $from,
+        string $to,
+        ?string $team,
+        ?int $employeeId,
+        array $rules,
+        array $exceptions,
+        bool $withArchived = false
+    ): array {
         $rulesByEmployee = [];
         foreach ($rules as $rule) {
             if (($rule['implicit'] ?? false) !== true) {
@@ -1722,13 +1787,17 @@ final class OperationalService {
         foreach ($exceptions as $exception) {
             $exceptionMap[$exception['employee_id'] . ':' . $exception['exception_date']] = $exception;
         }
-        $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId);
-        $employees = $this->scheduleScreenEmployees($team, $employeeId);
+        $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId, $withArchived);
+        $employees = $this->scheduleScreenEmployees($team, $employeeId, $withArchived);
         $items = [];
         $end = self::dateValue($to, 'Fim');
         for ($date = self::dateValue($from, 'Inicio'); $date <= $end; $date = $date->modify('+1 day')) {
             $dateKey = $date->format('Y-m-d');
             foreach ($employees as $employee) {
+                // [F5, D7] Arquivado: so ate a vespera do arquivamento.
+                if ($employee['archived_on'] !== null && $dateKey >= $employee['archived_on']) {
+                    continue;
+                }
                 $key = $employee['id'] . ':' . $dateKey;
                 $exception = $exceptionMap[$key] ?? null;
                 $absences = [];
@@ -1781,11 +1850,32 @@ final class OperationalService {
         return $items;
     }
 
-    /** [F2B] Cadastros da tela Escala: ativos, sem os fora do Mapa; N1, N2 e Lideranca. */
-    private function scheduleScreenEmployees(?string $team, ?int $employeeId): array {
-        $sql = 'SELECT id, nome AS employee_name, equipe
-                FROM funcionarios
-                WHERE ativo = 1 AND fora_mapa_escala = 0';
+    /**
+     * [F5, D5 e D7] Escala do relatorio a partir do corte, pelo motor (como a
+     * tela Escala): P3, P4, ausencia de dia inteiro, parcial como marcador,
+     * fora do Mapa fora, Lideranca com a regra fixa (sem o filtro de equipe)
+     * e o arquivado ate a vespera do arquivamento. Sem categoria de ausencia.
+     */
+    private function reportEngineSchedule(string $from, string $to, ?string $team, ?int $employeeId): array {
+        $rules = $this->scheduleRules($team, $employeeId, $from, true, true);
+        $exceptions = $this->scheduleExceptions($from, $to, $team, $employeeId);
+        return $this->engineSchedule($from, $to, $team, $employeeId, $rules, $exceptions, true);
+    }
+
+    /**
+     * [F2B] Cadastros da tela Escala: ativos, sem os fora do Mapa; N1, N2 e
+     * Lideranca. $withArchived: [F5, D7] relatorio no motor, tambem com os
+     * arquivados ('archived_on' = data do arquivamento); o inativo antigo,
+     * sem data, fica fora. Na tela, 'archived_on' e sempre null.
+     */
+    private function scheduleScreenEmployees(?string $team, ?int $employeeId, bool $withArchived = false): array {
+        $sql = $withArchived
+            ? 'SELECT id, nome AS employee_name, equipe, arquivado_em
+               FROM funcionarios
+               WHERE (ativo = 1 OR arquivado_em IS NOT NULL) AND fora_mapa_escala = 0'
+            : 'SELECT id, nome AS employee_name, equipe
+               FROM funcionarios
+               WHERE ativo = 1 AND fora_mapa_escala = 0';
         $params = [];
         if ($employeeId) {
             $sql .= ' AND id = :employee_id';
@@ -1800,7 +1890,13 @@ final class OperationalService {
             if ($rowTeam === null || ($team !== null && $rowTeam !== $team)) {
                 continue;
             }
-            $employees[] = ['id' => (int)$row['id'], 'name' => $row['employee_name'], 'team' => $rowTeam];
+            $archivedAt = $withArchived ? (string)($row['arquivado_em'] ?? '') : '';
+            $employees[] = [
+                'id' => (int)$row['id'],
+                'name' => $row['employee_name'],
+                'team' => $rowTeam,
+                'archived_on' => $archivedAt === '' ? null : substr($archivedAt, 0, 10),
+            ];
         }
         return $employees;
     }
@@ -1859,11 +1955,13 @@ final class OperationalService {
      * Ausencias aprovadas por "employee_id:data", em ordem de id, com o
      * periodo do dia (F3): a tela Escala (motor) mostra a parcial como
      * marcador; o calculo antigo so tira o dia com a de dia inteiro.
+     * $withArchived: [F5, D7] relatorio no motor, tambem do arquivado.
      */
-    private function scheduleBlockingAbsences(string $from, string $to, ?string $team, ?int $employeeId): array {
+    private function scheduleBlockingAbsences(string $from, string $to, ?string $team, ?int $employeeId, bool $withArchived = false): array {
         $sql = 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time
                 FROM portal_absences a
-                JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1
+                JOIN funcionarios f ON f.id = a.employee_id AND '
+                . ($withArchived ? '(f.ativo = 1 OR f.arquivado_em IS NOT NULL)' : 'f.ativo = 1') . '
                 WHERE a.starts_on <= :date_to
                   AND a.ends_on >= :date_from
                   AND a.status = "approved"';
@@ -1906,7 +2004,7 @@ final class OperationalService {
         return match ($status) {
             'onsite' => 'Presencial',
             'remote' => 'Remoto',
-            'absence' => 'Ausencia',
+            'absence' => 'Ausência',
             'day_off' => 'Folga',
             'no_schedule' => 'Sem escala',
             default => ucfirst(str_replace('_', ' ', $status)),
@@ -2087,17 +2185,22 @@ final class OperationalService {
         }
         if ($rule === 'cycle') {
             $cycle = PresenceEngine::cycleConfig($config ?? []);
-            return $cycle === null ? 'Ciclo com configuracao invalida' : ucfirst(PresenceEngine::cycleLabel($cycle['pattern']));
+            return $cycle === null ? 'Ciclo com configuração inválida' : ucfirst(PresenceEngine::cycleLabel($cycle['pattern']));
         }
         return match ($rule) {
             'even_days' => 'Dias pares',
-            'odd_days' => 'Dias impares',
+            'odd_days' => 'Dias ímpares',
             'always_onsite' => 'Sempre presencial',
             'always_remote' => 'Sempre remoto',
             'undefined' => 'Sem escala definida',
             'fixed_weekdays' => 'Presencial: ' . self::weekdayListLabel($weekdays),
-            default => 'Regra nao informada',
+            default => 'Regra não informada',
         };
+    }
+
+    /** [F5, D11] Rotulo do calculo antigo: o de hoje, sem acento. */
+    private static function legacyLabel(string $label): string {
+        return self::LEGACY_LABELS[$label] ?? $label;
     }
 
     /** [F2B] Rotulo de uma linha de regra (config decodificada ou rule_config em JSON). */
@@ -2415,6 +2518,15 @@ final class OperationalService {
 
     private function today(): string {
         return $this->today ?? date('Y-m-d');
+    }
+
+    /** [F5] Corte do motor (PresenceCutoff::read), lido uma vez por requisicao. */
+    private function presenceCutoff(): ?string {
+        if (!$this->presenceCutoffLoaded) {
+            $this->presenceCutoff = PresenceCutoff::read($this->pdo);
+            $this->presenceCutoffLoaded = true;
+        }
+        return $this->presenceCutoff;
     }
 
     private function team($value, bool $nullable = false): ?string {

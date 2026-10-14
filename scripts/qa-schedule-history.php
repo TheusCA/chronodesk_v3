@@ -1103,9 +1103,10 @@ $preview = $service->previewScheduleImport([['login_ad' => 'qa.tecnico1', 'regra
 assert_same(['Regra invalida.'], $preview['rows'][0]['errors'], 'importacao: regra desconhecida com a mensagem de antes');
 
 // Ciclo gravado com configuracao invalida (dado ruim): rotulo explicito e
-// "Sem escala" na tela, sem 400.
+// "Sem escala" na tela, sem 400. [F5, D11] A tela Escala e caminho do motor:
+// rotulo com acento (o calculo antigo segue sem, no qa-schedule-legacy-output).
 $pdo = qa_schedule_db([qa_rule(10, 'cycle', '2026-10-05', null, '{"pattern":["onsite"],"anchor_date":"2026-10-05"}')]);
 $view = (new OperationalService($pdo, $today))->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-05', 'employee_id' => '1']);
-assert_same(['Ciclo com configuracao invalida', 'no_schedule', 'Ciclo com configuracao invalida'], [$view['rules'][0]['rule_label'], $view['generated'][0]['presence_type'], $view['generated'][0]['rule_label']], 'ciclo invalido: rotulo explicito e sem escala');
+assert_same(['Ciclo com configuração inválida', 'no_schedule', 'Ciclo com configuração inválida'], [$view['rules'][0]['rule_label'], $view['generated'][0]['presence_type'], $view['generated'][0]['rule_label']], 'ciclo invalido: rotulo explicito e sem escala');
 
 echo "QA schedule history OK\n";
