@@ -1730,6 +1730,8 @@ Ausência que cruza o corte: o evento `absence` antigo vai até a véspera do co
 
 **Como testar no MySQL local (sugestão):** com a 019 e os dados de teste. (1) Sem a 019 e com a tabela vazia: relatório e CSV de uma competência iguais aos do código anterior (`b2c9bc5`), byte a byte. (2) Corte registrado num dia 16 futuro: as competências até ele sem campo novo. (3) **Só no banco de teste**, para ver a divisão com dados passados (o registro recusa data passada e os gatilhos não barram `INSERT` em tabela vazia): `INSERT INTO portal_presence_cutoff (id, cutoff_date, registered_by) VALUES (1, '2026-10-16', 'qa.teste');` e o relatório de 16/09 a 15/11: `cutoff.split = true`, linhas antes de 16/10 iguais às do código anterior, aviso no CSV, ausência como "Ausência" sem categoria, sem escala em `no_schedule_days`, fim de semana só com exceção de trabalho, Liderança presente, fora do Mapa só antes do corte, arquivado até a véspera. (4) Período só depois do corte (`split = false`, sem aviso). (5) Relatório de 366 dias, para o tempo e a memória com os cadastros reais.
 
+**Validação pela IA:** `qa-presence-cutoff` com 208 verificações; `qa-schedule-legacy-output` com a seção 3; **mutação 37/37** no `PresenceCutoff` e no relatório (na 1ª rodada sobreviveram dois mutantes, por teste fraco: a validação de data da leitura, porque todos os valores inválidos do teste já falhavam no dia 16, e `cutoff.date` pelo início da parte do motor, igual ao corte nos períodos testados; os testes foram reforçados); a mutação dos gatilhos continuou 20/20; bateria PHP completa, 15 `qa:*` do frontend e lint. **Sem MySQL na estação:** as consultas novas só rodaram contra o banco simulado.
+
 **Gatilhos e commit 2 aprovados em 2026-10-14**, com as cinco decisões dos gatilhos e as nove do commit 2 como estão, após teste do responsável em MySQL 8.0.46 local:
 
 | Caso | Resultado |
@@ -1744,7 +1746,13 @@ Ausência que cruza o corte: o evento `absence` antigo vai até a véspera do co
 
 **Ajuste pedido junto do commit 3:** (1) na verificação da 019, coluna `inconsistente`: 1 quando `eventos_registro - eventos_remocao` for diferente de `cortes` (corte apagado por `TRUNCATE`: registro sem linha; linha gravada fora do script: linha sem registro); no roteiro do deploy (commit 5), `inconsistente = 1` manda parar e avisar; (2) registrar aqui e na documentação de segurança que o `TRUNCATE` escapa dos gatilhos e que a proteção contra ele é de privilégio: o usuário do banco da aplicação não deveria ter `DROP` (pendência ligada à VULN-002, usuário dedicado com privilégio mínimo).
 
-**Validação pela IA:** `qa-presence-cutoff` com 208 verificações; `qa-schedule-legacy-output` com a seção 3; **mutação 37/37** no `PresenceCutoff` e no relatório (na 1ª rodada sobreviveram dois mutantes, por teste fraco: a validação de data da leitura, porque todos os valores inválidos do teste já falhavam no dia 16, e `cutoff.date` pelo início da parte do motor, igual ao corte nos períodos testados; os testes foram reforçados); a mutação dos gatilhos continuou 20/20; bateria PHP completa, 15 `qa:*` do frontend e lint. **Sem MySQL na estação:** as consultas novas só rodaram contra o banco simulado.
+**Ajuste da verificação e registro do `TRUNCATE` (2026-10-14):**
+
+| Item | Como ficou |
+|---|---|
+| `migrations/verificacao/20261013_019_presence_cutoff_check.sql` | Coluna `inconsistente` na consulta da auditoria (só com o `audit_log`): `IF(eventos_registro - eventos_remocao <> cortes, 1, 0)`, com `cortes` = contagem da tabela, ou 0 sem ela (antes da 019 e depois do rollback). Esperado 0 sempre. Cobre o corte apagado sem o rollback (`TRUNCATE`: registro sem linha) e a linha gravada fora do script (linha sem registro). Como os eventos são de todos os tempos, depois de um apagamento a coluna continua 1: a correção é decisão do responsável |
+| Roteiro do deploy (commit 5) | `inconsistente = 1` em qualquer verificação da 019 (ensaio, depois do registro, pós-deploy): **parar e avisar o responsável** |
+| `TRUNCATE` | O MySQL não dispara gatilho no `TRUNCATE`; os gatilhos da 019 não o barram. A proteção é de privilégio: o usuário do banco da aplicação não deve ter `DROP` (exigido pelo `TRUNCATE`) nem `TRIGGER` (permite remover os gatilhos). **Pendência ligada à VULN-002** (usuário dedicado com privilégio mínimo): conferir os privilégios no servidor com `SHOW GRANTS`. Registrado no cabeçalho da 019 e na limitação 11 de `docs/DOCUMENTACAO_TECNICA.md` |
 
 ---
 

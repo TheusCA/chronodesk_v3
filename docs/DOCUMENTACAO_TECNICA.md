@@ -227,6 +227,7 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 8. **Interface legada em PHP** ainda presente no servidor; acessível por POST.
 9. **Fuso horário não alinhado** entre PHP e a sessão MySQL (sessão em UTC, confirmado no servidor em 2026-09-30). Correção entregue no lote de fuso, **pendente de deploy**: a conexão passa a definir `America/Sao_Paulo`. Os `DATETIME` gravados pelo relógio do MySQL antes do deploy (auditoria, aprovações, decisões, remoções) continuam 3 h adiante até a correção histórica, feita por script separado. Ver `docs/FUSO_HORARIO_BIZ02.md`.
 10. **Repositório fora da esteira corporativa** (conta pessoal); migração para Azure DevOps pendente.
+11. **Data de corte do motor (F5) protegida por gatilho, mas não contra `TRUNCATE`.** Os gatilhos da migration 019 barram `UPDATE`, `DELETE`, `REPLACE` e `INSERT ... ON DUPLICATE KEY UPDATE` em `portal_presence_cutoff`; o MySQL não dispara gatilho no `TRUNCATE` (achado do teste de 2026-10-14). A proteção contra ele é de privilégio: o usuário do banco da aplicação não deve ter `DROP` (exigido pelo `TRUNCATE`) nem `TRIGGER` (permite remover os gatilhos). **Pendência ligada à VULN-002** (usuário dedicado com privilégio mínimo): conferir os privilégios do usuário da aplicação no servidor (`SHOW GRANTS`). A verificação da 019 detecta o apagamento (`inconsistente = 1`: registros auditados menos remoções diferente das linhas da tabela) e o roteiro do deploy para nesse caso.
 
 ---
 
@@ -267,3 +268,4 @@ Ordem recomendada, validada em incidente real (falha de socket PHP-FPM):
 |---|---|---|---|
 | 1.0 | 2026-09-28 | Matheus Camargo (elaboração assistida por IA — ver `REGISTRO_USO_IA.md`) | Versão inicial, gerada no Lote 1 do plano de remediação |
 | 1.1 | 2026-10-02 | Matheus Camargo (elaboração assistida por IA) | Perfis do Lote 5a (Liderança, admin só pela allowlist, revalidação por requisição) e recusa da aprovação de 24 h |
+| 1.2 | 2026-10-14 | Matheus Camargo (elaboração assistida por IA) | Limitação 11: `TRUNCATE` escapa dos gatilhos da data de corte (F5); proteção por privilégio (VULN-002) |

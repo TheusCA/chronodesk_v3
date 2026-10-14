@@ -219,12 +219,20 @@ assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE|R
 $flatCheck = (string)preg_replace('/\s+/', ' ', $check);
 assert_same(true, $at($flatCheck, "(SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE = 'portal_presence_cutoff' AND ACTION_TIMING = 'BEFORE' AND ACTION_STATEMENT LIKE '%corte imutavel: use o rollback da 019%' AND ((TRIGGER_NAME = 'trg_presence_cutoff_no_update' AND EVENT_MANIPULATION = 'UPDATE') OR (TRIGGER_NAME = 'trg_presence_cutoff_no_delete' AND EVENT_MANIPULATION = 'DELETE'))) AS gatilhos_019") > -1, 'verificacao 019: gatilhos_019 conta os dois pelo nome, evento, momento, tabela e corpo');
 assert_same([2, true], [substr_count($check, 'registered_by'), $at($check, "SUM(registered_by IS NULL OR TRIM(registered_by) = '''')") > -1], 'verificacao 019: autor nunca exibido (so na contagem sem_autor)');
-foreach (['tabela_019', 'checks_019', 'gatilhos_019', 'copia_rollback', 'procedimentos_soltos', 'cortes', 'corte', 'corte_dia_16', 'corte_no_futuro', 'sem_autor', 'eventos_registro', 'eventos_remocao'] as $column) {
+foreach (['tabela_019', 'checks_019', 'gatilhos_019', 'copia_rollback', 'procedimentos_soltos', 'cortes', 'corte', 'corte_dia_16', 'corte_no_futuro', 'sem_autor', 'eventos_registro', 'eventos_remocao', 'inconsistente'] as $column) {
     assert_same(true, $at($check, "AS {$column}") > -1, "verificacao 019: {$column}");
 }
 assert_same(true, $at($check, "@has_cutoff_table = 1,") > -1 && $at($check, "@has_audit_log = 1,") > -1, 'verificacao 019: corte e auditoria so com as tabelas presentes (ensaio sem audit_log)');
 assert_same(true, $at($check, "AND ROUTINE_NAME IN ('registrar_corte_019', 'rollback_019_confere_copia')") > -1, 'verificacao 019: conta procedimento que sobrou de recusa');
 assert_same(true, $at($check, 'SUM(cutoff_date > @hoje)') > -1, 'verificacao 019: corte no futuro (D2)');
+// Consistencia (aprovacao dos gatilhos, 2026-10-14): TRUNCATE nao passa pelos
+// gatilhos; registros menos remocoes tem de ser igual as linhas da tabela.
+$cortesExpr = "SET @cortes_expr := IF(@has_cutoff_table = 1, '(SELECT COUNT(*) FROM portal_presence_cutoff)', '0');";
+assert_same(true, $at($flatCheck, $cortesExpr) > $at($flatCheck, 'SET @has_cutoff_table :=') && $at($flatCheck, $cortesExpr) < $at($flatCheck, 'SET @audit_check_sql :='), 'verificacao 019: cortes da consistencia pela tabela, 0 sem ela, antes da consulta da auditoria');
+assert_same(1, substr_count($flatCheck, "IF(COALESCE(SUM(action = ''PRESENCE_CUTOFF_REGISTERED''), 0) - COALESCE(SUM(action = ''PRESENCE_CUTOFF_REMOVED''), 0) <> ', @cortes_expr, ', 1, 0) AS inconsistente FROM audit_log"), 'verificacao 019: inconsistente = 1 quando registros - remocoes difere de cortes');
+assert_same(true, $at($flatCheck, "SET @audit_check_sql := IF( @has_audit_log = 1, CONCAT(") > -1, 'verificacao 019: inconsistente so com o audit_log (na consulta da auditoria)');
+$checkHeader = $rawFile('migrations/verificacao/20261013_019_presence_cutoff_check.sql');
+assert_same([true, true], [strpos($checkHeader, 'TRUNCATE') !== false, strpos($checkHeader, 'inconsistente = 1 no deploy: PARAR e avisar') !== false], 'verificacao 019: cabecalho explica o TRUNCATE e manda parar com inconsistente = 1');
 
 // Ensaio: comandos nos cabecalhos (variantes a, b e c), com audit_log como extra.
 $migrationHeader = $rawFile('migrations/20261013_019_presence_cutoff.sql');

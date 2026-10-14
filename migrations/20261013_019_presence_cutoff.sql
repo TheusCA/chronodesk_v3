@@ -14,8 +14,11 @@
 --    corte so pelo rollback, que remove a tabela com DROP TABLE (nao passa
 --    pelos gatilhos; eles saem junto com a tabela). REPLACE e INSERT ... ON
 --    DUPLICATE KEY UPDATE sobre a linha tambem param (passam pelo DELETE ou
---    pelo UPDATE); TRUNCATE nao passa por gatilho, mas exige o privilegio
---    DROP, que o usuario da aplicacao nao tem.
+--    pelo UPDATE). TRUNCATE nao passa por gatilho (o MySQL nao dispara
+--    gatilho nele): a protecao e de privilegio, porque ele exige DROP, que o
+--    usuario do banco da aplicacao nao deve ter (conferir no servidor;
+--    pendencia ligada a VULN-002). A verificacao acusa o apagamento com
+--    inconsistente = 1.
 -- A migration so cria a tabela, VAZIA: sem linha, a aplicacao usa o calculo
 -- antigo em todas as datas (nada muda ate o registro). A linha e gravada so
 -- pelo script 20261013_019_registrar_corte.sql, no dia do deploy, depois da

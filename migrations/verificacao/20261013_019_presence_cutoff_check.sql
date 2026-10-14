@@ -15,7 +15,13 @@
 --    corte_no_futuro = 1 enquanto a data nao chega (D2: pode estar no
 --    futuro); sem_autor = 0.
 -- 3. Auditoria (com o audit_log; no ensaio, so com audit_log nas tabelas
---    extras): eventos_registro e eventos_remocao, de todos os tempos.
+--    extras): eventos_registro e eventos_remocao, de todos os tempos, e
+--    inconsistente = 1 quando eventos_registro - eventos_remocao difere de
+--    cortes (0 sem a tabela): corte apagado sem o rollback, por exemplo por
+--    TRUNCATE, que nao passa pelos gatilhos (registro sem linha), ou linha
+--    gravada fora do script de registro (linha sem registro). Esperado 0
+--    sempre; inconsistente = 1 no deploy: PARAR e avisar o responsavel. Uma
+--    vez inconsistente, continua 1 (os eventos sao de todos os tempos).
 -- "Hoje" e a data do MySQL no fuso do PHP (SET time_zone abaixo, regra do
 -- A4); esta consulta so le.
 
@@ -67,14 +73,22 @@ SET @has_audit_log := (
     SELECT COUNT(*) FROM information_schema.TABLES
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit_log'
 );
+-- Cortes para a consistencia: a contagem da tabela; sem ela (antes da 019 ou
+-- depois do rollback), 0.
+SET @cortes_expr := IF(@has_cutoff_table = 1, '(SELECT COUNT(*) FROM portal_presence_cutoff)', '0');
 SET @audit_check_sql := IF(
     @has_audit_log = 1,
-    'SELECT
-        COALESCE(SUM(action = ''PRESENCE_CUTOFF_REGISTERED''), 0) AS eventos_registro,
-        COALESCE(SUM(action = ''PRESENCE_CUTOFF_REMOVED''), 0) AS eventos_remocao
-     FROM audit_log
-     WHERE action IN (''PRESENCE_CUTOFF_REGISTERED'', ''PRESENCE_CUTOFF_REMOVED'')',
-    'SELECT ''audit_log ausente: eventos nao conferidos'' AS aviso'
+    CONCAT(
+        'SELECT
+            COALESCE(SUM(action = ''PRESENCE_CUTOFF_REGISTERED''), 0) AS eventos_registro,
+            COALESCE(SUM(action = ''PRESENCE_CUTOFF_REMOVED''), 0) AS eventos_remocao,
+            IF(COALESCE(SUM(action = ''PRESENCE_CUTOFF_REGISTERED''), 0) - COALESCE(SUM(action = ''PRESENCE_CUTOFF_REMOVED''), 0) <> ',
+        @cortes_expr,
+        ', 1, 0) AS inconsistente
+         FROM audit_log
+         WHERE action IN (''PRESENCE_CUTOFF_REGISTERED'', ''PRESENCE_CUTOFF_REMOVED'')'
+    ),
+    'SELECT ''audit_log ausente: eventos e consistencia nao conferidos'' AS aviso'
 );
 PREPARE audit_check_stmt FROM @audit_check_sql;
 EXECUTE audit_check_stmt;
