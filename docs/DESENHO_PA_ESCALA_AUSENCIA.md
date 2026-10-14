@@ -1799,6 +1799,21 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 
 **Ajuste da validação humana (pedido antes do commit 4):** do corte em diante, a ausência parcial sumia do `type=absence`: o dia fica com a situação presencial ou remoto e a parcial só aparece no detalhe, enquanto antes do corte o mesmo filtro lista a parcial como evento de ausência; quem filtra as ausências do mês deixava de ver as parciais. Correção: do corte em diante, `type=absence` traz também o evento do dia que tem o marcador da parcial no motor, o mesmo evento `schedule`, sem evento novo e sem mudar `status`, `situacao`, `origem` e `detalhe`; `status=absence` continua só pela situação (decisão 4); a exceção de trabalho com parcial segue a mesma regra. Commit separado, antes do commit 4.
 
+**Ajuste do `type=absence` entregue (2026-10-14, `114630e`; aguardando a revisão do responsável antes do commit 4):**
+
+| Arquivo | Como ficou |
+|---|---|
+| `services/OperationalService.php` | Os filtros do corte em diante passaram do `listCalendar` para o `calendarEngineEvents` (recebe `type` e `status`), que ainda tem os itens do motor. `type=absence` aceita o evento com status `absence` ou com o marcador da parcial (`calendarHasPartialMarker`: item que não é de dia inteiro e tem início válido, o mesmo critério do motor para o marcador); `onsite` e `remote` só pela situação; `status` só pela situação. O evento sai igual ao do Calendário sem filtro; os itens do motor continuam fora da resposta |
+| `scripts/qa-presence-cutoff.php` | Seção 4: `type=absence` com as parciais da massa (Técnico D em 19/11, regra; Técnico I em 20/11, exceção de trabalho remota). Caso novo com quatro parciais a mais: no dia de ausência de dia inteiro (uma vez só), em dia sem escala, sem início válido (fora) e antes do corte (continua evento de ausência); cada evento igual ao do Calendário sem filtro; status da situação; `type=onsite` e `remote` iguais aos eventos com essa situação; `status=absence` sem os dias com marcador |
+
+**Decisões de implementação do ajuste (a aprovar):**
+
+1. **O critério é o do marcador do motor:** item que não é de dia inteiro e tem início válido. Parcial gravada sem início válido não vira marcador no detalhe e também não entra no `type=absence`.
+2. **Dia sem escala com parcial entra no `type=absence`**, com o status `no_schedule` (o marcador aparece no detalhe "Sem escala definida · Ausente 09:00–10:00").
+3. **Dia de ausência de dia inteiro com parcial** sai uma vez só, como `absence`; o detalhe continua "Ausente (dia todo)", sem marcador.
+
+**Validação pela IA:** `qa-presence-cutoff` com 277 verificações; **mutação 31/31** (as 22 do Calendário que continuam válidas e 9 novas no filtro: sem o dia com parcial, parcial em qualquer `type`, qualquer item de ausência, `absence` sem a situação, `onsite` e `remote` sem filtro, sem filtro de `status`, `status=absence` com o dia com parcial, parcial sem início como marcador, dia inteiro como marcador); bateria PHP completa, 15 `qa:*` do frontend e lint. **Sem MySQL na estação:** só banco simulado. **Como testar:** com o corte em 16/10 no banco de teste, uma parcial de um técnico do motor depois do corte aparece em `type=absence` com o mesmo evento do Calendário sem filtro (situação presencial ou remoto, marcador no detalhe); `type=onsite` e `remote` e `status=absence` como antes.
+
 ---
 
 ## 10. Riscos e pendências
