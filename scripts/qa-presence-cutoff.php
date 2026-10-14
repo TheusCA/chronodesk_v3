@@ -747,7 +747,7 @@ assert_same([
 // Filtros: type pela situacao; status pelo mesmo mapa do corte em diante.
 $ids = static fn (array $list): array => array_column($list, 'id');
 $typeAbsence = $calendar($actors['gestor'], ['type' => 'absence']);
-assert_same(['absence-301', 'schedule-4-2026-11-16', 'absence-305', 'schedule-4-2026-11-17', 'schedule-5-2026-11-17', 'absence-306', 'schedule-2-2026-11-18'], $ids($typeAbsence), 'type=absence: eventos de ausencia e as situacoes de ausencia do motor');
+assert_same(['absence-301', 'schedule-4-2026-11-16', 'absence-305', 'schedule-4-2026-11-17', 'schedule-5-2026-11-17', 'absence-306', 'schedule-2-2026-11-18', 'schedule-4-2026-11-19', 'schedule-9-2026-11-20'], $ids($typeAbsence), 'type=absence: eventos de ausencia, as situacoes de ausencia do motor e os dias com parcial');
 foreach (['onsite', 'remote'] as $filterType) {
     $list = $calendar($actors['gestor'], ['type' => $filterType]);
     assert_same([true, true], [count($list) > 0, count($list) === count(array_filter($list, static fn (array $item): bool => $item['status'] === $filterType))], "type={$filterType}: so eventos com essa situacao, nas duas partes");
@@ -758,6 +758,56 @@ $statusAbsence = $engineEvents($calendar($actors['gestor'], ['status' => 'absenc
 assert_same(['schedule-4-2026-11-16', 'schedule-4-2026-11-17', 'schedule-5-2026-11-17', 'schedule-2-2026-11-18'], $ids($statusAbsence), 'status=absence: do corte em diante, so as situacoes de ausencia');
 $statusApproved = $calendar($actors['gestor'], ['status' => 'approved']);
 assert_same([[], ['absence-301', 'absence-305', 'absence-306']], [$engineEvents($statusApproved), $ids(array_values(array_filter($statusApproved, static fn (array $item): bool => $item['event_type'] === 'absence')))], 'status=approved: eventos de ausencia como antes; nenhum evento do motor');
+// Ajuste da validacao humana: type=absence traz tambem o dia com o marcador da
+// parcial (o mesmo evento, sem mudar status, situacao, origem e detalhe).
+$partialDb = static function () use ($reportDb): QaCutoffPdo {
+    $pdo = $reportDb();
+    $partial = static fn (int $id, int $employeeId, string $day, string $period, ?string $start, ?string $end): array => [
+        'id' => $id, 'employee_id' => $employeeId, 'starts_on' => $day, 'ends_on' => $day, 'status' => 'approved',
+        'category' => 'compromisso', 'period_type' => $period, 'start_time' => $start, 'end_time' => $end, 'reason' => 'observacao ficticia',
+    ];
+    // D: parcial no dia da ausencia de dia inteiro; C: parcial em dia sem escala;
+    // A: parcial sem inicio valido (sem marcador); antes do corte, a de A em 13/11.
+    $pdo->absences[] = $partial(308, 4, '2026-11-16', 'interval', '09:00:00', '10:00:00');
+    $pdo->absences[] = $partial(309, 3, '2026-11-17', 'interval', '09:00:00', '10:00:00');
+    $pdo->absences[] = $partial(310, 1, '2026-11-18', 'from_time', null, null);
+    $pdo->absences[] = $partial(311, 1, '2026-11-13', 'interval', '09:00:00', '10:00:00');
+    return $pdo;
+};
+$partialAll = $calendar($actors['gestor'], [], $partialDb());
+$partialAbsence = $calendar($actors['gestor'], ['type' => 'absence'], $partialDb());
+assert_same(
+    ['schedule-4-2026-11-16', 'schedule-3-2026-11-17', 'schedule-4-2026-11-17', 'schedule-5-2026-11-17', 'schedule-2-2026-11-18', 'schedule-4-2026-11-19', 'schedule-9-2026-11-20'],
+    $ids($engineEvents($partialAbsence)),
+    'type=absence com parcial: situacoes de ausencia e os dias com o marcador (regra, sem escala e excecao de trabalho), dia inteiro uma vez so, sem a parcial sem inicio'
+);
+foreach ($engineEvents($partialAbsence) as $item) {
+    assert_same($event($partialAll, $item['id']), $item, "type=absence com parcial: {$item['id']} igual ao evento sem filtro");
+}
+assert_same(['absence', 'no_schedule', 'absence', 'absence', 'absence', 'onsite', 'remote'], array_column($engineEvents($partialAbsence), 'status'), 'type=absence com parcial: o status continua o da situacao');
+assert_same(
+    ['Sem escala definida · Ausente 09:00–10:00', 'Ausente (dia todo)', false],
+    [$event($partialAll, 'schedule-3-2026-11-17')['detalhe'], $event($partialAll, 'schedule-4-2026-11-16')['detalhe'], strpos($event($partialAll, 'schedule-1-2026-11-18')['detalhe'], 'Ausente') !== false],
+    'type=absence com parcial: marcador no detalhe do sem escala; dia inteiro e parcial sem inicio sem marcador'
+);
+assert_same(
+    $ids(array_values(array_filter($partialAll, static fn (array $item): bool => $item['event_type'] === 'absence'))),
+    $ids(array_values(array_filter($partialAbsence, static fn (array $item): bool => !isset($item['situacao'])))),
+    'type=absence com parcial: antes do corte, os mesmos eventos de ausencia'
+);
+assert_same(true, in_array('absence-311', $ids($partialAbsence), true), 'type=absence com parcial: a parcial antes do corte continua como evento de ausencia');
+foreach (['onsite', 'remote'] as $filterType) {
+    assert_same(
+        array_values(array_filter($partialAll, static fn (array $item): bool => $item['event_type'] === 'schedule' && $item['status'] === $filterType)),
+        $calendar($actors['gestor'], ['type' => $filterType], $partialDb()),
+        "type={$filterType} com parcial: os mesmos eventos de antes do ajuste, pela situacao"
+    );
+}
+assert_same(
+    ['schedule-4-2026-11-16', 'schedule-4-2026-11-17', 'schedule-5-2026-11-17', 'schedule-2-2026-11-18'],
+    $ids($engineEvents($calendar($actors['gestor'], ['status' => 'absence'], $partialDb()))),
+    'status=absence com parcial: so pela situacao (decisao 4), sem os dias com marcador'
+);
 assert_same([
     'Tecnico A' => '16P 17R 18P 19R 20P 21P',
     'Tecnico C' => '16S 17S 18S 19S 20S',

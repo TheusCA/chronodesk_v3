@@ -312,13 +312,10 @@ final class OperationalService {
             }
         }
         // [F5, D8] Do corte em diante: type onsite, remote e absence filtram
-        // pela situacao do evento; status, pelo mesmo mapa (igual ao status).
+        // pela situacao do evento (absence traz tambem o dia com parcial);
+        // status, pelo mesmo mapa (igual ao status).
         if ($parts['engine'] !== null) {
-            foreach ($this->calendarEngineEvents($parts['engine']['from'], $parts['engine']['to'], $team, $employeeId, $actor) as $event) {
-                if ((in_array($type, ['onsite', 'remote', 'absence'], true) && $event['status'] !== $type)
-                    || ($status && $event['status'] !== $status)) {
-                    continue;
-                }
+            foreach ($this->calendarEngineEvents($parts['engine']['from'], $parts['engine']['to'], $team, $employeeId, $actor, $type, $status) as $event) {
                 $events[] = $event;
             }
         }
@@ -1891,12 +1888,21 @@ final class OperationalService {
      * situacao, origem e detalhe. Ausencia de dia inteiro vira a situacao; a
      * parcial, o marcador no detalhe. Arquivado ate a vespera; fora do Mapa
      * fora. Categoria so para a gestao e o proprio (P9); observacao nunca.
+     * Filtros (D8): type onsite, remote e absence pela situacao, e absence
+     * tambem o dia com o marcador da parcial (ajuste da validacao humana);
+     * status so pela situacao.
      */
-    private function calendarEngineEvents(string $from, string $to, ?string $team, ?int $employeeId, array $actor): array {
+    private function calendarEngineEvents(string $from, string $to, ?string $team, ?int $employeeId, array $actor, ?string $type, ?string $status): array {
         $rules = $this->scheduleRules($team, $employeeId, $from, true, true);
         $exceptions = $this->scheduleExceptions($from, $to, $team, $employeeId);
         $events = [];
         foreach ($this->engineSchedule($from, $to, $team, $employeeId, $rules, $exceptions, true, true) as $row) {
+            $typeMatches = !in_array($type, ['onsite', 'remote', 'absence'], true)
+                || $row['presence_type'] === $type
+                || ($type === 'absence' && self::calendarHasPartialMarker($row['ausencias']));
+            if (!$typeMatches || ($status && $row['presence_type'] !== $status)) {
+                continue;
+            }
             $category = self::seesPersonalText($actor, $row['employee_id']) ? self::calendarAbsenceCategory($row['ausencias']) : null;
             $categoryLabel = $category === null ? '' : self::absenceCategoryLabel($category);
             $suffix = $categoryLabel === '' ? '' : ' · ' . $categoryLabel;
@@ -1941,6 +1947,19 @@ final class OperationalService {
             }
         }
         return $marker['category'] ?? null;
+    }
+
+    /**
+     * [F5, D8] O dia tem o marcador da parcial no detalhe: item que nao e de
+     * dia inteiro e com inicio valido (o mesmo criterio do motor).
+     */
+    private static function calendarHasPartialMarker(array $absences): bool {
+        foreach ($absences as $absence) {
+            if ($absence['period_type'] !== 'full_day' && ($absence['start_time'] ?? null) !== null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
