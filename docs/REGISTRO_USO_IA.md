@@ -604,6 +604,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: as consultas novas (com arquivado e a leitura do corte) so rodaram contra o banco simulado; a carga real fica para o teste do responsavel. Calendario continua no calculo antigo ate o commit 3; o frontend ainda nao mostra os campos novos (commit 4). `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-14**, com as nove decisoes como estao, apos teste do responsavel em MySQL 8.0.46 local: relatorio de 16/09 a 15/11 com corte em 16/10, com as 31 linhas antes do corte identicas as do relatorio sem corte; periodo inteiro antes do corte identico byte a byte (JSON e CSV) sem a tabela, com ela vazia e com o corte depois; a partir do corte, fim de semana fora, ausencia como "Ausencia" (com acento) sem categoria, Lideranca "Presencial (regra fixa)", arquivado em 25/10 ate 23/10, fora do Mapa fora; CSV com a linha `aviso`; `split: false` no periodo so depois do corte; 10 ms para dois meses. |
 
+### Parte B, F5 — consistencia do corte (TRUNCATE) e commit 3 (Calendario) — 2026-10-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | (1) Pedido da aprovacao dos gatilhos: verificacao da 019 acusa corte apagado sem o rollback (`TRUNCATE`, que nao passa pelos gatilhos) ou gravado fora do script, e registro da protecao por privilegio. (2) Commit 3: Calendario dividido no corte, com a ausencia como situacao do motor (desenho, secao 9.7, D7 a D9, P9). |
+| **Branch e commits** | `735b032` (aprovacao), `96758ae` (consistencia e documentacao do `TRUNCATE`), `5f20dd8` (Calendario) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `migrations/verificacao/20261013_019_presence_cutoff_check.sql` (`inconsistente`), cabecalho da 019, `docs/DOCUMENTACAO_TECNICA.md` (limitacao 11, versao 1.2), `services/OperationalService.php` (`listCalendar`, `calendarEngineEvents`, categoria so no Calendario), `scripts/qa-presence-cutoff.php` (secao 4), `scripts/qa-schedule-legacy-output.php`, `scripts/qa-absences.php`; desenho 9.7. |
+| **Decisoes de implementacao** | Sete do commit 3, a aprovar (desenho 9.7); destaques: corte lido so quando escala ou ausencias entram na resposta; ausencia de quem esta no motor cortada na vespera do corte (cobertura pelo cadastro, sem o filtro de equipe); `status` do corte em diante pela igualdade com o status do evento (`approved` nao traz as situacoes); categoria so para a gestao e o proprio, observacao nunca. |
+| **Validacao executada pela IA** | `qa-presence-cutoff` (262 verificacoes); mutacao **9/9** na consistencia e **24/24** no Calendario (um sobrevivente na 1a rodada, por falta de caso na massa, morto depois de acrescentar o caso); relatorio 37/37 e gatilhos 20/20 mantidos; bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: a coluna `inconsistente` e as consultas novas do Calendario so rodaram em banco simulado. A tela atual do Calendario nao foi aberta com os eventos novos (legenda e cartoes no commit 4). Os privilegios do usuario do banco da aplicacao no servidor nao foram conferidos (pendencia com o responsavel, ligada a VULN-002). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: teste no MySQL local antes do commit 4. |
+
 ---
 
 ## 5. Responsabilidade
