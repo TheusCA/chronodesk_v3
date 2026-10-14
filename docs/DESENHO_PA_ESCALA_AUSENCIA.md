@@ -1756,7 +1756,7 @@ Ausência que cruza o corte: o evento `absence` antigo vai até a véspera do co
 
 Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expressão exata, a contagem pela tabela (0 sem ela), a coluna só com o `audit_log` e o cabeçalho; **mutação 9/9** (igualdade no lugar de diferença, remoções menos registros, só registros, 1 corte sem a tabela, cortes sempre 0, coluna sempre 0, variável errada, cabeçalho sem a parada e sem o `TRUNCATE`). Não executado em MySQL. **Como testar:** num banco de teste, depois do registro, `inconsistente = 0`; `TRUNCATE portal_presence_cutoff` dá 1; numa base sem registro, `INSERT` direto dá 1; o caminho normal (registro, rollback, 019 e registro novo) fica em 0.
 
-**Commit 3 entregue (2026-10-14, `5f20dd8`; aguardando o teste do responsável antes do commit 4):** Calendário.
+**Commit 3 entregue (2026-10-14, `5f20dd8`; aprovado em 2026-10-14, com o ajuste do `type=absence`):** Calendário.
 
 | Arquivo | Como ficou |
 |---|---|
@@ -1765,7 +1765,7 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 | `scripts/qa-schedule-legacy-output.php` | Calendário de outubro com corte em 16/10: eventos antes do corte iguais um a um; depois, só escala do motor, sem fim de semana, sem inativo antigo nem fora do Mapa. As saídas inteiras antes do corte continuam idênticas |
 | `scripts/qa-absences.php` | Banco simulado responde à checagem da tabela do corte (sem a 019); o teste do bloco de ausências confere a checagem e depois a consulta de ausências (antes, a consulta de ausências era a primeira) |
 
-**Decisões de implementação do commit 3 (a aprovar):**
+**Decisões de implementação do commit 3 (aprovadas em 2026-10-14; a 4 com o ajuste do `type=absence`, abaixo):**
 
 1. **O corte só é lido quando a escala ou as ausências entram na resposta.** Pausa, hora extra, ajuste, plantão, War Room e eventos manuais não consultam a tabela.
 2. **Quem tem a ausência como situação** é quem está no motor pelo cadastro (ativo ou arquivado, fora do Mapa não, equipes N1, N2 e Liderança), **sem o filtro de equipe**: uma consulta a mais. O evento de ausência dele vai até a véspera do corte, com o mesmo `id`; a que começa no corte ou depois não vira evento; com o período inteiro depois do corte, o evento cortado fica de fora. Fora do Mapa, inativo antigo e equipe fora das três continuam com o evento inteiro.
@@ -1778,6 +1778,26 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 **Como testar no MySQL local (sugestão):** no banco de teste com o corte em 16/10 (`INSERT` direto, só em teste, como no commit 2) e o Calendário de 01/10 a 31/10: (1) por perfil (gestor, Liderança, admin, técnico próprio, outro técnico, somente leitura): até 15/10, os mesmos eventos do código anterior (`7e08b03`); (2) de 16/10 em diante, um evento por técnico e dia útil (sábado só com exceção de trabalho), ausência como "Ausência: Nome" com a categoria só para a gestão e o próprio, parcial no `detalhe`, fora do Mapa só com o evento de ausência, arquivado até a véspera, Liderança "Presencial (regra fixa)"; (3) ausência que cruza 16/10 vai até 15/10 como evento; (4) `type=absence`, `onsite`, `remote`, `schedule`; `status=absence` e `approved`; equipe N1; (5) `type=pause`, `overtime` e os demais iguais aos de antes; (6) a observação nunca aparece; (7) a tela atual do Calendário abre sem erro com os eventos novos.
 
 **Validação pela IA:** `qa-presence-cutoff` com 262 verificações; `qa-schedule-legacy-output` e `qa-absences` atualizados; **mutação 24/24** no Calendário (na 1ª rodada sobreviveu um mutante por falta de caso na massa: a categoria da parcial junto da exceção de trabalho; o caso entrou na massa); as suítes anteriores continuam mortas (relatório 37/37, gatilhos 20/20, consistência 9/9); bateria PHP completa, 15 `qa:*` do frontend e lint. **Sem MySQL na estação:** as consultas só rodaram contra o banco simulado; a tela do Calendário com os eventos novos não foi aberta.
+
+**Coluna `inconsistente` e commit 3 aprovados em 2026-10-14**, após teste do responsável em MySQL 8.0.46 local; as sete decisões do commit 3 ficam aprovadas, com o ajuste do `type=absence` (abaixo). Massa de teste removida e tabela do corte esvaziada depois do teste.
+
+| Caso | Resultado |
+|---|---|
+| `inconsistente` antes da 019 (banco de teste com `audit_log`) | Aviso de tabela ausente e `inconsistente = 0` |
+| Depois do registro | 0 |
+| Depois de `TRUNCATE` | 1; continua 1 depois do rollback |
+| Base nova com `INSERT` direto, sem registro | 1 |
+| Caminho normal (registro, rollback, `RENAME` da cópia, 019 e registro novo) | 0, com eventos 1/1 e depois 2/1 |
+| Gatilhos e registro | `UPDATE` e `DELETE` barrados com "corte imutavel: use o rollback da 019"; registro recusado com data passada e com dia 15 |
+| Calendário: escopo do teste | Corte 2026-10-16 inserido direto no banco local; só `type` `schedule` e `absence` (o banco local não tem `room_description`) |
+| Antes do corte | Eventos de 01 a 15/10 iguais, um a um, aos de sem corte |
+| Ausência como evento | A de técnico do motor que cruza o corte termina em 15/10; a de fora do Mapa fica inteira (15 a 19/10) |
+| Do dia 16 em diante | 11 dias úteis × 14 cadastros, sem fim de semana, sem o fora do Mapa; "Ausência: Nome", "Sem escala: Nome" e a Liderança em "Presencial (regra fixa)"; parcial no detalhe ("Ausente 09:00–10:00") |
+| Categoria por perfil | Só para gestor, Liderança, admin e o próprio; vazia para outro técnico, somente leitura e sem ator; observação nunca |
+| Filtros e período | Período todo depois do corte sem o evento cortado; `status=approved` só com os eventos de ausência anteriores ao corte |
+| `qa-presence-cutoff` | 262 verificações OK |
+
+**Ajuste da validação humana (pedido antes do commit 4):** do corte em diante, a ausência parcial sumia do `type=absence`: o dia fica com a situação presencial ou remoto e a parcial só aparece no detalhe, enquanto antes do corte o mesmo filtro lista a parcial como evento de ausência; quem filtra as ausências do mês deixava de ver as parciais. Correção: do corte em diante, `type=absence` traz também o evento do dia que tem o marcador da parcial no motor, o mesmo evento `schedule`, sem evento novo e sem mudar `status`, `situacao`, `origem` e `detalhe`; `status=absence` continua só pela situação (decisão 4); a exceção de trabalho com parcial segue a mesma regra. Commit separado, antes do commit 4.
 
 ---
 
