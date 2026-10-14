@@ -1035,6 +1035,23 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   014 e o `git merge` do commit ensaiado juntos (com `cat-file` e `pipefail`),
   a verificacao e o passo pos-deploy da D5; nao use o `git pull` deste item.
   Entra no roteiro consolidado da Parte B (deploy unico depois do F9).
+- Deploy que traz o F5 (Parte B, Calendario e relatorios no motor a partir da
+  data de corte): o roteiro completo entra no commit 5 do F5 e no roteiro
+  consolidado da Parte B. Ja decidido: **antes do registro do corte, nenhum
+  tecnico ativo de N1 ou N2 pode ficar sem regra vigente.** Com o corte, cada
+  um deles aparece como "Sem escala: Nome" em todo dia util do Calendario, para
+  todos os perfis, e conta como dia sem escala no relatorio (em 2026-10-14 a
+  contagem deu 6 no servidor, com 22 ativos). Antes do registro, a gestao
+  cadastra a regra de cada um ou marca o cadastro como "fora do Mapa", e a
+  consulta abaixo (so contagens, nunca nome) roda de novo ate
+  `sem_regra_no_corte = 0`. **Com contagem maior que 0, o registro do corte nao
+  roda** (decisao do responsavel). Troque `AAAA-MM-16` pela data do corte
+  planejada (ensaiar a consulta no MySQL local antes; conferir se ela reproduz
+  a contagem de 6 feita pelo responsavel):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET @corte := 'AAAA-MM-16'; SELECT COUNT(*) AS ativos_n1_n2, COALESCE(SUM(NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= @corte AND (r.effective_until IS NULL OR r.effective_until >= @corte))), 0) AS sem_regra_no_corte FROM funcionarios f WHERE f.ativo = 1 AND f.fora_mapa_escala = 0 AND LOWER(f.equipe) IN ('n1', 'n2');"; unset P
+```
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
