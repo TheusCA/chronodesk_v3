@@ -580,6 +580,30 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: a 019, o registro, o rollback e a verificacao nao foram executados; ficam para o teste do responsavel e o ensaio. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-14**, com as oito decisoes como estao, apos teste do responsavel no MySQL local, num banco de teste: registro antes da 019 para ("aplique a migration 019 antes"); a 019 duas vezes no mesmo estado (`tabela_019 = 1`, `checks_019 = 2`); recusas sem gravar nada (sem `@corte`, autor em branco, 2020-01-16, 2026-11-15, 2026-13-16, 16/11/2026); data futura aceita (`cortes = 1`, `corte_no_futuro = 1`, `PRESENCE_CUTOFF_REGISTERED` no `audit_log`); 2o registro para ("corte ja registrado"); `INSERT` direto com id 2 ou dia 15 recusado (3819); tres registros simultaneos: um gravou e os outros falharam, nunca dois cortes; rollback com copia, `PRESENCE_CUTOFF_REMOVED` e tabela fora, e o 2o rollback para. **Ajuste pedido antes do commit 2:** a imutabilidade (D3) dependia so do script de registro (`DELETE` seguido de `INSERT` direto funcionava no banco e so foi barrado porque o dia nao era 16); a 019 ganha dois gatilhos em `portal_presence_cutoff`, `BEFORE UPDATE` e `BEFORE DELETE`, que sempre param com `SIGNAL 45000`; criacao condicional, a 019 continua idempotente; rollback continua com `DROP TABLE`; verificacao conta os gatilhos (esperado 2). |
 
+### Parte B, F5 — ajuste da 019 (gatilhos de imutabilidade do corte) — 2026-10-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Levar a imutabilidade do corte (D3) para o banco, pedido da aprovacao do commit 1: `UPDATE` e `DELETE` em `portal_presence_cutoff` sempre param (desenho, secao 9.7). |
+| **Branch e commits** | `adee559` (aprovacao do commit 1 e pedido), `b2c9bc5` (codigo e testes) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `migrations/20261013_019_presence_cutoff.sql` (gatilhos `trg_presence_cutoff_no_update` e `trg_presence_cutoff_no_delete`), cabecalho do rollback, `migrations/verificacao/20261013_019_presence_cutoff_check.sql` (`gatilhos_019`), `scripts/qa-presence-cutoff.php`; desenho 9.7. |
+| **Decisoes de implementacao** | Cinco, a aprovar (desenho 9.7); destaque: o pedido era criar os gatilhos por `IF` sobre o `information_schema.TRIGGERS`, mas o MySQL nao aceita `CREATE TRIGGER` em `PREPARE` (erro 1295) nem em procedimento (erro 1303); a 019 usa `CREATE TRIGGER IF NOT EXISTS` (MySQL 8.0.29 ou mais novo) e o `information_schema.TRIGGERS` fica na verificacao. Mensagem sem acento, como as demais dos scripts SQL. |
+| **Validacao executada pela IA** | `qa-presence-cutoff` (143 verificacoes); mutacao **20/20** nos gatilhos, no rollback e na verificacao; bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: os gatilhos nao foram executados; os erros 1295 e 1303 e a versao do `IF NOT EXISTS` vem da documentacao do MySQL 8.0 e ficam provados no teste do responsavel. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: teste no MySQL local, junto com o commit 2. |
+
+### Parte B, F5 — commit 2 (relatorio e CSV divididos na data de corte) — 2026-10-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Relatorio operacional (JSON) e CSV divididos no corte: antes dele, o calculo antigo sem nenhuma mudanca; a partir dele, o motor (P3, P4, ausencia, historico do arquivado), com os campos novos so quando o periodo alcanca o corte (desenho, secao 9.7, D4 a D7 e D11). |
+| **Branch e commits** | `7e08b03` (codigo e testes) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `services/PresenceCutoff.php` (novo), `services/OperationalService.php`, `scripts/qa-presence-cutoff.php`, `scripts/qa-schedule-legacy-output.php` (secao 3), `scripts/qa-schedule-history.php` (rotulo com acento da tela Escala); desenho 9.7. |
+| **Decisoes de implementacao** | Nove, a aprovar (desenho 9.7); destaques: leitura do corte em duas consultas, uma vez por requisicao; corte invalido no banco para o relatorio em vez de cair no calculo antigo; rotulos com acento por padrao e mapa dos rotulos antigos no calculo antigo; linha do motor com o formato da tela Escala (carga medida em banco simulado); aviso do CSV com a data do corte na coluna `data`. |
+| **Validacao executada pela IA** | `qa-presence-cutoff` (208 verificacoes); `qa-schedule-legacy-output` (17 saidas identicas sem a 019, com a tabela vazia, com o corte depois de cada periodo e no futuro; parte antiga igual linha a linha com o corte no meio); mutacao **37/37** (dois sobreviventes na 1a rodada, por teste fraco, mortos depois de reforcar os testes); carga com banco simulado (80 cadastros, 366 dias: 134 ms e 8,2 MB no motor contra 75 ms e 6,1 MB no calculo antigo); bateria PHP completa, 15 `qa:*` do frontend e lint. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: as consultas novas (com arquivado e a leitura do corte) so rodaram contra o banco simulado; a carga real fica para o teste do responsavel. Calendario continua no calculo antigo ate o commit 3; o frontend ainda nao mostra os campos novos (commit 4). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: teste no MySQL local antes do commit 3. |
+
 ---
 
 ## 5. Responsabilidade
