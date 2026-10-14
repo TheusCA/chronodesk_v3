@@ -97,7 +97,13 @@ assert_same(0, preg_match('/^\s*(CREATE|ALTER|DROP)\s+TABLE/mi', $migration), '0
 assert_same(1, preg_match("/SET @create_cutoff_sql := IF\\(\\s*@has_cutoff_table = 0,/", $migration), '019: cria so se a tabela nao existe');
 assert_same(true, $at($migration, "TABLE_NAME = 'portal_presence_cutoff'") > -1, '019: checagem em information_schema');
 assert_same(0, preg_match('/^\s*(INSERT|UPDATE|DELETE|TRUNCATE|REPLACE)\b/mi', $migration), '019: sem linha (tabela vazia: nada muda ate o registro)');
-assert_same(0, preg_match('/\b(SIGNAL|DROP|DEFAULT CURRENT|ON UPDATE)\b/i', $migration), '019: sem parada, sem remocao e sem data do banco');
+// Fora dos dois gatilhos (abaixo), nenhuma parada, remocao ou data do banco.
+$triggerSql = [
+    'update' => "CREATE TRIGGER IF NOT EXISTS trg_presence_cutoff_no_update BEFORE UPDATE ON portal_presence_cutoff FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'corte imutavel: use o rollback da 019';",
+    'delete' => "CREATE TRIGGER IF NOT EXISTS trg_presence_cutoff_no_delete BEFORE DELETE ON portal_presence_cutoff FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'corte imutavel: use o rollback da 019';",
+];
+$flatMigration = (string)preg_replace('/\s+/', ' ', $migration);
+assert_same(0, preg_match('/\b(SIGNAL|DROP|DEFAULT CURRENT|ON UPDATE)\b/i', str_replace($triggerSql, '', $flatMigration)), '019: sem parada, sem remocao e sem data do banco fora dos gatilhos');
 foreach ([
     'id TINYINT UNSIGNED NOT NULL' => 'chave de uma linha',
     'cutoff_date DATE NOT NULL' => 'data do corte',
@@ -109,6 +115,19 @@ foreach ([
 ] as $needle => $label) {
     assert_same(true, $at($migration, $needle) > -1, "019: {$label}");
 }
+
+// Gatilhos da imutabilidade (D3 no banco; aprovacao do commit 1, 2026-10-14):
+// UPDATE e DELETE sempre param, sem condicao; INSERT livre para o registro.
+foreach ($triggerSql as $event => $statement) {
+    assert_same(1, substr_count($flatMigration, $statement), "019: gatilho BEFORE {$event} incondicional, com a mensagem do rollback");
+    assert_same(true, strpos($flatMigration, $statement) > $at($flatMigration, 'EXECUTE create_cutoff_stmt;'), "019: gatilho BEFORE {$event} depois da tabela");
+}
+assert_same([2, 2], [preg_match_all('/\bCREATE TRIGGER\b/i', $migration), preg_match_all('/\bCREATE TRIGGER IF NOT EXISTS\b/', $migration)], '019: so os dois gatilhos, ambos com IF NOT EXISTS (idempotente)');
+assert_same(0, preg_match('/\bDROP TRIGGER\b|\b(BEFORE|AFTER) INSERT\b|\bAFTER (UPDATE|DELETE)\b/i', $migration), '019: sem DROP TRIGGER (sem janela sem protecao), sem gatilho de INSERT nem AFTER');
+assert_same(true, strlen('corte imutavel: use o rollback da 019') <= 128, '019: mensagem do gatilho dentro do limite de 128 do SIGNAL');
+assert_same(true, strpos($rawFile('migrations/20261013_019_presence_cutoff.sql'), 'Exige MySQL 8.0.29 ou mais novo') !== false, '019: cabecalho avisa a versao minima (IF NOT EXISTS em CREATE TRIGGER)');
+// O registro so insere (nao passa pelos gatilhos); o rollback nao depende deles.
+assert_same(0, preg_match('/\bTRIGGER\b/i', $register . $rollback), 'registro e rollback 019 nao mexem em gatilho');
 
 // Registro: recusas antes de gravar, na ordem; gravacao e auditoria juntas.
 assert_same(true, $at($register, 'DROP PROCEDURE IF EXISTS registrar_corte_019;') > -1 && $at($register, 'DROP PROCEDURE IF EXISTS registrar_corte_019;') < $at($register, 'CREATE PROCEDURE registrar_corte_019('), 'registro 019: procedimento recriado a cada execucao');
@@ -186,12 +205,15 @@ assert_same(true, $at($rollback, "''PRESENCE_CUTOFF_REMOVED''") > -1 && $at($rol
 assert_same(0, preg_match('/registered_by[^;]*audit_log|audit_log[^;]*registered_by/is', $rollback), 'rollback 019: o autor nao vai para a auditoria');
 assert_same(true, $at($rollback, 'EXECUTE copy_stmt;') < $at($rollback, 'EXECUTE audit_stmt;') && $at($rollback, 'EXECUTE audit_stmt;') < $at($rollback, 'EXECUTE drop_cutoff_stmt;'), 'rollback 019: copia e auditoria antes de remover a tabela');
 assert_same(true, $at($rollback, "'DROP TABLE portal_presence_cutoff'") > -1, 'rollback 019: remove a tabela do corte');
-assert_same(0, preg_match('/\b(UPDATE|DELETE|TRUNCATE|ALTER)\b/i', $rollback), 'rollback 019: nao altera outra tabela');
+assert_same(0, preg_match('/\b(UPDATE|DELETE|TRUNCATE|ALTER)\b/i', $rollback), 'rollback 019: sem UPDATE nem DELETE (nao passa pelos gatilhos) e nao altera outra tabela');
+assert_same(1, preg_match_all('/DROP TABLE/', $rollback), 'rollback 019: um unico DROP TABLE, que leva os gatilhos junto');
 
 // Verificacao: so le, so contagens e a data; o autor nao sai.
-assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE|REPLACE|RENAME|CALL)\b/i', $check), 'verificacao 019 so le');
+assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE|REPLACE|RENAME|CALL)\b/i', str_replace(["EVENT_MANIPULATION = 'UPDATE'", "EVENT_MANIPULATION = 'DELETE'"], '', $check)), 'verificacao 019 so le');
+$flatCheck = (string)preg_replace('/\s+/', ' ', $check);
+assert_same(true, $at($flatCheck, "(SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE = 'portal_presence_cutoff' AND ACTION_TIMING = 'BEFORE' AND ACTION_STATEMENT LIKE '%corte imutavel: use o rollback da 019%' AND ((TRIGGER_NAME = 'trg_presence_cutoff_no_update' AND EVENT_MANIPULATION = 'UPDATE') OR (TRIGGER_NAME = 'trg_presence_cutoff_no_delete' AND EVENT_MANIPULATION = 'DELETE'))) AS gatilhos_019") > -1, 'verificacao 019: gatilhos_019 conta os dois pelo nome, evento, momento, tabela e corpo');
 assert_same([2, true], [substr_count($check, 'registered_by'), $at($check, "SUM(registered_by IS NULL OR TRIM(registered_by) = '''')") > -1], 'verificacao 019: autor nunca exibido (so na contagem sem_autor)');
-foreach (['tabela_019', 'checks_019', 'copia_rollback', 'procedimentos_soltos', 'cortes', 'corte', 'corte_dia_16', 'corte_no_futuro', 'sem_autor', 'eventos_registro', 'eventos_remocao'] as $column) {
+foreach (['tabela_019', 'checks_019', 'gatilhos_019', 'copia_rollback', 'procedimentos_soltos', 'cortes', 'corte', 'corte_dia_16', 'corte_no_futuro', 'sem_autor', 'eventos_registro', 'eventos_remocao'] as $column) {
     assert_same(true, $at($check, "AS {$column}") > -1, "verificacao 019: {$column}");
 }
 assert_same(true, $at($check, "@has_cutoff_table = 1,") > -1 && $at($check, "@has_audit_log = 1,") > -1, 'verificacao 019: corte e auditoria so com as tabelas presentes (ensaio sem audit_log)');

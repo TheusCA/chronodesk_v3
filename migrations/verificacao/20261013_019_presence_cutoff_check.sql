@@ -4,8 +4,10 @@
 -- do rollback e no pos-deploy:
 --   read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_019_presence_cutoff_check.sql; unset P
 --
--- 1. Estrutura: tabela_019 = 1 e checks_019 = 2 depois da 019 (0 antes e
---    depois do rollback); copia_rollback = 1 so depois de um rollback;
+-- 1. Estrutura: tabela_019 = 1, checks_019 = 2 e gatilhos_019 = 2 depois da
+--    019 (0 antes e depois do rollback: os gatilhos saem com a tabela;
+--    gatilho com o nome certo e outro corpo nao conta);
+--    copia_rollback = 1 so depois de um rollback;
 --    procedimentos_soltos = 0 (registro ou rollback recusado deixa o
 --    procedimento: remova com DROP PROCEDURE IF EXISTS <nome>).
 -- 2. Corte (com a tabela; antes, um aviso): cortes = 0 depois da 019 e 1
@@ -28,6 +30,12 @@ SELECT
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_presence_cutoff'
         AND CONSTRAINT_TYPE = 'CHECK'
         AND CONSTRAINT_NAME IN ('ck_presence_cutoff_single', 'ck_presence_cutoff_day')) AS checks_019,
+    (SELECT COUNT(*) FROM information_schema.TRIGGERS
+      WHERE TRIGGER_SCHEMA = DATABASE() AND EVENT_OBJECT_TABLE = 'portal_presence_cutoff'
+        AND ACTION_TIMING = 'BEFORE'
+        AND ACTION_STATEMENT LIKE '%corte imutavel: use o rollback da 019%'
+        AND ((TRIGGER_NAME = 'trg_presence_cutoff_no_update' AND EVENT_MANIPULATION = 'UPDATE')
+          OR (TRIGGER_NAME = 'trg_presence_cutoff_no_delete' AND EVENT_MANIPULATION = 'DELETE'))) AS gatilhos_019,
     (SELECT COUNT(*) FROM information_schema.TABLES
       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_presence_cutoff_bkp_019') AS copia_rollback,
     (SELECT COUNT(*) FROM information_schema.ROUTINES

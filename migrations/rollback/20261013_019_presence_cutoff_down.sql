@@ -12,7 +12,10 @@
 --    registered_by) em portal_presence_cutoff_bkp_019 (fica: apagar a mao
 --    depois de conferir; guarda o login de quem registrou) e, se havia corte,
 --    grava PRESENCE_CUTOFF_REMOVED (CRITICAL) no audit_log com a data.
--- 1. portal_presence_cutoff sai. Sem a tabela, a aplicacao do F5 volta ao
+-- 1. portal_presence_cutoff sai, com DROP TABLE, e os gatilhos da 019
+--    (trg_presence_cutoff_no_update e _no_delete) saem junto com ela. Nada
+--    aqui faz UPDATE ou DELETE na tabela do corte: o rollback nao depende dos
+--    gatilhos nem passa por eles. Sem a tabela, a aplicacao do F5 volta ao
 --    calculo antigo em todas as datas; o codigo anterior nao a le.
 -- Cada passo confere information_schema antes de alterar. O arquivo inteiro
 -- NAO se repete: a segunda execucao para no passo 0, de proposito.
