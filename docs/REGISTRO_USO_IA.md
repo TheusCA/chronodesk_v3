@@ -626,7 +626,7 @@ Base da afirmação:
 | **Decisoes de implementacao** | Tres, a aprovar (desenho 9.7): criterio do marcador do motor (parcial sem inicio valido fica fora); dia sem escala com parcial entra com status `no_schedule`; dia de ausencia de dia inteiro com parcial sai uma vez so. |
 | **Validacao executada pela IA** | `qa-presence-cutoff` (277 verificacoes); mutacao **31/31** (22 do Calendario e 9 novas no filtro); bateria PHP completa, 15 `qa:*` do frontend e lint. |
 | **Limitacoes declaradas** | Sem MySQL na estacao: so banco simulado. `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: revisao do responsavel antes do commit 4. |
+| **Validacao humana** | **Aprovado em 2026-10-14**, com as tres decisoes, apos teste do responsavel em MySQL 8.0.46 local, com o corte 2026-10-16 inserido direto e parciais depois do corte: `type=absence` trouxe o "Presencial" de um tecnico com parcial 09:00-10:00 e o "Sem escala" de outro com parcial a partir das 15:00 (status `no_schedule`), os dois iguais ao evento sem filtro; parcial dentro de ferias: o dia saiu uma vez so, como `absence`; parcial antes do corte continuou evento de ausencia; `status=absence` so com as situacoes de ausencia; `type=onsite` sem mudanca; categoria so para gestor e o proprio, o horario no detalhe para todos (P9), observacao nunca; `qa-presence-cutoff` com 277 verificacoes OK. Massa, regras de teste e corte removidos depois. **Pendencia 16c (`6afc391`), achado do responsavel:** a consulta proposta so conferia a regra no dia do corte; regra que termina dentro da competencia ou buraco entre duas regras nao eram contados. Correcao pedida: coluna `sem_regra_na_competencia` (cada dia da competencia, `WITH RECURSIVE`), ja testada pelo responsavel no MySQL local. |
 
 ---
 
