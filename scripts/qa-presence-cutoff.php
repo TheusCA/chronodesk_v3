@@ -12,6 +12,11 @@ declare(strict_types=1);
 //    motor a partir do corte (P3, P4, ausencia, parcial, Lideranca, fora do
 //    Mapa, arquivado ate a vespera), totais, aviso, filtros e campos novos so
 //    quando o periodo alcanca o corte.
+// 4. Calendario dividido no corte (commit 3): escala antiga igual antes do
+//    corte; depois, um evento do motor por tecnico e dia util, com situacao,
+//    origem e detalhe; ausencia como situacao (evento cortado na vespera,
+//    inteiro para quem nao esta no motor); categoria so para a gestao e o
+//    proprio (P9), observacao nunca; filtros type e status; sem relogio.
 //
 // Nao acessa banco (usa um banco simulado) nem os arquivos de estado da aplicacao.
 //
@@ -319,7 +324,7 @@ final class QaCutoffStatement extends PDOStatement {
         $db = $this->pdo;
         $db->log[] = $sql;
         $this->rows = [];
-        foreach (['FROM portal_overtime_entries', 'FROM portal_time_adjustments', 'FROM portal_oncall_shifts'] as $empty) {
+        foreach (['FROM portal_overtime_entries', 'FROM portal_time_adjustments', 'FROM portal_oncall_shifts', 'FROM portal_calendar_events', 'FROM pausas p', 'FROM portal_critical_incidents'] as $empty) {
             if (strpos($sql, $empty) !== false) {
                 return true;
             }
@@ -378,9 +383,25 @@ final class QaCutoffStatement extends PDOStatement {
             usort($this->rows, static fn (array $a, array $b): int => [$a['exception_date'], $a['employee_name']] <=> [$b['exception_date'], $b['employee_name']]);
             return true;
         }
+        // Bloco de ausencias do Calendario (categoria, nunca o motivo).
+        if (strpos($sql, 'SELECT id, employee_name AS title, category, CONCAT(starts_on, " 00:00:00") AS starts_at, CONCAT(ends_on, " 23:59:59") AS ends_at, NULL AS team, employee_id, status FROM portal_absences WHERE starts_on <= :date_to AND ends_on >= :date_from AND status = "approved"') === 0) {
+            foreach ($db->absences as $row) {
+                if ($row['status'] === 'approved' && $row['starts_on'] <= $params[':date_to'] && $row['ends_on'] >= $params[':date_from'] && $matchesEmployee($row['employee_id'])) {
+                    $this->rows[] = [
+                        'id' => $row['id'], 'title' => $db->employees[$row['employee_id']]['nome'], 'category' => $row['category'],
+                        'starts_at' => $row['starts_on'] . ' 00:00:00', 'ends_at' => $row['ends_on'] . ' 23:59:59',
+                        'team' => null, 'employee_id' => $row['employee_id'], 'status' => 'approved',
+                    ];
+                }
+            }
+            usort($this->rows, static fn (array $a, array $b): int => strcmp($a['starts_at'], $b['starts_at']));
+            return true;
+        }
+        // Ausencias do motor; no Calendario, com a categoria (F5, commit 3).
         $absencesPrefix = 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND ';
-        if (strpos($sql, $absencesPrefix) === 0) {
-            $rest = substr($sql, strlen($absencesPrefix));
+        $absenceSql = str_replace('a.end_time, a.category FROM', 'a.end_time FROM', $sql, $withCategory);
+        if (strpos($absenceSql, $absencesPrefix) === 0) {
+            $rest = substr($absenceSql, strlen($absencesPrefix));
             $withArchived = strpos($rest, '(f.ativo = 1 OR f.arquivado_em IS NOT NULL) WHERE ') === 0;
             if (!$withArchived && strpos($rest, 'f.ativo = 1 WHERE ') !== 0) {
                 throw new PDOException('SQLSTATE[HY000]: banco simulado: filtro de cadastro nao previsto');
@@ -390,7 +411,7 @@ final class QaCutoffStatement extends PDOStatement {
                 if ($visible($employee, $withArchived) && $row['status'] === 'approved'
                     && $row['starts_on'] <= $params[':date_to'] && $row['ends_on'] >= $params[':date_from']
                     && (!isset($params[':team']) || strtolower($employee['equipe']) === $params[':team']) && $matchesEmployee($row['employee_id'])) {
-                    $this->rows[] = array_intersect_key($row, array_flip(['employee_id', 'starts_on', 'ends_on', 'period_type', 'start_time', 'end_time']));
+                    $this->rows[] = array_intersect_key($row, array_flip(array_merge(['employee_id', 'starts_on', 'ends_on', 'period_type', 'start_time', 'end_time'], $withCategory === 1 ? ['category'] : [])));
                 }
             }
             return true;
@@ -486,19 +507,26 @@ $reportDb = static function (bool $table = true, ?string $cutoff = '2026-11-16')
     $pdo->exceptions = [
         ['id' => 201, 'employee_id' => 1, 'team' => 'n1', 'exception_date' => '2026-11-21', 'exception_type' => 'oncall'],
         ['id' => 202, 'employee_id' => 2, 'team' => 'n2', 'exception_date' => '2026-11-18', 'exception_type' => 'day_off'],
+        // I: excecao de trabalho no dia de uma parcial (Calendario: categoria junto da excecao).
+        ['id' => 203, 'employee_id' => 9, 'team' => 'n1', 'exception_date' => '2026-11-20', 'exception_type' => 'remote'],
     ];
-    $absence = static fn (int $id, int $employeeId, string $from, string $to, string $status = 'approved', string $period = 'full_day', ?string $start = null): array => [
+    $absence = static fn (int $id, int $employeeId, string $from, string $to, string $status = 'approved', string $period = 'full_day', ?string $start = null, string $category = 'ferias'): array => [
         'id' => $id, 'employee_id' => $employeeId, 'starts_on' => $from, 'ends_on' => $to, 'status' => $status,
-        'category' => 'ferias', 'period_type' => $period, 'start_time' => $start, 'end_time' => null,
+        'category' => $category, 'period_type' => $period, 'start_time' => $start, 'end_time' => null,
+        'reason' => 'observacao ficticia',
     ];
     $pdo->absences = [
         // D: ausencia que cruza o corte e parcial depois dele.
         $absence(301, 4, '2026-11-13', '2026-11-17'),
-        $absence(302, 4, '2026-11-19', '2026-11-19', 'approved', 'from_time', '14:00:00'),
+        $absence(302, 4, '2026-11-19', '2026-11-19', 'approved', 'from_time', '14:00:00', 'compromisso'),
         // E (arquivado): ausencia antes do arquivamento.
         $absence(303, 5, '2026-11-17', '2026-11-17'),
         // A: pendente nao conta.
         $absence(304, 1, '2026-11-20', '2026-11-20', 'pending'),
+        // G (fora do Mapa) e F (inativo antigo): fora do motor, continuam como evento no Calendario.
+        $absence(305, 7, '2026-11-17', '2026-11-18', 'approved', 'full_day', null, 'folga'),
+        $absence(306, 6, '2026-11-18', '2026-11-18', 'approved', 'full_day', null, 'outro'),
+        $absence(307, 9, '2026-11-20', '2026-11-20', 'approved', 'from_time', '15:00:00', 'outro'),
     ];
     return $pdo;
 };
@@ -632,5 +660,138 @@ $once = new OperationalService($pdo, '2026-11-10');
 $once->report(['from' => '2026-11-12', 'to' => '2026-11-22']);
 $once->report(['from' => '2026-11-16', 'to' => '2026-11-22']);
 assert_same(1, count(array_filter($pdo->log, static fn (string $sql): bool => $sql === 'SELECT cutoff_date FROM portal_presence_cutoff WHERE id = 1')), 'corte lido uma vez por requisicao');
+
+// ----------------------------------------------------------------------------
+// 4. Calendario dividido no corte (commit 3; D7 a D9, P9)
+// ----------------------------------------------------------------------------
+$actors = [
+    'gestor' => ['role' => 'gestor', 'employee_id' => null],
+    'proprio' => ['role' => 'tecnico', 'employee_id' => 4],
+    'outro' => ['role' => 'tecnico', 'employee_id' => 1],
+    'leitura' => ['role' => 'somente_leitura', 'employee_id' => null],
+];
+$calendar = static function (array $actor, array $filters = [], ?QaCutoffPdo $pdo = null, string $today = '2026-11-10') use ($reportDb): array {
+    return (new OperationalService($pdo ?? $reportDb(), $today))->listCalendar($filters + ['from' => '2026-11-12', 'to' => '2026-11-22'], $actor)['items'];
+};
+$engineEvents = static fn (array $items): array => array_values(array_filter($items, static fn (array $item): bool => isset($item['situacao'])));
+$event = static function (array $items, string $id): array {
+    foreach ($items as $item) {
+        if ($item['id'] === $id) {
+            return $item;
+        }
+    }
+    return [];
+};
+$names = static fn (QaCutoffPdo $pdo): array => array_map(static fn (array $employee): string => $employee['nome'], $pdo->employees);
+$eventCodes = static function (array $items) use ($code, $names, $reportDb): array {
+    $byEmployee = $names($reportDb());
+    $days = [];
+    foreach ($items as $item) {
+        $name = $byEmployee[$item['employee_id']];
+        $days[$name] = trim(($days[$name] ?? '') . ' ' . $code(['date' => substr($item['starts_at'], 0, 10), 'presence_type' => $item['status']]));
+    }
+    ksort($days);
+    return $days;
+};
+$items = $calendar($actors['gestor']);
+$legacyItems = $calendar($actors['gestor'], [], $reportDb(false));
+$before = static fn (array $list): array => array_values(array_filter($list, static fn (array $item): bool => $item['event_type'] === 'schedule' && $item['starts_at'] < '2026-11-16 00:00:00'));
+assert_same($before($legacyItems), $before($items), 'Calendario: escala antes do corte igual a do calculo antigo, evento a evento');
+assert_same(0, count(array_filter($items, static fn (array $item): bool => $item['event_type'] === 'schedule' && $item['starts_at'] >= '2026-11-16' && !isset($item['situacao']))), 'Calendario: do corte em diante, nenhuma escala do calculo antigo');
+assert_same($byName($engineRows), $eventCodes($engineEvents($items)), 'Calendario: um evento por tecnico e dia util do motor, igual ao relatorio (P3, P4, ausencia, arquivado ate a vespera, Lideranca; sem fora do Mapa nem inativo antigo)');
+// Ausencia como evento: ate a vespera do corte para quem esta no motor; inteira para quem nao esta.
+$absenceEvents = [];
+foreach ($items as $item) {
+    if ($item['event_type'] === 'absence') {
+        $absenceEvents[$item['id']] = [$item['starts_at'], $item['ends_at'], $item['description']];
+    }
+}
+assert_same([
+    'absence-301' => ['2026-11-13 00:00:00', '2026-11-15 23:59:59', 'Férias'],
+    'absence-305' => ['2026-11-17 00:00:00', '2026-11-18 23:59:59', 'Folga'],
+    'absence-306' => ['2026-11-18 00:00:00', '2026-11-18 23:59:59', 'Outro'],
+], $absenceEvents, 'Calendario: ausencia que cruza o corte vai ate a vespera; a de depois do corte vira situacao; fora do Mapa e inativo antigo continuam como evento');
+foreach ([
+    'schedule-4-2026-11-16' => ['Ausência: Tecnico D', 'absence', 'ausente', 'ausencia', 'Ausente (dia todo)'],
+    'schedule-2-2026-11-18' => ['Ausência: Tecnico B', 'absence', 'ausente', 'ausencia', 'Ausente (dia todo)'],
+    'schedule-1-2026-11-21' => ['Presencial: Tecnico A', 'onsite', 'presencial', 'regra_escala', 'Presencial (exceção: plantão)'],
+    'schedule-3-2026-11-16' => ['Sem escala: Tecnico C', 'no_schedule', 'sem_escala', 'regra_escala', 'Sem escala definida'],
+    'schedule-8-2026-11-16' => ['Presencial: Lider H', 'onsite', 'presencial', 'regra_escala', 'Presencial (regra fixa)'],
+] as $id => $expected) {
+    $item = $event($items, $id);
+    assert_same($expected, [$item['title'] ?? null, $item['status'] ?? null, $item['situacao'] ?? null, $item['origem'] ?? null, $item['detalhe'] ?? null], "Calendario: evento {$id} com titulo, status, situacao, origem e detalhe do motor");
+}
+assert_same(true, strpos($event($items, 'schedule-4-2026-11-19')['detalhe'], 'Ausente a partir de 14:00') !== false, 'Calendario: parcial como marcador no detalhe');
+// P9: categoria so para a gestao e o proprio; observacao nunca; excecao sem categoria.
+$descriptions = [];
+foreach ($actors as $who => $actor) {
+    $list = $calendar($actor);
+    foreach (['schedule-4-2026-11-16', 'schedule-4-2026-11-19', 'schedule-5-2026-11-17', 'schedule-9-2026-11-20', 'schedule-2-2026-11-18', 'schedule-1-2026-11-21', 'schedule-8-2026-11-16', 'schedule-9-2026-11-16', 'schedule-3-2026-11-16', 'absence-301'] as $id) {
+        $descriptions[$who][$id] = $event($list, $id)['description'] ?? null;
+    }
+    $json = (string)json_encode($list, JSON_UNESCAPED_UNICODE);
+    assert_same([false, false, false], [strpos($json, 'observacao ficticia') !== false, strpos($json, '"ausencias"') !== false, strpos($json, '"category"') !== false], "Calendario ({$who}): sem observacao, sem os itens internos do motor e sem a categoria crua");
+    if (in_array($who, ['outro', 'leitura'], true)) {
+        foreach (['Férias', 'Compromisso', 'Folga', 'Outro'] as $label) {
+            assert_same(false, strpos($json, $label) !== false, "Calendario ({$who}): sem a categoria {$label} de outro colaborador");
+        }
+    }
+}
+$common = ['schedule-2-2026-11-18' => 'Exceção de escala', 'schedule-1-2026-11-21' => 'Exceção de escala', 'schedule-8-2026-11-16' => OperationalService::LEADERSHIP_RULE_LABEL, 'schedule-9-2026-11-16' => 'Dias ímpares', 'schedule-3-2026-11-16' => 'Sem escala definida'];
+assert_same([
+    'gestor' => ['schedule-4-2026-11-16' => 'Férias', 'schedule-4-2026-11-19' => 'Sempre presencial · Compromisso', 'schedule-5-2026-11-17' => 'Férias', 'schedule-9-2026-11-20' => 'Exceção de escala · Outro'] + $common + ['absence-301' => 'Férias'],
+    'proprio' => ['schedule-4-2026-11-16' => 'Férias', 'schedule-4-2026-11-19' => 'Sempre presencial · Compromisso', 'schedule-5-2026-11-17' => '', 'schedule-9-2026-11-20' => 'Exceção de escala'] + $common + ['absence-301' => 'Férias'],
+    'outro' => ['schedule-4-2026-11-16' => '', 'schedule-4-2026-11-19' => 'Sempre presencial', 'schedule-5-2026-11-17' => '', 'schedule-9-2026-11-20' => 'Exceção de escala'] + $common + ['absence-301' => ''],
+    'leitura' => ['schedule-4-2026-11-16' => '', 'schedule-4-2026-11-19' => 'Sempre presencial', 'schedule-5-2026-11-17' => '', 'schedule-9-2026-11-20' => 'Exceção de escala'] + $common + ['absence-301' => ''],
+], $descriptions, 'Calendario: descricao por perfil (categoria so para a gestao e o proprio, P9)');
+// Filtros: type pela situacao; status pelo mesmo mapa do corte em diante.
+$ids = static fn (array $list): array => array_column($list, 'id');
+$typeAbsence = $calendar($actors['gestor'], ['type' => 'absence']);
+assert_same(['absence-301', 'schedule-4-2026-11-16', 'absence-305', 'schedule-4-2026-11-17', 'schedule-5-2026-11-17', 'absence-306', 'schedule-2-2026-11-18'], $ids($typeAbsence), 'type=absence: eventos de ausencia e as situacoes de ausencia do motor');
+foreach (['onsite', 'remote'] as $filterType) {
+    $list = $calendar($actors['gestor'], ['type' => $filterType]);
+    assert_same([true, true], [count($list) > 0, count($list) === count(array_filter($list, static fn (array $item): bool => $item['status'] === $filterType))], "type={$filterType}: so eventos com essa situacao, nas duas partes");
+}
+$typeSchedule = $calendar($actors['gestor'], ['type' => 'schedule']);
+assert_same([0, true], [count(array_filter($typeSchedule, static fn (array $item): bool => $item['event_type'] !== 'schedule')), in_array('no_schedule', array_column($typeSchedule, 'status'), true)], 'type=schedule: so escala, com sem escala e ausencia do motor');
+$statusAbsence = $engineEvents($calendar($actors['gestor'], ['status' => 'absence']));
+assert_same(['schedule-4-2026-11-16', 'schedule-4-2026-11-17', 'schedule-5-2026-11-17', 'schedule-2-2026-11-18'], $ids($statusAbsence), 'status=absence: do corte em diante, so as situacoes de ausencia');
+$statusApproved = $calendar($actors['gestor'], ['status' => 'approved']);
+assert_same([[], ['absence-301', 'absence-305', 'absence-306']], [$engineEvents($statusApproved), $ids(array_values(array_filter($statusApproved, static fn (array $item): bool => $item['event_type'] === 'absence')))], 'status=approved: eventos de ausencia como antes; nenhum evento do motor');
+assert_same([
+    'Tecnico A' => '16P 17R 18P 19R 20P 21P',
+    'Tecnico C' => '16S 17S 18S 19S 20S',
+    'Tecnico D' => '16A 17A 18P 19P 20P',
+    'Tecnico I' => '16R 17P 18R 19R 20R',
+], $eventCodes($engineEvents($calendar($actors['gestor'], ['team' => 'n1']))), 'team=n1: motor so com N1, sem a Lideranca');
+assert_same(['absence-301', 'absence-305', 'absence-306'], $ids(array_values(array_filter($calendar($actors['gestor'], ['team' => 'n1']), static fn (array $item): bool => $item['event_type'] === 'absence'))), 'team=n1: o bloco de ausencias continua sem filtro de equipe (como antes)');
+$archived = $calendar($actors['gestor'], ['employee_id' => '5']);
+assert_same([['Tecnico E' => '16R 17A 18R'], []], [$eventCodes($engineEvents($archived)), array_values(array_filter($archived, static fn (array $item): bool => $item['event_type'] === 'absence'))], 'colaborador arquivado: motor ate a vespera; a ausencia vira situacao');
+$outside = $calendar($actors['gestor'], ['employee_id' => '7']);
+assert_same([[], ['absence-305']], [$engineEvents($outside), $ids(array_values(array_filter($outside, static fn (array $item): bool => $item['event_type'] === 'absence')))], 'fora do Mapa: sem escala do motor; a ausencia continua como evento');
+// Periodo so depois do corte: a ausencia que acabou de ser cortada nao aparece.
+$after = $calendar($actors['gestor'], ['from' => '2026-11-16']);
+assert_same(['absence-305', 'absence-306'], $ids(array_values(array_filter($after, static fn (array $item): bool => $item['event_type'] === 'absence'))), 'periodo depois do corte: ausencia de quem esta no motor nao vira evento fora do periodo');
+// Sem relogio (D9): o "hoje" do servico nao muda o Calendario.
+assert_same($items, $calendar($actors['gestor'], [], null, '2026-11-19'), 'Calendario sem relogio: o mesmo resultado em outro dia');
+// Periodo antes do corte, corte no futuro e tabela vazia: identico ao sem corte, por perfil.
+foreach ([
+    'periodo antes do corte' => [static fn (): QaCutoffPdo => $reportDb(), ['from' => '2026-11-02', 'to' => '2026-11-15']],
+    'corte no futuro' => [static fn (): QaCutoffPdo => $reportDb(true, '2026-12-16'), []],
+    'tabela vazia' => [static fn (): QaCutoffPdo => $reportDb(true, null), []],
+] as $label => [$db, $filters]) {
+    foreach ($actors as $who => $actor) {
+        assert_same($calendar($actor, $filters, $reportDb(false)), $calendar($actor, $filters, $db()), "Calendario ({$label}, {$who}): identico ao sem corte");
+    }
+}
+// Os demais tipos nao leem o corte; Calendario e relatorio leem uma vez.
+$pdo = $reportDb();
+(new OperationalService($pdo, '2026-11-10'))->listCalendar(['from' => '2026-11-12', 'to' => '2026-11-22', 'type' => 'overtime'], $actors['gestor']);
+assert_same(0, count(array_filter($pdo->log, static fn (string $sql): bool => strpos($sql, 'information_schema') !== false || strpos($sql, 'portal_presence_cutoff') !== false)), 'Calendario com outro tipo: nao le o corte');
+$pdo = $reportDb();
+$shared = new OperationalService($pdo, '2026-11-10');
+$shared->listCalendar(['from' => '2026-11-12', 'to' => '2026-11-22'], $actors['gestor']);
+$shared->report(['from' => '2026-11-12', 'to' => '2026-11-22']);
+assert_same(1, count(array_filter($pdo->log, static fn (string $sql): bool => $sql === 'SELECT cutoff_date FROM portal_presence_cutoff WHERE id = 1')), 'Calendario e relatorio: corte lido uma vez por requisicao');
 
 echo "QA presence cutoff OK ({$checks} verificacoes)\n";

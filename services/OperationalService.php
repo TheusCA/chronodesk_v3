@@ -139,6 +139,13 @@ final class OperationalService {
         $type = $this->text($filters['type'] ?? '', 40, true);
         $status = $this->text($filters['status'] ?? '', 30, true);
         $events = [];
+        // [F5, D8] Escala e ausencia divididas no corte: antes dele, como
+        // antes do F5; a partir dele, a escala do motor, com a ausencia como
+        // situacao. Os demais blocos nao mudam e nao leem o corte.
+        $parts = ['legacy' => ['from' => $from, 'to' => $to], 'engine' => null];
+        if (!$type || in_array($type, ['schedule', 'onsite', 'remote', 'absence'], true)) {
+            $parts = PresenceCutoff::split($from, $to, $this->presenceCutoff());
+        }
 
         if (!$type || $type === 'manual') {
             $sql = 'SELECT id, title, description, type, starts_at, ends_at, team,
@@ -231,7 +238,19 @@ final class OperationalService {
             }
             $stmt = $this->pdo->prepare($sql . ' ORDER BY starts_at');
             $stmt->execute($params);
+            // [F5, D8] Quem esta na escala do motor (sem o filtro de equipe)
+            // tem a ausencia como situacao do corte em diante: o evento vai
+            // ate a vespera do corte. Fora do Mapa e quem nao esta no motor
+            // continuam com o evento inteiro (tabela da P12).
+            $covered = $parts['engine'] === null ? [] : array_column($this->scheduleScreenEmployees(null, $employeeId, true), 'id', 'id');
+            $lastLegacyDay = $parts['engine'] === null ? null : ScheduleRulePlanner::addDays((string)$this->presenceCutoff(), -1);
             foreach ($stmt->fetchAll() as $row) {
+                if ($lastLegacyDay !== null && isset($covered[(int)$row['employee_id']]) && substr((string)$row['ends_at'], 0, 10) > $lastLegacyDay) {
+                    if (substr((string)$row['starts_at'], 0, 10) > $lastLegacyDay || $lastLegacyDay < $from) {
+                        continue;
+                    }
+                    $row['ends_at'] = $lastLegacyDay . ' 23:59:59';
+                }
                 $row['description'] = self::seesPersonalText($actor, $row['employee_id'])
                     ? self::absenceCategoryLabel((string)$row['category'])
                     : '';
@@ -272,8 +291,8 @@ final class OperationalService {
             }
         }
 
-        if (!$type || in_array($type, ['schedule', 'onsite', 'remote'], true)) {
-            foreach ($this->generatedSchedule($from, $to, $team, $employeeId) as $row) {
+        if ($parts['legacy'] !== null && (!$type || in_array($type, ['schedule', 'onsite', 'remote'], true))) {
+            foreach ($this->generatedSchedule($parts['legacy']['from'], $parts['legacy']['to'], $team, $employeeId) as $row) {
                 if ($type && $type !== 'schedule' && $row['presence_type'] !== $type) {
                     continue;
                 }
@@ -290,6 +309,17 @@ final class OperationalService {
                     'employee_id' => $row['employee_id'],
                     'status' => $row['presence_type'],
                 ];
+            }
+        }
+        // [F5, D8] Do corte em diante: type onsite, remote e absence filtram
+        // pela situacao do evento; status, pelo mesmo mapa (igual ao status).
+        if ($parts['engine'] !== null) {
+            foreach ($this->calendarEngineEvents($parts['engine']['from'], $parts['engine']['to'], $team, $employeeId, $actor) as $event) {
+                if ((in_array($type, ['onsite', 'remote', 'absence'], true) && $event['status'] !== $type)
+                    || ($status && $event['status'] !== $status)) {
+                    continue;
+                }
+                $events[] = $event;
             }
         }
 
@@ -1767,6 +1797,9 @@ final class OperationalService {
      * semana sem excecao de trabalho fica de fora (P3); ausencia (excecao ate
      * o F3 ou portal_absences aprovada) aparece como ausente, sem categoria.
      * Mantem os campos antigos e acrescenta situacao, origem, detalhe e escala.
+     * $withAbsenceCategory: [F5] so para o Calendario, que decide quem ve a
+     * categoria (P9): a linha leva tambem 'ausencias' do motor, com ela; o
+     * listCalendar nunca devolve esse campo.
      */
     private function engineSchedule(
         string $from,
@@ -1775,7 +1808,8 @@ final class OperationalService {
         ?int $employeeId,
         array $rules,
         array $exceptions,
-        bool $withArchived = false
+        bool $withArchived = false,
+        bool $withAbsenceCategory = false
     ): array {
         $rulesByEmployee = [];
         foreach ($rules as $rule) {
@@ -1787,7 +1821,7 @@ final class OperationalService {
         foreach ($exceptions as $exception) {
             $exceptionMap[$exception['employee_id'] . ':' . $exception['exception_date']] = $exception;
         }
-        $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId, $withArchived);
+        $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId, $withArchived, $withAbsenceCategory);
         $employees = $this->scheduleScreenEmployees($team, $employeeId, $withArchived);
         $items = [];
         $end = self::dateValue($to, 'Fim');
@@ -1844,10 +1878,69 @@ final class OperationalService {
                     'origem' => $presence['origem'],
                     'detalhe' => $presence['detalhe'],
                     'escala' => $presence['escala'],
-                ];
+                ] + ($withAbsenceCategory ? ['ausencias' => $presence['ausencias']] : []);
             }
         }
         return $items;
+    }
+
+    /**
+     * [F5, D7 a D9] Eventos de escala do Calendario a partir do corte, pelo
+     * motor (dayPresence, sem relogio): um por tecnico e dia util (fim de
+     * semana so com excecao de trabalho), com os campos de antes e mais
+     * situacao, origem e detalhe. Ausencia de dia inteiro vira a situacao; a
+     * parcial, o marcador no detalhe. Arquivado ate a vespera; fora do Mapa
+     * fora. Categoria so para a gestao e o proprio (P9); observacao nunca.
+     */
+    private function calendarEngineEvents(string $from, string $to, ?string $team, ?int $employeeId, array $actor): array {
+        $rules = $this->scheduleRules($team, $employeeId, $from, true, true);
+        $exceptions = $this->scheduleExceptions($from, $to, $team, $employeeId);
+        $events = [];
+        foreach ($this->engineSchedule($from, $to, $team, $employeeId, $rules, $exceptions, true, true) as $row) {
+            $category = self::seesPersonalText($actor, $row['employee_id']) ? self::calendarAbsenceCategory($row['ausencias']) : null;
+            $categoryLabel = $category === null ? '' : self::absenceCategoryLabel($category);
+            $suffix = $categoryLabel === '' ? '' : ' · ' . $categoryLabel;
+            if ($row['source'] === 'exception') {
+                $description = 'Exceção de escala' . $suffix;
+            } elseif ($row['presence_type'] === 'absence') {
+                $description = $categoryLabel;
+            } else {
+                $description = $row['rule_label'] . $suffix;
+            }
+            $events[] = [
+                'id' => 'schedule-' . $row['employee_id'] . '-' . $row['date'],
+                'event_type' => 'schedule',
+                'title' => $row['label'] . ': ' . $row['employee_name'],
+                'description' => $description,
+                'starts_at' => $row['date'] . ' 00:00:00',
+                'ends_at' => $row['date'] . ' 23:59:59',
+                'team' => $row['team'],
+                'employee_id' => $row['employee_id'],
+                'status' => $row['presence_type'],
+                'situacao' => $row['situacao'],
+                'origem' => $row['origem'],
+                'detalhe' => $row['detalhe'],
+            ];
+        }
+        return $events;
+    }
+
+    /**
+     * [F5, P9] Categoria da ausencia que decide o dia, a partir dos itens do
+     * motor: a 1a de dia inteiro; sem ela, a parcial do marcador (menor
+     * inicio, empate pela ordem). Excecao de ausencia nao tem categoria.
+     */
+    private static function calendarAbsenceCategory(array $absences): ?string {
+        $marker = null;
+        foreach ($absences as $absence) {
+            if ($absence['period_type'] === 'full_day') {
+                return $absence['category'] ?? null;
+            }
+            if (($absence['start_time'] ?? null) !== null && ($marker === null || $absence['start_time'] < $marker['start_time'])) {
+                $marker = $absence;
+            }
+        }
+        return $marker['category'] ?? null;
     }
 
     /**
@@ -1956,9 +2049,19 @@ final class OperationalService {
      * periodo do dia (F3): a tela Escala (motor) mostra a parcial como
      * marcador; o calculo antigo so tira o dia com a de dia inteiro.
      * $withArchived: [F5, D7] relatorio no motor, tambem do arquivado.
+     * $withCategory: [F5, D8] Calendario: a categoria vai junto (quem ve e
+     * decidido no listCalendar, P9); a observacao nunca e lida.
      */
-    private function scheduleBlockingAbsences(string $from, string $to, ?string $team, ?int $employeeId, bool $withArchived = false): array {
-        $sql = 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time
+    private function scheduleBlockingAbsences(
+        string $from,
+        string $to,
+        ?string $team,
+        ?int $employeeId,
+        bool $withArchived = false,
+        bool $withCategory = false
+    ): array {
+        $sql = 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time'
+                . ($withCategory ? ', a.category' : '') . '
                 FROM portal_absences a
                 JOIN funcionarios f ON f.id = a.employee_id AND '
                 . ($withArchived ? '(f.ativo = 1 OR f.arquivado_em IS NOT NULL)' : 'f.ativo = 1') . '
@@ -1994,7 +2097,7 @@ final class OperationalService {
                     'period_type' => (string)($row['period_type'] ?? 'full_day'),
                     'start_time' => $row['start_time'] ?? null,
                     'end_time' => $row['end_time'] ?? null,
-                ];
+                ] + ($withCategory ? ['category' => (string)$row['category']] : []);
             }
         }
         return $map;

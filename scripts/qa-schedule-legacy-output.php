@@ -32,8 +32,9 @@ declare(strict_types=1);
 //
 // Secao 3 (F5, commit 2): data de corte do motor. Sem a 019, com a tabela
 // vazia e com o corte depois de cada periodo (inclusive no futuro), as saidas
-// continuam identicas; com o corte no meio do relatorio do ano, a parte antiga
-// e igual linha a linha (JSON e CSV) e o resto vem do motor.
+// continuam identicas; com o corte no meio do relatorio do ano e do Calendario
+// de outubro (commit 3), a parte antiga e igual linha a linha (JSON, CSV e
+// eventos) e o resto vem do motor.
 //
 // Uso: php scripts/qa-schedule-legacy-output.php [--gravar-referencia | --despejar DIR]
 // ============================================================================
@@ -188,7 +189,9 @@ final class QaLegacyStatement extends PDOStatement {
         }
         // Ausencias aprovadas que tiram o dia da escala (cadastro ativo).
         // Desde o F3 (commit 4) a consulta traz o periodo; a massa e toda de dia inteiro.
-        $absencesWithArchived = strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND ' . $archivedClause('f.')) === 0;
+        // [F5] Calendario no motor: a mesma consulta com a categoria (so com o arquivado).
+        $absencesWithCategory = strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time, a.category FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND ' . $archivedClause('f.')) === 0;
+        $absencesWithArchived = $absencesWithCategory || strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND ' . $archivedClause('f.')) === 0;
         if ($absencesWithArchived
             || strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1') === 0
             || strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 1') === 0) {
@@ -201,7 +204,8 @@ final class QaLegacyStatement extends PDOStatement {
                     continue;
                 }
                 $this->rows[] = ['employee_id' => $row['employee_id'], 'starts_on' => $row['starts_on'], 'ends_on' => $row['ends_on']]
-                    + ($row['period_type'] ?? null ? ['period_type' => $row['period_type'], 'start_time' => $row['start_time'] ?? null, 'end_time' => $row['end_time'] ?? null] : []);
+                    + ($row['period_type'] ?? null ? ['period_type' => $row['period_type'], 'start_time' => $row['start_time'] ?? null, 'end_time' => $row['end_time'] ?? null] : [])
+                    + ($absencesWithCategory ? ['category' => $row['category']] : []);
             }
             return true;
         }
@@ -734,15 +738,26 @@ foreach (['tabela vazia' => null, 'corte depois de todos os periodos' => '2027-0
     assert_same($signature, qa_legacy_signature(qa_legacy_outputs(new OperationalService($withCutoff($cutoff), '2026-10-07'))), "corte ({$label}): as saidas identicas a referencia");
 }
 // Corte no dia seguinte ao fim das competencias (2026-10-16): elas continuam
-// identicas; o relatorio do ano cruza o corte e e dividido nele.
+// identicas; o relatorio do ano e o Calendario de outubro cruzam o corte.
 $cutoff = '2026-10-16';
 $cutOutputs = qa_legacy_outputs(new OperationalService($withCutoff($cutoff), '2026-10-07'));
 $cutSignature = qa_legacy_signature($cutOutputs);
+$crossing = ['report_ano', 'report_ano_csv', 'calendar_outubro', 'calendar_outubro_sem_ausencia'];
 foreach ($signature as $name => $reference) {
-    if (strpos($name, 'report_ano') !== 0) {
+    if (!in_array($name, $crossing, true)) {
         assert_same($reference, $cutSignature[$name], "corte em {$cutoff}: saida {$name} (inteira antes do corte) identica");
     }
 }
+// [F5, commit 3] Calendario de outubro: antes do corte, os mesmos eventos, na
+// mesma ordem (escala antiga e ausencias, que acabam antes do corte); depois,
+// so a escala do motor, com situacao, e nenhum evento de ausencia (a massa nao
+// tem ausencia aprovada de 16 a 31/10).
+$beforeCut = static fn (array $items): array => array_values(array_filter($items, static fn (array $item): bool => $item['starts_at'] < $cutoff . ' 00:00:00'));
+$afterCut = array_values(array_filter($cutOutputs['calendar_outubro']['items'], static fn (array $item): bool => $item['starts_at'] >= $cutoff . ' 00:00:00'));
+assert_same($beforeCut($outputs['calendar_outubro']['items']), $beforeCut($cutOutputs['calendar_outubro']['items']), 'Calendario com corte no meio: eventos antes do corte iguais, um a um');
+assert_same(true, count($afterCut) > 50 && count($afterCut) === count(array_filter($afterCut, static fn (array $item): bool => $item['event_type'] === 'schedule' && isset($item['situacao']))), 'Calendario com corte no meio: depois do corte, so escala do motor');
+assert_same(0, count(array_filter($afterCut, static fn (array $item): bool => (int)(new DateTimeImmutable(substr($item['starts_at'], 0, 10)))->format('N') >= 6)), 'Calendario com corte no meio: sem fim de semana depois do corte (a massa nao tem excecao de trabalho em 16 a 31/10)');
+assert_same(0, count(array_filter($afterCut, static fn (array $item): bool => in_array($item['employee_id'], [8, 9], true))), 'Calendario com corte no meio: inativo antigo e fora do Mapa sem escala depois do corte');
 $before = $outputs['report_ano'];
 $split = $cutOutputs['report_ano'];
 $legacyRows = array_values(array_filter($before['schedule'], static fn (array $row): bool => $row['date'] < $cutoff));

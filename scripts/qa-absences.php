@@ -199,6 +199,11 @@ final class QaAbsencesStatement extends PDOStatement {
         if ($sql === 'SELECT 1') {
             return true;
         }
+        // [F5] Calendario le o corte do motor: banco sem a 019 (calculo antigo).
+        if ($sql === 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name' && $params[':table_name'] === 'portal_presence_cutoff') {
+            $this->rows[] = ['total' => 0];
+            return true;
+        }
         if ($sql === 'INSERT INTO audit_log (user_ip, username, action, details, severity) VALUES (?, ?, ?, ?, ?)') {
             $db->audits[] = ['action' => $params[2], 'details' => $params[3], 'severity' => $params[4]];
             return true;
@@ -309,6 +314,11 @@ final class QaAbsencesStatement extends PDOStatement {
 
     public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
         return array_shift($this->rows) ?? false;
+    }
+
+    public function fetchColumn(int $column = 0): mixed {
+        $row = array_shift($this->rows);
+        return $row === null ? false : array_values($row)[$column];
     }
 
     public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
@@ -627,15 +637,18 @@ assert_same(false, strpos($encoded, 'texto livre') !== false, 'calendario: o mot
 assert_same(false, array_key_exists('category', $full['items'][0]), 'calendario: coluna crua da categoria fora da resposta');
 assert_same(['Folga', 'Férias', 'Ausência justificada', 'Compromisso', 'Outro', 'Ausência'], array_map([OperationalService::class, 'absenceCategoryLabel'], ['folga', 'ferias', 'ausencia_justificada', 'compromisso', 'outro', 'desconhecida']), 'calendario: rotulos das cinco categorias (D4)');
 assert_same(['Tecnico A', '2026-10-05 00:00:00', '2026-10-09 23:59:59', 'approved'], [$full['items'][0]['title'], $full['items'][0]['starts_at'], $full['items'][0]['ends_at'], $full['items'][0]['status']], 'calendario: nome, periodo e status como antes');
-assert_same(false, strpos($pdo->queries[0][0], 'reason') !== false, 'calendario: o motivo nem e lido do banco');
+// [F5] Antes da consulta de ausencias, so a checagem da tabela do corte (sem a 019 aqui).
+$cutoffCheck = ['SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name', [':table_name' => 'portal_presence_cutoff']];
+assert_same([$cutoffCheck, 2], [$pdo->queries[0], count($pdo->queries)], 'calendario: checagem do corte e uma consulta de ausencias');
+assert_same(false, strpos($pdo->queries[1][0], 'reason') !== false, 'calendario: o motivo nem e lido do banco');
 // [Decisao 5] So ausencia aprovada: o filtro esta no SQL; com status de outro
 // valor, a consulta de ausencias nem roda.
-assert_same(true, strpos($pdo->queries[0][0], 'AND status = "approved"') !== false, 'calendario: so aprovada, no SQL');
+assert_same(true, strpos($pdo->queries[1][0], 'AND status = "approved"') !== false, 'calendario: so aprovada, no SQL');
 assert_same($labels, $calendar(['role' => 'gestor'], ['status' => 'approved']), 'calendario: filtro approved igual ao padrao');
 foreach (['pending', 'rejected', 'cancelled'] as $otherStatus) {
     $pdo = qa_db();
     $result = (new OperationalService($pdo, '2026-10-07'))->listCalendar(['from' => '2026-10-01', 'to' => '2026-10-31', 'type' => 'absence', 'status' => $otherStatus], ['role' => 'admin']);
-    assert_same([[], []], [$result['items'], $pdo->queries], "calendario: filtro {$otherStatus} nao traz ausencia nem consulta");
+    assert_same([[], [$cutoffCheck]], [$result['items'], $pdo->queries], "calendario: filtro {$otherStatus} nao traz ausencia nem consulta ausencias (so a checagem do corte)");
 }
 
 // ----------------------------------------------------------------------------
