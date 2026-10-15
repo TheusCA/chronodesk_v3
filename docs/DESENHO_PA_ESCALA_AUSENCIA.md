@@ -2018,7 +2018,7 @@ O que cada número decide: `pas_compartilhados_hoje` e `vinculos_lideranca` dime
 
 **Validação da Q-F6 no MySQL 8.0.46 local (responsável, 2026-10-15, com vínculos de teste depois removidos):** as colunas contaram certo (PAs compartilhados, Liderança, observação, em que a vazia não conta, ciclo gravado como `undefined` sem divergência). **Achado:** a `copia_tipo_divergente_hoje` contava como divergente o vínculo da Liderança: sem regra cadastrada, a comparação vira `always_onsite` × `undefined`, mas no motor a Liderança é presencial pela regra fixa (P12). Correção aplicada no comando acima: `AND a.team <> 'lideranca'` nessa coluna.
 
-**Q-F6 no servidor: pendente.** Na mensagem de aprovação, os 14 campos vieram em branco (`pas_inventario = [ ]` e os demais). Os números ainda precisam ser anotados aqui; o commit 1 do F6 foi feito sem eles, tolerando os casos de dado antigo (sobreposição do mesmo colaborador, período invertido, vínculo fora do inventário, inativo e fora do Mapa) sem quebrar a leitura. Se algum deles vier maior que 0, o tratamento é decidido antes do deploy.
+**Q-F6 no servidor: pendente.** Na mensagem de aprovação, os 14 campos vieram em branco (`pas_inventario = [ ]` e os demais; falha na colagem, confirmada pelo responsável em 2026-10-15; os números vêm antes do commit 2). Os números ainda precisam ser anotados aqui; o commit 1 do F6 foi feito sem eles, tolerando os casos de dado antigo (sobreposição do mesmo colaborador, período invertido, vínculo fora do inventário, inativo e fora do Mapa) sem quebrar a leitura. Se algum deles vier maior que 0, o tratamento é decidido antes do deploy.
 
 **Commits previstos:**
 
@@ -2049,7 +2049,7 @@ O que cada número decide: `pas_compartilhados_hoje` e `vinculos_lideranca` dime
 | DF10 | Tabela antiga `portal_pa_map` | Continua só leitura, com a presença do motor; retirada só num lote próprio, se a Q-F6 der 0 |
 | DF11 | Remover vínculo | Contrato igual, em transação, auditoria com PA e IDs; sem etapa de confirmação nova (como hoje) |
 
-**Commit 1 entregue (2026-10-15, `60ee18c`; aguardando a revisão e o teste no MySQL local do responsável antes do commit 2):** leitura do mapa no motor.
+**Commit 1 entregue (2026-10-15, `60ee18c`; aprovado em 2026-10-15, ver abaixo):** leitura do mapa no motor.
 
 | Arquivo | Como ficou |
 |---|---|
@@ -2074,6 +2074,25 @@ O que cada número decide: `pas_compartilhados_hoje` e `vinculos_lideranca` dime
 **Validação pela IA:** `qa-pa-conflicts` (62 verificações); **mutação 30/30** (conflito com um ou três, remoto e sem escala contando, inativo contando, vínculo antes de começar e depois de acabar, o mesmo técnico duas vezes, conflito no fim de semana, sem a tabela antiga, semana errada, motivos `arquivado` e `inativo`, remoto como presencial, rótulo do fim de semana, cópia na resposta, sem `parcial`, DF7 em cada campo e nos elegíveis, ausências sem o filtro de equipe, repetidas e fora do vínculo, categoria para todos e crua, motor sem o arquivado, tabela conferida a cada uso; um sobrevivente na 1ª rodada, por falta de caso, morto depois); bateria PHP completa (`qa-archive` 573, `qa-security`, `qa-schedule-legacy-output` com as 17 saídas idênticas), os 16 `qa:*` e lint. **Não verificado:** MySQL (só banco simulado); a tela atual com a resposta nova (o frontend muda no commit 3; ele já não usa os campos da DF7 para quem não edita).
 
 **Como testar no MySQL local (sugestão):** com vínculos de teste: (1) dois técnicos presenciais no mesmo PA → `conflicts` e `has_conflict` nos dias certos; um deles com ausência de dia inteiro num dia → sem conflito nesse dia; com parcial → mantém; pares × ímpares e dias fixos disjuntos → sem conflito; (2) `presence` igual à da tela Escala no mesmo dia; vínculo com cópia antiga diferente da regra vigente → a regra vigente; (3) DevTools por perfil: gestor, técnico e somente leitura sem `employees`, `employee_login`, `notes`, `created_by`, `updated_by`; admin e Liderança com eles; categoria só para gestão e o próprio; (4) data passada com arquivado (até a véspera) e data de hoje sem inativo; (5) tempo de resposta do mapa (DevTools) contra o de antes.
+
+**Commit 1 aprovado em 2026-10-15**, com as sete decisões de implementação como estão, após teste do responsável no MySQL 8.0.46 local: 8 vínculos de teste em 4 PAs, regras e ausências variadas, semana de 19 a 23/10/2026; vínculos, regras e ausências de teste removidos depois.
+
+| Caso | Resultado |
+|---|---|
+| Conflito: pares × ímpares | Nunca |
+| Conflito: sempre presencial × seg/qua/sex com férias de 20 a 23 | Só 19/10 |
+| Conflito: dois sempre remoto | Nunca |
+| Conflito: Liderança × ciclo 3P/1R | 19, 21, 22 e 23/10; em 20/10 não, com o líder de folga |
+| Fim da cópia (L-02) | Vínculo gravado como `always_remote`, de quem tem regra vigente `always_onsite`, mostra presencial |
+| DF7 | Admin e Liderança com `employees`, `employee_login`, `notes`, `created_by` e `updated_by`; gestor, técnico e somente leitura sem nenhum deles |
+| P9 | Gestor vê todas as categorias; técnico e somente leitura só a própria; observação de ausência nunca |
+| Filtro N1 | Conflito com o ID do técnico da outra equipe |
+| Sábado | Semana de seg a sex, `presence` nula e `fim_de_semana` |
+| Data passada | Regra pela vigência da data |
+| Consultas | 12 para quem edita e 11 para os demais; cada leitura entre 5 e 10 ms |
+| `qa-pa-conflicts` | OK |
+
+**Antes do commit 2 (2026-10-15):** a Q-F6 do servidor continua **pendente**. Na aprovação do plano, os números vieram em branco por falha na colagem; o responsável manda os números antes do commit 2, e o commit 2 (gravação: DF4, DF5, DF11, decisão 8 do F4, `PA_MAP_CONFLICT_ACCEPTED`, `remove` em transação) só começa depois deles. Se algum número pedir tratamento (inativo ou fora do Mapa maior que 0, sobreposição, período invertido, fora do inventário), o tratamento vem antes do commit 2.
 
 ---
 
