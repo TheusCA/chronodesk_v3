@@ -20,6 +20,8 @@ final class OperationalService {
     public const RULE_PREVIEW_DAYS = 10;
     public const CYCLE_IMPORT_MESSAGE = 'Ciclo não é importado pela planilha: cadastre pela tela de Escala.';
     private const WEEKDAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri'];
+    /** [F5] Status do Calendario que sao modalidade da escala (ajuste c do commit 4). */
+    private const CALENDAR_PRESENCE_STATUSES = ['onsite', 'remote', 'absence', 'no_schedule', 'day_off'];
     private const WEEKDAY_LABELS = [
         'mon' => 'seg',
         'tue' => 'ter',
@@ -291,9 +293,17 @@ final class OperationalService {
             }
         }
 
+        // [F5, ajuste c do commit 4; revisa a decisao 4 do commit 3] Status de
+        // presenca filtra a escala antiga pela modalidade (no_schedule e
+        // absence nao existem nela: nada antes do corte); os demais status
+        // continuam ignorados pela escala antiga, como antes.
+        $presenceStatus = in_array($status, self::CALENDAR_PRESENCE_STATUSES, true) ? $status : null;
         if ($parts['legacy'] !== null && (!$type || in_array($type, ['schedule', 'onsite', 'remote'], true))) {
             foreach ($this->generatedSchedule($parts['legacy']['from'], $parts['legacy']['to'], $team, $employeeId) as $row) {
                 if ($type && $type !== 'schedule' && $row['presence_type'] !== $type) {
+                    continue;
+                }
+                if ($presenceStatus !== null && $row['presence_type'] !== $presenceStatus) {
                     continue;
                 }
                 $events[] = [
@@ -1913,6 +1923,10 @@ final class OperationalService {
             } else {
                 $description = $row['rule_label'] . $suffix;
             }
+            // [F5, ajuste b do commit 4] Campos aditivos: categoria so para a
+            // gestao e o proprio (P9), ausente nos demais; parcial = horario
+            // do marcador (so quando o dia nao e ausencia de dia inteiro).
+            $partial = $row['situacao'] === 'ausente' ? null : PresenceEngine::partialMarkerLabel($row['ausencias']);
             $events[] = [
                 'id' => 'schedule-' . $row['employee_id'] . '-' . $row['date'],
                 'event_type' => 'schedule',
@@ -1926,7 +1940,8 @@ final class OperationalService {
                 'situacao' => $row['situacao'],
                 'origem' => $row['origem'],
                 'detalhe' => $row['detalhe'],
-            ];
+            ] + ($categoryLabel === '' ? [] : ['categoria' => $categoryLabel])
+              + ($partial === null ? [] : ['parcial' => $partial]);
         }
         return $events;
     }

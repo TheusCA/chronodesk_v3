@@ -19,9 +19,11 @@ export function PresenceBadge({ status, label }) {
   )
 }
 
-export function PartialMarker() {
+// Marcador da parcial; com o horário (campo parcial), no nome acessível.
+export function PartialMarker({ time = null }) {
+  const label = time ? `${PARTIAL_MARKER_LEGEND.label} ${time}` : PARTIAL_MARKER_LEGEND.label
   return (
-    <span aria-label={PARTIAL_MARKER_LEGEND.label} className="inline-flex shrink-0" role="img" title={PARTIAL_MARKER_LEGEND.label}>
+    <span aria-label={label} className="inline-flex shrink-0" role="img" title={label}>
       <Icon name={PARTIAL_MARKER_LEGEND.icon} className="h-3 w-3" />
     </span>
   )

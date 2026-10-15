@@ -844,4 +844,72 @@ $shared->listCalendar(['from' => '2026-11-12', 'to' => '2026-11-22'], $actors['g
 $shared->report(['from' => '2026-11-12', 'to' => '2026-11-22']);
 assert_same(1, count(array_filter($pdo->log, static fn (string $sql): bool => $sql === 'SELECT cutoff_date FROM portal_presence_cutoff WHERE id = 1')), 'Calendario e relatorio: corte lido uma vez por requisicao');
 
+// Ajuste b da revisao do commit 4: campos aditivos categoria (so a gestao e o
+// proprio, P9; ausente nos demais) e parcial (horario do marcador; ausente sem
+// marcador e no dia de ausencia de dia inteiro). A description nao muda.
+$fields = static fn (array $item): array => [$item['categoria'] ?? null, $item['parcial'] ?? null, array_key_exists('categoria', $item), array_key_exists('parcial', $item)];
+$fieldsByActor = [];
+foreach ($actors as $who => $actor) {
+    $list = $calendar($actor, [], $partialDb());
+    foreach (['schedule-4-2026-11-16', 'schedule-4-2026-11-19', 'schedule-5-2026-11-17', 'schedule-9-2026-11-20', 'schedule-3-2026-11-17', 'schedule-1-2026-11-18', 'schedule-8-2026-11-16', 'schedule-3-2026-11-16'] as $id) {
+        $fieldsByActor[$who][$id] = $fields($event($list, $id));
+    }
+    foreach ($engineEvents($list) as $item) {
+        // parcial e o mesmo horario do marcador no detalhe; sem marcador, sem parcial.
+        $marker = isset($item['parcial']) ? ' · Ausente ' . $item['parcial'] : '';
+        assert_same(true, $marker === '' ? strpos($item['detalhe'], ' · Ausente ') === false : substr($item['detalhe'], -strlen($marker)) === $marker, "Calendario ({$who}): parcial de {$item['id']} igual ao marcador do detalhe");
+        assert_same(true, !isset($item['categoria']) || $who === 'gestor' || ($who === 'proprio' && (int)$item['employee_id'] === 4), "Calendario ({$who}): categoria de {$item['id']} so para a gestao e o proprio");
+    }
+    $json = (string)json_encode($list, JSON_UNESCAPED_UNICODE);
+    assert_same([false, false], [strpos($json, 'observacao ficticia') !== false, strpos($json, '"categoria":null') !== false || strpos($json, '"parcial":null') !== false], "Calendario ({$who}): campos novos sem observacao e ausentes em vez de nulos");
+}
+$publicFields = [
+    'schedule-4-2026-11-16' => [null, null, false, false],
+    'schedule-4-2026-11-19' => [null, 'a partir de 14:00', false, true],
+    'schedule-5-2026-11-17' => [null, null, false, false],
+    'schedule-9-2026-11-20' => [null, 'a partir de 15:00', false, true],
+    'schedule-3-2026-11-17' => [null, '09:00–10:00', false, true],
+    'schedule-1-2026-11-18' => [null, null, false, false],
+    'schedule-8-2026-11-16' => [null, null, false, false],
+    'schedule-3-2026-11-16' => [null, null, false, false],
+];
+assert_same([
+    'gestor' => [
+        'schedule-4-2026-11-16' => ['Férias', null, true, false],
+        'schedule-4-2026-11-19' => ['Compromisso', 'a partir de 14:00', true, true],
+        'schedule-5-2026-11-17' => ['Férias', null, true, false],
+        'schedule-9-2026-11-20' => ['Outro', 'a partir de 15:00', true, true],
+        'schedule-3-2026-11-17' => ['Compromisso', '09:00–10:00', true, true],
+    ] + $publicFields,
+    'proprio' => [
+        'schedule-4-2026-11-16' => ['Férias', null, true, false],
+        'schedule-4-2026-11-19' => ['Compromisso', 'a partir de 14:00', true, true],
+    ] + $publicFields,
+    'outro' => $publicFields,
+    'leitura' => $publicFields,
+], $fieldsByActor, 'Calendario: categoria e parcial por perfil (categoria so para a gestao e o proprio; parcial para todos, P9)');
+assert_same(
+    array_map(static fn (array $item): ?string => $item['description'], $calendar($actors['gestor'], [], $partialDb())),
+    array_map(static fn (array $item): ?string => $item['description'], $partialAll),
+    'Calendario: description sem mudanca (compatibilidade)'
+);
+
+// Ajuste c da revisao do commit 4 (revisa a decisao 4 do commit 3): status de
+// presenca filtra a escala antiga pela modalidade; os demais status, como antes.
+$legacySchedule = static fn (array $list): array => array_values(array_filter($list, static fn (array $item): bool => $item['event_type'] === 'schedule' && !isset($item['situacao'])));
+$legacyAll = $legacySchedule($calendar($actors['gestor']));
+assert_same([true, true], [count(array_filter($legacyAll, static fn (array $item): bool => $item['status'] === 'onsite')) > 0, count(array_filter($legacyAll, static fn (array $item): bool => $item['status'] === 'remote')) > 0], 'status antes do corte: a massa tem escala antiga presencial e remota');
+foreach (['onsite', 'remote', 'day_off', 'absence', 'no_schedule'] as $presenceStatus) {
+    assert_same(
+        array_values(array_filter($legacyAll, static fn (array $item): bool => $item['status'] === $presenceStatus)),
+        $legacySchedule($calendar($actors['gestor'], ['status' => $presenceStatus])),
+        "status={$presenceStatus}: escala antiga so com essa modalidade"
+    );
+}
+assert_same([], $legacySchedule($calendar($actors['gestor'], ['status' => 'no_schedule'])), 'status=no_schedule: nada da escala antiga antes do corte');
+assert_same([], array_values(array_filter($calendar($actors['gestor'], ['status' => 'no_schedule']), static fn (array $item): bool => $item['status'] !== 'no_schedule')), 'status=no_schedule: so sem escala, do motor');
+foreach (['approved', 'active', 'completed'] as $otherStatus) {
+    assert_same($legacyAll, $legacySchedule($calendar($actors['gestor'], ['status' => $otherStatus])), "status={$otherStatus}: escala antiga como antes (ignora o status)");
+}
+
 echo "QA presence cutoff OK ({$checks} verificacoes)\n";

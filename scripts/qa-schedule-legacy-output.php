@@ -758,6 +758,31 @@ assert_same($beforeCut($outputs['calendar_outubro']['items']), $beforeCut($cutOu
 assert_same(true, count($afterCut) > 50 && count($afterCut) === count(array_filter($afterCut, static fn (array $item): bool => $item['event_type'] === 'schedule' && isset($item['situacao']))), 'Calendario com corte no meio: depois do corte, so escala do motor');
 assert_same(0, count(array_filter($afterCut, static fn (array $item): bool => (int)(new DateTimeImmutable(substr($item['starts_at'], 0, 10)))->format('N') >= 6)), 'Calendario com corte no meio: sem fim de semana depois do corte (a massa nao tem excecao de trabalho em 16 a 31/10)');
 assert_same(0, count(array_filter($afterCut, static fn (array $item): bool => in_array($item['employee_id'], [8, 9], true))), 'Calendario com corte no meio: inativo antigo e fora do Mapa sem escala depois do corte');
+// [F5, ajuste c da revisao do commit 4; revisa a decisao 4 do commit 3] Status
+// de presenca filtra a escala antiga pela modalidade (sem corte e antes dele);
+// no_schedule e absence nao trazem nada da escala antiga; os demais status e o
+// Calendario sem status continuam como antes.
+$october = ['from' => '2026-10-01', 'to' => '2026-10-31'];
+$gestor = ['role' => 'gestor', 'employee_id' => null];
+$legacyOf = static fn (array $items): array => array_values(array_filter($items, static fn (array $item): bool => $item['event_type'] === 'schedule' && !isset($item['situacao'])));
+$legacyOctober = $legacyOf($outputs['calendar_outubro']['items']);
+assert_same(true, count(array_filter($legacyOctober, static fn (array $item): bool => $item['status'] === 'day_off')) > 0 && count(array_filter($legacyOctober, static fn (array $item): bool => $item['status'] === 'remote')) > 0, 'status de presenca: a massa de outubro tem folga, presencial e remoto no calculo antigo');
+foreach (['sem corte' => null, 'corte em 16/10' => $cutoff] as $label => $statusCutoff) {
+    $statusService = new OperationalService($statusCutoff === null ? qa_legacy_db() : $withCutoff($statusCutoff), '2026-10-07');
+    $legacyBase = $statusCutoff === null ? $legacyOctober : $legacyOf($cutOutputs['calendar_outubro']['items']);
+    foreach (['onsite', 'remote', 'day_off', 'absence', 'no_schedule'] as $presenceStatus) {
+        assert_same(
+            array_values(array_filter($legacyBase, static fn (array $item): bool => $item['status'] === $presenceStatus)),
+            $legacyOf($statusService->listCalendar($october + ['status' => $presenceStatus], $gestor)['items']),
+            "status={$presenceStatus} ({$label}): escala antiga so com essa modalidade"
+        );
+    }
+    $noSchedule = $statusService->listCalendar($october + ['status' => 'no_schedule'], $gestor)['items'];
+    assert_same([[], true], [$legacyOf($noSchedule), count($noSchedule) === count(array_filter($noSchedule, static fn (array $item): bool => $item['status'] === 'no_schedule' && isset($item['situacao'])))], "status=no_schedule ({$label}): nada antes do corte; depois, so o sem escala do motor");
+    foreach (['approved', 'active'] as $otherStatus) {
+        assert_same($legacyBase, $legacyOf($statusService->listCalendar($october + ['status' => $otherStatus], $gestor)['items']), "status={$otherStatus} ({$label}): escala antiga como antes (ignora o status)");
+    }
+}
 $before = $outputs['report_ano'];
 $split = $cutOutputs['report_ano'];
 $legacyRows = array_values(array_filter($before['schedule'], static fn (array $row): bool => $row['date'] < $cutoff));

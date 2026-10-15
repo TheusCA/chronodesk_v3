@@ -16,11 +16,15 @@ const {
   PRESENCE_LEGEND,
   daySummaryAriaLabel,
   daySummaryText,
+  engineEventFullText,
+  engineEventName,
   hasPartialMarker,
   isEngineScheduleEvent,
   originLabel,
   partialMarkerInDetail,
+  partialTime,
   presenceCutoffNotice,
+  presenceCutoffTitle,
   presenceDaySummary,
   presenceLegendItem,
   situationLabel,
@@ -54,6 +58,21 @@ assert.equal(cssRule('presence-absence'), absenceEventTone, 'ausência do motor 
 assert.match(cssRule('presence-no-schedule'), /border-dashed/, 'sem escala com contorno tracejado (forma, não só cor)')
 assert.match(legendSource, /Tailwind não lê \.ts/, 'cores fora do .ts: o Tailwind só varre js e jsx')
 assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src\/\*\*\/\*\.\{js,jsx\}'\]/, 'Tailwind continua sem varrer .ts (por isso as classes presence-* no CSS)')
+// Defeito achado na revisão do commit 4: dentro de @layer components, o
+// Tailwind descartava as presence-* (nomes só no .ts) e a legenda saía sem cor.
+// Compila o index.css com a configuração do projeto e confere cada classe.
+{
+  const { default: postcss } = await import('postcss')
+  const { default: tailwindcss } = await import('tailwindcss')
+  const { default: tailwindConfig } = await import(pathToFileURL(join(frontendRoot, 'tailwind.config.js')).href)
+  const compiled = (await postcss([tailwindcss({ ...tailwindConfig, content: tailwindConfig.content.map((glob) => join(frontendRoot, glob).replaceAll('\\', '/')) })]).process(cssSource, { from: join(frontendRoot, 'src', 'index.css') })).css
+  for (const item of PRESENCE_LEGEND) {
+    const rule = compiled.match(new RegExp(`\\.${item.tone} \\{([^}]*)\\}`))?.[1] ?? ''
+    assert.match(rule, /border-color/, `CSS gerado com a classe ${item.tone} (borda)`)
+    assert.match(rule, /color: rgb/, `CSS gerado com a classe ${item.tone} (texto)`)
+  }
+  assert.match(compiled.match(/\.presence-no-schedule \{([^}]*)\}/)?.[1] ?? '', /border-style: dashed/, 'CSS gerado: sem escala tracejado')
+}
 assert.equal(presenceLegendItem('day_off'), null, 'folga (antes do corte) fora da legenda do motor')
 assert.equal(presenceLegendItem('absence').tone, 'presence-absence')
 
@@ -66,19 +85,38 @@ assert.equal(isEngineScheduleEvent(legacySchedule), false, 'escala antes do cort
 assert.equal(isEngineScheduleEvent({ id: 'absence-1', event_type: 'absence', status: 'approved' }), false, 'evento de ausência não é do motor')
 assert.equal(isEngineScheduleEvent({ id: 'x', event_type: 'manual', situacao: 'presencial' }), false, 'só eventos schedule')
 assert.equal(isEngineScheduleEvent(engine('a', 'onsite', 'presencial', 'Presencial (regra fixa)')), true)
+// [Ajuste b] No Calendário, o marcador vem do campo parcial do servidor, não
+// do texto do detalhe.
 for (const [event, expected, label] of [
-  [engine('p1', 'onsite', 'presencial', 'Presencial (sempre presencial) · Ausente a partir de 14:00'), true, 'a partir de'],
-  [engine('p2', 'remote', 'remoto', 'Remoto (exceção: remoto) · Ausente 09:00–10:00'), true, 'intervalo'],
-  [engine('p3', 'no_schedule', 'sem_escala', 'Sem escala definida · Ausente 15:00–16:00'), true, 'sem escala com parcial'],
-  [engine('p4', 'absence', 'ausente', 'Ausente (dia todo)'), false, 'dia inteiro'],
-  [engine('p6', 'absence', 'ausente', 'Ausente (dia todo) · Ausente 09:00–10:00'), false, 'situação ausente nunca leva o marcador'],
-  [engine('p5', 'onsite', 'presencial', 'Presencial (dias pares)'), false, 'sem parcial'],
-  [{ ...legacySchedule, detalhe: 'x · Ausente 09:00–10:00' }, false, 'evento antigo'],
+  [engine('p1', 'onsite', 'presencial', 'Presencial (sempre presencial) · Ausente a partir de 14:00', { parcial: 'a partir de 14:00' }), 'a partir de 14:00', 'a partir de'],
+  [engine('p2', 'remote', 'remoto', 'Remoto (exceção: remoto) · Ausente 09:00–10:00', { parcial: '09:00–10:00' }), '09:00–10:00', 'intervalo'],
+  [engine('p3', 'no_schedule', 'sem_escala', 'Sem escala definida · Ausente 15:00–16:00', { parcial: '15:00–16:00' }), '15:00–16:00', 'sem escala com parcial'],
+  [engine('p4', 'absence', 'ausente', 'Ausente (dia todo)'), null, 'dia inteiro'],
+  [engine('p6', 'onsite', 'presencial', 'Presencial (dias pares) · Ausente 09:00–10:00'), null, 'texto do marcador no detalhe sem o campo parcial'],
+  [engine('p7', 'onsite', 'presencial', 'Presencial (dias pares)', { parcial: '' }), null, 'parcial vazio'],
+  [engine('p5', 'onsite', 'presencial', 'Presencial (dias pares)'), null, 'sem parcial'],
+  [{ ...legacySchedule, parcial: '09:00–10:00' }, null, 'evento antigo'],
 ]) {
-  assert.equal(hasPartialMarker(event), expected, `marcador da parcial: ${label}`)
+  assert.equal(partialTime(event), expected, `horário da parcial: ${label}`)
+  assert.equal(hasPartialMarker(event), expected !== null, `marcador da parcial: ${label}`)
 }
+// [Ajuste a] Nome no cartão da semana, sem o prefixo da situação.
+for (const [event, expected, label] of [
+  [engine('n1', 'onsite', 'presencial', '', { title: 'Presencial: Tecnico A' }), 'Tecnico A', 'presencial'],
+  [engine('n2', 'remote', 'remoto', '', { title: 'Remoto: Tecnico B' }), 'Tecnico B', 'remoto'],
+  [engine('n3', 'absence', 'ausente', '', { title: 'Ausência: Tecnico C' }), 'Tecnico C', 'ausência'],
+  [engine('n4', 'no_schedule', 'sem_escala', '', { title: 'Sem escala: Tecnico D' }), 'Tecnico D', 'sem escala'],
+  [engine('n5', 'onsite', 'presencial', '', { title: 'Remoto: Tecnico E' }), 'Remoto: Tecnico E', 'prefixo de outra situação fica'],
+  [engine('n6', 'onsite', 'presencial', '', { title: 'Presencial: ' }), 'Presencial: ', 'sem nome depois do prefixo'],
+  [engine('n7', 'onsite', 'presencial', '', { title: 'Tecnico F' }), 'Tecnico F', 'título fora do formato'],
+]) {
+  assert.equal(engineEventName(event), expected, `nome no cartão da semana: ${label}`)
+}
+assert.equal(engineEventFullText(engine('t1', 'remote', 'remoto', 'Remoto (dias pares) · Ausente 09:00–10:00', { title: 'Remoto: Tecnico B', categoria: 'Compromisso' })), 'Remoto: Tecnico B · Remoto (dias pares) · Ausente 09:00–10:00 · Compromisso', 'texto completo do cartão (title): título, detalhe e categoria')
+assert.equal(engineEventFullText(engine('t2', 'onsite', 'presencial', 'Presencial (regra fixa)', { title: 'Presencial: Lider A' })), 'Presencial: Lider A · Presencial (regra fixa)', 'texto completo sem categoria')
 assert.equal(partialMarkerInDetail('presencial', 'Presencial (regra fixa) · Ausente a partir de 10:00'), true, 'linha da tela Escala com marcador')
 assert.equal(partialMarkerInDetail(undefined, 'x · Ausente a partir de 10:00'), false, 'linha sem situacao (cálculo antigo): sem marcador')
+assert.equal(partialMarkerInDetail('ausente', 'Ausente (dia todo) · Ausente 09:00–10:00'), false, 'linha da tela Escala: situação ausente nunca leva o marcador')
 assert.deepEqual(['presencial', 'remoto', 'ausente', 'sem_escala'].map(situationLabel), ['Presencial', 'Remoto', 'Ausente', 'Sem escala'])
 assert.deepEqual(['ausencia', 'regra_escala', 'expediente', 'outra'].map(originLabel), ['Ausência', 'Escala', 'Expediente', 'outra'])
 
@@ -87,11 +125,11 @@ assert.deepEqual(['ausencia', 'regra_escala', 'expediente', 'outra'].map(originL
 // ---------------------------------------------------------------------------
 const day = [
   engine('s-1', 'onsite', 'presencial', 'Presencial (sempre presencial)'),
-  engine('s-2', 'onsite', 'presencial', 'Presencial (dias pares) · Ausente 09:00–10:00'),
-  engine('s-3', 'remote', 'remoto', 'Remoto (sempre remoto) · Ausente a partir de 15:00'),
+  engine('s-2', 'onsite', 'presencial', 'Presencial (dias pares) · Ausente 09:00–10:00', { parcial: '09:00–10:00' }),
+  engine('s-3', 'remote', 'remoto', 'Remoto (sempre remoto) · Ausente a partir de 15:00', { parcial: 'a partir de 15:00' }),
   engine('s-4', 'absence', 'ausente', 'Ausente (dia todo)'),
-  engine('s-5', 'no_schedule', 'sem_escala', 'Sem escala definida · Ausente 15:00–16:00'),
-  engine('s-2', 'onsite', 'presencial', 'Presencial (dias pares) · Ausente 09:00–10:00'),
+  engine('s-5', 'no_schedule', 'sem_escala', 'Sem escala definida · Ausente 15:00–16:00', { parcial: '15:00–16:00' }),
+  engine('s-2', 'onsite', 'presencial', 'Presencial (dias pares) · Ausente 09:00–10:00', { parcial: '09:00–10:00' }),
   legacySchedule,
   { id: 'absence-9', event_type: 'absence', status: 'approved' },
   { id: 'war-1', event_type: 'war_room', status: 'open' },
@@ -120,7 +158,11 @@ assert.equal(presenceCutoffNotice({ date: '2027-01-16', split: true }), 'Escala 
 assert.equal(presenceCutoffNotice({ date: '2026-10-16', split: false }), 'Escala pelas regras novas (corte em 16/10/2026).', 'período todo depois do corte')
 for (const value of [undefined, null, {}, { date: '' }, { date: '16/10/2026', split: true }]) {
   assert.equal(presenceCutoffNotice(value), null, `sem corte no período: sem aviso (${JSON.stringify(value)})`)
+  assert.equal(presenceCutoffTitle(value), null, `sem corte no período: sem título (${JSON.stringify(value)})`)
 }
+// [Ajuste d] Título do aviso pelo split.
+assert.equal(presenceCutoffTitle({ date: '2026-10-16', split: true }), 'Escala dividida na data de corte', 'título com o período cruzando o corte')
+assert.equal(presenceCutoffTitle({ date: '2026-10-16', split: false }), 'Escala pelas regras novas', 'título com o período todo depois do corte')
 
 // ---------------------------------------------------------------------------
 // 5. Calendário: tela igual sem corte; motor com resumo, cartões e legenda.
@@ -128,20 +170,31 @@ for (const value of [undefined, null, {}, { date: '' }, { date: '16/10/2026', sp
 assert.match(calendarSource, /const otherEvents = engineEvents\.length === 0 \? dayEvents : dayEvents\.filter\(\(event\) => !isEngineScheduleEvent\(event\)\)/, 'sem evento do motor: o dia lista os mesmos eventos de antes')
 assert.match(calendarSource, /const limit = view === 'week' \? 8 : 3/, 'limites de antes (3 no mês, 8 na semana) para os demais eventos')
 assert.match(calendarSource, /\{view === 'month' && <PresenceDaySummary events=\{engineEvents\} \/>\}/, 'mês: resumo do dia por situação')
-assert.match(calendarSource, /\{view === 'week' && engineEvents\.map\(\(event\) => <EventChip detailed event=\{event\}/, 'semana: um cartão por técnico, com o detalhe')
+assert.match(calendarSource, /\{view === 'week' && engineEvents\.map\(\(event\) => <EventChip event=\{event\}/, 'semana: um cartão por técnico')
+// Ramo do motor do EventChip (os demais eventos continuam com o título inteiro).
+const chipSource = calendarSource.slice(calendarSource.indexOf('function EventChip'), calendarSource.indexOf('\n  }\n  return (', calendarSource.indexOf('function EventChip')))
+assert.ok(chipSource.length > 200 && chipSource.includes('isEngineScheduleEvent(event)'), 'trecho do cartão do motor localizado')
+assert.match(chipSource, /title=\{engineEventFullText\(event\)\}/, 'semana: texto completo no title do cartão (ajuste a)')
+assert.match(chipSource, /<span className="line-clamp-2 min-w-0 break-words">\{engineEventName\(event\)\}<\/span>/, 'semana: nome do técnico sem o prefixo da situação, em até duas linhas (ajuste a)')
+assert.match(chipSource, /<span className="sr-only">\{item\.label\}: <\/span>/, 'semana: situação para leitor de tela')
+assert.match(chipSource, /\{hasPartialMarker\(event\) && <PartialMarker time=\{partialTime\(event\)\} \/>\}/, 'semana: marcador da parcial pelo campo parcial')
+assert.doesNotMatch(chipSource, /event\.detalhe|event\.title\}/, 'semana: sem o detalhe nem o título com prefixo no cartão')
 assert.match(calendarSource, /\{otherEvents\.slice\(0, limit\)\.map/, 'demais tipos continuam visíveis no mês e na semana')
 assert.match(calendarSource, /\{hasEngineEvents && <PresenceLegend \/>\}/, 'legenda do motor só quando há evento do motor (sem corte, igual à atual)')
 assert.match(calendarSource, /<PresenceDaySummary events=\{selectedEvents\} \/>/, 'detalhe do dia com o resumo')
 assert.match(calendarSource, /\{situationLabel\(event\.situacao\)\} · Origem: \{originLabel\(event\.origem\)\}/, 'cartão com situação e origem')
-assert.match(calendarSource, /\{hasPartialMarker\(event\) && <PartialMarker \/>\}\{event\.detalhe\}/, 'cartão com o detalhe e o marcador da parcial')
-assert.match(calendarSource, /\{event\.description && <p className="mt-1 text-sm leading-5 text-slate-400">\{event\.description\}<\/p>\}/, 'categoria só quando o servidor manda (descrição)')
+const engineCardSource = calendarSource.slice(calendarSource.indexOf('[F5, ajuste b] Cartão do técnico'), calendarSource.indexOf(') : (', calendarSource.indexOf('[F5, ajuste b] Cartão do técnico')))
+assert.match(engineCardSource, /\{hasPartialMarker\(event\) && <PartialMarker time=\{partialTime\(event\)\} \/>\}\{event\.detalhe\}/, 'cartão com o detalhe e o marcador do campo parcial')
+assert.match(engineCardSource, /\{event\.categoria && <p className="mt-1 text-sm leading-5 text-slate-400">Categoria: \{event\.categoria\}<\/p>\}/, 'categoria só quando o servidor manda (campo categoria)')
+assert.doesNotMatch(engineCardSource, /event\.description/,'cartão do motor sem a description (sem texto repetido, ajuste b)')
 assert.doesNotMatch(calendarSource, /\b(reason|observacao|note|ausencias|category)\b/, 'o Calendário não lê observação, itens internos nem a categoria crua')
 assert.doesNotMatch(calendarSource, /\brole\b.*situacao|isManagerRole\([^)]*\)[^\n]*description/, 'a tela não decide perfil para a categoria')
 assert.match(calendarSource, /no_schedule: 'Sem escala',\n {2}day_off: 'Folga',/, 'rótulo de Sem escala e Folga mantida')
 assert.match(calendarSource, /'onsite', 'remote', 'absence', 'no_schedule', 'day_off'\]\.map\(\(status\)/, 'filtro de status com Ausência, Sem escala e Folga')
 assert.match(calendarSource, /war_room: 'border-red-500\/30 bg-red-500\/10 text-red-200'/, 'War Room no tom de hoje (ausência continua laranja)')
 assert.match(calendarSource, /schedule: 'border-blue-500\/30 bg-blue-500\/10 text-blue-200'/, 'escala de antes do corte no tom de hoje')
-assert.match(presenceSource, /role="img" title=\{PARTIAL_MARKER_LEGEND\.label\}/, 'marcador da parcial com nome acessível')
+assert.match(presenceSource, /const label = time \? `\$\{PARTIAL_MARKER_LEGEND\.label\} \$\{time\}` : PARTIAL_MARKER_LEGEND\.label/, 'marcador da parcial: horário no nome acessível quando vem')
+assert.match(presenceSource, /<span aria-label=\{label\} className="inline-flex shrink-0" role="img" title=\{label\}>/, 'marcador da parcial com nome acessível')
 assert.match(presenceSource, /aria-label=\{daySummaryAriaLabel\(summary\)\} className="flex flex-wrap gap-1" role="group"/, 'resumo com nome acessível')
 for (const source of [calendarSource, presenceSource, legendSource]) {
   assert.doesNotMatch(source, /\bconfirm\(/, 'sem confirm() no Calendário e na legenda')
@@ -160,6 +213,10 @@ assert.match(operationalSource, /<PresenceBadge status=\{item\.presence_type\} l
 assert.match(operationalSource, /\.\.\.\('absence_days' in summary \? \[\['Dias de ausência', summary\.absence_days \|\| 0\]\] : \[\]\)/, 'relatório: Dias de ausência só com o campo do servidor')
 assert.match(operationalSource, /\.\.\.\('no_schedule_days' in summary \? \[\['Dias sem escala', summary\.no_schedule_days \|\| 0\]\] : \[\]\)/, 'relatório: Dias sem escala só com o campo do servidor')
 assert.match(operationalSource, /const cutoffNotice = presenceCutoffNotice\(resource\.data\?\.cutoff\)/, 'relatório: aviso do corte')
+assert.match(operationalSource, /<InlineAlert tone="info" title=\{cutoffTitle\}>\{cutoffNotice\}<\/InlineAlert>/, 'relatório: título do aviso pelo split (ajuste d)')
+assert.doesNotMatch(operationalSource, /title="Escala dividida na data de corte"/, 'relatório: sem o título fixo')
+assert.match(operationalSource, /return 'Regra de escala'\n\}/, 'tela Escala: origem "Regra de escala" para qualquer regra (ajuste e)')
+assert.match(operationalSource, /if \(item\.source === 'implicit'\) return 'Regra fixa da Liderança'/, 'tela Escala: "Regra fixa da Liderança" mantida')
 assert.doesNotMatch(operationalSource, /export function CalendarPage|portal\/calendar\.php/, 'L-13: sem a CalendarPage duplicada')
 assert.match(appSource, /<LoadingState label="Carregando módulo\.\.\." \/>/, 'L-14: "Carregando módulo..." com acento')
 assert.doesNotMatch(appSource, /Ã/, 'L-14: sem texto quebrado no App')

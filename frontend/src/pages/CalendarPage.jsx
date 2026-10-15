@@ -6,7 +6,7 @@ import { useResource } from '../hooks/useResource'
 import { formatDateTime } from '../lib/format'
 import { localDate, queryString } from '../lib/operational'
 import { post } from '../lib/api'
-import { hasPartialMarker, isEngineScheduleEvent, originLabel, presenceLegendItem, situationLabel } from '../lib/presenceLegend'
+import { engineEventFullText, engineEventName, hasPartialMarker, isEngineScheduleEvent, originLabel, partialTime, presenceLegendItem, situationLabel } from '../lib/presenceLegend'
 import { isManagerRole } from '../lib/roles'
 
 const typeLabels = {
@@ -76,20 +76,19 @@ function asLocalDate(date) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10)
 }
 
-// [F5] Escala do motor (do corte em diante): cor, ícone e rótulo pela
-// situação (status), com o marcador da parcial; na semana, com o detalhe.
-// Os demais eventos, e a escala de antes do corte, como antes.
-function EventChip({ event, detailed = false }) {
+// [F5] Escala do motor (do corte em diante), cartão da semana: cor e ícone
+// pela situação (status), o nome do técnico e o marcador da parcial; o texto
+// completo no title e no detalhe do dia (ajuste a). Os demais eventos, e a
+// escala de antes do corte, como antes.
+function EventChip({ event }) {
   if (isEngineScheduleEvent(event)) {
     const item = presenceLegendItem(event.status)
     return (
-      <div className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${item?.tone || typeTones.schedule}`}>
-        <div className="flex items-center gap-1">
-          {item && <Icon name={item.icon} className="h-3 w-3 shrink-0" />}
-          <span className="truncate">{event.title}</span>
-          {hasPartialMarker(event) && <PartialMarker />}
-        </div>
-        {detailed && event.detalhe && <p className="truncate text-[10px] font-normal opacity-80">{event.detalhe}</p>}
+      <div className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[11px] font-semibold leading-tight ${item?.tone || typeTones.schedule}`} title={engineEventFullText(event)}>
+        {item && <Icon name={item.icon} className="h-3 w-3 shrink-0" />}
+        {item && <span className="sr-only">{item.label}: </span>}
+        <span className="line-clamp-2 min-w-0 break-words">{engineEventName(event)}</span>
+        {hasPartialMarker(event) && <PartialMarker time={partialTime(event)} />}
       </div>
     )
   }
@@ -249,7 +248,7 @@ export function CalendarPage({ session, notify }) {
                   <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-bold ${key === localDate() ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>{day.getDate()}</span>
                   <div className="mt-2 space-y-1">
                     {view === 'month' && <PresenceDaySummary events={engineEvents} />}
-                    {view === 'week' && engineEvents.map((event) => <EventChip detailed event={event} key={`${key}-${event.id}`} />)}
+                    {view === 'week' && engineEvents.map((event) => <EventChip event={event} key={`${key}-${event.id}`} />)}
                     {otherEvents.slice(0, limit).map((event) => <EventChip event={event} key={`${key}-${event.id}`} />)}
                     {otherEvents.length > limit && <p className="px-1 text-[10px] text-slate-500">+{otherEvents.length - limit} eventos</p>}
                   </div>
@@ -265,13 +264,14 @@ export function CalendarPage({ session, notify }) {
             {selectedEvents.length === 0 && <EmptyState title="Dia sem eventos" description="Selecione outro dia ou cadastre um evento manual." />}
             <PresenceDaySummary events={selectedEvents} />
             {selectedEvents.map((event) => isEngineScheduleEvent(event) ? (
-              // [F5] Cartão do técnico: situação, origem e detalhe do motor; a
-              // descrição (regra e, quando o servidor manda, a categoria).
+              // [F5, ajuste b] Cartão do técnico: situação, origem, detalhe (com
+              // o marcador do campo parcial) e a categoria, só quando o servidor
+              // manda (P9); sem a description, que repetia a regra.
               <article className="rounded-xl border border-white/[0.07] bg-slate-950/30 p-3" key={event.id}>
                 <div className="flex items-start justify-between gap-2"><strong className="text-sm text-slate-200">{event.title}</strong><PresenceBadge status={event.status} /></div>
                 <p className="mt-2 text-xs text-slate-500">{situationLabel(event.situacao)} · Origem: {originLabel(event.origem)}</p>
-                {event.detalhe && <p className="mt-2 flex items-center gap-1 text-sm leading-5 text-slate-300">{hasPartialMarker(event) && <PartialMarker />}{event.detalhe}</p>}
-                {event.description && <p className="mt-1 text-sm leading-5 text-slate-400">{event.description}</p>}
+                {event.detalhe && <p className="mt-2 flex items-center gap-1 text-sm leading-5 text-slate-300">{hasPartialMarker(event) && <PartialMarker time={partialTime(event)} />}{event.detalhe}</p>}
+                {event.categoria && <p className="mt-1 text-sm leading-5 text-slate-400">Categoria: {event.categoria}</p>}
               </article>
             ) : (
               <article className="rounded-xl border border-white/[0.07] bg-slate-950/30 p-3" key={event.id}>

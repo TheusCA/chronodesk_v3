@@ -12,7 +12,7 @@ import { ACTION_FEEDBACK, decisionFeedback, importFeedback } from '../lib/action
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { reportFiltersSchema, scheduleRuleSchema } from '../lib/formSchemas'
-import { partialMarkerInDetail, presenceCutoffNotice, presenceLegendItem } from '../lib/presenceLegend'
+import { partialMarkerInDetail, presenceCutoffNotice, presenceCutoffTitle, presenceLegendItem } from '../lib/presenceLegend'
 import { queryKeys } from '../lib/queryKeys'
 import {
   DetailPill,
@@ -181,7 +181,8 @@ function scheduleSourceLabel(item) {
   if (item.source === 'exception') return `Exceção: ${item.label}`
   if (item.source === 'implicit') return 'Regra fixa da Liderança'
   if (item.source === 'none') return 'Sem regra cadastrada'
-  return 'Regra fixa'
+  // [F5, ajuste e] Qualquer regra (dias pares, ciclo, dias fixos...).
+  return 'Regra de escala'
 }
 
 function scheduleRuleLabel(value, weekdays = []) {
@@ -1046,6 +1047,7 @@ export function OperationalReportsPage() {
     ]
   }, [resource.data?.summary])
   const cutoffNotice = presenceCutoffNotice(resource.data?.cutoff)
+  const cutoffTitle = presenceCutoffTitle(resource.data?.cutoff)
   function applyReportFilters(values) {
     const parsed = reportFiltersSchema.safeParse(values)
     if (!parsed.success) {
@@ -1088,7 +1090,7 @@ export function OperationalReportsPage() {
       </form>
       <OperationalShell resource={resource}>
         <>
-          {cutoffNotice && <InlineAlert tone="info" title="Escala dividida na data de corte">{cutoffNotice}</InlineAlert>}
+          {cutoffNotice && <InlineAlert tone="info" title={cutoffTitle}>{cutoffNotice}</InlineAlert>}
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-2xl font-black text-white">{value}</p></article>)}</section>
           <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div><h2 className="font-bold text-white">Competência {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-slate-500">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>

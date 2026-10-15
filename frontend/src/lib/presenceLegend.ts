@@ -1,7 +1,9 @@
 // F5 (desenho 5.1, 5.5 e 9.7): legenda única da situação do técnico no
 // Calendário e na tela Escala. Nenhuma situação só pela cor: cada uma tem
 // rótulo, letra, ícone e forma (sem escala com contorno tracejado). As cores
-// ficam em classes do index.css (presence-*), porque o Tailwind não lê .ts.
+// ficam em classes do index.css (presence-*), porque o Tailwind não lê .ts;
+// lá ficam fora de @layer, senão o Tailwind as descarta (qa:calendar-presence
+// compila o CSS e confere).
 
 export type PresenceStatus = 'onsite' | 'remote' | 'absence' | 'no_schedule'
 
@@ -54,9 +56,19 @@ export function originLabel(value: unknown): string {
 type CalendarEventLike = {
   id?: unknown
   event_type?: unknown
+  title?: unknown
   status?: unknown
   situacao?: unknown
   detalhe?: unknown
+  parcial?: unknown
+}
+
+// Prefixo do título do evento do motor (scheduleStatusLabel no backend).
+const TITLE_PREFIX: Record<PresenceStatus, string> = {
+  onsite: 'Presencial',
+  remote: 'Remoto',
+  absence: 'Ausência',
+  no_schedule: 'Sem escala',
 }
 
 // Evento de escala do motor (do corte em diante): o único com situacao.
@@ -65,15 +77,38 @@ export function isEngineScheduleEvent(event: CalendarEventLike): boolean {
   return event.event_type === 'schedule' && typeof event.situacao === 'string'
 }
 
-// Marcador da parcial no detalhe do motor (" · Ausente a partir de HH:MM" ou
+// Linha da tela Escala (schedules.php, sem o campo parcial): marcador da
+// parcial no detalhe do motor (" · Ausente a partir de HH:MM" ou
 // " · Ausente HH:MM–HH:MM"); o dia continua pela situação.
-// Também serve à linha da tela Escala (mesmos campos do motor).
 export function partialMarkerInDetail(situacao: unknown, detalhe: unknown): boolean {
   return typeof situacao === 'string' && situacao !== 'ausente' && /· Ausente /u.test(String(detalhe ?? ''))
 }
 
+// [Ajuste b] Calendário: o horário do marcador vem do campo parcial do
+// servidor (ausente sem marcador e no dia de ausência de dia inteiro).
+export function partialTime(event: CalendarEventLike): string | null {
+  return isEngineScheduleEvent(event) && typeof event.parcial === 'string' && event.parcial !== '' ? event.parcial : null
+}
+
 export function hasPartialMarker(event: CalendarEventLike): boolean {
-  return isEngineScheduleEvent(event) && partialMarkerInDetail(event.situacao, event.detalhe)
+  return partialTime(event) !== null
+}
+
+// [Ajuste a] Nome do técnico no cartão da semana, sem o prefixo da situação
+// (ícone e cor já a dão); título fora do formato sai inteiro.
+export function engineEventName(event: CalendarEventLike): string {
+  const title = String(event.title ?? '')
+  const item = presenceLegendItem(event.status)
+  const prefix = item === null ? null : `${TITLE_PREFIX[item.status]}: `
+  return prefix !== null && title.startsWith(prefix) && title.length > prefix.length ? title.slice(prefix.length) : title
+}
+
+// Texto completo do cartão da semana (atributo title): título, detalhe e a
+// categoria quando o servidor manda.
+export function engineEventFullText(event: CalendarEventLike & { categoria?: unknown }): string {
+  return [event.title, event.detalhe, event.categoria]
+    .filter((part): part is string => typeof part === 'string' && part !== '')
+    .join(' · ')
 }
 
 export type DaySummary = Record<PresenceStatus, number> & { partial: number, total: number }
@@ -121,6 +156,13 @@ export function presenceCutoffNotice(cutoff: CutoffLike): string | null {
   const dayBefore = new Date(`${date}T12:00:00Z`)
   dayBefore.setUTCDate(dayBefore.getUTCDate() - 1)
   return `Escala pelo cálculo antigo até ${brDate(dayBefore.toISOString().slice(0, 10))} e pelas regras novas a partir de ${brDate(date)}.`
+}
+
+// [Ajuste d] Título do aviso pelo split: "dividida" só quando o período
+// cruza o corte; todo depois dele, "pelas regras novas".
+export function presenceCutoffTitle(cutoff: CutoffLike): string | null {
+  if (presenceCutoffNotice(cutoff) === null) return null
+  return cutoff?.split === true ? 'Escala dividida na data de corte' : 'Escala pelas regras novas'
 }
 
 // Texto para leitor de tela: "9 presenciais, 6 remotos, 2 ausentes, 1 sem

@@ -364,6 +364,16 @@ final class PresenceEngine {
      * pela ordem de entrada (id), por isso so troca com inicio estritamente menor.
      */
     private static function partialMarker(array $absences, ?string $time): string {
+        $label = self::partialMarkerLabel($absences, $time);
+        return $label === null ? '' : ' · Ausente ' . $label;
+    }
+
+    /**
+     * [F5, ajuste b do commit 4] Horario do marcador da parcial ("09:00–10:00"
+     * ou "a partir de 15:00"), a mesma regra do detalhe; null sem marcador.
+     * Aceita as ausencias de entrada ou os itens de ausencias[] da resposta.
+     */
+    public static function partialMarkerLabel(array $absences, ?string $time = null): ?string {
         $next = null;
         $nextStart = null;
         foreach ($absences as $absence) {
@@ -377,11 +387,11 @@ final class PresenceEngine {
             }
         }
         if ($next === null) {
-            return '';
+            return null;
         }
         return $next['period_type'] === 'from_time'
-            ? ' · Ausente a partir de ' . $nextStart
-            : ' · Ausente ' . $nextStart . '–' . self::time($next['end_time'] ?? null);
+            ? 'a partir de ' . $nextStart
+            : $nextStart . '–' . self::time($next['end_time'] ?? null);
     }
 
     private static function isoWeekday(string $date): int {
