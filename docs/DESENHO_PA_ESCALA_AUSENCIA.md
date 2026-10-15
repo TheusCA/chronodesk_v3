@@ -1770,7 +1770,7 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 1. **O corte só é lido quando a escala ou as ausências entram na resposta.** Pausa, hora extra, ajuste, plantão, War Room e eventos manuais não consultam a tabela.
 2. **Quem tem a ausência como situação** é quem está no motor pelo cadastro (ativo ou arquivado, fora do Mapa não, equipes N1, N2 e Liderança), **sem o filtro de equipe**: uma consulta a mais. O evento de ausência dele vai até a véspera do corte, com o mesmo `id`; a que começa no corte ou depois não vira evento; com o período inteiro depois do corte, o evento cortado fica de fora. Fora do Mapa, inativo antigo e equipe fora das três continuam com o evento inteiro.
 3. **Filtro de equipe:** do corte em diante, a ausência de quem é de outra equipe some junto com a escala dele. Antes do corte, e para quem não está no motor, o bloco de ausências continua sem filtro de equipe, como hoje.
-4. **Filtros do corte em diante:** `type` `onsite`, `remote` e `absence` pela situação; `status` pela igualdade com o status do evento (`onsite`, `remote`, `absence`, `no_schedule`). `status=approved` continua trazendo os eventos de ausência, mas não as situações do motor; para elas, `type=absence` ou `status=absence`. Antes do corte, a escala continua ignorando `status`, como hoje. **Ajuste da validação humana:** `type=absence` traz também o dia com o marcador da parcial (abaixo).
+4. **Filtros do corte em diante:** `type` `onsite`, `remote` e `absence` pela situação; `status` pela igualdade com o status do evento (`onsite`, `remote`, `absence`, `no_schedule`). `status=approved` continua trazendo os eventos de ausência, mas não as situações do motor; para elas, `type=absence` ou `status=absence`. Antes do corte, a escala continua ignorando `status`, como hoje (**revisto em 2026-10-15, ajuste c da revisão do commit 4:** status de presença filtra a escala antiga pela modalidade). **Ajuste da validação humana:** `type=absence` traz também o dia com o marcador da parcial (abaixo).
 5. **Descrição:** regra (com acento, D11) ou "Exceção de escala"; ausência de dia inteiro: só a categoria, para a gestão e o próprio (vazio para os demais); parcial: regra mais " · " e a categoria, para a gestão e o próprio. A categoria é a da ausência que decide o dia: a primeira de dia inteiro; sem ela, a da parcial do marcador. Exceção de ausência antiga (`day_off` e afins) não tem categoria.
 6. **`situacao`, `origem` e `detalhe` para todos os perfis** (P9: todos veem quem está ausente e o período, inclusive o horário da parcial).
 7. **Status novos no Calendário:** `absence` e `no_schedule` em eventos `schedule`, com título "Ausência: Nome" e "Sem escala: Nome". A tela atual mostra os eventos com o título e a descrição; a legenda e os cartões ficam no commit 4.
@@ -1828,7 +1828,7 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 
 **Pendência 16c, consulta ajustada (2026-10-14, `c91f353`):** achado do responsável no teste local: a consulta só conferia a regra no dia do corte. Entrou a coluna `sem_regra_na_competencia` (cada dia de `@corte` até `@corte` + 1 mês − 1 dia, `WITH RECURSIVE`), mantida a `sem_regra_no_corte`; o registro do corte só roda com as duas em 0. Texto e validação local no `DEPLOY_LINUX.md`, item "Deploy que traz o F5"; no servidor, pendente.
 
-**Commit 4 entregue (2026-10-15, `e25cc8c`; aguardando a revisão e o teste no navegador do responsável antes do commit 5):** frontend do Calendário, tela Escala, relatório, L-13 e L-14.
+**Commit 4 entregue (2026-10-15, `e25cc8c`; revisado e testado no navegador em 2026-10-15: decisões 1, 2, 3, 5, 6, 8 e 9 aprovadas, 4 e 7 substituídas pelos ajustes abaixo):** frontend do Calendário, tela Escala, relatório, L-13 e L-14.
 
 | Arquivo | Como ficou |
 |---|---|
@@ -1840,7 +1840,7 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 | `frontend/src/App.jsx` | "Carregando módulo..." (L-14) |
 | `frontend/scripts/qa-calendar-presence.mjs` (novo, `qa:calendar-presence`) | Legenda (rótulo, letra, ícone e cor distintos; ausência na cor do evento de ausência; sem escala tracejado), marcador, resumo (repetido, parcial, filtro "Ausência"), aviso do corte (mesmo texto do CSV), Calendário sem corte igual, cartão sem observação nem categoria crua, sem `confirm()` novo, tela Escala, relatório, L-13 e L-14 |
 
-**Decisões de implementação do commit 4 (a aprovar):**
+**Decisões de implementação do commit 4 (1, 2, 3, 5, 6, 8 e 9 aprovadas em 2026-10-15; 4 e 7 substituídas pelo ajuste b):**
 
 1. **Cores (pedido do responsável):** ausente no mesmo laranja do evento de ausência de antes do corte; por isso **remoto em azul-claro** (a seção 5.1 previa laranja) e presencial em verde; sem escala cinza com contorno tracejado. Nenhuma situação só pela cor: rótulo, letra e ícone em todas.
 2. **War Room continua vermelho** (a D10 previa violeta): com a ausência em laranja não há confusão, a tela sem corte fica igual (pedido do responsável) e o violeta já é do evento manual.
@@ -1855,6 +1855,28 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 **Validação pela IA:** lint, typecheck, os 15 `qa:*` e o `qa:calendar-presence` novo; bateria PHP completa (`qa-presence-cutoff` 277, `qa-schedule-legacy-output`, `qa-security` e os demais); **mutação 26/26** no frontend (um sobrevivente na 1ª rodada, por falta de caso: dia inteiro com o texto do marcador no detalhe; o caso entrou). Prints com servidor simulado (dados fictícios, perfil Liderança) e Chrome sem janela: **sem corte, o HTML do mês e da semana é idêntico ao do código anterior**, exceto a opção "Sem escala" no filtro de status; com o corte em 16/10, resumo do dia 21 "7 presenciais, 5 remotos, 2 sem escala, inclui ausência parcial", 15 cartões no detalhe; filtro "Ausência" no dia 21 com "Remoto: Técnico 02" e "Sem escala: Técnico 12" (as duas parciais); "Ocultar sem escala" de 44 linhas para 0. **Não verificado:** a tela contra o backend real e o MySQL; largura de celular.
 
 **Como testar no navegador (sugestão):** com o corte 2026-10-16 inserido direto no banco local: (1) sem corte, o Calendário igual ao de antes (mês, semana, detalhe, legenda); (2) com o corte, outubro no mês: até 15/10 os chips de hoje; de 16/10 em diante o resumo "P · R · A · S" e os demais tipos (War Room, plantão, manual) visíveis; (3) semana com o cartão de cada técnico e o detalhe; (4) detalhe do dia: situação, origem, detalhe com o marcador da parcial, categoria só como gestor e como o próprio, observação nunca; (5) filtro "Ausência": os dias com parcial pela situação, sem contar duas vezes no resumo; filtro de status "Sem escala"; (6) tela Escala com a legenda, "Ocultar sem escala" e "Liderança" sem quebra; (7) relatório de uma competência que cruza o corte, com "Dias de ausência", "Dias sem escala" e o aviso.
+
+**Revisão e teste do commit 4 (2026-10-15)**, pelo responsável, com o front novo contra o backend real e o MySQL 8.0.46 local: corte 2026-10-16 inserido direto; 14 cadastros com regras variadas, ausências inteiras e parciais, War Room, evento manual e plantão; 1366 px e 390 px; gestor, técnico e somente leitura. Massa removida e tabela do corte esvaziada depois.
+
+| Caso | Resultado |
+|---|---|
+| Mês | Até 15/10, igual ao de antes. De 16/10 em diante, resumo "P 4 · R 4 · A 1 · S 5" no dia 21 (14 cadastros), com War Room, evento manual e plantão visíveis. Legenda do motor no rodapé |
+| Filtro "Ausência" | Dia 21 com R 1, A 1 e S 1 (as duas parciais e a ausência inteira uma vez só); dia 13, antes do corte, com o evento de ausência antigo |
+| Perfis | Técnico e somente leitura só com a própria categoria; observação da ausência nunca; observação do plantão só para o gestor (SEC-07b) |
+| Tela Escala | "Ocultar sem escala" de 79 para 54 linhas (25 = 5 dias × 5 sem regra) |
+| Relatório | Novembro/2026 (16/10 a 15/11) com "Dias de ausência 8", "Dias sem escala 105" e o aviso do corte |
+| Celular (390 px) | Sem rolagem horizontal |
+| Validação | `qa-calendar-presence`, typecheck e build OK |
+
+**Decisões do commit 4:** 1, 2, 3, 5, 6, 8 e 9 aprovadas; 4 (marcador lido do detalhe) e 7 (cartão com a descrição) substituídas pelo ajuste b. A decisão 4 do commit 3 é revista no ajuste c.
+
+**Ajustes pedidos na revisão (commit separado, antes do commit 5):**
+
+- **a) Semana:** em 1366 px os cartões ficavam "Remot… / Remoto (dia…" e o nome do técnico sumia. O cartão da semana mostra o nome do técnico, sem o prefixo da situação (ícone e cor já a dão), com o marcador da parcial; o texto completo fica no `title` do cartão e no detalhe do dia. Conferir por print em 1366 px e 1920 px.
+- **b) Cartão do dia sem texto repetido** ("Presencial (regra fixa)" duas vezes na Liderança, "Sem escala definida" duas vezes nos sem regra). Mudança aditiva no evento `schedule` do motor: `categoria` (rótulo da categoria, só quando o perfil pode ver, gestão e o próprio, P9; ausente nos demais casos) e `parcial` (horário da parcial do marcador, por exemplo "09:00–10:00" ou "a partir de 15:00", ou ausente). A `description` continua como está (compatibilidade). O cartão mostra situação, origem, detalhe e categoria, sem a `description`; o marcador vem de `parcial`, não do texto do detalhe. `API_CONTRACTS_FRONTEND.md`, `qa-presence-cutoff` (campos por perfil, nunca a observação, nunca para outro técnico) e `qa:calendar-presence`, com mutação nos dois.
+- **c) Filtro de status antes do corte** (revisão da decisão 4 do commit 3): com "Sem escala" no filtro, outubro mostrava chips de Presencial e Remoto nos dias 1 a 15, porque a escala antiga ignora o status. Quando o status for de presença (`onsite`, `remote`, `absence`, `no_schedule`, `day_off`), a escala antiga filtra pela modalidade (`presence_type`), e `no_schedule` não traz nada antes do corte. Os outros status ficam como hoje; sem filtro de status, a tela continua igual. Caso no `qa-presence-cutoff` e no `qa-schedule-legacy-output`.
+- **d) Relatório:** com `split: false`, o título do aviso não pode ser "Escala dividida na data de corte"; título pelo `split` ("Escala pelas regras novas").
+- **e) Opcional, se couber sem risco:** a coluna Origem da tela Escala diz "Regra fixa" para qualquer regra (ex.: "Dias pares"), enquanto o Calendário diz "Escala". Rótulo "Regra de escala", mantendo "Regra fixa da Liderança".
 
 ---
 
