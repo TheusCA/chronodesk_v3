@@ -68,6 +68,10 @@ final class QaChildPdo extends PDO {
     public function inTransaction(): bool {
         return $this->transaction;
     }
+
+    public function lastInsertId(?string $name = null): string|false {
+        return '30';
+    }
 }
 
 final class QaChildStatement extends PDOStatement {
@@ -300,6 +304,44 @@ final class QaChildStatement extends PDOStatement {
                         $this->rows[] = ['id' => (int)$id, 'employee_name' => 'QA ' . $id, 'equipe' => $row['equipe'], 'arquivado_em' => $row['arquivado_em'] ?? null];
                     }
                 }
+                return true;
+            }
+            // F6, commit 2: gravacao do mapa (save e remove). Vinculos de
+            // db['pa_map'] sem fim; a gravacao vai para [QA_WRITE].
+            if ($this->sql === 'SELECT id, nome AS name, equipe AS team, ad_login, fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1 FOR UPDATE') {
+                $row = $byId($this->pdo, $params[':id'] ?? 0);
+                $this->rows = $row && (int)$row['ativo'] === 1
+                    ? [['id' => (int)$params[':id'], 'name' => 'QA ' . $params[':id'], 'team' => $row['equipe'], 'ad_login' => $row['ad_login'], 'fora_mapa_escala' => (int)($row['fora_mapa_escala'] ?? 0)]]
+                    : [];
+                return true;
+            }
+            if ($this->sql === 'SELECT id, pa_number FROM portal_pa_assignments WHERE active = 1 AND employee_id = :employee_id AND id <> :id AND valid_from <= :new_until AND (valid_until IS NULL OR valid_until >= :new_from) LIMIT 1 FOR UPDATE') {
+                $this->rows = [];
+                foreach ($map as $id => [$employeeId, $pa, $from]) {
+                    if ($employeeId === (int)$params[':employee_id'] && (int)$id !== (int)$params[':id'] && $from <= $params[':new_until']) {
+                        $this->rows[] = ['id' => (int)$id, 'pa_number' => $pa];
+                    }
+                }
+                return true;
+            }
+            if (strpos($this->sql, 'SELECT employee_id, valid_from, valid_until FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number AND id <> :id') === 0) {
+                $onlyActive = strpos($this->sql, ' AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = portal_pa_assignments.employee_id AND f.ativo = 1) ORDER BY id') !== false;
+                $this->rows = [];
+                foreach ($map as $id => [$employeeId, $pa, $from]) {
+                    if ($pa === $params[':pa_number'] && (int)$id !== (int)$params[':id'] && $from <= $params[':date_until']
+                        && (!$onlyActive || (int)($this->pdo->db['funcionarios'][(string)$employeeId]['ativo'] ?? 0) === 1)) {
+                        $this->rows[] = ['employee_id' => $employeeId, 'valid_from' => $from, 'valid_until' => null];
+                    }
+                }
+                return true;
+            }
+            if (strpos($this->sql, 'INSERT INTO portal_pa_assignments (') === 0) {
+                error_log('[QA_WRITE] INSERT INTO portal_pa_assignments pa=' . $params[':pa_number'] . ' employee_id=' . $params[':employee_id']);
+                return true;
+            }
+            if ($this->sql === 'SELECT id, pa_number, employee_id FROM portal_pa_assignments WHERE id = :id AND active = 1 LIMIT 1 FOR UPDATE') {
+                $found = $map[(string)$params[':id']] ?? null;
+                $this->rows = $found === null ? [] : [['id' => (int)$params[':id'], 'pa_number' => $found[1], 'employee_id' => $found[0]]];
                 return true;
             }
         }
@@ -1906,6 +1948,40 @@ foreach (['mapa_admin' => true, 'mapa_lideranca' => true, 'mapa_hoje' => false, 
     assert_same([1, 'QA 1', 'n1', '1732', true, true], [$item['employee_id'] ?? null, $item['employee_name'] ?? null, $item['team'] ?? null, $item['pa_number'] ?? null, array_key_exists('presence', $item), array_key_exists('schedule_rule_label', $item)], "DF7 {$case}: nome, equipe, PA e situacao para todos");
     assert_same([true, true, true], [isset($body['week']['from'], $body['week']['to']), is_array($body['conflicts'] ?? null), is_array($body['absences_week'] ?? null)], "F6 {$case}: semana, conflitos e ausencias da semana na resposta");
 }
+
+// F6, commit 2: gravacao do mapa de ponta a ponta. Dois da Lideranca
+// (presenciais pela regra fixa, P12) no mesmo PA: salva, devolve o conflito
+// com os IDs e audita PA_MAP_CONFLICT_ACCEPTED (WARNING); salvar e remover
+// auditam o PA e os IDs. Nenhum nome nem login na resposta ou na auditoria.
+$paWriteDb = $mapDb;
+$paWriteDb['pa_map']['3'] = [5, '1730', '2026-09-01'];
+$paWriteSpec = static fn (array $body): array => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'POST', 'content_type' => 'application/json', 'body' => (string)json_encode($body), 'session' => QA_ADMIN_SESSION, 'db' => $paWriteDb];
+$paWriteCases = qa_run_endpoints($qaDir, [
+    'salvar_com_conflito' => $paWriteSpec(['action' => 'save', 'pa_number' => '1730', 'employee_id' => 2, 'valid_from' => date('Y-m-d')]),
+    'salvar_outro_pa' => $paWriteSpec(['action' => 'save', 'pa_number' => '1729', 'employee_id' => 5, 'valid_from' => date('Y-m-d')]),
+    'remover' => $paWriteSpec(['action' => 'remove', 'id' => 3]),
+]);
+foreach ($paWriteCases as $case => $result) {
+    assert_same('', $result['stderr'], "F6 gravacao {$case}: sem erro de PHP");
+    preg_match_all('/\[QA_AUDIT\] PA_MAP_[A-Z_]+ \[[A-Z]+\]: [^\n]*/', $result['log'], $audits);
+    foreach (array_merge([$result['body']], $audits[0]) as $text) {
+        assert_same(0, preg_match('/QA \d|qa\.lider|qa\.login|joao\.silva/', $text), "F6 gravacao {$case}: sem nome nem login na resposta e na auditoria");
+    }
+}
+$saved = (array)json_decode($paWriteCases['salvar_com_conflito']['body'], true);
+assert_same([200, true, [], [2, 5], '1730', 10], [$paWriteCases['salvar_com_conflito']['status'], $saved['sucesso'] ?? null, $saved['warnings'] ?? null, $saved['conflicts'][0]['employee_ids'] ?? null, $saved['conflicts'][0]['pa_number'] ?? null, $saved['conflicts_more'] ?? null], 'F6: salvar com conflito responde 200 com o conflito (IDs) e quantos dias a mais (P13, DF4)');
+$savedLog = $paWriteCases['salvar_com_conflito']['log'];
+assert_same([true, 1, true], [
+    strpos($savedLog, '[QA_AUDIT] PA_MAP_SAVED [INFO]: Alocacao de PA salva. ID 30, PA 1730, colaborador ID 2') !== false,
+    preg_match('/\[QA_AUDIT\] PA_MAP_CONFLICT_ACCEPTED \[WARNING\]: Alocacao de PA salva com conflito\. ID 30, PA 1730, colaboradores ID 2, 5, datas (\d{4}-\d{2}-\d{2}, ){9}\d{4}-\d{2}-\d{2} e mais 10\r?\n/', $savedLog),
+    strpos($savedLog, '[QA_WRITE] INSERT INTO portal_pa_assignments pa=1730 employee_id=2') !== false,
+], 'F6: salvar audita PA e IDs, e o conflito aceito como WARNING com as datas');
+assert_same([409, 'Este colaborador ja possui vinculo ativo em outro PA no periodo.', false], [$paWriteCases['salvar_outro_pa']['status'], json_decode($paWriteCases['salvar_outro_pa']['body'], true)['mensagem'] ?? null, strpos($paWriteCases['salvar_outro_pa']['log'], 'PA_MAP_SAVED') !== false], 'F6: o mesmo colaborador em outro PA continua 409, sem auditoria de gravacao');
+assert_same([200, true, true], [
+    $paWriteCases['remover']['status'],
+    strpos($paWriteCases['remover']['log'], '[QA_AUDIT] PA_MAP_REMOVED [INFO]: Alocacao de PA removida. ID 3, PA 1730, colaborador ID 5') !== false,
+    strpos($paWriteCases['remover']['log'], '[QA_WRITE] UPDATE portal_pa_assignments SET') !== false,
+], 'F6: remover audita o vinculo, o PA e o colaborador (DF11)');
 
 // QA 13 e A3, estruturais: so os endpoints de funcionario e a carga de
 // emergencia do config.php gravam access_role; ad_login gravado so depois de

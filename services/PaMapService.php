@@ -13,6 +13,10 @@ final class PaMapService {
         'even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined', 'fixed_weekdays', 'cycle',
     ];
 
+    /** [F6, DF4] Dias uteis do aviso de conflito ao salvar e quantos voltam na resposta. */
+    private const CONFLICT_HORIZON_DAYS = 20;
+    private const CONFLICT_LIST_LIMIT = 10;
+
     /** [F6, DF7] Campos do vinculo so para quem edita o mapa. */
     private const MANAGER_ONLY_FIELDS = ['employee_login', 'notes', 'created_by', 'updated_by'];
 
@@ -150,6 +154,14 @@ final class PaMapService {
         return $this->today ?? date('Y-m-d');
     }
 
+    /**
+     * [F6, commit 2] Gravacao do vinculo (desenho 9.8, P13). Conflito,
+     * remoto, ausencia e sem escala nao bloqueiam: viram warnings[] (no 1o dia
+     * util do vinculo, DF5) e conflicts[] (horizonte da DF4, ate 10 dias, com
+     * conflicts_more). confirm_remote_allocation e aceito e ignorado.
+     * Continua recusado: o mesmo colaborador em outro PA no periodo (409, com
+     * FOR UPDATE), cadastro inativo ou inexistente (400) e fora do Mapa (409).
+     */
     public function save(array $data, string $actor): array {
         return $this->atomic(function () use ($data, $actor): array {
             if (!$this->tableExists('portal_pa_assignments')) {
@@ -161,42 +173,37 @@ final class PaMapService {
             if ((int)$employee['fora_mapa_escala'] === 1) {
                 throw new DomainException('Cadastro marcado como fora do Mapa PA e da escala: não recebe vínculo de PA.');
             }
-            $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? date('Y-m-d'), 'Inicio da validade');
+            $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? $this->today(), 'Inicio da validade');
             $validUntil = $this->nullableDate($data['valid_until'] ?? null, 'Fim da validade');
             if ($validUntil !== null && $validUntil < $validFrom) {
                 throw new InvalidArgumentException('Fim da validade nao pode ser anterior ao inicio.');
             }
             $notes = $this->text($data['notes'] ?? '', 1000, true);
-            $schedule = $this->scheduleForEmployee((int)$employee['id'], $validFrom);
-            $warnings = $this->scheduleWarnings($schedule);
+            $employeeId = (int)$employee['id'];
+            $this->assertNoOtherPa($employeeId, $validFrom, $validUntil, $id);
 
-            if ($schedule['block']) {
-                throw new DomainException($schedule['message']);
+            // Motor: o horizonte do conflito e, se ficar antes dele, o 1o dia util do vinculo.
+            $horizon = $this->conflictHorizon($validFrom, $validUntil);
+            $start = self::firstBusinessDay($validFrom, $validUntil);
+            $presence = $horizon === [] ? ['days' => []] : $this->operational()->mapPresence($horizon[0], $horizon[count($horizon) - 1], []);
+            if ($start !== null && ($horizon === [] || $start < $horizon[0])) {
+                $presence['days'] += $this->operational()->mapPresence($start, $start, [])['days'];
             }
-            if ($schedule['remote_on_date'] && empty($data['confirm_remote_allocation'])) {
-                throw new DomainException('Colaborador marcado como remoto nesta data. Confirme para alocar mesmo assim.');
-            }
+            $warnings = self::startWarnings($start === null ? null : ($presence['days'][$employeeId . ':' . $start] ?? null), $start);
+            $conflicts = $this->saveConflicts($paNumber, $employeeId, $horizon, $presence, $id);
 
-            $this->assertNoConflict(
-                $paNumber,
-                (int)$employee['id'],
-                $schedule['rule_type'],
-                $validFrom,
-                $validUntil,
-                $id
-            );
-
+            $copy = $this->ruleCopy($employeeId, $validFrom);
             $params = [
                 ':pa_number' => $paNumber,
-                ':employee_id' => (int)$employee['id'],
+                ':employee_id' => $employeeId,
                 ':employee_name' => $employee['name'],
                 ':employee_login' => $employee['ad_login'],
                 ':team' => $employee['team'],
                 // [F2B] O ENUM da copia (migrations 009 e 010) nao tem 'cycle':
                 // o ciclo e gravado como 'undefined' com a configuracao, e a
                 // copia continua gravada para o rollback; desde o F6 a leitura usa o motor (L-02).
-                ':schedule_rule_type' => $schedule['rule_type'] === 'cycle' ? 'undefined' : $schedule['rule_type'],
-                ':schedule_rule_config' => $schedule['rule_config'] ?? null,
+                ':schedule_rule_type' => $copy['rule_type'] === 'cycle' ? 'undefined' : $copy['rule_type'],
+                ':schedule_rule_config' => $copy['rule_config'],
                 ':valid_from' => $validFrom,
                 ':valid_until' => $validUntil,
                 ':notes' => $notes ?: null,
@@ -236,24 +243,184 @@ final class PaMapService {
                 $id = (int)$this->pdo->lastInsertId();
             }
 
-            return ['id' => $id, 'warnings' => $warnings];
+            return [
+                'id' => $id,
+                'pa_number' => $paNumber,
+                'employee_id' => $employeeId,
+                'warnings' => $warnings,
+                'conflicts' => array_slice($conflicts, 0, self::CONFLICT_LIST_LIMIT),
+                'conflicts_more' => max(0, count($conflicts) - self::CONFLICT_LIST_LIMIT),
+                'conflict_audit' => self::conflictAudit($id, $paNumber, $conflicts),
+            ];
         });
     }
 
-    public function remove(int $id, string $actor): void {
-        if (!$this->tableExists('portal_pa_assignments')) {
-            throw new DomainException('Tabela de vinculos do Mapa de PA ainda nao foi criada.');
+    /**
+     * [F6, DF11] Desocupa o PA em transacao, com o vinculo travado; devolve o
+     * PA e o colaborador para a auditoria (IDs, sem nome nem login).
+     */
+    public function remove(int $id, string $actor): array {
+        return $this->atomic(function () use ($id, $actor): array {
+            if (!$this->tableExists('portal_pa_assignments')) {
+                throw new DomainException('Tabela de vinculos do Mapa de PA ainda nao foi criada.');
+            }
+            $id = $this->positiveInt($id);
+            $stmt = $this->pdo->prepare(
+                'SELECT id, pa_number, employee_id
+                 FROM portal_pa_assignments
+                 WHERE id = :id AND active = 1
+                 LIMIT 1
+                 FOR UPDATE'
+            );
+            $stmt->execute([':id' => $id]);
+            $row = $stmt->fetch();
+            if (!$row) {
+                throw new DomainException('Vinculo de PA nao encontrado.');
+            }
+            $stmt = $this->pdo->prepare(
+                'UPDATE portal_pa_assignments
+                 SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_by = :updated_by
+                 WHERE id = :id AND active = 1'
+            );
+            $stmt->execute([':updated_by' => $actor, ':id' => $id]);
+            if ($stmt->rowCount() !== 1) {
+                throw new DomainException('Vinculo de PA nao encontrado.');
+            }
+            return ['id' => $id, 'pa_number' => (string)$row['pa_number'], 'employee_id' => (int)$row['employee_id']];
+        });
+    }
+
+    /**
+     * [F6, DF4] Dias uteis do aviso de conflito ao salvar: do maior entre o
+     * inicio do vinculo e hoje, ate 20 dias uteis, sem passar do fim.
+     *
+     * @return list<string>
+     */
+    private function conflictHorizon(string $validFrom, ?string $validUntil): array {
+        $days = [];
+        $day = new DateTimeImmutable(max($validFrom, $this->today()) . ' 00:00:00', new DateTimeZone('UTC'));
+        while (count($days) < self::CONFLICT_HORIZON_DAYS && ($validUntil === null || $day->format('Y-m-d') <= $validUntil)) {
+            if (PresenceEngine::isBusinessDay($day->format('Y-m-d'))) {
+                $days[] = $day->format('Y-m-d');
+            }
+            $day = $day->modify('+1 day');
         }
-        $id = $this->positiveInt($id);
+        return $days;
+    }
+
+    /** 1o dia util do vinculo (o inicio, ou a segunda seguinte), dentro da validade. */
+    private static function firstBusinessDay(string $validFrom, ?string $validUntil): ?string {
+        $day = new DateTimeImmutable($validFrom . ' 00:00:00', new DateTimeZone('UTC'));
+        for ($i = 0; $i < 7; $i++, $day = $day->modify('+1 day')) {
+            $date = $day->format('Y-m-d');
+            if ($validUntil !== null && $date > $validUntil) {
+                return null;
+            }
+            if (PresenceEngine::isBusinessDay($date)) {
+                return $date;
+            }
+        }
+        return null;
+    }
+
+    /** [F6, DF5] Avisos do 1o dia util do vinculo pelo motor; nenhum bloqueia. */
+    private static function startWarnings(?array $day, ?string $date): array {
+        if ($day === null || $date === null) {
+            return [];
+        }
+        $when = 'em ' . (new DateTimeImmutable($date))->format('d/m/Y') . ', início do vínculo';
+        return match ($day['presence_type']) {
+            'absence' => ["Colaborador ausente o dia todo {$when}."],
+            'remote' => ["Colaborador em trabalho remoto {$when}."],
+            'no_schedule' => ["Colaborador sem escala definida {$when}."],
+            default => [],
+        };
+    }
+
+    /**
+     * [F6, DF4, DF8, decisao 8 do F4] Dias do horizonte em que o colaborador
+     * do vinculo e mais alguem com vinculo no mesmo PA estao presenciais no
+     * motor (mesma regra da leitura). O horizonte comeca hoje ou depois: sem
+     * vinculo de cadastro inativo, que nao entra no conflito nem na resposta.
+     * So aviso; nada e travado.
+     */
+    private function saveConflicts(string $paNumber, int $employeeId, array $horizon, array $presence, ?int $id): array {
+        if ($horizon === []) {
+            return [];
+        }
+        $occupants = $this->paOccupants($paNumber, $horizon[0], $horizon[count($horizon) - 1], $id);
+        $onsite = static fn (int $who, string $date): bool => ($presence['days'][$who . ':' . $date]['presence_type'] ?? null) === 'onsite';
+        $conflicts = [];
+        foreach ($horizon as $date) {
+            if (!$onsite($employeeId, $date)) {
+                continue;
+            }
+            $ids = [$employeeId => $employeeId];
+            foreach ($occupants as $row) {
+                if ($row['from'] <= $date && ($row['until'] === null || $row['until'] >= $date) && $onsite($row['employee_id'], $date)) {
+                    $ids[$row['employee_id']] = $row['employee_id'];
+                }
+            }
+            if (count($ids) >= 2) {
+                sort($ids);
+                $conflicts[] = ['pa_number' => $paNumber, 'date' => $date, 'employee_ids' => $ids];
+            }
+        }
+        return $conflicts;
+    }
+
+    /**
+     * Vinculos do PA no periodo (recorrentes, menos o que esta sendo
+     * editado, e da tabela antiga), de cadastros ativos (decisao 8 do F4).
+     */
+    private function paOccupants(string $paNumber, string $from, string $to, ?int $id): array {
         $stmt = $this->pdo->prepare(
-            'UPDATE portal_pa_assignments
-             SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_by = :updated_by
-             WHERE id = :id AND active = 1'
+            'SELECT employee_id, valid_from, valid_until
+             FROM portal_pa_assignments
+             WHERE active = 1
+               AND pa_number = :pa_number
+               AND id <> :id
+               AND valid_from <= :date_until
+               AND (valid_until IS NULL OR valid_until >= :date_from)'
+            . $this->activeEmployeeFilter('portal_pa_assignments', $from)
+            . ' ORDER BY id'
         );
-        $stmt->execute([':updated_by' => $actor, ':id' => $id]);
-        if ($stmt->rowCount() !== 1) {
-            throw new DomainException('Vinculo de PA nao encontrado.');
+        $stmt->execute([':pa_number' => $paNumber, ':id' => $id ?: 0, ':date_from' => $from, ':date_until' => $to]);
+        $rows = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $rows[] = ['employee_id' => (int)$row['employee_id'], 'from' => (string)$row['valid_from'], 'until' => $row['valid_until'] === null ? null : (string)$row['valid_until']];
         }
+        if ($this->tableExists('portal_pa_map')) {
+            $stmt = $this->pdo->prepare(
+                'SELECT employee_id, work_date
+                 FROM portal_pa_map
+                 WHERE record_status = "active" AND pa_number = :pa_number AND work_date BETWEEN :date_from AND :date_to'
+                . $this->activeEmployeeFilter('portal_pa_map', $from)
+                . ' ORDER BY work_date'
+            );
+            $stmt->execute([':pa_number' => $paNumber, ':date_from' => $from, ':date_to' => $to]);
+            foreach ($stmt->fetchAll() as $row) {
+                $rows[] = ['employee_id' => (int)$row['employee_id'], 'from' => (string)$row['work_date'], 'until' => (string)$row['work_date']];
+            }
+        }
+        return $rows;
+    }
+
+    /**
+     * [F6] Detalhe do PA_MAP_CONFLICT_ACCEPTED: vinculo, PA, IDs dos tecnicos
+     * e datas em conflito (ate 10, e quantas a mais); sem nome nem login.
+     */
+    private static function conflictAudit(int $id, string $paNumber, array $conflicts): ?string {
+        if ($conflicts === []) {
+            return null;
+        }
+        $ids = array_values(array_unique(array_merge(...array_column($conflicts, 'employee_ids'))));
+        sort($ids);
+        $dates = array_column(array_slice($conflicts, 0, self::CONFLICT_LIST_LIMIT), 'date');
+        $more = count($conflicts) - count($dates);
+        return 'Alocacao de PA salva com conflito. ID ' . $id . ', PA ' . $paNumber
+            . ', colaboradores ID ' . implode(', ', $ids)
+            . ', datas ' . implode(', ', $dates) . ($more > 0 ? " e mais {$more}" : '');
     }
 
     private function inventory(): array {
@@ -520,14 +687,12 @@ final class PaMapService {
         ] + ($reason === null ? [] : ['presence_reason' => $reason]));
     }
 
-    private function assertNoConflict(
-        string $paNumber,
-        int $employeeId,
-        string $ruleType,
-        string $validFrom,
-        ?string $validUntil,
-        ?int $id
-    ): void {
+    /**
+     * O mesmo colaborador nao pode ter dois vinculos ativos no mesmo periodo
+     * (em outro PA ou no mesmo): continua bloqueando, com trava. O conflito
+     * de ocupacao do PA virou aviso no F6 (saveConflicts).
+     */
+    private function assertNoOtherPa(int $employeeId, string $validFrom, ?string $validUntil, ?int $id): void {
         $rangeUntil = $validUntil ?? '9999-12-31';
         $stmt = $this->pdo->prepare(
             'SELECT id, pa_number
@@ -548,48 +713,6 @@ final class PaMapService {
         if ($stmt->fetch()) {
             throw new DomainException('Este colaborador ja possui vinculo ativo em outro PA no periodo.');
         }
-
-        // [F4, decisao 8 do commit 4] Ocupacao do PA pela mesma regra do mapa:
-        // vinculo novo de hoje em diante ignora o de cadastro inativo (o mapa
-        // mostra o PA livre e a mensagem nao expoe o nome do arquivado);
-        // vinculo que comeca no passado continua conferido contra todos.
-        $stmt = $this->pdo->prepare(
-            'SELECT id, schedule_rule_type, employee_name
-             FROM portal_pa_assignments
-             WHERE active = 1
-               AND pa_number = :pa_number
-               AND id <> :id
-               AND valid_from <= :new_until
-               AND (valid_until IS NULL OR valid_until >= :new_from)'
-            . $this->activeEmployeeFilter('portal_pa_assignments', $validFrom)
-            . ' FOR UPDATE'
-        );
-        $stmt->execute([
-            ':pa_number' => $paNumber,
-            ':id' => $id ?: 0,
-            ':new_until' => $rangeUntil,
-            ':new_from' => $validFrom,
-        ]);
-        foreach ($stmt->fetchAll() as $existing) {
-            if ($this->rulesConflict($ruleType, $this->ruleType($existing['schedule_rule_type']))) {
-                throw new DomainException('Conflito de escala no PA com ' . $existing['employee_name'] . '.');
-            }
-        }
-    }
-
-    private function rulesConflict(string $a, string $b): bool {
-        $a = $this->ruleType($a);
-        $b = $this->ruleType($b);
-        if ($a === 'always_remote' || $b === 'always_remote') {
-            return false;
-        }
-        if ($a === 'even_days' && $b === 'odd_days') {
-            return false;
-        }
-        if ($a === 'odd_days' && $b === 'even_days') {
-            return false;
-        }
-        return true;
     }
 
     private function employee($id): array {
@@ -614,39 +737,14 @@ final class PaMapService {
         return $employee;
     }
 
-    private function scheduleForEmployee(int $employeeId, string $date): array {
-        $exception = $this->scheduleException($employeeId, $date);
-        if ($exception) {
-            $type = $exception['exception_type'];
-            if (in_array($type, ['vacation', 'leave', 'absence', 'day_off'], true)) {
-                return [
-                    'rule_type' => 'undefined',
-                    'rule_config' => null,
-                    'weekdays' => [],
-                    'status' => $type,
-                    'label' => $type,
-                    'source' => 'exception',
-                    'block' => true,
-                    'message' => 'Colaborador com ausencia/ferias nesta data.',
-                    'remote_on_date' => false,
-                ];
-            }
-        }
-
+    /**
+     * Copia da regra vigente no inicio do vinculo, gravada so para o rollback
+     * (2.7); desde o F6 a leitura e os avisos usam o motor (L-02).
+     */
+    private function ruleCopy(int $employeeId, string $date): array {
         if (!$this->tableExists('portal_schedule_rules')) {
-            return [
-                'rule_type' => 'undefined',
-                'rule_config' => null,
-                'weekdays' => [],
-                'status' => 'no_schedule',
-                'label' => 'Sem escala definida',
-                'source' => 'none',
-                'block' => false,
-                'message' => null,
-                'remote_on_date' => false,
-            ];
+            return ['rule_type' => 'undefined', 'rule_config' => null];
         }
-
         $stmt = $this->pdo->prepare(
             'SELECT rule_type, rule_config
              FROM portal_schedule_rules
@@ -663,99 +761,19 @@ final class PaMapService {
         ]);
         $rule = $stmt->fetch();
         if (!$rule) {
-            return [
-                'rule_type' => 'undefined',
-                'rule_config' => null,
-                'weekdays' => [],
-                'status' => 'no_schedule',
-                'label' => 'Sem escala definida',
-                'source' => 'none',
-                'block' => false,
-                'message' => null,
-                'remote_on_date' => false,
-            ];
+            return ['rule_type' => 'undefined', 'rule_config' => null];
         }
         $ruleType = $this->ruleType((string)$rule['rule_type']);
+        if ($ruleType === 'cycle') {
+            return ['rule_type' => $ruleType, 'rule_config' => (string)$rule['rule_config']];
+        }
         $weekdays = $ruleType === 'fixed_weekdays'
             ? OperationalService::scheduleRuleConfigWeekdays($rule['rule_config'] ?? null)
             : [];
-        if ($ruleType === 'cycle') {
-            // [F2B] Ciclo pelo motor: a copia guarda a configuracao, e o dia
-            // da data diz presencial ou remoto (fim de semana: sem escala).
-            $ruleConfig = (string)$rule['rule_config'];
-            $presence = self::cyclePresence($ruleConfig, $date) ?? 'no_schedule';
-        } else {
-            $ruleConfig = $ruleType === 'fixed_weekdays' && $weekdays !== []
-                ? json_encode(['weekdays' => $weekdays], JSON_UNESCAPED_SLASHES)
-                : null;
-            $presence = $ruleType === 'undefined'
-                ? 'no_schedule'
-                : OperationalService::presenceForRule($ruleType, $date, $weekdays);
-        }
         return [
             'rule_type' => $ruleType,
-            'rule_config' => $ruleConfig,
-            'weekdays' => $weekdays,
-            'status' => $presence,
-            'label' => $this->ruleLabel($ruleType, $weekdays, $ruleConfig),
-            'source' => 'rule',
-            'block' => false,
-            'message' => null,
-            // Aviso e confirmacao de alocacao remota: sempre remoto, ou ciclo
-            // em dia remoto na data de inicio (o ciclo em dia presencial nao avisa).
-            'remote_on_date' => $ruleType === 'always_remote' || ($ruleType === 'cycle' && $presence === 'remote'),
+            'rule_config' => $weekdays !== [] ? json_encode(['weekdays' => $weekdays], JSON_UNESCAPED_SLASHES) : null,
         ];
-    }
-
-    private function scheduleException(int $employeeId, string $date): ?array {
-        if (!$this->tableExists('portal_schedule_exceptions')) {
-            return null;
-        }
-        $stmt = $this->pdo->prepare(
-            'SELECT exception_type
-             FROM portal_schedule_exceptions
-             WHERE employee_id = :employee_id AND exception_date = :work_date
-             LIMIT 1'
-        );
-        $stmt->execute([':employee_id' => $employeeId, ':work_date' => $date]);
-        $row = $stmt->fetch();
-        return $row ?: null;
-    }
-
-    private function scheduleWarnings(array $schedule): array {
-        if ($schedule['remote_on_date']) {
-            return ['Colaborador marcado como remoto nesta data.'];
-        }
-        if ($schedule['rule_type'] === 'undefined') {
-            return ['Colaborador sem escala definida.'];
-        }
-        return [];
-    }
-
-    private function ruleLabel(string $ruleType, array $weekdays = [], ?string $config = null): string {
-        if ($this->ruleType($ruleType) === 'cycle') {
-            $cycle = PresenceEngine::cycleConfig(self::decodedConfig($config));
-            return $cycle === null ? 'Ciclo com configuracao invalida' : ucfirst(PresenceEngine::cycleLabel($cycle['pattern']));
-        }
-        $labels = [
-            'even_days' => 'Dias pares',
-            'odd_days' => 'Dias impares',
-            'always_onsite' => 'Sempre presencial',
-            'always_remote' => 'Remoto',
-            'undefined' => 'Sem escala',
-            'fixed_weekdays' => 'Presencial: ' . OperationalService::weekdayListLabel($weekdays),
-        ];
-        return $labels[$this->ruleType($ruleType)];
-    }
-
-    /** [F2B] Dia do ciclo na data pelo motor: 'onsite', 'remote' ou null. */
-    private static function cyclePresence(?string $config, string $date): ?string {
-        return OperationalService::cyclePresence(self::decodedConfig($config), $date);
-    }
-
-    private static function decodedConfig(?string $config): array {
-        $decoded = is_string($config) ? json_decode($config, true) : null;
-        return is_array($decoded) ? $decoded : [];
     }
 
     private function ruleType($value): string {

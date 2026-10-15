@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 // ============================================================================
-// QA do Mapa PA no motor (Parte B, F6, commit 1; desenho, secao 9.8)
+// QA do Mapa PA no motor (Parte B, F6, commits 1 e 2; desenho, secao 9.8)
 //
 // Leitura do mapa (PaMapService::list) sobre o motor de presenca:
 // 1. Conflito por PA e dia util da semana (seg a sex): dois ou mais com
@@ -18,6 +18,12 @@ declare(strict_types=1);
 //    edita o mapa. Ausencias da semana (DF9).
 // 4. Numero de consultas fixo para N cadastros (L-10) e o mapa nao le a data
 //    de corte (DF1).
+// 5. Gravacao (commit 2): conflito, remoto, ausencia e sem escala nao
+//    bloqueiam (P13): warnings[] no 1o dia util do vinculo (DF5) e
+//    conflicts[] por dia no horizonte da DF4, com auditoria sem nome;
+//    confirm_remote_allocation ignorado; 409 para o mesmo colaborador em
+//    outro PA (com trava) e fora do Mapa; 400 para inativo; decisao 8 do F4;
+//    remove em transacao com PA e colaborador (DF11).
 //
 // Nao acessa banco (usa um banco simulado) nem os arquivos de estado da aplicacao.
 //
@@ -73,8 +79,36 @@ final class QaPaPdo extends PDO {
     public array $legacy = [];
     public array $tables = ['portal_pa_assignments' => 1, 'portal_pa_map' => 1];
     public array $log = [];
+    public array $written = [];
+    public array $transactions = [];
+    private bool $transaction = false;
 
     public function __construct() {
+    }
+
+    public function beginTransaction(): bool {
+        $this->transactions[] = 'begin';
+        return $this->transaction = true;
+    }
+
+    public function commit(): bool {
+        $this->transactions[] = 'commit';
+        $this->transaction = false;
+        return true;
+    }
+
+    public function rollBack(): bool {
+        $this->transactions[] = 'rollback';
+        $this->transaction = false;
+        return true;
+    }
+
+    public function inTransaction(): bool {
+        return $this->transaction;
+    }
+
+    public function lastInsertId(?string $name = null): string|false {
+        return (string)array_key_last($this->assignments);
     }
 
     public function prepare(string $query, array $options = []): PDOStatement|false {
@@ -90,6 +124,7 @@ final class QaPaPdo extends PDO {
 
 final class QaPaStatement extends PDOStatement {
     private array $rows = [];
+    private int $affected = 0;
 
     public function __construct(private QaPaPdo $pdo, private string $sql) {
     }
@@ -171,7 +206,7 @@ final class QaPaStatement extends PDOStatement {
         if (strpos($sql, 'SELECT id, pa_number, employee_id, employee_name, employee_login, team, schedule_rule_type, schedule_rule_config, valid_from, valid_until, notes, created_by, updated_by, created_at, updated_at FROM portal_pa_assignments WHERE active = 1 AND valid_from <= :date_until AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {
             foreach ($db->assignments as $id => $row) {
                 $employee = $db->employees[$row['employee_id']];
-                if ($row['valid_from'] <= $params[':date_until'] && ($row['valid_until'] === null || $row['valid_until'] >= $params[':date_from'])
+                if (($row['active'] ?? 1) === 1 && $row['valid_from'] <= $params[':date_until'] && ($row['valid_until'] === null || $row['valid_until'] >= $params[':date_from'])
                     && (!isset($params[':team']) || $employee['equipe'] === $params[':team'])
                     && (!$activeOnly('portal_pa_assignments') || (int)$employee['ativo'] === 1)) {
                     $this->rows[] = [
@@ -207,7 +242,82 @@ final class QaPaStatement extends PDOStatement {
             }
             return true;
         }
+        // Gravacao (save e remove).
+        if ($sql === 'SELECT id, nome AS name, equipe AS team, ad_login, fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1 FOR UPDATE') {
+            $row = $db->employees[(int)$params[':id']] ?? null;
+            if ($row !== null && (int)$row['ativo'] === 1) {
+                $this->rows[] = ['id' => (int)$params[':id'], 'name' => $row['nome'], 'team' => $row['equipe'], 'ad_login' => 'qa.login.' . $params[':id'], 'fora_mapa_escala' => $row['fora_mapa_escala']];
+            }
+            return true;
+        }
+        if ($sql === 'SELECT id, pa_number FROM portal_pa_assignments WHERE active = 1 AND employee_id = :employee_id AND id <> :id AND valid_from <= :new_until AND (valid_until IS NULL OR valid_until >= :new_from) LIMIT 1 FOR UPDATE') {
+            foreach ($db->assignments as $id => $row) {
+                if (($row['active'] ?? 1) === 1 && $row['employee_id'] === $params[':employee_id'] && $id !== $params[':id']
+                    && $row['valid_from'] <= $params[':new_until'] && ($row['valid_until'] === null || $row['valid_until'] >= $params[':new_from'])) {
+                    $this->rows[] = ['id' => $id, 'pa_number' => $row['pa_number']];
+                }
+            }
+            return true;
+        }
+        if ($sql === 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE employee_id = :employee_id AND effective_from <= :work_date_from AND (effective_until IS NULL OR effective_until >= :work_date_until) ORDER BY effective_from DESC, id DESC LIMIT 1') {
+            foreach ($db->rules as $rule) {
+                if ($rule['employee_id'] === $params[':employee_id'] && $rule['effective_from'] <= $params[':work_date_from']) {
+                    $this->rows[] = ['rule_type' => $rule['rule_type'], 'rule_config' => $rule['rule_config']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT employee_id, valid_from, valid_until FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number AND id <> :id AND valid_from <= :date_until AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {
+            foreach ($db->assignments as $id => $row) {
+                if (($row['active'] ?? 1) === 1 && $row['pa_number'] === $params[':pa_number'] && $id !== $params[':id']
+                    && $row['valid_from'] <= $params[':date_until'] && ($row['valid_until'] === null || $row['valid_until'] >= $params[':date_from'])
+                    && (!$activeOnly('portal_pa_assignments') || (int)$db->employees[$row['employee_id']]['ativo'] === 1)) {
+                    $this->rows[] = ['employee_id' => $row['employee_id'], 'valid_from' => $row['valid_from'], 'valid_until' => $row['valid_until']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT employee_id, work_date FROM portal_pa_map WHERE record_status = "active" AND pa_number = :pa_number AND work_date BETWEEN :date_from AND :date_to') === 0) {
+            foreach ($db->legacy as $row) {
+                if ($row['pa_number'] === $params[':pa_number'] && $row['work_date'] >= $params[':date_from'] && $row['work_date'] <= $params[':date_to']
+                    && (!$activeOnly('portal_pa_map') || (int)$db->employees[$row['employee_id']]['ativo'] === 1)) {
+                    $this->rows[] = ['employee_id' => $row['employee_id'], 'work_date' => $row['work_date']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'INSERT INTO portal_pa_assignments (') === 0) {
+            $db->assignments[max(array_keys($db->assignments)) + 1] = ['pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'], 'valid_from' => $params[':valid_from'], 'valid_until' => $params[':valid_until']];
+            $db->written[] = $params;
+            return true;
+        }
+        if (strpos($sql, 'UPDATE portal_pa_assignments SET pa_number = :pa_number,') === 0) {
+            $this->affected = isset($db->assignments[$params[':id']]) && ($db->assignments[$params[':id']]['active'] ?? 1) === 1 ? 1 : 0;
+            if ($this->affected === 1) {
+                $db->assignments[$params[':id']] = ['pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'], 'valid_from' => $params[':valid_from'], 'valid_until' => $params[':valid_until']];
+                $db->written[] = $params;
+            }
+            return true;
+        }
+        if ($sql === 'SELECT id, pa_number, employee_id FROM portal_pa_assignments WHERE id = :id AND active = 1 LIMIT 1 FOR UPDATE') {
+            $row = $db->assignments[$params[':id']] ?? null;
+            if ($row !== null && ($row['active'] ?? 1) === 1) {
+                $this->rows[] = ['id' => $params[':id'], 'pa_number' => $row['pa_number'], 'employee_id' => $row['employee_id']];
+            }
+            return true;
+        }
+        if ($sql === 'UPDATE portal_pa_assignments SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_by = :updated_by WHERE id = :id AND active = 1') {
+            $this->affected = isset($db->assignments[$params[':id']]) && ($db->assignments[$params[':id']]['active'] ?? 1) === 1 ? 1 : 0;
+            if ($this->affected === 1) {
+                $db->assignments[$params[':id']]['active'] = 0;
+            }
+            return true;
+        }
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $sql);
+    }
+
+    public function rowCount(): int {
+        return $this->affected;
     }
 
     public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
@@ -451,6 +561,122 @@ assert_same(0, count(array_filter(array_merge($small, $large), static fn (string
 $serviceSource = (string)file_get_contents($root . '/services/PaMapService.php');
 assert_same([false, false], [strpos($serviceSource, 'PresenceCutoff') !== false, strpos($serviceSource, 'presenceCutoff') !== false], 'PaMapService sem leitura do corte (DF1)');
 assert_same([false, false], [strpos($serviceSource, 'ruleActiveOnDate') !== false, strpos($serviceSource, 'storedRuleType') !== false], 'leitura da copia removida (L-02)');
+
+// ----------------------------------------------------------------------------
+// 5. Gravacao (commit 2): avisos, conflito por dia e remove em transacao
+// ----------------------------------------------------------------------------
+// Hoje = quarta 18/11; os 20 dias uteis do horizonte (DF4) vao de 18/11 a 15/12.
+// Cadastros so desta secao: Y (ter e qui), W (sempre presencial, ausente o dia
+// todo em 18/11), Z (sempre remoto, N2) e AA (sem regra).
+$saveDb = static function () use ($baseDb): QaPaPdo {
+    $pdo = $baseDb();
+    $pdo->tables['portal_schedule_rules'] = 1;
+    foreach ([24 => ['Tecnico Y', 'n1'], 25 => ['Tecnico W', 'n1'], 26 => ['Tecnico Z', 'n2'], 27 => ['Tecnico AA', 'n1']] as $id => [$nome, $equipe]) {
+        $pdo->employees[$id] = ['nome' => $nome, 'equipe' => $equipe, 'ativo' => 1, 'arquivado_em' => null, 'fora_mapa_escala' => 0];
+    }
+    $pdo->rules[124] = ['employee_id' => 24, 'rule_type' => 'fixed_weekdays', 'rule_config' => '{"weekdays":["tue","thu"]}', 'effective_from' => '2026-01-05', 'effective_until' => null];
+    $pdo->rules[125] = ['employee_id' => 25, 'rule_type' => 'always_onsite', 'rule_config' => null, 'effective_from' => '2026-01-05', 'effective_until' => null];
+    $pdo->rules[126] = ['employee_id' => 26, 'rule_type' => 'always_remote', 'rule_config' => null, 'effective_from' => '2026-01-05', 'effective_until' => null];
+    $pdo->absences[] = ['employee_id' => 25, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-18', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'category' => 'ferias', 'reason' => 'observacao ficticia'];
+    return $pdo;
+};
+$save = static function (array $data, ?QaPaPdo $pdo = null) use ($saveDb, $today): array {
+    $pdo ??= $saveDb();
+    try {
+        $result = (new PaMapService($pdo, $today))->save($data + ['valid_from' => '2026-11-18'], 'qa.lider');
+    } catch (Throwable $error) {
+        $result = ['erro' => get_class($error) . ': ' . $error->getMessage()];
+    }
+    return [$result, $pdo];
+};
+$summary = static fn (array $result): array => isset($result['erro']) ? [$result['erro']] : [
+    $result['warnings'],
+    array_map(static fn (array $c): string => substr($c['date'], 5) . ' ' . implode('+', $c['employee_ids']), $result['conflicts']),
+    $result['conflicts_more'],
+];
+$horizon = ['11-18', '11-19', '11-20', '11-23', '11-24', '11-25', '11-26', '11-27', '11-30', '12-01'];
+
+// Conflito com ativo: salva, avisa os 20 dias (10 na lista e 10 a mais); o
+// inativo antigo J (vinculo 13 no mesmo PA) fica fora (decisao 8).
+[$result, $pdo] = $save(['pa_number' => '1726', 'employee_id' => 16]);
+assert_same([[], array_map(static fn (string $d): string => $d . ' 15+16', $horizon), 10], $summary($result), 'save: conflito com ativo salva e avisa 20 dias (10 + 10 a mais); inativo fora (P13, DF4, decisao 8)');
+assert_same([21, ['begin', 'commit']], [count($pdo->assignments), $pdo->transactions], 'save: gravado em transacao');
+assert_same('Alocacao de PA salva com conflito. ID 21, PA 1726, colaboradores ID 15, 16, datas 2026-11-18, 2026-11-19, 2026-11-20, 2026-11-23, 2026-11-24, 2026-11-25, 2026-11-26, 2026-11-27, 2026-11-30, 2026-12-01 e mais 10', $result['conflict_audit'], 'save: auditoria do conflito com PA, IDs e datas');
+assert_same([false, false], [strpos((string)json_encode($result), 'Tecnico') !== false, strpos((string)json_encode($result), 'qa.login') !== false], 'save: resposta e auditoria sem nome nem login');
+assert_same(['1726', 16, 21], [$result['pa_number'], $result['employee_id'], $result['id']], 'save: PA, colaborador e ID para a auditoria do endpoint');
+// Dias fixos: conflito so nos dias em que os dois estao presenciais (ter e qui com F; seg, qua e sex com E nunca).
+assert_same([['Colaborador em trabalho remoto em 18/11/2026, início do vínculo.'], ['11-19 6+24', '11-24 6+24', '11-26 6+24', '12-01 6+24', '12-03 6+24', '12-08 6+24', '12-10 6+24', '12-15 6+24'], 0], $summary($save(['pa_number' => '1730', 'employee_id' => 24])[0]), 'save: conflito por dia (ter e qui), nao por tipo (L-09)');
+// Ausente o dia todo no inicio: salva sem 409, avisa e fica fora do conflito nesse dia; parcial de D (19/11) conta.
+[$result] = $save(['pa_number' => '1731', 'employee_id' => 25]);
+assert_same([['Colaborador ausente o dia todo em 18/11/2026, início do vínculo.'], '11-19 3+4+25', 19], [$result['warnings'], substr($result['conflicts'][0]['date'], 5) . ' ' . implode('+', $result['conflicts'][0]['employee_ids']), count($result['conflicts']) + $result['conflicts_more']], 'save: ausente o dia todo avisa, sem 409, e sai do conflito no dia; parcial conta');
+// Remoto: salva sem confirmacao (o campo e ignorado), com aviso e sem conflito.
+$remote = $summary($save(['pa_number' => '1732', 'employee_id' => 26])[0]);
+assert_same([['Colaborador em trabalho remoto em 18/11/2026, início do vínculo.'], [], 0], $remote, 'save: remoto salva sem confirmacao, com aviso, fora do conflito (DF5)');
+assert_same($remote, $summary($save(['pa_number' => '1732', 'employee_id' => 26, 'confirm_remote_allocation' => true])[0]), 'save: confirm_remote_allocation aceito e ignorado (DF5)');
+assert_same([['Colaborador sem escala definida em 18/11/2026, início do vínculo.'], [], 0], $summary($save(['pa_number' => '1729', 'employee_id' => 27])[0]), 'save: sem escala salva com aviso');
+// Inicio no sabado: o aviso e da segunda; inicio no passado: do 1o dia util do vinculo, com o horizonte de hoje.
+assert_same([['Colaborador em trabalho remoto em 23/11/2026, início do vínculo.']], [$save(['pa_number' => '1732', 'employee_id' => 26, 'valid_from' => '2026-11-21'])[0]['warnings']], 'save: inicio no sabado avisa pela segunda');
+[$result, $pdo] = $save(['pa_number' => '1732', 'employee_id' => 26, 'valid_from' => '2026-11-02']);
+$motorLoads = count(array_filter($pdo->log, static fn (string $sql): bool => strpos($sql, 'FROM portal_schedule_rules r JOIN funcionarios f') !== false));
+assert_same([['Colaborador em trabalho remoto em 02/11/2026, início do vínculo.'], 2], [$result['warnings'], $motorLoads], 'save: inicio no passado avisa pelo 1o dia util do vinculo (motor carregado duas vezes)');
+[$result, $pdo] = $save(['pa_number' => '1726', 'employee_id' => 16, 'valid_from' => '2026-11-02', 'valid_until' => '2026-11-17']);
+$motorLoads = count(array_filter($pdo->log, static fn (string $sql): bool => strpos($sql, 'FROM portal_schedule_rules r JOIN funcionarios f') !== false));
+assert_same([[], [], 0, 1], array_merge($summary($result), [$motorLoads]), 'save: vinculo todo no passado sem horizonte nem conflito (DF4)');
+assert_same([[], ['11-18 15+16', '11-19 15+16', '11-20 15+16'], 0], $summary($save(['pa_number' => '1726', 'employee_id' => 16, 'valid_until' => '2026-11-20'])[0]), 'save: horizonte para no fim do vinculo');
+// Ocupante que comeca no meio do horizonte (25/11) e acaba antes do fim (01/12): so nesses dias.
+$pdo = $saveDb();
+$pdo->assignments[30] = ['pa_number' => '1721', 'employee_id' => 25, 'valid_from' => '2026-11-25', 'valid_until' => '2026-12-01'];
+assert_same([[], ['11-25 16+25', '11-26 16+25', '11-27 16+25', '11-30 16+25', '12-01 16+25'], 0], $summary($save(['pa_number' => '1721', 'employee_id' => 16], $pdo)[0]), 'save: ocupante so nos dias do vinculo dele');
+// Continua recusado.
+[$result, $pdo] = $save(['pa_number' => '1726', 'employee_id' => 1]);
+assert_same([[DomainException::class . ': Este colaborador ja possui vinculo ativo em outro PA no periodo.'], 20, ['begin', 'rollback']], [$summary($result), count($pdo->assignments), $pdo->transactions], 'save: o mesmo colaborador em outro PA no periodo continua 409, sem gravar');
+assert_same([DomainException::class . ': Este colaborador ja possui vinculo ativo em outro PA no periodo.'], $summary($save(['pa_number' => '1732', 'employee_id' => 1, 'valid_from' => '2026-12-01'])[0]), 'save: o mesmo colaborador no mesmo PA, periodo sobreposto, continua 409');
+assert_same([DomainException::class . ': Cadastro marcado como fora do Mapa PA e da escala: não recebe vínculo de PA.'], $summary($save(['pa_number' => '1726', 'employee_id' => 23])[0]), 'save: fora do Mapa continua 409');
+assert_same([InvalidArgumentException::class . ': Colaborador ativo invalido.'], $summary($save(['pa_number' => '1726', 'employee_id' => 10])[0]), 'save: cadastro inativo continua recusado (400)');
+// Edicao: o proprio vinculo nao conta; mudar de PA confere o PA novo.
+[$result, $pdo] = $save(['id' => 14, 'pa_number' => '1726', 'employee_id' => 15]);
+assert_same([[[], [], 0], 20], [$summary($result), count($pdo->assignments)], 'save: edicao sem conflito com o proprio vinculo, sem inserir');
+assert_same('11-18 3+4+15', $summary($save(['id' => 14, 'pa_number' => '1731', 'employee_id' => 15])[0])[1][0], 'save: edicao para outro PA confere o PA novo');
+assert_same([[], [], 0], $summary($save(['id' => 14, 'pa_number' => '1726', 'employee_id' => 16])[0]), 'save: edicao que troca o colaborador nao conta o vinculo antigo (o proprio registro) como ocupante');
+// Tabela antiga no conflito do save; os IDs da auditoria juntam todos os dias.
+[$result] = $save(['pa_number' => '1725', 'employee_id' => 24]);
+assert_same(['11-19 16+17+24', '11-24 17+24', '11-26 17+24'], array_slice($summary($result)[1], 0, 3), 'save: vinculo da tabela antiga (P em 19/11) entra no conflito do dia');
+assert_same(1, preg_match('/^Alocacao de PA salva com conflito\. ID 21, PA 1725, colaboradores ID 16, 17, 24, datas /', (string)$result['conflict_audit']), 'save: auditoria com os IDs de todos os dias, sem repeticao');
+// Copia da regra gravada para o rollback (2.7).
+[, $pdo] = $save(['pa_number' => '1730', 'employee_id' => 24]);
+assert_same(['fixed_weekdays', '{"weekdays":["tue","thu"]}'], [end($pdo->written)[':schedule_rule_type'], end($pdo->written)[':schedule_rule_config']], 'save: copia da regra continua gravada');
+// Consultas fixas no save para N cadastros.
+$saveLog = static function (int $extra) use ($saveDb, $save): array {
+    $pdo = $saveDb();
+    for ($i = 0; $i < $extra; $i++) {
+        $id = 600 + $i;
+        $pdo->employees[$id] = ['nome' => 'Extra ' . $id, 'equipe' => 'n1', 'ativo' => 1, 'arquivado_em' => null, 'fora_mapa_escala' => 0];
+        $pdo->rules[2000 + $id] = ['employee_id' => $id, 'rule_type' => 'always_onsite', 'rule_config' => null, 'effective_from' => '2026-01-05', 'effective_until' => null];
+        $pdo->assignments[2000 + $id] = ['pa_number' => '1721', 'employee_id' => $id, 'valid_from' => '2026-09-01', 'valid_until' => null];
+    }
+    $save(['pa_number' => '1726', 'employee_id' => 16], $pdo);
+    return array_map(static fn (string $sql): string => preg_replace('/INSERT INTO .*/', 'INSERT', $sql), $pdo->log);
+};
+assert_same(count($saveLog(0)), count($saveLog(40)), 'save: numero de consultas fixo com 40 cadastros a mais');
+// remove em transacao, com o PA e o colaborador para a auditoria (DF11).
+$pdo = $saveDb();
+assert_same([['id' => 14, 'pa_number' => '1726', 'employee_id' => 15], ['begin', 'commit'], 0], [(new PaMapService($pdo, $today))->remove(14, 'qa.lider'), $pdo->transactions, $pdo->assignments[14]['active']], 'remove: em transacao, devolve PA e colaborador (IDs)');
+$pdo->transactions = [];
+try {
+    (new PaMapService($pdo, $today))->remove(14, 'qa.lider');
+    $removed = 'ok';
+} catch (DomainException $error) {
+    $removed = $error->getMessage();
+}
+assert_same(['Vinculo de PA nao encontrado.', ['begin', 'rollback']], [$removed, $pdo->transactions], 'remove: vinculo ja removido da 409 e desfaz a transacao');
+$serviceSource = (string)file_get_contents($root . '/services/PaMapService.php');
+assert_same([false, false, false], [strpos($serviceSource, 'confirm_remote_allocation') !== false && strpos($serviceSource, "\$data['confirm_remote_allocation']") !== false, strpos($serviceSource, 'Conflito de escala no PA com') !== false, strpos($serviceSource, 'scheduleException') !== false], 'save: sem confirmacao de remoto, sem 409 de conflito com nome, sem a excecao antiga (o motor decide)');
+$endpointSource = (string)file_get_contents($root . '/api/portal/pa_map.php');
+assert_same([true, true, true], [
+    strpos($endpointSource, "audit_log('PA_MAP_CONFLICT_ACCEPTED', \$result['conflict_audit'], 'WARNING');") !== false,
+    strpos($endpointSource, "', PA ' . \$result['pa_number'] . ', colaborador ID ' . \$result['employee_id']") !== false,
+    strpos($endpointSource, "', PA ' . \$removed['pa_number'] . ', colaborador ID ' . \$removed['employee_id']") !== false,
+], 'endpoint: auditoria do conflito (WARNING) e de salvar e remover com PA e IDs');
 
 // Runners.
 foreach (['scripts/test-linux.sh', 'scripts/test-local.ps1'] as $runner) {

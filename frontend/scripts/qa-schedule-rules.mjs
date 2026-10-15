@@ -114,7 +114,9 @@ assert.match(formSchemas, /fora_mapa_escala: z\.boolean\(/, 'Schema do funcionar
 
 assert.match(paMapService, /'fixed_weekdays'/, 'Mapa de PA deve reconhecer fixed_weekdays')
 assert.match(paMapService, /schedule_rule_config/, 'Mapa de PA deve persistir snapshot da configuracao')
-assert.match(paMapService, /OperationalService::presenceForRule\(\$ruleType, \$date, \$weekdays\)/, 'Mapa de PA deve calcular fixed_weekdays por data')
+// F6 (desenho 9.8): a presenca por data (fixed_weekdays inclusive) vem do motor, na leitura e na gravacao.
+assert.match(paMapService, /\$this->operational\(\)->mapPresence\(/, 'Mapa de PA deve calcular a presenca por data pelo motor (F6)')
+assert.doesNotMatch(paMapService, /OperationalService::presenceForRule\(/, 'Mapa de PA nao calcula mais a presenca pela regra copiada (F6, L-02)')
 assert.match(paMapPage, /fixed_weekdays: 'border-cyan/, 'Mapa de PA deve ter tom visual para fixed_weekdays')
 
 assert.match(migration, /ADD COLUMN rule_config TEXT DEFAULT NULL AFTER rule_type/, 'Migration deve adicionar rule_config')

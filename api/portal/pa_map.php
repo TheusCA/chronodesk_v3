@@ -38,20 +38,28 @@ try {
         if (!$id) {
             throw new InvalidArgumentException('Alocacao invalida.');
         }
-        $service->remove((int)$id, portal_username());
-        audit_log('PA_MAP_REMOVED', 'Alocacao de PA removida. ID ' . (int)$id, 'INFO');
+        // [F6, DF11] Auditoria com o vinculo, o PA e o colaborador (IDs; sem nome nem login).
+        $removed = $service->remove((int)$id, portal_username());
+        audit_log('PA_MAP_REMOVED', 'Alocacao de PA removida. ID ' . $removed['id'] . ', PA ' . $removed['pa_number'] . ', colaborador ID ' . $removed['employee_id'], 'INFO');
         json_response(['sucesso' => true, 'mensagem' => 'PA desocupado.']);
     }
 
     if ($action !== 'save') {
         throw new InvalidArgumentException('Acao invalida.');
     }
+    // [F6, P13] Conflito, remoto, ausencia e sem escala nao bloqueiam: a
+    // resposta traz warnings[] e conflicts[], e o conflito aceito e auditado.
     $result = $service->save($data, portal_username());
-    audit_log('PA_MAP_SAVED', 'Alocacao de PA salva. ID ' . (int)$result['id'], 'INFO');
+    audit_log('PA_MAP_SAVED', 'Alocacao de PA salva. ID ' . $result['id'] . ', PA ' . $result['pa_number'] . ', colaborador ID ' . $result['employee_id'], 'INFO');
+    if ($result['conflict_audit'] !== null) {
+        audit_log('PA_MAP_CONFLICT_ACCEPTED', $result['conflict_audit'], 'WARNING');
+    }
     json_response([
         'sucesso' => true,
         'id' => $result['id'],
         'warnings' => $result['warnings'],
+        'conflicts' => $result['conflicts'],
+        'conflicts_more' => $result['conflicts_more'],
         'mensagem' => 'Alocacao de PA salva.',
     ]);
 } catch (Throwable $error) {

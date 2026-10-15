@@ -1164,6 +1164,8 @@ final class QaMapPdo extends PDO {
     }
 
     public bool $transaction = false;
+    /** @var list<bool> Ocupantes do save consultados com o filtro de ativo (decisao 8). */
+    public array $occupantFilter = [];
 
     public function beginTransaction(): bool {
         return $this->transaction = true;
@@ -1232,10 +1234,20 @@ final class QaMapStatement extends PDOStatement {
         if (strpos($sql, 'SELECT exception_type FROM portal_schedule_exceptions WHERE ') === 0 || strpos($sql, 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE ') === 0) {
             return true;
         }
-        // [F6] Motor do mapa (OperationalService::mapPresence): sem regra,
-        // excecao nem ausencia nesta massa; cadastros com o arquivado (D7).
-        if (strpos($sql, 'SELECT r.id, r.employee_id, f.nome AS employee_name') === 0
-            || strpos($sql, 'SELECT id, employee_id, employee_name, team, exception_date, exception_type, note,') === 0
+        // [F6] Motor do mapa (OperationalService::mapPresence): todos sempre
+        // presenciais desde 2026-01-01 (conflito do save, commit 2), sem
+        // excecao nem ausencia; cadastros com o arquivado (D7).
+        if (strpos($sql, 'SELECT r.id, r.employee_id, f.nome AS employee_name') === 0) {
+            foreach ($db->employees as $id => $row) {
+                if ((int)$row['ativo'] === 1 || ($row['arquivado_em'] ?? null) !== null) {
+                    $this->rows[] = ['id' => 900 + $id, 'employee_id' => $id, 'employee_name' => "Tecnico {$id}", 'ad_login' => null, 'team' => 'n1',
+                        'rule_type' => 'always_onsite', 'rule_config' => null, 'effective_from' => '2026-01-01', 'effective_until' => null,
+                        'created_by' => 'qa', 'updated_by' => 'qa', 'created_at' => '2026-01-01 08:00:00', 'updated_at' => '2026-01-01 08:00:00'];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, employee_id, employee_name, team, exception_date, exception_type, note,') === 0
             || strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time') === 0) {
             return true;
         }
@@ -1273,14 +1285,23 @@ final class QaMapStatement extends PDOStatement {
             }
             return true;
         }
-        if (strpos($sql, 'SELECT id, schedule_rule_type, employee_name FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number AND id <> :id AND valid_from <= :new_until AND (valid_until IS NULL OR valid_until >= :new_from)') === 0) {
-            $onlyActive = strpos($sql, ' AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = portal_pa_assignments.employee_id AND f.ativo = 1) FOR UPDATE') !== false;
-            if (!$onlyActive && substr($sql, -11) !== ' FOR UPDATE') {
-                throw new PDOException('SQLSTATE[HY000]: banco simulado: conferencia de conflito sem trava');
-            }
+        // [F6, commit 2] Ocupantes do PA no horizonte do aviso de conflito; o
+        // filtro de ativo so vale com a clausula exata do servico.
+        if (strpos($sql, 'SELECT employee_id, valid_from, valid_until FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number AND id <> :id AND valid_from <= :date_until AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {
+            $db->occupantFilter[] = strpos($sql, ' AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = portal_pa_assignments.employee_id AND f.ativo = 1) ORDER BY id') !== false;
             foreach ($db->assignments as $row) {
-                if ($row['pa_number'] === $params[':pa_number'] && $overlaps($row) && (!$onlyActive || $active($row))) {
-                    $this->rows[] = ['id' => $row['id'], 'schedule_rule_type' => $row['schedule_rule_type'], 'employee_name' => $row['employee_name']];
+                if ($row['pa_number'] === $params[':pa_number'] && (int)$row['id'] !== (int)$params[':id'] && $row['valid_from'] <= $params[':date_until']
+                    && ($row['valid_until'] === null || $row['valid_until'] >= $params[':date_from']) && (!$activeOnly('portal_pa_assignments') || $active($row))) {
+                    $this->rows[] = ['employee_id' => $row['employee_id'], 'valid_from' => $row['valid_from'], 'valid_until' => $row['valid_until']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT employee_id, work_date FROM portal_pa_map WHERE record_status = "active" AND pa_number = :pa_number AND work_date BETWEEN :date_from AND :date_to') === 0) {
+            $db->occupantFilter[] = strpos($sql, ' AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = portal_pa_map.employee_id AND f.ativo = 1) ORDER BY work_date') !== false;
+            foreach ($db->legacy as $row) {
+                if ($row['pa_number'] === $params[':pa_number'] && $row['work_date'] >= $params[':date_from'] && $row['work_date'] <= $params[':date_to'] && (!$activeOnly('portal_pa_map') || $active($row))) {
+                    $this->rows[] = ['employee_id' => $row['employee_id'], 'work_date' => $row['work_date']];
                 }
             }
             return true;
@@ -1360,26 +1381,32 @@ foreach (['hoje' => $today, 'amanha' => $tomorrow] as $label => $date) {
 }
 $filtered = array_values(array_filter($mapPdo->sql, static fn (string $sql): bool => strpos($sql, 'FROM portal_pa_') !== false));
 assert_same(12, count($filtered), 'Mapa PA: quatro leituras de vinculo por data (recorrente e tabela antiga, na data e na semana do conflito; F6)');
-// Decisao 8 do commit 4: a conferencia de conflito do save() segue a regra
-// do mapa. De hoje em diante, PA ocupado so por inativo aceita vinculo novo
-// (sem o nome do arquivado na resposta); ocupado por ativo continua em
-// conflito; vinculo que comeca no passado e conferido contra todos.
-$saveOutcome = static function (int $employeeId, string $pa, string $validFrom) use ($mapRow, $recurring): array {
+// Decisao 8 do commit 4, no F6 (commit 2): o conflito do save() virou aviso
+// (P13), no horizonte de hoje em diante (DF4), com a regra do mapa: vinculo
+// de cadastro inativo nao entra no conflito nem na auditoria; ocupado por
+// ativo salva e avisa. Todos sempre presenciais nesta massa.
+$saveOutcome = static function (int $employeeId, string $pa, string $validFrom) use ($mapRow, $recurring, $today): array {
     $pdo = new QaMapPdo(
         [41 => ['ativo' => 1], 42 => ['ativo' => 0], 43 => ['ativo' => '0'], 44 => ['ativo' => 1]],
         [$mapRow(1, 41, '1732', $recurring), $mapRow(2, 42, '1731', $recurring), $mapRow(3, 43, '1730', $recurring)],
-        []
+        [$mapRow(130, 42, '1731', ['work_date' => $today, 'schedule_status' => 'onsite', 'schedule_label' => null])]
     );
-    $outcome = qa_service_outcome(static fn () => (new PaMapService($pdo))->save(['pa_number' => $pa, 'employee_id' => $employeeId, 'valid_from' => $validFrom], 'qa.lider'));
-    return [$outcome[0] === 'ok' ? 'ok' : $outcome[0] . ': ' . $outcome[1], count($pdo->assignments)];
+    $outcome = qa_service_outcome(static fn () => (new PaMapService($pdo, $today))->save(['pa_number' => $pa, 'employee_id' => $employeeId, 'valid_from' => $validFrom], 'qa.lider'));
+    if ($outcome[0] !== 'ok') {
+        return [$outcome[0] . ': ' . $outcome[1], count($pdo->assignments)];
+    }
+    $result = $outcome[1];
+    $ids = array_values(array_unique(array_merge([], ...array_column($result['conflicts'], 'employee_ids'))));
+    return ['ok', count($pdo->assignments), $ids, count($result['conflicts']) + $result['conflicts_more'], $result['conflict_audit'] === null ? null : preg_replace('/ID \d+, PA/', 'ID ?, PA', $result['conflict_audit']), $pdo->occupantFilter];
 };
-foreach (['hoje' => $today, 'amanha' => $tomorrow] as $label => $date) {
-    assert_same(['ok', 4], $saveOutcome(44, '1731', $date), "Mapa PA: PA ocupado por inativo aceita vinculo novo de {$label} (decisao 8)");
-    assert_same(['ok', 4], $saveOutcome(44, '1730', $date), "Mapa PA: PA ocupado por inativo com ativo em texto ('0') aceita vinculo novo de {$label}");
-    assert_same([DomainException::class . ': Conflito de escala no PA com Tecnico 41.', 3], $saveOutcome(44, '1732', $date), "Mapa PA: PA ocupado por ativo continua em conflito ({$label})");
+foreach (['hoje' => $today, 'amanha' => $tomorrow, 'ontem (horizonte de hoje em diante)' => $yesterday] as $label => $date) {
+    assert_same(['ok', 4, [], 0, null, [true, true]], $saveOutcome(44, '1731', $date), "Mapa PA: PA ocupado por inativo (recorrente e tabela antiga) salva sem conflito e sem o inativo na auditoria, vinculo de {$label} (decisao 8)");
+    assert_same(['ok', 4, [], 0, null, [true, true]], $saveOutcome(44, '1730', $date), "Mapa PA: PA ocupado por inativo com ativo em texto ('0'), vinculo de {$label}");
+    $active = $saveOutcome(44, '1732', $date);
+    assert_same(['ok', 4, [41, 44], 20, [true, true]], [$active[0], $active[1], $active[2], $active[3], $active[5]], "Mapa PA: PA ocupado por ativo salva e avisa os 20 dias uteis do horizonte ({$label}; P13, DF4)");
+    assert_same(1, preg_match('/^Alocacao de PA salva com conflito\. ID \?, PA 1732, colaboradores ID 41, 44, datas (\d{4}-\d{2}-\d{2}, ){9}\d{4}-\d{2}-\d{2} e mais 10$/', (string)$active[4]), "Mapa PA: auditoria com PA, IDs e ate 10 datas, sem nome ({$label})");
 }
-assert_same([DomainException::class . ': Conflito de escala no PA com Tecnico 42.', 3], $saveOutcome(44, '1731', $yesterday), 'Mapa PA: vinculo que comeca ontem continua conferido contra o inativo (passado sem mudanca)');
-assert_same([DomainException::class . ': Conflito de escala no PA com Tecnico 41.', 3], $saveOutcome(44, '1732', $yesterday), 'Mapa PA: vinculo que comeca ontem em PA de ativo continua em conflito');
+assert_same([DomainException::class . ': Este colaborador ja possui vinculo ativo em outro PA no periodo.', 3], $saveOutcome(41, '1731', $today), 'Mapa PA: o mesmo colaborador em outro PA no periodo continua 409');
 
 $filter = new ReflectionMethod(PaMapService::class, 'activeEmployeeFilter');
 $filter->setAccessible(true);

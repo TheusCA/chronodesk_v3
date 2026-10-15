@@ -280,14 +280,6 @@ final class QaLegacyStatement extends PDOStatement {
             }
             return true;
         }
-        if ($sql === 'SELECT exception_type FROM portal_schedule_exceptions WHERE employee_id = :employee_id AND exception_date = :work_date LIMIT 1') {
-            foreach ($db->exceptions as $row) {
-                if ($row['employee_id'] === $params[':employee_id'] && $row['exception_date'] === $params[':work_date']) {
-                    $this->rows[] = ['exception_type' => $row['exception_type']];
-                }
-            }
-            return true;
-        }
         if (strpos($sql, 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE employee_id = :employee_id AND effective_from <= :work_date_from') === 0) {
             $found = null;
             foreach ($db->rules as $rule) {
@@ -314,10 +306,12 @@ final class QaLegacyStatement extends PDOStatement {
             }
             return true;
         }
-        if (strpos($sql, 'SELECT id, schedule_rule_type, employee_name FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number') === 0) {
+        // [F6] Ocupantes do PA no horizonte do aviso de conflito (todos ativos nesta massa).
+        if (strpos($sql, 'SELECT employee_id, valid_from, valid_until FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number AND id <> :id AND valid_from <= :date_until AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {
             foreach ($db->paAssignments as $row) {
-                if ($row['pa_number'] === $params[':pa_number'] && $overlaps($row, $params)) {
-                    $this->rows[] = ['id' => $row['id'], 'schedule_rule_type' => $row['schedule_rule_type'], 'employee_name' => $row['employee_name']];
+                if ($row['active'] === 1 && $row['pa_number'] === $params[':pa_number'] && (int)$row['id'] !== (int)$params[':id']
+                    && $row['valid_from'] <= $params[':date_until'] && ($row['valid_until'] === null || $row['valid_until'] >= $params[':date_from'])) {
+                    $this->rows[] = ['employee_id' => $row['employee_id'], 'valid_from' => $row['valid_from'], 'valid_until' => $row['valid_until']];
                 }
             }
             return true;
@@ -645,11 +639,12 @@ $pdo = $withCycle();
 unset($pdo->employees[11], $pdo->employees[12], $pdo->employees[13], $pdo->rules[111], $pdo->rules[121], $pdo->rules[131]);
 assert_same($signature, qa_legacy_signature(qa_legacy_outputs(new OperationalService($pdo, '2026-10-07'))), 'referencia estavel entre execucoes');
 
-// Mapa PA (decisao 2 ajustada): o ciclo vem do motor na exibicao e no aviso
-// de alocacao remota; o conflito continua pelo tipo (conservador) ate o F6.
+// Mapa PA (decisao 2 ajustada): o ciclo vem do motor na exibicao e, desde o
+// F6 (commit 2), no aviso e no conflito por dia, sem bloqueio. Hoje fixo em
+// 07/10/2026 (o horizonte do aviso comeca hoje).
 require_once __DIR__ . '/../services/PaMapService.php';
 $pdo = $withCycle();
-$map = new PaMapService($pdo);
+$map = new PaMapService($pdo, '2026-10-07');
 $eligible = [];
 foreach (['2026-10-05', '2026-10-06', '2026-10-10'] as $date) {
     foreach ($map->eligibleEmployees($date) as $employee) {
@@ -685,43 +680,28 @@ $pdo->paAssignments[] = ['id' => 999, 'active' => 1, 'pa_number' => '1727', 'emp
 $types = array_column(array_map(static fn (array $item): array => [$item['employee_id'], $item['schedule_rule_type'] . ' / ' . $item['schedule_rule_label']], $map->list(['date' => '2026-10-06'])['items']), 1, 0);
 assert_same([11 => 'cycle / Ciclo 2P/1R', 12 => 'even_days / Dias pares'], $types, 'Mapa PA: ciclo e regra vigente pelo motor, nao pela copia (F6, L-02)');
 $pdo->paAssignments = array_values(array_filter($pdo->paAssignments, static fn (array $row): bool => $row['id'] !== 999));
-assert_same('409: Conflito de escala no PA com Tecnico K.', (static function () use ($map): string {
-    try {
-        $map->save(['pa_number' => '1730', 'employee_id' => 12, 'valid_from' => '2026-10-06'], 'qa');
-        return 'ok';
-    } catch (DomainException $e) {
-        return '409: ' . $e->getMessage();
-    }
-})(), 'Mapa PA: conflito conservador (ciclo x dias pares no mesmo PA) ate o F6');
+// [F6, P13] Conflito por dia no motor, sem 409: ciclo 2P/1R x dias pares no
+// mesmo PA so nos dias em que os dois estao presenciais, dentro dos 20 dias
+// uteis a partir de hoje (DF4); o vinculo e salvo.
+$cycleEvenDays = ['2026-10-12', '2026-10-14', '2026-10-20', '2026-10-22', '2026-10-28', '2026-10-30', '2026-11-02'];
+$conflictDays = static fn (array $saved): array => [array_column($saved['conflicts'], 'date'), array_values(array_unique(array_merge(...array_column($saved['conflicts'], 'employee_ids')))), $saved['conflicts_more']];
+$before = count($pdo->paAssignments);
+$saved = $map->save(['pa_number' => '1730', 'employee_id' => 12, 'valid_from' => '2026-10-06'], 'qa');
+assert_same([$cycleEvenDays, [11, 12], 0, $before + 1], array_merge($conflictDays($saved), [count($pdo->paAssignments)]), 'Mapa PA: ciclo x dias pares no mesmo PA salva e avisa so os dias em que os dois estao presenciais (F6)');
+assert_same(['Alocacao de PA salva com conflito. ID ' . $saved['id'] . ', PA 1730, colaboradores ID 11, 12, datas ' . implode(', ', $cycleEvenDays)], [$saved['conflict_audit']], 'Mapa PA: auditoria do conflito com PA, IDs e datas, sem nome');
 $conflictPdo = $withCycle();
-$conflictMap = new PaMapService($conflictPdo);
-$conflictMap->save(['pa_number' => '1726', 'employee_id' => 12, 'valid_from' => '2026-10-06'], 'qa');
-assert_same('409: Conflito de escala no PA com Tecnico L.', (static function () use ($conflictMap): string {
-    try {
-        $conflictMap->save(['pa_number' => '1726', 'employee_id' => 11, 'valid_from' => '2026-10-06'], 'qa');
-        return 'ok';
-    } catch (DomainException $e) {
-        return '409: ' . $e->getMessage();
-    }
-})(), 'Mapa PA: conflito conservador tambem quando o vinculo novo e o de ciclo');
+$conflictMap = new PaMapService($conflictPdo, '2026-10-07');
+assert_same([[], [], 0], $conflictDays($conflictMap->save(['pa_number' => '1726', 'employee_id' => 12, 'valid_from' => '2026-10-06'], 'qa')), 'Mapa PA: PA vazio, sem conflito');
+assert_same([$cycleEvenDays, [11, 12], 0], $conflictDays($conflictMap->save(['pa_number' => '1726', 'employee_id' => 11, 'valid_from' => '2026-10-06'], 'qa')), 'Mapa PA: o mesmo conflito quando o vinculo novo e o de ciclo');
 $remoteSaved = $map->save(['pa_number' => '1730', 'employee_id' => 13, 'valid_from' => '2026-10-06', 'confirm_remote_allocation' => true], 'qa');
-assert_same(['Colaborador marcado como remoto nesta data.'], $remoteSaved['warnings'], 'Mapa PA: sempre remoto continua avisando e sem conflito');
-// Ciclo em dia remoto: mesmo aviso e confirmacao do sempre remoto.
+assert_same([['Colaborador em trabalho remoto em 06/10/2026, início do vínculo.'], []], [$remoteSaved['warnings'], $remoteSaved['conflicts']], 'Mapa PA: sempre remoto avisa e nao entra no conflito');
+// Ciclo em dia remoto: salva sem confirmacao (DF5), com o aviso.
 $pdo = $withCycle();
-$map = new PaMapService($pdo);
-$outcome = static function (callable $call): string {
-    try {
-        $call();
-        return 'ok';
-    } catch (DomainException $e) {
-        return '409: ' . $e->getMessage();
-    }
-};
-assert_same('409: Colaborador marcado como remoto nesta data. Confirme para alocar mesmo assim.', $outcome(fn () => $map->save(['pa_number' => '1729', 'employee_id' => 11, 'valid_from' => '2026-10-05'], 'qa')), 'Mapa PA: ciclo em dia remoto pede confirmacao');
-$saved = $map->save(['pa_number' => '1729', 'employee_id' => 11, 'valid_from' => '2026-10-05', 'confirm_remote_allocation' => true], 'qa');
-assert_same(['Colaborador marcado como remoto nesta data.'], $saved['warnings'], 'Mapa PA: ciclo em dia remoto confirmado avisa');
-// Dias pares (tipo antigo) sem mudanca: nao pede confirmacao em dia remoto.
-assert_same('ok', $outcome(fn () => $map->save(['pa_number' => '1728', 'employee_id' => 12, 'valid_from' => '2026-10-07'], 'qa')), 'Mapa PA: dias pares em dia impar segue sem confirmacao (como antes)');
+$map = new PaMapService($pdo, '2026-10-07');
+$saved = $map->save(['pa_number' => '1729', 'employee_id' => 11, 'valid_from' => '2026-10-05'], 'qa');
+assert_same([['Colaborador em trabalho remoto em 05/10/2026, início do vínculo.'], 1], [$saved['warnings'], count($pdo->paAssignments)], 'Mapa PA: ciclo em dia remoto salva sem confirmacao, com aviso (DF5)');
+// Dias pares em dia impar: remoto pelo motor, avisa (antes, so o sempre remoto e o ciclo avisavam).
+assert_same(['Colaborador em trabalho remoto em 07/10/2026, início do vínculo.'], $map->save(['pa_number' => '1728', 'employee_id' => 12, 'valid_from' => '2026-10-07'], 'qa')['warnings'], 'Mapa PA: dias pares em dia impar avisa remoto pelo motor');
 
 // ----------------------------------------------------------------------------
 // 3. Data de corte do motor (F5, commit 2; desenho 9.7, D4 e D6)
