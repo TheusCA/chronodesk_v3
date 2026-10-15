@@ -677,6 +677,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Os numeros do servidor (Q-F6, so contagens) ainda nao foram medidos; a Q5 da secao 2.8 nunca rodou. |
 | **Validacao humana** | **Plano aprovado em 2026-10-15**, com DF1 a DF11 como recomendadas, inclusive a DF7 (para quem nao edita o mapa, sem `employees`, `employee_login`, `notes`, `created_by` e `updated_by`; nome, equipe, PA e situacao para todos). Q-F6 validada pelo responsavel no MySQL 8.0.46 local, com vinculos de teste depois removidos: colunas certas (PAs compartilhados, Lideranca, observacao vazia nao conta, ciclo gravado como `undefined` sem divergencia); **achado:** `copia_tipo_divergente_hoje` contava a Lideranca (sem regra, `always_onsite` x `undefined`, mas presencial pela regra fixa no motor); correcao `AND a.team <> 'lideranca'` aplicada no comando da 9.8. **Q-F6 no servidor: pendente** (os campos vieram em branco na mensagem de aprovacao). |
 
+### Parte B, F6 — commit 1 (leitura do Mapa PA no motor) — 2026-10-15
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Leitura do Mapa PA pelo motor (desenho 9.8): presenca por vinculo, conflito por dia, ausencias da semana, DF7, fim do N+1 e da leitura da copia. |
+| **Branch e commits** | `1b62168` (aprovacao do plano e ajuste da Q-F6), `60ee18c` (codigo e testes) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `services/OperationalService.php` (`mapPresence`), `services/PaMapService.php` (`list` e leituras), `api/portal/pa_map.php`, `scripts/qa-pa-conflicts.php` (novo), `qa-security`, `qa-archive`, `qa-schedule-legacy-output`, runners, `docs/API_CONTRACTS_FRONTEND.md`; desenho 9.8. |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.8); destaques: 12 consultas fixas por leitura; conflito com todas as equipes; sem dia no motor, sem regra; rotulos do motor com acento; `list()` fechado por padrao para a DF7. |
+| **Validacao executada pela IA** | `qa-pa-conflicts` (62 verificacoes); mutacao **30/30** (um sobrevivente na 1a rodada, por falta de caso, morto depois); bateria PHP completa, 16 `qa:*` e lint. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: so banco simulado. **Q-F6 no servidor nao informada** (campos em branco): o codigo tolera os casos de dado antigo, mas os numeros ainda sao necessarios antes do deploy. Frontend sem mudanca neste commit. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao e teste no MySQL local antes do commit 2. |
+
 ---
 
 ## 5. Responsabilidade

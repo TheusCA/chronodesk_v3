@@ -2049,6 +2049,32 @@ O que cada número decide: `pas_compartilhados_hoje` e `vinculos_lideranca` dime
 | DF10 | Tabela antiga `portal_pa_map` | Continua só leitura, com a presença do motor; retirada só num lote próprio, se a Q-F6 der 0 |
 | DF11 | Remover vínculo | Contrato igual, em transação, auditoria com PA e IDs; sem etapa de confirmação nova (como hoje) |
 
+**Commit 1 entregue (2026-10-15, `60ee18c`; aguardando a revisão e o teste no MySQL local do responsável antes do commit 2):** leitura do mapa no motor.
+
+| Arquivo | Como ficou |
+|---|---|
+| `services/OperationalService.php` | `mapPresence($from, $to, $actor)` público: a carga em lote do motor (`engineSchedule`, com o arquivado até a véspera, a categoria e o `parcial`) para todos os cadastros do motor, sem filtro de equipe e sem ler o corte; devolve `days` (chave "id:data") e `employees` (id ⇒ data do arquivamento). Categoria pela P9 (`seesPersonalText`), já com o rótulo; itens de ausência só com origem, período e horário. `engineSchedule` aceita a lista de cadastros já carregada (não lê duas vezes) |
+| `services/PaMapService.php` | `list($filters, $actor, $canManage)`: presença de cada vínculo pelo motor (`presence`, ou `null` com `presence_reason`); `schedule_rule_*`, `active_on_date` e `presence_status` pela regra vigente; `schedule_rule_config` (a cópia) fora da resposta; `week`, `conflicts`, `has_conflict`, `conflict_days`, `absences_week`, `server_now`; DF7 (sem `pa_map.manage`: sem `employees`, `employee_login`, `notes`, `created_by`, `updated_by`). Vínculos da data com o filtro da D13 (como antes) e vínculos da semana (recorrente e tabela antiga, todas as equipes) para o conflito e as ausências. Elegíveis pelo motor. "Hoje" injetável (testes); `tableExists` com cache. Saem `ruleActiveOnDate` e `storedRuleType` (só a cópia os usava). `save` e `remove` sem mudança |
+| `api/portal/pa_map.php` | `GET` passa o ator (P9) e `can_manage` (DF7) |
+| `scripts/qa-pa-conflicts.php` (novo, nos dois runners) | Semana de 16 a 20/11/2026 com hoje em 18/11: conflito (pares × ímpares e dias fixos disjuntos nunca; remoto e sem escala não; ausente o dia todo, do F3 e da exceção antiga, não; parcial e Liderança sim; arquivado até a véspera; inativo antigo não; vínculo que começa no meio da semana; tabela antiga; equipes diferentes no mesmo PA, também com o filtro de equipe; o mesmo técnico duas vezes no dia não é conflito; sábado fora); presença pela regra vigente com a cópia de propósito diferente; parcial; motivos `inativo`, `arquivado` e `fim_de_semana`; P9 por perfil e observação nunca; ausências da semana (sem repetição e só nos dias do vínculo); DF7; elegíveis; consultas fixas com 40 cadastros a mais; sem leitura do corte |
+| `scripts/qa-security.php` | Banco simulado com as consultas do motor no caso do mapa; DF7 de ponta a ponta por perfil (admin, Liderança, gestor, técnico, somente leitura): elegíveis, login, observação e autores só para quem edita; nome, equipe, PA e situação para todos |
+| `scripts/qa-archive.php`, `scripts/qa-schedule-legacy-output.php` | Bancos simulados com as consultas novas; D13 e decisão 8 inalteradas. **Mudança esperada:** o vínculo antigo com cópia `undefined` passa a mostrar a regra vigente ("Dias pares"), não "Sem escala" (L-02) |
+| `docs/API_CONTRACTS_FRONTEND.md` | `pa_map.php` com a leitura do F6 e a DF7 |
+
+**Decisões de implementação do commit 1 (a aprovar):**
+
+1. **Duas leituras por tabela de vínculo:** a da data (com o filtro da D13, igual à de antes) e a da semana (para conflito e ausências). Assim a D13 e a decisão 8 continuam com o mesmo SQL. **Leitura do mapa: 12 consultas fixas** para quem edita e 11 para quem não edita, com qualquer número de cadastros (antes: 4 por elegível e 2 por vínculo da tabela antiga).
+2. **Conflito com todas as equipes**, mesmo com o filtro de equipe: o PA é um só. Os IDs da outra equipe aparecem em `employee_ids`, sem nome.
+3. **Sem dia no motor, sem regra:** inativo antigo e arquivado a partir do arquivamento saem com `presence: null`, o motivo e "Sem escala definida" no rótulo da regra (o motor não carrega a regra de quem está fora dele).
+4. **Fim de semana:** sem situação (`fim_de_semana`), salvo exceção de trabalho; o rótulo da regra é o do último dia útil da semana; nos elegíveis, situação `no_schedule`.
+5. **Rótulos do motor, com acento:** "Sempre remoto" (antes "Remoto"), "Dias ímpares", "Presencial: seg, qua e sex", "Presencial (regra fixa)" na Liderança; a cópia da configuração sai da resposta.
+6. **`list()` sem `$canManage` não entrega os campos da DF7** (padrão fechado); o endpoint passa o valor da permissão.
+7. **Ausências da semana sem repetição** (o mesmo técnico no recorrente e na tabela antiga conta uma vez por dia) e só nos dias em que o vínculo vale.
+
+**Validação pela IA:** `qa-pa-conflicts` (62 verificações); **mutação 30/30** (conflito com um ou três, remoto e sem escala contando, inativo contando, vínculo antes de começar e depois de acabar, o mesmo técnico duas vezes, conflito no fim de semana, sem a tabela antiga, semana errada, motivos `arquivado` e `inativo`, remoto como presencial, rótulo do fim de semana, cópia na resposta, sem `parcial`, DF7 em cada campo e nos elegíveis, ausências sem o filtro de equipe, repetidas e fora do vínculo, categoria para todos e crua, motor sem o arquivado, tabela conferida a cada uso; um sobrevivente na 1ª rodada, por falta de caso, morto depois); bateria PHP completa (`qa-archive` 573, `qa-security`, `qa-schedule-legacy-output` com as 17 saídas idênticas), os 16 `qa:*` e lint. **Não verificado:** MySQL (só banco simulado); a tela atual com a resposta nova (o frontend muda no commit 3; ele já não usa os campos da DF7 para quem não edita).
+
+**Como testar no MySQL local (sugestão):** com vínculos de teste: (1) dois técnicos presenciais no mesmo PA → `conflicts` e `has_conflict` nos dias certos; um deles com ausência de dia inteiro num dia → sem conflito nesse dia; com parcial → mantém; pares × ímpares e dias fixos disjuntos → sem conflito; (2) `presence` igual à da tela Escala no mesmo dia; vínculo com cópia antiga diferente da regra vigente → a regra vigente; (3) DevTools por perfil: gestor, técnico e somente leitura sem `employees`, `employee_login`, `notes`, `created_by`, `updated_by`; admin e Liderança com eles; categoria só para gestão e o próprio; (4) data passada com arquivado (até a véspera) e data de hoje sem inativo; (5) tempo de resposta do mapa (DevTools) contra o de antes.
+
 ---
 
 ## 10. Riscos e pendências
