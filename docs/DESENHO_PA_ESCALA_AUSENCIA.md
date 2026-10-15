@@ -1878,6 +1878,32 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 - **d) Relatório:** com `split: false`, o título do aviso não pode ser "Escala dividida na data de corte"; título pelo `split` ("Escala pelas regras novas").
 - **e) Opcional, se couber sem risco:** a coluna Origem da tela Escala diz "Regra fixa" para qualquer regra (ex.: "Dias pares"), enquanto o Calendário diz "Escala". Rótulo "Regra de escala", mantendo "Regra fixa da Liderança".
 
+**Ajustes entregues (2026-10-15, `7aa5cfe`; aguardando a revisão dos prints antes do commit 5):** os cinco itens, mais a correção de um defeito do commit 4 achado nos prints.
+
+| Arquivo | Como ficou |
+|---|---|
+| `services/PresenceEngine.php` | `partialMarkerLabel($absences, $time = null)` público: o horário do marcador ("09:00–10:00" ou "a partir de 15:00"), a mesma regra do detalhe; o `partialMarker` do detalhe passou a usá-lo (detalhe idêntico: `qa-presence-engine` sem mudança) |
+| `services/OperationalService.php` | `calendarEngineEvents`: `categoria` (rótulo, só quando a categoria é visível pela P9) e `parcial` (só quando a situação não é ausente e há marcador); as chaves não vêm nos demais casos; `description` igual. `listCalendar`: status de presença (`CALENDAR_PRESENCE_STATUSES`) filtra a escala antiga pela modalidade |
+| `frontend/src/lib/presenceLegend.ts` | `partialTime` e `hasPartialMarker` pelo campo `parcial`; `engineEventName` (tira o prefixo do título só quando bate com o status); `engineEventFullText` (título, detalhe e categoria, para o `title`); `presenceCutoffTitle` (título do aviso pelo `split`). `partialMarkerInDetail` fica só para a tela Escala |
+| `frontend/src/pages/CalendarPage.jsx` | Semana: ícone, nome (até duas linhas), a situação para leitor de tela e o marcador; texto completo no `title`. Cartão do dia: situação, origem, detalhe com o marcador do `parcial` e "Categoria: …" quando vem; sem a `description` |
+| `frontend/src/components/ui/Presence.jsx` | `PartialMarker` com o horário no nome acessível ("Ausência parcial 09:00–10:00") |
+| `frontend/src/pages/OperationalPages.jsx` | Título do aviso pelo `split`; origem "Regra de escala" ("Regra fixa da Liderança" mantida) |
+| `frontend/src/index.css` | **Defeito do commit 4 corrigido:** as classes `presence-*` estavam dentro de `@layer components` e o Tailwind as descartava (os nomes só aparecem no `.ts`, que ele não varre): resumo, legenda e cartões do motor saíam sem a cor e sem o tracejado do sem escala. Agora ficam fora de camada |
+| `docs/API_CONTRACTS_FRONTEND.md` | `portal/calendar.php`: evento do motor, `categoria`, `parcial`, filtros |
+| `scripts/qa-presence-cutoff.php`, `scripts/qa-schedule-legacy-output.php`, `frontend/scripts/qa-calendar-presence.mjs` | Campos por perfil (categoria só para a gestão e o próprio, nunca para outro técnico nem somente leitura; parcial para todos, igual ao marcador do detalhe; chaves ausentes em vez de nulas; observação nunca; `description` sem mudança); status de presença antes do corte (sem corte e com o corte, `no_schedule` vazio, `approved` e `active` como antes); nome da semana, `title`, título do aviso, origem; **o `qa:calendar-presence` compila o `index.css` com o Tailwind do projeto e confere cada classe `presence-*`** |
+
+**Decisões de implementação dos ajustes (a aprovar):**
+
+1. **Chaves ausentes, não nulas:** `categoria` e `parcial` só vêm quando há valor (o contrato antigo continua válido para quem não as lê).
+2. **`parcial` sai do motor** (`PresenceEngine::partialMarkerLabel`), não do texto do detalhe: as duas coisas vêm da mesma função.
+3. **Tela Escala continua lendo o marcador do detalhe** (`schedules.php` não tem `parcial`). Se quiser o mesmo campo lá, é aditivo e cabe no commit 5.
+4. **Semana em duas linhas em vez de cortar na primeira:** em 1366 px, nomes de 26 caracteres mostram o primeiro nome e o começo do sobrenome (12 de 14 cortados na 2ª linha, na massa fictícia); em 1920 px, nenhum. O nome completo fica no `title` e no detalhe do dia.
+5. **Prefixo tirado só quando bate com o status** ("Remoto: " num evento `remote`); título fora do formato sai inteiro.
+6. **Cartão do dia com "Categoria: …"** como rótulo, na linha de baixo.
+7. **Classes da legenda fora de `@layer`**, sem mudar o `tailwind.config.js`; o QA compila o CSS para isso não voltar.
+
+**Validação pela IA:** bateria PHP completa (`qa-presence-cutoff` com 566 verificações), os 16 `qa:*`, lint e typecheck; **mutação 17/17 no backend** (categoria e parcial por perfil e chave, parcial com relógio, filtro de status antigo, lista de status, formato do horário) e **47/47 no frontend** (24 das anteriores que ainda se aplicam e 23 novas, entre elas as classes `presence-*` de volta no `@layer` e o tracejado fora do CSS gerado; um sobrevivente na 1ª rodada, por caso perdido na troca da tabela, morto depois). Prints com servidor simulado (dados e nomes fictícios, perfil Liderança) em Chrome sem janela com perfil próprio: semana em 1366 e 1920 px, detalhe do dia 21, mês e relatório (título "Escala pelas regras novas" com `split: false`). **Não verificado:** contra o backend real e o MySQL; semana em 390 px.
+
 ---
 
 ## 10. Riscos e pendências
