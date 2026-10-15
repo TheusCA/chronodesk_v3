@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react'
+import { Icon } from '../components/ui/Icon'
+import { PartialMarker, PresenceBadge, PresenceDaySummary, PresenceLegend } from '../components/ui/Presence'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { useResource } from '../hooks/useResource'
 import { formatDateTime } from '../lib/format'
 import { localDate, queryString } from '../lib/operational'
 import { post } from '../lib/api'
+import { hasPartialMarker, isEngineScheduleEvent, originLabel, presenceLegendItem, situationLabel } from '../lib/presenceLegend'
 import { isManagerRole } from '../lib/roles'
 
 const typeLabels = {
@@ -43,6 +46,7 @@ const statusLabels = {
   onsite: 'Presencial',
   remote: 'Remoto',
   absence: 'Ausência',
+  no_schedule: 'Sem escala',
   day_off: 'Folga',
 }
 
@@ -72,7 +76,23 @@ function asLocalDate(date) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 10)
 }
 
-function EventChip({ event }) {
+// [F5] Escala do motor (do corte em diante): cor, ícone e rótulo pela
+// situação (status), com o marcador da parcial; na semana, com o detalhe.
+// Os demais eventos, e a escala de antes do corte, como antes.
+function EventChip({ event, detailed = false }) {
+  if (isEngineScheduleEvent(event)) {
+    const item = presenceLegendItem(event.status)
+    return (
+      <div className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${item?.tone || typeTones.schedule}`}>
+        <div className="flex items-center gap-1">
+          {item && <Icon name={item.icon} className="h-3 w-3 shrink-0" />}
+          <span className="truncate">{event.title}</span>
+          {hasPartialMarker(event) && <PartialMarker />}
+        </div>
+        {detailed && event.detalhe && <p className="truncate text-[10px] font-normal opacity-80">{event.detalhe}</p>}
+      </div>
+    )
+  }
   return (
     <div className={`truncate rounded-md border px-2 py-1 text-[11px] font-semibold ${typeTones[event.event_type] || typeTones.manual}`}>
       {event.title}
@@ -128,6 +148,7 @@ export function CalendarPage({ session, notify }) {
     })
   }, [range.start, view])
   const selectedEvents = byDay.get(selectedDay) || []
+  const hasEngineEvents = useMemo(() => events.some(isEngineScheduleEvent), [events])
 
   function move(direction) {
     const next = new Date(anchor)
@@ -184,7 +205,7 @@ export function CalendarPage({ session, notify }) {
           </select>
           <select aria-label="Filtrar por status" className="field" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
             <option value="">Todos os status</option>
-            {['active', 'pending', 'approved', 'rejected', 'open', 'in_progress', 'war_room', 'mitigated', 'resolved', 'completed', 'cancelled', 'onsite', 'remote', 'absence', 'day_off'].map((status) => <option key={status} value={status}>{statusLabels[status] || status.replaceAll('_', ' ')}</option>)}
+            {['active', 'pending', 'approved', 'rejected', 'open', 'in_progress', 'war_room', 'mitigated', 'resolved', 'completed', 'cancelled', 'onsite', 'remote', 'absence', 'no_schedule', 'day_off'].map((status) => <option key={status} value={status}>{statusLabels[status] || status.replaceAll('_', ' ')}</option>)}
           </select>
         </div>
       </section>
@@ -211,6 +232,11 @@ export function CalendarPage({ session, notify }) {
             {days.map((day) => {
               const key = asLocalDate(day)
               const dayEvents = byDay.get(key) || []
+              // [F5, P15] Escala do motor: no mês, o resumo por situação; na
+              // semana, um cartão por técnico. Os demais tipos seguem visíveis.
+              const engineEvents = dayEvents.filter(isEngineScheduleEvent)
+              const otherEvents = engineEvents.length === 0 ? dayEvents : dayEvents.filter((event) => !isEngineScheduleEvent(event))
+              const limit = view === 'week' ? 8 : 3
               const outside = view === 'month' && day.getMonth() !== anchor.getMonth()
               const selected = selectedDay === key
               return (
@@ -222,8 +248,10 @@ export function CalendarPage({ session, notify }) {
                 >
                   <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-bold ${key === localDate() ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>{day.getDate()}</span>
                   <div className="mt-2 space-y-1">
-                    {dayEvents.slice(0, view === 'week' ? 8 : 3).map((event) => <EventChip event={event} key={`${key}-${event.id}`} />)}
-                    {dayEvents.length > (view === 'week' ? 8 : 3) && <p className="px-1 text-[10px] text-slate-500">+{dayEvents.length - (view === 'week' ? 8 : 3)} eventos</p>}
+                    {view === 'month' && <PresenceDaySummary events={engineEvents} />}
+                    {view === 'week' && engineEvents.map((event) => <EventChip detailed event={event} key={`${key}-${event.id}`} />)}
+                    {otherEvents.slice(0, limit).map((event) => <EventChip event={event} key={`${key}-${event.id}`} />)}
+                    {otherEvents.length > limit && <p className="px-1 text-[10px] text-slate-500">+{otherEvents.length - limit} eventos</p>}
                   </div>
                 </button>
               )
@@ -235,7 +263,17 @@ export function CalendarPage({ session, notify }) {
           <h3 className="mt-2 text-lg font-bold capitalize text-white">{new Date(`${selectedDay}T12:00:00`).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</h3>
           <div className="mt-5 space-y-3">
             {selectedEvents.length === 0 && <EmptyState title="Dia sem eventos" description="Selecione outro dia ou cadastre um evento manual." />}
-            {selectedEvents.map((event) => (
+            <PresenceDaySummary events={selectedEvents} />
+            {selectedEvents.map((event) => isEngineScheduleEvent(event) ? (
+              // [F5] Cartão do técnico: situação, origem e detalhe do motor; a
+              // descrição (regra e, quando o servidor manda, a categoria).
+              <article className="rounded-xl border border-white/[0.07] bg-slate-950/30 p-3" key={event.id}>
+                <div className="flex items-start justify-between gap-2"><strong className="text-sm text-slate-200">{event.title}</strong><PresenceBadge status={event.status} /></div>
+                <p className="mt-2 text-xs text-slate-500">{situationLabel(event.situacao)} · Origem: {originLabel(event.origem)}</p>
+                {event.detalhe && <p className="mt-2 flex items-center gap-1 text-sm leading-5 text-slate-300">{hasPartialMarker(event) && <PartialMarker />}{event.detalhe}</p>}
+                {event.description && <p className="mt-1 text-sm leading-5 text-slate-400">{event.description}</p>}
+              </article>
+            ) : (
               <article className="rounded-xl border border-white/[0.07] bg-slate-950/30 p-3" key={event.id}>
                 <div className="flex items-start justify-between gap-2"><strong className="text-sm text-slate-200">{event.title}</strong><span className={`status-badge ${typeTones[event.event_type] || typeTones.manual}`}>{typeLabels[event.event_type] || event.event_type}</span></div>
                 <p className="mt-2 text-xs text-slate-500">{formatDateTime(event.starts_at)} - {statusLabels[event.status] || event.status}</p>
@@ -247,6 +285,7 @@ export function CalendarPage({ session, notify }) {
       </section>
       <section className="card flex flex-wrap gap-2">
         {Object.entries(typeLabels).map(([type, label]) => <span className={`status-badge ${typeTones[type]}`} key={type}>{label}</span>)}
+        {hasEngineEvents && <PresenceLegend />}
       </section>
     </div>
   )

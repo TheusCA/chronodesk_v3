@@ -223,7 +223,7 @@ export default function App() {
   return (
     <PortalLayout session={session} path={router.path} navigate={router.navigate} onLogout={logout}>
       <RouteErrorBoundary resetKey={router.path}>
-        <Suspense fallback={<LoadingState label="Carregando mÃ³dulo..." />}>
+        <Suspense fallback={<LoadingState label="Carregando módulo..." />}>
           {content}
         </Suspense>
       </RouteErrorBoundary>

@@ -113,6 +113,24 @@
     @apply border-slate-600/40 bg-slate-800 text-slate-400;
   }
 
+  /* F5: legenda única da situação (src/lib/presenceLegend.ts). Ausente no
+     mesmo laranja do evento de ausência do Calendário; sem escala tracejado. */
+  .presence-onsite {
+    @apply border-green-500/30 bg-green-500/10 text-green-200;
+  }
+
+  .presence-remote {
+    @apply border-sky-500/30 bg-sky-500/10 text-sky-200;
+  }
+
+  .presence-absence {
+    @apply border-orange-500/30 bg-orange-500/10 text-orange-200;
+  }
+
+  .presence-no-schedule {
+    @apply border-dashed border-slate-400/60 bg-transparent text-slate-300;
+  }
+
   .tab-button {
     @apply whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-white/5 hover:text-slate-200;
   }

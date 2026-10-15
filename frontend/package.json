@@ -13,6 +13,7 @@
     "qa:absences-form": "node scripts/qa-absences-form.mjs",
     "qa:action-feedback": "node scripts/qa-action-feedback.mjs",
     "qa:action-runner": "node scripts/qa-action-runner.mjs",
+    "qa:calendar-presence": "node scripts/qa-calendar-presence.mjs",
     "qa:bundle": "node scripts/qa-bundle.mjs",
     "qa:employee-form": "node scripts/qa-employee-form.mjs",
     "qa:forms": "node scripts/qa-forms.mjs",

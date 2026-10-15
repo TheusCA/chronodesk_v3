@@ -5,12 +5,14 @@ import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-tabl
 import { useForm } from 'react-hook-form'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
+import { PartialMarker, PresenceBadge } from '../components/ui/Presence'
 import { useResource } from '../hooks/useResource'
 import { api, apiUrl, post, postForm } from '../lib/api'
 import { ACTION_FEEDBACK, decisionFeedback, importFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { reportFiltersSchema, scheduleRuleSchema } from '../lib/formSchemas'
+import { partialMarkerInDetail, presenceCutoffNotice, presenceLegendItem } from '../lib/presenceLegend'
 import { queryKeys } from '../lib/queryKeys'
 import {
   DetailPill,
@@ -252,65 +254,6 @@ function PeriodFilters({ filters, setFilters, extra = null }) {
   )
 }
 
-export function CalendarPage({ session, notify }) {
-  const canManage = isManagerRole(session.role)
-  const employees = useEmployees()
-  const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '', type: '', status: '' })
-  const resource = useResource(`portal/calendar.php${queryString(filters)}`)
-  const [form, setForm] = useState({ title: '', description: '', type: 'manual', starts_at: `${today}T09:00`, ends_at: `${today}T10:00`, team: '' })
-
-  async function create(event) {
-    event.preventDefault()
-    await submit(
-      () => post('portal/calendar.php', form),
-      resource.refresh,
-      notify,
-      ACTION_FEEDBACK.calendarCreated,
-      () => setForm({ ...form, title: '', description: '' }),
-    )
-  }
-
-  return (
-    <div className="space-y-5">
-      <PeriodFilters filters={filters} setFilters={setFilters} extra={(
-        <>
-          <label className="label">Competência<input className="field mt-2" type="month" value={filters.to ? competencyFor(`${filters.to}T12:00:00`).key : ''} onChange={(event) => {
-            if (!event.target.value) return
-            const competency = competencyFor(`${event.target.value}-01T12:00:00`)
-            setFilters({ ...filters, from: competency.start, to: competency.end })
-          }} /></label>
-          <label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>
-          <label className="label">Tipo<select className="field mt-2" value={filters.type} onChange={(event) => setFilters({ ...filters, type: event.target.value })}><option value="">Todos</option><option value="manual">Manual</option><option value="pause">Pausa</option><option value="schedule">Escala</option><option value="overtime">Hora extra</option><option value="time_adjustment">Ajuste</option><option value="oncall">Plantão</option></select></label>
-          <label className="label">Status<input className="field mt-2" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })} /></label>
-        </>
-      )} />
-      {canManage && (
-        <form className="card space-y-4" onSubmit={create}>
-          <h2 className="font-bold text-white">Novo evento operacional</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <label className="label xl:col-span-2">Título<input className="field mt-2" maxLength="160" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-            <label className="label">Início<input className="field mt-2" required type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
-            <label className="label">Fim<input className="field mt-2" type="datetime-local" value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
-            <label className="label">Equipe<select className="field mt-2" value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
-            <label className="label xl:col-span-3">Descrição<input className="field mt-2" maxLength="1000" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-          </div>
-          <button className="btn-primary" type="submit">Cadastrar evento</button>
-        </form>
-      )}
-      <OperationalShell resource={resource}>
-        {(resource.data?.items || []).length === 0 ? <EmptyState title="Nenhum evento no período" description="Ajuste os filtros ou cadastre um evento operacional." /> : (
-          <section className="card table-wrap">
-            <table className="data-table">
-              <thead><tr><th>Data</th><th>Evento</th><th>Tipo</th><th>Equipe</th><th>Status</th></tr></thead>
-              <tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDateTime(item.starts_at)}</td><td><strong>{item.title}</strong><small>{item.description || 'Sem descrição'}</small></td><td>{item.event_type}</td><td>{item.team?.toUpperCase() || 'Todas'}</td><td><Status value={item.status} /></td></tr>)}</tbody>
-            </table>
-          </section>
-        )}
-      </OperationalShell>
-    </div>
-  )
-}
-
 // F2B: prévia calculada pelo servidor (próximos dias úteis), o que será
 // encerrado e o aviso de prévia desatualizada.
 function RulePreviewPanel({ preview, fresh }) {
@@ -377,6 +320,9 @@ export function SchedulePage({ session, notify }) {
   )
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
   const [exceptionError, setExceptionError] = useState('')
+  // [F5, D13] Filtro só da tela, desligado por padrão; não muda o schedules.php.
+  const [hideNoSchedule, setHideNoSchedule] = useState(false)
+  const generatedRows = (resource.data?.generated || []).filter((item) => !hideNoSchedule || item.presence_type !== 'no_schedule')
   // Fora do Mapa PA e da escala: sem regra nem exceção (P12).
   const allEmployees = (employees.data?.funcionarios || []).filter((employee) => employee.fora_mapa_escala !== true)
   // Regra: só N1 e N2. Exceção de líder: só admin (L9), nunca remota.
@@ -739,7 +685,7 @@ export function SchedulePage({ session, notify }) {
               <tbody>{(resource.data?.rules || []).filter((item) => item.is_current || item.is_future).map((item) => (
                 <tr key={item.id ?? `implicita-${item.employee_id}`}>
                   <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>{item.ad_login || 'Sem login AD'}</small></div></div></td>
-                  <td>{teamLabel(item.team)}</td>
+                  <td className="whitespace-nowrap">{teamLabel(item.team)}</td>
                   <td><span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span></td>
                   <td>
                     <span className={`status-badge ${item.is_current ? 'status-success' : 'status-info'}`}>{item.is_current ? 'Vigente' : 'Agendada'}</span>
@@ -782,10 +728,15 @@ export function SchedulePage({ session, notify }) {
         )}
         {(resource.data?.generated || []).length === 0 ? <EmptyState title="Nenhuma escala gerada" description="Cadastre regras fixas para gerar automaticamente os dias presenciais e remotos." /> : (
           <section className="card table-wrap">
+            <label className="mb-4 inline-flex items-center gap-2 text-sm text-slate-300">
+              <input checked={hideNoSchedule} className="h-4 w-4" type="checkbox" onChange={(event) => setHideNoSchedule(event.target.checked)} />
+              Ocultar sem escala
+            </label>
             <table className="data-table">
               <thead><tr><th>Data</th><th>Colaborador</th><th>Equipe</th><th>Modalidade</th><th>Origem</th></tr></thead>
-              <tbody>{resource.data.generated.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td>{teamLabel(item.team)}</td><td><Status value={item.presence_type} />{item.presence_type === 'absence' && item.detalhe && <small className="block">{item.detalhe}</small>}</td><td>{scheduleSourceLabel(item)}</td></tr>)}</tbody>
+              <tbody>{generatedRows.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td className="whitespace-nowrap">{teamLabel(item.team)}</td><td>{presenceLegendItem(item.presence_type) ? <PresenceBadge status={item.presence_type} label={statusLabel(item.presence_type)} /> : <Status value={item.presence_type} />}{(item.presence_type === 'absence' || partialMarkerInDetail(item.situacao, item.detalhe)) && item.detalhe && <small className="mt-1 flex items-center gap-1">{item.presence_type !== 'absence' && <PartialMarker />}{item.detalhe}</small>}</td><td>{scheduleSourceLabel(item)}</td></tr>)}</tbody>
             </table>
+            {generatedRows.length === 0 && <p className="mt-3 text-sm text-slate-500">Todos os dias do filtro estão sem escala.</p>}
             <p className="mt-3 text-xs text-slate-500">Dias úteis de segunda a sexta; sábado e domingo só aparecem com exceção de trabalho. Quem não tem regra aparece como “Sem escala”. Ausência aparece sem a categoria.</p>
           </section>
         )}
@@ -1086,11 +1037,15 @@ export function OperationalReportsPage() {
       ['Plantões', summary.oncall_count || 0],
       ['Dias presenciais', summary.onsite_days || 0],
       ['Dias remotos', summary.remote_days || 0],
+      // [F5, D4] Só quando o período alcança o corte (o servidor manda os campos).
+      ...('absence_days' in summary ? [['Dias de ausência', summary.absence_days || 0]] : []),
+      ...('no_schedule_days' in summary ? [['Dias sem escala', summary.no_schedule_days || 0]] : []),
       ['Pendências', summary.pending || 0],
       ['Rejeitados', summary.rejected || 0],
       ['Erros de sync', summary.sync_errors || 0],
     ]
   }, [resource.data?.summary])
+  const cutoffNotice = presenceCutoffNotice(resource.data?.cutoff)
   function applyReportFilters(values) {
     const parsed = reportFiltersSchema.safeParse(values)
     if (!parsed.success) {
@@ -1133,6 +1088,7 @@ export function OperationalReportsPage() {
       </form>
       <OperationalShell resource={resource}>
         <>
+          {cutoffNotice && <InlineAlert tone="info" title="Escala dividida na data de corte">{cutoffNotice}</InlineAlert>}
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-2xl font-black text-white">{value}</p></article>)}</section>
           <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div><h2 className="font-bold text-white">Competência {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-slate-500">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>
@@ -1167,6 +1123,8 @@ function ReportsSummaryTable({ title, values }) {
         return (
           <span className="text-right text-slate-500">
             {minutesLabel(value.overtime_approved_minutes)} HE aprovada(s), {minutesLabel(value.overtime_pending_minutes)} pendente(s), {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantão(ões), {value.onsite_days || 0} presencial(is)
+            {'absence_days' in value && `, ${value.absence_days} ausência(s)`}
+            {'no_schedule_days' in value && `, ${value.no_schedule_days} sem escala`}
           </span>
         )
       },
