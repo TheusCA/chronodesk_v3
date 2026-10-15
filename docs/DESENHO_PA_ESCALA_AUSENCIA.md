@@ -1878,7 +1878,7 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 - **d) Relatório:** com `split: false`, o título do aviso não pode ser "Escala dividida na data de corte"; título pelo `split` ("Escala pelas regras novas").
 - **e) Opcional, se couber sem risco:** a coluna Origem da tela Escala diz "Regra fixa" para qualquer regra (ex.: "Dias pares"), enquanto o Calendário diz "Escala". Rótulo "Regra de escala", mantendo "Regra fixa da Liderança".
 
-**Ajustes entregues (2026-10-15, `7aa5cfe`; aguardando a revisão dos prints antes do commit 5):** os cinco itens, mais a correção de um defeito do commit 4 achado nos prints.
+**Ajustes entregues (2026-10-15, `7aa5cfe`; aprovados em 2026-10-15, ver abaixo):** os cinco itens, mais a correção de um defeito do commit 4 achado nos prints.
 
 | Arquivo | Como ficou |
 |---|---|
@@ -1892,7 +1892,7 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 | `docs/API_CONTRACTS_FRONTEND.md` | `portal/calendar.php`: evento do motor, `categoria`, `parcial`, filtros |
 | `scripts/qa-presence-cutoff.php`, `scripts/qa-schedule-legacy-output.php`, `frontend/scripts/qa-calendar-presence.mjs` | Campos por perfil (categoria só para a gestão e o próprio, nunca para outro técnico nem somente leitura; parcial para todos, igual ao marcador do detalhe; chaves ausentes em vez de nulas; observação nunca; `description` sem mudança); status de presença antes do corte (sem corte e com o corte, `no_schedule` vazio, `approved` e `active` como antes); nome da semana, `title`, título do aviso, origem; **o `qa:calendar-presence` compila o `index.css` com o Tailwind do projeto e confere cada classe `presence-*`** |
 
-**Decisões de implementação dos ajustes (a aprovar):**
+**Decisões de implementação dos ajustes (aprovadas em 2026-10-15; na 3, o `parcial` entra no `schedules.php` no commit 5):**
 
 1. **Chaves ausentes, não nulas:** `categoria` e `parcial` só vêm quando há valor (o contrato antigo continua válido para quem não as lê).
 2. **`parcial` sai do motor** (`PresenceEngine::partialMarkerLabel`), não do texto do detalhe: as duas coisas vêm da mesma função.
@@ -1903,6 +1903,25 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 7. **Classes da legenda fora de `@layer`**, sem mudar o `tailwind.config.js`; o QA compila o CSS para isso não voltar.
 
 **Validação pela IA:** bateria PHP completa (`qa-presence-cutoff` com 566 verificações), os 16 `qa:*`, lint e typecheck; **mutação 17/17 no backend** (categoria e parcial por perfil e chave, parcial com relógio, filtro de status antigo, lista de status, formato do horário) e **47/47 no frontend** (24 das anteriores que ainda se aplicam e 23 novas, entre elas as classes `presence-*` de volta no `@layer` e o tracejado fora do CSS gerado; um sobrevivente na 1ª rodada, por caso perdido na troca da tabela, morto depois). Prints com servidor simulado (dados e nomes fictícios, perfil Liderança) em Chrome sem janela com perfil próprio: semana em 1366 e 1920 px, detalhe do dia 21, mês e relatório (título "Escala pelas regras novas" com `split: false`). **Não verificado:** contra o backend real e o MySQL; semana em 390 px.
+
+**Ajustes do commit 4 aprovados em 2026-10-15**, com as sete decisões, após revisão do responsável com o front novo contra o backend real e o MySQL 8.0.46 local (mesma massa da revisão anterior; corte 2026-10-16 inserido direto; 1366, 1920 e 390 px; gestor, técnico e somente leitura). Massa removida e tabela do corte esvaziada depois.
+
+| Caso | Resultado |
+|---|---|
+| `categoria` e `parcial` | Chaves só com valor; técnico 9 com a própria categoria ("Compromisso") e só o horário da parcial dos outros; somente leitura só com a própria ("Férias"); observação nunca, em nenhum perfil |
+| Status antes do corte | `status=no_schedule` sem nada antes de 16/10; `status=onsite` só presenciais nos dois lados; sem filtro, a escala antiga igual |
+| Cartão do dia | Sem texto repetido, com "Categoria: …" |
+| Cores da legenda | Presentes no CSS gerado (verde, azul-claro, laranja e o tracejado do sem escala) |
+| Semana em 1366 px | Nome em duas linhas, cor, ícone e marcador; `title` com o texto completo |
+| Validação | `qa-presence-cutoff` (566), `qa-presence-engine`, `qa-calendar-presence` e typecheck OK |
+
+**Defeito das cores na revisão anterior:** as classes `presence-*` descartadas pelo Tailwind passaram também na revisão do commit 4 feita pelo responsável: os prints dele já mostravam o resumo sem cor. Registro para a lição: conferir a cor no CSS gerado, não só no código.
+
+**Decisão 3:** o campo `parcial` entra também nos dias do `schedules.php` no commit 5 (item a), e a tela Escala passa a ler o marcador dele.
+
+**Pedidos para o commit 5 (2026-10-15):** (a) `parcial` aditivo nos dias do `schedules.php`, pela mesma `PresenceEngine::partialMarkerLabel`; a tela Escala lê o marcador dele e `partialMarkerInDetail` sai se não sobrar uso; contrato, QA e mutação. (b) Semana: o conteúdo de cada dia começa no topo da célula (hoje só a coluna mais alta começa no topo e as outras ficam centralizadas, o que desalinha o número do dia); só CSS/classe, com print em 1366 px. (c) Roteiro "Deploy que traz o F5" no `DEPLOY_LINUX.md`, no padrão dos anteriores: conferir o branch, `fN-commit`, ensaio com `git archive`; `git cat-file -e`, `bash -o pipefail` e `git merge --ff-only`; build, recarga do PHP-FPM e verificação; verificação da 019 em cada etapa, com `inconsistente = 1` = PARAR; consulta da 16c com as duas colunas em 0 antes do registro do corte; registro do corte para o próximo dia 16; nota da pendência 16b (`SHOW GRANTS` do usuário da aplicação, sem `DROP` nem `TRIGGER`); só contagens, nunca nomes; comandos Linux em uma linha. (d) `API_CONTRACTS_FRONTEND.md` completo para `calendar.php`, `schedules.php` e `reports.php` com o corte; bateria completa, 16 `qa:*`, lint e typecheck; mutação no que for novo. Parar para a revisão antes de fechar o F5.
+
+**Pendência do lote de acabamento (registrada em 2026-10-15, junto com a 17):** Calendário, visão Semana em 390 px: cada cartão mostra só o ícone e uma letra, e com o motor são cerca de 14 cartões por dia. Proposta: em telas estreitas, a semana vira lista, um dia embaixo do outro, com os cartões completos. Não entra no F5.
 
 ---
 
