@@ -240,7 +240,7 @@ export function CalendarPage({ session, notify }) {
               const selected = selectedDay === key
               return (
                 <button
-                  className={`min-h-28 border-b border-r border-white/[0.06] p-2 text-left align-top transition hover:bg-white/[0.03] sm:min-h-36 ${outside ? 'bg-slate-950/30 opacity-45' : ''} ${selected ? 'ring-1 ring-inset ring-blue-500/60' : ''}`}
+                  className={`flex min-h-28 flex-col justify-start border-b border-r border-white/[0.06] p-2 text-left align-top transition hover:bg-white/[0.03] sm:min-h-36 ${outside ? 'bg-slate-950/30 opacity-45' : ''} ${selected ? 'ring-1 ring-inset ring-blue-500/60' : ''}`}
                   key={key}
                   onClick={() => setSelectedDay(key)}
                   type="button"

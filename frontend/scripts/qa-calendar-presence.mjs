@@ -21,8 +21,8 @@ const {
   hasPartialMarker,
   isEngineScheduleEvent,
   originLabel,
-  partialMarkerInDetail,
   partialTime,
+  rowPartialTime,
   presenceCutoffNotice,
   presenceCutoffTitle,
   presenceDaySummary,
@@ -96,6 +96,7 @@ for (const [event, expected, label] of [
   [engine('p7', 'onsite', 'presencial', 'Presencial (dias pares)', { parcial: '' }), null, 'parcial vazio'],
   [engine('p5', 'onsite', 'presencial', 'Presencial (dias pares)'), null, 'sem parcial'],
   [{ ...legacySchedule, parcial: '09:00–10:00' }, null, 'evento antigo'],
+  [{ id: 'm1', event_type: 'manual', situacao: 'presencial', parcial: '09:00–10:00' }, null, 'evento que não é escala, mesmo com situacao e parcial'],
 ]) {
   assert.equal(partialTime(event), expected, `horário da parcial: ${label}`)
   assert.equal(hasPartialMarker(event), expected !== null, `marcador da parcial: ${label}`)
@@ -114,9 +115,22 @@ for (const [event, expected, label] of [
 }
 assert.equal(engineEventFullText(engine('t1', 'remote', 'remoto', 'Remoto (dias pares) · Ausente 09:00–10:00', { title: 'Remoto: Tecnico B', categoria: 'Compromisso' })), 'Remoto: Tecnico B · Remoto (dias pares) · Ausente 09:00–10:00 · Compromisso', 'texto completo do cartão (title): título, detalhe e categoria')
 assert.equal(engineEventFullText(engine('t2', 'onsite', 'presencial', 'Presencial (regra fixa)', { title: 'Presencial: Lider A' })), 'Presencial: Lider A · Presencial (regra fixa)', 'texto completo sem categoria')
-assert.equal(partialMarkerInDetail('presencial', 'Presencial (regra fixa) · Ausente a partir de 10:00'), true, 'linha da tela Escala com marcador')
-assert.equal(partialMarkerInDetail(undefined, 'x · Ausente a partir de 10:00'), false, 'linha sem situacao (cálculo antigo): sem marcador')
-assert.equal(partialMarkerInDetail('ausente', 'Ausente (dia todo) · Ausente 09:00–10:00'), false, 'linha da tela Escala: situação ausente nunca leva o marcador')
+// [Commit 5] Linha da tela Escala: o marcador vem do campo parcial do schedules.php.
+for (const [row, expected, label] of [
+  [{ situacao: 'presencial', detalhe: 'Presencial (regra fixa) · Ausente a partir de 10:00', parcial: 'a partir de 10:00' }, 'a partir de 10:00', 'com parcial'],
+  [{ situacao: 'sem_escala', detalhe: 'Sem escala definida · Ausente 11:00–11:30', parcial: '11:00–11:30' }, '11:00–11:30', 'sem escala com parcial'],
+  [{ situacao: 'presencial', detalhe: 'Presencial (regra fixa) · Ausente a partir de 10:00' }, null, 'texto do marcador sem o campo parcial'],
+  [{ detalhe: 'x', parcial: '09:00–10:00' }, null, 'linha sem situacao (cálculo antigo)'],
+  [{ situacao: 'presencial', parcial: '' }, null, 'parcial vazio'],
+  [{ situacao: 'presencial', parcial: 10 }, null, 'parcial que não é texto'],
+]) {
+  assert.equal(rowPartialTime(row), expected, `linha da tela Escala: ${label}`)
+}
+assert.doesNotMatch(legendSource + operationalSource + calendarSource, /partialMarkerInDetail|· Ausente \//, 'o marcador não é mais lido do texto do detalhe em nenhuma tela')
+// [Commit 5, item b] Célula do dia (botão): conteúdo no topo, não centralizado
+// na vertical (o número do dia alinhado em todas as colunas).
+assert.match(calendarSource, /className=\{`flex min-h-28 flex-col justify-start border-b/, 'célula do dia com o conteúdo no topo')
+assert.match(operationalSource, /\{rowPartialTime\(item\) !== null && <PartialMarker time=\{rowPartialTime\(item\)\} \/>\}\{item\.detalhe\}/, 'tela Escala: marcador e horário pelo campo parcial')
 assert.deepEqual(['presencial', 'remoto', 'ausente', 'sem_escala'].map(situationLabel), ['Presencial', 'Remoto', 'Ausente', 'Sem escala'])
 assert.deepEqual(['ausencia', 'regra_escala', 'expediente', 'outra'].map(originLabel), ['Ausência', 'Escala', 'Expediente', 'outra'])
 

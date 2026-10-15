@@ -908,8 +908,72 @@ foreach (['onsite', 'remote', 'day_off', 'absence', 'no_schedule'] as $presenceS
 }
 assert_same([], $legacySchedule($calendar($actors['gestor'], ['status' => 'no_schedule'])), 'status=no_schedule: nada da escala antiga antes do corte');
 assert_same([], array_values(array_filter($calendar($actors['gestor'], ['status' => 'no_schedule']), static fn (array $item): bool => $item['status'] !== 'no_schedule')), 'status=no_schedule: so sem escala, do motor');
+// [F5, commit 5] parcial so no Calendario e na tela Escala: o relatorio (JSON)
+// continua sem o campo, mesmo com parcial no periodo do motor.
+$reportWithPartial = (new OperationalService($partialDb(), '2026-11-10'))->report(['from' => '2026-11-12', 'to' => '2026-11-22']);
+assert_same([true, false], [strpos((string)json_encode($reportWithPartial['schedule'], JSON_UNESCAPED_UNICODE), ' · Ausente 09:00–10:00') !== false, strpos((string)json_encode($reportWithPartial), '"parcial"') !== false], 'relatorio: marcador no detalhe, sem o campo parcial (contrato do relatorio sem mudanca)');
 foreach (['approved', 'active', 'completed'] as $otherStatus) {
     assert_same($legacyAll, $legacySchedule($calendar($actors['gestor'], ['status' => $otherStatus])), "status={$otherStatus}: escala antiga como antes (ignora o status)");
+}
+
+// ----------------------------------------------------------------------------
+// 5. Roteiro "Deploy que traz o F5" (commit 5): travas do DEPLOY_LINUX.md
+// ----------------------------------------------------------------------------
+$deployDoc = str_replace("\r\n", "\n", (string)file_get_contents($root . '/DEPLOY_LINUX.md'));
+$f5Start = strpos($deployDoc, "### Deploy que traz o F5 (Parte B");
+$f5End = $f5Start === false ? false : strpos($deployDoc, "\n## ", $f5Start);
+assert_same(true, $f5Start !== false && $f5End !== false, 'roteiro do F5: secao presente, antes da secao seguinte');
+$runbook = substr($deployDoc, (int)$f5Start, (int)$f5End - (int)$f5Start);
+preg_match_all('/```bash\n(.*?)```/s', $runbook, $blocks);
+$commands = array_values(array_filter(explode("\n", implode("\n", $blocks[1])), static fn (string $line): bool => trim($line) !== ''));
+$commandText = implode("\n", $commands);
+$firstLine = static function (string $needle) use ($commands): int {
+    foreach ($commands as $i => $line) {
+        if (strpos($line, $needle) !== false) {
+            return $i;
+        }
+    }
+    return -1;
+};
+$lastLine = static function (string $needle) use ($commands): int {
+    $found = -1;
+    foreach ($commands as $i => $line) {
+        if (strpos($line, $needle) !== false) {
+            $found = $i;
+        }
+    }
+    return $found;
+};
+assert_same(true, count($commands) >= 20, 'roteiro do F5: comandos encontrados');
+assert_same([], array_values(array_filter($commands, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), 'roteiro do F5: comandos Linux em uma linha (sem continuacao)');
+assert_same([false, false], [preg_match('/\bgit (pull|fetch)\b/', $commandText) === 1, strpos($commandText, 'git merge origin') !== false], 'roteiro do F5: sem pull nem fetch; merge so --ff-only');
+$mergeLine = $firstLine('sudo git merge --ff-only origin/<BRANCH>');
+assert_same(true, $mergeLine >= 0 && strpos($commands[$mergeLine], "sudo git cat-file -e origin/<BRANCH>:migrations/20261013_019_presence_cutoff.sql && bash -o pipefail -c 'sudo git show origin/<BRANCH>:migrations/20261013_019_presence_cutoff.sql | docker exec") !== false && strpos($commands[$mergeLine], "' && sudo git merge --ff-only origin/<BRANCH>") !== false, 'roteiro do F5: 019 e merge na mesma linha, com cat-file e pipefail, merge so se a 019 passar');
+assert_same(true, $firstLine('| sudo tee /var/backups/chronodesk/f5-commit') >= 0 && $firstLine('= "$(sudo cat /var/backups/chronodesk/f5-commit)" ] && echo "HEAD = commit do ensaio"') === $mergeLine + 1, 'roteiro do F5: commit do ensaio gravado antes e conferido logo depois do merge');
+assert_same(true, $firstLine('[ "$B" = "<BRANCH>" ]') >= 0 && $firstLine('[ "$B" = "<BRANCH>" ]') < $firstLine('git archive origin/<BRANCH> migrations'), 'roteiro do F5: confere o branch antes do archive');
+// Verificacao da 019 antes da 019, depois do merge, no pos-deploy e depois do registro.
+$checkLines = array_keys(array_filter($commands, static fn (string $line): bool => strpos($line, '20261013_019_presence_cutoff_check.sql') !== false || strpos($line, 'sudo cat "$V" | docker exec') !== false));
+$registerLine = $firstLine('cat migrations/20261013_019_registrar_corte.sql; } | docker exec');
+$queryLine = $firstLine('AS sem_regra_na_competencia FROM funcionarios f');
+$cutoffLine = $firstLine('C=$(docker exec');
+assert_same(true, $registerLine > $mergeLine && $queryLine > $mergeLine && $cutoffLine < $queryLine && $queryLine < $registerLine, 'roteiro do F5: data do corte, consulta da 16c e so depois o registro, tudo depois do merge');
+assert_same(true, count(array_filter($checkLines, static fn (int $i): bool => $i < $mergeLine)) >= 1 && count(array_filter($checkLines, static fn (int $i): bool => $i > $mergeLine && $i < $registerLine)) >= 2 && count(array_filter($checkLines, static fn (int $i): bool => $i === $registerLine + 1)) === 1, 'roteiro do F5: verificacao da 019 antes da 019, depois do merge, no pos-deploy e logo depois do registro');
+assert_same(true, strpos($commands[$cutoffLine], "[[ \"\$C\" =~ ^[0-9]{4}-[0-9]{2}-16\$ ]] && echo \"corte planejado: \$C\" || echo \"PARE") !== false && strpos($commands[$cutoffLine], "DATE_FORMAT(CURDATE() + INTERVAL 1 MONTH, '%Y-%m-16'), DATE_FORMAT(CURDATE(), '%Y-%m-16')") !== false, 'roteiro do F5: data do corte pela D2 (proximo dia 16) e conferida no formato');
+$approvedQuery = "SET @corte := 'AAAA-MM-16'; WITH RECURSIVE dias (d) AS (SELECT CAST(@corte AS DATE) UNION ALL SELECT d + INTERVAL 1 DAY FROM dias WHERE d < @corte + INTERVAL 1 MONTH - INTERVAL 1 DAY) SELECT COUNT(*) AS ativos_n1_n2, COALESCE(SUM(NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= @corte AND (r.effective_until IS NULL OR r.effective_until >= @corte))), 0) AS sem_regra_no_corte, COALESCE(SUM(EXISTS (SELECT 1 FROM dias WHERE NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= dias.d AND (r.effective_until IS NULL OR r.effective_until >= dias.d)))), 0) AS sem_regra_na_competencia FROM funcionarios f WHERE f.ativo = 1 AND f.fora_mapa_escala = 0 AND LOWER(f.equipe) IN ('n1', 'n2');";
+assert_same(true, strpos($commands[$queryLine], str_replace("'AAAA-MM-16'", "'\$C'", $approvedQuery)) !== false, 'roteiro do F5: consulta da 16c com o texto aprovado, na data do corte');
+assert_same(true, strpos($commands[$registerLine], "printf \"SET @corte := '%s'; SET @autor := '%s';\\n\" \"\$C\" '<login do operador>'") !== false, 'roteiro do F5: registro com a data do passo da 16c e o autor explicito');
+assert_same(true, preg_match('/Com qualquer das duas maior que 0, o registro do corte nao roda/', preg_replace('/\s+/', ' ', $runbook)) === 1 && preg_match('/`inconsistente = 1` manda PARAR/', preg_replace('/\s+/', ' ', $runbook)) === 1, 'roteiro do F5: 16c maior que 0 impede o registro; inconsistente = 1 = PARAR');
+// Ensaio nas tres variantes, com audit_log; privilegios da 16b so em contagem.
+foreach (['ensaio-migration.sh f5 "$M" "$R" audit_log', 'ensaio-migration.sh f5_registro "$E/registro_f5.sql" "$R" audit_log', 'ensaio-migration.sh f5_passado "$E/registro_f5_passado.sql" "$R" audit_log'] as $variant) {
+    assert_same(true, $firstLine($variant) >= 0 && $firstLine($variant) < $mergeLine, "roteiro do F5: ensaio antes do merge ({$variant})");
+}
+assert_same(true, $firstLine("g.PRIVILEGE_TYPE = 'DROP') AS concessoes_drop") >= 0 && $firstLine("g.PRIVILEGE_TYPE = 'TRIGGER') AS concessoes_trigger") >= 0 && $firstLine('concessoes_drop') < $registerLine, 'roteiro do F5: pendencia 16b (DROP e TRIGGER do usuario da aplicacao) em contagem, antes do registro');
+// So contagens: nenhum nome, login ou autor nas consultas; senha sempre lida sem eco e apagada.
+assert_same(0, preg_match('/\b(f\.nome|nome AS|SELECT nome|ad_login|registered_by|employee_name)\b/', $commandText), 'roteiro do F5: nenhuma consulta devolve nome, login ou autor');
+foreach ($commands as $line) {
+    if (strpos($line, 'MYSQL_PWD="$P"') !== false) {
+        assert_same(true, strpos($line, "read -rsp 'Senha root do MySQL: ' P;") !== false && preg_match('/; unset P( U)?(;|$)/', rtrim($line)) === 1 && preg_match('/\s-p\S/', $line) === 0, 'roteiro do F5: senha lida sem eco e apagada na mesma linha: ' . substr($line, 0, 60));
+    }
 }
 
 echo "QA presence cutoff OK ({$checks} verificacoes)\n";

@@ -1036,36 +1036,12 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   a verificacao e o passo pos-deploy da D5; nao use o `git pull` deste item.
   Entra no roteiro consolidado da Parte B (deploy unico depois do F9).
 - Deploy que traz o F5 (Parte B, Calendario e relatorios no motor a partir da
-  data de corte): o roteiro completo entra no commit 5 do F5 e no roteiro
-  consolidado da Parte B. Ja decidido: **antes do registro do corte, nenhum
-  tecnico ativo de N1 ou N2 pode ficar sem regra vigente em nenhum dia da
-  primeira competencia do motor.** Com o corte, cada dia sem regra aparece
-  como "Sem escala: Nome" no Calendario, para todos os perfis, e conta como dia
-  sem escala no relatorio (em 2026-10-14 a contagem no dia do corte deu 6 no
-  servidor, com 22 ativos). Antes do registro, a gestao cadastra a regra de
-  cada um ou marca o cadastro como "fora do Mapa", e a consulta abaixo (so
-  contagens, nunca nome) roda de novo ate as duas colunas darem 0:
-  `sem_regra_no_corte` (sem regra vigente no dia do corte) e
-  `sem_regra_na_competencia` (algum dia de `@corte` ate `@corte` + 1 mes - 1
-  dia sem regra vigente: regra que termina dentro da competencia, que comeca
-  depois do corte ou buraco entre duas regras). **Com qualquer das duas maior
-  que 0, o registro do corte nao roda** (decisao do responsavel). Troque
-  `AAAA-MM-16` pela data do corte planejada. Regra `undefined` conta como sem
-  regra (P4). **Limitacao declarada:** regra `cycle` com configuracao invalida
-  conta como regra na consulta, mas o motor mostra o dia como "Sem escala";
-  a consulta nao a acusa.
-
-```bash
-read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET @corte := 'AAAA-MM-16'; WITH RECURSIVE dias (d) AS (SELECT CAST(@corte AS DATE) UNION ALL SELECT d + INTERVAL 1 DAY FROM dias WHERE d < @corte + INTERVAL 1 MONTH - INTERVAL 1 DAY) SELECT COUNT(*) AS ativos_n1_n2, COALESCE(SUM(NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= @corte AND (r.effective_until IS NULL OR r.effective_until >= @corte))), 0) AS sem_regra_no_corte, COALESCE(SUM(EXISTS (SELECT 1 FROM dias WHERE NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= dias.d AND (r.effective_until IS NULL OR r.effective_until >= dias.d)))), 0) AS sem_regra_na_competencia FROM funcionarios f WHERE f.ativo = 1 AND f.fora_mapa_escala = 0 AND LOWER(f.equipe) IN ('n1', 'n2');"; unset P
-```
-
-Validacao da consulta: no MySQL local do responsavel (2026-10-14), com
-regras de teste (uma que comeca em 20/10, uma que termina em 31/10, uma com
-buraco de 26/10 a 04/11 e uma aberta), 13 ativos, `sem_regra_no_corte = 8`
-e `sem_regra_na_competencia = 10`, os dois corretos. **No servidor:
-pendente** (preencher: `ativos_n1_n2 = 22` e `sem_regra_no_corte = 6`
-reproduzem a contagem do responsavel; `sem_regra_na_competencia = N`).
-
+  data de corte): siga o roteiro "Deploy que traz o F5", abaixo. Ensaio da 019
+  nas tres variantes, a 019 e o `git merge` do commit ensaiado juntos (com
+  `cat-file` e `pipefail`), a verificacao da 019 em cada etapa
+  (`inconsistente = 1` = PARAR), a consulta da pendencia 16c com as duas
+  colunas em 0 e so entao o registro do corte; nao use o `git pull` deste
+  item. Entra no roteiro consolidado da Parte B (deploy unico depois do F9).
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -1656,6 +1632,322 @@ alterar** (`rollback_014 abortado`): confira a copia, renomeie
 tire o login do `.env` e recarregue o PHP-FPM (D3). A sessao CI do arquivado e
 encerrada na requisicao seguinte (`SESSION_REVOKED` com `cadastro_inativo`).
 Restaurar nao devolve PA, escala nem ausencias: cadastre-os de novo.
+
+### Deploy que traz o F5 (Parte B, Calendario e relatorios no motor a partir da data de corte)
+
+Roteiro completo, na ordem. O F5 traz a migration 019 (tabela
+`portal_presence_cutoff`, vazia, com os gatilhos de imutabilidade), o script
+de registro da data de corte (rodado so no fim, depois da consulta da 16c), o
+relatorio, o CSV e o Calendario divididos no corte (antes dele, o calculo
+antigo sem nenhuma mudanca; a partir dele, o motor), a legenda unica no
+Calendario e na tela Escala, o filtro "Ocultar sem escala", os campos
+`categoria` e `parcial` (aditivos) no Calendario e `parcial` na tela Escala.
+Nao traz variavel nova no `.env`, nem mudanca em `.htaccess`, vhost ou
+dependencia do frontend. Desenho: `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secao
+9.7. **A Parte B entra num deploy unico depois do F9:** este roteiro vira a
+parte do F5 do roteiro consolidado, na mesma ordem (019 antes do `merge`; o
+registro do corte depois da recarga e da consulta da 16c).
+
+Todas as consultas deste roteiro devolvem **so contagens, estrutura e a data
+do corte**, nunca nome, login nem texto (a verificacao da 019 nao mostra
+`registered_by`). Onde aparece `<BRANCH>`, use o branch do deploy; onde
+aparece `<ServerName do vhost>`, o `ServerName` do VirtualHost do portal; onde
+aparece `<login do operador>`, o login AD de quem roda o registro (fica em
+`registered_by`, como autor). A senha do root do MySQL e sempre lida sem eco
+(`read -rsp`) e apagada no fim do comando (`unset P`); nunca a escreva no
+comando nem neste documento.
+
+**Regra de parada em todo o roteiro: a verificacao da 019 com
+`inconsistente = 1` manda PARAR e avisar o responsavel** (corte apagado sem o
+rollback, por exemplo por `TRUNCATE`, ou linha gravada fora do script de
+registro). Nao apague nem altere linha; nao rode o registro. Uma vez `1`,
+continua `1` (os eventos de auditoria sao de todos os tempos).
+
+**Pre-requisitos.** Deploys 1 a 12 no ar e o F4 aplicado (no roteiro
+consolidado, a parte do F4 vem antes desta). O codigo do F5 le as colunas da
+011 (`fora_mapa_escala`), da 012 (ausencias do F3) e da 014 (`arquivado_em`,
+historico do arquivado ate a vespera). Os gatilhos da 019 usam
+`CREATE TRIGGER IF NOT EXISTS`: **MySQL 8.0.29 ou mais novo**. Conferencia
+(esperado `mysql` 8.0.29 ou maior, `migrations_011_014 = 3` e
+`migration_012 = 3`):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT VERSION() AS mysql, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME IN ('fora_mapa_escala', 'arquivado_em', 'arquivado_por')) AS migrations_011_014, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_absences' AND COLUMN_NAME IN ('category', 'period_type', 'cancelled_by')) AS migration_012;"; unset P
+```
+
+**Janela.** Sem 503 e sem mudanca de numeros ate o registro: o codigo anterior
+nao le a tabela da 019, e o codigo do F5 sem corte registrado (tabela ausente
+ou vazia) usa o calculo antigo em todas as datas. Entre o `git merge` (passo
+6) e o build (passo 7), o navegador ainda carrega a tela anterior, que mostra
+os campos novos so pelo titulo (sem perda). O que muda ja na recarga, mesmo
+sem corte: a tela Escala com a legenda e o "Ocultar sem escala"; o filtro de
+status de presenca do Calendario (`Presencial`, `Remoto`, `Ausencia`,
+`Sem escala`, `Folga`) passa a filtrar a escala antiga pela modalidade.
+
+1. **Ponto de rollback e pre-checagem**: itens 1 e 2 de "Atualizacao de Versao
+   e Rollback" (anota `pre-deploy-commit`, `git status` vazio, `git fetch` e
+   preflight da versao nova com `RESULTADO=0`).
+
+2. **Backup**: item 3 da mesma secao. Esperado `backup concluido`; anote o
+   diretorio (ponto de restauracao do banco).
+
+3. **Branch, commit do ensaio, arquivos da versao nova e verificacao da 019
+   antes de tudo.** Os arquivos da 019 ainda nao estao na arvore (antes do
+   `git merge`): saem do commit com `git archive` para um diretorio
+   temporario. O `f5-commit` guarda o commit ensaiado: o passo 6 aplica
+   exatamente esse commit, sem novo `fetch` no meio.
+
+```bash
+cd /var/www/chronodesk
+B=$(sudo git rev-parse --abbrev-ref HEAD); [ "$B" = "<BRANCH>" ] && echo "branch OK: $B" || echo "PARE: o clone esta em $B, nao em <BRANCH>"
+sudo git rev-parse origin/<BRANCH> | sudo tee /var/backups/chronodesk/f5-commit
+E=$(sudo mktemp -d /root/ensaio-f5.XXXXXX); sudo git archive origin/<BRANCH> migrations | sudo tar -x -C "$E"; M=$E/migrations/20261013_019_presence_cutoff.sql; R=$E/migrations/rollback/20261013_019_presence_cutoff_down.sql; V=$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql; G=$E/migrations/20261013_019_registrar_corte.sql; sudo ls "$M" "$R" "$V" "$G"
+read -rsp 'Senha root do MySQL: ' P; echo; sudo cat "$V" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas; unset P
+```
+
+   Esperado (estado inicial, banco real): `tabela_019 = 0`, `checks_019 = 0`,
+   `gatilhos_019 = 0`, `copia_rollback = 0`, `procedimentos_soltos = 0`, o
+   aviso de tabela ausente no lugar do corte, `eventos_registro = 0`,
+   `eventos_remocao = 0` e `inconsistente = 0`. Diferente disso (por exemplo
+   `copia_rollback = 1` ou eventos de um registro anterior): **pare** e envie
+   as contagens.
+
+4. **Ensaio da 019** em banco descartavel, nas tres variantes, com os
+   arquivos do passo 3. O `scripts/ensaio-migration.sh` do servidor ja tem
+   `PREPARO` e `VERIFICA` (deploy 8) e nao mudou no F5; `audit_log` entra
+   como tabela extra (o registro e o rollback auditam). Cada variante roda a
+   migration (ou o registro) duas vezes e o rollback duas vezes, com a
+   verificacao em cada estado.
+
+```bash
+cd /var/www/chronodesk; sudo env VERIFICA="$V" bash scripts/ensaio-migration.sh f5 "$M" "$R" audit_log
+{ printf "SET @corte := '2099-12-16'; SET @autor := 'qa.ensaio';\n"; sudo cat "$G"; } | sudo tee "$E/registro_f5.sql" > /dev/null; sudo env PREPARO="$M" VERIFICA="$V" bash scripts/ensaio-migration.sh f5_registro "$E/registro_f5.sql" "$R" audit_log
+{ printf "SET @corte := '2020-01-16'; SET @autor := 'qa.ensaio';\n"; sudo cat "$G"; } | sudo tee "$E/registro_f5_passado.sql" > /dev/null; sudo env PREPARO="$M" VERIFICA="$V" bash scripts/ensaio-migration.sh f5_passado "$E/registro_f5_passado.sql" "$R" audit_log
+```
+
+   O que conferir:
+
+   - **(a) `f5`, a migration:** a 1a e a 2a execucao terminam no mesmo
+     estado, com `tabela_019 = 1`, `checks_019 = 2`, `gatilhos_019 = 2`,
+     `copia_rollback = 0`, `procedimentos_soltos = 0`, `cortes = 0`,
+     `sem_autor = 0` e `inconsistente = 0`. O 1o rollback volta a
+     `tabela_019 = 0` e `gatilhos_019 = 0`, com `copia_rollback = 1`. O **2o
+     rollback para** com `rollback_019 abortado: ja existe
+     portal_presence_cutoff_bkp_019 ...` (FALHOU no ensaio, de proposito) e o
+     estado fica igual ao do 1o.
+   - **(b) `f5_registro`, registro do corte com a 019 aplicada (PREPARO):** o
+     1o registro grava (`cortes = 1`, `corte = 2099-12-16`,
+     `corte_dia_16 = 1`, `corte_no_futuro = 1`, `sem_autor = 0`,
+     `eventos_registro = 1`, `inconsistente = 0`); o 2o **para** com
+     `registro_019 abortado: corte ja registrado (imutavel)` e o estado fica
+     igual (o procedimento recusado fica no banco de ensaio:
+     `procedimentos_soltos = 1` e esperado aqui). O 1o rollback copia a linha
+     e remove a tabela (`tabela_019 = 0`, `copia_rollback = 1`,
+     `eventos_remocao = 1`, `inconsistente = 0`); o 2o para de proposito.
+   - **(c) `f5_passado`, data passada:** as duas execucoes **param** com
+     `registro_019 abortado: data anterior a hoje` (`cortes = 0`,
+     `eventos_registro = 0`, `inconsistente = 0`; `procedimentos_soltos = 1`,
+     como em (b)); o rollback remove a tabela vazia.
+
+   Qualquer resultado diferente, ou `inconsistente = 1` em qualquer estado:
+   **pare o deploy** (nada foi alterado no banco real) e envie as contagens.
+   O diretorio temporario fica ate o fim do passo 6 (o `$V` e usado de novo
+   antes do `merge`); apague-o no passo 8.
+
+5. **Privilegios do usuario do banco da aplicacao (pendencia 16b, VULN-002).**
+   O `TRUNCATE` nao passa pelos gatilhos da 019 (o MySQL nao dispara gatilho
+   nele) e exige `DROP`; com `TRIGGER`, os gatilhos podem ser removidos. O
+   usuario da aplicacao (`DB_USER` do `.env`) nao deve ter nenhum dos dois. A
+   consulta devolve so a contagem de concessoes desses dois privilegios
+   (global, por banco e por tabela), sem senha:
+
+```bash
+U=$(sudo grep -E '^DB_USER=' /var/www/chronodesk/.env | cut -d= -f2- | tr -d "\"'"); read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT '$U' <> '' AS usuario_lido, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'DROP') AS concessoes_drop, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'TRIGGER') AS concessoes_trigger;"; unset P U
+```
+
+   Esperado: `usuario_lido = 1`, `concessoes_drop = 0` e
+   `concessoes_trigger = 0`. Com `usuario_lido = 0`, confira o nome da
+   variavel no `.env`. Com `DROP` ou `TRIGGER` maior que `0`: **nao bloqueia
+   este deploy por si** (a verificacao da 019 acusa o `TRUNCATE` com
+   `inconsistente = 1`), mas anote e avise o responsavel; a correcao (tirar
+   os dois privilegios do usuario da aplicacao) e decisao dele, ligada a
+   VULN-002. Para conferir a mao, `SHOW GRANTS FOR` o usuario e o host
+   (mostra os privilegios, nunca a senha).
+
+6. **019 e `git merge` em sequencia**, no mesmo comando. O `git cat-file -e`
+   confere antes que o arquivo existe na versao nova, e a aplicacao roda com
+   `pipefail`: sem ele, se o `git show` falhasse, o `mysql` receberia entrada
+   vazia, sairia com `0` e o `merge` rodaria sem a 019. O codigo do F5
+   funciona sem a tabela (calculo antigo em todas as datas), mas o registro do
+   corte depende dela. O `merge --ff-only` de `origin/<BRANCH>` aplica o
+   commit do ensaio (sem `fetch`); a linha seguinte confirma. Em seguida, a
+   verificacao da 019:
+
+```bash
+cd /var/www/chronodesk
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e origin/<BRANCH>:migrations/20261013_019_presence_cutoff.sql && bash -o pipefail -c 'sudo git show origin/<BRANCH>:migrations/20261013_019_presence_cutoff.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && sudo git merge --ff-only origin/<BRANCH>; unset P
+[ "$(sudo git rev-parse HEAD)" = "$(sudo cat /var/backups/chronodesk/f5-commit)" ] && echo "HEAD = commit do ensaio" || echo "PARE: HEAD diferente do commit do ensaio"
+sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_019_presence_cutoff_check.sql; unset P
+```
+
+   Esperado: `tabela_019 = 1`, `checks_019 = 2`, `gatilhos_019 = 2`,
+   `copia_rollback = 0`, `procedimentos_soltos = 0`, `cortes = 0`,
+   `sem_autor = 0`, `eventos_registro = 0`, `eventos_remocao = 0` e
+   **`inconsistente = 0`**. O `diff --stat` lista em `migrations/` so os
+   arquivos da 019 (a migration, o registro, o rollback e a verificacao). A
+   2a execucao da 019 (se repetida) imprime `1` pelos `SELECT 1`
+   (cosmetico).
+
+7. **Build do frontend e recarga do PHP-FPM** (limpa o OPcache; `reload` e
+   gracioso). O F5 nao muda vhost nem `.htaccess`: a recarga do Apache nao e
+   necessaria.
+
+```bash
+cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+8. **Verificacao pos-deploy, ainda sem corte, so com contagens.**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: <ServerName do vhost>' http://127.0.0.1/api/health.php
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < /var/www/chronodesk/migrations/verificacao/20261013_019_presence_cutoff_check.sql; unset P
+```
+
+   Esperado: health `200`; a verificacao da 019 como no passo 6
+   (`inconsistente = 0`). Em seguida, a checagem HTTP de
+   `scripts/test-linux.sh` (item 6 de "Atualizacao de Versao"). No fim,
+   apague o diretorio temporario do passo 3 (`sudo rm -r "$E"`; confira antes
+   que `$E` comeca com `/root/ensaio-f5.`).
+
+   Pelo navegador, sem gravar e sem anotar nomes: o Calendario e o relatorio
+   de qualquer competencia **iguais aos de antes** (sem corte, nada muda); a
+   tela Escala com a legenda (icone, cor e forma), o "Ocultar sem escala"
+   (desligado) e a coluna Origem com "Regra de escala"; no Calendario, o
+   filtro de status "Sem escala" sem nenhum evento e "Presencial" so com
+   escalas presenciais.
+
+9. **Pendencia 16c: nenhum tecnico ativo de N1 ou N2 sem regra vigente em
+   nenhum dia da primeira competencia do motor.** Com o corte, cada dia sem
+   regra aparece como "Sem escala: Nome" no Calendario, para todos os
+   perfis, e conta como dia sem escala no relatorio (em 2026-10-14 a contagem
+   no dia do corte deu 6 no servidor, com 22 ativos). Primeiro, a data do
+   corte (D2: o 1o dia da competencia seguinte ao deploy, competencia de 16 a
+   15; pode estar no futuro), guardada em `C` para os passos 9 e 10:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; C=$(docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -N sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT IF(DAYOFMONTH(CURDATE()) >= 16, DATE_FORMAT(CURDATE() + INTERVAL 1 MONTH, '%Y-%m-16'), DATE_FORMAT(CURDATE(), '%Y-%m-16'));"); unset P; [[ "$C" =~ ^[0-9]{4}-[0-9]{2}-16$ ]] && echo "corte planejado: $C" || echo "PARE: data do corte invalida ($C)"
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET @corte := '$C'; WITH RECURSIVE dias (d) AS (SELECT CAST(@corte AS DATE) UNION ALL SELECT d + INTERVAL 1 DAY FROM dias WHERE d < @corte + INTERVAL 1 MONTH - INTERVAL 1 DAY) SELECT COUNT(*) AS ativos_n1_n2, COALESCE(SUM(NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= @corte AND (r.effective_until IS NULL OR r.effective_until >= @corte))), 0) AS sem_regra_no_corte, COALESCE(SUM(EXISTS (SELECT 1 FROM dias WHERE NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= dias.d AND (r.effective_until IS NULL OR r.effective_until >= dias.d)))), 0) AS sem_regra_na_competencia FROM funcionarios f WHERE f.ativo = 1 AND f.fora_mapa_escala = 0 AND LOWER(f.equipe) IN ('n1', 'n2');"; unset P
+```
+
+   As duas colunas tem de dar `0`: `sem_regra_no_corte` (sem regra vigente
+   no dia do corte) e `sem_regra_na_competencia` (algum dia de `@corte` ate
+   `@corte` + 1 mes - 1 dia sem regra vigente: regra que termina dentro da
+   competencia, que comeca depois do corte ou buraco entre duas regras).
+   **Com qualquer das duas maior que 0, o registro do corte nao roda**
+   (decisao do responsavel): a gestao cadastra a regra de cada um ou marca o
+   cadastro como "fora do Mapa" pela tela, e a consulta roda de novo. O
+   deploy em si fica no ar (sem corte, tudo no calculo antigo): o registro
+   pode ser feito depois, no mesmo dia ou noutro antes da data, repetindo os
+   passos 9 e 10. Regra `undefined` conta como sem regra (P4).
+   **Limitacao declarada:** regra `cycle` com configuracao invalida conta
+   como regra na consulta, mas o motor mostra o dia como "Sem escala"; a
+   consulta nao a acusa.
+
+   Validacao da consulta: no MySQL local do responsavel (2026-10-14), com
+   regras de teste (uma que comeca em 20/10, uma que termina em 31/10, uma
+   com buraco de 26/10 a 04/11 e uma aberta), 13 ativos,
+   `sem_regra_no_corte = 8` e `sem_regra_na_competencia = 10`, os dois
+   corretos. **No servidor: pendente** (preencher: `ativos_n1_n2 = 22` e
+   `sem_regra_no_corte = 6` reproduzem a contagem do responsavel;
+   `sem_regra_na_competencia = N`).
+
+10. **Registro do corte**, so com as duas colunas do passo 9 em `0`, a
+    verificacao da 019 com `inconsistente = 0` (passo 8 ou repetida agora) e
+    o `C` do passo 9 na mesma sessao do shell. O script recusa (SIGNAL,
+    nada alterado) data passada, dia diferente de 16, data invalida e corte
+    ja registrado (imutavel). Grava a linha e o evento
+    `PRESENCE_CUTOFF_REGISTERED` (so a data) na mesma transacao.
+
+```bash
+cd /var/www/chronodesk; echo "corte a registrar: $C"; read -rsp 'Senha root do MySQL: ' P; echo; { printf "SET @corte := '%s'; SET @autor := '%s';\n" "$C" '<login do operador>'; cat migrations/20261013_019_registrar_corte.sql; } | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_019_presence_cutoff_check.sql; unset P
+```
+
+    Esperado: `cortes = 1`, `corte` = a data do passo 9, `corte_dia_16 = 1`,
+    `corte_no_futuro = 1` (o corte e sempre depois do dia do deploy),
+    `sem_autor = 0`, `eventos_registro = 1`, `eventos_remocao = 0`,
+    `procedimentos_soltos = 0` e **`inconsistente = 0`**. Com
+    `registro_019 abortado: ...`, nada foi gravado: confira `C` e a
+    mensagem, remova o procedimento que ficou
+    (`DROP PROCEDURE IF EXISTS registrar_corte_019`, a verificacao conta) e
+    envie a mensagem; nao tente gravar a linha a mao.
+
+    Pelo navegador, sem gravar e sem anotar nomes (o corte vale por data, nao
+    por hoje: competencias a partir dele ja mostram o motor):
+    - Calendario: a competencia anterior ao corte igual a de antes; a partir
+      da data do corte, o resumo do dia ("P · R · A · S") no Mes, um cartao
+      por tecnico na Semana, a legenda do motor no rodape e ausencia como
+      situacao; a categoria so como gestor e como o proprio; observacao
+      nunca.
+    - Relatorio da competencia que comeca no corte: aviso "Escala pelas
+      regras novas (corte em DD/MM/AAAA)." e "Dias de ausencia" e "Dias sem
+      escala"; o da competencia anterior sem aviso e com os numeros de antes;
+      o CSV da competencia anterior sem linha `aviso`.
+    - Anote no registro do deploy so as contagens da verificacao e a data do
+      corte.
+
+**Se a verificacao falhar:**
+
+- **`inconsistente = 1` em qualquer passo:** pare, nao rode o registro, nao
+  apague nem altere linha e avise o responsavel com as contagens.
+- **A 019 falhou** (passo 6; ou o `git cat-file` ou o `git show` falharam):
+  nada foi mesclado (o `pipefail` e o `&&` impedem) e o codigo anterior
+  continua no ar. A 019 confere o `information_schema` antes de criar a
+  tabela e usa `IF NOT EXISTS` nos gatilhos: pode ser repetida depois de
+  corrigida a causa; envie a mensagem de erro. Erro de sintaxe no
+  `CREATE TRIGGER IF NOT EXISTS`: o MySQL e anterior ao 8.0.29 (pre-requisito).
+- **A 019 terminou mas o `git merge` falhou**: como no F4 (o codigo anterior
+  continua no ar e nao le a tabela). Resolva a causa, **sem `fetch` e sem
+  `pull`**, rode so `sudo git merge --ff-only origin/<BRANCH>`, confira que
+  `HEAD` e o `f5-commit` e siga a partir da verificacao do passo 6.
+- **Consulta da 16c maior que 0:** nao e falha do deploy; o registro espera
+  (passo 9).
+- **Erro 500 ou 503 nas telas, health diferente de `200`, ou falha no build:**
+  rollback do codigo ("Rollback", acima: `git checkout --detach` do
+  `pre-deploy-commit`, build e recarga). A 019 e o corte podem ficar: o
+  codigo anterior nao le a tabela, e relatorio e Calendario voltam ao
+  calculo antigo em todas as datas, sem perda de dado.
+- **Corte registrado na data errada:** o corte e imutavel (os gatilhos barram
+  `UPDATE` e `DELETE`). Trocar so com aprovacao do responsavel: rollback da
+  019 (abaixo, audita `PRESENCE_CUTOFF_REMOVED`), a 019 de novo (passo 6, so
+  a parte da migration, com `cat-file` e `pipefail`) e os passos 9 e 10.
+- Restaurar o backup do passo 2 so como ultimo recurso (secao "Restauracao em
+  Incidente"): perde o que foi gravado depois dele.
+
+**Rollback da 019** (so com aprovacao; antes, o rollback do codigo se o
+objetivo for voltar ao calculo antigo, ou nao, se for so trocar a data do
+corte):
+
+```bash
+cd /var/www/chronodesk; export F5=$(sudo cat /var/backups/chronodesk/f5-commit)
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$F5:migrations/rollback/20261013_019_presence_cutoff_down.sql" && bash -o pipefail -c 'sudo git show "$F5:migrations/rollback/20261013_019_presence_cutoff_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 019 aplicado"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$F5:migrations/verificacao/20261013_019_presence_cutoff_check.sql" && bash -o pipefail -c 'sudo git show "$F5:migrations/verificacao/20261013_019_presence_cutoff_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P
+```
+
+Os arquivos sao lidos da versao do F5 (`f5-commit`, passo 3): depois de um
+`git checkout` do codigo anterior eles nao estao na arvore. Sem a mensagem
+"rollback da 019 aplicado", o rollback nao rodou. Esperado: `tabela_019 = 0`,
+`gatilhos_019 = 0`, `copia_rollback = 1`, `eventos_remocao` = 1 se havia corte
+e `inconsistente = 0`. Sem a tabela, o codigo do F5 volta ao calculo antigo
+em todas as datas. A copia `portal_presence_cutoff_bkp_019` guarda a data e o
+login de quem registrou (LGPD): apague-a a mao
+(`DROP TABLE portal_presence_cutoff_bkp_019`) depois de conferir, com
+aprovacao. Se ela ja existir (rollback anterior), o rollback **para antes de
+alterar** (`rollback_019 abortado`): confira a copia, renomeie
+(`RENAME TABLE portal_presence_cutoff_bkp_019 TO portal_presence_cutoff_bkp_019_<data>`)
+e repita.
 
 ## HTTPS Interno
 

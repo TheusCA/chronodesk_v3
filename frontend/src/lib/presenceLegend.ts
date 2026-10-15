@@ -77,17 +77,16 @@ export function isEngineScheduleEvent(event: CalendarEventLike): boolean {
   return event.event_type === 'schedule' && typeof event.situacao === 'string'
 }
 
-// Linha da tela Escala (schedules.php, sem o campo parcial): marcador da
-// parcial no detalhe do motor (" · Ausente a partir de HH:MM" ou
-// " · Ausente HH:MM–HH:MM"); o dia continua pela situação.
-export function partialMarkerInDetail(situacao: unknown, detalhe: unknown): boolean {
-  return typeof situacao === 'string' && situacao !== 'ausente' && /· Ausente /u.test(String(detalhe ?? ''))
+// Horário do marcador da parcial, do campo parcial do servidor (ausente sem
+// marcador e no dia de ausência de dia inteiro); só em dia do motor (com
+// situacao). Linha da tela Escala (schedules.php, commit 5).
+export function rowPartialTime(row: { situacao?: unknown, parcial?: unknown }): string | null {
+  return typeof row.situacao === 'string' && typeof row.parcial === 'string' && row.parcial !== '' ? row.parcial : null
 }
 
-// [Ajuste b] Calendário: o horário do marcador vem do campo parcial do
-// servidor (ausente sem marcador e no dia de ausência de dia inteiro).
+// [Ajuste b] Calendário: o mesmo campo, só no evento de escala do motor.
 export function partialTime(event: CalendarEventLike): string | null {
-  return isEngineScheduleEvent(event) && typeof event.parcial === 'string' && event.parcial !== '' ? event.parcial : null
+  return isEngineScheduleEvent(event) ? rowPartialTime(event) : null
 }
 
 export function hasPartialMarker(event: CalendarEventLike): boolean {

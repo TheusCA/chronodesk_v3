@@ -12,7 +12,7 @@ import { ACTION_FEEDBACK, decisionFeedback, importFeedback } from '../lib/action
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { reportFiltersSchema, scheduleRuleSchema } from '../lib/formSchemas'
-import { partialMarkerInDetail, presenceCutoffNotice, presenceCutoffTitle, presenceLegendItem } from '../lib/presenceLegend'
+import { presenceCutoffNotice, presenceCutoffTitle, presenceLegendItem, rowPartialTime } from '../lib/presenceLegend'
 import { queryKeys } from '../lib/queryKeys'
 import {
   DetailPill,
@@ -735,7 +735,7 @@ export function SchedulePage({ session, notify }) {
             </label>
             <table className="data-table">
               <thead><tr><th>Data</th><th>Colaborador</th><th>Equipe</th><th>Modalidade</th><th>Origem</th></tr></thead>
-              <tbody>{generatedRows.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td className="whitespace-nowrap">{teamLabel(item.team)}</td><td>{presenceLegendItem(item.presence_type) ? <PresenceBadge status={item.presence_type} label={statusLabel(item.presence_type)} /> : <Status value={item.presence_type} />}{(item.presence_type === 'absence' || partialMarkerInDetail(item.situacao, item.detalhe)) && item.detalhe && <small className="mt-1 flex items-center gap-1">{item.presence_type !== 'absence' && <PartialMarker />}{item.detalhe}</small>}</td><td>{scheduleSourceLabel(item)}</td></tr>)}</tbody>
+              <tbody>{generatedRows.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td className="whitespace-nowrap">{teamLabel(item.team)}</td><td>{presenceLegendItem(item.presence_type) ? <PresenceBadge status={item.presence_type} label={statusLabel(item.presence_type)} /> : <Status value={item.presence_type} />}{(item.presence_type === 'absence' || rowPartialTime(item) !== null) && item.detalhe && <small className="mt-1 flex items-center gap-1">{rowPartialTime(item) !== null && <PartialMarker time={rowPartialTime(item)} />}{item.detalhe}</small>}</td><td>{scheduleSourceLabel(item)}</td></tr>)}</tbody>
             </table>
             {generatedRows.length === 0 && <p className="mt-3 text-sm text-slate-500">Todos os dias do filtro estão sem escala.</p>}
             <p className="mt-3 text-xs text-slate-500">Dias úteis de segunda a sexta; sábado e domingo só aparecem com exceção de trabalho. Quem não tem regra aparece como “Sem escala”. Ausência aparece sem a categoria.</p>

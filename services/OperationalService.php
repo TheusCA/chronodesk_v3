@@ -388,7 +388,8 @@ final class OperationalService {
             'exceptions' => $exceptions,
             // [F2B] Tela Escala no motor (decisao 1 do plano): P3, P4 e ausencia
             // valem aqui; Calendario e Relatorios ficam no calculo antigo ate o F5.
-            'generated' => $this->engineSchedule($from, $to, $team, $employeeId, $rules, $exceptions),
+            // [F5, commit 5] Com o campo parcial (aditivo), como no Calendario.
+            'generated' => $this->engineSchedule($from, $to, $team, $employeeId, $rules, $exceptions, false, false, true),
         ];
     }
 
@@ -1816,7 +1817,8 @@ final class OperationalService {
         array $rules,
         array $exceptions,
         bool $withArchived = false,
-        bool $withAbsenceCategory = false
+        bool $withAbsenceCategory = false,
+        bool $withPartial = false
     ): array {
         $rulesByEmployee = [];
         foreach ($rules as $rule) {
@@ -1885,7 +1887,8 @@ final class OperationalService {
                     'origem' => $presence['origem'],
                     'detalhe' => $presence['detalhe'],
                     'escala' => $presence['escala'],
-                ] + ($withAbsenceCategory ? ['ausencias' => $presence['ausencias']] : []);
+                ] + ($withAbsenceCategory ? ['ausencias' => $presence['ausencias']] : [])
+                  + ($withPartial ? self::partialField($presence) : []);
             }
         }
         return $items;
@@ -1906,7 +1909,7 @@ final class OperationalService {
         $rules = $this->scheduleRules($team, $employeeId, $from, true, true);
         $exceptions = $this->scheduleExceptions($from, $to, $team, $employeeId);
         $events = [];
-        foreach ($this->engineSchedule($from, $to, $team, $employeeId, $rules, $exceptions, true, true) as $row) {
+        foreach ($this->engineSchedule($from, $to, $team, $employeeId, $rules, $exceptions, true, true, true) as $row) {
             $typeMatches = !in_array($type, ['onsite', 'remote', 'absence'], true)
                 || $row['presence_type'] === $type
                 || ($type === 'absence' && self::calendarHasPartialMarker($row['ausencias']));
@@ -1925,8 +1928,7 @@ final class OperationalService {
             }
             // [F5, ajuste b do commit 4] Campos aditivos: categoria so para a
             // gestao e o proprio (P9), ausente nos demais; parcial = horario
-            // do marcador (so quando o dia nao e ausencia de dia inteiro).
-            $partial = $row['situacao'] === 'ausente' ? null : PresenceEngine::partialMarkerLabel($row['ausencias']);
+            // do marcador (partialField, o mesmo da tela Escala).
             $events[] = [
                 'id' => 'schedule-' . $row['employee_id'] . '-' . $row['date'],
                 'event_type' => 'schedule',
@@ -1941,9 +1943,20 @@ final class OperationalService {
                 'origem' => $row['origem'],
                 'detalhe' => $row['detalhe'],
             ] + ($categoryLabel === '' ? [] : ['categoria' => $categoryLabel])
-              + ($partial === null ? [] : ['parcial' => $partial]);
+              + (isset($row['parcial']) ? ['parcial' => $row['parcial']] : []);
         }
         return $events;
+    }
+
+    /**
+     * [F5] Campo parcial (aditivo) do dia do motor: o horario do marcador da
+     * ausencia parcial ("09:00–10:00" ou "a partir de 15:00"), a mesma regra
+     * do detalhe; sem marcador, ou no dia de ausencia de dia inteiro, a chave
+     * nao vem. Calendario (ajuste b do commit 4) e tela Escala (commit 5).
+     */
+    private static function partialField(array $presence): array {
+        $partial = $presence['situacao'] === 'ausente' ? null : PresenceEngine::partialMarkerLabel($presence['ausencias']);
+        return $partial === null ? [] : ['parcial' => $partial];
     }
 
     /**

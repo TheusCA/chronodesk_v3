@@ -1081,15 +1081,34 @@ $pdo->absences = [
     ['employee_id' => 1, 'starts_on' => '2026-10-07', 'ends_on' => '2026-10-07', 'period_type' => 'from_time', 'start_time' => '14:00:00', 'end_time' => null],
     ['employee_id' => 1, 'starts_on' => '2026-10-08', 'ends_on' => '2026-10-08', 'period_type' => 'interval', 'start_time' => '10:00:00', 'end_time' => '12:00:00'],
     ['employee_id' => 1, 'starts_on' => '2026-10-08', 'ends_on' => '2026-10-08', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null],
+    ['employee_id' => 1, 'starts_on' => '2026-10-09', 'ends_on' => '2026-10-09', 'period_type' => 'interval', 'start_time' => '09:00:00', 'end_time' => '10:00:00'],
+    ['employee_id' => 1, 'starts_on' => '2026-10-09', 'ends_on' => '2026-10-09', 'period_type' => 'from_time', 'start_time' => '15:00:00', 'end_time' => null],
+    ['employee_id' => 4, 'starts_on' => '2026-10-07', 'ends_on' => '2026-10-07', 'period_type' => 'interval', 'start_time' => '11:00:00', 'end_time' => '11:30:00'],
+    ['employee_id' => 1, 'starts_on' => '2026-10-05', 'ends_on' => '2026-10-05', 'period_type' => 'from_time', 'start_time' => null, 'end_time' => null],
 ];
 $partialView = [];
-foreach ($service->scheduleData(['from' => '2026-10-07', 'to' => '2026-10-08', 'employee_id' => '1'])['generated'] as $item) {
-    $partialView[$item['date']] = [$item['presence_type'], $item['source'], $item['detalhe']];
+$partialGenerated = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-09'])['generated'];
+foreach ($partialGenerated as $item) {
+    if (in_array($item['employee_id'], [1, 4], true) && $item['date'] >= '2026-10-07' || $item['employee_id'] === 1 && $item['date'] === '2026-10-05') {
+        $partialView[$item['employee_id'] . ':' . $item['date']] = [$item['presence_type'], $item['source'], $item['detalhe'], $item['parcial'] ?? null, array_key_exists('parcial', $item)];
+    }
 }
+ksort($partialView);
 assert_same([
-    '2026-10-07' => ['remote', 'rule', 'Remoto (dias pares) · Ausente a partir de 14:00'],
-    '2026-10-08' => ['absence', 'absence', 'Ausente (dia todo)'],
-], $partialView, 'motor: parcial vira marcador; dia inteiro continua ausente');
+    '1:2026-10-05' => ['remote', 'rule', 'Remoto (dias pares)', null, false],
+    '1:2026-10-07' => ['remote', 'rule', 'Remoto (dias pares) · Ausente a partir de 14:00', 'a partir de 14:00', true],
+    '1:2026-10-08' => ['absence', 'absence', 'Ausente (dia todo)', null, false],
+    '1:2026-10-09' => ['remote', 'rule', 'Remoto (dias pares) · Ausente 09:00–10:00', '09:00–10:00', true],
+    '4:2026-10-07' => ['no_schedule', 'none', 'Sem escala definida · Ausente 11:00–11:30', '11:00–11:30', true],
+    '4:2026-10-08' => ['no_schedule', 'none', 'Sem escala definida', null, false],
+    '4:2026-10-09' => ['no_schedule', 'none', 'Sem escala definida', null, false],
+], $partialView, 'motor: parcial vira marcador; dia inteiro continua ausente; [F5, commit 5] campo parcial com o horario do marcador (menor inicio; sem escala tambem), sem a chave no dia inteiro, sem marcador e na parcial sem inicio valido');
+// [F5, commit 5] parcial sempre igual ao marcador do detalhe; sem observacao.
+foreach ($partialGenerated as $item) {
+    $marker = isset($item['parcial']) ? ' · Ausente ' . $item['parcial'] : '';
+    assert_same(true, $marker === '' ? strpos($item['detalhe'], ' · Ausente ') === false : substr($item['detalhe'], -strlen($marker)) === $marker, "motor: parcial de {$item['employee_id']}:{$item['date']} igual ao marcador do detalhe");
+}
+assert_same(false, strpos((string)json_encode($partialGenerated), '"parcial":null') !== false, 'motor: parcial ausente em vez de nulo');
 assert_same(['onsite', 'implicit', 'always_onsite', OperationalService::LEADERSHIP_RULE_LABEL], [$byKey['3:2026-10-05']['presence_type'], $byKey['3:2026-10-05']['source'], $byKey['3:2026-10-05']['rule_type'], $byKey['3:2026-10-05']['rule_label']], 'motor: Lideranca presencial (regra fixa)');
 $monday = array_values(array_filter($view['generated'], static fn (array $item): bool => $item['date'] === '2026-10-05'));
 assert_same([3, 1, 2, 4], array_column($monday, 'employee_id'), 'motor: um item por cadastro por dia, por nome');
