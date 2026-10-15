@@ -665,6 +665,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem servidor nem MySQL na estacao: o roteiro nao foi executado; a consulta de privilegios da 16b (formato do `GRANTEE`) e o ensaio da 019 so ficam provados no servidor ou no MySQL do responsavel. Tela nao aberta contra o backend real. Semana em 390 px fica para o lote de acabamento. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-15**, com as sete decisoes como estao, apos revisao do responsavel no MySQL 8.0.46 local. Passo 5 (16b), comando do roteiro com um `.env` de teste e usuarios de teste, removidos depois: so `SELECT`/`INSERT`/`UPDATE`/`DELETE` deu `usuario_lido` 1, drop 0, trigger 0; `ALL` no banco, 1/1/1; root, 1/1/1; `DB_USER` vazio, `usuario_lido` 0; `TRIGGER` numa tabela, noutro host do mesmo usuario, 1/0/1; `.env` com e sem aspas; o formato do `GRANTEE` (`'usuario'@'host'`) confere no MySQL 8.0. Passo 9: a data do corte em 15/10 deu 2026-10-16; simulada para 16/10, 20/12 e 31/01, deu 16/11, 16/01 e 16/02; a consulta da 16c com o `C` do passo deu 13 ativos e 11 nas duas colunas (base local). `qa-presence-cutoff` (597), `qa-schedule-history`, `qa-presence-engine` e `qa-calendar-presence` OK. **F5 completo**, no deploy unico da Parte B. Pedido para o roteiro consolidado (pendencia 16): o `merge` e o `cat-file`/`show` da migration leem o commit salvo do ensaio (`fN-commit`), nao `origin/<BRANCH>`. |
 
+### Parte B, F6 — plano (Mapa PA no motor) — 2026-10-15
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Plano do F6 (Mapa PA no motor: RF-05, RF-06 e RF-08; L-02, L-03, L-09, L-10; P13; D6), so documento, antes de qualquer codigo. |
+| **Branch e commits** | Commit deste registro (desenho, secao 9.8). Sem push. |
+| **O que a IA alterou** | `docs/DESENHO_PA_ESCALA_AUSENCIA.md` (secao 9.8 e a situacao no topo). Nenhum codigo. |
+| **Decisoes propostas** | DF1 a DF11 (desenho 9.8); destaques: o mapa nao le a data de corte (motor em todas as datas); sem relogio; conflito so de aviso, calculado por dia na semana seg a sex; horizonte do aviso ao salvar; **achado novo DF7**: o `GET` do mapa devolve a qualquer perfil logins, observacao do vinculo e a lista de elegiveis com login. |
+| **Validacao executada pela IA** | Leitura do codigo (`PaMapService.php`, `api/portal/pa_map.php`, `PaMapPage.jsx`, `OperationalService::engineSchedule`, `PresenceService`) e das secoes do desenho citadas no plano. Nenhum teste rodado (sem codigo). |
+| **Limitacoes declaradas** | Os numeros do servidor (Q-F6, so contagens) ainda nao foram medidos; a Q5 da secao 2.8 nunca rodou. |
+| **Validacao humana** | Pendente: aprovacao do plano antes de qualquer codigo. |
+
 ---
 
 ## 5. Responsabilidade
