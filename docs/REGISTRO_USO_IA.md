@@ -653,6 +653,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: backend so contra o banco simulado; tela nao aberta contra o backend real; semana em 390 px nao conferida. A remocao da skill browser-use das outras sete pastas de assistentes foi pedida, mas o hook de Seguranca da Informacao bloqueia comandos de remocao; nao foi contornado: o comando foi entregue ao responsavel. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-15**, com as sete decisoes, apos revisao do responsavel com o front novo contra o backend real e o MySQL 8.0.46 local (mesma massa da revisao anterior; corte 2026-10-16 inserido direto; 1366, 1920 e 390 px; gestor, tecnico e somente leitura): `categoria` e `parcial` com chaves so com valor; tecnico 9 com a propria categoria ("Compromisso") e so o horario da parcial dos outros; somente leitura so com a propria ("Ferias"); observacao nunca, em nenhum perfil; `status=no_schedule` sem nada antes de 16/10; `status=onsite` so presenciais nos dois lados; sem filtro, a escala antiga igual; cartao do dia sem texto repetido, com "Categoria: ..."; cores da legenda presentes no CSS gerado (verde, azul-claro, laranja e o tracejado do sem escala); semana em 1366 px com nome em duas linhas, cor, icone e marcador, `title` com o texto completo; `qa-presence-cutoff` (566), `qa-presence-engine`, `qa-calendar-presence` e typecheck OK. Massa removida e tabela do corte esvaziada depois. **O defeito das cores passou tambem na revisao anterior do responsavel:** os prints dele ja mostravam o resumo sem cor. Na decisao 3, o `parcial` entra no `schedules.php` no commit 5. Pendencia do lote de acabamento registrada: semana do Calendario em 390 px (so icone e letra, cerca de 14 cartoes por dia); proposta de lista, um dia embaixo do outro. |
 
+### Parte B, F5 — commit 5 (ponta a ponta, contratos e roteiro do deploy) — 2026-10-15
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Fechar o F5 (desenho 9.7, commit 5): `parcial` na tela Escala, celula do dia no topo, roteiro "Deploy que traz o F5", contratos de `calendar.php`, `schedules.php` e `reports.php` com o corte e LGPD 5.3. |
+| **Branch e commits** | `a42269c` (aprovacao dos ajustes e pedidos), `6f87c4e` (codigo, roteiro, contratos e testes) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `services/OperationalService.php` (`partialField`, flag `$withPartial`), `presenceLegend.ts`, `OperationalPages.jsx`, `CalendarPage.jsx`, `DEPLOY_LINUX.md`, `docs/API_CONTRACTS_FRONTEND.md`, `docs/DOCUMENTACAO_TECNICA.md` (LGPD 5.3), `qa-schedule-history`, `qa-presence-cutoff` (secao 5: travas do roteiro), `qa:calendar-presence`; desenho 9.7. |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.7); destaques: relatorio sem `parcial`; a correcao da celula vale tambem para o Mes; sem ponta a ponta novo no `qa-security` (ator ja conferido pelo SEC-07b, matriz sem mudanca); 16b por contagem no `information_schema`, sem bloquear o deploy; 16c maior que 0 adia o registro, nao derruba o deploy. |
+| **Validacao executada pela IA** | Bateria PHP completa (`qa-presence-cutoff` 597), 16 `qa:*`, lint e typecheck; mutacao 22/22 (backend e roteiro) e 50/50 (frontend); prints com servidor simulado e Chrome sem janela em perfil proprio do scratchpad. |
+| **Limitacoes declaradas** | Sem servidor nem MySQL na estacao: o roteiro nao foi executado; a consulta de privilegios da 16b (formato do `GRANTEE`) e o ensaio da 019 so ficam provados no servidor ou no MySQL do responsavel. Tela nao aberta contra o backend real. Semana em 390 px fica para o lote de acabamento. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do responsavel antes de fechar o F5. |
+
 ---
 
 ## 5. Responsabilidade

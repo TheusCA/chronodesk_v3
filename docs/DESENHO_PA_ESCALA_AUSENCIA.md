@@ -1923,6 +1923,35 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 
 **Pendência do lote de acabamento (registrada em 2026-10-15, junto com a 17):** Calendário, visão Semana em 390 px: cada cartão mostra só o ícone e uma letra, e com o motor são cerca de 14 cartões por dia. Proposta: em telas estreitas, a semana vira lista, um dia embaixo do outro, com os cartões completos. Não entra no F5.
 
+**Commit 5 entregue (2026-10-15, `6f87c4e`; aguardando a revisão do responsável antes de fechar o F5):** ponta a ponta, contratos e roteiro.
+
+| Arquivo | Como ficou |
+|---|---|
+| `services/OperationalService.php` | `engineSchedule` ganha `$withPartial`: com ele, cada dia leva `parcial` (`partialField`: `PresenceEngine::partialMarkerLabel` sobre os itens do motor; sem marcador, na parcial sem início válido e no dia de ausência de dia inteiro, a chave não vem). Ligado no `scheduleData` (tela Escala) e no `calendarEngineEvents` (que passou a repassar o campo em vez de calcular); desligado no relatório |
+| `frontend/src/lib/presenceLegend.ts` | `rowPartialTime` (linha com `situacao` e `parcial` texto não vazio); `partialTime` usa ela só no evento de escala do motor; sai `partialMarkerInDetail` (nenhum marcador é mais lido do texto do detalhe) |
+| `frontend/src/pages/OperationalPages.jsx` | Tela Escala: marcador e horário pelo `parcial` |
+| `frontend/src/pages/CalendarPage.jsx` | Célula do dia (botão) com `flex flex-col justify-start`: o conteúdo começa no topo em todas as colunas |
+| `DEPLOY_LINUX.md` | Roteiro "Deploy que traz o F5" (pré-requisitos com MySQL 8.0.29+, janela, passos 1 a 10, falhas e rollback da 019); o item do resumo virou ponteiro, e a consulta da 16c foi para o passo 9 com o texto aprovado |
+| `docs/API_CONTRACTS_FRONTEND.md` | `calendar.php`, `schedules.php` e `reports.php` com o corte, os campos novos e os filtros |
+| `docs/DOCUMENTACAO_TECNICA.md` | LGPD 5.3: situação do técnico no Calendário e no relatório, e o autor do corte (`registered_by`) |
+| `scripts/qa-schedule-history.php` | `parcial` na tela Escala: "a partir de", intervalo (menor início), sem escala, dia inteiro, parcial sem início; igual ao marcador do detalhe; chave ausente em vez de nula |
+| `scripts/qa-presence-cutoff.php` | Relatório sem `parcial`; **seção 5, travas do roteiro**: comandos em uma linha, sem `pull`/`fetch`, 019 e `merge --ff-only` na mesma linha com `cat-file` e `pipefail`, `f5-commit` gravado e conferido, branch antes do archive, ensaio nas três variantes antes do merge, verificação da 019 antes da 019, depois do merge, no pós-deploy e logo depois do registro, data do corte pela D2 e conferida no formato, consulta da 16c com o texto aprovado antes do registro, 16b em contagem antes do registro, as duas regras de parada no texto, nenhuma consulta com nome, login ou autor, senha lida sem eco e apagada na mesma linha |
+| `frontend/scripts/qa-calendar-presence.mjs` | `rowPartialTime` (casos), nenhuma tela lê o marcador do detalhe, tela Escala pelo `parcial`, célula no topo, evento que não é escala com `situacao` e `parcial` |
+
+**Decisões de implementação do commit 5 (a aprovar):**
+
+1. **`parcial` num lugar só:** calculado no `engineSchedule` (flag `$withPartial`) e ligado no Calendário e na tela Escala. **O relatório fica sem ele** (o contrato do relatório não muda; o marcador continua no `detalhe`).
+2. **A correção da célula vale também para o Mês** (é o mesmo botão): nos dias com poucos eventos, e nos fins de semana, o número do dia passa a ficar no topo também no Mês, com ou sem corte. É a única mudança visual sem corte deste commit.
+3. **Sem ponta a ponta novo no `qa-security`:** o `calendar.php` passa ao serviço o mesmo `portal_actor($role)` que o ponta a ponta do SEC-07b já confere por perfil, e a matriz de permissões não muda (Calendário para todos; relatório só gestão). O caminho do motor por perfil fica no `qa-presence-cutoff` (serviço) e nos testes do responsável no navegador. Emular o motor no banco simulado do `qa-security` duplicaria o do `qa-presence-cutoff`.
+4. **Pendência 16b em contagem, não pelo `SHOW GRANTS`:** a consulta conta as concessões de `DROP` e `TRIGGER` do `DB_USER` do `.env` no `information_schema` (global, por banco e por tabela), sem expor outros privilégios; o `SHOW GRANTS` fica citado para conferência à mão. **Não bloqueia o deploy por si**: a decisão de tirar os privilégios fica com o responsável (VULN-002).
+5. **16c maior que 0 não é falha do deploy:** sem corte, tudo segue no cálculo antigo; o registro pode ser feito depois, antes da data, repetindo os passos 9 e 10.
+6. **Data do corte pela consulta da D2** (`C`, conferida no formato `AAAA-MM-16`), usada na 16c e no registro na mesma sessão do shell; deploy a partir do dia 16 registra o dia 16 do mês seguinte.
+7. **Travas do roteiro testadas pelo `qa-presence-cutoff`** (seção 5), com mutação: é o primeiro roteiro do `DEPLOY_LINUX.md` com teste.
+
+**Validação pela IA:** bateria PHP completa (`qa-presence-cutoff` com 597 verificações, `qa-schedule-history`, `qa-schedule-legacy-output` com as 17 saídas idênticas), os 16 `qa:*`, lint e typecheck; **mutação 22/22** no backend e no roteiro (`parcial` no relatório, sem `parcial`, flag desligada em cada tela, dia inteiro, nulo em vez de ausente; roteiro sem `pipefail`, sem `cat-file`, merge com `;`, `pull`, 16c em outra data, data sem conferência, as duas regras de parada, sem verificação depois do registro, consulta com o autor, senha sem `unset`, comando em duas linhas, sem `f5-commit`, 16b sem `TRIGGER`, sem a variante c; um mutante inválido na 1ª rodada por escape errado no próprio mutante, corrigido) e **50/50** no frontend (22 das anteriores que ainda se aplicam e 28 novas; um sobrevivente na 1ª rodada por falta de caso, morto depois). Prints com servidor simulado em Chrome sem janela com perfil próprio: semana do corte (12 a 18/10) em 1366 px com o número do dia a 8 px do topo nas sete colunas; tela Escala com os três marcadores e o horário no nome acessível. **Não verificado:** o roteiro não foi executado (sem servidor nem MySQL na estação): ensaio, a consulta de privilégios da 16b (o formato do `GRANTEE` no `information_schema` precisa ser conferido no MySQL 8.0 do servidor) e o registro só ficam provados no ensaio; a tela contra o backend real; a semana em 390 px (pendência do lote de acabamento).
+
+**Como testar (sugestão):** (1) no MySQL local, com a massa de antes e o corte inserido direto: tela Escala com o marcador e o horário nos dias com parcial (inclusive sem escala), sem marcador no dia inteiro; `schedules.php` (DevTools) com `parcial` só nesses dias; relatório sem `parcial`; (2) Calendário em 1366 px, Semana e Mês, com o número do dia no topo em todas as colunas; (3) ler o roteiro "Deploy que traz o F5" e, se quiser, rodar o passo 5 (16b) e o passo 9 (data do corte e 16c) no MySQL local, que só leem.
+
 ---
 
 ## 10. Riscos e pendências
