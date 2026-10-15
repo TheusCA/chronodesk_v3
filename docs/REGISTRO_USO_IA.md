@@ -675,7 +675,7 @@ Base da afirmação:
 | **Decisoes propostas** | DF1 a DF11 (desenho 9.8); destaques: o mapa nao le a data de corte (motor em todas as datas); sem relogio; conflito so de aviso, calculado por dia na semana seg a sex; horizonte do aviso ao salvar; **achado novo DF7**: o `GET` do mapa devolve a qualquer perfil logins, observacao do vinculo e a lista de elegiveis com login. |
 | **Validacao executada pela IA** | Leitura do codigo (`PaMapService.php`, `api/portal/pa_map.php`, `PaMapPage.jsx`, `OperationalService::engineSchedule`, `PresenceService`) e das secoes do desenho citadas no plano. Nenhum teste rodado (sem codigo). |
 | **Limitacoes declaradas** | Os numeros do servidor (Q-F6, so contagens) ainda nao foram medidos; a Q5 da secao 2.8 nunca rodou. |
-| **Validacao humana** | Pendente: aprovacao do plano antes de qualquer codigo. |
+| **Validacao humana** | **Plano aprovado em 2026-10-15**, com DF1 a DF11 como recomendadas, inclusive a DF7 (para quem nao edita o mapa, sem `employees`, `employee_login`, `notes`, `created_by` e `updated_by`; nome, equipe, PA e situacao para todos). Q-F6 validada pelo responsavel no MySQL 8.0.46 local, com vinculos de teste depois removidos: colunas certas (PAs compartilhados, Lideranca, observacao vazia nao conta, ciclo gravado como `undefined` sem divergencia); **achado:** `copia_tipo_divergente_hoje` contava a Lideranca (sem regra, `always_onsite` x `undefined`, mas presencial pela regra fixa no motor); correcao `AND a.team <> 'lideranca'` aplicada no comando da 9.8. **Q-F6 no servidor: pendente** (os campos vieram em branco na mensagem de aprovacao). |
 
 ---
 
