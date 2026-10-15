@@ -2018,7 +2018,32 @@ O que cada número decide: `pas_compartilhados_hoje` e `vinculos_lideranca` dime
 
 **Validação da Q-F6 no MySQL 8.0.46 local (responsável, 2026-10-15, com vínculos de teste depois removidos):** as colunas contaram certo (PAs compartilhados, Liderança, observação, em que a vazia não conta, ciclo gravado como `undefined` sem divergência). **Achado:** a `copia_tipo_divergente_hoje` contava como divergente o vínculo da Liderança: sem regra cadastrada, a comparação vira `always_onsite` × `undefined`, mas no motor a Liderança é presencial pela regra fixa (P12). Correção aplicada no comando acima: `AND a.team <> 'lideranca'` nessa coluna.
 
-**Q-F6 no servidor: pendente.** Na mensagem de aprovação, os 14 campos vieram em branco (`pas_inventario = [ ]` e os demais; falha na colagem, confirmada pelo responsável em 2026-10-15; os números vêm antes do commit 2). Os números ainda precisam ser anotados aqui; o commit 1 do F6 foi feito sem eles, tolerando os casos de dado antigo (sobreposição do mesmo colaborador, período invertido, vínculo fora do inventário, inativo e fora do Mapa) sem quebrar a leitura. Se algum deles vier maior que 0, o tratamento é decidido antes do deploy.
+**Q-F6 no servidor (responsável, 2026-10-15, antes da Parte B).** Na aprovação do plano, os campos vieram em branco por falha na colagem; os números vieram depois, antes do commit 2. Sem a migration 011 no servidor, a coluna `fora_mapa_escala` ainda não existe, e a 1ª consulta rodou na variante sem `vinculos_fora_do_mapa` (abaixo).
+
+| Coluna | Servidor | Leitura |
+|---|---|---|
+| `pas_inventario` | 16 | — |
+| `vinculos_ativos` | 20 | — |
+| `vinculos_vigentes_ou_futuros` | 20 | — |
+| `pas_compartilhados_hoje` | 6 | Com `vinculos_lideranca`, até 6 PAs podem aparecer em conflito no primeiro dia: é aviso, não bloqueio (P13). **Avisar a gestão antes do deploy** |
+| `vinculos_de_inativos` | 1 | O mesmo caso da Q-F4 (inativo com PA aberto). O passo da D5 do F4 no pós-deploy arquiva o cadastro e fecha o PA; até lá, a D13 já o tira do mapa de hoje em diante. Não bloqueia o F6 |
+| `vinculos_fora_do_mapa` | não medido | Coluna da 011, ainda não aplicada no servidor; medir no roteiro consolidado, depois das migrations |
+| `vinculos_lideranca` | 2 | Ver `pas_compartilhados_hoje` |
+| `sobreposicoes_mesmo_colaborador` | 0 | — |
+| `periodo_invertido` | 0 | — |
+| `vinculos_fora_do_inventario` | 0 | — |
+| `copia_tipo_divergente_hoje` | 3 | Três cartões mudam de aparência só por trocar a cópia pelo motor (L-02), como esperado |
+| `vinculos_com_observacao` | 0 | A DF7 não esconde, hoje, nenhuma observação existente; continua valendo para as próximas |
+| `legado_total` | 1 | Só no passado (`legado_futuro` = 0): a tabela antiga continua só leitura (DF10); retirada num lote próprio, depois do deploy |
+| `legado_futuro` | 0 | Ver `legado_total` |
+
+**Nenhum número pede tratamento antes do commit 2.** No roteiro consolidado (pendência 16 do estado da sessão), a Q-F6 completa, com `vinculos_fora_do_mapa`, roda depois das migrations e de novo depois do passo da D5 do F4; nesse ponto o esperado é `vinculos_de_inativos` = 0 e `vinculos_fora_do_mapa` = 0, e diferente disso o deploy para e o responsável é avisado.
+
+Variante da 1ª consulta **sem a coluna da 011**, para medir antes do deploy (a usada em 2026-10-15); a 2ª consulta não muda:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM portal_pa_inventory WHERE active = 1) AS pas_inventario, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1) AS vinculos_ativos, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_vigentes_ou_futuros, (SELECT COUNT(*) FROM (SELECT pa_number FROM portal_pa_assignments WHERE active = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE()) GROUP BY pa_number HAVING COUNT(*) > 1) t) AS pas_compartilhados_hoje, (SELECT COUNT(*) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND f.ativo = 0) AS vinculos_de_inativos, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND team = 'lideranca' AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_lideranca;"; unset P
+```
 
 **Commits previstos:**
 
@@ -2092,7 +2117,7 @@ O que cada número decide: `pas_compartilhados_hoje` e `vinculos_lideranca` dime
 | Consultas | 12 para quem edita e 11 para os demais; cada leitura entre 5 e 10 ms |
 | `qa-pa-conflicts` | OK |
 
-**Antes do commit 2 (2026-10-15):** a Q-F6 do servidor continua **pendente**. Na aprovação do plano, os números vieram em branco por falha na colagem; o responsável manda os números antes do commit 2, e o commit 2 (gravação: DF4, DF5, DF11, decisão 8 do F4, `PA_MAP_CONFLICT_ACCEPTED`, `remove` em transação) só começa depois deles. Se algum número pedir tratamento (inativo ou fora do Mapa maior que 0, sobreposição, período invertido, fora do inventário), o tratamento vem antes do commit 2.
+**Antes do commit 2 (2026-10-15):** a Q-F6 do servidor ficou pendente até os números chegarem (falha na colagem na aprovação do plano). Chegaram em 2026-10-15 e estão na tabela da Q-F6, acima: nenhum pede tratamento antes do commit 2, que começou depois deles.
 
 ---
 
