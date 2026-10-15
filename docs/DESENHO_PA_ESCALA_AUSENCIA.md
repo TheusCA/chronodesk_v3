@@ -2119,6 +2119,35 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 **Antes do commit 2 (2026-10-15):** a Q-F6 do servidor ficou pendente até os números chegarem (falha na colagem na aprovação do plano). Chegaram em 2026-10-15 e estão na tabela da Q-F6, acima: nenhum pede tratamento antes do commit 2, que começou depois deles.
 
+**Commit 2 entregue (2026-10-15, `2be30eb`; a aprovar):** gravação do mapa.
+
+| Arquivo | Como ficou |
+|---|---|
+| `services/PaMapService.php` | `save` sem 409 por conflito, remoto, ausência ou sem escala (P13): `warnings[]` do 1º dia útil do vínculo pelo motor (DF5) e `conflicts[]` por dia no horizonte da DF4 (até 10, com `conflicts_more`), pela mesma regra da leitura (presencial no motor; ausente o dia todo, remoto e sem escala fora; parcial e Liderança contam; recorrente e tabela antiga). Continua recusado: o mesmo colaborador com outro vínculo no período (409, `FOR UPDATE`), fora do Mapa (409), inativo ou inexistente (400). Decisão 8 do F4: o horizonte começa hoje ou depois, e a leitura dos ocupantes tem o filtro de ativo (recorrente e tabela antiga). `remove` em transação, com o vínculo travado, devolvendo PA e colaborador. A cópia da regra continua gravada (rollback, 2.7). Saem `assertNoConflict`, `rulesConflict`, `scheduleForEmployee`, `scheduleException`, `scheduleWarnings` e `ruleLabel` (só o bloqueio antigo os usava) |
+| `api/portal/pa_map.php` | Resposta do `save` com `warnings`, `conflicts` e `conflicts_more`; auditoria `PA_MAP_SAVED` e `PA_MAP_REMOVED` com o ID do vínculo, o PA e o ID do colaborador; `PA_MAP_CONFLICT_ACCEPTED` (`WARNING`) com o PA, os IDs dos técnicos e as datas; sem nome nem login |
+| `scripts/qa-pa-conflicts.php` | Seção 5 (gravação): conflito com ativo (20 dias, 10 + 10 a mais), dias fixos por dia, ausente no início (aviso, fora do conflito no dia; parcial conta), remoto sem confirmação e com `confirm_remote_allocation` igual, sem escala, início no sábado e no passado, vínculo todo no passado, horizonte cortado pelo fim, ocupante só nos dias do vínculo dele, tabela antiga, os três bloqueios, edição (o próprio vínculo e a troca de colaborador), cópia gravada, consultas fixas para N cadastros, `remove` em transação e auditoria sem nome |
+| `scripts/qa-archive.php` | Decisão 8 reescrita para o aviso: PA de inativo (recorrente e tabela antiga) salva sem conflito e sem o inativo na auditoria, com início ontem, hoje e amanhã; PA de ativo salva e avisa; filtro de ativo nas duas leituras de ocupantes |
+| `scripts/qa-security.php` | Ponta a ponta: salvar com conflito (dois da Liderança no mesmo PA) responde 200 com os IDs e `conflicts_more`, e audita `PA_MAP_SAVED` e `PA_MAP_CONFLICT_ACCEPTED` (`WARNING`); o mesmo colaborador em outro PA continua 409 sem auditoria de gravação; remover audita PA e colaborador; nenhum nome nem login na resposta e na auditoria |
+| `scripts/qa-schedule-legacy-output.php` | Os testes do conflito conservador (409 "Conflito de escala no PA com ...") e da confirmação de remoto viram o conflito por dia (ciclo 2P/1R × dias pares: 7 dias em 20) e os avisos; hoje fixo em 07/10/2026 |
+| `frontend/scripts/qa-schedule-rules.mjs` | A verificação de fonte "o Mapa calcula `fixed_weekdays` por data" pedia `OperationalService::presenceForRule` no `PaMapService`; passa a pedir o motor (`mapPresence`) e a recusar o cálculo pela cópia |
+| `docs/API_CONTRACTS_FRONTEND.md` | `pa_map.php` com a gravação do F6 |
+
+**Decisões de implementação do commit 2 (a aprovar):**
+
+1. **Avisos no 1º dia útil do vínculo:** `valid_from`, ou a segunda seguinte se cair no fim de semana; texto com a data ("Colaborador em trabalho remoto em 23/11/2026, início do vínculo."). Pelo motor, o aviso de remoto passa a valer para qualquer regra remota no dia (dias pares em dia ímpar, dias fixos fora do dia), não só para sempre remoto e ciclo. Continuam como texto em `warnings[]` (a tela atual mostra o primeiro).
+2. **Horizonte (DF4):** os 20 primeiros dias úteis a partir do maior entre `valid_from` e hoje, incluindo esse dia, sem passar de `valid_until`; fim de semana fora, como na leitura (DF3). Vínculo todo no passado: sem conferência de conflito (só o aviso do início).
+3. **Sem trava na leitura dos ocupantes do PA:** virou aviso, então não precisa de `FOR UPDATE`; a trava continua no cadastro e na conferência do mesmo colaborador.
+4. **Cadastro inativo continua 400** ("Colaborador ativo invalido."), como sempre foi: o plano dizia 409, mas o código nunca deu 409 nesse caso. Mudar para 409 é uma linha, se preferir.
+5. **Tabela antiga no conflito do `save`**, com o filtro de ativo, como na leitura (hoje ela só tem passado, `legado_futuro` = 0).
+6. **Auditoria do conflito:** os IDs de todos os dias em conflito, sem repetição; as datas até 10, com "e mais N".
+7. **Campo `conflicts_more`** na resposta (quantos dias além dos 10 listados). A tela atual ainda não mostra `conflicts`: isso é o commit 3, no mesmo deploy.
+8. **Cópia gravada sem a exceção antiga:** a cópia é a regra vigente no início, mesmo com ausência nesse dia (antes, ausência no início bloqueava e a cópia nem era gravada).
+9. **`valid_from` padrão pelo "hoje" injetável** do serviço (antes, `date()` direto), para os testes.
+
+**Validação pela IA:** `qa-pa-conflicts` (92 verificações), `qa-archive` (578), `qa-security`, `qa-schedule-legacy-output` (17 saídas idênticas), bateria PHP completa, os 16 `qa:*` e lint; **mutação 39/39 (um sobrevivente na 1ª rodada, o ocupante que começa no meio do horizonte, por falta de caso; morto depois)** no `save`, no `remove` e no endpoint. **Não verificado:** MySQL (só banco simulado); a tela atual com a resposta nova (ela mostra `warnings[0]` e não mostra `conflicts`; muda no commit 3).
+
+**Como testar no MySQL local (sugestão):** (1) dois técnicos presenciais: vincular o segundo ao PA do primeiro → salva, `conflicts` com os dois IDs nos dias certos e `conflicts_more`; `audit_log` com `PA_MAP_SAVED` (PA e IDs) e `PA_MAP_CONFLICT_ACCEPTED` (`WARNING`, datas), sem nome; (2) remoto, sem escala e ausente o dia todo no início → salva com o aviso, sem a confirmação de antes (a tela atual ainda pode abrir o `window.confirm` só se receber 409, o que não acontece mais); (3) o mesmo colaborador em outro PA no período → 409; fora do Mapa → 409; (4) PA com vínculo de cadastro arquivado → salva sem conflito com ele; (5) desocupar → `PA_MAP_REMOVED` com PA e colaborador; (6) `SELECT action, severity, details FROM audit_log WHERE action LIKE 'PA_MAP_%' ORDER BY id DESC LIMIT 5;`.
+
 ---
 
 ## 10. Riscos e pendências
