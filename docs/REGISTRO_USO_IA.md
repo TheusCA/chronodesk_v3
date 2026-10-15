@@ -628,6 +628,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: so banco simulado. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-14**, com as tres decisoes, apos teste do responsavel em MySQL 8.0.46 local, com o corte 2026-10-16 inserido direto e parciais depois do corte: `type=absence` trouxe o "Presencial" de um tecnico com parcial 09:00-10:00 e o "Sem escala" de outro com parcial a partir das 15:00 (status `no_schedule`), os dois iguais ao evento sem filtro; parcial dentro de ferias: o dia saiu uma vez so, como `absence`; parcial antes do corte continuou evento de ausencia; `status=absence` so com as situacoes de ausencia; `type=onsite` sem mudanca; categoria so para gestor e o proprio, o horario no detalhe para todos (P9), observacao nunca; `qa-presence-cutoff` com 277 verificacoes OK. Massa, regras de teste e corte removidos depois. **Pendencia 16c (`6afc391`), achado do responsavel:** a consulta proposta so conferia a regra no dia do corte; regra que termina dentro da competencia ou buraco entre duas regras nao eram contados. Correcao pedida: coluna `sem_regra_na_competencia` (cada dia da competencia, `WITH RECURSIVE`), ja testada pelo responsavel no MySQL local. |
 
+### Parte B, F5 — commit 4 (frontend do Calendario, tela Escala e relatorio) — 2026-10-15
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Legenda unica da situacao no Calendario e na tela Escala, resumo do dia na visao Mes, cartao por tecnico, relatorio com os campos do corte, pendencia 8a, L-13 e L-14 (desenho, secoes 5.1, 5.5 e 9.7). |
+| **Branch e commits** | `c16e992` e `c91f353` (aprovacao do ajuste do `type=absence` e consulta da pendencia 16c, ja feitos em 2026-10-14), `e25cc8c` (codigo e testes) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/lib/presenceLegend.ts` e `frontend/src/components/ui/Presence.jsx` (novos), `CalendarPage.jsx`, `OperationalPages.jsx`, `App.jsx`, `Icon.jsx`, `index.css`, `frontend/scripts/qa-calendar-presence.mjs` (novo) e `package.json`; desenho 9.7. |
+| **Decisoes de implementacao** | Nove, a aprovar (desenho 9.7); destaques: ausente em laranja (pedido do responsavel), remoto em azul-claro em vez do laranja da secao 5.1; War Room continua vermelho (a D10 previa violeta); marcador da parcial lido do texto do `detalhe`, sem campo novo no contrato; resumo um por evento, com a parcial sem somar. |
+| **Validacao executada pela IA** | Lint, typecheck, 15 `qa:*` e `qa:calendar-presence`; bateria PHP completa; mutacao **26/26** no frontend (um sobrevivente na 1a rodada, por falta de caso, morto depois); prints com servidor simulado e dados ficticios: sem corte, HTML do mes e da semana identico ao do codigo anterior (so a opcao "Sem escala" a mais no filtro de status); com corte, resumo, cartoes, filtro "Ausencia" com as parciais e "Ocultar sem escala" conferidos. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: a tela nao foi aberta contra o backend real; largura de celular nao conferida. A sessao anterior caiu (erro de conexao) durante os prints; o trabalho foi retomado da arvore de trabalho, com a bateria e a mutacao repetidas antes do commit. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao e teste no navegador do responsavel antes do commit 5. |
+
 ---
 
 ## 5. Responsabilidade

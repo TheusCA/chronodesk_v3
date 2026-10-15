@@ -1826,6 +1826,36 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 | Perfis | Categoria só para gestor e o próprio; o horário no detalhe para todos (P9); observação nunca |
 | `qa-presence-cutoff` | 277 verificações OK |
 
+**Pendência 16c, consulta ajustada (2026-10-14, `c91f353`):** achado do responsável no teste local: a consulta só conferia a regra no dia do corte. Entrou a coluna `sem_regra_na_competencia` (cada dia de `@corte` até `@corte` + 1 mês − 1 dia, `WITH RECURSIVE`), mantida a `sem_regra_no_corte`; o registro do corte só roda com as duas em 0. Texto e validação local no `DEPLOY_LINUX.md`, item "Deploy que traz o F5"; no servidor, pendente.
+
+**Commit 4 entregue (2026-10-15, `e25cc8c`; aguardando a revisão e o teste no navegador do responsável antes do commit 5):** frontend do Calendário, tela Escala, relatório, L-13 e L-14.
+
+| Arquivo | Como ficou |
+|---|---|
+| `frontend/src/lib/presenceLegend.ts` (novo) | Legenda única (`onsite`, `remote`, `absence`, `no_schedule`: rótulo, letra, ícone, classe de cor e forma) e o marcador da parcial; `isEngineScheduleEvent` (evento `schedule` com `situacao`); `partialMarkerInDetail` e `hasPartialMarker`; `presenceDaySummary` (um por `id`, pela situação; parcial à parte), `daySummaryText`, `daySummaryAriaLabel`; `presenceCutoffNotice` (aviso do relatório) |
+| `frontend/src/components/ui/Presence.jsx` (novo) | `PresenceBadge`, `PartialMarker` (com `aria-label`), `PresenceDaySummary` (grupo com nome acessível) e `PresenceLegend` |
+| `frontend/src/index.css`, `Icon.jsx` | Classes `presence-*` (o Tailwind não varre `.ts`); ícones `home` e `help` |
+| `frontend/src/pages/CalendarPage.jsx` | Evento do motor com cor, ícone e rótulo pelo status e o marcador da parcial. Mês: resumo do dia ("P 7 · R 5 · S 2", com ícone e cor) e os demais tipos com o limite de antes (3); semana: um cartão por técnico, com o detalhe, e os demais tipos com o limite de antes (8); detalhe do dia: resumo e cartão com situação, origem, detalhe (com o marcador) e a descrição que o servidor manda. Filtro de status com "Sem escala" ("Ausência" e "Folga" já existiam). Legenda do motor no rodapé só quando há evento do motor |
+| `frontend/src/pages/OperationalPages.jsx` | Tela Escala: status com a legenda única, marcador da parcial na linha, "Ocultar sem escala" (desligado, só na tela, D13), "Liderança" sem quebra nas duas tabelas. Relatório: "Dias de ausência" e "Dias sem escala" só quando o JSON traz os campos (resumo, por colaborador e por equipe) e o aviso do corte. Sai a `CalendarPage` duplicada (L-13) |
+| `frontend/src/App.jsx` | "Carregando módulo..." (L-14) |
+| `frontend/scripts/qa-calendar-presence.mjs` (novo, `qa:calendar-presence`) | Legenda (rótulo, letra, ícone e cor distintos; ausência na cor do evento de ausência; sem escala tracejado), marcador, resumo (repetido, parcial, filtro "Ausência"), aviso do corte (mesmo texto do CSV), Calendário sem corte igual, cartão sem observação nem categoria crua, sem `confirm()` novo, tela Escala, relatório, L-13 e L-14 |
+
+**Decisões de implementação do commit 4 (a aprovar):**
+
+1. **Cores (pedido do responsável):** ausente no mesmo laranja do evento de ausência de antes do corte; por isso **remoto em azul-claro** (a seção 5.1 previa laranja) e presencial em verde; sem escala cinza com contorno tracejado. Nenhuma situação só pela cor: rótulo, letra e ícone em todas.
+2. **War Room continua vermelho** (a D10 previa violeta): com a ausência em laranja não há confusão, a tela sem corte fica igual (pedido do responsável) e o violeta já é do evento manual.
+3. **Evento do motor = `schedule` com `situacao`.** Só o motor manda esse campo; sem ele (antes do corte ou sem corte), o evento sai como antes.
+4. **Marcador da parcial lido do `detalhe`** (" · Ausente " com situação diferente de ausente), o formato do motor desde o F3; o contrato não ganhou campo novo. Se o texto do detalhe mudar, o marcador some (o `qa:calendar-presence` fixa o formato).
+5. **Resumo do dia:** cada `id` conta uma vez, pela situação; a parcial aparece só como o ícone do marcador, sem número e sem somar no total. Com o filtro "Ausência", os dias presencial, remoto e sem escala com parcial contam pela situação deles.
+6. **Semana:** todos os cartões do motor, sem limite; os demais tipos com o limite de antes. Na largura de 1366 px o texto dos cartões fica truncado; o texto inteiro está no detalhe do dia.
+7. **Cartão:** a descrição vem como o servidor manda (regra e, para a gestão e o próprio, a categoria); a tela não decide perfil. Ela repete a regra que já está no detalhe (efeito visível nos prints); não foi mudada para não mexer no contrato.
+8. **Relatório:** os campos novos entram pela presença da chave (`'absence_days' in summary`), como na D4; com o período todo depois do corte (`split: false`), o aviso é "Escala pelas regras novas (corte em DD/MM/AAAA)."; com `split: true`, o mesmo texto da linha `aviso` do CSV.
+9. **Tela Escala:** com "Ocultar sem escala" ligado e nenhum dia restante, uma linha avisa que todos os dias do filtro estão sem escala.
+
+**Validação pela IA:** lint, typecheck, os 15 `qa:*` e o `qa:calendar-presence` novo; bateria PHP completa (`qa-presence-cutoff` 277, `qa-schedule-legacy-output`, `qa-security` e os demais); **mutação 26/26** no frontend (um sobrevivente na 1ª rodada, por falta de caso: dia inteiro com o texto do marcador no detalhe; o caso entrou). Prints com servidor simulado (dados fictícios, perfil Liderança) e Chrome sem janela: **sem corte, o HTML do mês e da semana é idêntico ao do código anterior**, exceto a opção "Sem escala" no filtro de status; com o corte em 16/10, resumo do dia 21 "7 presenciais, 5 remotos, 2 sem escala, inclui ausência parcial", 15 cartões no detalhe; filtro "Ausência" no dia 21 com "Remoto: Técnico 02" e "Sem escala: Técnico 12" (as duas parciais); "Ocultar sem escala" de 44 linhas para 0. **Não verificado:** a tela contra o backend real e o MySQL; largura de celular.
+
+**Como testar no navegador (sugestão):** com o corte 2026-10-16 inserido direto no banco local: (1) sem corte, o Calendário igual ao de antes (mês, semana, detalhe, legenda); (2) com o corte, outubro no mês: até 15/10 os chips de hoje; de 16/10 em diante o resumo "P · R · A · S" e os demais tipos (War Room, plantão, manual) visíveis; (3) semana com o cartão de cada técnico e o detalhe; (4) detalhe do dia: situação, origem, detalhe com o marcador da parcial, categoria só como gestor e como o próprio, observação nunca; (5) filtro "Ausência": os dias com parcial pela situação, sem contar duas vezes no resumo; filtro de status "Sem escala"; (6) tela Escala com a legenda, "Ocultar sem escala" e "Liderança" sem quebra; (7) relatório de uma competência que cruza o corte, com "Dias de ausência", "Dias sem escala" e o aviso.
+
 ---
 
 ## 10. Riscos e pendências
