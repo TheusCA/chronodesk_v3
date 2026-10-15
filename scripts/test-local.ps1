@@ -130,6 +130,14 @@ if (!$phpExecutable) {
         Pass "QA da data de corte concluido"
     }
 
+    # Sem banco: Mapa PA no motor (F6): conflito por dia, presenca, P9, DF7, sem N+1.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-pa-conflicts.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do Mapa PA falhou"
+    } else {
+        Pass "QA do Mapa PA concluido"
+    }
+
     # Sem banco: arquivamento de tecnicos (F4): migration 014 e, depois, o plano.
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-archive.php")
     if ($LASTEXITCODE -ne 0) {

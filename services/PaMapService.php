@@ -13,43 +13,81 @@ final class PaMapService {
         'even_days', 'odd_days', 'always_onsite', 'always_remote', 'undefined', 'fixed_weekdays', 'cycle',
     ];
 
-    private PDO $pdo;
+    /** [F6, DF7] Campos do vinculo so para quem edita o mapa. */
+    private const MANAGER_ONLY_FIELDS = ['employee_login', 'notes', 'created_by', 'updated_by'];
 
-    public function __construct(?PDO $pdo = null) {
+    private PDO $pdo;
+    private ?string $today;
+    private ?OperationalService $operational = null;
+    private array $tables = [];
+
+    public function __construct(?PDO $pdo = null, ?string $today = null) {
         $this->pdo = $pdo ?? get_db_connection();
+        $this->today = $today;
     }
 
-    public function list(array $filters): array {
-        $date = $this->date($filters['date'] ?? date('Y-m-d'), 'Data');
+    /**
+     * [F6, commit 1] Leitura do mapa pelo motor (desenho 9.8): presenca de
+     * cada vinculo na data (RF-08), conflito por PA e dia util da semana da
+     * data (dois ou mais presenciais; RF-05, P13), ausencias da semana. Nao le
+     * a copia da regra (L-02) nem a data de corte (DF1); numero de consultas
+     * fixo (L-10). $canManage (pa_map.manage): sem ele, sem a lista de
+     * elegiveis e sem login, observacao e autores do vinculo (DF7).
+     */
+    public function list(array $filters, array $actor = [], bool $canManage = false): array {
+        $date = $this->date($filters['date'] ?? $this->today(), 'Data');
         $team = $this->team($filters['team'] ?? null, true);
+        [$weekFrom, $weekTo] = self::week($date);
+        $presence = $this->operational()->mapPresence($weekFrom, max($weekTo, $date), $actor);
         $inventory = $this->inventory();
-        $assignments = $this->assignmentsForMap($date, $team);
-        $legacy = $this->legacySpecificDateAssignments($date, $team);
+        $items = array_merge($this->assignmentsForMap($date, $team, $presence), $this->legacySpecificDateAssignments($date, $team, $presence));
+        $weekRows = $this->weekRows($weekFrom, $weekTo);
+        $conflicts = $this->weekConflicts($weekRows, $presence, $weekFrom, $weekTo);
+        if (!$canManage) {
+            $items = array_map(static fn (array $item): array => array_diff_key($item, array_flip(self::MANAGER_ONLY_FIELDS)), $items);
+        }
         $byPa = [];
-
-        foreach (array_merge($assignments, $legacy) as $assignment) {
+        foreach ($items as $assignment) {
             $byPa[$assignment['pa_number']][] = $assignment;
+        }
+        $conflictDays = [];
+        foreach ($conflicts as $conflict) {
+            $conflictDays[$conflict['pa_number']][] = $conflict['date'];
         }
 
         $pas = [];
         foreach ($inventory as $pa) {
             $pas[] = $pa + [
                 'assignments' => $byPa[$pa['pa_number']] ?? [],
+                'has_conflict' => isset($conflictDays[$pa['pa_number']]),
+                'conflict_days' => $conflictDays[$pa['pa_number']] ?? [],
             ];
         }
 
         return [
             'date' => $date,
             'team' => $team,
+            'server_now' => (new DateTimeImmutable('now'))->format(DATE_ATOM),
+            'week' => ['from' => $weekFrom, 'to' => $weekTo],
             'pas' => $pas,
-            'items' => array_merge($assignments, $legacy),
-            'employees' => $this->eligibleEmployees($date, $team),
-        ];
+            'items' => $items,
+            'conflicts' => $conflicts,
+            'absences_week' => $this->weekAbsences($weekRows, $presence, $team, $weekFrom, $weekTo),
+        ] + ($canManage ? ['employees' => $this->eligibleEmployees($date, $team, $presence)] : []);
     }
 
-    public function eligibleEmployees(string $date, ?string $team = null): array {
+    /**
+     * Elegiveis para o formulario (so para quem edita o mapa): cadastros
+     * ativos fora do "fora do Mapa", com a escala do dia pelo motor (fim de
+     * semana: a regra do ultimo dia util da semana, situacao sem escala).
+     */
+    public function eligibleEmployees(string $date, ?string $team = null, ?array $presence = null): array {
         $date = $this->date($date, 'Data');
         $team = $this->team($team, true);
+        if ($presence === null) {
+            [$weekFrom, $weekTo] = self::week($date);
+            $presence = $this->operational()->mapPresence($weekFrom, max($weekTo, $date), []);
+        }
         // [P12, F1] Cadastro fora do Mapa PA e da escala nao e elegivel.
         $sql = 'SELECT id, nome AS name, equipe AS team, ad_login
                 FROM funcionarios
@@ -71,17 +109,45 @@ final class PaMapService {
                 continue;
             }
             $seen[(int)$row['id']] = true;
-            $schedule = $this->scheduleForEmployee((int)$row['id'], $date);
+            $day = $presence['days'][(int)$row['id'] . ':' . $date] ?? null;
+            $rule = $day ?? self::lastBusinessDay($presence, (int)$row['id'], $date);
             $row['team'] = $normalizedTeam;
             $items[] = $row + [
-                'schedule_rule_type' => $schedule['rule_type'],
-                'schedule_rule_label' => $this->ruleLabel($schedule['rule_type'], [], $schedule['rule_config']),
-                'schedule_status' => $schedule['status'],
-                'schedule_label' => $schedule['label'],
-                'schedule_source' => $schedule['source'],
+                'schedule_rule_type' => $rule['rule_type'] ?? 'undefined',
+                'schedule_rule_label' => $rule['rule_label'] ?? 'Sem escala definida',
+                'schedule_status' => $day['presence_type'] ?? 'no_schedule',
+                'schedule_label' => $day['label'] ?? 'Sem escala',
+                'schedule_source' => $day['source'] ?? 'none',
             ];
         }
         return $items;
+    }
+
+    /** Segunda a sexta da semana da data (fim de semana: a semana que termina nele). */
+    private static function week(string $date): array {
+        $day = new DateTimeImmutable($date . ' 00:00:00', new DateTimeZone('UTC'));
+        $monday = $day->modify('-' . ((int)$day->format('N') - 1) . ' days');
+        return [$monday->format('Y-m-d'), $monday->modify('+4 days')->format('Y-m-d')];
+    }
+
+    /** Dia do motor mais recente antes da data, na mesma carga (regra no fim de semana). */
+    private static function lastBusinessDay(array $presence, int $employeeId, string $date): ?array {
+        $day = new DateTimeImmutable($date . ' 00:00:00', new DateTimeZone('UTC'));
+        for ($i = 1; $i <= 6; $i++) {
+            $found = $presence['days'][$employeeId . ':' . $day->modify("-{$i} days")->format('Y-m-d')] ?? null;
+            if ($found !== null) {
+                return $found;
+            }
+        }
+        return null;
+    }
+
+    private function operational(): OperationalService {
+        return $this->operational ??= new OperationalService($this->pdo, $this->today);
+    }
+
+    private function today(): string {
+        return $this->today ?? date('Y-m-d');
     }
 
     public function save(array $data, string $actor): array {
@@ -128,7 +194,7 @@ final class PaMapService {
                 ':team' => $employee['team'],
                 // [F2B] O ENUM da copia (migrations 009 e 010) nao tem 'cycle':
                 // o ciclo e gravado como 'undefined' com a configuracao, e a
-                // leitura o reconhece pelo pattern (storedRuleType). F6 troca a copia pelo motor.
+                // copia continua gravada para o rollback; desde o F6 a leitura usa o motor (L-02).
                 ':schedule_rule_type' => $schedule['rule_type'] === 'cycle' ? 'undefined' : $schedule['rule_type'],
                 ':schedule_rule_config' => $schedule['rule_config'] ?? null,
                 ':valid_from' => $validFrom,
@@ -220,7 +286,20 @@ final class PaMapService {
         return $items;
     }
 
-    private function assignmentsForMap(string $date, ?string $team): array {
+    private function assignmentsForMap(string $date, ?string $team, array $presence): array {
+        $items = [];
+        foreach ($this->assignmentRows($date, $date, $team, $date) as $row) {
+            $items[] = $this->assignmentView($row, $date, 'assignment', $presence);
+        }
+        return $items;
+    }
+
+    /**
+     * Vinculos recorrentes ativos que cobrem o periodo; de $filterDate em
+     * diante sem vinculo de cadastro inativo (D13 do F4). A copia da regra
+     * vem na linha, mas nao e mais lida (L-02; continua gravada, 2.7).
+     */
+    private function assignmentRows(string $from, string $to, ?string $team, string $filterDate): array {
         if (!$this->tableExists('portal_pa_assignments')) {
             return [];
         }
@@ -232,22 +311,116 @@ final class PaMapService {
                   AND valid_from <= :date_until
                   AND (valid_until IS NULL OR valid_until >= :date_from)';
         $params = [
-            ':date_from' => $date,
-            ':date_until' => $date,
+            ':date_from' => $from,
+            ':date_until' => $to,
         ];
         if ($team) {
             $sql .= ' AND team = :team';
             $params[':team'] = $team;
         }
-        $sql .= $this->activeEmployeeFilter('portal_pa_assignments', $date);
+        $sql .= $this->activeEmployeeFilter('portal_pa_assignments', $filterDate);
         $stmt = $this->pdo->prepare($sql . ' ORDER BY pa_number, employee_name');
         $stmt->execute($params);
+        return $stmt->fetchAll();
+    }
 
-        $items = [];
-        foreach ($stmt->fetchAll() as $row) {
-            $items[] = $this->assignmentView($row, $date, 'assignment');
+    /**
+     * [F6] Vinculos da semana (recorrentes e da tabela antiga, todas as
+     * equipes: o PA e um so) para o conflito e as ausencias da semana. Duas
+     * consultas, qualquer que seja o numero de cadastros.
+     */
+    private function weekRows(string $weekFrom, string $weekTo): array {
+        $rows = [];
+        foreach ($this->assignmentRows($weekFrom, $weekTo, null, $weekFrom) as $row) {
+            $rows[] = ['pa_number' => (string)$row['pa_number'], 'employee_id' => (int)$row['employee_id'], 'team' => $row['team'],
+                'from' => (string)$row['valid_from'], 'until' => $row['valid_until'] === null ? null : (string)$row['valid_until']];
         }
+        if ($this->tableExists('portal_pa_map')) {
+            $stmt = $this->pdo->prepare(
+                'SELECT pa_number, employee_id, team, work_date
+                 FROM portal_pa_map
+                 WHERE record_status = "active" AND work_date BETWEEN :date_from AND :date_to
+                 ORDER BY work_date, pa_number'
+            );
+            $stmt->execute([':date_from' => $weekFrom, ':date_to' => $weekTo]);
+            foreach ($stmt->fetchAll() as $row) {
+                $rows[] = ['pa_number' => (string)$row['pa_number'], 'employee_id' => (int)$row['employee_id'], 'team' => $row['team'],
+                    'from' => (string)$row['work_date'], 'until' => (string)$row['work_date']];
+            }
+        }
+        return $rows;
+    }
+
+    /**
+     * [F6, RF-05, P13, DF3, DF8] Conflito por PA e dia util da semana: dois
+     * ou mais cadastros com vinculo no PA no dia e situacao presencial no
+     * motor. Ausente o dia todo, remoto e sem escala nao contam; parcial e
+     * Lideranca contam. Cadastro inativo de hoje em diante (e arquivado a
+     * partir do arquivamento) nao tem dia no motor e nao conta (D13 do F4 e
+     * decisao 8). Calculado na leitura, nunca gravado (2.7).
+     */
+    private function weekConflicts(array $rows, array $presence, string $weekFrom, string $weekTo): array {
+        $onsite = [];
+        foreach (self::days($weekFrom, $weekTo) as $date) {
+            foreach ($rows as $row) {
+                if ($row['from'] <= $date && ($row['until'] === null || $row['until'] >= $date)
+                    && ($presence['days'][$row['employee_id'] . ':' . $date]['presence_type'] ?? null) === 'onsite') {
+                    $onsite[$row['pa_number']][$date][$row['employee_id']] = $row['employee_id'];
+                }
+            }
+        }
+        $conflicts = [];
+        foreach ($onsite as $paNumber => $byDate) {
+            foreach ($byDate as $date => $employees) {
+                if (count($employees) >= 2) {
+                    sort($employees);
+                    $conflicts[] = ['pa_number' => (string)$paNumber, 'date' => $date, 'employee_ids' => array_values($employees)];
+                }
+            }
+        }
+        usort($conflicts, static fn (array $a, array $b): int => [$a['pa_number'], $a['date']] <=> [$b['pa_number'], $b['date']]);
+        return $conflicts;
+    }
+
+    /**
+     * [F6, DF9] Ausencias da semana dos cadastros com vinculo em algum PA no
+     * dia (filtro de equipe pelo vinculo): dia inteiro e parciais, do F3 e da
+     * excecao antiga, ordenadas por data e nome. Categoria pela P9 (o motor so
+     * a entrega para a gestao e o proprio); observacao nunca.
+     */
+    private function weekAbsences(array $rows, array $presence, ?string $team, string $weekFrom, string $weekTo): array {
+        $items = [];
+        $seen = [];
+        foreach (self::days($weekFrom, $weekTo) as $date) {
+            foreach ($rows as $row) {
+                $key = $row['employee_id'] . ':' . $date;
+                $day = $presence['days'][$key] ?? null;
+                if ($day === null || isset($seen[$key]) || ($team !== null && $row['team'] !== $team)
+                    || $row['from'] > $date || ($row['until'] !== null && $row['until'] < $date)) {
+                    continue;
+                }
+                $seen[$key] = true;
+                foreach ($day['absences'] as $absence) {
+                    $items[] = [
+                        'employee_id' => $row['employee_id'],
+                        'employee_name' => $day['employee_name'],
+                        'team' => $day['team'],
+                        'date' => $date,
+                    ] + $absence;
+                }
+            }
+        }
+        usort($items, static fn (array $a, array $b): int => [$a['date'], $a['employee_name'], $a['start_time'] ?? ''] <=> [$b['date'], $b['employee_name'], $b['start_time'] ?? '']);
         return $items;
+    }
+
+    /** @return list<string> */
+    private static function days(string $from, string $to): array {
+        $days = [];
+        for ($day = new DateTimeImmutable($from . ' 00:00:00', new DateTimeZone('UTC')); $day->format('Y-m-d') <= $to; $day = $day->modify('+1 day')) {
+            $days[] = $day->format('Y-m-d');
+        }
+        return $days;
     }
 
     /**
@@ -259,13 +432,13 @@ final class PaMapService {
         if (!in_array($table, ['portal_pa_assignments', 'portal_pa_map'], true)) {
             throw new LogicException('Tabela fora da lista do Mapa PA.');
         }
-        if ($date < date('Y-m-d')) {
+        if ($date < $this->today()) {
             return '';
         }
         return " AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = {$table}.employee_id AND f.ativo = 1)";
     }
 
-    private function legacySpecificDateAssignments(string $date, ?string $team): array {
+    private function legacySpecificDateAssignments(string $date, ?string $team, array $presence): array {
         if (!$this->tableExists('portal_pa_map')) {
             return [];
         }
@@ -285,7 +458,6 @@ final class PaMapService {
 
         $items = [];
         foreach ($stmt->fetchAll() as $row) {
-            $ruleType = $this->scheduleForEmployee((int)$row['employee_id'], $date)['rule_type'];
             $items[] = $this->assignmentView([
                 'id' => 'legacy-' . $row['id'],
                 'pa_number' => $row['pa_number'],
@@ -293,8 +465,6 @@ final class PaMapService {
                 'employee_name' => $row['employee_name'],
                 'employee_login' => $row['employee_login'],
                 'team' => $row['team'],
-                'schedule_rule_type' => $ruleType,
-                'schedule_rule_config' => $this->scheduleForEmployee((int)$row['employee_id'], $date)['rule_config'] ?? null,
                 'valid_from' => $date,
                 'valid_until' => $date,
                 'notes' => $row['notes'],
@@ -302,28 +472,52 @@ final class PaMapService {
                 'updated_by' => $row['updated_by'],
                 'created_at' => $row['created_at'],
                 'updated_at' => $row['updated_at'],
-            ], $date, 'legacy');
+            ], $date, 'legacy', $presence);
         }
         return $items;
     }
 
-    private function assignmentView(array $row, string $date, string $source): array {
-        $config = $row['schedule_rule_config'] ?? null;
-        $ruleType = $this->storedRuleType($row['schedule_rule_type'] ?? 'undefined', $config);
-        $weekdays = $ruleType === 'fixed_weekdays'
-            ? OperationalService::scheduleRuleConfigWeekdays($config)
-            : [];
-        $activeOnDate = $this->ruleActiveOnDate($ruleType, $date, $weekdays, $config);
-        $remote = in_array($ruleType, ['always_remote', 'fixed_weekdays'], true)
-            || ($ruleType === 'cycle' && self::cyclePresence($config, $date) === 'remote');
-        // O tipo reconhecido prevalece sobre o gravado (o ciclo e gravado como 'undefined').
-        return ['schedule_rule_type' => $ruleType] + $row + [
+    /**
+     * [F6, L-02, RF-08] Vinculo com a presenca do motor na data: regra
+     * vigente (nao a copia gravada), ausencia do F3 e da excecao antiga,
+     * parcial e categoria pela P9. Sem dia no motor, presence = null e o
+     * motivo (DF6): 'inativo' (inativo antigo, fora do motor), 'arquivado'
+     * (data do arquivamento ou depois), 'fim_de_semana' ou 'sem_situacao'.
+     * Os campos de antes (schedule_rule_type e label, active_on_date,
+     * presence_status) continuam, calculados pelo motor; a copia
+     * (schedule_rule_config) sai da resposta.
+     */
+    private function assignmentView(array $row, string $date, string $source, array $presence): array {
+        $employeeId = (int)$row['employee_id'];
+        $day = $presence['days'][$employeeId . ':' . $date] ?? null;
+        $rule = $day ?? self::lastBusinessDay($presence, $employeeId, $date);
+        $status = $day['presence_type'] ?? null;
+        $reason = null;
+        if ($day === null) {
+            $archivedOn = $presence['employees'][$employeeId] ?? null;
+            $reason = match (true) {
+                !array_key_exists($employeeId, $presence['employees']) => 'inativo',
+                $archivedOn !== null && $date >= $archivedOn => 'arquivado',
+                !PresenceEngine::isBusinessDay($date) => 'fim_de_semana',
+                default => 'sem_situacao',
+            };
+        }
+        unset($row['schedule_rule_config']);
+        return array_merge($row, [
+            'schedule_rule_type' => $rule['rule_type'] ?? 'undefined',
             'source' => $source,
-            'schedule_rule_label' => $this->ruleLabel($ruleType, $weekdays, $config),
-            'schedule_weekdays' => $weekdays,
-            'active_on_date' => $activeOnDate,
-            'presence_status' => $activeOnDate ? 'onsite' : ($remote ? 'remote' : 'offsite'),
-        ];
+            'schedule_rule_label' => $rule['rule_label'] ?? 'Sem escala definida',
+            'schedule_weekdays' => $rule['weekdays'] ?? [],
+            'active_on_date' => $status === 'onsite',
+            'presence_status' => in_array($status, ['onsite', 'remote'], true) ? $status : 'offsite',
+            'presence' => $day === null ? null : [
+                'situacao' => $day['situacao'],
+                'origem' => $day['origem'],
+                'detalhe' => $day['detalhe'],
+                'status' => $day['presence_type'],
+            ] + (isset($day['parcial']) ? ['parcial' => $day['parcial']] : [])
+              + (isset($day['categoria']) ? ['categoria' => $day['categoria']] : []),
+        ] + ($reason === null ? [] : ['presence_reason' => $reason]));
     }
 
     private function assertNoConflict(
@@ -538,34 +732,6 @@ final class PaMapService {
         return [];
     }
 
-    /**
-     * $config: copia da configuracao (JSON); usada so no ciclo, que vem do
-     * motor (F2B, decisao 2 ajustada). O conflito continua pelo tipo ate o F6.
-     */
-    private function ruleActiveOnDate(string $ruleType, string $date, array $weekdays = [], ?string $config = null): bool {
-        $ruleType = $this->ruleType($ruleType);
-        if ($ruleType === 'cycle') {
-            return self::cyclePresence($config, $date) === 'onsite';
-        }
-        if ($ruleType === 'always_onsite') {
-            return true;
-        }
-        if ($ruleType === 'always_remote' || $ruleType === 'undefined') {
-            return false;
-        }
-        $day = (int)substr($date, -2);
-        if ($ruleType === 'even_days') {
-            return $day % 2 === 0;
-        }
-        if ($ruleType === 'odd_days') {
-            return $day % 2 === 1;
-        }
-        if ($ruleType === 'fixed_weekdays') {
-            return OperationalService::presenceForRule($ruleType, $date, $weekdays) === 'onsite';
-        }
-        return false;
-    }
-
     private function ruleLabel(string $ruleType, array $weekdays = [], ?string $config = null): string {
         if ($this->ruleType($ruleType) === 'cycle') {
             $cycle = PresenceEngine::cycleConfig(self::decodedConfig($config));
@@ -590,15 +756,6 @@ final class PaMapService {
     private static function decodedConfig(?string $config): array {
         $decoded = is_string($config) ? json_decode($config, true) : null;
         return is_array($decoded) ? $decoded : [];
-    }
-
-    /** [F2B] Tipo da copia: 'undefined' com configuracao de ciclo valida e o ciclo gravado no vinculo. */
-    private function storedRuleType($value, ?string $config): string {
-        $ruleType = $this->ruleType($value);
-        if ($ruleType === 'undefined' && PresenceEngine::cycleConfig(self::decodedConfig($config)) !== null) {
-            return 'cycle';
-        }
-        return $ruleType;
     }
 
     private function ruleType($value): string {
@@ -698,14 +855,18 @@ final class PaMapService {
         return $text;
     }
 
+    /** Existencia da tabela, uma consulta por tabela e instancia (L-10). */
     private function tableExists(string $table): bool {
+        if (isset($this->tables[$table])) {
+            return $this->tables[$table];
+        }
         $stmt = $this->pdo->prepare(
             'SELECT COUNT(*)
              FROM information_schema.TABLES
              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name'
         );
         $stmt->execute([':table_name' => $table]);
-        return (int)$stmt->fetchColumn() > 0;
+        return $this->tables[$table] = (int)$stmt->fetchColumn() > 0;
     }
 
     private function atomic(callable $callback) {

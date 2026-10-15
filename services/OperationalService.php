@@ -1818,7 +1818,8 @@ final class OperationalService {
         array $exceptions,
         bool $withArchived = false,
         bool $withAbsenceCategory = false,
-        bool $withPartial = false
+        bool $withPartial = false,
+        ?array $screenEmployees = null
     ): array {
         $rulesByEmployee = [];
         foreach ($rules as $rule) {
@@ -1831,7 +1832,7 @@ final class OperationalService {
             $exceptionMap[$exception['employee_id'] . ':' . $exception['exception_date']] = $exception;
         }
         $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId, $withArchived, $withAbsenceCategory);
-        $employees = $this->scheduleScreenEmployees($team, $employeeId, $withArchived);
+        $employees = $screenEmployees ?? $this->scheduleScreenEmployees($team, $employeeId, $withArchived);
         $items = [];
         $end = self::dateValue($to, 'Fim');
         for ($date = self::dateValue($from, 'Inicio'); $date <= $end; $date = $date->modify('+1 day')) {
@@ -1946,6 +1947,56 @@ final class OperationalService {
               + (isset($row['parcial']) ? ['parcial' => $row['parcial']] : []);
         }
         return $events;
+    }
+
+    /**
+     * [F6, commit 1] Presenca do motor para o Mapa PA, em lote, num periodo:
+     * todos os cadastros do motor (N1, N2 e Lideranca; arquivado ate a
+     * vespera; fora do Mapa e inativo antigo fora), sem filtro de equipe e
+     * sem relogio (DF2). Nao le a data de corte (DF1): o mapa usa o motor em
+     * todas as datas. Numero de consultas fixo, qualquer que seja o numero de
+     * cadastros (L-10). Devolve 'days' (chave "id:data", so dias que o motor
+     * calcula: fim de semana so com excecao de trabalho) e 'employees' (id =>
+     * data do arquivamento ou null). Categoria pela P9 (gestao e o proprio);
+     * observacao nunca; os itens de ausencia so com periodo e horario.
+     */
+    public function mapPresence(string $from, string $to, array $actor): array {
+        $rules = $this->scheduleRules(null, null, $from, true, true);
+        $exceptions = $this->scheduleExceptions($from, $to, null, null);
+        $days = [];
+        $screen = $this->scheduleScreenEmployees(null, null, true);
+        $employees = array_column($screen, 'archived_on', 'id');
+        foreach ($this->engineSchedule($from, $to, null, null, $rules, $exceptions, true, true, true, $screen) as $row) {
+            $visible = self::seesPersonalText($actor, $row['employee_id']);
+            $category = $visible ? self::calendarAbsenceCategory($row['ausencias']) : null;
+            $absences = [];
+            foreach ($row['ausencias'] as $item) {
+                $absences[] = [
+                    'origem' => $item['origem'],
+                    'period_type' => $item['period_type'],
+                    'start_time' => $item['start_time'] ?? null,
+                    'end_time' => $item['end_time'] ?? null,
+                ] + ($visible && isset($item['category']) ? ['category' => self::absenceCategoryLabel((string)$item['category'])] : []);
+            }
+            $days[$row['employee_id'] . ':' . $row['date']] = [
+                'employee_id' => $row['employee_id'],
+                'employee_name' => $row['employee_name'],
+                'team' => $row['team'],
+                'date' => $row['date'],
+                'presence_type' => $row['presence_type'],
+                'label' => $row['label'],
+                'source' => $row['source'],
+                'rule_type' => $row['rule_type'],
+                'rule_label' => $row['rule_label'],
+                'weekdays' => $row['weekdays'],
+                'situacao' => $row['situacao'],
+                'origem' => $row['origem'],
+                'detalhe' => $row['detalhe'],
+                'absences' => $absences,
+            ] + (isset($row['parcial']) ? ['parcial' => $row['parcial']] : [])
+              + ($category === null ? [] : ['categoria' => self::absenceCategoryLabel($category)]);
+        }
+        return ['days' => $days, 'employees' => $employees];
     }
 
     /**

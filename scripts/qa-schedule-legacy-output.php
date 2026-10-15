@@ -677,12 +677,13 @@ assert_same([
     '2026-10-08' => [false, 'remote', 'Ciclo 2P/1R'],
     '2026-10-10' => [false, 'offsite', 'Ciclo 2P/1R'],
 ], $active, 'Mapa PA: presencial no dia certo do ciclo, remoto no dia remoto, fora no fim de semana');
-// Copia 'undefined' sem pattern (vinculo antigo) continua "Sem escala".
+// [F6, L-02] A copia gravada no vinculo nao e mais lida: o vinculo antigo
+// com copia 'undefined' mostra a regra vigente do motor (Tecnico L, dias pares).
 $pdo->paAssignments[] = ['id' => 999, 'active' => 1, 'pa_number' => '1727', 'employee_id' => 12, 'employee_name' => 'Tecnico L', 'employee_login' => 'qa.l', 'team' => 'n1',
     'schedule_rule_type' => 'undefined', 'schedule_rule_config' => null, 'valid_from' => '2026-09-01', 'valid_until' => null, 'notes' => null,
     'created_by' => 'qa', 'updated_by' => 'qa', 'created_at' => '2026-09-01 08:00:00', 'updated_at' => '2026-09-01 08:00:00'];
 $types = array_column(array_map(static fn (array $item): array => [$item['employee_id'], $item['schedule_rule_type'] . ' / ' . $item['schedule_rule_label']], $map->list(['date' => '2026-10-06'])['items']), 1, 0);
-assert_same([11 => 'cycle / Ciclo 2P/1R', 12 => 'undefined / Sem escala'], $types, 'Mapa PA: copia reconhecida como ciclo pelo pattern; undefined antigo continua sem escala');
+assert_same([11 => 'cycle / Ciclo 2P/1R', 12 => 'even_days / Dias pares'], $types, 'Mapa PA: ciclo e regra vigente pelo motor, nao pela copia (F6, L-02)');
 $pdo->paAssignments = array_values(array_filter($pdo->paAssignments, static fn (array $row): bool => $row['id'] !== 999));
 assert_same('409: Conflito de escala no PA com Tecnico K.', (static function () use ($map): string {
     try {

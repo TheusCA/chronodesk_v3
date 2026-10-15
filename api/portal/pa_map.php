@@ -10,10 +10,13 @@ try {
     // portal_operational_error(), sem excecao sem captura.
     $service = new PaMapService();
     if ($method === 'GET') {
+        // [F6] Ator para a P9 (categoria so para a gestao e o proprio) e quem
+        // edita o mapa para a DF7 (logins, observacao e elegiveis).
+        $canManage = portal_role_can($role, 'pa_map.manage');
         json_response([
             'sucesso' => true,
-            'can_manage' => portal_role_can($role, 'pa_map.manage'),
-        ] + $service->list($_GET));
+            'can_manage' => $canManage,
+        ] + $service->list($_GET, portal_actor($role), $canManage));
     }
 
     if (!portal_role_can($role, 'pa_map.manage')) {

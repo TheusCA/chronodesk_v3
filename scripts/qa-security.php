@@ -265,9 +265,9 @@ final class QaChildStatement extends PDOStatement {
                 $this->rows = [];
                 foreach ($map as $id => [$employeeId, $pa, $from]) {
                     if ($from <= $params[':date_until'] && (!$onlyActive || (int)($this->pdo->db['funcionarios'][(string)$employeeId]['ativo'] ?? 0) === 1)) {
-                        $this->rows[] = ['id' => (int)$id, 'pa_number' => $pa, 'employee_id' => $employeeId, 'employee_name' => 'QA ' . $employeeId, 'employee_login' => null, 'team' => 'n1',
-                            'schedule_rule_type' => 'always_onsite', 'schedule_rule_config' => null, 'valid_from' => $from, 'valid_until' => null, 'notes' => null,
-                            'created_by' => 'qa', 'updated_by' => 'qa', 'created_at' => '2026-09-01 08:00:00', 'updated_at' => '2026-09-01 08:00:00'];
+                        $this->rows[] = ['id' => (int)$id, 'pa_number' => $pa, 'employee_id' => $employeeId, 'employee_name' => 'QA ' . $employeeId, 'employee_login' => 'qa.login.' . $employeeId, 'team' => 'n1',
+                            'schedule_rule_type' => 'always_onsite', 'schedule_rule_config' => null, 'valid_from' => $from, 'valid_until' => null, 'notes' => 'nota do vinculo ' . $id,
+                            'created_by' => 'qa.criou', 'updated_by' => 'qa.alterou', 'created_at' => '2026-09-01 08:00:00', 'updated_at' => '2026-09-01 08:00:00'];
                     }
                 }
                 return true;
@@ -276,13 +276,30 @@ final class QaChildStatement extends PDOStatement {
                 $this->rows = [];
                 foreach ($this->pdo->db['funcionarios'] as $id => $row) {
                     if ((int)$row['ativo'] === 1 && $row['equipe'] === 'n1') {
-                        $this->rows[] = ['id' => (int)$id, 'name' => 'QA ' . $id, 'team' => 'n1', 'ad_login' => null];
+                        $this->rows[] = ['id' => (int)$id, 'name' => 'QA ' . $id, 'team' => 'n1', 'ad_login' => 'qa.elegivel.' . $id];
                     }
                 }
                 return true;
             }
             if (strpos($this->sql, 'SELECT exception_type FROM portal_schedule_exceptions WHERE ') === 0 || strpos($this->sql, 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE ') === 0) {
                 $this->rows = [];
+                return true;
+            }
+            // F6: motor do mapa (mapPresence). Sem regra, excecao nem ausencia;
+            // cadastros com o arquivado; todos de N1 ficam sem escala.
+            if (strpos($this->sql, 'SELECT r.id, r.employee_id, f.nome AS employee_name') === 0
+                || strpos($this->sql, 'SELECT id, employee_id, employee_name, team, exception_date, exception_type, note,') === 0
+                || strpos($this->sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time') === 0) {
+                $this->rows = [];
+                return true;
+            }
+            if (strpos($this->sql, 'SELECT id, nome AS employee_name, equipe, arquivado_em FROM funcionarios WHERE (ativo = 1 OR arquivado_em IS NOT NULL) AND fora_mapa_escala = 0') === 0) {
+                $this->rows = [];
+                foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                    if ((int)$row['ativo'] === 1 || ($row['arquivado_em'] ?? null) !== null) {
+                        $this->rows[] = ['id' => (int)$id, 'employee_name' => 'QA ' . $id, 'equipe' => $row['equipe'], 'arquivado_em' => $row['arquivado_em'] ?? null];
+                    }
+                }
                 return true;
             }
         }
@@ -1851,6 +1868,12 @@ $l07Cases = qa_run_endpoints($qaDir, [
     'dashboard_tecnico' => ['endpoint' => 'api/portal/dashboard.php', 'method' => 'GET', 'session' => $technician, 'state' => $archivedState],
     'mapa_hoje' => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'GET', 'session' => $manager, 'db' => $mapDb],
     'mapa_ontem' => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'GET', 'session' => $manager, 'db' => $mapDb, 'query' => ['date' => $yesterday]],
+    // F6 (DF7): o mapa por perfil; so quem edita (admin e Lideranca) recebe
+    // elegiveis, login, observacao e autores do vinculo.
+    'mapa_admin' => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'GET', 'session' => QA_ADMIN_SESSION, 'db' => $mapDb],
+    'mapa_lideranca' => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'GET', 'session' => qa_ci_session(2, 'qa.lider', 'lideranca'), 'db' => $mapDb],
+    'mapa_tecnico' => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'GET', 'session' => $technician, 'db' => $mapDb],
+    'mapa_leitura' => ['endpoint' => 'api/portal/pa_map.php', 'method' => 'GET', 'session' => qa_ci_session(4, 'qa.leitura', 'somente_leitura'), 'db' => $mapDb],
 ]);
 $l07Body = static fn (string $case): array => (array)json_decode($l07Cases[$case]['body'], true);
 foreach ($l07Cases as $case => $result) {
@@ -1871,7 +1894,18 @@ assert_same(false, strpos($l07Cases['dashboard_gestor']['body'], 'QA Arquivado')
 $mapEmployees = static fn (array $body): array => array_column($body['items'] ?? [], 'employee_id');
 assert_same([1], $mapEmployees($l07Body('mapa_hoje')), 'D13: Mapa PA de hoje sem o vinculo do arquivado');
 assert_same([1, 11], $mapEmployees($l07Body('mapa_ontem')), 'D13: Mapa PA de ontem com o vinculo do arquivado, como estava');
-assert_same([true, false], [in_array(1, array_column($l07Body('mapa_hoje')['employees'] ?? [], 'id'), true), in_array(11, array_column($l07Body('mapa_hoje')['employees'] ?? [], 'id'), true)], 'Mapa PA: arquivado fora dos elegiveis');
+assert_same([true, false], [in_array(1, array_column($l07Body('mapa_lideranca')['employees'] ?? [], 'id'), true), in_array(11, array_column($l07Body('mapa_lideranca')['employees'] ?? [], 'id'), true)], 'Mapa PA: arquivado fora dos elegiveis');
+// F6 (DF7): campos so de quem edita o mapa; nome, equipe, PA e situacao para todos.
+$managerOnlyMarks = ['"employees"', 'qa.elegivel.', 'qa.login.', 'nota do vinculo', 'qa.criou', 'qa.alterou'];
+foreach (['mapa_admin' => true, 'mapa_lideranca' => true, 'mapa_hoje' => false, 'mapa_tecnico' => false, 'mapa_leitura' => false] as $case => $edits) {
+    $body = $l07Body($case);
+    $raw = $l07Cases[$case]['body'];
+    assert_same($edits, $body['can_manage'] ?? null, "DF7 {$case}: can_manage");
+    assert_same(array_fill_keys($managerOnlyMarks, $edits), array_combine($managerOnlyMarks, array_map(static fn (string $mark): bool => strpos($raw, $mark) !== false, $managerOnlyMarks)), "DF7 {$case}: elegiveis, login, observacao e autores so para quem edita o mapa");
+    $item = $body['items'][0] ?? [];
+    assert_same([1, 'QA 1', 'n1', '1732', true, true], [$item['employee_id'] ?? null, $item['employee_name'] ?? null, $item['team'] ?? null, $item['pa_number'] ?? null, array_key_exists('presence', $item), array_key_exists('schedule_rule_label', $item)], "DF7 {$case}: nome, equipe, PA e situacao para todos");
+    assert_same([true, true, true], [isset($body['week']['from'], $body['week']['to']), is_array($body['conflicts'] ?? null), is_array($body['absences_week'] ?? null)], "F6 {$case}: semana, conflitos e ausencias da semana na resposta");
+}
 
 // QA 13 e A3, estruturais: so os endpoints de funcionario e a carga de
 // emergencia do config.php gravam access_role; ad_login gravado so depois de

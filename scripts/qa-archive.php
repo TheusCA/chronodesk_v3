@@ -1232,6 +1232,29 @@ final class QaMapStatement extends PDOStatement {
         if (strpos($sql, 'SELECT exception_type FROM portal_schedule_exceptions WHERE ') === 0 || strpos($sql, 'SELECT rule_type, rule_config FROM portal_schedule_rules WHERE ') === 0) {
             return true;
         }
+        // [F6] Motor do mapa (OperationalService::mapPresence): sem regra,
+        // excecao nem ausencia nesta massa; cadastros com o arquivado (D7).
+        if (strpos($sql, 'SELECT r.id, r.employee_id, f.nome AS employee_name') === 0
+            || strpos($sql, 'SELECT id, employee_id, employee_name, team, exception_date, exception_type, note,') === 0
+            || strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time') === 0) {
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, nome AS employee_name, equipe, arquivado_em FROM funcionarios WHERE (ativo = 1 OR arquivado_em IS NOT NULL) AND fora_mapa_escala = 0') === 0) {
+            foreach ($db->employees as $id => $row) {
+                if ((int)$row['ativo'] === 1 || ($row['arquivado_em'] ?? null) !== null) {
+                    $this->rows[] = ['id' => $id, 'employee_name' => "Tecnico {$id}", 'equipe' => 'n1', 'arquivado_em' => $row['arquivado_em'] ?? null];
+                }
+            }
+            return true;
+        }
+        if ($sql === 'SELECT pa_number, employee_id, team, work_date FROM portal_pa_map WHERE record_status = "active" AND work_date BETWEEN :date_from AND :date_to ORDER BY work_date, pa_number') {
+            foreach ($db->legacy as $row) {
+                if ($row['work_date'] >= $params[':date_from'] && $row['work_date'] <= $params[':date_to']) {
+                    $this->rows[] = ['pa_number' => $row['pa_number'], 'employee_id' => $row['employee_id'], 'team' => $row['team'], 'work_date' => $row['work_date']];
+                }
+            }
+            return true;
+        }
         // save(): cadastro, conferencia de conflito e gravacao.
         if ($sql === 'SELECT id, nome AS name, equipe AS team, ad_login, fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1 FOR UPDATE') {
             $id = (int)$params[':id'];
@@ -1308,9 +1331,9 @@ $mapPdo = new QaMapPdo(
     [$mapRow(1, 41, '1732', $recurring), $mapRow(2, 42, '1731', $recurring), $mapRow(3, 43, '1730', $recurring)],
     $legacyRows
 );
-$map = new PaMapService($mapPdo);
+$map = new PaMapService($mapPdo, $today);
 $mapView = static function (string $date) use ($map): array {
-    $result = $map->list(['date' => $date]);
+    $result = $map->list(['date' => $date], ['role' => 'admin', 'employee_id' => null], true);
     $view = [];
     foreach ($result['items'] as $item) {
         $view[] = $item['source'] . ':' . $item['employee_id'];
@@ -1336,7 +1359,7 @@ foreach (['hoje' => $today, 'amanha' => $tomorrow] as $label => $date) {
     ], $mapView($date), "Mapa PA de {$label}: sem vinculo de inativo, recorrente e da tabela antiga (L-07, D13)");
 }
 $filtered = array_values(array_filter($mapPdo->sql, static fn (string $sql): bool => strpos($sql, 'FROM portal_pa_') !== false));
-assert_same(6, count($filtered), 'Mapa PA: duas leituras de vinculo por data');
+assert_same(12, count($filtered), 'Mapa PA: quatro leituras de vinculo por data (recorrente e tabela antiga, na data e na semana do conflito; F6)');
 // Decisao 8 do commit 4: a conferencia de conflito do save() segue a regra
 // do mapa. De hoje em diante, PA ocupado so por inativo aceita vinculo novo
 // (sem o nome do arquivado na resposta); ocupado por ativo continua em
