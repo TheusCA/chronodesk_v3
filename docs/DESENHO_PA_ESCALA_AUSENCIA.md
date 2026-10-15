@@ -1923,7 +1923,7 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 
 **Pendência do lote de acabamento (registrada em 2026-10-15, junto com a 17):** Calendário, visão Semana em 390 px: cada cartão mostra só o ícone e uma letra, e com o motor são cerca de 14 cartões por dia. Proposta: em telas estreitas, a semana vira lista, um dia embaixo do outro, com os cartões completos. Não entra no F5.
 
-**Commit 5 entregue (2026-10-15, `6f87c4e`; aguardando a revisão do responsável antes de fechar o F5):** ponta a ponta, contratos e roteiro.
+**Commit 5 entregue (2026-10-15, `6f87c4e`; aprovado em 2026-10-15: F5 completo):** ponta a ponta, contratos e roteiro.
 
 | Arquivo | Como ficou |
 |---|---|
@@ -1938,7 +1938,7 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 | `scripts/qa-presence-cutoff.php` | Relatório sem `parcial`; **seção 5, travas do roteiro**: comandos em uma linha, sem `pull`/`fetch`, 019 e `merge --ff-only` na mesma linha com `cat-file` e `pipefail`, `f5-commit` gravado e conferido, branch antes do archive, ensaio nas três variantes antes do merge, verificação da 019 antes da 019, depois do merge, no pós-deploy e logo depois do registro, data do corte pela D2 e conferida no formato, consulta da 16c com o texto aprovado antes do registro, 16b em contagem antes do registro, as duas regras de parada no texto, nenhuma consulta com nome, login ou autor, senha lida sem eco e apagada na mesma linha |
 | `frontend/scripts/qa-calendar-presence.mjs` | `rowPartialTime` (casos), nenhuma tela lê o marcador do detalhe, tela Escala pelo `parcial`, célula no topo, evento que não é escala com `situacao` e `parcial` |
 
-**Decisões de implementação do commit 5 (a aprovar):**
+**Decisões de implementação do commit 5 (aprovadas em 2026-10-15, como estão):**
 
 1. **`parcial` num lugar só:** calculado no `engineSchedule` (flag `$withPartial`) e ligado no Calendário e na tela Escala. **O relatório fica sem ele** (o contrato do relatório não muda; o marcador continua no `detalhe`).
 2. **A correção da célula vale também para o Mês** (é o mesmo botão): nos dias com poucos eventos, e nos fins de semana, o número do dia passa a ficar no topo também no Mês, com ou sem corte. É a única mudança visual sem corte deste commit.
@@ -1951,6 +1951,17 @@ Entregue em `96758ae`. **Validação pela IA:** `qa-presence-cutoff` com a expre
 **Validação pela IA:** bateria PHP completa (`qa-presence-cutoff` com 597 verificações, `qa-schedule-history`, `qa-schedule-legacy-output` com as 17 saídas idênticas), os 16 `qa:*`, lint e typecheck; **mutação 22/22** no backend e no roteiro (`parcial` no relatório, sem `parcial`, flag desligada em cada tela, dia inteiro, nulo em vez de ausente; roteiro sem `pipefail`, sem `cat-file`, merge com `;`, `pull`, 16c em outra data, data sem conferência, as duas regras de parada, sem verificação depois do registro, consulta com o autor, senha sem `unset`, comando em duas linhas, sem `f5-commit`, 16b sem `TRIGGER`, sem a variante c; um mutante inválido na 1ª rodada por escape errado no próprio mutante, corrigido) e **50/50** no frontend (22 das anteriores que ainda se aplicam e 28 novas; um sobrevivente na 1ª rodada por falta de caso, morto depois). Prints com servidor simulado em Chrome sem janela com perfil próprio: semana do corte (12 a 18/10) em 1366 px com o número do dia a 8 px do topo nas sete colunas; tela Escala com os três marcadores e o horário no nome acessível. **Não verificado:** o roteiro não foi executado (sem servidor nem MySQL na estação): ensaio, a consulta de privilégios da 16b (o formato do `GRANTEE` no `information_schema` precisa ser conferido no MySQL 8.0 do servidor) e o registro só ficam provados no ensaio; a tela contra o backend real; a semana em 390 px (pendência do lote de acabamento).
 
 **Como testar (sugestão):** (1) no MySQL local, com a massa de antes e o corte inserido direto: tela Escala com o marcador e o horário nos dias com parcial (inclusive sem escala), sem marcador no dia inteiro; `schedules.php` (DevTools) com `parcial` só nesses dias; relatório sem `parcial`; (2) Calendário em 1366 px, Semana e Mês, com o número do dia no topo em todas as colunas; (3) ler o roteiro "Deploy que traz o F5" e, se quiser, rodar o passo 5 (16b) e o passo 9 (data do corte e 16c) no MySQL local, que só leem.
+
+**Commit 5 aprovado em 2026-10-15**, com as sete decisões como estão, após revisão do responsável no MySQL 8.0.46 local. **F5 completo**, no deploy único da Parte B, pelo roteiro "Deploy que traz o F5" do `DEPLOY_LINUX.md`.
+
+| Caso | Resultado |
+|---|---|
+| Passo 5 (16b), comando do roteiro com um `.env` de teste e usuários de teste (removidos depois) | Só `SELECT`/`INSERT`/`UPDATE`/`DELETE`: `usuario_lido = 1`, `concessoes_drop = 0`, `concessoes_trigger = 0`; `ALL` no banco: 1/1/1; root: 1/1/1; `DB_USER` vazio: `usuario_lido = 0`; `TRIGGER` numa tabela, noutro host do mesmo usuário: 1/0/1; `.env` com e sem aspas. O formato do `GRANTEE` (`'usuario'@'host'`) confere no MySQL 8.0 |
+| Passo 9, data do corte | Em 15/10 deu 2026-10-16; simulada para 16/10, 20/12 e 31/01, deu 16/11, 16/01 e 16/02 |
+| Passo 9, consulta da 16c com o `C` do passo | 13 ativos e 11 nas duas colunas (base local) |
+| QAs | `qa-presence-cutoff` (597), `qa-schedule-history`, `qa-presence-engine` e `qa-calendar-presence` OK |
+
+**F5 completo (2026-10-15):** commit 1 `03359b5` (019 e registro), gatilhos `b2c9bc5`, commit 2 `7e08b03` (relatório e CSV), consistência `96758ae`, commit 3 `5f20dd8` (Calendário) e ajuste `114630e` (`type=absence`), commit 4 `e25cc8c` (frontend) e ajustes `7aa5cfe`, commit 5 `6f87c4e` (ponta a ponta, contratos e roteiro); documentação de cada passo nos commits seguintes. Deploy: dentro do deploy único da Parte B, depois do F9.
 
 ---
 
