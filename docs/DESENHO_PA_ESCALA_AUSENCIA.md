@@ -1716,7 +1716,7 @@ Ausência que cruza o corte: o evento `absence` antigo vai até a véspera do co
 | `scripts/qa-schedule-legacy-output.php` | Banco simulado com a tabela do corte e as consultas com arquivado. Seção 3: as 17 saídas idênticas com a tabela vazia, com o corte depois de todos os períodos e no futuro distante; corte em 16/10/2026: as competências inteiras antes dele idênticas e o relatório do ano dividido (parte antiga igual linha a linha no JSON e no CSV, aviso, ordem das chaves, totais) |
 | `scripts/qa-schedule-history.php` | Rótulo do ciclo inválido na tela Escala com acento (D11) |
 
-**Decisões de implementação do commit 2 (a aprovar):**
+**Decisões de implementação do commit 2 (aprovadas em 2026-10-16):**
 
 1. **Leitura do corte em duas consultas** (`information_schema` e a linha), no padrão do `PaMapService`, em vez de capturar o erro 1146: nenhuma exceção engolida. Uma vez por requisição, guardada na instância do serviço.
 2. **Corte inválido no banco para o relatório** (500 genérico, classe no log) em vez de cair em silêncio no cálculo antigo. Os `CHECK` e os gatilhos da 019 tornam o caso quase impossível.
@@ -2119,7 +2119,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 **Antes do commit 2 (2026-10-15):** a Q-F6 do servidor ficou pendente até os números chegarem (falha na colagem na aprovação do plano). Chegaram em 2026-10-15 e estão na tabela da Q-F6, acima: nenhum pede tratamento antes do commit 2, que começou depois deles.
 
-**Commit 2 entregue (2026-10-15, `2be30eb`; a aprovar):** gravação do mapa.
+**Commit 2 entregue (2026-10-15, `2be30eb`; aprovado em 2026-10-16, ver abaixo):** gravação do mapa.
 
 | Arquivo | Como ficou |
 |---|---|
@@ -2132,7 +2132,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 | `frontend/scripts/qa-schedule-rules.mjs` | A verificação de fonte "o Mapa calcula `fixed_weekdays` por data" pedia `OperationalService::presenceForRule` no `PaMapService`; passa a pedir o motor (`mapPresence`) e a recusar o cálculo pela cópia |
 | `docs/API_CONTRACTS_FRONTEND.md` | `pa_map.php` com a gravação do F6 |
 
-**Decisões de implementação do commit 2 (a aprovar):**
+**Decisões de implementação do commit 2 (aprovadas em 2026-10-16):**
 
 1. **Avisos no 1º dia útil do vínculo:** `valid_from`, ou a segunda seguinte se cair no fim de semana; texto com a data ("Colaborador em trabalho remoto em 23/11/2026, início do vínculo."). Pelo motor, o aviso de remoto passa a valer para qualquer regra remota no dia (dias pares em dia ímpar, dias fixos fora do dia), não só para sempre remoto e ciclo. Continuam como texto em `warnings[]` (a tela atual mostra o primeiro).
 2. **Horizonte (DF4):** os 20 primeiros dias úteis a partir do maior entre `valid_from` e hoje, incluindo esse dia, sem passar de `valid_until`; fim de semana fora, como na leitura (DF3). Vínculo todo no passado: sem conferência de conflito (só o aviso do início).
@@ -2147,6 +2147,22 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 **Validação pela IA:** `qa-pa-conflicts` (92 verificações), `qa-archive` (578), `qa-security`, `qa-schedule-legacy-output` (17 saídas idênticas), bateria PHP completa, os 16 `qa:*` e lint; **mutação 39/39 (um sobrevivente na 1ª rodada, o ocupante que começa no meio do horizonte, por falta de caso; morto depois)** no `save`, no `remove` e no endpoint. **Não verificado:** MySQL (só banco simulado); a tela atual com a resposta nova (ela mostra `warnings[0]` e não mostra `conflicts`; muda no commit 3).
 
 **Como testar no MySQL local (sugestão):** (1) dois técnicos presenciais: vincular o segundo ao PA do primeiro → salva, `conflicts` com os dois IDs nos dias certos e `conflicts_more`; `audit_log` com `PA_MAP_SAVED` (PA e IDs) e `PA_MAP_CONFLICT_ACCEPTED` (`WARNING`, datas), sem nome; (2) remoto, sem escala e ausente o dia todo no início → salva com o aviso, sem a confirmação de antes (a tela atual ainda pode abrir o `window.confirm` só se receber 409, o que não acontece mais); (3) o mesmo colaborador em outro PA no período → 409; fora do Mapa → 409; (4) PA com vínculo de cadastro arquivado → salva sem conflito com ele; (5) desocupar → `PA_MAP_REMOVED` com PA e colaborador; (6) `SELECT action, severity, details FROM audit_log WHERE action LIKE 'PA_MAP_%' ORDER BY id DESC LIMIT 5;`.
+
+**Commit 2 aprovado em 2026-10-16**, com as nove decisões de implementação como estão, inclusive o cadastro inativo continuar 400 (validação do cadastro, como sempre foi), após teste do responsável no MySQL 8.0.46 local com regras, ausência e vínculos de teste, removidos depois (o cadastro desativado para o teste foi reativado).
+
+| Caso | Resultado |
+|---|---|
+| Sempre presencial no PA de quem tem seg/qua/sex | Salvou; 10 dias de conflito de 16/10 a 11/11 (21 e 23/10 fora pelas férias do colega), `conflicts_more` 0; `PA_MAP_CONFLICT_ACCEPTED` só com IDs e datas |
+| Remoto no início | Aviso de trabalho remoto; salvou, sem 409 |
+| Início numa folga | Aviso de ausente o dia todo; salvou, sem 409 |
+| Sem regra | Aviso de sem escala; salvou, sem 409 |
+| Mesmo colaborador em outro PA no período | 409 |
+| Fora do Mapa | 409 |
+| Inativo ou inexistente | 400 |
+| Período invertido | 400 |
+| Remover | Funciona; remover de novo: "não encontrado" |
+| Concorrência: duas gravações simultâneas do mesmo técnico em PAs diferentes, 5 rodadas | Sempre uma grava e a outra recebe 409; nunca dois vínculos |
+| Decisão 8: vínculo novo no PA de um cadastro inativo | 0 conflitos, sem auditoria de conflito |
 
 ---
 
