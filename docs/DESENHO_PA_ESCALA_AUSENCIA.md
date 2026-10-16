@@ -2212,7 +2212,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 **Ajustes pedidos na revisão, num commit separado antes do commit 4:** (a) o cartão de permissão de quem não edita deixa de dizer "Seu perfil é somente leitura" (confunde com o perfil `somente_leitura`, e o gestor também o via); (b) o achado dos tons `metric-card-*` e `inline-alert-*` fora do CSS é corrigido agora, porque o deploy é único e o defeito já está em produção.
 
-**Ajustes entregues (2026-10-16, `9f15d33`; a aprovar):**
+**Ajustes entregues (2026-10-16, `9f15d33`; aprovados em 2026-10-16, ver abaixo):**
 
 | Arquivo | Como ficou |
 |---|---|
@@ -2221,7 +2221,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 | `frontend/scripts/qa-calendar-presence.mjs` | Compila o `index.css` com a configuração do projeto e confere, no CSS gerado, cada tom em uso: borda nos dois; fundo e cor do texto no alerta. Os tons saem do código (literais e resultados de ternário em `tone=` do `MetricCard` e do `InlineAlert`, a função `metricTone` e a tabela de métricas do Dashboard, mais o padrão `info`): `MetricCard` com info, success, warning e danger; `InlineAlert` com info, warning e danger. Tom novo usado sem a regra no CSS derruba o QA. Confere também que o `Primitives` monta os dois por template |
 | `frontend/scripts/qa-pa-map.mjs` | `PermissionCard` renderizado nos dois perfis (texto, valor e tom; sem "somente leitura" para quem não edita); a página usa o componente e não tem o texto antigo; o comentário do achado aponta para o `qa:calendar-presence` |
 
-**Decisões de implementação dos ajustes (a aprovar):**
+**Decisões de implementação dos ajustes (aprovadas em 2026-10-16):**
 
 1. **Valor do cartão continua "Leitura"**, e o texto sugerido vai para o detalhe. "Visualização" como valor, no tamanho do número do cartão, não cabe na coluna de 1366 px (cinco cartões).
 2. **Tons conferidos no `qa:calendar-presence`**, junto com as `presence-*` (mesmo defeito, mesma compilação), e não num QA novo.
@@ -2230,6 +2230,24 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 **Validação pela IA:** os 17 `qa:*`, lint, typecheck e a bateria PHP completa; **mutação 16/16**: cada tom de volta na camada, um a um e todos juntos (8); alerta sem fundo, alerta sem cor de texto e cartão sem borda (3); tom novo (`neutral`) num `MetricCard` (1); cartão de quem não edita com o texto antigo, com o texto de quem edita, tons trocados e a página sem o `PermissionCard` (4). Na 1ª rodada, os 8 mutantes "de volta na camada" sobreviveram por **erro do mutante**: os blocos iam para dentro do `@media (prefers-reduced-motion)`, não da camada. Com o mutante corrigido, os 8 morreram. **Prints antes e depois** (servidor simulado, Chrome sem janela, 1366 px): cartões de métrica (Liderança e técnico), alerta de conflito (`danger`) e aviso do save (`warning`) no modal. Valores computados no navegador: antes, borda `rgb(35, 48, 68)` (a padrão) e alerta com fundo transparente em todos os tons; depois, a borda de cada tom (ciano 15%, esmeralda 15%, âmbar 20%, vermelho 20%) e o fundo do alerta (vermelho e âmbar 5%). A diferença na tela é discreta porque os tons são de baixa opacidade por desenho. Técnico: "Leitura" e "Visualização: só Admin e Liderança editam o mapa". **Não verificado:** o portal real com o build novo (o teste no navegador é do responsável).
 
 **Achado novo (mesmo defeito, fora do pedido, não corrigido):** `status-dot-*` e `detail-pill-*`, também montados por template no `Primitives.jsx` e dentro de `@layer components`, também não saem no CSS gerado. `StatusDot` (indicador de conexão no topo do portal, no Dashboard e em Pausas: `success`, `warning`, `info`) fica sem a cor e **sem o ponto**, porque a cor do ponto vem de `.status-dot-<tom> span`, e "online" e "instável" só se distinguem pelo texto. `DetailPill` (`neutral`, o padrão, `info` e `warning`; Admin, aprovações e Incidentes críticos) fica sem a cor do tom. `status-<tom>` (`FileTypeBadge`) sai normalmente, porque esses nomes aparecem inteiros em outros arquivos. A correção é a mesma (sair da camada e conferir no QA).
+
+**Ajustes aprovados em 2026-10-16** (validação humana, revisão do responsável), com as três decisões:
+
+| Caso | Resultado |
+|---|---|
+| Build com o `index.css` novo | As regras `inline-alert-info`, `-warning`, `-danger` e `metric-card-info`, `-success`, `-warning`, `-danger` saem no CSS gerado |
+| `qa:calendar-presence` | OK |
+| Cartão de permissão de quem não edita | "Leitura" e "Visualização: só Admin e Liderança editam o mapa" |
+
+**Achado novo: corrigir antes do commit 4, num commit separado.** Varredura do responsável no CSS gerado, por classe montada por template no código:
+
+| Classe | Onde aparece | Situação no CSS gerado |
+|---|---|---|
+| `status-dot-*` (`Primitives`) | Topo do portal, Dashboard, Pausas | Nenhum tom; o indicador de conexão fica sem cor e sem o ponto |
+| `detail-pill-*` (`Primitives`) | Admin, aprovações, Incidentes críticos | Nenhum tom |
+| `operator-card-${state}` (`PausasPage.jsx:125`) | Cartões de Pausas | `operator-card-available` e `operator-card-offline` ausentes: o técnico disponível perde a barra verde; `paused` e `pending` só sobrevivem porque as palavras aparecem inteiras em outro arquivo. **Não estava no achado da IA** |
+
+Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `tailwind.config.js`. QA genérico, no lugar da lista por prefixo: varrer o `src` por `className` montado por template (`prefixo-${...}` dentro de `className`, não em `key`) e, para cada prefixo, exigir que toda regra `.prefixo-<variante>` do `index.css` saia no CSS gerado; prefixo ou variante novo sem regra no CSS derruba o QA. Mantida a conferência dos tons em uso do `MetricCard` e do `InlineAlert`. Mutação: cada grupo de volta na camada, mais um prefixo novo por template sem regra. Prints antes e depois: indicador de conexão (online e instável), uma pílula de Incidentes críticos e cartões de Pausas com técnico disponível e em pausa.
 
 ---
 
