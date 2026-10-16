@@ -725,6 +725,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Portal real com o build novo nao aberto (teste do responsavel). Diferenca visual discreta: os tons sao de baixa opacidade por desenho. **Achado novo, nao corrigido:** `status-dot-*` (indicador de conexao, sem a cor e sem o ponto) e `detail-pill-*` tem o mesmo defeito. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-16**, com as tres decisoes, apos revisao do responsavel: build com o `index.css` novo, com as regras `inline-alert-info`, `-warning`, `-danger` e `metric-card-info`, `-success`, `-warning`, `-danger` no CSS gerado; `qa:calendar-presence` OK; cartao de permissao com "Leitura" e "Visualizacao: so Admin e Lideranca editam o mapa". Achado novo a corrigir antes do commit 4, em commit separado, ampliado pela varredura do responsavel no CSS gerado: `status-dot-*` e `detail-pill-*` sem nenhum tom, e `operator-card-${state}` (`PausasPage.jsx:125`) sem `available` e `offline` (o tecnico disponivel perde a barra verde; `paused` e `pending` so sobrevivem porque as palavras aparecem inteiras em outro arquivo), que nao estava no achado da IA. Pedido tambem um QA generico por prefixo montado por template no `className`. |
 
+### Parte B, F6 — correcao do achado (status-dot, detail-pill e operator-card no CSS) — 2026-10-16
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Corrigir, antes do commit 4, o mesmo defeito do ajuste (b) em `status-dot-*` (indicador de conexao sem cor e sem o ponto), `detail-pill-*` (pilulas sem o tom) e `operator-card-${state}` (tecnico disponivel sem a barra verde), e trocar a conferencia por prefixo por um QA generico. |
+| **Branch e commits** | `fcf24f3` (aprovacao dos ajustes), `a795efc` (correcao e QA) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `src/index.css` (variantes dos tres prefixos fora de `@layer components`, sem mudar as regras nem o `tailwind.config.js`), `qa-calendar-presence.mjs` (conferencia generica por prefixo montado por template no `className`; a dos tons de `MetricCard` e `InlineAlert` continua); desenho 9.8. |
+| **Decisoes de implementacao** | Quatro, a aprovar (desenho 9.8): variantes de hoje conferidas como "contem" (variante nova com regra passa); variante que o QA nao resolve derruba; o prefixo `status-` do `FileTypeBadge` entra na varredura; `operator-card-paused`/`-pending` tambem saem da camada. |
+| **Validacao executada pela IA** | 17 `qa:*`, lint, typecheck, bateria PHP completa; mutacao **22/22** e **3/3 controles** aceitos (template em `key`, tom novo com regra, e `operator-card-paused`/`-pending` de volta na camada, mutante equivalente pelo literal no `DashboardPage.jsx:94`; na 1a rodada esse caso estava entre os mutantes e sobreviveu; virou controle e ganhou o mutante sem o literal, que morreu). Prints antes e depois com servidor simulado e Chrome sem janela (indicador online e instavel, cartoes de Pausas, pilulas de um chamado critico); valores computados: antes, borda padrao, fundo e ponto transparentes, barra do disponivel cinza; depois, cor de cada tom, ponto colorido e barra verde. |
+| **Limitacoes declaradas** | Portal real com o build novo nao aberto (teste do responsavel). A varredura le so `className` com template literal; classe montada fora do `className` (variavel, funcao) nao entra. **Achado fora do escopo, nao corrigido:** "Atualizado ha 1792178705 segundos" no Dashboard quando o primeiro `status.php` falha (`parseDate(null)` vira 1970). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do responsavel antes do commit 4. |
+
 ---
 
 ## 5. Responsabilidade
