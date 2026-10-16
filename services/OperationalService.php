@@ -1067,7 +1067,9 @@ final class OperationalService {
     }
 
     public function report(array $filters): array {
-        $competency = self::competencyRange($filters['competency'] ?? null);
+        // Competencia padrao pelo "hoje" do servico (injetavel nos testes; em
+        // producao, a data do PHP): sem isso, a saida dependia do dia da execucao.
+        $competency = self::competencyRange($filters['competency'] ?? $this->today());
         $from = $filters['from'] ?? $competency['start'];
         $to = $filters['to'] ?? $competency['end'];
         [$from, $to] = $this->period(['from' => $from, 'to' => $to], 366);
