@@ -329,18 +329,6 @@
     @apply flex items-start gap-3 rounded-card border px-4 py-3;
   }
 
-  .inline-alert-info {
-    @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-100;
-  }
-
-  .inline-alert-warning {
-    @apply border-amber-400/20 bg-amber-500/5 text-amber-100;
-  }
-
-  .inline-alert-danger {
-    @apply border-red-400/20 bg-red-500/5 text-red-100;
-  }
-
   .approval-card {
     @apply card flex flex-col justify-between gap-5 border-l-4 border-l-amber-400 lg:flex-row lg:items-center;
   }
@@ -394,22 +382,6 @@
   .metric-card {
     @apply min-w-0 rounded-card border bg-slate-900/80 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)];
     background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);
-  }
-
-  .metric-card-info {
-    @apply border-cyan-400/15;
-  }
-
-  .metric-card-success {
-    @apply border-emerald-400/15;
-  }
-
-  .metric-card-warning {
-    @apply border-amber-400/20;
-  }
-
-  .metric-card-danger {
-    @apply border-red-400/20;
   }
 
   .metric-label {
@@ -537,4 +509,37 @@
 
 .presence-no-schedule {
   @apply border-dashed border-slate-400/60 bg-transparent text-slate-300;
+}
+
+/* Tons do InlineAlert e do MetricCard (Primitives.jsx). O nome é montado por
+   template (`inline-alert-${tone}`, `metric-card-${tone}`) e nunca aparece
+   inteiro nos arquivos que o Tailwind varre: dentro de @layer components eles
+   eram descartados do CSS gerado, e alertas e cartões saíam sem a cor do tom.
+   Fora de camada, como as presence-* do F5, sempre vão para o CSS. */
+.inline-alert-info {
+  @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-100;
+}
+
+.inline-alert-warning {
+  @apply border-amber-400/20 bg-amber-500/5 text-amber-100;
+}
+
+.inline-alert-danger {
+  @apply border-red-400/20 bg-red-500/5 text-red-100;
+}
+
+.metric-card-info {
+  @apply border-cyan-400/15;
+}
+
+.metric-card-success {
+  @apply border-emerald-400/15;
+}
+
+.metric-card-warning {
+  @apply border-amber-400/20;
+}
+
+.metric-card-danger {
+  @apply border-red-400/20;
 }

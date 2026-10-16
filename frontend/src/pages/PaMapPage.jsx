@@ -308,6 +308,14 @@ export function DaySelector({ days, date, onSelect }) {
   )
 }
 
+// Quem não edita é o gestor, o técnico e o perfil somente leitura: o texto não
+// fala em "somente leitura" para não confundir com o nome desse perfil.
+export function PermissionCard({ canManage }) {
+  return canManage
+    ? <MetricCard detail="Admin/Liderança podem editar" icon="settings" label="Permissão" tone="warning" value="Edição" />
+    : <MetricCard detail="Visualização: só Admin e Liderança editam o mapa" icon="settings" label="Permissão" tone="info" value="Leitura" />
+}
+
 export function PaMapPage({ notify }) {
   // L-03: a data padrão é a de hoje no fuso local, não em UTC.
   const [filters, setFilters] = useState({ date: localDate(), team: '' })
@@ -388,7 +396,7 @@ export function PaMapPage({ notify }) {
         <MetricCard detail="Vínculos na data" icon="users" label="Vínculos" value={assignments.length} />
         <MetricCard detail="Técnicos presenciais na data" icon="shield" label="Presenciais" tone="success" value={onsiteCount} />
         <MetricCard detail="PAs com dois ou mais presenciais num dia da semana" icon="alert" label="Conflitos" tone={conflictCount ? 'danger' : 'info'} value={conflictCount} />
-        <MetricCard detail={canManage ? 'Admin/Liderança podem editar' : 'Seu perfil é somente leitura'} icon="settings" label="Permissão" tone={canManage ? 'warning' : 'info'} value={canManage ? 'Edição' : 'Leitura'} />
+        <PermissionCard canManage={canManage} />
       </section>
 
       <section aria-label="Legenda do mapa" className="card flex flex-wrap gap-2">

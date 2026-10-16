@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -72,6 +72,43 @@ assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src
     assert.match(rule, /color: rgb/, `CSS gerado com a classe ${item.tone} (texto)`)
   }
   assert.match(compiled.match(/\.presence-no-schedule \{([^}]*)\}/)?.[1] ?? '', /border-style: dashed/, 'CSS gerado: sem escala tracejado')
+
+  // Achado do F6 (commit 3), corrigido antes do commit 4: o mesmo defeito nos
+  // tons do MetricCard e do InlineAlert, montados por template no Primitives
+  // (`metric-card-${tone}`, `inline-alert-${tone}`). Os tons conferidos saem do
+  // código: literais em tone= dos dois componentes, nas tabelas e funções que
+  // alimentam tone={...} e o padrão de cada um; todos precisam existir no CSS gerado.
+  const primitives = read('src/components/ui/Primitives.jsx')
+  assert.match(primitives, /className=\{`metric-card metric-card-\$\{tone\}`\}/, 'MetricCard monta o tom por template')
+  assert.match(primitives, /className=\{`inline-alert inline-alert-\$\{tone\} \$\{className\}`\}/, 'InlineAlert monta o tom por template')
+  const sourceFiles = (dir) => readdirSync(join(frontendRoot, dir), { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? sourceFiles(join(dir, entry.name)) : /\.(jsx?|tsx?)$/.test(entry.name) ? [read(join(dir, entry.name))] : []))
+  const sources = sourceFiles('src')
+  // Valor do tom: o literal de tone="x" ou os resultados de um ternário (não o
+  // que se compara nele, como kind === 'restore').
+  const literals = (text) => [...text.matchAll(/^"([a-z]+)"$|^\{'([a-z]+)'\}$|[?:]\s*'([a-z]+)'/g)].map((match) => match[1] || match[2] || match[3])
+  const usedTones = { 'metric-card': new Set(['info']), 'inline-alert': new Set(['info']) }
+  for (const text of sources) {
+    for (const [, component, value] of text.matchAll(/<(MetricCard|InlineAlert)\b[^>]*?\btone=("[a-z]+"|\{[^}]*\})/g)) {
+      for (const tone of literals(value)) usedTones[component === 'MetricCard' ? 'metric-card' : 'inline-alert'].add(tone)
+    }
+    for (const [, expression] of text.matchAll(/const metricTone = ([^\n]+)/g)) {
+      for (const tone of literals(expression)) usedTones['metric-card'].add(tone)
+    }
+  }
+  const dashboardMetrics = read('src/pages/DashboardPage.jsx').match(/const metrics = \[([\s\S]*?)\n\]/)?.[1] ?? ''
+  for (const [, tone] of dashboardMetrics.matchAll(/\['[a-z_]+', '[^']+', '([a-z]+)'/g)) usedTones['metric-card'].add(tone)
+  assert.deepEqual([...usedTones['metric-card']].sort(), ['danger', 'info', 'success', 'warning'], 'tons do MetricCard em uso')
+  assert.deepEqual([...usedTones['inline-alert']].sort(), ['danger', 'info', 'warning'], 'tons do InlineAlert em uso')
+  for (const [prefix, tones] of Object.entries(usedTones)) {
+    for (const tone of tones) {
+      const rule = compiled.match(new RegExp(`\\.${prefix}-${tone} \\{([^}]*)\\}`))?.[1] ?? ''
+      assert.match(rule, /border-color: rgb/, `CSS gerado com a classe ${prefix}-${tone} (borda)`)
+      if (prefix === 'inline-alert') {
+        assert.match(rule, /background-color: rgb/, `CSS gerado com a classe ${prefix}-${tone} (fundo)`)
+        assert.match(rule, /(^|[^-])color: rgb/, `CSS gerado com a classe ${prefix}-${tone} (texto)`)
+      }
+    }
+  }
 }
 assert.equal(presenceLegendItem('day_off'), null, 'folga (antes do corte) fora da legenda do motor')
 assert.equal(presenceLegendItem('absence').tone, 'presence-absence')

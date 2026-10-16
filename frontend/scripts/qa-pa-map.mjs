@@ -168,7 +168,16 @@ for (const tab of ['map', 'absences']) {
   assert.match(tabs, new RegExp(`aria-selected="true"[^>]*>${tab === 'map' ? 'Mapa' : 'Ausências da semana \\(3\\)'}<`), `aba ${tab} marcada`)
   assert.equal((tabs.match(/aria-selected="true"/g) || []).length, 1, `só a aba ${tab} marcada`)
 }
-const selector = render(page.DaySelector, { days: paMap.weekDays(null, '2026-10-21'), date: '2026-10-21', onSelect: () => {} })
+// Cartão de permissão: quem não edita (gestor, técnico e o perfil somente
+// leitura) não lê "somente leitura", que é o nome de um perfil só.
+const managerPermission = render(page.PermissionCard, { canManage: true })
+assert.match(managerPermission, /metric-card-warning/)
+assert.match(managerPermission, /Edição.*Admin\/Liderança podem editar/s, 'quem edita: Admin/Liderança')
+const readerPermission = render(page.PermissionCard, { canManage: false })
+assert.match(readerPermission, /metric-card-info/)
+assert.match(readerPermission, /Leitura.*Visualização: só Admin e Liderança editam o mapa/s, 'quem não edita: quem edita o mapa')
+assert.doesNotMatch(readerPermission, /somente leitura/i, 'sem "somente leitura" (confunde com o perfil)')
+const selector = render(page.DaySelector,{ days: paMap.weekDays(null, '2026-10-21'), date: '2026-10-21', onSelect: () => {} })
 assert.equal((selector.match(/<button/g) || []).length, 5, 'seletor com cinco dias')
 assert.match(selector, /aria-pressed="true"[^>]*>qua 21</, 'dia selecionado marcado')
 
@@ -184,6 +193,8 @@ assert.match(source, /useState\(\{ date: localDate\(\), team: '' \}\)/, 'data pa
 assert.doesNotMatch(source, /ruleTone|OperationalLegend|Regra par\/ímpar/, 'sem a legenda por tipo de regra')
 assert.match(source, /<PresenceLegend \/>/, 'legenda única do F5')
 assert.match(source, /Admin\/Liderança podem editar/, 'texto de quem edita')
+assert.match(source, /<PermissionCard canManage=\{canManage\} \/>/, 'cartão de permissão na página')
+assert.doesNotMatch(source, /Seu perfil é somente leitura/, 'sem o texto antigo do cartão de permissão')
 assert.doesNotMatch(source, /Admin\/Gestor/, 'sem o texto antigo')
 assert.doesNotMatch(source, /ad_login|employee_login/, 'a tela não mostra login (DF7)')
 assert.match(source, /<MapTabs absences=\{absences\.length\} onSelect=\{setTab\} tab=\{tab\} \/>/, 'abas Mapa e Ausências da semana na página')
@@ -200,8 +211,7 @@ assert.match(source, /pas\.find\(\(pa\) => pa\.pa_number === selectedPa\)/, 'mod
   const { default: tailwindConfig } = await import(pathToFileURL(join(frontendRoot, 'tailwind.config.js')).href)
   const compiled = (await postcss([tailwindcss({ ...tailwindConfig, content: tailwindConfig.content.map((glob) => join(frontendRoot, glob).replaceAll('\\', '/')) })]).process(read('src/index.css'), { from: join(frontendRoot, 'src', 'index.css') })).css
   // Os tons metric-card-* e inline-alert-* (montados por template no
-  // Primitives) já saem do CSS antes do F6: achado registrado à parte; a tela
-  // não depende deles para mostrar o conflito (contorno, ícone e texto).
+  // Primitives) são conferidos no qa:calendar-presence, com os das outras telas.
   // No CSS gerado, a barra do modificador de opacidade vem escapada: .ring-red-400\/60.
   for (const name of ['presence-onsite', 'presence-remote', 'presence-absence', 'presence-no-schedule', 'pa-cell', 'data-table', 'status-neutral', 'ring-red-400/60', 'border-red-400/80', 'bg-red-500/15', 'ring-2']) {
     assert.match(compiled, new RegExp(`\\.${name.split('/').join(String.raw`\\\/`)}[\\s,{:]`), `CSS gerado com .${name}`)
