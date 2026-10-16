@@ -2164,7 +2164,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 | Concorrência: duas gravações simultâneas do mesmo técnico em PAs diferentes, 5 rodadas | Sempre uma grava e a outra recebe 409; nunca dois vínculos |
 | Decisão 8: vínculo novo no PA de um cadastro inativo | 0 conflitos, sem auditoria de conflito |
 
-**Commit 3 entregue (2026-10-16, `b4880e9`; a aprovar):** tela do mapa. Antes dele, `5051eda` corrigiu uma dependência de data achada na bateria: o `report()` calculava a competência padrão com a data do PHP, mesmo com o "hoje" fixo do serviço, e a saída de referência do `qa-schedule-legacy-output` mudou a partir de 16/10/2026 (em produção nada muda).
+**Commit 3 entregue (2026-10-16, `b4880e9`; aprovado em 2026-10-16, ver abaixo):** tela do mapa. Antes dele, `5051eda` corrigiu uma dependência de data achada na bateria: o `report()` calculava a competência padrão com a data do PHP, mesmo com o "hoje" fixo do serviço, e a saída de referência do `qa-schedule-legacy-output` mudou a partir de 16/10/2026 (em produção nada muda).
 
 | Arquivo | Como ficou |
 |---|---|
@@ -2175,7 +2175,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 | `qa-pa-conflicts`, `qa-archive`, `qa-security` | Textos atualizados; `qa-pa-conflicts` com três mensagens de validação acentuadas (93 verificações) |
 | `frontend/scripts/qa-employee-form.mjs`, `qa-schedule-rules.mjs` | O inventário de `window.confirm` perde o do Mapa PA (P13); a cor por tipo de regra (ciclo e dias fixos) vira a cor pela situação do motor, com o rótulo da regra no cartão |
 
-**Decisões de implementação do commit 3 (a aprovar):**
+**Decisões de implementação do commit 3 (aprovadas em 2026-10-16):**
 
 1. **Ausente na cor da legenda (laranja), não vermelho:** a 5.6 fala em "preenchimento vermelho", mas a legenda única do F5 fixou o laranja para ausente; o vermelho fica só para o conflito do PA, o que mantém os dois níveis da D6 distintos.
 2. **Contorno do conflito com ícone, selo e os dias no texto e no nome acessível**, não só cor.
@@ -2192,6 +2192,25 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 **Achado fora do escopo (não corrigido):** os tons `metric-card-*` e `inline-alert-*` (montados por template no `Primitives.jsx`, dentro de `@layer components`) não saem no CSS gerado, nem no build atual em `app/`: cartões de métrica e alertas aparecem sem a cor do tom em todo o portal. É o mesmo defeito das `presence-*` no F5. O mapa não depende disso para mostrar o conflito (contorno, ícone e texto). Proposta: lote de acabamento.
 
 **Como testar no navegador (sugestão):** (1) Liderança e admin: o mapa abre na data de hoje (também depois das 21:00); os dias de seg a sex trocam a data; PA com dois presenciais fica com contorno e os dias; ausente em laranja, sem escala tracejado, parcial com o relógio; (2) vincular um técnico remoto a um PA ocupado: salva sem pergunta, mostra o aviso e o conflito no modal, e o `audit_log` tem o `PA_MAP_CONFLICT_ACCEPTED`; (3) aba "Ausências da semana" com Categoria para gestor, Liderança e admin; técnico e somente leitura sem a coluna (ou só com a própria); (4) gestor, técnico e somente leitura: sem formulário, sem login nem observação (DevTools e tela); (5) sábado: "Fim de semana" nos cartões; (6) mensagens de erro com acento (vínculo duplicado, período invertido).
+
+**Commit 3 aprovado em 2026-10-16**, com as nove decisões de implementação como estão, e também o `5051eda` (competência padrão do relatório pelo "hoje" injetável), após revisão e teste do responsável no navegador, com o front novo contra o backend e o MySQL 8.0.46 local: 10 vínculos de teste, regras variadas, ausências inteiras e parciais; 1366 e 390 px; Liderança, gestor, técnico e somente leitura; dados removidos depois.
+
+| Caso | Resultado |
+|---|---|
+| Abertura e semana | Data padrão = hoje local; o seletor de seg a sex troca a data; sábado com "Fim de semana" nos cartões |
+| Conflito | PA 1718 com contorno e "Conflito: seg 19"; PA 1720 com seg 19, qua 21, qui 22 e sex 23 (20 sem conflito, com a Liderança de folga); pares × ímpares sem conflito; cartões "Conflitos 2" e "Vínculos na data" |
+| Legenda | Ausente laranja, sem escala tracejado, presencial verde |
+| Salvar com conflito | Nenhum `window.confirm`; modal com "Conflito no PA 1722 em 20 dias: … e mais 10" e o nome do colega presencial; aviso flutuante; `PA_MAP_CONFLICT_ACCEPTED` só com IDs e datas |
+| Salvar sem regra | "Sem escala definida" como aviso |
+| Duplicado em outro PA | 409 no modal |
+| DF7 | Gestor, técnico e somente leitura sem formulário, Editar ou Remover, e sem `employees`, `employee_login`, `notes` e `created_by` no JSON; Liderança com eles; nenhuma tela mostra login |
+| Aba "Ausências da semana" | Categoria de todos para o gestor; técnico e somente leitura só a própria ("—" nas demais); observação nunca |
+| 390 px | Sem rolagem horizontal |
+| `qa:pa-map` e typecheck | OK |
+
+**Limitação do teste:** o backend local era o do commit 2 (a cópia dos PHP do commit 3 não chegou); os acentos novos das mensagens ficam pela validação da IA e pela conferência no navegador do responsável.
+
+**Ajustes pedidos na revisão, num commit separado antes do commit 4:** (a) o cartão de permissão de quem não edita deixa de dizer "Seu perfil é somente leitura" (confunde com o perfil `somente_leitura`, e o gestor também o via); (b) o achado dos tons `metric-card-*` e `inline-alert-*` fora do CSS é corrigido agora, porque o deploy é único e o defeito já está em produção.
 
 ---
 
