@@ -2164,6 +2164,35 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 | Concorrência: duas gravações simultâneas do mesmo técnico em PAs diferentes, 5 rodadas | Sempre uma grava e a outra recebe 409; nunca dois vínculos |
 | Decisão 8: vínculo novo no PA de um cadastro inativo | 0 conflitos, sem auditoria de conflito |
 
+**Commit 3 entregue (2026-10-16, `b4880e9`; a aprovar):** tela do mapa. Antes dele, `5051eda` corrigiu uma dependência de data achada na bateria: o `report()` calculava a competência padrão com a data do PHP, mesmo com o "hoje" fixo do serviço, e a saída de referência do `qa-schedule-legacy-output` mudou a partir de 16/10/2026 (em produção nada muda).
+
+| Arquivo | Como ficou |
+|---|---|
+| `frontend/src/pages/PaMapPage.jsx` | Data padrão local (`localDate`, L-03); seletor de seg a sex da semana da data; cartão do técnico na cor da legenda única (`presence-*`), com ícone e rótulo da situação, o marcador da parcial com o horário e, sem dia no motor, o motivo (inativo, arquivado, fim de semana); PA em conflito com contorno vermelho, selo "Conflito" com ícone e os dias ("Conflito: seg 19, sex 23"), também no nome acessível (D6); ausente preenchido na cor da legenda; abas "Mapa" e "Ausências da semana" (técnico, equipe, data, período, origem; categoria só quando vem); modal lê o PA da última resposta (lista e conflito atualizados na recarga) e mostra o conflito da semana, o detalhe do motor e a categoria quando vem; salvar sem `window.confirm` nem confirmação em dois passos, com o aviso do servidor (`warnings`, `conflicts`, `conflicts_more`) no modal e no aviso da tela; "Admin/Liderança podem editar"; legenda única mais "PA em conflito" e "PA livre", sem a legenda por tipo de regra; cartão "Conflitos" (PAs com conflito na semana); gestor, técnico e somente leitura sem formulário; a tela não mostra login |
+| `frontend/src/lib/paMap.ts` (novo) | Regras puras: semana (como o servidor), dias do seletor, rótulos dos dias de conflito, motivo sem situação, período e origem da ausência, coluna Categoria, texto do aviso do save |
+| `frontend/scripts/qa-pa-map.mjs` (novo, `qa:pa-map`) | Regras puras; **componentes renderizados de verdade** (o JSX é transpilado pelo TypeScript do projeto num hook de módulo do Node e renderizado com `react-dom/server`, sem dependência nova): cores e rótulos por situação, parcial, motivo, contorno e dias do conflito, contagem de presenciais, modal por perfil (sem formulário, sem login nem observação para quem não edita), aviso do save, aba de ausências com e sem categoria, abas e seletor; verificações de fonte (sem `window.confirm`, sem `confirm_remote_allocation`, sem data em UTC, sem a legenda por regra); CSS gerado com as classes da tela |
+| `services/PaMapService.php`, `api/portal/pa_map.php` | Mensagens que aparecem na tela com acento ("Colaborador ativo inválido.", "Este colaborador já possui vínculo ativo em outro PA no período.", "Fim da validade não pode ser anterior ao início.", "Vínculo de PA não encontrado.", "Ação inválida.", "Alocação inválida.", "Alocação de PA salva." e as demais de validação). A auditoria continua sem acento, como o resto do `audit_log` |
+| `qa-pa-conflicts`, `qa-archive`, `qa-security` | Textos atualizados; `qa-pa-conflicts` com três mensagens de validação acentuadas (93 verificações) |
+| `frontend/scripts/qa-employee-form.mjs`, `qa-schedule-rules.mjs` | O inventário de `window.confirm` perde o do Mapa PA (P13); a cor por tipo de regra (ciclo e dias fixos) vira a cor pela situação do motor, com o rótulo da regra no cartão |
+
+**Decisões de implementação do commit 3 (a aprovar):**
+
+1. **Ausente na cor da legenda (laranja), não vermelho:** a 5.6 fala em "preenchimento vermelho", mas a legenda única do F5 fixou o laranja para ausente; o vermelho fica só para o conflito do PA, o que mantém os dois níveis da D6 distintos.
+2. **Contorno do conflito com ícone, selo e os dias no texto e no nome acessível**, não só cor.
+3. **Seletor de seg a sex** pela semana devolvida pelo servidor (calculada localmente enquanto a resposta não chega); o campo de data continua para outras semanas; no sábado e no domingo, a semana que termina neles.
+4. **Aviso do save no modal** (lista completa: avisos, dias de conflito com "e mais N", nomes dos outros técnicos que a tela já tem) **e no aviso flutuante** (título e a primeira linha). Os nomes vêm da lista de elegíveis e dos vínculos da data; o servidor continua mandando só IDs.
+5. **O modal lê o PA da última resposta** (antes, guardava a cópia do clique e mostrava a lista antiga depois de salvar).
+6. **Cartão "Conflitos"** no topo (PAs com conflito na semana) e o cartão "Vínculos" passa a dizer "na data".
+7. **A tela não mostra login** em nenhum perfil (antes, o código lia um `ad_login` que o servidor não manda nos vínculos).
+8. **Formulário sem "fim da validade"**, como antes (o servidor aceita `valid_until`; ficou fora do pedido).
+9. **`qa:pa-map` renderiza os componentes** com o TypeScript já instalado (hook de módulo do Node 24); os componentes da tela foram exportados para isso.
+
+**Validação pela IA:** `qa:pa-map`, os 17 `qa:*`, lint e typecheck; bateria PHP completa; **mutação 33/33 na tela** (um sobrevivente na 1ª rodada, a aba sem estado, morto depois de extrair as abas para um componente testado); prints com servidor simulado e Chrome sem janela em perfil próprio do scratchpad (perfil que edita e técnico; 1366 e 390 px, sem rolagem horizontal; modal, save com conflito sem nenhum `confirm`, aba de ausências com e sem categoria, sábado com "Fim de semana"). **Não verificado:** a tela contra o backend real (o teste no navegador é do responsável).
+
+**Achado fora do escopo (não corrigido):** os tons `metric-card-*` e `inline-alert-*` (montados por template no `Primitives.jsx`, dentro de `@layer components`) não saem no CSS gerado, nem no build atual em `app/`: cartões de métrica e alertas aparecem sem a cor do tom em todo o portal. É o mesmo defeito das `presence-*` no F5. O mapa não depende disso para mostrar o conflito (contorno, ícone e texto). Proposta: lote de acabamento.
+
+**Como testar no navegador (sugestão):** (1) Liderança e admin: o mapa abre na data de hoje (também depois das 21:00); os dias de seg a sex trocam a data; PA com dois presenciais fica com contorno e os dias; ausente em laranja, sem escala tracejado, parcial com o relógio; (2) vincular um técnico remoto a um PA ocupado: salva sem pergunta, mostra o aviso e o conflito no modal, e o `audit_log` tem o `PA_MAP_CONFLICT_ACCEPTED`; (3) aba "Ausências da semana" com Categoria para gestor, Liderança e admin; técnico e somente leitura sem a coluna (ou só com a própria); (4) gestor, técnico e somente leitura: sem formulário, sem login nem observação (DevTools e tela); (5) sábado: "Fim de semana" nos cartões; (6) mensagens de erro com acento (vínculo duplicado, período invertido).
+
 ---
 
 ## 10. Riscos e pendências

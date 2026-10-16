@@ -701,6 +701,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: so banco simulado. A tela atual nao mostra `conflicts` (commit 3, no mesmo deploy). `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-16**, com as nove decisoes, inclusive o inativo continuar 400 (validacao do cadastro, como sempre foi), apos teste do responsavel no MySQL 8.0.46 local com regras, ausencia e vinculos de teste, removidos depois (cadastro desativado para o teste reativado). Sempre presencial no PA de quem tem seg/qua/sex: salvou, 10 dias de conflito de 16/10 a 11/11 (21 e 23/10 fora pelas ferias do colega), `conflicts_more` 0, `PA_MAP_CONFLICT_ACCEPTED` so com IDs e datas. Remoto, inicio numa folga e sem regra: avisos de trabalho remoto, ausente o dia todo e sem escala; os tres salvaram, sem 409. Mesmo colaborador em outro PA no periodo: 409; fora do Mapa: 409; inativo ou inexistente: 400; periodo invertido: 400. Remover funciona; remover de novo: "nao encontrado". Concorrencia: duas gravacoes simultaneas do mesmo tecnico em PAs diferentes, 5 rodadas: sempre uma grava e a outra recebe 409, nunca dois vinculos. Decisao 8: vinculo novo no PA de um cadastro inativo, com 0 conflitos e sem auditoria. |
 
+### Parte B, F6 — commit 3 (tela do Mapa PA) — 2026-10-16
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Tela do Mapa PA pelo motor (desenho 5.6 e 9.8): legenda unica, conflito com contorno e dias, ausencias da semana, data local, sem confirmacao ao salvar; mensagens do servico com acento. |
+| **Branch e commits** | `1b768d5` (aprovacao do commit 2), `5051eda` (correcao da dependencia de data do relatorio, achada na bateria), `b4880e9` (tela, testes e mensagens) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `PaMapPage.jsx`, `src/lib/paMap.ts` (novo), `qa-pa-map.mjs` (novo), `package.json` (script), `qa-employee-form` e `qa-schedule-rules` (inventario de `window.confirm` e cor por regra), `PaMapService.php` e `pa_map.php` (mensagens), `qa-pa-conflicts`, `qa-archive`, `qa-security`; `OperationalService::report` (competencia padrao pelo hoje injetavel); desenho 9.8. |
+| **Decisoes de implementacao** | Nove, a aprovar (desenho 9.8); destaques: ausente no laranja da legenda (nao vermelho); aviso do save no modal e no aviso flutuante; modal le o PA da ultima resposta; a tela nao mostra login; `qa:pa-map` renderiza os componentes com o TypeScript ja instalado. |
+| **Validacao executada pela IA** | `qa:pa-map`, 17 `qa:*`, lint, typecheck, bateria PHP completa; mutacao **33/33** na tela (um sobrevivente na 1a rodada, morto depois); prints com servidor simulado e Chrome sem janela em perfil proprio (1366 e 390 px, perfil que edita e tecnico). |
+| **Limitacoes declaradas** | Tela nao aberta contra o backend real. Achado fora do escopo, nao corrigido: tons `metric-card-*` e `inline-alert-*` ausentes do CSS gerado em todo o portal (lote de acabamento). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao e teste do responsavel no navegador antes do commit 4. |
+
 ---
 
 ## 5. Responsabilidade
