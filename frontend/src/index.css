@@ -342,18 +342,6 @@
     overflow-wrap: anywhere;
   }
 
-  .detail-pill-neutral {
-    @apply border-white/10 bg-slate-950/40;
-  }
-
-  .detail-pill-info {
-    @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-200;
-  }
-
-  .detail-pill-warning {
-    @apply border-amber-400/20 bg-amber-500/5 text-amber-200;
-  }
-
   .legend-panel {
     @apply card flex w-full min-w-0 flex-wrap items-center gap-x-4 gap-y-3 py-3;
   }
@@ -413,30 +401,6 @@
     @apply h-2 w-2 rounded-full;
   }
 
-  .status-dot-info {
-    @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-200;
-  }
-
-  .status-dot-info span {
-    @apply bg-cyan-300;
-  }
-
-  .status-dot-success {
-    @apply border-emerald-400/20 bg-emerald-500/5 text-emerald-200;
-  }
-
-  .status-dot-success span {
-    @apply bg-emerald-300;
-  }
-
-  .status-dot-warning {
-    @apply border-amber-400/20 bg-amber-500/5 text-amber-200;
-  }
-
-  .status-dot-warning span {
-    @apply bg-amber-300;
-  }
-
   .operator-card {
     @apply relative min-w-0 overflow-hidden rounded-card border border-white/[0.07] bg-slate-900/80 p-4 transition duration-200 hover:border-cyan-400/20 hover:bg-slate-800/80;
   }
@@ -444,19 +408,6 @@
   .operator-card::before {
     content: '';
     @apply absolute inset-y-0 left-0 w-1 bg-slate-600;
-  }
-
-  .operator-card-available::before {
-    @apply bg-emerald-400;
-  }
-
-  .operator-card-paused::before,
-  .operator-card-pending::before {
-    @apply bg-amber-400;
-  }
-
-  .operator-card-offline::before {
-    @apply bg-slate-600;
   }
 }
 
@@ -511,11 +462,14 @@
   @apply border-dashed border-slate-400/60 bg-transparent text-slate-300;
 }
 
-/* Tons do InlineAlert e do MetricCard (Primitives.jsx). O nome é montado por
-   template (`inline-alert-${tone}`, `metric-card-${tone}`) e nunca aparece
-   inteiro nos arquivos que o Tailwind varre: dentro de @layer components eles
-   eram descartados do CSS gerado, e alertas e cartões saíam sem a cor do tom.
-   Fora de camada, como as presence-* do F5, sempre vão para o CSS. */
+/* Variantes de classe montadas por template no className: tons do InlineAlert,
+   do MetricCard, do StatusDot e do DetailPill (Primitives.jsx) e o estado do
+   cartão de Pausas (`operator-card-${state}`, PausasPage.jsx). O nome nunca
+   aparece inteiro nos arquivos que o Tailwind varre: dentro de @layer
+   components essas regras eram descartadas do CSS gerado (alerta, cartão,
+   pílula e indicador sem a cor do tom; indicador sem o ponto; técnico
+   disponível sem a barra verde). Fora de camada, como as presence-* do F5,
+   sempre vão para o CSS. O qa:calendar-presence confere cada prefixo. */
 .inline-alert-info {
   @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-100;
 }
@@ -542,4 +496,53 @@
 
 .metric-card-danger {
   @apply border-red-400/20;
+}
+
+.status-dot-info {
+  @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-200;
+}
+
+.status-dot-info span {
+  @apply bg-cyan-300;
+}
+
+.status-dot-success {
+  @apply border-emerald-400/20 bg-emerald-500/5 text-emerald-200;
+}
+
+.status-dot-success span {
+  @apply bg-emerald-300;
+}
+
+.status-dot-warning {
+  @apply border-amber-400/20 bg-amber-500/5 text-amber-200;
+}
+
+.status-dot-warning span {
+  @apply bg-amber-300;
+}
+
+.detail-pill-neutral {
+  @apply border-white/10 bg-slate-950/40;
+}
+
+.detail-pill-info {
+  @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-200;
+}
+
+.detail-pill-warning {
+  @apply border-amber-400/20 bg-amber-500/5 text-amber-200;
+}
+
+.operator-card-available::before {
+  @apply bg-emerald-400;
+}
+
+.operator-card-paused::before,
+.operator-card-pending::before {
+  @apply bg-amber-400;
+}
+
+.operator-card-offline::before {
+  @apply bg-slate-600;
 }

@@ -81,8 +81,9 @@ assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src
   const primitives = read('src/components/ui/Primitives.jsx')
   assert.match(primitives, /className=\{`metric-card metric-card-\$\{tone\}`\}/, 'MetricCard monta o tom por template')
   assert.match(primitives, /className=\{`inline-alert inline-alert-\$\{tone\} \$\{className\}`\}/, 'InlineAlert monta o tom por template')
-  const sourceFiles = (dir) => readdirSync(join(frontendRoot, dir), { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? sourceFiles(join(dir, entry.name)) : /\.(jsx?|tsx?)$/.test(entry.name) ? [read(join(dir, entry.name))] : []))
-  const sources = sourceFiles('src')
+  const sourceFiles = (dir) => readdirSync(join(frontendRoot, dir), { withFileTypes: true }).flatMap((entry) => (entry.isDirectory() ? sourceFiles(join(dir, entry.name)) : /\.(jsx?|tsx?)$/.test(entry.name) ? [{ path: join(dir, entry.name).replaceAll('\\', '/'), text: read(join(dir, entry.name)) }] : []))
+  const sourceEntries = sourceFiles('src')
+  const sources = sourceEntries.map((entry) => entry.text)
   // Valor do tom: o literal de tone="x" ou os resultados de um ternário (não o
   // que se compara nele, como kind === 'restore').
   const literals = (text) => [...text.matchAll(/^"([a-z]+)"$|^\{'([a-z]+)'\}$|[?:]\s*'([a-z]+)'/g)].map((match) => match[1] || match[2] || match[3])
@@ -107,6 +108,108 @@ assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src
         assert.match(rule, /background-color: rgb/, `CSS gerado com a classe ${prefix}-${tone} (fundo)`)
         assert.match(rule, /(^|[^-])color: rgb/, `CSS gerado com a classe ${prefix}-${tone} (texto)`)
       }
+    }
+  }
+
+  // Revisão dos ajustes do commit 3: o mesmo defeito em status-dot-*,
+  // detail-pill-* e operator-card-${state}. Conferência genérica, por prefixo:
+  // toda classe montada por template dentro de um className (`prefixo-${x}`;
+  // key e outros atributos ficam de fora) precisa de regras .prefixo-<variante>
+  // no index.css, e todas elas precisam sair no CSS gerado. As variantes em uso
+  // saem do código (const local, retorno de função desestruturado, padrão do
+  // parâmetro e valores passados ao componente) e cada uma precisa da sua regra.
+  // Prefixo ou variante novo sem regra, ou variante que o QA não resolve, derruba.
+  const stripComments = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '')
+  const sourceCss = stripComments(cssSource)
+  const compiledCss = stripComments(compiled)
+  const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const inCompiled = (className) => new RegExp(`\\.${escapeRegExp(className)}(?![\\w-])`).test(compiledCss)
+  const functionAt = (text, index) => {
+    const found = [...text.slice(0, index).matchAll(/(?:^|\n)(?:export )?function (\w+)\(([^)]*)\)/g)].at(-1)
+    return found ? { name: found[1], params: found[2], start: found.index } : null
+  }
+  const functionBody = (text, name) => {
+    const start = text.search(new RegExp(`(?:^|\\n)(?:export )?function ${name}\\(`))
+    if (start < 0) return ''
+    const end = text.indexOf('\n}\n', start)
+    return text.slice(start, end < 0 ? undefined : end)
+  }
+  const splitArgs = (list) => list.split(/,(?![^(]*\))/).map((part) => part.trim())
+  // Valor passado a um atributo do componente: literal, ternário, const do
+  // arquivo ou coluna de uma tabela percorrida com .map(([..., x, ...]) =>.
+  const valuesOf = (value, text) => {
+    const direct = literals(value)
+    if (direct.length) return direct
+    const identifier = value.match(/^\{(\w+)\}$/)?.[1]
+    if (!identifier) return []
+    const constant = text.match(new RegExp(`const ${identifier} = ([^\\n]+)`))?.[1]
+    if (constant && literals(constant).length) return literals(constant)
+    const mapped = text.match(new RegExp(`(\\w+)\\.map\\(\\(\\[([^\\]]*\\b${identifier}\\b[^\\]]*)\\]\\)`))
+    if (!mapped) return []
+    const column = splitArgs(mapped[2]).indexOf(identifier)
+    const table = text.match(new RegExp(`const ${mapped[1]} = \\[([\\s\\S]*?)\\n\\]`))?.[1] ?? ''
+    return [...table.matchAll(/^\s*\[(.*)\],?$/gm)].map((row) => splitArgs(row[1])[column]?.match(/^'([a-z0-9-]+)'$/)?.[1]).filter(Boolean)
+  }
+  const variantsOf = (entry, index, expression) => {
+    const variable = expression.trim()
+    assert.match(variable, /^\w+$/, `${entry.path}: variante montada por expressão (${variable}); ensine o QA a resolvê-la`)
+    const owner = functionAt(entry.text, index)
+    assert.ok(owner, `${entry.path}: template fora de função (${variable})`)
+    const body = entry.text.slice(owner.start, index)
+    const constant = body.match(new RegExp(`const ${variable} = ([^\\n]+)`))?.[1]
+    if (constant) return literals(constant)
+    const destructured = body.match(new RegExp(`const \\[([^\\]]*\\b${variable}\\b[^\\]]*)\\] = (\\w+)\\(`))
+    if (destructured) {
+      const position = splitArgs(destructured[1]).indexOf(variable)
+      return [...functionBody(entry.text, destructured[2]).matchAll(/return \[([^\]]*)\]/g)].map((row) => {
+        const value = splitArgs(row[1])[position]
+        assert.match(value ?? '', /^'[a-z0-9-]+'$/, `${entry.path}: ${destructured[2]} devolve ${variable} sem literal`)
+        return value.slice(1, -1)
+      })
+    }
+    const parameter = owner.params.match(new RegExp(`\\b${variable}\\b(?:\\s*=\\s*'([a-z0-9-]+)')?`))
+    assert.ok(parameter, `${entry.path}: variante ${variable} não resolvida em ${owner.name}; ensine o QA a resolvê-la`)
+    const found = parameter[1] ? [parameter[1]] : []
+    for (const source of sourceEntries) {
+      for (const [, value] of source.text.matchAll(new RegExp(`<${owner.name}\\b[^>]*?\\b${variable}=("[^"]*"|\\{[^}]*\\})`, 'g'))) {
+        const values = valuesOf(value, source.text)
+        assert.ok(values.length, `${source.path}: ${owner.name} com ${variable}=${value} não resolvido; ensine o QA a resolvê-lo`)
+        found.push(...values)
+      }
+    }
+    return found
+  }
+  const templated = new Map()
+  for (const entry of sourceEntries) {
+    for (const attribute of entry.text.matchAll(/className=\{`([^`]*)`\}/g)) {
+      for (const match of attribute[1].matchAll(/(?:^|\s)([a-z][a-z0-9]*(?:-[a-z0-9]+)*)-\$\{([^}]*)\}/g)) {
+        const index = attribute.index + 'className={`'.length + match.index
+        const variants = templated.get(match[1]) ?? new Set()
+        for (const variant of variantsOf(entry, index, match[2])) variants.add(variant)
+        templated.set(match[1], variants)
+      }
+    }
+  }
+  for (const prefix of ['metric-card', 'inline-alert', 'status-dot', 'detail-pill', 'operator-card', 'status']) {
+    assert.ok(templated.has(prefix), `varredura acha o template de ${prefix}`)
+  }
+  for (const prefix of ['pause', 'overtime', 'adjustment', 'implicita']) {
+    assert.ok(!templated.has(prefix), `template em key não entra na varredura (${prefix})`)
+  }
+  assert.deepEqual([...templated.get('metric-card')].sort(), [...usedTones['metric-card']].sort(), 'varredura e tons do MetricCard batem')
+  assert.deepEqual([...templated.get('inline-alert')].sort(), [...usedTones['inline-alert']].sort(), 'varredura e tons do InlineAlert batem')
+  // A varredura não pode voltar vazia: as variantes de hoje precisam aparecer
+  // (uma nova, com a sua regra, passa; sem regra, cai no laço abaixo).
+  const known = { 'status-dot': ['info', 'success', 'warning'], 'detail-pill': ['info', 'neutral', 'warning'], 'operator-card': ['available', 'offline', 'paused', 'pending'], status: ['danger', 'info', 'neutral', 'success'] }
+  for (const [prefix, variants] of Object.entries(known)) {
+    for (const variant of variants) assert.ok(templated.get(prefix).has(variant), `varredura acha a variante ${prefix}-${variant} em uso`)
+  }
+  for (const [prefix, variants] of templated) {
+    const rules = new Set([...sourceCss.matchAll(new RegExp(`\\.(${escapeRegExp(prefix)}-[a-z0-9-]+)`, 'g'))].map((match) => match[1]))
+    assert.ok(rules.size > 0, `prefixo ${prefix}-\${...} montado por template sem regra .${prefix}-<variante> no index.css`)
+    for (const className of rules) assert.ok(inCompiled(className), `CSS gerado sem a regra .${className} (montada por template; fora de @layer components?)`)
+    for (const variant of variants) {
+      assert.ok(rules.has(`${prefix}-${variant}`), `variante ${prefix}-${variant} em uso sem regra no index.css`)
     }
   }
 }
