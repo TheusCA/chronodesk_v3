@@ -1406,7 +1406,7 @@ foreach (['hoje' => $today, 'amanha' => $tomorrow, 'ontem (horizonte de hoje em 
     assert_same(['ok', 4, [41, 44], 20, [true, true]], [$active[0], $active[1], $active[2], $active[3], $active[5]], "Mapa PA: PA ocupado por ativo salva e avisa os 20 dias uteis do horizonte ({$label}; P13, DF4)");
     assert_same(1, preg_match('/^Alocacao de PA salva com conflito\. ID \?, PA 1732, colaboradores ID 41, 44, datas (\d{4}-\d{2}-\d{2}, ){9}\d{4}-\d{2}-\d{2} e mais 10$/', (string)$active[4]), "Mapa PA: auditoria com PA, IDs e ate 10 datas, sem nome ({$label})");
 }
-assert_same([DomainException::class . ': Este colaborador ja possui vinculo ativo em outro PA no periodo.', 3], $saveOutcome(41, '1731', $today), 'Mapa PA: o mesmo colaborador em outro PA no periodo continua 409');
+assert_same([DomainException::class . ': Este colaborador já possui vínculo ativo em outro PA no período.', 3], $saveOutcome(41, '1731', $today), 'Mapa PA: o mesmo colaborador em outro PA no periodo continua 409');
 
 $filter = new ReflectionMethod(PaMapService::class, 'activeEmployeeFilter');
 $filter->setAccessible(true);

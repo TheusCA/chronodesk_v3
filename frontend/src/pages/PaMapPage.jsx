@@ -1,33 +1,38 @@
 import { useMemo, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
+import { Icon } from '../components/ui/Icon'
+import { PartialMarker, PresenceLegend } from '../components/ui/Presence'
 import { useResource } from '../hooks/useResource'
 import { post } from '../lib/api'
 import { ACTION_FEEDBACK } from '../lib/actionFeedback'
-import { queryString } from '../lib/operational'
+import { localDate, queryString } from '../lib/operational'
+import {
+  absenceOriginLabel,
+  absencePeriodLabel,
+  brDate,
+  conflictDaysLabel,
+  presenceReasonLabel,
+  saveFeedback,
+  showsCategory,
+  weekDays,
+} from '../lib/paMap'
+import { presenceLegendItem, situationLabel } from '../lib/presenceLegend'
 import {
   FilterBar,
   InlineAlert,
   MetricCard,
-  OperationalLegend,
   SectionHeader,
   UserAvatar,
 } from '../components/ui/Primitives'
+
+// F6 (desenho 5.6 e 9.8): mapa pelo motor. A situação do técnico usa a
+// legenda única do F5 (classes presence-*); o PA em conflito na semana (seg a
+// sex) ganha contorno com os dias (D6); sem confirmação ao salvar (P13).
 
 const fallbackPas = [
   '1732', '1731', '1730', '1729', '1728', '1727', '1726', '1725',
   '1724', '1723', '1722', '1721', '1720', '1719', '1718', '1717',
 ]
-
-const ruleTone = {
-  even_days: 'border-blue-500/25 bg-blue-500/10 text-blue-300',
-  odd_days: 'border-violet-500/25 bg-violet-500/10 text-violet-300',
-  always_onsite: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
-  always_remote: 'border-amber-500/25 bg-amber-500/10 text-amber-300',
-  fixed_weekdays: 'border-cyan-500/25 bg-cyan-500/10 text-cyan-300',
-  // F2B: ciclo; o dia presencial ou remoto vem do servidor (active_on_date).
-  cycle: 'border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-300',
-  undefined: 'border-slate-600/50 bg-slate-800 text-slate-400',
-}
 
 function defaultPaObjects() {
   return fallbackPas.map((pa, index) => ({
@@ -36,6 +41,8 @@ function defaultPaObjects() {
     row_number: Math.floor(index / 8) + 1,
     column_number: (index % 8) + 1,
     assignments: [],
+    has_conflict: false,
+    conflict_days: [],
   }))
 }
 
@@ -66,27 +73,49 @@ function teamLabel(team) {
   return String(team || '').toUpperCase()
 }
 
-function AssignmentChip({ item }) {
-  const tone = ruleTone[item.schedule_rule_type] || ruleTone.undefined
+// Situação do vínculo na data: o item da legenda (motor) ou o motivo sem
+// situação (inativo, arquivado, fim de semana).
+function assignmentStatus(item) {
+  const legend = presenceLegendItem(item.presence?.status)
+  if (legend !== null) {
+    return { tone: legend.tone, icon: legend.icon, label: situationLabel(item.presence.situacao) || legend.label }
+  }
+  return { tone: 'border-slate-600/50 bg-slate-900/40 text-slate-400', icon: 'help', label: presenceReasonLabel(item.presence_reason) }
+}
+
+// Cartão do técnico: preenchido na cor da situação (ausente no laranja da
+// legenda, D6), sem escala tracejado; marcador da parcial com o horário.
+export function AssignmentChip({ item }) {
+  const status = assignmentStatus(item)
   return (
-    <div className={`min-w-0 rounded-lg border px-2.5 py-2 ${item.active_on_date ? 'bg-opacity-100 ring-1 ring-white/10' : 'opacity-55'} ${tone}`}>
+    <div className={`min-w-0 rounded-lg border px-2.5 py-2 ${status.tone}`} data-presence={item.presence?.status ?? 'none'}>
       <div className="flex min-w-0 items-center justify-between gap-2">
-        <span className="min-w-0 truncate text-xs font-semibold">{item.employee_name}</span>
-        <span className="shrink-0 rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-bold">
-          {item.schedule_rule_label}
+        <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold">
+          <Icon name={status.icon} className="h-3 w-3 shrink-0" />
+          <span className="truncate" title={item.employee_name}>{item.employee_name}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold">
+          {item.presence?.parcial && <PartialMarker time={item.presence.parcial} />}
+          {status.label}
         </span>
       </div>
-      <p className="mt-1 text-[10px] uppercase tracking-[0.14em] opacity-75">Equipe {teamLabel(item.team)} {item.ad_login ? `· ${item.ad_login}` : ''}</p>
+      <p className="mt-1 truncate text-[10px] uppercase tracking-[0.14em] opacity-75">Equipe {teamLabel(item.team)} · {item.schedule_rule_label}</p>
     </div>
   )
 }
 
-function PaCard({ pa, canManage, onOpen }) {
+export function PaCard({ pa, canManage, onOpen }) {
   const assignments = pa.assignments || []
-  const activeCount = assignments.filter((item) => item.active_on_date).length
+  const onsiteCount = assignments.filter((item) => item.presence?.status === 'onsite').length
+  const conflictDays = conflictDaysLabel(pa.conflict_days)
+  const outline = pa.has_conflict
+    ? 'border-red-400/80 bg-slate-900/80 ring-2 ring-red-400/60'
+    : assignments.length ? 'border-white/10 bg-slate-900/80' : 'border-dashed border-white/10 bg-slate-950/45'
   return (
     <button
-      className={`pa-cell ${assignments.length ? 'border-white/10 bg-slate-900/80' : 'border-dashed border-white/10 bg-slate-950/45'}`}
+      aria-label={`PA ${pa.pa_number}${pa.has_conflict ? `, conflito: ${conflictDays}` : ''}`}
+      className={`pa-cell ${outline}`}
+      data-conflict={pa.has_conflict ? 'true' : 'false'}
       onClick={() => onOpen(pa)}
       type="button"
     >
@@ -95,10 +124,17 @@ function PaCard({ pa, canManage, onOpen }) {
           <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-300/70">PA</p>
           <strong className="mt-1 block text-2xl font-black text-white">{pa.pa_number}</strong>
         </div>
-        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${activeCount ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-slate-600/50 bg-slate-950/60 text-slate-500'}`}>
-          {assignments.length ? `${activeCount}/${assignments.length} hoje` : 'Livre'}
-        </span>
+        {pa.has_conflict ? (
+          <span className="flex shrink-0 items-center gap-1 rounded-full border border-red-400/50 bg-red-500/15 px-2.5 py-1 text-[11px] font-bold text-red-200">
+            <Icon name="alert" className="h-3 w-3" />Conflito
+          </span>
+        ) : (
+          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${onsiteCount ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-slate-600/50 bg-slate-950/60 text-slate-500'}`}>
+            {assignments.length ? `${onsiteCount}/${assignments.length} presencial` : 'Livre'}
+          </span>
+        )}
       </div>
+      {pa.has_conflict && <p className="mt-2 text-xs font-semibold text-red-200">Conflito: {conflictDays}</p>}
 
       {assignments.length ? (
         <div className="mt-4 space-y-2">
@@ -115,33 +151,24 @@ function PaCard({ pa, canManage, onOpen }) {
   )
 }
 
-function AssignmentList({ assignments, canManage, onEdit, onRemove, saving }) {
+export function AssignmentList({ assignments, canManage, onEdit, onRemove, saving }) {
   if (assignments.length === 0) {
-    return <InlineAlert title="PA livre">Nenhum colaborador vinculado a este PA.</InlineAlert>
+    return <InlineAlert title="PA livre">Nenhum colaborador vinculado a este PA na data.</InlineAlert>
   }
   return (
     <div className="space-y-2">
       {assignments.map((item) => (
         <div className="rounded-lg border border-white/5 bg-slate-950/35 p-3" key={`${item.source}-${item.id}`}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-start gap-3">
-                <UserAvatar name={item.employee_name} />
-                <div>
-                  <p className="truncate text-sm font-semibold text-slate-100">{item.employee_name}</p>
-                  <p className="mt-1 text-xs uppercase tracking-wider text-slate-600">Equipe {teamLabel(item.team)} {item.ad_login ? `· ${item.ad_login}` : ''}</p>
-                </div>
-              </div>
+          <div className="flex items-start gap-3">
+            <UserAvatar name={item.employee_name} />
+            <div className="min-w-0 flex-1">
+              <AssignmentChip item={item} />
+              {item.presence?.detalhe && <p className="mt-2 text-xs text-slate-400">{item.presence.detalhe}</p>}
+              {item.presence?.categoria && <p className="mt-1 text-xs text-slate-400">Categoria: {item.presence.categoria}</p>}
+              <p className="mt-2 text-xs text-slate-500">Desde {brDate(item.valid_from)}{item.valid_until ? ` até ${brDate(item.valid_until)}` : ''}</p>
+              {item.notes && <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400" title={item.notes}>{item.notes}</p>}
             </div>
-            <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${ruleTone[item.schedule_rule_type] || ruleTone.undefined}`}>
-              {item.schedule_rule_label}
-            </span>
           </div>
-          <p className="mt-2 text-xs text-slate-500">
-            Desde {item.valid_from}
-            {item.active_on_date ? ' - presencial na data filtrada' : ' - fora da escala presencial da data'}
-          </p>
-          {item.notes && <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400" title={item.notes}>{item.notes}</p>}
           {canManage && item.source === 'assignment' && (
             <div className="mt-3 flex gap-2">
               <button className="table-action" disabled={saving} onClick={() => onEdit(item)} type="button">Editar</button>
@@ -155,7 +182,16 @@ function AssignmentList({ assignments, canManage, onEdit, onRemove, saving }) {
   )
 }
 
-function PaModal({ pa, date, employees, canManage, onClose, onSave, onRemove, saving }) {
+export function SaveFeedbackAlert({ feedback }) {
+  if (!feedback || feedback.lines.length === 0) return null
+  return (
+    <InlineAlert className="mt-4" title={feedback.title} tone="warning">
+      <ul className="space-y-1">{feedback.lines.map((line) => <li key={line}>{line}</li>)}</ul>
+    </InlineAlert>
+  )
+}
+
+export function PaModal({ pa, date, employees, canManage, feedback, onClose, onSave, onRemove, saving }) {
   const [form, setForm] = useState(emptyForm(pa.pa_number, date))
   const [editing, setEditing] = useState(false)
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }))
@@ -179,10 +215,17 @@ function PaModal({ pa, date, employees, canManage, onClose, onSave, onRemove, sa
           <div>
             <p className="section-eyebrow">Mapa de PA</p>
             <h2 className="mt-2 text-xl font-bold text-white">PA {pa.pa_number}</h2>
-            <p className="mt-1 text-sm text-slate-500">Vínculos recorrentes por regra de escala.</p>
+            <p className="mt-1 text-sm text-slate-500">Situação de cada técnico em {brDate(date)}, pela escala e pelas ausências.</p>
           </div>
           <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
         </div>
+
+        {pa.has_conflict && (
+          <InlineAlert className="mt-4" title="Conflito na semana" tone="danger">
+            Dois ou mais técnicos presenciais neste PA em: {conflictDaysLabel(pa.conflict_days)}.
+          </InlineAlert>
+        )}
+        <SaveFeedbackAlert feedback={feedback} />
 
         <div className="mt-6">
           <SectionHeader title="Colaboradores vinculados" />
@@ -200,6 +243,7 @@ function PaModal({ pa, date, employees, canManage, onClose, onSave, onRemove, sa
               <label className="label">Início da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => update('valid_from', event.target.value)} /></label>
               <label className="label sm:col-span-2">Observação<textarea className="field mt-2 min-h-24" maxLength="1000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             </div>
+            <p className="mt-3 text-xs text-slate-500">Conflito, remoto, ausência e falta de escala não impedem o vínculo: o mapa salva e mostra o aviso.</p>
             <div className="mt-5 flex justify-end gap-3">
               <button className="btn-secondary" disabled={saving} onClick={reset} type="button">Limpar</button>
               <button className="btn-primary" disabled={saving || !form.employee_id} type="submit">{saving ? 'Salvando...' : 'Salvar vínculo'}</button>
@@ -213,30 +257,96 @@ function PaModal({ pa, date, employees, canManage, onClose, onSave, onRemove, sa
   )
 }
 
+// Aba "Ausências da semana" (DF9): ordenada pelo servidor (data e nome); a
+// coluna Categoria só aparece quando o servidor a manda (P9).
+export function AbsencesTable({ items }) {
+  if (!items.length) {
+    return <EmptyState title="Nenhuma ausência na semana" description="Nenhum técnico com vínculo de PA tem ausência aprovada de segunda a sexta." />
+  }
+  const withCategory = showsCategory(items)
+  return (
+    <div className="overflow-x-auto rounded-card border border-white/5">
+      <table className="data-table">
+        <thead>
+          <tr><th>Técnico</th><th>Equipe</th><th>Data</th><th>Período</th><th>Origem</th>{withCategory && <th>Categoria</th>}</tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => (
+            <tr key={`${item.employee_id}-${item.date}-${item.start_time ?? ''}-${index}`}>
+              <td><strong>{item.employee_name}</strong></td>
+              <td className="whitespace-nowrap">{teamLabel(item.team)}</td>
+              <td className="whitespace-nowrap">{brDate(item.date)}</td>
+              <td className="whitespace-nowrap">{absencePeriodLabel(item)}</td>
+              <td>{absenceOriginLabel(item.origem)}</td>
+              {withCategory && <td>{item.category || '—'}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+export function MapTabs({ tab, absences, onSelect }) {
+  return (
+    <div aria-label="Visão do mapa" className="flex gap-2" role="tablist">
+      <button aria-selected={tab === 'map'} className={tab === 'map' ? 'btn-primary' : 'btn-secondary'} onClick={() => onSelect('map')} role="tab" type="button">Mapa</button>
+      <button aria-selected={tab === 'absences'} className={tab === 'absences' ? 'btn-primary' : 'btn-secondary'} onClick={() => onSelect('absences')} role="tab" type="button">Ausências da semana ({absences})</button>
+    </div>
+  )
+}
+
+export function DaySelector({ days, date, onSelect }) {
+  return (
+    <div aria-label="Dia da semana" className="flex flex-wrap gap-2" role="group">
+      {days.map((day) => (
+        <button aria-pressed={day.date === date} className={day.date === date ? 'btn-primary' : 'btn-secondary'} key={day.date} onClick={() => onSelect(day.date)} type="button">
+          {day.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function PaMapPage({ notify }) {
-  const [filters, setFilters] = useState({ date: new Date().toISOString().slice(0, 10), team: '' })
+  // L-03: a data padrão é a de hoje no fuso local, não em UTC.
+  const [filters, setFilters] = useState({ date: localDate(), team: '' })
   const resource = useResource(`portal/pa_map.php${queryString(filters)}`)
-  const [selected, setSelected] = useState(null)
+  const [selectedPa, setSelectedPa] = useState(null)
+  const [tab, setTab] = useState('map')
   const [saving, setSaving] = useState(false)
+  const [feedback, setFeedback] = useState(null)
   const pas = useMemo(() => resource.data?.pas || defaultPaObjects(), [resource.data?.pas])
   const employees = useMemo(() => resource.data?.employees || [], [resource.data?.employees])
   const canManage = Boolean(resource.data?.can_manage)
   const assignments = useMemo(() => pas.flatMap((pa) => pa.assignments || []), [pas])
-  const activeToday = assignments.filter((item) => item.active_on_date).length
+  const onsiteCount = assignments.filter((item) => item.presence?.status === 'onsite').length
+  const conflictCount = pas.filter((pa) => pa.has_conflict).length
+  const absences = resource.data?.absences_week || []
+  const days = weekDays(resource.data?.week, filters.date)
+  // O modal lê o PA da última resposta: a lista e o conflito se atualizam na recarga.
+  const selected = selectedPa === null ? null : pas.find((pa) => pa.pa_number === selectedPa) || null
+  const names = useMemo(() => new Map([
+    ...employees.map((employee) => [String(employee.id), employee.name]),
+    ...assignments.map((item) => [String(item.employee_id), item.employee_name]),
+  ]), [employees, assignments])
 
-  async function save(form, resetForm, confirmed = false) {
+  function open(pa) {
+    setFeedback(null)
+    setSelectedPa(pa.pa_number)
+  }
+
+  async function save(form, resetForm) {
     setSaving(true)
     try {
-      const result = await post('portal/pa_map.php', { ...form, action: 'save', confirm_remote_allocation: confirmed })
-      if (result.warnings?.[0]) notify(result.warnings[0], 'warning')
-      else notify(ACTION_FEEDBACK.paLinked)
+      // P13: sem confirmação; conflito, remoto, ausência e sem escala voltam como aviso.
+      const result = await post('portal/pa_map.php', { ...form, action: 'save' })
+      const outcome = saveFeedback(result, form.employee_id, names)
+      setFeedback(outcome)
+      notify(outcome.lines.length ? `${outcome.title}. ${outcome.lines[0]}` : ACTION_FEEDBACK.paLinked, outcome.lines.length ? 'warning' : 'success')
       resetForm?.()
       await resource.refresh()
     } catch (error) {
-      if (!confirmed && error.message.includes('remoto') && window.confirm(`${error.message}\n\nDeseja alocar mesmo assim?`)) {
-        await save(form, resetForm, true)
-        return
-      }
       notify(error.message, 'error')
     } finally {
       setSaving(false)
@@ -247,6 +357,7 @@ export function PaMapPage({ notify }) {
     setSaving(true)
     try {
       await post('portal/pa_map.php', { action: 'remove', id })
+      setFeedback(null)
       notify(ACTION_FEEDBACK.paUnlinked)
       await resource.refresh()
     } catch (error) {
@@ -262,7 +373,7 @@ export function PaMapPage({ notify }) {
   return (
     <div className="min-w-0 space-y-5">
       <SectionHeader
-        description="Vínculos recorrentes por escala híbrida/home office, com destaque para a data filtrada."
+        description="Situação de cada técnico pela escala e pelas ausências, com conflito de PA na semana (segunda a sexta)."
         eyebrow="Mapa visual da operação"
         title="Mapa de PA"
       />
@@ -270,37 +381,46 @@ export function PaMapPage({ notify }) {
           <label className="label">Data<input className="field mt-2" type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} /></label>
           <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select></label>
       </FilterBar>
+      <DaySelector date={filters.date} days={days} onSelect={(date) => setFilters({ ...filters, date })} />
 
-      {assignments.length === 0 && <EmptyState title="Nenhum vínculo cadastrado" description="Todos os PAs continuam visíveis e livres para montagem do mapa." />}
-
-      <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard detail="PAs no inventário visual" icon="building" label="PAs" value={pas.length} />
-        <MetricCard detail="Vínculos recorrentes carregados" icon="users" label="Vínculos" value={assignments.length} />
-        <MetricCard detail="Alocações presenciais na data" icon="shield" label="Presenciais" tone="success" value={activeToday} />
-        <MetricCard detail={canManage ? 'Admin/Gestor pode editar' : 'Seu perfil é somente leitura'} icon="settings" label="Permissão" tone={canManage ? 'warning' : 'info'} value={canManage ? 'Edição' : 'Leitura'} />
+        <MetricCard detail="Vínculos na data" icon="users" label="Vínculos" value={assignments.length} />
+        <MetricCard detail="Técnicos presenciais na data" icon="shield" label="Presenciais" tone="success" value={onsiteCount} />
+        <MetricCard detail="PAs com dois ou mais presenciais num dia da semana" icon="alert" label="Conflitos" tone={conflictCount ? 'danger' : 'info'} value={conflictCount} />
+        <MetricCard detail={canManage ? 'Admin/Liderança podem editar' : 'Seu perfil é somente leitura'} icon="settings" label="Permissão" tone={canManage ? 'warning' : 'info'} value={canManage ? 'Edição' : 'Leitura'} />
       </section>
 
-      <OperationalLegend items={[
-        { label: 'PA livre', className: 'bg-slate-500' },
-        { label: 'Ocupado/presencial', className: 'bg-emerald-400' },
-        { label: 'Regra par/ímpar', className: 'bg-amber-400' },
-        { label: 'Remoto ou sem escala na data', className: 'bg-slate-700' },
-      ]} />
-
-      <section className="pa-grid-shell">
-        <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
-          {pas.map((pa) => (
-            <PaCard canManage={canManage} key={pa.pa_number} onOpen={(item) => setSelected(item)} pa={pa} />
-          ))}
-        </div>
+      <section aria-label="Legenda do mapa" className="card flex flex-wrap gap-2">
+        <PresenceLegend />
+        <span className="status-badge gap-1 border-red-400/60 bg-red-500/15 text-red-200"><Icon name="alert" className="h-3 w-3" />PA em conflito (contorno)</span>
+        <span className="status-badge status-neutral border-dashed">PA livre</span>
       </section>
+
+      <MapTabs absences={absences.length} onSelect={setTab} tab={tab} />
+
+      {tab === 'map' ? (
+        <>
+          {assignments.length === 0 && <EmptyState title="Nenhum vínculo na data" description="Todos os PAs continuam visíveis e livres para montagem do mapa." />}
+          <section className="pa-grid-shell">
+            <div className="grid w-full min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
+              {pas.map((pa) => (
+                <PaCard canManage={canManage} key={pa.pa_number} onOpen={open} pa={pa} />
+              ))}
+            </div>
+          </section>
+        </>
+      ) : (
+        <AbsencesTable items={absences} />
+      )}
 
       {selected && (
         <PaModal
           canManage={canManage}
           date={filters.date}
           employees={employees}
-          onClose={() => setSelected(null)}
+          feedback={feedback}
+          onClose={() => setSelectedPa(null)}
           onRemove={remove}
           onSave={save}
           pa={selected}

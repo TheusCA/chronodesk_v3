@@ -629,10 +629,19 @@ $pdo->assignments[30] = ['pa_number' => '1721', 'employee_id' => 25, 'valid_from
 assert_same([[], ['11-25 16+25', '11-26 16+25', '11-27 16+25', '11-30 16+25', '12-01 16+25'], 0], $summary($save(['pa_number' => '1721', 'employee_id' => 16], $pdo)[0]), 'save: ocupante so nos dias do vinculo dele');
 // Continua recusado.
 [$result, $pdo] = $save(['pa_number' => '1726', 'employee_id' => 1]);
-assert_same([[DomainException::class . ': Este colaborador ja possui vinculo ativo em outro PA no periodo.'], 20, ['begin', 'rollback']], [$summary($result), count($pdo->assignments), $pdo->transactions], 'save: o mesmo colaborador em outro PA no periodo continua 409, sem gravar');
-assert_same([DomainException::class . ': Este colaborador ja possui vinculo ativo em outro PA no periodo.'], $summary($save(['pa_number' => '1732', 'employee_id' => 1, 'valid_from' => '2026-12-01'])[0]), 'save: o mesmo colaborador no mesmo PA, periodo sobreposto, continua 409');
+assert_same([[DomainException::class . ': Este colaborador já possui vínculo ativo em outro PA no período.'], 20, ['begin', 'rollback']], [$summary($result), count($pdo->assignments), $pdo->transactions], 'save: o mesmo colaborador em outro PA no periodo continua 409, sem gravar');
+assert_same([DomainException::class . ': Este colaborador já possui vínculo ativo em outro PA no período.'], $summary($save(['pa_number' => '1732', 'employee_id' => 1, 'valid_from' => '2026-12-01'])[0]), 'save: o mesmo colaborador no mesmo PA, periodo sobreposto, continua 409');
 assert_same([DomainException::class . ': Cadastro marcado como fora do Mapa PA e da escala: não recebe vínculo de PA.'], $summary($save(['pa_number' => '1726', 'employee_id' => 23])[0]), 'save: fora do Mapa continua 409');
-assert_same([InvalidArgumentException::class . ': Colaborador ativo invalido.'], $summary($save(['pa_number' => '1726', 'employee_id' => 10])[0]), 'save: cadastro inativo continua recusado (400)');
+assert_same([InvalidArgumentException::class . ': Colaborador ativo inválido.'], $summary($save(['pa_number' => '1726', 'employee_id' => 10])[0]), 'save: cadastro inativo continua recusado (400)');
+assert_same([
+    [InvalidArgumentException::class . ': Fim da validade não pode ser anterior ao início.'],
+    [InvalidArgumentException::class . ': Início da validade inválida.'],
+    [InvalidArgumentException::class . ': PA inválido.'],
+], [
+    $summary($save(['pa_number' => '1726', 'employee_id' => 16, 'valid_until' => '2026-11-17'])[0]),
+    $summary($save(['pa_number' => '1726', 'employee_id' => 16, 'valid_from' => '2026-02-30'])[0]),
+    $summary($save(['pa_number' => '#1726', 'employee_id' => 16])[0]),
+], 'save: mensagens de validacao com acento (aparecem na tela)');
 // Edicao: o proprio vinculo nao conta; mudar de PA confere o PA novo.
 [$result, $pdo] = $save(['id' => 14, 'pa_number' => '1726', 'employee_id' => 15]);
 assert_same([[[], [], 0], 20], [$summary($result), count($pdo->assignments)], 'save: edicao sem conflito com o proprio vinculo, sem inserir');
@@ -668,7 +677,7 @@ try {
 } catch (DomainException $error) {
     $removed = $error->getMessage();
 }
-assert_same(['Vinculo de PA nao encontrado.', ['begin', 'rollback']], [$removed, $pdo->transactions], 'remove: vinculo ja removido da 409 e desfaz a transacao');
+assert_same(['Vínculo de PA não encontrado.', ['begin', 'rollback']], [$removed, $pdo->transactions], 'remove: vinculo ja removido da 409 e desfaz a transacao');
 $serviceSource = (string)file_get_contents($root . '/services/PaMapService.php');
 assert_same([false, false, false], [strpos($serviceSource, 'confirm_remote_allocation') !== false && strpos($serviceSource, "\$data['confirm_remote_allocation']") !== false, strpos($serviceSource, 'Conflito de escala no PA com') !== false, strpos($serviceSource, 'scheduleException') !== false], 'save: sem confirmacao de remoto, sem 409 de conflito com nome, sem a excecao antiga (o motor decide)');
 $endpointSource = (string)file_get_contents($root . '/api/portal/pa_map.php');

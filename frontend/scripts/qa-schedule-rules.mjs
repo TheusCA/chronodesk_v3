@@ -53,7 +53,10 @@ assert.match(operationalPage, /\{ value: 'fixed_weekdays', label: 'Dias fixos da
 assert.match(operationalPage, /\{ value: 'cycle', label: 'Ciclo presencial\/remoto' \}/, 'UI deve oferecer Ciclo (F2B)')
 assert.match(operationalPage, /registerRule\('cycle_onsite_days'\)[\s\S]*registerRule\('cycle_remote_days'\)[\s\S]*registerRule\('cycle_starts_with'\)/, 'UI do ciclo: dias presenciais, remotos e comeca por (F2B)')
 assert.match(operationalPage, /value="home" \{\.\.\.registerRule\('input_mode'/, 'UI de dias fixos com modo home (F2B)')
-assert.match(paMapPage, /cycle: 'border-fuchsia/, 'Mapa de PA deve ter tom visual para cycle (F2B)')
+// F6 (desenho 5.6): o Mapa PA deixa a cor por tipo de regra (ciclo inclusive)
+// e usa a legenda unica da situacao do dia; o rotulo da regra continua no cartao.
+assert.doesNotMatch(paMapPage, /ruleTone|cycle: 'border-fuchsia/, 'Mapa de PA sem tom por tipo de regra (F6)')
+assert.match(paMapPage, /item\.schedule_rule_label/, 'Mapa de PA mostra o rotulo da regra (ciclo inclusive) no cartao')
 assert.match(operationalPage, /const WEEKDAY_OPTIONS = \[/, 'UI deve declarar dias permitidos')
 for (const weekday of ['mon', 'tue', 'wed', 'thu', 'fri']) {
   assert.match(operationalPage, new RegExp(`value: '${weekday}'`), `UI deve permitir ${weekday}`)
@@ -117,7 +120,7 @@ assert.match(paMapService, /schedule_rule_config/, 'Mapa de PA deve persistir sn
 // F6 (desenho 9.8): a presenca por data (fixed_weekdays inclusive) vem do motor, na leitura e na gravacao.
 assert.match(paMapService, /\$this->operational\(\)->mapPresence\(/, 'Mapa de PA deve calcular a presenca por data pelo motor (F6)')
 assert.doesNotMatch(paMapService, /OperationalService::presenceForRule\(/, 'Mapa de PA nao calcula mais a presenca pela regra copiada (F6, L-02)')
-assert.match(paMapPage, /fixed_weekdays: 'border-cyan/, 'Mapa de PA deve ter tom visual para fixed_weekdays')
+assert.match(paMapPage, /presenceLegendItem\(item\.presence\?\.status\)/, 'Mapa de PA: cor pela situacao do motor, fixed_weekdays inclusive (F6)')
 
 assert.match(migration, /ADD COLUMN rule_config TEXT DEFAULT NULL AFTER rule_type/, 'Migration deve adicionar rule_config')
 assert.match(migration, /fixed_weekdays/, 'Migration deve incluir fixed_weekdays nos ENUMs')

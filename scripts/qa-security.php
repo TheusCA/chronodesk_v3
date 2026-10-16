@@ -1976,7 +1976,7 @@ assert_same([true, 1, true], [
     preg_match('/\[QA_AUDIT\] PA_MAP_CONFLICT_ACCEPTED \[WARNING\]: Alocacao de PA salva com conflito\. ID 30, PA 1730, colaboradores ID 2, 5, datas (\d{4}-\d{2}-\d{2}, ){9}\d{4}-\d{2}-\d{2} e mais 10\r?\n/', $savedLog),
     strpos($savedLog, '[QA_WRITE] INSERT INTO portal_pa_assignments pa=1730 employee_id=2') !== false,
 ], 'F6: salvar audita PA e IDs, e o conflito aceito como WARNING com as datas');
-assert_same([409, 'Este colaborador ja possui vinculo ativo em outro PA no periodo.', false], [$paWriteCases['salvar_outro_pa']['status'], json_decode($paWriteCases['salvar_outro_pa']['body'], true)['mensagem'] ?? null, strpos($paWriteCases['salvar_outro_pa']['log'], 'PA_MAP_SAVED') !== false], 'F6: o mesmo colaborador em outro PA continua 409, sem auditoria de gravacao');
+assert_same([409, 'Este colaborador já possui vínculo ativo em outro PA no período.', false], [$paWriteCases['salvar_outro_pa']['status'], json_decode($paWriteCases['salvar_outro_pa']['body'], true)['mensagem'] ?? null, strpos($paWriteCases['salvar_outro_pa']['log'], 'PA_MAP_SAVED') !== false], 'F6: o mesmo colaborador em outro PA continua 409, sem auditoria de gravacao');
 assert_same([200, true, true], [
     $paWriteCases['remover']['status'],
     strpos($paWriteCases['remover']['log'], '[QA_AUDIT] PA_MAP_REMOVED [INFO]: Alocacao de PA removida. ID 3, PA 1730, colaborador ID 5') !== false,

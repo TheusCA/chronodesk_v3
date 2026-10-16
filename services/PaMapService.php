@@ -165,7 +165,7 @@ final class PaMapService {
     public function save(array $data, string $actor): array {
         return $this->atomic(function () use ($data, $actor): array {
             if (!$this->tableExists('portal_pa_assignments')) {
-                throw new DomainException('Tabela de vinculos do Mapa de PA ainda nao foi criada.');
+                throw new DomainException('Tabela de vínculos do Mapa de PA ainda não foi criada.');
             }
             $id = $this->positiveInt($data['id'] ?? null, true);
             $paNumber = $this->paNumber($data['pa_number'] ?? null);
@@ -173,10 +173,10 @@ final class PaMapService {
             if ((int)$employee['fora_mapa_escala'] === 1) {
                 throw new DomainException('Cadastro marcado como fora do Mapa PA e da escala: não recebe vínculo de PA.');
             }
-            $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? $this->today(), 'Inicio da validade');
+            $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? $this->today(), 'Início da validade');
             $validUntil = $this->nullableDate($data['valid_until'] ?? null, 'Fim da validade');
             if ($validUntil !== null && $validUntil < $validFrom) {
-                throw new InvalidArgumentException('Fim da validade nao pode ser anterior ao inicio.');
+                throw new InvalidArgumentException('Fim da validade não pode ser anterior ao início.');
             }
             $notes = $this->text($data['notes'] ?? '', 1000, true);
             $employeeId = (int)$employee['id'];
@@ -228,7 +228,7 @@ final class PaMapService {
                 );
                 $stmt->execute($params + [':id' => $id]);
                 if ($stmt->rowCount() !== 1) {
-                    throw new DomainException('Vinculo de PA nao encontrado.');
+                    throw new DomainException('Vínculo de PA não encontrado.');
                 }
             } else {
                 $stmt = $this->pdo->prepare(
@@ -262,7 +262,7 @@ final class PaMapService {
     public function remove(int $id, string $actor): array {
         return $this->atomic(function () use ($id, $actor): array {
             if (!$this->tableExists('portal_pa_assignments')) {
-                throw new DomainException('Tabela de vinculos do Mapa de PA ainda nao foi criada.');
+                throw new DomainException('Tabela de vínculos do Mapa de PA ainda não foi criada.');
             }
             $id = $this->positiveInt($id);
             $stmt = $this->pdo->prepare(
@@ -275,7 +275,7 @@ final class PaMapService {
             $stmt->execute([':id' => $id]);
             $row = $stmt->fetch();
             if (!$row) {
-                throw new DomainException('Vinculo de PA nao encontrado.');
+                throw new DomainException('Vínculo de PA não encontrado.');
             }
             $stmt = $this->pdo->prepare(
                 'UPDATE portal_pa_assignments
@@ -284,7 +284,7 @@ final class PaMapService {
             );
             $stmt->execute([':updated_by' => $actor, ':id' => $id]);
             if ($stmt->rowCount() !== 1) {
-                throw new DomainException('Vinculo de PA nao encontrado.');
+                throw new DomainException('Vínculo de PA não encontrado.');
             }
             return ['id' => $id, 'pa_number' => (string)$row['pa_number'], 'employee_id' => (int)$row['employee_id']];
         });
@@ -711,7 +711,7 @@ final class PaMapService {
             ':new_from' => $validFrom,
         ]);
         if ($stmt->fetch()) {
-            throw new DomainException('Este colaborador ja possui vinculo ativo em outro PA no periodo.');
+            throw new DomainException('Este colaborador já possui vínculo ativo em outro PA no período.');
         }
     }
 
@@ -727,11 +727,11 @@ final class PaMapService {
         $stmt->execute([':id' => $employeeId]);
         $employee = $stmt->fetch();
         if (!$employee) {
-            throw new InvalidArgumentException('Colaborador ativo invalido.');
+            throw new InvalidArgumentException('Colaborador ativo inválido.');
         }
         $normalizedTeam = $this->normalizeTeam($employee['team'] ?? null);
         if ($normalizedTeam === null) {
-            throw new InvalidArgumentException('Colaborador ativo invalido.');
+            throw new InvalidArgumentException('Colaborador ativo inválido.');
         }
         $employee['team'] = $normalizedTeam;
         return $employee;
@@ -784,19 +784,19 @@ final class PaMapService {
     private function paNumber($value): string {
         $text = $this->text($value, 20);
         if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9 -]{0,19}$/', $text)) {
-            throw new InvalidArgumentException('PA invalido.');
+            throw new InvalidArgumentException('PA inválido.');
         }
         return strtoupper(trim($text));
     }
 
     private function date($value, string $label): string {
         if (!is_string($value) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
-            throw new InvalidArgumentException("{$label} invalida.");
+            throw new InvalidArgumentException("{$label} inválida.");
         }
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $value);
         $errors = DateTimeImmutable::getLastErrors();
         if (!$date || ($errors !== false && ($errors['warning_count'] || $errors['error_count']))) {
-            throw new InvalidArgumentException("{$label} invalida.");
+            throw new InvalidArgumentException("{$label} inválida.");
         }
         return $date->format('Y-m-d');
     }
@@ -814,7 +814,7 @@ final class PaMapService {
         }
         $team = strtolower(trim((string)$value));
         if (!in_array($team, ['n1', 'n2', 'lideranca'], true)) {
-            throw new InvalidArgumentException('Equipe invalida.');
+            throw new InvalidArgumentException('Equipe inválida.');
         }
         return $team;
     }
@@ -854,18 +854,18 @@ final class PaMapService {
         }
         $result = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if ($result === false) {
-            throw new InvalidArgumentException('Identificador invalido.');
+            throw new InvalidArgumentException('Identificador inválido.');
         }
         return (int)$result;
     }
 
     private function text($value, int $max, bool $allowEmpty = false): string {
         if (!is_scalar($value) && $value !== null) {
-            throw new InvalidArgumentException('Texto invalido.');
+            throw new InvalidArgumentException('Texto inválido.');
         }
         $text = trim((string)$value);
         if ($text === '' && !$allowEmpty) {
-            throw new InvalidArgumentException('Texto obrigatorio.');
+            throw new InvalidArgumentException('Texto obrigatório.');
         }
         if (self::stringLength($text) > $max) {
             throw new InvalidArgumentException('Texto excede o limite permitido.');

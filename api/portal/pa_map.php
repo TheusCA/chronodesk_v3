@@ -30,13 +30,13 @@ try {
     $data = portal_json_input(PaMapService::MAX_PAYLOAD_BYTES);
     $action = $data['action'] ?? 'save';
     if (!is_string($action)) {
-        throw new InvalidArgumentException('Acao invalida.');
+        throw new InvalidArgumentException('Ação inválida.');
     }
 
     if ($action === 'remove') {
         $id = filter_var($data['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
         if (!$id) {
-            throw new InvalidArgumentException('Alocacao invalida.');
+            throw new InvalidArgumentException('Alocação inválida.');
         }
         // [F6, DF11] Auditoria com o vinculo, o PA e o colaborador (IDs; sem nome nem login).
         $removed = $service->remove((int)$id, portal_username());
@@ -45,7 +45,7 @@ try {
     }
 
     if ($action !== 'save') {
-        throw new InvalidArgumentException('Acao invalida.');
+        throw new InvalidArgumentException('Ação inválida.');
     }
     // [F6, P13] Conflito, remoto, ausencia e sem escala nao bloqueiam: a
     // resposta traz warnings[] e conflicts[], e o conflito aceito e auditado.
@@ -60,7 +60,7 @@ try {
         'warnings' => $result['warnings'],
         'conflicts' => $result['conflicts'],
         'conflicts_more' => $result['conflicts_more'],
-        'mensagem' => 'Alocacao de PA salva.',
+        'mensagem' => 'Alocação de PA salva.',
     ]);
 } catch (Throwable $error) {
     portal_operational_error($error);

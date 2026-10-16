@@ -154,7 +154,7 @@ assert.deepEqual(confirmInventory, {
   'src/pages/AdminPage.jsx': 2,
   'src/pages/DocumentsPage.jsx': 1,
   'src/pages/OperationalPages.jsx': 1,
-  'src/pages/PaMapPage.jsx': 1,
+  // F6 (P13): saiu o confirm do remoto no Mapa PA (salvar nunca pede confirmacao).
 }, 'Fase 21 nao deve adicionar novo window.confirm')
 assert.doesNotMatch(sourceText, /\buseMutation\(/, 'Nenhuma mutation deve ser criada')
 
