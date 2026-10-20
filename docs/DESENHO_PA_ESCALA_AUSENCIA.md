@@ -2249,14 +2249,14 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `tailwind.config.js`. QA genérico, no lugar da lista por prefixo: varrer o `src` por `className` montado por template (`prefixo-${...}` dentro de `className`, não em `key`) e, para cada prefixo, exigir que toda regra `.prefixo-<variante>` do `index.css` saia no CSS gerado; prefixo ou variante novo sem regra no CSS derruba o QA. Mantida a conferência dos tons em uso do `MetricCard` e do `InlineAlert`. Mutação: cada grupo de volta na camada, mais um prefixo novo por template sem regra. Prints antes e depois: indicador de conexão (online e instável), uma pílula de Incidentes críticos e cartões de Pausas com técnico disponível e em pausa.
 
-**Correção do achado entregue (2026-10-16, `a795efc`; a aprovar):**
+**Correção do achado entregue (2026-10-16, `a795efc`; aprovada em 2026-10-20, ver abaixo):**
 
 | Arquivo | Como ficou |
 |---|---|
 | `frontend/src/index.css` | `status-dot-info`, `-success`, `-warning` (com o `span` do ponto), `detail-pill-neutral`, `-info`, `-warning` e `operator-card-available`, `-paused`/`-pending`, `-offline` (`::before`) saem de `@layer components` e vão para o fim do arquivo, junto com os tons do ajuste (b); as regras não mudam, o `tailwind.config.js` também não. O comentário do bloco cobre os cinco prefixos. As regras base (`.status-dot`, `.status-dot span`, `.detail-pill`, `.operator-card`, `::before`) ficam na camada: o nome aparece inteiro no código |
 | `frontend/scripts/qa-calendar-presence.mjs` | Conferência genérica, depois da dos tons de `MetricCard` e `InlineAlert` (mantida): varre o `src` por ``className={`…`}`` com `prefixo-${x}` (não pega `key`); resolve as variantes em uso pelo código (`const` local, retorno de função desestruturado, padrão do parâmetro e valores passados ao componente: literal, ternário, `const` do arquivo ou coluna de tabela percorrida com `.map`); para cada prefixo exige pelo menos uma regra `.prefixo-<variante>` no `index.css`, que **toda** essa regra saia no CSS gerado e que cada variante em uso tenha a sua. Prefixo ou variante novo sem regra derruba; variante que o QA não sabe resolver (expressão, valor sem origem conhecida, template fora de função) também derruba, com "ensine o QA". Conferências contra varredura vazia: os seis prefixos de hoje (`metric-card`, `inline-alert`, `status-dot`, `detail-pill`, `operator-card`, `status`) e as variantes de hoje precisam ser achados; os templates em `key` (`pause`, `overtime`, `adjustment`, `implicita`) não; a varredura bate com os tons do `MetricCard` e do `InlineAlert` |
 
-**Decisões de implementação da correção (a aprovar):**
+**Decisões de implementação da correção (aprovadas em 2026-10-20):**
 
 1. **Variantes de hoje conferidas como "contém", não "igual"**, para `status-dot`, `detail-pill`, `operator-card` e `status`: uma variante nova **com** a sua regra passa; sem regra, cai no laço genérico. Os tons de `MetricCard` e `InlineAlert` continuam com "igual", como aprovado no ajuste (b).
 2. **Variante que o QA não resolve derruba**, em vez de ser ignorada: um template novo com expressão (`operator-card-${item.state}`) ou um tom passado por variável de origem desconhecida pede que o QA seja ensinado.
@@ -2265,7 +2265,22 @@ Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `ta
 
 **Validação pela IA:** os 17 `qa:*`, lint, typecheck e a bateria PHP completa; **mutação 22/22 e 3/3 controles**: os cinco grupos de volta na camada, um a um e todos juntos (6); cada classe nova de volta na camada, uma a uma (8: três `status-dot`, três `detail-pill`, `operator-card-available` e `-offline`); `operator-card-paused`/`-pending` na camada **e** sem o literal no Dashboard (1); prefixo novo por template sem regra (`pill-tone-${tone}` no `DetailPill`) (1); variante nova sem regra: tom `danger` num `DetailPill` e num `StatusDot`, estado `blocked` no cartão de Pausas, regra `operator-card-available` removida (4); variante por expressão (`operator-card-${item.state}`) e tom por variável sem origem conhecida (2). Controles que o QA aceita, como deve: template em `key`; tom novo **com** regra fora da camada (`detail-pill-danger`); e `operator-card-paused`/`-pending` de volta na camada, **mutante equivalente**, porque o literal `operator-card-paused` no `DashboardPage.jsx:94` faz o Tailwind manter o bloco inteiro (as duas regras saem no CSS gerado; conferido compilando). Na 1ª rodada esse caso estava entre os mutantes e "sobreviveu"; passou para controle e ganhou o mutante sem o literal, que morreu. **Prints antes e depois** (servidor simulado com dados fictícios, Chrome sem janela, 1366 px): indicador de conexão online (topo e Dashboard) e instável (Dashboard, com `status.php` falhando), cartões de Pausas (disponível, em pausa, aguardando aprovação) e as pílulas do detalhe de um chamado crítico. Valores computados no navegador: antes, indicador e pílulas com a borda padrão `rgb(35, 48, 68)`, fundo transparente e o ponto transparente; barra do disponível `rgb(71, 85, 105)` (a padrão). Depois: indicador `success` com borda esmeralda 20%, texto `rgb(167, 243, 208)` e ponto `rgb(110, 231, 183)`; `warning` com borda âmbar 20% e ponto `rgb(252, 211, 77)`; `info` com ponto `rgb(103, 232, 249)`; pílulas `info` e `warning` com borda, fundo e texto do tom e `neutral` com borda `rgba(255, 255, 255, 0.1)`; barra do disponível `rgb(52, 211, 153)`. `offline` não muda na tela (a regra repete a cor padrão do `::before`). **Não verificado:** o portal real com o build novo (o teste no navegador é do responsável). **Limite do QA:** a varredura lê só o `className` com template literal; uma classe montada fora dele (numa variável ou função passada ao `className`) não entra.
 
-**Achado fora do escopo, não corrigido:** no Dashboard, se o primeiro `status.php` falha (conexão instável antes de qualquer resposta), o indicador ao lado mostra "Atualizado há 1792178705 segundos": `updatedLabel` (`DashboardPage.jsx:19`) recebe `server_now` nulo, `parseDate(null)` vira 1970 e o teste de número finito passa. Aparece no print "instável". Fica para um lote de acabamento, se aprovado.
+**Achado fora do escopo, não corrigido:** no Dashboard, se o primeiro `status.php` falha (conexão instável antes de qualquer resposta), o indicador ao lado mostra "Atualizado há 1792178705 segundos": `updatedLabel` (`DashboardPage.jsx:19`) recebe `server_now` nulo, `parseDate(null)` vira 1970 e o teste de número finito passa. Aparece no print "instável". Fica para o lote de acabamento (pendência 17c do estado da sessão, decisão de 2026-10-20).
+
+**Correção aprovada em 2026-10-20** (validação humana, revisão do responsável), com as quatro decisões. Build com o `index.css` novo e varredura independente do responsável no CSS gerado: para cada prefixo montado por template no `className`, toda regra definida no `index.css` sai no CSS gerado.
+
+| Caso | Resultado |
+|---|---|
+| `status-dot` | 3/3 |
+| `detail-pill` | 3/3 |
+| `operator-card` | 4/4 |
+| `inline-alert` | 3/3 |
+| `metric-card` | 4/4 |
+| `status` | 10/10 |
+| `qa:calendar-presence` | OK |
+| Telas no navegador | Ainda não abertas pelo responsável (próximo teste) |
+
+**Achado do Dashboard:** vai para o lote de acabamento (pendência 17c). Com o 1º `status.php` falhando, `server_now` nulo, `parseDate(null)` vira 1970 e aparece "Atualizado há 1792178705 segundos" (`DashboardPage.jsx:19`). Correção prevista: sem `server_now` válido, o texto "Atualização automática ativa". Não corrigido no F6.
 
 ---
 
