@@ -749,6 +749,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Nenhuma consulta executada em MySQL (nao ha MySQL na estacao; a consulta do `audit_log` do passo 6 e nova). Roteiro nao ensaiado no servidor. **Achado fora do escopo, nao corrigido:** `DOCUMENTACAO_TECNICA.md` 7.4 diz que a unicidade por posto e por colaborador e garantida no banco; so vale para a tabela antiga `portal_pa_map`. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-23**, com as sete decisoes (inclusive o `merge` pelo `f6-commit`, a verificacao pos-deploy sem contagem de conflito em SQL e o rollback so com aprovacao previa), apos revisao do responsavel no MySQL 8.0.46 local: consulta do `audit_log` do passo 6 com eventos de teste, depois removidos, contou certo `PA_MAP_SAVED`, `PA_MAP_REMOVED` e `PA_MAP_CONFLICT_ACCEPTED` (`WARNING`), e um evento `PAXMAPXY` ficou fora (o escape do `_` no `LIKE` funciona dentro das aspas do bash); Q-F6 completa do passo 3 (as duas consultas, com `vinculos_fora_do_mapa`) sem erro; roteiro conferido contra o do F5. **F6 completo**, no deploy unico da Parte B. O achado da 7.4 da documentacao tecnica foi corrigido a pedido, em commit proprio. |
 
+### Parte B, F7 — plano (Visao Operacional no motor) — 2026-10-23
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Plano do F7 (desenho 9.9), so documento, sem codigo: contadores por equipe pelo motor com relogio (Em pausa, Almoco, Fora do expediente), `presence` no `technicians.php` (D14 do F4), legenda unica na Visao Operacional, impacto no polling e medicao, DF7/P9 por perfil, Q-F7, commits, testes, riscos e quinze decisoes (DV1 a DV15). |
+| **Branch e commits** | `8ca50d8` (aprovacao do commit 4 do F6 e F6 completo), `5b57d91` (7.4 da documentacao tecnica) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | Desenho: secao 9.9 (nova) e linha de situacao do cabecalho. |
+| **Decisoes de implementacao** | Nenhuma ainda (plano). Quinze a aprovar; destaques: contadores no `dashboard.php`, sem consulta nova no `status.php` (DV1); o painel nao le o corte (DV3); o mesmo interruptor do F2 (DV4); cores novas da legenda, porque o azul-ceu ja e o remoto (DV7); dois achados de exposicao: `role` no `technicians.php` (DV9) e `observacao_reuniao` de todos no `status.php` e no `dashboard.php` para qualquer perfil (DV11). |
+| **Validacao executada pela IA** | Fatos lidos no codigo com arquivo:linha; as duas consultas da Q-F7 passam no `bash -n` e tem os parenteses balanceados; colunas conferidas nas migrations 001, 003 e 012 e no `database_SECURED.sql`. |
+| **Limitacoes declaradas** | Q-F7 nunca rodou em MySQL (nao ha MySQL na estacao). Sem medicao do `dashboard.php` hoje (o custo e estimado pelo F2). O comportamento do `carregar_estado` com o estado ilegivel foi lido no codigo, nao testado. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: aprovacao do plano antes de qualquer codigo. |
+
 ---
 
 ## 5. Responsabilidade
