@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8; commit 1 (migration 014) aprovado em 2026-10-13; commit 2 (planejador puro) aprovado em 2026-10-13; commit 3 (serviço e endpoints) aprovado em 2026-10-13; commit 4 (L-07) aprovado em 2026-10-13, com a decisão 8 (conflito do Mapa PA sem inativos); commit 5 (tela de Funcionários) aprovado em 2026-10-13; commit 6 (ponta a ponta e documentação) aprovado em 2026-10-13: **F4 completo**, no deploy único da Parte B** (seção 9.6). **F5: plano aprovado em 2026-10-13, com ajuste na D2 (corte no 1º dia da competência seguinte ao deploy); commits 1 a 5 aprovados entre 2026-10-14 e 2026-10-15: F5 completo, no deploy único da Parte B** (seção 9.7). **F6 (Mapa PA no motor): plano aprovado em 2026-10-15; commits 1 a 4 aprovados entre 2026-10-15 e 2026-10-23: F6 completo, no deploy único da Parte B** (seção 9.8). **F7 (Visão Operacional): plano entregue em 2026-10-23, aguardando aprovação; sem código** (seção 9.9). Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8; commit 1 (migration 014) aprovado em 2026-10-13; commit 2 (planejador puro) aprovado em 2026-10-13; commit 3 (serviço e endpoints) aprovado em 2026-10-13; commit 4 (L-07) aprovado em 2026-10-13, com a decisão 8 (conflito do Mapa PA sem inativos); commit 5 (tela de Funcionários) aprovado em 2026-10-13; commit 6 (ponta a ponta e documentação) aprovado em 2026-10-13: **F4 completo**, no deploy único da Parte B** (seção 9.6). **F5: plano aprovado em 2026-10-13, com ajuste na D2 (corte no 1º dia da competência seguinte ao deploy); commits 1 a 5 aprovados entre 2026-10-14 e 2026-10-15: F5 completo, no deploy único da Parte B** (seção 9.7). **F6 (Mapa PA no motor): plano aprovado em 2026-10-15; commits 1 a 4 aprovados entre 2026-10-15 e 2026-10-23: F6 completo, no deploy único da Parte B** (seção 9.8). **F7 (Visão Operacional): plano aprovado em 2026-10-23, com DV1 a DV15 como recomendadas e ajustes na DV7, DV11, DV14 e no risco 1; Q-F7 validada no MySQL 8.0.46 local; commit 1 entregue em 2026-10-23, aguardando revisão** (seção 9.9). Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -2316,9 +2316,9 @@ Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `ta
 
 **F6 completo (2026-10-23)**, no deploy único da Parte B (pendência 16 do estado da sessão), pelo roteiro "Deploy que traz o F6" do `DEPLOY_LINUX.md`.
 
-### 9.9 F7 — Visão Operacional no motor: plano (2026-10-23, a aprovar)
+### 9.9 F7 — Visão Operacional no motor: plano (2026-10-23, aprovado)
 
-Plano gravado aqui antes de qualquer código. Base: seções 1.6 e 1.7 (presença e polling hoje), 3.6 (`technicians.php`), 3.7 (`dashboard.php`), 3.8, 4.3 (situação com relógio), 4.5 (contadores), 4.6 (P14), 5.1 (legenda), 5.7 (tela), 0.6 (P2, D10, fora do Mapa); do F2, o interruptor `STATUS_PRESENCE_ENABLED`, a base do polling e a decisão 11 (9.2); do F4, a D14 (9.6); do F5, a D9 (9.7); do F6, a DF2 e a DF7 (9.8); RF-10 do requisito.
+Plano gravado aqui antes de qualquer código. **Aprovado em 2026-10-23, com DV1 a DV15 como recomendadas e os ajustes registrados em "Aprovação do plano", no fim desta seção.** Base: seções 1.6 e 1.7 (presença e polling hoje), 3.6 (`technicians.php`), 3.7 (`dashboard.php`), 3.8, 4.3 (situação com relógio), 4.5 (contadores), 4.6 (P14), 5.1 (legenda), 5.7 (tela), 0.6 (P2, D10, fora do Mapa); do F2, o interruptor `STATUS_PRESENCE_ENABLED`, a base do polling e a decisão 11 (9.2); do F4, a D14 (9.6); do F5, a D9 (9.7); do F6, a DF2 e a DF7 (9.8); RF-10 do requisito.
 
 **Fatos lidos no código (2026-10-23):**
 
@@ -2423,6 +2423,48 @@ O que cada número decide: `ativos_n1`, `ativos_n2` e `ativos_lideranca` dimensi
 | DV13 | Plantonistas e sobreavisos ativos (zero fixo) | **Fora do F7**, em lote próprio; os dois cartões continuam como estão |
 | DV14 | Pendência 17c ("Atualizado há … segundos") | **Fica no lote de acabamento**, como decidido em 2026-10-20; se preferir, entra no commit 3 (mesmo arquivo, uma linha) |
 | DV15 | Medição | Referência do `dashboard.php` agora; base do critério do `status.php` e do `dashboard.php` logo antes do deploy único; o critério do F2 para os dois; piora no `dashboard.php` → interruptor (DV4) |
+
+**Aprovação do plano (2026-10-23).** DV1 a DV15 como recomendadas, com quatro ajustes:
+
+- **DV7:** o amarelo do almoço bem distinto do laranja de ausente, com o contraste conferido em print no commit 3; ícone e rótulo em todas as situações (nenhuma só pela cor).
+- **DV11:** antes do commit 2, conferir se alguma tela antiga (PHP/JS) lê a `observacao_reuniao` do `status.php`; se ler, segue a mesma regra e entra no mesmo commit, com teste. Conferência abaixo.
+- **DV14:** entra no commit 3 (`DashboardPage.jsx`, uma linha): sem `server_now` válido, "Atualização automática ativa". A pendência 17c sai da lista quando entrar.
+- **Risco 1:** o aviso à gestão da mudança de "CIs disponíveis" vai junto com o do F6: quem está sem regra, ausente, no almoço ou fora do expediente deixa de contar; com o número de `n1_n2_sem_regra_hoje` da Q-F7 do servidor.
+
+**Q-F7 no MySQL 8.0.46 local (responsável, 2026-10-23).** As duas variantes rodaram sem erro, com os números conferidos à mão:
+
+| Coluna | Local |
+|---|---|
+| `ativos_n1` / `ativos_n2` / `ativos_lideranca` | 6 / 8 / 1 (o cadastro com "ç" mal codificado também contado) |
+| `ativos_outras_equipes` | 0 |
+| `fora_do_mapa` | 1 |
+| `n1_n2_sem_regra_hoje` | 11 (12 na variante, que conta também o fora do Mapa) |
+| `jornada_invertida` / `almoco_fora_da_jornada` | 0 / 0 |
+| `ausencias_aprovadas_hoje` | 1 |
+| `excecoes_de_ausencia_hoje` | não informado |
+
+Nenhuma das três colunas com regra de parada (`ativos_outras_equipes`, `jornada_invertida`, `almoco_fora_da_jornada`) veio maior que 0 no local. **Q-F7 do servidor (variante, dia útil em expediente) e referência do `dashboard.php` (`medir-polling.sh`, `N=200`, mesma conta da base do F2): pendentes** (os campos vieram em branco na mensagem de aprovação). A regra continua: qualquer uma das três maior que 0 no servidor, tratamento proposto e parada antes do código seguinte.
+
+**Achado da Q-F7 (rótulo de equipe), a decidir.** A Q-F7 compara a equipe pela colação do MySQL (`LOWER` Unicode e, na colação padrão do 8.0, sem acento); o motor usa `validate_funcionario_equipe` (`security.php:132`): `strtolower` só de ASCII e comparação byte a byte. Um rótulo que o MySQL aceita e o PHP não (mal codificado, ou com maiúscula acentuada, como `LIDERANÇA`) fica **fora do motor**: some do painel, dos contadores, do Mapa PA e do `presence.php`, e a Q-F7 o conta como Liderança (o `qa-operational-view` fixa esse comportamento atual). Não dá para saber se o cadastro mal codificado do MySQL local é desse tipo. Proposta: contar no MySQL local antes do commit 3, só contagem (nunca rodou em MySQL; o `CAST(... AS BINARY)` compara bytes, como o PHP, e o `LOCATE` pega maiúscula acentuada, que o `LOWER` do MySQL converte e o PHP não):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT COUNT(*) AS rotulo_que_o_php_nao_reconhece FROM funcionarios WHERE ativo = 1 AND (CAST(LOWER(TRIM(equipe)) AS BINARY) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe') OR LOCATE(CAST('Ç' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0 OR LOCATE(CAST('Ã' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0);"; unset P
+```
+
+Maior que 0: corrigir o cadastro pela tela de Funcionários (dado, não código), antes do deploy; a validação de equipe muda de qualquer forma no F9 (Crítico).
+
+**Conferência da DV11 (2026-10-23, leitura do código).** Nenhuma tela antiga lê a `observacao_reuniao` do `status.php`:
+
+| Tela | O que lê | Efeito no commit 2 |
+|---|---|---|
+| `index.php` + `static/js/script.js` (painel antigo) | `status.php` (`script.js:383`), mas mostra só o `motivo_pausa` (`:542`); a observação é só digitada no formulário de reunião (`:599-639`) e enviada ao `solicitar_pausa_com_aprovacao.php` | Nenhum |
+| `metricas.php` + `static/js/metricas.js` | `observacao` do `solicitacoes_pendentes.php` (`metricas.js:119`, `:161`), endpoint só da gestão | Nenhum |
+| `admin.php` + `static/js/admin.js`, `admin_users.js` | Não leem | Nenhum |
+| React: `DashboardPage.jsx:104-112` | Caixa da observação em cada pausa de reunião, da lista do `status.php` (`useLivePauses`), não do `active_pauses` do `dashboard.php`; sem a chave, mostraria "Sem observação informada" | Mesma regra: a caixa só aparece quando a chave vier (no commit 2, com teste) |
+| React: `PausasPage.jsx:142-145` (cartões dos colegas) e `:50-55` (a própria) | `status.php`; nos cartões, já só mostra com valor | Cartões sem mudança de código (conferir no teste); a própria continua |
+| React: `MetricasPage.jsx:62` | `metricas.php` (gestão) | Nenhum |
+
+Fora do `status.php` e do `dashboard.php`, a observação sai em `solicitacoes_pendentes.php`, `metricas.php` e `download_relatorio.php` (só gestão) e na resposta do `solicitar_pausa_com_aprovacao.php` (a do próprio): sem mudança. Correção de um fato desta seção: a lista "Pausas em andamento" da Visão Operacional vem do `status.php`, não do `active_pauses` do `dashboard.php` (que a tela não usa); a DV2 garante a coerência dentro do `dashboard.php`, e o risco 4 (contadores e lista em polls diferentes) vale como escrito.
 
 ---
 
