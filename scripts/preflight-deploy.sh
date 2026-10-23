@@ -121,7 +121,8 @@ check_int_range() {
 check_int_range LOGIN_USER_MAX_FAILURES 1 20 5
 check_int_range LOGIN_USER_WINDOW_SECONDS 60 86400 900
 
-# [F2, P14] Presenca no status.php. Valor fora da lista fica ligado no PHP
+# [F2, P14; F7, DV4] Presenca ao vivo: status.php, contadores do dashboard.php
+# e situacao do technicians.php. Valor fora da lista fica ligado no PHP
 # (so avisa no log), mas indica configuracao diferente da pretendida.
 case $(printf %s "$(gv STATUS_PRESENCE_ENABLED)" | tr "A-Z" "a-z" | tr -d " ") in
     ""|1|true|on|yes) echo "STATUS_PRESENCE_ENABLED: OK (ligado)" ;;

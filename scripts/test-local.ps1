@@ -138,6 +138,14 @@ if (!$phpExecutable) {
         Pass "QA do Mapa PA concluido"
     }
 
+    # Sem banco: Visao Operacional no motor (F7): contadores com relogio, P9, DV9, DV10, sem N+1.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-operational-view.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA da Visao Operacional falhou"
+    } else {
+        Pass "QA da Visao Operacional concluido"
+    }
+
     # Sem banco: arquivamento de tecnicos (F4): migration 014 e, depois, o plano.
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-archive.php")
     if ($LASTEXITCODE -ne 0) {

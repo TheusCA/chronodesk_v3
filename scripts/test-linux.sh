@@ -54,6 +54,10 @@ echo "== PHP PA map conflicts QA =="
 # Mapa PA no motor (F6): conflito por dia, presenca, P9, DF7, sem N+1; sem banco.
 php scripts/qa-pa-conflicts.php
 
+echo "== PHP operational view QA =="
+# Visao Operacional no motor (F7): contadores com relogio, P9, DV9, DV10, sem N+1; sem banco.
+php scripts/qa-operational-view.php
+
 echo "== PHP legacy schedule output QA =="
 # Relatorio, CSV e Calendario iguais a referencia anterior ao F2B; sem banco.
 php scripts/qa-schedule-legacy-output.php

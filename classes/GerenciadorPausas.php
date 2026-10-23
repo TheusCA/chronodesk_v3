@@ -8,6 +8,7 @@ class GerenciadorPausas {
     public $limite_pausa_por_equipe;
     private $duracao_pausa_minutos;
     private $pdo;
+    private $estado_pausas_lido = false;
 
     public function __construct($limite_pausa_por_equipe = 2, $duracao_pausa_minutos = 20) {
         $this->funcionarios = [];
@@ -24,9 +25,14 @@ class GerenciadorPausas {
     }
 
     public function carregar_estado() {
+        // [F7, DV6] Sem arquivo = nenhuma pausa ainda (lido); arquivo ilegivel
+        // = pausas indisponiveis, para a Visao Operacional nao contar "nenhuma
+        // pausa" em silencio.
+        $this->estado_pausas_lido = !is_file(ESTADO_JSON);
         // LOCK_SH no proprio arquivo: ver ler_estado_pausas() em config.php.
         $estado = ler_estado_pausas(ESTADO_JSON);
         if ($estado === null) return;
+        $this->estado_pausas_lido = true;
 
         foreach ($estado['funcionarios'] as $id => $data) {
             if (isset($this->funcionarios[$id])) {
@@ -677,6 +683,22 @@ class GerenciadorPausas {
 
     public function getFuncionarios() {
         return $this->funcionarios;
+    }
+
+    /**
+     * [F7, DV2 e DV6] Pausa de cada cadastro carregado, do estado ja lido pelo
+     * init.php (sem segunda leitura do arquivo): id => ['em_pausa' => bool,
+     * 'motivo' => ?string]. null quando o estado de pausas estava ilegivel.
+     */
+    public function pausas_atuais(): ?array {
+        if (!$this->estado_pausas_lido) {
+            return null;
+        }
+        $pausas = [];
+        foreach ($this->funcionarios as $id => $func) {
+            $pausas[(int)$id] = ['em_pausa' => $func->em_pausa === true, 'motivo' => $func->motivo_pausa];
+        }
+        return $pausas;
     }
 
     private function pausa_conta_para_limite($motivo): bool {

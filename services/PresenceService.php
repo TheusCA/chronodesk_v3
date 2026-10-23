@@ -3,11 +3,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/PresenceEngine.php';
 require_once __DIR__ . '/PresenceRepository.php';
+require_once __DIR__ . '/OperationalService.php';
 
 /**
  * Consumidores do motor de presenca no F2: GET portal/presence.php e a
- * presenca de hoje no status.php (P14). Carrega em lote pelo repositorio e
- * calcula pelo PresenceEngine; o instante vem de quem chama.
+ * presenca de hoje no status.php (P14). No F7, os contadores do
+ * dashboard.php e a situacao de agora do technicians.php. Carrega em lote
+ * pelo repositorio e calcula pelo PresenceEngine; o instante vem de quem chama.
  *
  * Escopo reduzido do F2 (plano aprovado): Calendario, Escala, Relatorios
  * (generatedSchedule) e Mapa PA continuam no calculo antigo ate o F2B, F5 e F6.
@@ -144,6 +146,128 @@ final class PresenceService {
             }
         }
         return $status;
+    }
+
+    /**
+     * [F7] Contadores da Visao Operacional (secoes 4.5 e 5.7) no instante
+     * $now, pelo summarize: N1, N2 e Lideranca, e o total = N1 + N2 (a
+     * Lideranca fica separada e fora do total, D10). $pauses: ver nowPresences.
+     */
+    public function operationalSummary(DateTimeImmutable $now, ?array $pauses): array {
+        $byTeam = ['n1' => [], 'n2' => [], 'lideranca' => []];
+        foreach ($this->nowPresences($now, $pauses) as $row) {
+            $byTeam[$row['team']][] = $row['presence'];
+        }
+        return [
+            'n1' => PresenceEngine::summarize($byTeam['n1']),
+            'n2' => PresenceEngine::summarize($byTeam['n2']),
+            'lideranca' => PresenceEngine::summarize($byTeam['lideranca']),
+            'total' => PresenceEngine::summarize(array_merge($byTeam['n1'], $byTeam['n2'])),
+        ];
+    }
+
+    /**
+     * [F7, D14] Situacao de agora por colaborador para o technicians.php:
+     * id => situacao, origem e detalhe, mais 'parcial' (horario da proxima
+     * ausencia parcial de hoje, quando ha marcador) e 'categoria' (P9: so a
+     * gestao e o proprio). Motivo de pausa fora da lista fechada vira "Pausa"
+     * para quem nao e gestao nem o proprio (DV10, regra do SEC-07b).
+     * Observacao nunca. Fora do Mapa ou de N1, N2 e Lideranca: sem chave.
+     */
+    public function technicianPresence(DateTimeImmutable $now, ?array $pauses, array $viewer): array {
+        $time = $now->format('H:i');
+        $items = [];
+        foreach ($this->nowPresences($now, $pauses) as $id => $row) {
+            $presence = $row['presence'];
+            $personal = self::seesPersonal($viewer, $id);
+            $absent = $presence['situacao'] === 'ausente';
+            $detail = $presence['detalhe'];
+            if ($presence['origem'] === 'pausa' && !$personal) {
+                $detail = validate_motivo_pausa($detail) ?? 'Pausa';
+            }
+            $partial = $absent ? null : PresenceEngine::partialMarkerLabel($presence['ausencias'], $time);
+            $category = $personal ? self::nowCategory($presence['ausencias'], $absent, $time) : null;
+            $items[$id] = [
+                'situacao' => $presence['situacao'],
+                'origem' => $presence['origem'],
+                'detalhe' => $detail,
+            ] + ($partial === null ? [] : ['parcial' => $partial])
+              + ($category === null ? [] : ['categoria' => OperationalService::absenceCategoryLabel($category)]);
+        }
+        return $items;
+    }
+
+    /**
+     * [F7] Situacao de agora de cada cadastro do motor (N1, N2 e Lideranca),
+     * numa carga so: as 4 consultas do repositorio, qualquer que seja o numero
+     * de cadastros. Fora do Mapa, inativo e equipe fora das tres ficam de fora
+     * (0.6). Nao le a data de corte (DV3). $pauses: id => ['em_pausa' => bool,
+     * 'motivo' => ?string], do estado ja carregado pelo init.php (DV2), ou null
+     * com o estado de pausas ilegivel (DV6): ai ninguem conta em pausa, e quem
+     * chama avisa. A categoria entra no motor so para a P9 do technicians.php.
+     */
+    private function nowPresences(DateTimeImmutable $now, ?array $pauses): array {
+        $today = $now->format('Y-m-d');
+        $employees = $this->repository->employees();
+        $rules = $this->repository->rulesByEmployee($today, $today);
+        $exceptions = $this->repository->exceptionsByDay($today, $today);
+        $absences = $this->repository->absencesByEmployee($today, $today);
+        $presences = [];
+        foreach ($employees as $employee) {
+            if ($employee['outside_map'] || $employee['team'] === null) {
+                continue;
+            }
+            $id = $employee['id'];
+            $exception = $exceptions[$id . ':' . $today] ?? null;
+            $presences[$id] = [
+                'team' => $employee['team'],
+                'presence' => PresenceEngine::nowPresence(
+                    $employee,
+                    $now,
+                    $rules[$id] ?? [],
+                    $exception,
+                    self::absencesForDay($today, $exception, $absences[$id] ?? [], true),
+                    $pauses === null ? null : ($pauses[$id] ?? null)
+                ),
+            ];
+        }
+        return $presences;
+    }
+
+    /**
+     * [F7, P9] Categoria da ausencia que decide agora: ausente, a de dia
+     * inteiro ou a primeira parcial ativa (a mesma ordem do motor); senao, a
+     * do marcador (menor inicio ainda por vir, empate pela ordem). Excecao de
+     * ausencia antiga nao tem categoria.
+     */
+    private static function nowCategory(array $items, bool $absent, string $time): ?string {
+        $chosen = null;
+        foreach ($items as $item) {
+            if ($absent) {
+                if ($item['period_type'] === 'full_day') {
+                    return $item['category'] ?? null;
+                }
+                if ($chosen === null && $item['ativa']) {
+                    $chosen = $item;
+                }
+                continue;
+            }
+            $start = $item['start_time'] ?? null;
+            if ($item['period_type'] !== 'full_day' && $start !== null && $start > $time
+                && ($chosen === null || $start < $chosen['start_time'])) {
+                $chosen = $item;
+            }
+        }
+        return $chosen['category'] ?? null;
+    }
+
+    /** Gestao ve tudo; tecnico e somente leitura, so o proprio cadastro (P9, SEC-07b). */
+    private static function seesPersonal(array $viewer, int $employeeId): bool {
+        if (portal_role_is_manager($viewer['role'] ?? null)) {
+            return true;
+        }
+        $own = (int)($viewer['employee_id'] ?? 0);
+        return $own > 0 && $own === $employeeId;
     }
 
     /**

@@ -349,6 +349,22 @@ final class QaChildStatement extends PDOStatement {
             error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? $params[':id_funcionario'] ?? $params[':record_id'] ?? '?'));
             return true;
         }
+        // F7: as 4 consultas do motor (PresenceRepository), so nos casos com
+        // db['presenca'] (os demais continuam vendo o banco fora): cadastros,
+        // regras, excecoes e ausencias ja como o caso quer (datas nao emuladas).
+        if (isset($this->pdo->db['presenca'])) {
+            foreach ([
+                'SELECT id, nome, equipe, jornada_entrada, jornada_saida, almoco_inicio, almoco_fim, fora_mapa_escala FROM funcionarios WHERE ativo = 1 ORDER BY nome, id' => 'funcionarios',
+                'SELECT id, employee_id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE ' => 'regras',
+                'SELECT employee_id, exception_date, exception_type FROM portal_schedule_exceptions WHERE ' => 'excecoes',
+                'SELECT id, employee_id, starts_on, ends_on, period_type, start_time, end_time, category FROM portal_absences WHERE ' => 'ausencias',
+            ] as $prefix => $key) {
+                if (strpos($this->sql, $prefix) === 0) {
+                    $this->rows = array_values($this->pdo->db['presenca'][$key] ?? []);
+                    return true;
+                }
+            }
+        }
         if ($this->sql === 'INSERT INTO audit_log (user_ip, username, action, details, severity) VALUES (?, ?, ?, ?, ?)') {
             error_log("[QA_AUDIT] {$params[2]} [{$params[4]}]: {$params[3]}");
             return true;
@@ -1982,6 +1998,104 @@ assert_same([200, true, true], [
     strpos($paWriteCases['remover']['log'], '[QA_AUDIT] PA_MAP_REMOVED [INFO]: Alocacao de PA removida. ID 3, PA 1730, colaborador ID 5') !== false,
     strpos($paWriteCases['remover']['log'], '[QA_WRITE] UPDATE portal_pa_assignments SET') !== false,
 ], 'F6: remover audita o vinculo, o PA e o colaborador (DF11)');
+
+// F7 (secao 9.9), ponta a ponta: contadores do dashboard.php e situacao de
+// agora do technicians.php pelo motor, por perfil. Sem mudanca de acesso (a
+// matriz continua TODOS); muda o que cada perfil recebe: role so com
+// funcionarios.manage (DV9), categoria so gestao e o proprio (P9) e motivo
+// de pausa fora da lista como "Pausa" para os demais (DV10). Jornada de
+// 00:00 a 23:59 e excecao de trabalho hoje: o resultado nao depende do
+// horario nem do dia da semana em que o QA roda.
+$today = date('Y-m-d');
+$presenceRow = static fn (int $id, string $team): array => [
+    'id' => $id, 'nome' => 'QA ' . $id, 'equipe' => $team, 'jornada_entrada' => '00:00:00', 'jornada_saida' => '23:59:00',
+    'almoco_inicio' => '23:58:00', 'almoco_fim' => '23:59:00', 'fora_mapa_escala' => 0,
+];
+$presenceDb = QA_DB + ['presenca' => [
+    'funcionarios' => [$presenceRow(1, 'n1'), $presenceRow(13, 'n2'), $presenceRow(2, 'lideranca')],
+    'regras' => [],
+    'excecoes' => [
+        ['employee_id' => 1, 'exception_date' => $today, 'exception_type' => 'onsite'],
+        ['employee_id' => 13, 'exception_date' => $today, 'exception_type' => 'onsite'],
+        ['employee_id' => 2, 'exception_date' => $today, 'exception_type' => 'onsite'],
+    ],
+    'ausencias' => [
+        ['id' => 41, 'employee_id' => 13, 'starts_on' => $today, 'ends_on' => $today, 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'category' => 'ferias'],
+    ],
+]];
+$f7State = [
+    'funcionarios.json' => (string)json_encode([
+        ['id' => 1, 'nome' => 'QA Tecnico N1', 'equipe' => 'n1', 'ativo' => true, 'access_role' => 'tecnico'],
+        ['id' => 13, 'nome' => 'QA Tecnico N2', 'equipe' => 'n2', 'ativo' => true, 'access_role' => 'tecnico'],
+        ['id' => 2, 'nome' => 'QA Lider', 'equipe' => 'lideranca', 'ativo' => true, 'access_role' => 'lideranca'],
+    ]),
+    'estado.json' => (string)json_encode(['funcionarios' => [
+        '1' => ['em_pausa' => true, 'inicio_pausa' => $recent, 'motivo_pausa' => 'Texto livre antigo', 'status_aprovacao' => 'aprovado', 'solicitacao_timestamp' => null, 'observacao_reuniao' => null],
+    ]]),
+];
+$f7Spec = static fn (string $endpoint, array $session, array $extra = []): array => $extra + ['endpoint' => $endpoint, 'method' => 'GET', 'session' => $session, 'db' => $presenceDb, 'state' => $f7State];
+$f7Cases = qa_run_endpoints($qaDir, [
+    'tecnicos_admin' => $f7Spec('api/portal/technicians.php', QA_ADMIN_SESSION),
+    'tecnicos_lideranca' => $f7Spec('api/portal/technicians.php', qa_ci_session(2, 'qa.lider', 'lideranca')),
+    'tecnicos_gestor' => $f7Spec('api/portal/technicians.php', $manager),
+    'tecnicos_tecnico' => $f7Spec('api/portal/technicians.php', $technician),
+    'tecnicos_leitura' => $f7Spec('api/portal/technicians.php', qa_ci_session(4, 'qa.leitura', 'somente_leitura')),
+    'tecnicos_interruptor' => $f7Spec('api/portal/technicians.php', $manager, ['env' => ['STATUS_PRESENCE_ENABLED' => 'false']]),
+    'tecnicos_estado_ilegivel' => $f7Spec('api/portal/technicians.php', $manager, ['state' => ['funcionarios.json' => $f7State['funcionarios.json'], 'estado.json' => '{"funcionarios": ']]),
+    'painel_gestor' => $f7Spec('api/portal/dashboard.php', $manager),
+    'painel_leitura' => $f7Spec('api/portal/dashboard.php', qa_ci_session(4, 'qa.leitura', 'somente_leitura')),
+    'painel_interruptor' => $f7Spec('api/portal/dashboard.php', $manager, ['env' => ['STATUS_PRESENCE_ENABLED' => 'off']]),
+    'painel_estado_ilegivel' => $f7Spec('api/portal/dashboard.php', $manager, ['state' => ['funcionarios.json' => $f7State['funcionarios.json'], 'estado.json' => '{"funcionarios": ']]),
+    'painel_banco_fora' => $f7Spec('api/portal/dashboard.php', $manager, ['db' => QA_DB]),
+]);
+$f7Body = static fn (string $case): array => (array)json_decode($f7Cases[$case]['body'], true);
+foreach ($f7Cases as $case => $result) {
+    assert_same([200, ''], [$result['status'], $result['stderr']], "F7 {$case}: HTTP 200 sem erro de PHP");
+    assert_same(1, preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/', (string)($f7Body($case)['server_now'] ?? '')), "F7 {$case}: server_now ISO 8601 com fuso");
+}
+$byId = static fn (array $body): array => array_column($body['items'] ?? [], null, 'id');
+foreach ([
+    'tecnicos_admin' => [true, 'Texto livre antigo', 'Férias'],
+    'tecnicos_lideranca' => [true, 'Texto livre antigo', 'Férias'],
+    'tecnicos_gestor' => [false, 'Texto livre antigo', 'Férias'],
+    'tecnicos_tecnico' => [false, 'Texto livre antigo', null],
+    'tecnicos_leitura' => [false, 'Pausa', null],
+] as $case => [$seesRole, $reason, $category]) {
+    $items = $byId($f7Body($case));
+    assert_same([1, 13], array_keys($items), "F7 {$case}: N1 e N2 ativos, como antes");
+    assert_same([$seesRole, $seesRole], [array_key_exists('role', $items[1]), array_key_exists('role', $items[13])], "DV9 {$case}: role so com funcionarios.manage");
+    assert_same(['situacao' => 'pausa', 'origem' => 'pausa', 'detalhe' => $reason], $items[1]['presence'] ?? null, "DV10 {$case}: motivo fora da lista so para a gestao e o proprio");
+    assert_same(['ausente', 'Ausente (dia todo)', $category], [$items[13]['presence']['situacao'] ?? null, $items[13]['presence']['detalhe'] ?? null, $items[13]['presence']['categoria'] ?? null], "P9 {$case}: categoria so para a gestao e o proprio");
+    assert_same(['disponivel' => true, 'pausas_disponiveis' => true], $f7Body($case)['presence_meta'] ?? null, "F7 {$case}: presenca disponivel");
+    assert_same(['name', 'team', 'shift', 'status', 'on_break'], array_values(array_intersect(['name', 'team', 'shift', 'status', 'on_break'], array_keys($items[1]))), "F7 {$case}: campos antigos mantidos (compatibilidade, 3.6)");
+    assert_same(0, preg_match('/observ|reason|"note"|qa\.lider|joao\.silva/i', $f7Cases[$case]['body']), "F7 {$case}: sem observacao nem login");
+}
+assert_same(['Tecnico', 'Tecnico'], array_column($f7Body('tecnicos_admin')['items'] ?? [], 'role'), 'DV9: admin recebe o perfil de acesso, como antes');
+$items = $byId($f7Body('tecnicos_interruptor'));
+assert_same([null, null, ['disponivel' => false, 'pausas_disponiveis' => true]], [$items[1]['presence'], $items[13]['presence'], $f7Body('tecnicos_interruptor')['presence_meta']], 'DV4: interruptor desligado tira a presenca da lista, sem derrubar');
+$items = $byId($f7Body('tecnicos_estado_ilegivel'));
+assert_same([['disponivel' => true, 'pausas_disponiveis' => false], 'presencial'], [$f7Body('tecnicos_estado_ilegivel')['presence_meta'] ?? null, $items[1]['presence']['situacao'] ?? null], 'DV6: estado ilegivel avisado na lista de tecnicos, sem pausa inventada');
+$painel = $f7Body('painel_gestor');
+assert_same(
+    [['escalados' => 2, 'disponiveis' => 0, 'em_pausa' => 1, 'almoco' => 0, 'ausentes' => 1, 'fora_expediente' => 0, 'sem_escala' => 0], 1, 0, 0, ['disponivel' => true, 'pausas_disponiveis' => true]],
+    [$painel['presence_summary']['total'] ?? null, $painel['presence_summary']['lideranca']['escalados'] ?? null, $painel['presence_summary']['total']['disponiveis'] ?? null, $painel['summary']['cis_disponiveis'] ?? null, $painel['presence_meta'] ?? null],
+    'F7: dashboard.php com o resumo do motor (pausa, ausente; Lideranca fora do total) e CIs disponiveis = total.disponiveis'
+);
+assert_same([1, 1, 2], [$painel['summary']['pausas_ativas'] ?? null, count($painel['active_pauses'] ?? []), $painel['summary']['tecnicos_monitorados'] ?? null], 'F7: contadores antigos e active_pauses sem mudanca');
+assert_same($painel['presence_summary'] ?? 'gestor', $f7Body('painel_leitura')['presence_summary'] ?? 'leitura', 'F7: o resumo (so contagens) e o mesmo para todos os perfis');
+assert_same(0, preg_match('/QA Lider|Ferias|Férias|ferias/u', $f7Cases['painel_leitura']['body']), 'F7: o resumo nao leva nome da Lideranca nem categoria');
+foreach (['painel_interruptor' => 'DV4: interruptor desligado', 'painel_banco_fora' => 'DV5: falha no calculo'] as $case => $label) {
+    $body = $f7Body($case);
+    assert_same([true, null, true, null, false, 1], [
+        array_key_exists('presence_summary', $body), $body['presence_summary'] ?? null,
+        array_key_exists('cis_disponiveis', $body['summary'] ?? []), $body['summary']['cis_disponiveis'] ?? null,
+        $body['presence_meta']['disponivel'] ?? null, $body['summary']['pausas_ativas'] ?? null,
+    ], "{$label}: resumo e CIs disponiveis nulos, o resto do dashboard.php responde");
+}
+assert_same(1, preg_match('/\[PRESENCE\] Resumo de presenca indisponivel no dashboard: PDOException\r?\n/', $f7Cases['painel_banco_fora']['log']), 'DV5: falha no log so com a classe do erro');
+assert_same(0, preg_match('/consulta nao prevista|SQLSTATE/', (string)strstr($f7Cases['painel_banco_fora']['log'], '[PRESENCE]')), 'DV5: log sem a mensagem nem o SQL');
+$body = $f7Body('painel_estado_ilegivel');
+assert_same([false, true, 0], [$body['presence_meta']['pausas_disponiveis'] ?? null, $body['presence_meta']['disponivel'] ?? null, $body['presence_summary']['total']['em_pausa'] ?? null], 'DV6: estado de pausas ilegivel avisado em presence_meta');
 
 // QA 13 e A3, estruturais: so os endpoints de funcionario e a carga de
 // emergencia do config.php gravam access_role; ad_login gravado so depois de
