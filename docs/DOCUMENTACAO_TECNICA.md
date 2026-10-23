@@ -198,7 +198,10 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 
 ### 7.4 Mapa de PA
 
-- Postos identificados por número; unicidade garantida no banco tanto por posto quanto por colaborador em alocação ativa.
+- Postos identificados por número (`portal_pa_inventory`, número único).
+- **Tabela antiga `portal_pa_map`** (vínculo por data, migration 008; desde o F6 só leitura): a trava de banco contra dois vínculos ativos no mesmo posto, e contra o mesmo colaborador em dois postos, na mesma data e turno vale **só para ela** (`uq_pa_map_active_pa_slot` e `uq_pa_map_active_employee_slot`).
+- **Vínculos recorrentes `portal_pa_assignments`** (migration 009, em uso): sem unicidade por posto no banco. O PA pode ser compartilhado; dois ou mais técnicos presenciais no mesmo PA e dia aparecem em conflito no mapa, como **aviso**: salvar não é bloqueado e o conflito aceito é auditado (`PA_MAP_CONFLICT_ACCEPTED`; P13, F6).
+- **O mesmo colaborador em dois PAs no mesmo período** é impedido pelo `PaMapService`, não pelo banco: na transação do `save`, trava o cadastro (`SELECT ... FOR UPDATE` em `funcionarios`) e confere os vínculos ativos dele no período, também com `FOR UPDATE`; havendo outro, 409. Validado pelo responsável no MySQL 8.0.46 em 2026-10-16: duas gravações simultâneas do mesmo técnico em PAs diferentes, 5 rodadas, sempre uma grava e a outra recebe 409.
 - Equipes: `n1`, `n2`, `lideranca`.
 
 ---
