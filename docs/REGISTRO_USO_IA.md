@@ -761,6 +761,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Q-F7 nunca rodou em MySQL (nao ha MySQL na estacao). Sem medicao do `dashboard.php` hoje (o custo e estimado pelo F2). O comportamento do `carregar_estado` com o estado ilegivel foi lido no codigo, nao testado. `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-23**, com DV1 a DV15 como recomendadas e quatro ajustes (desenho 9.9, "Aprovacao do plano"): DV7 com o amarelo do almoco bem distinto do laranja de ausente, contraste conferido em print; DV11 com a conferencia das telas antigas antes do commit 2 (feita pela IA: nenhuma tela antiga le a observacao do `status.php`; no React, a caixa do `DashboardPage.jsx` entra no commit 2); DV14 no commit 3; aviso da mudanca de "CIs disponiveis" junto com o do F6. Q-F7 validada pelo responsavel no MySQL 8.0.46 local, as duas variantes sem erro e conferidas a mao (ativos N1 6, N2 8, Lideranca 1; fora do Mapa 1; sem regra hoje 11, 12 na variante; jornada invertida, almoco fora da jornada e outras equipes 0; ausencias aprovadas hoje 1). Q-F7 do servidor e referencia do `dashboard.php`: pendentes (campos em branco). Achado da IA a decidir: rotulo de equipe que o MySQL aceita e o PHP nao (fica fora do motor), com contagem proposta para o MySQL local. |
 
+### Parte B, F7 — commit 1 (resumo no motor e endpoints) — 2026-10-23
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Contadores da Visao Operacional pelo motor no `dashboard.php` e situacao de agora no `technicians.php` (desenho 9.9, commit 1), com DV1 a DV6, DV9 e DV10. |
+| **Branch e commits** | `32cdb75` (aprovacao do plano, Q-F7 local e conferencia da DV11), `2c1d457` (codigo e QA) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `services/PresenceService.php` (`operationalSummary`, `technicianPresence`, carga unica de 4 consultas), `classes/GerenciadorPausas.php` (`pausas_atuais`; estado ilegivel deixa de ser silencioso), `api/portal/dashboard.php`, `api/portal/technicians.php`, `scripts/qa-operational-view.php` (novo, nos dois runners), `scripts/qa-security.php` (12 casos de ponta a ponta e o banco simulado das 4 consultas do motor), texto do interruptor nos `.env` de exemplo e no preflight; desenho 9.9. `status.php` sem mudanca. |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.9, I1 a I7); destaques: arquivo de estado inexistente = lido, como no `presence.php`; DV10 pela regra do SEC-07b (o proprio ve o proprio motivo); `presence_meta` tambem no `technicians.php`; `cis_disponiveis` nulo sem presenca; rotulo de equipe nao reconhecido pelo PHP fora do motor (comportamento atual, achado a decidir). |
+| **Validacao executada pela IA** | `qa-operational-view` (239 verificacoes, relogio injetado nos instantes da 9.9); `qa-security` OK; bateria PHP completa; 17 `qa:*`, lint e typecheck; mutacao **26/26** (7 sobreviventes de borda na 1a rodada, mortas pelos testes acrescentados). |
+| **Limitacoes declaradas** | Nada rodou em MySQL. Sem medicao do `dashboard.php`. A tela ainda conta no navegador ate o commit 3. A observacao de reuniao continua indo a todos ate o commit 2 (DV11). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao e teste no MySQL local antes do commit 2 (roteiro sugerido na 9.9). |
+
 ---
 
 ## 5. Responsabilidade
