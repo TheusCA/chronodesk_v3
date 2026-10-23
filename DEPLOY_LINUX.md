@@ -1042,6 +1042,11 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   (`inconsistente = 1` = PARAR), a consulta da pendencia 16c com as duas
   colunas em 0 e so entao o registro do corte; nao use o `git pull` deste
   item. Entra no roteiro consolidado da Parte B (deploy unico depois do F9).
+- Deploy que traz o F6 (Parte B, Mapa PA no motor): so codigo, sem
+  migration. Siga o roteiro "Deploy que traz o F6", abaixo: aviso a gestao
+  antes, Q-F6 logo antes do `git merge` do commit conferido (sem `pull`),
+  build, recarga e verificacao so com contagens. Entra no roteiro consolidado
+  da Parte B (deploy unico depois do F9).
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -1135,6 +1140,10 @@ anterior no ar quebra Calendario, Escala e Relatorios (400).
 Parte B, F3: ver "Rollback da 012" e o aviso de LGPD no roteiro "Deploy 11 -
 Parte B, F3 (ausencias)". Com ausencias ja gravadas, o rollback do codigo
 expoe as observacoes no Calendario do codigo anterior.
+
+Parte B, F6: so codigo, sem passo de banco; ver "Rollback do F6" no roteiro
+"Deploy que traz o F6". O codigo anterior volta a enviar logins, observacoes
+e autores dos vinculos do Mapa PA a qualquer perfil.
 
 Lote 4 (SEC-08): depois do rollback do codigo, opcional,
 `migrations/rollback/20261002_017_shift_attachment_team_down.sql` (remove a
@@ -1948,6 +1957,223 @@ aprovacao. Se ela ja existir (rollback anterior), o rollback **para antes de
 alterar** (`rollback_019 abortado`): confira a copia, renomeie
 (`RENAME TABLE portal_presence_cutoff_bkp_019 TO portal_presence_cutoff_bkp_019_<data>`)
 e repita.
+
+### Deploy que traz o F6 (Parte B, Mapa PA no motor)
+
+Roteiro completo, na ordem. O F6 traz o Mapa PA pelo motor de presenca: a
+situacao de cada vinculo pela regra vigente (nao mais pela copia gravada no
+vinculo), o conflito por PA e dia util da semana (dois ou mais presenciais),
+calculado na leitura e mostrado como aviso, a gravacao sem 409 por conflito,
+remoto, ausencia ou sem escala (salva, avisa e audita
+`PA_MAP_CONFLICT_ACCEPTED`), a aba "Ausencias da semana", a DF7 (logins,
+observacao, autores e lista de elegiveis so para admin e Lideranca) e a tela
+nova; junto, os tons de `inline-alert`, `metric-card`, `status-dot`,
+`detail-pill` e `operator-card` que faltavam no CSS gerado. **So codigo: sem
+migration**, sem variavel nova no `.env`, sem mudanca em `.htaccess`, vhost ou
+dependencia do frontend (o `package.json` so ganhou o script `qa:pa-map`; o
+`package-lock.json` nao mudou). Contrato: `docs/API_CONTRACTS_FRONTEND.md`,
+linha `portal/pa_map.php`. Desenho: `docs/DESENHO_PA_ESCALA_AUSENCIA.md`,
+secao 9.8. **A Parte B entra num deploy unico depois do F9:** este roteiro vira
+a parte do F6 do roteiro consolidado (Q-F6 depois das migrations e de novo
+depois do passo da D5 do F4; ver o passo 3).
+
+Todas as consultas deste roteiro devolvem **so contagens**, nunca nome, login
+nem texto. Onde aparece `<BRANCH>`, use o branch do deploy; onde aparece
+`<ServerName do vhost>`, o `ServerName` do VirtualHost do portal. A senha do
+root do MySQL e sempre lida sem eco (`read -rsp`) e apagada no fim do comando
+(`unset P`); nunca a escreva no comando nem neste documento.
+
+**Pre-requisitos.** Deploys 1 a 12 no ar e o F4 e o F5 aplicados (no roteiro
+consolidado, as partes do F4 e do F5 vem antes desta), inclusive o passo da
+D5 do F4. O codigo do F6 le as colunas da 011 (`fora_mapa_escala`), da 012
+(ausencias do F3) e da 014 (`arquivado_em`, arquivado ate a vespera no
+motor); **nao le a 019** (o mapa nao segue a data de corte, DF1). Conferencia
+(esperado `migrations_011_014 = 3` e `migration_012 = 3`):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME IN ('fora_mapa_escala', 'arquivado_em', 'arquivado_por')) AS migrations_011_014, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_absences' AND COLUMN_NAME IN ('category', 'period_type', 'cancelled_by')) AS migration_012;"; unset P
+```
+
+**Antes do dia do deploy: aviso a gestao (P13).** O conflito do F6 olha cada
+dia, e PAs compartilhados que hoje nao aparecem em conflito passam a aparecer
+no primeiro dia. Pela Q-F6 de 2026-10-15 (`pas_compartilhados_hoje = 6`, com
+`vinculos_lideranca = 2`), **ate 6 PAs** podem aparecer em conflito; use o
+numero da Q-F6 mais recente (passo 3, ou a medicao antecipada). E aviso, nao
+bloqueio. Texto sugerido, a quem cuida do Mapa PA (Lideranca e gestores):
+
+> A partir de DD/MM, o Mapa PA passa a mostrar a situacao de cada tecnico pela
+> escala do dia e a marcar, com contorno vermelho e os dias da semana, o PA em
+> que duas ou mais pessoas estao presenciais no mesmo dia. Pelos numeros de
+> hoje, ate N PAs podem aparecer em conflito ja no primeiro dia. O conflito e
+> um aviso: o sistema nao impede salvar a alocacao e registra o conflito
+> aceito na auditoria. Para resolver, mova um dos tecnicos de PA ou ajuste a
+> escala. Gestores, tecnicos e perfis de leitura deixam de ver no mapa os
+> logins e as observacoes dos vinculos; so admin e Lideranca editam o mapa.
+
+**Janela.** Sem 503 e sem alteracao de dado: o F6 nao muda o esquema nem
+regrava linha (a copia da regra continua gravada a cada `save`). A partir do
+`git merge` (passo 4): a gravacao no mapa deixa de recusar conflito, remoto,
+ausencia e sem escala (salva e avisa), e o `GET` deixa de enviar logins,
+observacao, autores e elegiveis a quem nao edita. Entre o `git merge` e o
+build (passo 5), o navegador ainda carrega a tela anterior: as cores seguem
+o tipo da regra, o conflito nao aparece e salvar com remoto nao pede mais a
+confirmacao (o servidor nao devolve mais 409; a tela mostra so o primeiro
+aviso). Prefira horario de pouco uso e avise quem edita o mapa para nao
+alterar vinculos durante o deploy.
+
+1. **Ponto de rollback, pre-checagem e commit conferido**: itens 1 e 2 de
+   "Atualizacao de Versao e Rollback" (anota `pre-deploy-commit`,
+   `git status` vazio, `git fetch` e preflight da versao nova com
+   `RESULTADO=0`). Em seguida, confira o branch e grave o commit que passou
+   pelo preflight: o passo 4 aplica exatamente esse commit, sem novo `fetch`
+   no meio (o `merge` le o `f6-commit`, nao `origin/<BRANCH>`).
+
+```bash
+cd /var/www/chronodesk; B=$(sudo git rev-parse --abbrev-ref HEAD); if [ "$B" = "<BRANCH>" ]; then echo "branch OK: $B"; sudo git rev-parse origin/<BRANCH> | sudo tee /var/backups/chronodesk/f6-commit; else echo "PARE: o clone esta em $B, nao em <BRANCH>"; fi
+```
+
+2. **Backup**: item 3 da mesma secao. Esperado `backup concluido`; anote o
+   diretorio (ponto de restauracao do banco; o F6 nao altera o banco, mas o
+   backup e o padrao de todo deploy).
+
+3. **Q-F6 imediatamente antes do `git merge`** (so contagens). Com a 011
+   aplicada (pre-requisito), rode a **versao completa**, as duas consultas:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM portal_pa_inventory WHERE active = 1) AS pas_inventario, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1) AS vinculos_ativos, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_vigentes_ou_futuros, (SELECT COUNT(*) FROM (SELECT pa_number FROM portal_pa_assignments WHERE active = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE()) GROUP BY pa_number HAVING COUNT(*) > 1) t) AS pas_compartilhados_hoje, (SELECT COUNT(*) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND f.ativo = 0) AS vinculos_de_inativos, (SELECT COUNT(*) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND f.fora_mapa_escala = 1) AS vinculos_fora_do_mapa, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND team = 'lideranca' AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_lideranca;"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM portal_pa_assignments a JOIN portal_pa_assignments b ON b.employee_id = a.employee_id AND b.id > a.id AND b.active = 1 AND b.valid_from <= COALESCE(a.valid_until, '9999-12-31') AND COALESCE(b.valid_until, '9999-12-31') >= a.valid_from WHERE a.active = 1) AS sobreposicoes_mesmo_colaborador, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND valid_until < valid_from) AS periodo_invertido, (SELECT COUNT(*) FROM portal_pa_assignments a WHERE a.active = 1 AND NOT EXISTS (SELECT 1 FROM portal_pa_inventory i WHERE i.active = 1 AND i.pa_number = a.pa_number)) AS vinculos_fora_do_inventario, (SELECT COUNT(*) FROM portal_pa_assignments a LEFT JOIN portal_schedule_rules r ON r.employee_id = a.employee_id AND r.effective_from <= CURDATE() AND (r.effective_until IS NULL OR r.effective_until >= CURDATE()) WHERE a.active = 1 AND a.valid_from <= CURDATE() AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND a.team <> 'lideranca' AND a.schedule_rule_type <> COALESCE(IF(r.rule_type = 'cycle', 'undefined', r.rule_type), 'undefined')) AS copia_tipo_divergente_hoje, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND notes IS NOT NULL AND notes <> '') AS vinculos_com_observacao, (SELECT COUNT(*) FROM portal_pa_map WHERE record_status = 'active') AS legado_total, (SELECT COUNT(*) FROM portal_pa_map WHERE record_status = 'active' AND work_date >= CURDATE()) AS legado_futuro;"; unset P
+```
+
+   **Medicao antecipada, antes das migrations** (sem a 011 no banco, como em
+   2026-10-15): a 1a consulta acima da erro 1054 em `fora_mapa_escala`; use
+   esta variante, sem `vinculos_fora_do_mapa` (a 2a consulta nao muda). No
+   deploy, a variante nao serve: a 011 e pre-requisito.
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM portal_pa_inventory WHERE active = 1) AS pas_inventario, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1) AS vinculos_ativos, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_vigentes_ou_futuros, (SELECT COUNT(*) FROM (SELECT pa_number FROM portal_pa_assignments WHERE active = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE()) GROUP BY pa_number HAVING COUNT(*) > 1) t) AS pas_compartilhados_hoje, (SELECT COUNT(*) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND f.ativo = 0) AS vinculos_de_inativos, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND team = 'lideranca' AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_lideranca;"; unset P
+```
+
+   Referencia (servidor, 2026-10-15, variante): `pas_inventario = 16`,
+   `vinculos_ativos = 20`, `vinculos_vigentes_ou_futuros = 20`,
+   `pas_compartilhados_hoje = 6`, `vinculos_de_inativos = 1` (o caso da D5
+   do F4), `vinculos_lideranca = 2`, `sobreposicoes_mesmo_colaborador = 0`,
+   `periodo_invertido = 0`, `vinculos_fora_do_inventario = 0`,
+   `copia_tipo_divergente_hoje = 3`, `vinculos_com_observacao = 0`,
+   `legado_total = 1`, `legado_futuro = 0`. O que cada numero decide no
+   deploy:
+
+   - **`vinculos_de_inativos` e `vinculos_fora_do_mapa`: esperado `0`**
+     (o passo da D5 do F4 ja arquivou o inativo com PA e fechou o vinculo;
+     cadastro "fora do Mapa" nao recebe vinculo desde o F1). Diferente de
+     `0`: **pare e avise o responsavel** (nada foi alterado). **No roteiro
+     consolidado**, o F6 entra no mesmo `merge` das migrations: rode a Q-F6
+     completa depois das migrations (esperado `vinculos_de_inativos = 1`, o
+     caso da D5, e `vinculos_fora_do_mapa = 0`) e de novo depois do passo da
+     D5 do F4 (esperado os dois em `0`); diferente disso, pare e avise.
+   - `sobreposicoes_mesmo_colaborador`, `periodo_invertido` e
+     `vinculos_fora_do_inventario`: esperado `0`. Maior que `0` e dado
+     antigo, a decidir caso a caso (desenho 9.8): envie as contagens ao
+     responsavel antes do passo 4.
+   - `pas_compartilhados_hoje` (com `vinculos_lideranca`): quantos PAs podem
+     aparecer em conflito no primeiro dia. **Maior que o numero do aviso a
+     gestao**: atualize o aviso antes de seguir (nao bloqueia).
+   - `copia_tipo_divergente_hoje`: quantos cartoes mudam de aparencia so por
+     trocar a copia pelo motor (L-02). Anote; nao bloqueia.
+   - `vinculos_com_observacao`: observacoes que a DF7 deixa de enviar a quem
+     nao edita (e que um rollback reabre). Anote; nao bloqueia.
+   - `legado_futuro`: maior que `0` nao bloqueia (a tabela antiga continua
+     lida, DF10); anote para o lote de retirada dela.
+   - Erro 1146 em `portal_pa_map` ou `portal_pa_inventory`: a tabela nao
+     existe; anote (o codigo trata). Erro 1054 em `fora_mapa_escala` no
+     deploy: a 011 nao esta aplicada, pre-requisito falhou: **pare**.
+
+4. **`git merge` do commit conferido** (sem `fetch` e sem `pull`), conferencia
+   do `HEAD` e do que mudou em pontos sensiveis:
+
+```bash
+cd /var/www/chronodesk; F6=$(sudo cat /var/backups/chronodesk/f6-commit); sudo git merge --ff-only "$F6" && [ "$(sudo git rev-parse HEAD)" = "$F6" ] && echo "HEAD = f6-commit" || echo "PARE: merge falhou ou HEAD diferente do f6-commit"
+sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
+```
+
+   Esperado: `HEAD = f6-commit` e o `diff --stat` **vazio** (o F6 nao traz
+   migration nem muda backup ou `.htaccess`). No roteiro consolidado, o
+   `diff --stat` lista so os arquivos das migrations dos outros lotes.
+
+5. **Build do frontend e recarga do PHP-FPM** (limpa o OPcache; `reload` e
+   gracioso). O F6 nao muda vhost nem `.htaccess`: a recarga do Apache nao e
+   necessaria.
+
+```bash
+cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+6. **Verificacao pos-deploy, so com contagens.**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: <ServerName do vhost>' http://127.0.0.1/api/health.php
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT action, severity, COUNT(*) AS n FROM audit_log WHERE action LIKE 'PA\_MAP\_%' AND timestamp >= CURDATE() GROUP BY action, severity;"; unset P
+```
+
+   Esperado: health `200`; no `audit_log`, so os eventos das acoes feitas hoje
+   no mapa (sem nenhuma gravacao, nenhuma linha), com
+   `PA_MAP_CONFLICT_ACCEPTED` sempre em `WARNING`. Repita as duas consultas
+   da Q-F6 do passo 3: **os mesmos numeros** (o deploy nao altera linha; se
+   alguem gravou no mapa durante a janela, as diferencas batem com os
+   `PA_MAP_SAVED` e `PA_MAP_REMOVED` do `audit_log`). Em seguida, a checagem
+   HTTP de `scripts/test-linux.sh` (item 6 de "Atualizacao de Versao").
+
+   Pelo navegador, sem gravar e sem anotar nomes:
+   - Como Lideranca ou admin, Mapa PA: abre na data de hoje (tambem depois das
+     21:00); o seletor de seg a sex troca a data; cartoes na cor da legenda
+     (presencial verde, ausente laranja, sem escala tracejado, parcial com o
+     relogio); PA em conflito com contorno vermelho, selo "Conflito" e os
+     dias. Anote **so o numero** do cartao "Conflitos" (esperado ate o numero
+     do aviso a gestao; mais que isso nao e falha, avise a gestao). O modal
+     abre sem `window.confirm`; o cartao de permissao diz "Admin/Lideranca
+     podem editar". A aba "Ausencias da semana" mostra a coluna Categoria.
+   - Como gestor (ou tecnico): sem formulario, Editar ou Remover; cartao
+     "Leitura". No DevTools, a resposta de `pa_map.php` **sem** `employees` e,
+     nos vinculos, sem `employee_login`, `notes`, `created_by` e
+     `updated_by` (DF7); como tecnico, a categoria so nas proprias
+     ausencias. Anote o tempo de resposta de `pa_map.php` (risco 4 da 9.8;
+     no MySQL local, de 5 a 10 ms).
+   - CSS que veio junto: o indicador de conexao no topo com o ponto colorido;
+     em Pausas, o tecnico disponivel com a barra verde; cartoes de metrica com
+     a borda do tom.
+
+**Se a verificacao falhar:**
+
+- **Q-F6 do passo 3 fora do esperado** (as regras de parada acima): nada foi
+  alterado e o codigo anterior continua no ar; envie as contagens.
+- **O `git merge` falhou ou o `HEAD` difere do `f6-commit`** (alteracao local
+  na arvore, ou o branch local divergiu e o `--ff-only` recusa): o codigo
+  anterior continua no ar. Resolva a causa (item 1 de "Atualizacao de
+  Versao"), **sem `fetch` e sem `pull`**, e repita so a 1a linha do passo 4.
+  Se o `HEAD` mudou para outro commit, pare: o codigo no ar nao e o
+  conferido; rollback do codigo (abaixo) e avise o responsavel.
+- **Erro 500 ou 503 no Mapa PA ou em outras telas, health diferente de
+  `200`, ou falha no build:** rollback do codigo (abaixo).
+- **Mais PAs em conflito que o aviso:** nao e falha do deploy; avise a
+  gestao com o numero (o conflito e aviso, P13).
+- Restaurar o backup do passo 2 nao e necessario: o F6 nao altera o banco.
+
+**Rollback do F6 (so codigo, sem passo de banco):** `git checkout --detach` do
+`pre-deploy-commit`, build e recarga ("Rollback", acima). Nao ha migration a
+desfazer nem dado a corrigir: a copia da regra continua gravada a cada `save`
+do F6, e o codigo anterior a le como antes. O que volta com o codigo anterior:
+(1) a situacao pela copia gravada (os `copia_tipo_divergente_hoje` cartoes da
+Q-F6 voltam a aparencia antiga, L-02) e o conflito por tipo de regra, que
+**bloqueia** com 409 (dois dias fixos sempre conflitam, L-09) e pede
+confirmacao no remoto; (2) os vinculos salvos com conflito durante o F6 ficam
+gravados e aparecem normalmente, mas editar um deles pode receber o 409 do
+conflito por tipo; (3) **a DF7 cai: o `GET` volta a enviar a qualquer perfil
+os logins, a observacao e os autores dos vinculos e a lista de elegiveis com
+login** (LGPD, `docs/DOCUMENTACAO_TECNICA.md`, 5.3). Por isso, como no F3,
+qualquer rollback do F6 so com aprovacao previa do responsavel; prefira
+corrigir para frente. No roteiro consolidado, o rollback do codigo e o do
+consolidado (volta toda a Parte B ao `pre-deploy-commit`); o F6 nao acrescenta
+passo de banco a ele.
 
 ## HTTPS Interno
 
