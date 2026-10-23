@@ -2282,7 +2282,7 @@ Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `ta
 
 **Achado do Dashboard:** vai para o lote de acabamento (pendência 17c). Com o 1º `status.php` falhando, `server_now` nulo, `parseDate(null)` vira 1970 e aparece "Atualizado há 1792178705 segundos" (`DashboardPage.jsx:19`). Correção prevista: sem `server_now` válido, o texto "Atualização automática ativa". Não corrigido no F6.
 
-**Commit 4 entregue (2026-10-23, `ec99d54`; a aprovar):** contratos e documentação, sem mudança de código. Com ele, o F6 fica completo depois da aprovação.
+**Commit 4 entregue (2026-10-23, `ec99d54`; aprovado em 2026-10-23, ver abaixo):** contratos e documentação, sem mudança de código. Com ele, o F6 fica completo depois da aprovação.
 
 | Arquivo | Como ficou |
 |---|---|
@@ -2290,7 +2290,7 @@ Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `ta
 | `DEPLOY_LINUX.md` | Roteiro **"Deploy que traz o F6"**, depois do F5: só código, sem migration nem dependência nova; pré-requisitos (011, 012 e 014; não lê a 019); aviso à gestão antes do dia, com texto sugerido (até 6 PAs em conflito no primeiro dia, pela Q-F6 de 2026-10-15); passos 1 a 6 (ponto de rollback e `f6-commit`, backup, Q-F6 completa logo antes do `merge` com a variante sem a coluna da 011 para medição antecipada, `merge` do commit conferido, build e recarga, verificação só com contagens); "Se a verificação falhar"; "Rollback do F6". Item na rotina de atualização (item 4) e nota na seção "Rollback". Comandos em uma linha |
 | `docs/DOCUMENTACAO_TECNICA.md` | LGPD 5.3: linha nova da DF7 (o achado, os controles por perfil, a categoria pela P9, a auditoria só com IDs, `vinculos_com_observacao` = 0 no servidor e o risco de rollback) |
 
-**Decisões de implementação do commit 4 (a aprovar):**
+**Decisões de implementação do commit 4 (aprovadas em 2026-10-23):**
 
 1. **`merge` do `f6-commit`, não de `origin/<BRANCH>`:** o roteiro grava o commit que passou pelo preflight (passo 1) e aplica exatamente ele (passo 4), com a conferência do `HEAD`. É o pedido de 2026-10-15 para o consolidado, já aplicado aqui por ser roteiro novo; os roteiros do F4 e do F5 não mudam.
 2. **Q-F6 completa no deploy; a variante só na medição antecipada.** A 011 é pré-requisito do código do F6 (elegíveis e motor leem `fora_mapa_escala`), então no deploy a coluna existe; erro 1054 nela é pré-requisito falho (parar).
@@ -2302,9 +2302,19 @@ Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `ta
 
 **Validação pela IA:** os 11 comandos do roteiro passam no `bash -n` (com `<BRANCH>` e `<ServerName do vhost>` trocados por valores de exemplo; o marcador fora de aspas é o mesmo padrão dos roteiros anteriores); as três consultas da Q-F6 do roteiro são idênticas, caractere a caractere, às desta seção; cada campo do contrato conferido contra `PaMapService.php`, `pa_map.php` e `portal_operational_error` (400, 409, 413, 503); colunas `action`, `severity` e `timestamp` do `audit_log` conferidas no esquema; `qa-presence-cutoff` (lê o `DEPLOY_LINUX.md`) OK com 602 verificações; `git diff --check` sem achado. **Não verificado:** nenhuma consulta foi executada em MySQL (não há MySQL na estação; a Q-F6 é a validada pelo responsável em 2026-10-15; a consulta do `audit_log` é nova); o roteiro não foi ensaiado no servidor.
 
-**Achado fora do escopo, não corrigido:** `docs/DOCUMENTACAO_TECNICA.md`, seção 7.4, diz que a unicidade por posto e por colaborador é garantida no banco; isso só vale para a tabela antiga `portal_pa_map` (008). Nos vínculos recorrentes (`portal_pa_assignments`), o PA pode ser compartilhado (o conflito é aviso, P13) e o "mesmo colaborador em outro PA" é conferido pelo serviço com `FOR UPDATE`. Proposta: corrigir a 7.4 junto com a aprovação do F6 ou no lote de acabamento.
+**Achado fora do escopo (corrigido depois, a pedido da aprovação, num commit próprio):** `docs/DOCUMENTACAO_TECNICA.md`, seção 7.4, diz que a unicidade por posto e por colaborador é garantida no banco; isso só vale para a tabela antiga `portal_pa_map` (008). Nos vínculos recorrentes (`portal_pa_assignments`), o PA pode ser compartilhado (o conflito é aviso, P13) e o "mesmo colaborador em outro PA" é conferido pelo serviço com `FOR UPDATE`.
 
 **Como revisar (sugestão):** (1) ler o roteiro "Deploy que traz o F6" de ponta a ponta contra o do F5; (2) rodar a Q-F6 completa no MySQL local e a consulta do `audit_log` do passo 6; (3) conferir a linha do `pa_map.php` contra o DevTools do teste do commit 3 (admin, gestor e técnico).
+
+**Commit 4 aprovado em 2026-10-23**, com as sete decisões de implementação como estão, inclusive o `merge` pelo `f6-commit`, a verificação pós-deploy sem contagem de conflito em SQL e o rollback só com aprovação prévia, após revisão do responsável no MySQL 8.0.46 local:
+
+| Caso | Resultado |
+|---|---|
+| Consulta do `audit_log` do passo 6, com eventos de teste depois removidos | `PA_MAP_SAVED`, `PA_MAP_REMOVED` e `PA_MAP_CONFLICT_ACCEPTED` (`WARNING`) contados certo; um evento `PAXMAPXY` ficou fora: o escape do `_` no `LIKE` funciona dentro das aspas do bash |
+| Q-F6 completa do passo 3 (as duas consultas, com `vinculos_fora_do_mapa`) | Sem erro |
+| Roteiro "Deploy que traz o F6" | Conferido contra o do F5 |
+
+**F6 completo (2026-10-23)**, no deploy único da Parte B (pendência 16 do estado da sessão), pelo roteiro "Deploy que traz o F6" do `DEPLOY_LINUX.md`.
 
 ---
 
