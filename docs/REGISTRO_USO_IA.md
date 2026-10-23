@@ -737,6 +737,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Portal real com o build novo nao aberto (teste do responsavel). A varredura le so `className` com template literal; classe montada fora do `className` (variavel, funcao) nao entra. **Achado fora do escopo, nao corrigido:** "Atualizado ha 1792178705 segundos" no Dashboard quando o primeiro `status.php` falha (`parseDate(null)` vira 1970). `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-20**, com as quatro decisoes, apos revisao do responsavel: build com o `index.css` novo e varredura independente no CSS gerado; para cada prefixo montado por template no `className`, toda regra definida no `index.css` sai no CSS gerado: `status-dot` 3/3, `detail-pill` 3/3, `operator-card` 4/4, `inline-alert` 3/3, `metric-card` 4/4, `status` 10/10. `qa:calendar-presence` OK. Telas no navegador ainda nao abertas pelo responsavel (proximo teste). O achado do Dashboard ("Atualizado ha ... segundos" sem `server_now`) vai para o lote de acabamento (pendencia 17c do estado da sessao; correcao prevista: "Atualizacao automatica ativa"), sem correcao no F6. |
 
+### Parte B, F6 — commit 4 (contrato, roteiro do deploy e LGPD) — 2026-10-23
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Fechar a documentacao do F6 (desenho 9.8): contrato do `portal/pa_map.php`, roteiro "Deploy que traz o F6" e LGPD 5.3 da DF7. Sem mudanca de codigo. |
+| **Branch e commits** | `897920b` (aprovacao da correcao do CSS), `ec99d54` (contrato, roteiro e LGPD) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `docs/API_CONTRACTS_FRONTEND.md` (linha do `pa_map.php` como estado final do F6, paragrafo e linha da Parte B), `DEPLOY_LINUX.md` (roteiro novo, item da rotina, nota no Rollback), `docs/DOCUMENTACAO_TECNICA.md` (linha da DF7 na 5.3); desenho 9.8. |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.8); destaques: `merge` do `f6-commit` (nao de `origin/<BRANCH>`); Q-F6 completa no deploy e a variante so na medicao antecipada; regras de parada da Q-F6; verificacao pos-deploy sem consulta de conflito (calculado pelo motor); rollback so com aprovacao previa (reabre a DF7); contrato como estado final. |
+| **Validacao executada pela IA** | `bash -n` nos 11 comandos do roteiro (marcadores trocados por exemplos); Q-F6 do roteiro identica a da 9.8 (tres consultas); campos do contrato conferidos no codigo (`PaMapService.php`, `pa_map.php`, `portal_operational_error`); colunas do `audit_log` no esquema; `qa-presence-cutoff` OK (602, le o `DEPLOY_LINUX.md`); `git diff --check`. |
+| **Limitacoes declaradas** | Nenhuma consulta executada em MySQL (nao ha MySQL na estacao; a consulta do `audit_log` do passo 6 e nova). Roteiro nao ensaiado no servidor. **Achado fora do escopo, nao corrigido:** `DOCUMENTACAO_TECNICA.md` 7.4 diz que a unicidade por posto e por colaborador e garantida no banco; so vale para a tabela antiga `portal_pa_map`. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do responsavel antes de fechar o F6. |
+
 ---
 
 ## 5. Responsabilidade

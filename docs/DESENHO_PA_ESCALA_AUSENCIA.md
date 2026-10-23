@@ -2282,6 +2282,30 @@ Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `ta
 
 **Achado do Dashboard:** vai para o lote de acabamento (pendência 17c). Com o 1º `status.php` falhando, `server_now` nulo, `parseDate(null)` vira 1970 e aparece "Atualizado há 1792178705 segundos" (`DashboardPage.jsx:19`). Correção prevista: sem `server_now` válido, o texto "Atualização automática ativa". Não corrigido no F6.
 
+**Commit 4 entregue (2026-10-23, `ec99d54`; a aprovar):** contratos e documentação, sem mudança de código. Com ele, o F6 fica completo depois da aprovação.
+
+| Arquivo | Como ficou |
+|---|---|
+| `docs/API_CONTRACTS_FRONTEND.md` | Linha do `portal/pa_map.php` reescrita como o **estado final do F6**, não mais commit a commit: parâmetros do `GET` e do `POST` (corpo até 32 KB; `confirm_remote_allocation` aceito e ignorado); resposta do `GET` (`server_now`, `week`, `pas[]` com `has_conflict` e `conflict_days`, `items`, `conflicts[]`, `absences_week[]`), campos do vínculo (`presence` com `parcial` e `categoria` pela P9, ou `null` com `presence_reason`; regra vigente do motor, não a cópia), elegíveis, regra do conflito (DF8) e da aba (DF9); a DF7 por perfil (admin e Liderança com tudo; gestor, técnico e somente leitura sem `employees`, `employee_login`, `notes`, `created_by` e `updated_by`); `save` com `warnings`, `conflicts`, `conflicts_more` e as recusas que ficam (400, 409 do mesmo colaborador e do fora do Mapa, 413); `remove` em transação; escrita só com `pa_map.manage` (403 auditado); auditoria só com IDs. Testes atuais e o histórico (Lote 5c, F2B, F4) numa frase. Parágrafo da Parte B e linha da tabela de propostas com o F6 implementado |
+| `DEPLOY_LINUX.md` | Roteiro **"Deploy que traz o F6"**, depois do F5: só código, sem migration nem dependência nova; pré-requisitos (011, 012 e 014; não lê a 019); aviso à gestão antes do dia, com texto sugerido (até 6 PAs em conflito no primeiro dia, pela Q-F6 de 2026-10-15); passos 1 a 6 (ponto de rollback e `f6-commit`, backup, Q-F6 completa logo antes do `merge` com a variante sem a coluna da 011 para medição antecipada, `merge` do commit conferido, build e recarga, verificação só com contagens); "Se a verificação falhar"; "Rollback do F6". Item na rotina de atualização (item 4) e nota na seção "Rollback". Comandos em uma linha |
+| `docs/DOCUMENTACAO_TECNICA.md` | LGPD 5.3: linha nova da DF7 (o achado, os controles por perfil, a categoria pela P9, a auditoria só com IDs, `vinculos_com_observacao` = 0 no servidor e o risco de rollback) |
+
+**Decisões de implementação do commit 4 (a aprovar):**
+
+1. **`merge` do `f6-commit`, não de `origin/<BRANCH>`:** o roteiro grava o commit que passou pelo preflight (passo 1) e aplica exatamente ele (passo 4), com a conferência do `HEAD`. É o pedido de 2026-10-15 para o consolidado, já aplicado aqui por ser roteiro novo; os roteiros do F4 e do F5 não mudam.
+2. **Q-F6 completa no deploy; a variante só na medição antecipada.** A 011 é pré-requisito do código do F6 (elegíveis e motor leem `fora_mapa_escala`), então no deploy a coluna existe; erro 1054 nela é pré-requisito falho (parar).
+3. **Regras de parada da Q-F6:** `vinculos_de_inativos` e `vinculos_fora_do_mapa` diferentes de 0 param (no consolidado: 1 e 0 depois das migrations, os dois em 0 depois da D5 do F4); `sobreposicoes_mesmo_colaborador`, `periodo_invertido` e `vinculos_fora_do_inventario` maiores que 0 vão ao responsável antes do `merge` (caso a caso, como no plano); `pas_compartilhados_hoje` acima do número avisado atualiza o aviso, sem bloquear; os demais só são anotados.
+4. **Verificação pós-deploy sem consulta de conflito:** o conflito é calculado pelo motor, não existe em SQL. As contagens são o health, os eventos `PA_MAP_*` do dia por ação e severidade e a Q-F6 repetida com os mesmos números (o deploy não altera linha); o conflito entra só como o número do cartão "Conflitos" no navegador, sem nomes.
+5. **Rollback do F6 só com aprovação prévia do responsável**, como no F3: é só código, mas reabre a exposição da DF7 (logins, observações, autores e elegíveis para qualquer perfil). O roteiro recomenda corrigir para frente.
+6. **Texto sugerido do aviso à gestão** no roteiro, sem acento como o resto do `DEPLOY_LINUX.md`, com o número a preencher pela Q-F6 mais recente.
+7. **Contrato como estado final:** a linha do `pa_map.php` deixa de acumular os blocos por commit (que tinham trechos já superados, como a confirmação de remoto do F2B); o histórico fica numa frase.
+
+**Validação pela IA:** os 11 comandos do roteiro passam no `bash -n` (com `<BRANCH>` e `<ServerName do vhost>` trocados por valores de exemplo; o marcador fora de aspas é o mesmo padrão dos roteiros anteriores); as três consultas da Q-F6 do roteiro são idênticas, caractere a caractere, às desta seção; cada campo do contrato conferido contra `PaMapService.php`, `pa_map.php` e `portal_operational_error` (400, 409, 413, 503); colunas `action`, `severity` e `timestamp` do `audit_log` conferidas no esquema; `qa-presence-cutoff` (lê o `DEPLOY_LINUX.md`) OK com 602 verificações; `git diff --check` sem achado. **Não verificado:** nenhuma consulta foi executada em MySQL (não há MySQL na estação; a Q-F6 é a validada pelo responsável em 2026-10-15; a consulta do `audit_log` é nova); o roteiro não foi ensaiado no servidor.
+
+**Achado fora do escopo, não corrigido:** `docs/DOCUMENTACAO_TECNICA.md`, seção 7.4, diz que a unicidade por posto e por colaborador é garantida no banco; isso só vale para a tabela antiga `portal_pa_map` (008). Nos vínculos recorrentes (`portal_pa_assignments`), o PA pode ser compartilhado (o conflito é aviso, P13) e o "mesmo colaborador em outro PA" é conferido pelo serviço com `FOR UPDATE`. Proposta: corrigir a 7.4 junto com a aprovação do F6 ou no lote de acabamento.
+
+**Como revisar (sugestão):** (1) ler o roteiro "Deploy que traz o F6" de ponta a ponta contra o do F5; (2) rodar a Q-F6 completa no MySQL local e a consulta do `audit_log` do passo 6; (3) conferir a linha do `pa_map.php` contra o DevTools do teste do commit 3 (admin, gestor e técnico).
+
 ---
 
 ## 10. Riscos e pendências
