@@ -773,6 +773,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Nada rodou em MySQL. Sem medicao do `dashboard.php`. A tela ainda conta no navegador ate o commit 3. A observacao de reuniao continua indo a todos ate o commit 2 (DV11). `gitleaks` ausente na estacao. |
 | **Validacao humana** | Pendente: revisao e teste no MySQL local antes do commit 2 (roteiro sugerido na 9.9). |
 
+### Parte B, F7 — Q-F7 do servidor e complemento da aprovacao — 2026-10-26
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar a Q-F7 do servidor, o adiamento da referencia do `dashboard.php` para o commit 4 e o quinto ajuste do plano (medicao pelo `git show` do branch remoto). Sem codigo. |
+| **Branch e commits** | `d0152b7` (entrega do commit 1) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | Desenho 9.9 (complemento da aprovacao, tabela da Q-F7 com a coluna do servidor, risco 1, linha do commit 4, limitacoes do commit 1) e linha de situacao do cabecalho. |
+| **Decisoes de implementacao** | Nenhuma nova. Na alternativa de copia manual do script, a IA acrescentou a conferencia por `sha256sum` contra o `git show` local. |
+| **Validacao executada pela IA** | `origin/feat/employee-form-rhf-zod` aponta para `f91d2d0`, que tem o `scripts/medir-polling.sh`; o script le o cookie de `/dev/tty` e ja preve o uso por `bash <(git show ...)`. Numeros do servidor conferidos contra a regra de parada da 9.9 e contra a contagem da 16c (22 ativos N1/N2, 6 sem regra). |
+| **Limitacoes declaradas** | Q-F7 do servidor e a variante (sem `fora_do_mapa`); a completa roda no deploy. `excecoes_de_ausencia_hoje` do local nao informado. Referencia do `dashboard.php` sem medir. Contagem do rotulo de equipe nao reconhecido pelo PHP ainda nao rodada. |
+| **Validacao humana** | Q-F7 do servidor rodada pelo responsavel em 2026-10-26 (variante, dia util em expediente): N1 13, N2 9, Lideranca 3, outras equipes 0, sem regra hoje 6, jornada invertida 0, almoco fora da jornada 0, ausencias aprovadas hoje 0, excecoes de ausencia hoje 0. Nenhum numero pede tratamento; os 6 sem regra entram no aviso a gestao. Complemento da aprovacao: roteiro do commit 4 mede o `dashboard.php` por `bash <(git show <ref>:scripts/medir-polling.sh)`, com a copia manual como alternativa. |
+
 ---
 
 ## 5. Responsabilidade
