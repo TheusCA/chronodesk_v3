@@ -785,6 +785,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Q-F7 do servidor e a variante (sem `fora_do_mapa`); a completa roda no deploy. `excecoes_de_ausencia_hoje` do local nao informado. Referencia do `dashboard.php` sem medir. Contagem do rotulo de equipe nao reconhecido pelo PHP ainda nao rodada. |
 | **Validacao humana** | Q-F7 do servidor rodada pelo responsavel em 2026-10-26 (variante, dia util em expediente): N1 13, N2 9, Lideranca 3, outras equipes 0, sem regra hoje 6, jornada invertida 0, almoco fora da jornada 0, ausencias aprovadas hoje 0, excecoes de ausencia hoje 0. Nenhum numero pede tratamento; os 6 sem regra entram no aviso a gestao. Complemento da aprovacao: roteiro do commit 4 mede o `dashboard.php` por `bash <(git show <ref>:scripts/medir-polling.sh)`, com a copia manual como alternativa. |
 
+### Parte B, F7 — commit 2 (observacao da reuniao, DV11) — 2026-10-27
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Fechar o achado de exposicao da DV11 (desenho 9.9): a `observacao_reuniao` (texto livre da pausa de reuniao) de outros tecnicos so para a gestao e o proprio no `status.php` e no `dashboard.php`, e a caixa da Visao Operacional so com a chave presente. |
+| **Branch e commits** | `12bb49d` (aprovacao do commit 1 e rotulo de equipe conferido), `0d06009` (codigo e QA) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `classes/GerenciadorPausas.php` (`status_para_o_perfil`), `api/status.php` (carrega o `_bootstrap.php` do portal para o `portal_actor`), `api/portal/dashboard.php`, `frontend/src/pages/DashboardPage.jsx`, `frontend/scripts/qa-operational-view.mjs` (novo) e `package.json`, `scripts/qa-operational-view.php`, `scripts/qa-security.php`, `scripts/qa-archive.php` (checagem estrutural do F4); desenho 9.9. |
+| **Decisoes de implementacao** | Seis, a aprovar (desenho 9.9, J1 a J6); destaques: um filtro so, logo depois do `obter_status()`; o proprio pela regra do SEC-07b via `portal_actor`; chave nula mantida para quem pode ver; sessao sem `employee_id` sem nenhuma observacao; `qa:operational-view` antecipado do commit 3. |
+| **Validacao executada pela IA** | `qa-operational-view` (256, 17 novas); `qa-security` com 10 casos de ponta a ponta (dois endpoints x cinco perfis); `qa:operational-view` novo (componentes renderizados); `php -l`, 12 QAs PHP e `qa-smoke`; 18 `qa:*`, lint, typecheck e build; mutacao **16/16** (1 sobrevivente de borda na 1a rodada, morto pelo teste acrescentado); os 4 mutantes dos endpoints mortos tambem so pelo `qa-security`. |
+| **Limitacoes declaradas** | Nada rodou em MySQL (sem consulta nova). `test-local.ps1` nao rodou inteiro: o `-ExecutionPolicy Bypass` foi recusado pela permissao da sessao; as etapas rodaram separadas. Telas nao abertas no navegador pela IA. Painel antigo sem teste (nao le a observacao, conferencia de 2026-10-23). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao e teste no MySQL local antes do commit 3 (roteiro sugerido na 9.9; zip do HEAD em `_revisao_f7c2.zip`). |
+
 ---
 
 ## 5. Responsabilidade

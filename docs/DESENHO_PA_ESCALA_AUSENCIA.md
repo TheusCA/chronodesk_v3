@@ -2517,6 +2517,33 @@ Fora do `status.php` e do `dashboard.php`, a observação sai em `solicitacoes_p
 - `technicianPresence` por perfil: categoria de todos para o gestor e só a própria para técnico e somente leitura; observação da ausência nunca; motivo de pausa fora da lista para o gestor e o próprio, "Pausa" para os colegas (I2); parcial para todos; fora do Mapa sem chave.
 - Rótulo de equipe (I7): a consulta do achado acima deu 0 no MySQL local. O "ç" do cadastro local está gravado certo (bytes UTF-8, o PHP reconhece); o defeito era só a exibição no terminal (frase corrigida na tabela da Q-F7 e no achado). A contagem do servidor fica pendente (pendência 16 do estado da sessão); com 0, a I7 fica como está.
 
+**Commit 2 (observação da reunião, DV11), 2026-10-27: entregue (`0d06009`), aguardando revisão e teste no MySQL local antes do commit 3.** Arquivos: `classes/GerenciadorPausas.php` (`status_para_o_perfil`), `api/status.php`, `api/portal/dashboard.php`, `frontend/src/pages/DashboardPage.jsx`, `frontend/scripts/qa-operational-view.mjs` (novo, `qa:operational-view`), `scripts/qa-operational-view.php`, `scripts/qa-security.php`, `scripts/qa-archive.php`.
+
+| Perfil | `observacao_reuniao` no `status.php` e no `dashboard.php` (`active_pauses`) |
+|---|---|
+| admin, Liderança, gestor | De todos, com valor ou nula (como antes) |
+| técnico | Só a própria; os colegas vêm sem a chave |
+| somente leitura | Só a própria (quando o cadastro está no status); os colegas vêm sem a chave |
+
+O resto do item não muda (motivo da lista fechada, pausa, timers, `presenca`); contadores e `active_pauses` iguais; nenhuma consulta nova no polling (DV1). Na Visão Operacional, a caixa da observação só aparece com a chave presente: a gestão continua vendo "Sem observação informada" quando a chave vem nula; quem não é gestão não vê caixa nos cartões dos colegas. Tela de Pausas sem mudança de código (os cartões dos colegas já exigiam valor; a própria pausa continua com a observação), conferida no teste renderizado.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| J1 | Um filtro só, `GerenciadorPausas::status_para_o_perfil`, aplicado logo depois do `obter_status()` nos dois endpoints | O `active_pauses` do `dashboard.php` sai do mesmo `$status`: filtrado uma vez, vale para a lista e para os contadores |
+| J2 | O `status.php` passa a carregar `api/portal/_bootstrap.php` para usar o `portal_actor` | "O próprio" pela mesma regra do SEC-07b e do `technicians.php` (`employee_id` só para técnico e somente leitura), sem uma segunda cópia da leitura da sessão. Precedente: `solicitacoes_pendentes.php`. O arquivo só define funções e carrega classes: nenhuma consulta nova |
+| J3 | A gestão e o próprio recebem a chave mesmo nula | A tela distingue "sem observação informada" (chave nula) de "não é para você" (sem chave) |
+| J4 | Sessão de técnico ou somente leitura sem `employee_id` (0 ou ausente) não recebe observação nenhuma, nem de item sem `id` | Falha fechada, como o `seesPersonalText` do SEC-07b |
+| J5 | O `qa:operational-view` nasce neste commit, com a parte da DV11 (o plano o previa no commit 3); o commit 3 o amplia. Passam a ser 18 `qa:*` | O pedido da aprovação era a caixa com teste no commit 2; o `DashboardPage` é renderizado de verdade, com o `useResource` respondendo sem rede |
+| J6 | A checagem estrutural do `qa-archive` (F4, L-07: contadores e lista só do `obter_status()`) passou a aceitar o `obter_status()` filtrado | Ela fixava o texto exato da linha; a intenção do teste continua |
+
+**Validação executada pela IA:** `qa-operational-view` (256 verificações; 17 novas da DV11: gestão com a chave de todos, inclusive nula; técnico e somente leitura só com a própria, com `id` do estado como texto; sessão sem `employee_id` sem nenhuma, nem de item sem `id`; só a chave sai, resto do item, ordem e campos do status iguais; status sem N2; estrutura dos dois endpoints). `qa-security` com 10 casos novos de ponta a ponta (`status.php` e `dashboard.php` × admin, Liderança, gestor, técnico e somente leitura, com duas pausas de reunião com texto): a chave por perfil, o texto de terceiro fora de todo o corpo da resposta, motivo, pausa, `presenca` e contadores sem mudança; matriz de perfis sem mudança de acesso. `qa:operational-view` novo (Visão Operacional e Pausas renderizadas para técnico e gestão). Bateria PHP (`php -l` em todos os `.php` e os 12 QAs PHP dos runners, mais o `qa-smoke`), 18 `qa:*`, lint, typecheck e build. Mutação **16/16** (filtro, os dois endpoints, a caixa do `DashboardPage` e o cartão de colega do `PausasPage`; na 1ª rodada sobreviveu "sessão sem `employee_id` casa com item de `id` 0", morto pelo teste acrescentado); os 4 mutantes dos endpoints morrem também só pelo `qa-security` (ponta a ponta, não só pela checagem estrutural).
+
+**Limitações declaradas:** nada rodou em MySQL (sem consulta nova; o filtro é em memória). O `test-local.ps1` não rodou como um todo: o `-ExecutionPolicy Bypass` foi recusado pela permissão da sessão; cada etapa dele rodou separada (acima). Telas no navegador não abertas pela IA (o teste renderiza os componentes). Painel antigo (`index.php` + `script.js`) sem teste: pela conferência de 2026-10-23, não lê a observação. `gitleaks` ausente na estação.
+
+**Teste sugerido no MySQL 8.0.46 local (antes do commit 3):** com duas pausas de reunião com observação (uma do técnico que vai logar, outra de um colega): (1) `GET status.php` e `GET portal/dashboard.php` como gestor (as duas observações), como técnico (só a própria; o item do colega sem a chave `observacao_reuniao`) e como somente leitura (nenhuma de colega); (2) no navegador, com o build do zip: Visão Operacional como técnico (caixa só no próprio cartão) e como gestor (as duas caixas; numa reunião sem observação, "Sem observação informada"); tela de Pausas como técnico (a própria pausa com a observação; cartão do colega sem caixa).
+
 ---
 
 ## 10. Riscos e pendências
