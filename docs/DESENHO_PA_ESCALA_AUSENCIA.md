@@ -2563,7 +2563,7 @@ O resto do item não muda (motivo da lista fechada, pausa, timers, `presenca`); 
   O resto de cada item sem mudança.
 - **Não testado no navegador:** a caixa da observação na Visão Operacional fica para o teste do commit 3 (mesma página).
 
-**Commit 3 (telas), 2026-10-27: entregue (`dabd9d9`), aguardando revisão e teste no navegador antes do commit 4.** Arquivos: `frontend/src/pages/DashboardPage.jsx`, `frontend/src/pages/TechniciansPage.jsx` (novo), `frontend/src/pages/PausasPage.jsx`, `frontend/src/pages/ModulePage.jsx` (sai a entrada genérica de `/tecnicos`), `frontend/src/App.jsx`, `frontend/src/lib/presenceLegend.ts`, `frontend/src/components/ui/Presence.jsx`, `frontend/src/components/ui/Icon.jsx` (talheres), `frontend/src/index.css`, `frontend/scripts/qa-operational-view.mjs` e `frontend/scripts/qa-calendar-presence.mjs`. Nenhum PHP mudou.
+**Commit 3 (telas), 2026-10-27: entregue (`dabd9d9`) e aprovado em 2026-10-27, com K1 a K9 e os ajustes A1 a A3 (`dba407d`)** (validação humana e ajustes no fim desta parte). Arquivos: `frontend/src/pages/DashboardPage.jsx`, `frontend/src/pages/TechniciansPage.jsx` (novo), `frontend/src/pages/PausasPage.jsx`, `frontend/src/pages/ModulePage.jsx` (sai a entrada genérica de `/tecnicos`), `frontend/src/App.jsx`, `frontend/src/lib/presenceLegend.ts`, `frontend/src/components/ui/Presence.jsx`, `frontend/src/components/ui/Icon.jsx` (talheres), `frontend/src/index.css`, `frontend/scripts/qa-operational-view.mjs` e `frontend/scripts/qa-calendar-presence.mjs`. Nenhum PHP mudou.
 
 | Tela | O que mudou |
 |---|---|
@@ -2572,7 +2572,7 @@ O resto do item não muda (motivo da lista fechada, pausa, timers, `presenca`); 
 | Técnicos (DV8) | Tela própria: Nome, Equipe, Turno e "Situação agora às HH:MM" (sem a coluna Status; o campo continua no JSON); selo da legenda, detalhe do motor, marcador da parcial com o horário e a categoria quando o servidor manda (P9); "Fora do Mapa" para `presence` nula com a presença disponível; "—" com aviso sem presença (I5); aviso de pausas ilegíveis; legenda da situação de agora no rodapé. Sem polling (P14) |
 | Pausas (DV12) | Selo e estado do cartão pela `presenca` do `status.php`; o cálculo antigo (`disponibilidade`) só quando ela não vem |
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-10-27):**
 
 | # | Decisão | Motivo |
 |---|---|---|
@@ -2593,6 +2593,39 @@ O resto do item não muda (motivo da lista fechada, pausa, timers, `presenca`); 
 **Limitações declaradas:** nada rodou contra o backend real nem em MySQL (prints e testes com dados simulados). O `test-local.ps1` não rodou como um todo (`-ExecutionPolicy Bypass` recusado pela permissão da sessão); cada etapa rodou separada. Os prints ficam fora do repositório. Em 390 px, a tabela rola dentro do cartão (K9). Painel antigo sem mudança. `gitleaks` ausente na estação.
 
 **Teste sugerido no navegador (antes do commit 4),** com o build do zip contra o backend e o MySQL 8.0.46 local, como gestor, técnico e somente leitura, em 1366 e 390 px: (1) Visão Operacional: a tabela igual ao `presence_summary` do `dashboard.php` no DevTools; Liderança fora do total; nota dos ausentes; "CIs disponíveis" = `total.disponiveis`; numa pausa de reunião com observação, a caixa só para a gestão e o próprio (DV11, que ficou do commit 2); (2) `STATUS_PRESENCE_ENABLED=false` e recarga do PHP: "—" com aviso na tabela e nos cartões; (3) só no local, com cópia antes, `estado.json` truncado: "—" só em Em pausa; (4) bloquear o `status.php` no DevTools antes de abrir a tela: "Conexão instável" e "Atualização automática ativa" (DV14); (5) Técnicos: coluna "Situação agora às HH:MM", categoria só para a gestão e o próprio, o cadastro fora do Mapa como "Fora do Mapa"; (6) Pausas: um técnico ausente ou no almoço sem "Disponível"; (7) almoço e ausente lado a lado (legenda do rodapé da tela Técnicos).
+
+**Validação humana do commit 3 (responsável, 2026-10-27).** No zip do HEAD, com o `PresenceService` real contra o MySQL 8 local, regras, ausências (dia todo e intervalo 15:00–16:30) e pausas simuladas (café, motivo livre e reunião pendente com observação), no Chromium em 1280, 1366, 1440, 1920 e 390 px. **Aprovado, com K1 a K9, dois ajustes (A1, A2) e uma sugestão (A3).**
+
+- Tabela da 5.7 com a identidade fechando às 10:00, 12:30, 18:00 e no sábado; Liderança fora do total; "CIs disponíveis" e "Disponíveis por equipe" iguais ao resumo.
+- Degradados: interruptor desligado e falha no cálculo ("—" em tudo, aviso, cartão "CIs disponíveis" com "Indisponível"); pausas ilegíveis ("—" só em Em pausa); `status.php` com 500 (DV14, sem contagem absurda).
+- Técnicos: as sete situações, "Fora do Mapa", marcador da parcial com nome acessível; técnico e somente leitura sem categoria dos outros, motivo livre como "Pausa" e sem o perfil de acesso (P9, DV10, DV9).
+- Pausas: cartões pela `presenca`; pendente primeiro.
+- DV11: o técnico 7 não vê a observação do 11; o 11 vê a própria; o gestor vê todas.
+- Nenhuma observação de ausência em tela nenhuma; sem rolagem horizontal da página; sem erro de JS.
+- 18 `qa:*` OK; QAs PHP OK, exceto `qa-auth` e `qa-security` (sem `php-ldap` no ambiente de revisão); classes `presence-*` e `operator-card-*` presentes no CSS gerado.
+- **Residual conhecido, sem mudança:** o `status.php` e o `active_pauses` do `dashboard.php` mostram o `motivo_pausa` como gravado; desde a VULN-019 a entrada só aceita Café, Pessoal ou Reunião, então só um `estado.json` antigo traria texto livre.
+
+**Ajustes da revisão (2026-10-27, `dba407d`).**
+
+| # | Pedido | Feito |
+|---|---|---|
+| A1 (médio) | Com a fonte Inter instalada, a tabela da Visão Operacional rolava dentro do cartão em 1280 e 1366 px (conteúdo de 1017 px; cartão de 918 e 1004 px), cortando "Sem escala". O print da entrega usou a fonte de reserva, mais estreita | O rótulo do cabeçalho quebra em até duas linhas, com o ícone preso à primeira palavra e o resto inteiro na linha de baixo. **Causa a mais, achada na medição:** o `px-2` das células não valia, porque a regra `.data-table th/td` do `index.css` é mais específica que a utilidade; as colunas seguiam com 16 px de cada lado. A tabela passou a usar `!px-2` (e `!px-3` na coluna Equipe), e "Total" ganhou a nota "N1 + N2" numa segunda linha, como "fora dos totais" |
+| A2 (baixo) | Busca sem resultado mostrava "Nenhum técnico cadastrado" | Com termo preenchido (sem contar espaços): "Nenhum técnico encontrado" e "Nenhum técnico corresponde à busca."; a mensagem antiga só para a lista vazia de verdade |
+| A3 (sugestão) | Sábado com a tabela toda em 0 | Com a presença disponível e `total.escalados = 0`: "Ninguém escalado neste momento (fim de semana, feriado ou sem regra de escala)." abaixo da tabela. Só texto: a contagem e o PHP não mudam |
+
+**Medição do A1 com a Inter carregada** (Google Fonts injetada só na página de teste, no Chrome sem janela; o projeto não muda), barra lateral aberta (256 px), servidor simulado: largura mínima da tabela **767 px** (com os rótulos em duas linhas, se faltar espaço). `scrollWidth <= clientWidth` do `.table-wrap` em todas as larguras de 1280 px para cima:
+
+| Janela | Largura útil do cartão | Folga sobre a largura mínima | Rolagem dentro do cartão |
+|---|---|---|---|
+| 1280 px | 903 px | 15,1% | Não |
+| 1366 px | 989 px | 22,4% | Não |
+| 1440 px | 1063 px | 27,8% | Não |
+| 1920 px | 1494 px | 48,7% | Não |
+| 390 px | 316 px | — | Sim, dentro do cartão (K9); a página não rola |
+
+Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do print (Chrome sem janela pelo protocolo DevTools), não do `qa:operational-view`, que renderiza HTML sem layout; o QA fixa a estrutura que garante a quebra e o espaçamento (cabeçalho com `whitespace-normal` e `flex-wrap`, ícone na primeira palavra, `!px-2` nas células). Mutação **16/16** nos ajustes (na 1ª rodada, 15/16: "busca só com espaços conta como termo" sobreviveu; o teste passou a exigir que a mensagem de busca não apareça) e a suíte do commit 3 refeita, **51/51**. 18 `qa:*`, lint, typecheck e build.
+
+**Pendência nova (lote de acabamento):** 17d, Visão Operacional no celular com cartões por equipe no lugar da tabela (junto da 17 e da 17b).
 
 ---
 
