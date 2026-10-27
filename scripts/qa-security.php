@@ -2097,6 +2097,57 @@ assert_same(0, preg_match('/consulta nao prevista|SQLSTATE/', (string)strstr($f7
 $body = $f7Body('painel_estado_ilegivel');
 assert_same([false, true, 0], [$body['presence_meta']['pausas_disponiveis'] ?? null, $body['presence_meta']['disponivel'] ?? null, $body['presence_summary']['total']['em_pausa'] ?? null], 'DV6: estado de pausas ilegivel avisado em presence_meta');
 
+// F7 (DV11), ponta a ponta: observacao_reuniao de outros tecnicos so para a
+// gestao (status.php e dashboard.php, inclusive o active_pauses); tecnico e
+// somente leitura recebem o item sem a chave, salvo o proprio. O tecnico da
+// sessao e o 1; o 13 e colega; o somente leitura (4) nao esta no status.
+$dv11State = ['funcionarios.json' => $f7State['funcionarios.json'], 'estado.json' => (string)json_encode(['funcionarios' => [
+    '1' => ['em_pausa' => true, 'inicio_pausa' => $recent, 'motivo_pausa' => 'Reunião', 'status_aprovacao' => 'aprovado', 'solicitacao_timestamp' => null, 'observacao_reuniao' => 'QA pauta do proprio'],
+    '13' => ['em_pausa' => true, 'inicio_pausa' => $recent, 'motivo_pausa' => 'Reunião', 'status_aprovacao' => 'aprovado', 'solicitacao_timestamp' => null, 'observacao_reuniao' => 'QA pauta do colega'],
+]])];
+$dv11Sessions = [
+    'admin' => QA_ADMIN_SESSION,
+    'lideranca' => qa_ci_session(2, 'qa.lider', 'lideranca'),
+    'gestor' => $manager,
+    'tecnico' => $technician,
+    'somente_leitura' => qa_ci_session(4, 'qa.leitura', 'somente_leitura'),
+];
+$dv11Specs = [];
+foreach ($dv11Sessions as $profile => $session) {
+    $dv11Specs["status_{$profile}"] = $f7Spec('api/status.php', $session, ['state' => $dv11State]);
+    $dv11Specs["painel_{$profile}"] = $f7Spec('api/portal/dashboard.php', $session, ['state' => $dv11State]);
+}
+$dv11Cases = qa_run_endpoints($qaDir, $dv11Specs);
+$dv11Notes = static function (array $items): array {
+    $notes = [];
+    foreach ($items as $item) {
+        $notes[(int)$item['id']] = array_key_exists('observacao_reuniao', $item) ? $item['observacao_reuniao'] : 'sem chave';
+    }
+    ksort($notes);
+    return $notes;
+};
+foreach ([
+    'admin' => ['QA pauta do proprio', 'QA pauta do colega'],
+    'lideranca' => ['QA pauta do proprio', 'QA pauta do colega'],
+    'gestor' => ['QA pauta do proprio', 'QA pauta do colega'],
+    'tecnico' => ['QA pauta do proprio', 'sem chave'],
+    'somente_leitura' => ['sem chave', 'sem chave'],
+] as $profile => [$own, $colleague]) {
+    $expected = [1 => $own, 13 => $colleague];
+    $status = (array)json_decode($dv11Cases["status_{$profile}"]['body'], true);
+    $painel = (array)json_decode($dv11Cases["painel_{$profile}"]['body'], true);
+    assert_same([200, '', 200, ''], [$dv11Cases["status_{$profile}"]['status'], $dv11Cases["status_{$profile}"]['stderr'], $dv11Cases["painel_{$profile}"]['status'], $dv11Cases["painel_{$profile}"]['stderr']], "DV11 {$profile}: status.php e dashboard.php HTTP 200 sem erro de PHP");
+    assert_same($expected, $dv11Notes(array_merge($status['n1'] ?? [], $status['n2'] ?? [])), "DV11 {$profile}: observacao de reuniao no status.php so da gestao e do proprio");
+    assert_same($expected, $dv11Notes($painel['active_pauses'] ?? []), "DV11 {$profile}: observacao de reuniao no active_pauses do dashboard.php so da gestao e do proprio");
+    foreach (['status', 'painel'] as $endpoint) {
+        $raw = $dv11Cases["{$endpoint}_{$profile}"]['body'];
+        assert_same([$own !== 'sem chave', $colleague !== 'sem chave'], [strpos($raw, 'QA pauta do proprio') !== false, strpos($raw, 'QA pauta do colega') !== false], "DV11 {$profile}: texto de terceiro fora de todo o {$endpoint}");
+    }
+    // O resto do item nao muda: o motivo da lista fechada, a pausa e a presenca continuam para todos.
+    assert_same([['Reunião', true], ['Reunião', true]], array_map(static fn (array $item): array => [$item['motivo_pausa'] ?? null, $item['em_pausa'] ?? null], array_merge($status['n1'] ?? [], $status['n2'] ?? [])), "DV11 {$profile}: motivo e pausa continuam no status.php");
+    assert_same([true, 2, 2], [$status['presenca_disponivel'] ?? null, count(array_filter(array_merge($status['n1'] ?? [], $status['n2'] ?? []), static fn (array $item): bool => isset($item['presenca']))), $painel['summary']['pausas_ativas'] ?? null], "DV11 {$profile}: presenca do status.php e contadores do dashboard.php sem mudanca");
+}
+
 // QA 13 e A3, estruturais: so os endpoints de funcionario e a carga de
 // emergencia do config.php gravam access_role; ad_login gravado so depois de
 // normalizado (NULL, nunca vazio).

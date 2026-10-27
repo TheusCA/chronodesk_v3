@@ -1136,8 +1136,9 @@ assert_same([1, 1, [true, true, true]], [
     array_map(static fn (array $item): bool => $item['ativo'], $listed),
 ], 'obter_status: pausa e pendente do inativo fora dos contadores; contrato com ativo mantido');
 $dashboardSource = (string)file_get_contents($root . '/api/portal/dashboard.php');
-assert_same([true, false], [strpos($dashboardSource, '$status = $gerenciador->obter_status();') !== false, strpos($dashboardSource, 'getFuncionarios(') !== false], 'dashboard.php: contadores e active_pauses so a partir do obter_status()');
-assert_same(true, strpos((string)file_get_contents($root . '/api/status.php'), '$status = $gerenciador->obter_status();') !== false, 'status.php: lista a partir do obter_status()');
+// F7 (DV11): o obter_status() chega filtrado pelo perfil (so a observacao de reuniao muda).
+assert_same([1, false], [preg_match('/\$status = GerenciadorPausas::status_para_o_perfil\(\$gerenciador->obter_status\(\), \$actor\);/', $dashboardSource), strpos($dashboardSource, 'getFuncionarios(') !== false], 'dashboard.php: contadores e active_pauses so a partir do obter_status()');
+assert_same(1, preg_match('/\$status = GerenciadorPausas::status_para_o_perfil\(\$gerenciador->obter_status\(\), portal_actor\(\$role\)\);/', (string)file_get_contents($root . '/api/status.php')), 'status.php: lista a partir do obter_status()');
 // Listagem (commit 5): data do arquivamento so para quem gerencia
 // funcionarios, so a data (sem autor), nula no ativo (ponta a ponta no qa-security).
 $listSource = (string)file_get_contents($root . '/api/listar_funcionarios.php');

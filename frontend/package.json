@@ -18,6 +18,7 @@
     "qa:employee-form": "node scripts/qa-employee-form.mjs",
     "qa:forms": "node scripts/qa-forms.mjs",
     "qa:operational": "node scripts/qa-operational.mjs",
+    "qa:operational-view": "node scripts/qa-operational-view.mjs",
     "qa:pa-map": "node scripts/qa-pa-map.mjs",
     "qa:query": "node scripts/qa-query.mjs",
     "qa:resource": "node scripts/qa-resource.mjs",

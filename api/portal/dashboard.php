@@ -6,9 +6,12 @@ require_once __DIR__ . '/../../services/PresenceService.php';
 
 require_get_method();
 $role = require_portal_auth();
+$actor = portal_actor($role);
 
 global $gerenciador;
-$status = $gerenciador->obter_status();
+// [F7, DV11] Observacao de reuniao dos outros tecnicos so para a gestao,
+// inclusive no active_pauses.
+$status = GerenciadorPausas::status_para_o_perfil($gerenciador->obter_status(), $actor);
 $funcionarios = array_merge($status['n1'] ?? [], $status['n2'] ?? []);
 $pausas_ativas = count(array_filter($funcionarios, static fn($item) => !empty($item['em_pausa'])));
 $pendentes = count(array_filter(
@@ -23,7 +26,6 @@ $criticalSummary = [
     'last_update' => null,
 ];
 try {
-    $actor = portal_actor($role);
     $operational = (new OperationalService())->listPendingWorkflowApprovals($actor);
     $workflowPendentes = count($operational['overtime'] ?? []) + count($operational['time_adjustments'] ?? []);
     $criticalSummary = (new CriticalIncidentService())->dashboardSummary();

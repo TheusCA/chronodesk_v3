@@ -103,7 +103,8 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
                     <span className="status-badge status-warning">{item.motivo_pausa}</span>
                   </div>
                   <p className="mt-5 rounded-card border border-amber-400/15 bg-amber-500/5 px-3 py-2 font-mono text-2xl font-bold text-amber-200">{formatDuration(livePauses.elapsedFor(item))}</p>
-                  {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && (
+                  {/* [F7, DV11] Sem a chave (colega, para quem não é gestão), sem a caixa. */}
+                  {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && 'observacao_reuniao' in item && (
                     <p
                       className="mt-3 line-clamp-2 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-xs leading-5 text-slate-400"
                       title={item.observacao_reuniao || 'Sem observação informada'}

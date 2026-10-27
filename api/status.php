@@ -4,11 +4,13 @@
  */
 require_once __DIR__ . '/../config.php';
 require_get_method();
-require_portal_auth();
+$role = require_portal_auth();
 require_once __DIR__ . '/../init.php';
+require_once __DIR__ . '/portal/_bootstrap.php';
 require_once __DIR__ . '/../services/PresenceService.php';
 global $gerenciador;
-$status = $gerenciador->obter_status();
+// [F7, DV11] Observacao de reuniao dos outros tecnicos so para a gestao.
+$status = GerenciadorPausas::status_para_o_perfil($gerenciador->obter_status(), portal_actor($role));
 
 // [F2, P14] Presenca de hoje em cada item, desligavel por
 // STATUS_PRESENCE_ENABLED. Falha no calculo nao derruba o status.

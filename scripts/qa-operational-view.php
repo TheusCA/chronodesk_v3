@@ -14,7 +14,8 @@ declare(strict_types=1);
 // 3. PresenceService::technicianPresence: P9 (categoria), parcial e DV10
 //    (motivo de pausa fora da lista);
 // 4. numero de consultas fixo (4) e sem a data de corte (DV3);
-// 5. estrutura dos endpoints: interruptor (DV4), falha suave (DV5), DV9.
+// 5. estrutura dos endpoints: interruptor (DV4), falha suave (DV5), DV9;
+// 6. observacao de reuniao so para a gestao e o proprio (DV11, commit 2).
 // Os endpoints rodam de ponta a ponta no qa-security (perfis, interruptor e
 // falha). As consultas SQL nao rodam em MySQL aqui (sem MySQL local).
 //
@@ -383,5 +384,47 @@ assert_same(true, strpos($technicians, "\$seesRole = in_array('funcionarios.mana
 assert_same(true, strpos($technicians, '$viewer = portal_actor($role);') !== false && strpos($technicians, '->technicianPresence($now, $pausas, $viewer)') !== false, 'technicians.php: passa quem consulta (P9, DV10)');
 $status = (string)file_get_contents(__DIR__ . '/../api/status.php');
 assert_same(0, preg_match('/operationalSummary|technicianPresence|pausas_atuais/', $status), 'status.php: sem consulta nem calculo novo (DV1)');
+
+// ============================================================================
+// 6. Observacao de reuniao por perfil (DV11)
+// ============================================================================
+$meetingItem = static fn ($id, ?string $note): array => ['id' => $id, 'nome' => 'QA ' . $id, 'motivo_pausa' => 'Reunião', 'em_pausa' => true, 'observacao_reuniao' => $note];
+$meetingStatus = [
+    'n1' => [$meetingItem(1, 'pauta 1'), $meetingItem('7', 'pauta 7')],
+    'n2' => [$meetingItem(13, null)],
+    'server_now' => '2026-10-27T10:00:00-03:00',
+    'poll_interval_seconds' => 15,
+];
+$notesFor = static function (array $viewer) use ($meetingStatus): array {
+    $filtered = GerenciadorPausas::status_para_o_perfil($meetingStatus, $viewer);
+    $notes = [];
+    foreach (array_merge($filtered['n1'], $filtered['n2']) as $item) {
+        $notes[(string)$item['id']] = array_key_exists('observacao_reuniao', $item) ? $item['observacao_reuniao'] : 'sem chave';
+    }
+    return $notes;
+};
+$everyone = ['1' => 'pauta 1', '7' => 'pauta 7', '13' => null];
+foreach (['admin', 'lideranca', 'gestor'] as $role) {
+    assert_same($everyone, $notesFor(['role' => $role, 'employee_id' => null]), "DV11: {$role} recebe a chave de todos (inclusive nula)");
+}
+assert_same(['1' => 'sem chave', '7' => 'pauta 7', '13' => 'sem chave'], $notesFor(['role' => 'tecnico', 'employee_id' => 7]), 'DV11: tecnico so com a propria (id do estado como texto)');
+assert_same(['1' => 'sem chave', '7' => 'sem chave', '13' => null], $notesFor(['role' => 'somente_leitura', 'employee_id' => 13]), 'DV11: somente leitura so com a propria, mesmo nula');
+foreach ([['role' => 'tecnico', 'employee_id' => 0], ['role' => 'tecnico', 'employee_id' => null], ['role' => 'tecnico'], []] as $viewer) {
+    assert_same(['1' => 'sem chave', '7' => 'sem chave', '13' => 'sem chave'], $notesFor($viewer), 'DV11: sem gestao nem employee_id da sessao, nenhuma observacao: ' . json_encode($viewer));
+}
+$filtered = GerenciadorPausas::status_para_o_perfil($meetingStatus, ['role' => 'tecnico', 'employee_id' => 1]);
+unset($meetingStatus['n1'][1]['observacao_reuniao'], $meetingStatus['n2'][0]['observacao_reuniao']);
+assert_same($meetingStatus, $filtered, 'DV11: so a chave sai; o resto do item, a ordem e os campos do status ficam');
+$withoutId = ['n1' => [['nome' => 'QA sem id', 'observacao_reuniao' => 'pauta'], $meetingItem(0, 'pauta 0')]];
+foreach ([['role' => 'tecnico', 'employee_id' => 0], ['role' => 'somente_leitura']] as $viewer) {
+    $filtered = GerenciadorPausas::status_para_o_perfil($withoutId, $viewer);
+    assert_same([false, false], array_map(static fn (array $item): bool => array_key_exists('observacao_reuniao', $item), $filtered['n1']), 'DV11: sessao sem employee_id nunca casa com item sem id ou id 0: ' . json_encode($viewer));
+}
+assert_same(['n1' => []], GerenciadorPausas::status_para_o_perfil(['n1' => []], ['role' => 'tecnico', 'employee_id' => 1]), 'DV11: status sem N2 nao quebra');
+$statusFilter = '/\$status = GerenciadorPausas::status_para_o_perfil\(\$gerenciador->obter_status\(\), (portal_actor\(\$role\)|\$actor)\);/';
+assert_same(1, preg_match($statusFilter, $status), 'status.php: filtro da DV11 sobre o obter_status, pela sessao');
+assert_same(1, preg_match($statusFilter, $dashboard), 'dashboard.php: filtro da DV11 sobre o obter_status (active_pauses incluido)');
+assert_same(1, preg_match('/\$role = require_portal_auth\(\);\s+\$actor = portal_actor\(\$role\);/', $dashboard), 'dashboard.php: $actor da sessao, antes do filtro');
+assert_same(2, substr_count($dashboard, 'obter_status()') + substr_count($status, 'obter_status()'), 'status.php e dashboard.php: uma leitura do obter_status cada, ja filtrada');
 
 echo "QA operational view OK ({$checks} verificacoes)\n";

@@ -407,6 +407,27 @@ class GerenciadorPausas {
     }
 
     /**
+     * [F7, DV11] Texto livre da pausa de reuniao (observacao_reuniao) so para
+     * a gestao e o proprio, regra do SEC-07b; os demais recebem o item sem a
+     * chave. $viewer: portal_actor() de quem consulta; sem employee_id, so a
+     * gestao ve.
+     */
+    public static function status_para_o_perfil(array $status, array $viewer): array {
+        if (portal_role_is_manager($viewer['role'] ?? null)) {
+            return $status;
+        }
+        $proprio = (int)($viewer['employee_id'] ?? 0);
+        foreach (['n1', 'n2'] as $equipe) {
+            foreach ($status[$equipe] ?? [] as $indice => $item) {
+                if ($proprio <= 0 || (int)($item['id'] ?? 0) !== $proprio) {
+                    unset($status[$equipe][$indice]['observacao_reuniao']);
+                }
+            }
+        }
+        return $status;
+    }
+
+    /**
      * $completo = false (tela de métricas): até METRICS_MAX_ROWS pausas mais
      * recentes, com aviso em "dados_truncados".
      * $completo = true (exportação, PERF-02): todas as pausas, lidas em páginas.
