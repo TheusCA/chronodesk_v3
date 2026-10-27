@@ -797,6 +797,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Nada rodou em MySQL (sem consulta nova). `test-local.ps1` nao rodou inteiro: o `-ExecutionPolicy Bypass` foi recusado pela permissao da sessao; as etapas rodaram separadas. Telas nao abertas no navegador pela IA. Painel antigo sem teste (nao le a observacao, conferencia de 2026-10-23). `gitleaks` ausente na estacao. |
 | **Validacao humana** | Responsavel, 2026-10-27, a partir do zip do HEAD (`e7d287a`): **aprovado, com J1 a J6**. `qa-operational-view` (256), `qa-archive` (578) e `qa-presence-engine` OK. `status_para_o_perfil` com tres itens (reuniao do 2 com observacao, reuniao do 3 com observacao nula, cafe do 9): admin, Lideranca e gestor com as tres chaves, inclusive nulas; tecnico 2 so com a propria; tecnico 3 so com a propria (nula); somente leitura 9 so com a propria; tecnico com `employee_id` 0 sem nenhuma; perfil nao normalizado (`GESTOR`) sem nenhuma (falha fechada); resto do item sem mudanca. Nao testado no navegador: a caixa da Visao Operacional fica para o teste do commit 3. |
 
+### Parte B, F7 — commit 3 (telas) — 2026-10-27
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Levar a Visao Operacional, a tela Tecnicos e os cartoes de Pausas para a presenca do motor (desenho 5.7 e 9.9): tabela por equipe com a legenda, Lideranca fora do total, estado degradado, DV14, coluna "Situacao agora" (DV8) e cartoes pela `presenca` (DV12). |
+| **Branch e commits** | `f38a12c` (aprovacao do commit 2), `dabd9d9` (codigo e QA) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/pages/DashboardPage.jsx`, `TechniciansPage.jsx` (novo), `PausasPage.jsx`, `ModulePage.jsx`, `App.jsx`, `lib/presenceLegend.ts`, `components/ui/Presence.jsx`, `components/ui/Icon.jsx` (talheres), `index.css` (classes novas fora de `@layer`), `scripts/qa-operational-view.mjs` e `scripts/qa-calendar-presence.mjs`; desenho 5.1 (cores como implementadas) e 9.9. Nenhum PHP. |
+| **Decisoes de implementacao** | Nove, a aprovar (desenho 9.9, K1 a K9); destaques: tela Tecnicos propria; fora do Mapa em texto na tela Tecnicos e pelo calculo antigo em Pausas; relogio compartilhado entre fora do expediente e marcador da parcial; hora do `server_now` sem converter fuso; em 390 px a tabela rola dentro do cartao. |
+| **Validacao executada pela IA** | `qa:operational-view` e `qa:calendar-presence` ampliados (contraste do texto de 4,5:1 ou mais e almoco x ausente por matiz, fundo e borda no CSS gerado); 18 `qa:*`, lint, typecheck e build; bateria PHP (14 QAs). Mutacao **51/51** (1a rodada 49/50, com um mutante mal construido trocado por dois corretos). Prints com servidor simulado e dados ficticios (Chrome sem janela) em 1366 e 390 px, sem rolagem horizontal da pagina; achado nos prints (coluna "Sem escala" cortada em 1366 px) corrigido antes do commit. Contraste medido no navegador: almoco 9,38:1, ausente 11,93:1, fundos entre si 1,48:1. |
+| **Limitacoes declaradas** | Nada contra o backend real nem em MySQL. `test-local.ps1` nao rodou inteiro (Bypass recusado pela permissao da sessao); etapas separadas. Prints fora do repositorio. Em 390 px a tabela rola dentro do cartao. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao e teste no navegador antes do commit 4 (roteiro sugerido na 9.9; zip do HEAD em `_revisao_f7c3.zip`). |
+
 ---
 
 ## 5. Responsabilidade
