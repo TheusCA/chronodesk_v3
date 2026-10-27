@@ -13,6 +13,8 @@ const read = (path) => readFileSync(join(frontendRoot, path), 'utf8')
 
 const legend = await import(pathToFileURL(join(frontendRoot, 'src', 'lib', 'presenceLegend.ts')).href)
 const {
+  NOW_PRESENCE_LEGEND,
+  OPERATIONAL_SUMMARY_COLUMNS,
   PRESENCE_LEGEND,
   daySummaryAriaLabel,
   daySummaryText,
@@ -36,6 +38,25 @@ const presenceSource = read('src/components/ui/Presence.jsx')
 const iconSource = read('src/components/ui/Icon.jsx')
 const appSource = read('src/App.jsx')
 const cssSource = read('src/index.css')
+// CSS fora das camadas (@layer base e components): regra fora de camada
+// sempre vai para o CSS gerado.
+const sourceCssOutsideLayers = (() => {
+  let out = ''
+  let index = 0
+  while (index < cssSource.length) {
+    const layer = cssSource.indexOf('@layer', index)
+    if (layer < 0) { out += cssSource.slice(index); break }
+    out += cssSource.slice(index, layer)
+    let depth = 0
+    let cursor = cssSource.indexOf('{', layer)
+    for (; cursor < cssSource.length; cursor++) {
+      if (cssSource[cursor] === '{') depth++
+      if (cssSource[cursor] === '}' && --depth === 0) break
+    }
+    index = cursor + 1
+  }
+  return out
+})()
 const legendSource = read('src/lib/presenceLegend.ts')
 
 // ---------------------------------------------------------------------------
@@ -52,6 +73,33 @@ for (const item of PRESENCE_LEGEND) {
   assert.match(cssSource, new RegExp(`\\.${item.tone} \\{`), `classe ${item.tone} no index.css`)
 }
 assert.match(iconSource, /\bclock: \[/, 'ícone do marcador da parcial existe')
+// [F7, DV7] Legenda da situação de agora: as sete situações do motor com
+// rótulo, ícone e tom; nenhuma só pela cor.
+assert.deepEqual(NOW_PRESENCE_LEGEND.map((item) => item.situacao), ['presencial', 'remoto', 'pausa', 'almoco', 'ausente', 'fora_expediente', 'sem_escala'], 'situações de agora do motor')
+assert.deepEqual(NOW_PRESENCE_LEGEND.map((item) => item.label), ['Presencial', 'Remoto', 'Em pausa', 'Almoço', 'Ausente', 'Fora do expediente', 'Sem escala'], 'rótulos da situação de agora')
+for (const field of ['label', 'icon', 'tone']) {
+  assert.equal(new Set(NOW_PRESENCE_LEGEND.map((item) => item[field])).size, NOW_PRESENCE_LEGEND.length, `situação de agora: ${field} distinto por situação`)
+}
+for (const item of NOW_PRESENCE_LEGEND) {
+  assert.match(iconSource, new RegExp(`\\b${item.icon}: \\[`), `ícone ${item.icon} existe no Icon`)
+  assert.match(cssSource, new RegExp(`\\.${item.tone} \\{`), `classe ${item.tone} no index.css`)
+}
+assert.deepEqual(Object.fromEntries(NOW_PRESENCE_LEGEND.map((item) => [item.situacao, [item.icon, item.tone]])), {
+  presencial: ['building', 'presence-onsite'],
+  remoto: ['home', 'presence-remote'],
+  pausa: ['pause', 'presence-pause'],
+  almoco: ['utensils', 'presence-lunch'],
+  ausente: ['userMinus', 'presence-absence'],
+  fora_expediente: ['clock', 'presence-off-hours'],
+  sem_escala: ['help', 'presence-no-schedule'],
+}, 'DV7: pausa violeta, almoço com talheres, fora do expediente com relógio; presencial, remoto, ausente e sem escala com a cor do F5')
+assert.deepEqual(OPERATIONAL_SUMMARY_COLUMNS.map((column) => [column.key, column.label]), [['escalados', 'Escalados'], ['disponiveis', 'Disponíveis'], ['em_pausa', 'Em pausa'], ['almoco', 'Almoço'], ['ausentes', 'Ausentes'], ['fora_expediente', 'Fora do expediente'], ['sem_escala', 'Sem escala']], 'colunas da tabela da 5.7, na ordem do presence_summary')
+for (const column of OPERATIONAL_SUMMARY_COLUMNS.slice(2)) {
+  assert.ok(NOW_PRESENCE_LEGEND.some((item) => item.icon === column.icon && item.tone === column.tone), `coluna ${column.label} com o ícone e a cor da situação`)
+}
+for (const column of OPERATIONAL_SUMMARY_COLUMNS) {
+  assert.match(iconSource, new RegExp(`\\b${column.icon}: \\[`), `ícone ${column.icon} da coluna ${column.label} existe`)
+}
 const cssRule = (name) => cssSource.match(new RegExp(`\\.${name} \\{\\s*@apply ([^;]+);`))?.[1]
 const absenceEventTone = calendarSource.match(/const typeTones = \{[\s\S]*?\n {2}absence: '([^']+)'/)?.[1]
 assert.equal(cssRule('presence-absence'), absenceEventTone, 'ausência do motor com a mesma cor do evento de ausência de antes do corte')
@@ -72,6 +120,67 @@ assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src
     assert.match(rule, /color: rgb/, `CSS gerado com a classe ${item.tone} (texto)`)
   }
   assert.match(compiled.match(/\.presence-no-schedule \{([^}]*)\}/)?.[1] ?? '', /border-style: dashed/, 'CSS gerado: sem escala tracejado')
+
+  // [F7, DV7] Situação de agora (Em pausa, Almoço, Fora do expediente) e os
+  // cabeçalhos da Visão Operacional: nomes só no .ts, então fora de @layer e
+  // conferidos no CSS gerado, com borda, fundo e texto.
+  const rgbOf = (rule, property) => {
+    const found = rule.match(new RegExp(`(?:^|[;\\s{])${property}: rgb\\((\\d+) (\\d+) (\\d+)(?: / ([\\d.]+|var\\([^)]*\\)))?\\)`))
+    if (!found) return null
+    const alpha = found[4] === undefined || found[4].startsWith('var') ? 1 : Number(found[4])
+    return { rgb: found.slice(1, 4).map(Number), alpha }
+  }
+  const nowTones = [...new Set([...NOW_PRESENCE_LEGEND.map((item) => item.tone), ...OPERATIONAL_SUMMARY_COLUMNS.map((column) => column.tone)])]
+  const ruleOf = (tone) => compiled.match(new RegExp(`\\.${tone} \\{([^}]*)\\}`))?.[1] ?? ''
+  for (const tone of nowTones) {
+    assert.ok(rgbOf(ruleOf(tone), 'border-color'), `CSS gerado com a classe ${tone} (borda)`)
+    assert.ok(rgbOf(ruleOf(tone), 'color'), `CSS gerado com a classe ${tone} (texto)`)
+    if (tone !== 'presence-no-schedule') assert.ok(rgbOf(ruleOf(tone), 'background-color'), `CSS gerado com a classe ${tone} (fundo)`)
+  }
+  for (const tone of ['presence-pause', 'presence-lunch', 'presence-off-hours', 'presence-scheduled', 'presence-available']) {
+    assert.ok(nowTones.includes(tone), `classe nova ${tone} em uso na legenda`)
+    assert.match(sourceCssOutsideLayers, new RegExp(`\\.${tone} \\{`), `${tone} fora de @layer`)
+  }
+  // Contraste do texto sobre o fundo do selo (fundo com alfa sobre o cartão,
+  // chrono.card #0d1625): pelo menos 4,5:1 (WCAG AA) em todas as situações.
+  const card = [13, 22, 37]
+  const blend = ({ rgb, alpha }) => rgb.map((value, index) => value * alpha + card[index] * (1 - alpha))
+  const luminance = (rgb) => {
+    const [r, g, b] = rgb.map((value) => { const c = value / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 })
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+  }
+  const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05) }
+  const badgeBackground = (tone) => { const bg = rgbOf(ruleOf(tone), 'background-color'); return bg ? blend(bg) : card }
+  for (const tone of nowTones) {
+    const ratio = contrast(blend(rgbOf(ruleOf(tone), 'color')), badgeBackground(tone))
+    assert.ok(ratio >= 4.5, `contraste do texto em ${tone}: ${ratio.toFixed(2)}:1 (mínimo 4,5:1)`)
+  }
+  // Almoço × ausente (aprovação do plano, DV7): matiz amarelo × laranja na
+  // borda, no fundo e no texto; fundo e borda finais (com o alfa sobre o
+  // cartão) bem diferentes.
+  const hue = ([r, g, b]) => {
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    const d = max - min
+    if (d === 0) return 0
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return (h * 60 + 360) % 360
+  }
+  for (const property of ['border-color', 'background-color', 'color']) {
+    const lunch = hue(rgbOf(ruleOf('presence-lunch'), property).rgb)
+    const absence = hue(rgbOf(ruleOf('presence-absence'), property).rgb)
+    assert.ok(lunch >= 45 && lunch <= 65, `almoço amarelo (${property}: matiz ${lunch.toFixed(0)}°)`)
+    assert.ok(absence >= 15 && absence <= 40, `ausente laranja (${property}: matiz ${absence.toFixed(0)}°)`)
+    assert.ok(lunch - absence >= 15, `almoço e ausente com matiz distinto (${property}: ${lunch.toFixed(0)}° × ${absence.toFixed(0)}°)`)
+  }
+  const lunchBackground = badgeBackground('presence-lunch')
+  const absenceBackground = badgeBackground('presence-absence')
+  assert.ok(contrast(lunchBackground, absenceBackground) >= 1.3, `fundo do almoço distinto do fundo do ausente (${contrast(lunchBackground, absenceBackground).toFixed(2)}:1)`)
+  const distance = (a, b) => Math.hypot(...a.map((value, index) => value - b[index]))
+  assert.ok(distance(blend(rgbOf(ruleOf('presence-lunch'), 'border-color')), blend(rgbOf(ruleOf('presence-absence'), 'border-color'))) >= 60, 'borda do almoço distinta da borda do ausente')
+  // Fora do expediente preenchido; sem escala tracejado e sem fundo.
+  assert.ok(rgbOf(ruleOf('presence-off-hours'), 'background-color').alpha >= 0.2, 'fora do expediente cinza preenchido')
+  assert.doesNotMatch(ruleOf('presence-off-hours'), /border-style: dashed/, 'fora do expediente sem tracejado (forma distinta do sem escala)')
 
   // Achado do F6 (commit 3), corrigido antes do commit 4: o mesmo defeito nos
   // tons do MetricCard e do InlineAlert, montados por template no Primitives

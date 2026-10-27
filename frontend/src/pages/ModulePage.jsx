@@ -7,7 +7,6 @@ import { TruncationNotice } from '../components/ui/Primitives'
 
 const modules = {
   '/calendario': { endpoint: 'portal/calendar.php', noun: 'evento', columns: ['title', 'type', 'starts_at', 'status'] },
-  '/tecnicos': { endpoint: 'portal/technicians.php', noun: 'técnico', columns: ['name', 'team', 'shift', 'status'] },
   '/escala-turnos': { endpoint: 'portal/schedules.php?type=turno', noun: 'turno', columns: ['employee_name', 'team', 'schedule_type', 'starts_at'] },
   '/escala-presencial': { endpoint: 'portal/schedules.php?type=presencial', noun: 'escala presencial', columns: ['employee_name', 'team', 'schedule_type', 'starts_at'] },
   '/horas-extras': { endpoint: 'portal/overtime.php', noun: 'hora extra', columns: ['employee_name', 'work_date', 'minutes', 'status'] },

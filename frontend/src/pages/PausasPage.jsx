@@ -3,6 +3,7 @@ import { formatDuration } from '../lib/format'
 import { Icon } from '../components/ui/Icon'
 import { SectionHeader, StatusDot, UserAvatar } from '../components/ui/Primitives'
 import { hasPermission } from '../lib/roles'
+import { nowLegendItem } from '../lib/presenceLegend'
 
 const reasons = ['Café', 'Pessoal', 'Reunião']
 
@@ -104,11 +105,21 @@ function StartPauseCard({ loading, onStart, onRequest }) {
   )
 }
 
+// [F7, DV12] Situação do cartão pela presenca do status.php (motor: escala,
+// ausência lançada, expediente, pausa e almoço), a mesma da Visão
+// Operacional. O cálculo antigo (disponibilidade) só quando ela não vem:
+// interruptor desligado, falha no cálculo ou cadastro fora do Mapa.
 function operatorState(item) {
-  if (item.status_aprovacao === 'pendente') return ['pending', 'Aguardando aprovação', 'status-warning']
-  if (item.em_pausa) return ['paused', 'Em pausa', 'status-warning']
-  if (item.disponibilidade?.status === 'disponivel') return ['available', item.disponibilidade?.label || 'Disponível', 'status-success']
-  return ['offline', item.disponibilidade?.label || 'Indisponível', 'status-neutral']
+  if (item.status_aprovacao === 'pendente') return ['pending', 'Aguardando aprovação', 'status-warning', null]
+  const now = nowLegendItem(item.presenca?.situacao)
+  if (now !== null) {
+    if (now.situacao === 'presencial' || now.situacao === 'remoto') return ['available', now.label, now.tone, now.icon]
+    if (now.situacao === 'pausa') return ['paused', now.label, now.tone, now.icon]
+    return ['offline', now.label, now.tone, now.icon]
+  }
+  if (item.em_pausa) return ['paused', 'Em pausa', 'status-warning', null]
+  if (item.disponibilidade?.status === 'disponivel') return ['available', item.disponibilidade?.label || 'Disponível', 'status-success', null]
+  return ['offline', item.disponibilidade?.label || 'Indisponível', 'status-neutral', null]
 }
 
 function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loading = false, onForceEndBreak }) {
@@ -120,7 +131,7 @@ function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loadin
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {items.map((item) => {
-          const [state, label, badgeClass] = operatorState(item)
+          const [state, label, badgeClass, icon] = operatorState(item)
           return (
             <article className={`operator-card operator-card-${state}`} key={item.id}>
               <div className="flex items-start justify-between gap-3">
@@ -131,7 +142,10 @@ function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loadin
                     <p className="mt-1 text-xs text-slate-600">Jornada {item.jornada_entrada} - {item.jornada_saida}</p>
                   </div>
                 </div>
-                <span className={`status-badge ${badgeClass}`}>{label}</span>
+                <span className={`status-badge shrink-0 gap-1 ${badgeClass}`} title={item.presenca?.detalhe || undefined}>
+                  {icon && <Icon className="h-3 w-3 shrink-0" name={icon} />}
+                  {label}
+                </span>
               </div>
               {item.em_pausa && (
                 <div className="mt-4 rounded-card border border-amber-400/15 bg-amber-500/5 px-3 py-2">

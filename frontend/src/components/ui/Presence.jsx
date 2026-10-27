@@ -1,11 +1,37 @@
 import { Icon } from './Icon'
 import {
+  NOW_PRESENCE_LEGEND,
   PARTIAL_MARKER_LEGEND,
   PRESENCE_LEGEND,
   daySummaryAriaLabel,
+  nowLegendItem,
   presenceDaySummary,
   presenceLegendItem,
 } from '../../lib/presenceLegend'
+
+// F7 (DV7): situação de agora (campo situacao do motor), com rótulo e ícone.
+export function NowPresenceBadge({ situacao, title = undefined }) {
+  const item = nowLegendItem(situacao)
+  if (item === null) return null
+  return (
+    <span className={`status-badge gap-1 ${item.tone}`} title={title}>
+      <Icon name={item.icon} className="h-3 w-3 shrink-0" />
+      {item.label}
+    </span>
+  )
+}
+
+export function NowPresenceLegend() {
+  return (
+    <div aria-label="Legenda da situação agora" className="flex flex-wrap gap-2" role="group">
+      {NOW_PRESENCE_LEGEND.map((item) => (
+        <span className={`status-badge gap-1 ${item.tone}`} key={item.situacao}>
+          <Icon name={item.icon} className="h-3 w-3" />{item.label}
+        </span>
+      ))}
+    </div>
+  )
+}
 
 // F5: situação com rótulo, ícone e forma da legenda única (desenho 5.1).
 export function PresenceBadge({ status, label }) {

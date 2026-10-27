@@ -1,9 +1,10 @@
 import { useResource } from '../hooks/useResource'
 import { formatDuration, parseDate } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
-import { MetricCard, SectionHeader, StatusDot, UserAvatar } from '../components/ui/Primitives'
+import { InlineAlert, MetricCard, SectionHeader, StatusDot, UserAvatar } from '../components/ui/Primitives'
 import { Icon } from '../components/ui/Icon'
 import { hasPermission } from '../lib/roles'
+import { OPERATIONAL_SUMMARY_COLUMNS, serverClock, summaryCount } from '../lib/presenceLegend'
 
 const metrics = [
   ['tecnicos_monitorados', 'Técnicos monitorados', 'info', 'users', 'Equipe operacional no painel'],
@@ -16,11 +17,76 @@ const metrics = [
   ['sobreavisos_ativos', 'Sobreavisos ativos', 'info', 'radio', 'Cobertura de contingência'],
 ]
 
+// [F7, DV14] Sem server_now válido (o 1º status.php falhou), sem contagem:
+// parseDate(null) é 1970 e daria "Atualizado há 1792178705 segundos".
 function updatedLabel(status, serverNow) {
-  const updatedAt = parseDate(status?.server_now).getTime()
+  const updatedAt = typeof status?.server_now === 'string' ? parseDate(status.server_now).getTime() : Number.NaN
   if (!Number.isFinite(updatedAt) || !Number.isFinite(serverNow)) return 'Atualização automática ativa'
   const seconds = Math.max(0, Math.floor((serverNow - updatedAt) / 1000))
   return `Atualizado há ${seconds} segundo${seconds === 1 ? '' : 's'}`
+}
+
+// [F7] Linhas da tabela da 5.7: N1, N2 e o total N1 + N2; a Liderança fica
+// à parte e fora do total (D10).
+const TEAM_ROWS = [['n1', 'N1'], ['n2', 'N2'], ['total', 'Total (N1 + N2)']]
+
+// [F7, desenho 5.7] Situação da equipe agora, pelo presence_summary do
+// dashboard.php (o navegador não conta). Presença indisponível (interruptor
+// desligado ou falha no cálculo): "—" em tudo, com aviso, nunca o cálculo
+// antigo (DV5). Estado de pausas ilegível: "—" em Em pausa, com aviso (DV6).
+function OperationalSummary({ data }) {
+  const presence = data?.presence_meta?.disponivel === true ? data?.presence_summary ?? null : null
+  const pausesAvailable = data?.presence_meta?.pausas_disponiveis === true
+  const clock = serverClock(data?.server_now)
+  const cell = (team, key) => {
+    if (presence === null || (key === 'em_pausa' && !pausesAvailable)) return '—'
+    return summaryCount(presence[team], key) ?? '—'
+  }
+  const row = ([team, label], className = '', note = null) => (
+    <tr className={className} key={team}>
+      <th className="whitespace-nowrap px-3 text-left" scope="row">{label}{note && <small className="font-normal normal-case tracking-normal">{note}</small>}</th>
+      {OPERATIONAL_SUMMARY_COLUMNS.map((column) => <td className="px-2 text-center" key={column.key}><strong>{cell(team, column.key)}</strong></td>)}
+    </tr>
+  )
+  return (
+    <section className="card">
+      <SectionHeader
+        description="Contagem do servidor pela escala, ausências lançadas, pausas, almoço e expediente."
+        eyebrow="Visão Operacional"
+        meta={clock && <span className="status-badge status-neutral">Situação às {clock}</span>}
+        title="Situação da equipe agora"
+      />
+      {presence === null && (
+        <InlineAlert className="mt-5" tone="warning" title="Situação da equipe indisponível">
+          A presença de agora não foi calculada (desligada ou com falha no servidor). Os números aparecem como "—" até a próxima atualização que os traga.
+        </InlineAlert>
+      )}
+      {presence !== null && !pausesAvailable && (
+        <InlineAlert className="mt-5" tone="warning" title="Pausas indisponíveis">
+          O estado das pausas não pôde ser lido: Em pausa aparece como "—", e quem está em pausa conta pela escala até a leitura voltar.
+        </InlineAlert>
+      )}
+      <div className="table-wrap mt-5">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th className="px-3" scope="col">Equipe</th>
+              {OPERATIONAL_SUMMARY_COLUMNS.map((column) => (
+                <th className="px-2 text-center" key={column.key} scope="col">
+                  <span className={`status-badge gap-1 whitespace-nowrap px-2 normal-case tracking-normal ${column.tone}`}>
+                    <Icon className="h-3 w-3 shrink-0" name={column.icon} />{column.label}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{TEAM_ROWS.map((team) => row(team))}</tbody>
+          <tbody>{row(['lideranca', 'Liderança'], 'border-t-2 border-white/10', 'fora dos totais')}</tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">Ausentes: somente ausências lançadas; pausas não entram. Sem escala fica fora de Escalados.</p>
+    </section>
+  )
 }
 
 export function DashboardPage({ navigate, session, livePauses, loading, onForceEndBreak }) {
@@ -30,18 +96,20 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
 
   const activePauses = livePauses.employees.filter((item) => item.em_pausa)
   const pendingPauses = livePauses.employees.filter((item) => item.status_aprovacao === 'pendente').length
-  const availableCis = livePauses.employees.filter((item) => !item.em_pausa && item.disponibilidade?.status === 'disponivel').length
+  // [F7] Disponíveis pelo resumo do servidor; sem presença, "—" (DV5).
+  const presence = resource.data?.presence_meta?.disponivel === true ? resource.data?.presence_summary ?? null : null
+  const availableCis = presence === null ? null : summaryCount(presence.total, 'disponiveis')
   const meetingPauses = activePauses.filter((item) => String(item.motivo_pausa || '').toLowerCase().startsWith('reuni')).length
   const coffeePauses = activePauses.filter((item) => String(item.motivo_pausa || '').toLowerCase() === 'café').length
   const summary = {
     ...(resource.data?.summary || {}),
-    cis_disponiveis: availableCis,
+    cis_disponiveis: availableCis ?? '—',
     pausas_ativas: activePauses.length,
     solicitacoes_pendentes: Math.max(resource.data?.summary?.solicitacoes_pendentes || 0, pendingPauses),
   }
   const canForceEndBreak = hasPermission(session, 'pausas.force_end')
-  const n1Available = (livePauses.status.n1 || []).filter((item) => !item.em_pausa && item.disponibilidade?.status === 'disponivel').length
-  const n2Available = (livePauses.status.n2 || []).filter((item) => !item.em_pausa && item.disponibilidade?.status === 'disponivel').length
+  const n1Available = presence === null ? '—' : summaryCount(presence.n1, 'disponiveis') ?? '—'
+  const n2Available = presence === null ? '—' : summaryCount(presence.n2, 'disponiveis') ?? '—'
 
   return (
     <div className="space-y-7">
@@ -75,9 +143,11 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map(([key, label, tone, icon, detail]) => (
-          <MetricCard detail={detail} icon={icon} key={key} label={label} tone={tone} value={summary[key] ?? 0} />
+          <MetricCard detail={key === 'cis_disponiveis' && availableCis === null ? 'Indisponível: presença não calculada' : detail} icon={icon} key={key} label={label} tone={tone} value={summary[key] ?? 0} />
         ))}
       </section>
+
+      <OperationalSummary data={resource.data} />
 
       <section className="card">
         <SectionHeader

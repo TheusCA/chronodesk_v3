@@ -29,6 +29,7 @@ const OvertimePage = lazyPage(() => import('./pages/OperationalPages'), 'Overtim
 const SchedulePage = lazyPage(() => import('./pages/OperationalPages'), 'SchedulePage')
 const TimeCorrectionPage = lazyPage(() => import('./pages/OperationalPages'), 'TimeCorrectionPage')
 const PausasPage = lazyPage(() => import('./pages/PausasPage'), 'PausasPage')
+const TechniciansPage = lazyPage(() => import('./pages/TechniciansPage'), 'TechniciansPage')
 
 const emptySession = {
   role: null,
@@ -183,6 +184,8 @@ export default function App() {
     content = <SchedulePage session={session} notify={notify} />
   } else if (router.path === '/ausencias') {
     content = <AbsencesPage session={session} notify={notify} />
+  } else if (router.path === '/tecnicos') {
+    content = <TechniciansPage />
   } else if (router.path === '/mapa-pa') {
     content = <PaMapPage notify={notify} />
   } else if (router.path === '/escala-turnos') {

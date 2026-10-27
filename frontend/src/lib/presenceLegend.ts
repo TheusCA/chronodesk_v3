@@ -32,6 +32,75 @@ export function presenceLegendItem(status: unknown): PresenceLegendItem | null {
   return BY_STATUS.get(status as PresenceStatus) ?? null
 }
 
+// F7 (desenho 5.7 e 9.9, DV7): situação de agora, com relógio (o campo
+// situacao do motor no status.php e no technicians.php). Em pausa violeta,
+// Almoço amarelo (bem distinto do laranja de ausente) e Fora do expediente
+// cinza preenchido; as demais com a cor da legenda do F5. Cada uma com rótulo
+// e ícone: nenhuma só pela cor.
+export type NowSituation = 'presencial' | 'remoto' | 'pausa' | 'almoco' | 'ausente' | 'fora_expediente' | 'sem_escala'
+
+export type NowLegendItem = {
+  situacao: NowSituation
+  label: string
+  icon: string
+  tone: string
+}
+
+export const NOW_PRESENCE_LEGEND: NowLegendItem[] = [
+  { situacao: 'presencial', label: 'Presencial', icon: 'building', tone: 'presence-onsite' },
+  { situacao: 'remoto', label: 'Remoto', icon: 'home', tone: 'presence-remote' },
+  { situacao: 'pausa', label: 'Em pausa', icon: 'pause', tone: 'presence-pause' },
+  { situacao: 'almoco', label: 'Almoço', icon: 'utensils', tone: 'presence-lunch' },
+  { situacao: 'ausente', label: 'Ausente', icon: 'userMinus', tone: 'presence-absence' },
+  { situacao: 'fora_expediente', label: 'Fora do expediente', icon: 'clock', tone: 'presence-off-hours' },
+  { situacao: 'sem_escala', label: 'Sem escala', icon: 'help', tone: 'presence-no-schedule' },
+]
+
+const NOW_BY_SITUATION = new Map(NOW_PRESENCE_LEGEND.map((item) => [item.situacao, item]))
+
+export function nowLegendItem(situacao: unknown): NowLegendItem | null {
+  return NOW_BY_SITUATION.get(situacao as NowSituation) ?? null
+}
+
+export type OperationalSummaryKey = 'escalados' | 'disponiveis' | 'em_pausa' | 'almoco' | 'ausentes' | 'fora_expediente' | 'sem_escala'
+
+export type OperationalSummaryColumn = {
+  key: OperationalSummaryKey
+  label: string
+  icon: string
+  tone: string
+}
+
+const nowColumn = (key: OperationalSummaryKey, situacao: NowSituation, label: string): OperationalSummaryColumn => {
+  const item = NOW_BY_SITUATION.get(situacao) as NowLegendItem
+  return { key, label, icon: item.icon, tone: item.tone }
+}
+
+// Colunas da tabela da 5.7, na ordem do presence_summary; Disponíveis é
+// presencial ou remoto (escalados = disponíveis + em pausa + almoço +
+// ausentes + fora do expediente; sem escala fora da soma).
+export const OPERATIONAL_SUMMARY_COLUMNS: OperationalSummaryColumn[] = [
+  { key: 'escalados', label: 'Escalados', icon: 'users', tone: 'presence-scheduled' },
+  { key: 'disponiveis', label: 'Disponíveis', icon: 'shield', tone: 'presence-available' },
+  nowColumn('em_pausa', 'pausa', 'Em pausa'),
+  nowColumn('almoco', 'almoco', 'Almoço'),
+  nowColumn('ausentes', 'ausente', 'Ausentes'),
+  nowColumn('fora_expediente', 'fora_expediente', 'Fora do expediente'),
+  nowColumn('sem_escala', 'sem_escala', 'Sem escala'),
+]
+
+// Contador do resumo: número inteiro não negativo, senão null ("—").
+export function summaryCount(group: unknown, key: OperationalSummaryKey): number | null {
+  const value = (group as Record<string, unknown> | null | undefined)?.[key]
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null
+}
+
+// "HH:MM" do server_now (DATE_ATOM, hora do servidor), sem converter para o
+// fuso do navegador; fora do formato, null.
+export function serverClock(serverNow: unknown): string | null {
+  return typeof serverNow === 'string' ? serverNow.match(/^\d{4}-\d{2}-\d{2}T(\d{2}:\d{2})/u)?.[1] ?? null : null
+}
+
 const SITUATION_LABELS: Record<string, string> = {
   presencial: 'Presencial',
   remoto: 'Remoto',
