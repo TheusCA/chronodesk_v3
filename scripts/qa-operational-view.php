@@ -427,4 +427,70 @@ assert_same(1, preg_match($statusFilter, $dashboard), 'dashboard.php: filtro da 
 assert_same(1, preg_match('/\$role = require_portal_auth\(\);\s+\$actor = portal_actor\(\$role\);/', $dashboard), 'dashboard.php: $actor da sessao, antes do filtro');
 assert_same(2, substr_count($dashboard, 'obter_status()') + substr_count($status, 'obter_status()'), 'status.php e dashboard.php: uma leitura do obter_status cada, ja filtrada');
 
+// ----------------------------------------------------------------------------
+// 7. Roteiro "Deploy que traz o F7" (commit 4): travas do DEPLOY_LINUX.md
+// ----------------------------------------------------------------------------
+$deployDoc = str_replace("\r\n", "\n", (string)file_get_contents(dirname(__DIR__) . '/DEPLOY_LINUX.md'));
+$runbookOf = static function (string $heading) use ($deployDoc): string {
+    $start = strpos($deployDoc, $heading);
+    if ($start === false) {
+        return '';
+    }
+    $ends = array_filter([strpos($deployDoc, "\n### ", $start + 1), strpos($deployDoc, "\n## ", $start)], static fn ($pos): bool => $pos !== false);
+    return substr($deployDoc, $start, ($ends === [] ? strlen($deployDoc) : min($ends)) - $start);
+};
+$commandsOf = static function (string $runbook): array {
+    preg_match_all('/```bash\n(.*?)```/s', $runbook, $blocks);
+    return array_values(array_filter(explode("\n", implode("\n", $blocks[1])), static fn (string $line): bool => trim($line) !== ''));
+};
+$f7Runbook = $runbookOf('### Deploy que traz o F7 (Parte B');
+$f7Commands = $commandsOf($f7Runbook);
+$f7Text = implode("\n", $f7Commands);
+$f7First = static function (string $needle) use ($f7Commands): int {
+    foreach ($f7Commands as $i => $line) {
+        if (strpos($line, $needle) !== false) {
+            return $i;
+        }
+    }
+    return -1;
+};
+assert_same(true, $f7Runbook !== '' && count($f7Commands) >= 20, 'roteiro do F7: secao e comandos presentes');
+assert_same([], array_values(array_filter($f7Commands, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), 'roteiro do F7: comandos Linux em uma linha (sem continuacao)');
+assert_same([0, false], [preg_match('/\bgit pull\b/', $f7Text), strpos($f7Text, 'git merge origin') !== false], 'roteiro do F7: sem pull; merge so do commit gravado');
+$recordLine = $f7First('| sudo tee /var/backups/chronodesk/f7-commit');
+$catFileLine = $f7First('sudo git cat-file -e "$F7^{commit}"');
+$archiveLine = $f7First("bash -o pipefail -c 'sudo git archive \"\$F7\" | sudo tar -x -C \"\$E\"'");
+$mergeLine = $f7First('sudo git merge --ff-only "$F7" && [ "$(sudo git rev-parse HEAD)" = "$F7" ] && echo "HEAD = f7-commit"');
+$fetchLines = array_keys(array_filter($f7Commands, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
+assert_same(true, $f7First('[ "$B" = "<BRANCH>" ]') >= 0 && $f7First('[ "$B" = "<BRANCH>" ]') === $recordLine, 'roteiro do F7: confere o branch e grava o f7-commit na mesma linha');
+assert_same(true, $recordLine < $catFileLine && $catFileLine < $archiveLine && $archiveLine < $mergeLine, 'roteiro do F7: f7-commit gravado, cat-file, ensaio com git archive e pipefail, so depois o merge');
+assert_same(true, count($fetchLines) === 1 && $fetchLines[0] < $recordLine, 'roteiro do F7: um fetch so, na medicao antecipada (0b), antes de gravar o commit');
+assert_same(true, $f7First('case "$E" in /tmp/ensaio-f7.*) sudo rm -r "$E"') > $archiveLine && $f7First('case "$E" in /tmp/ensaio-f7.*) sudo rm -r "$E"') < $mergeLine, 'roteiro do F7: o ensaio so apaga o proprio diretorio, antes do merge');
+foreach (['qa-presence-engine', 'qa-operational-view', 'qa-pa-conflicts', 'qa-archive', 'qa-security'] as $qa) {
+    assert_same(true, strpos($f7Commands[$f7First('for q in ')] ?? '', $qa) !== false, "roteiro do F7: ensaio roda o {$qa}");
+}
+// Medicao: script do branch remoto (0b) e do commit gravado (5), sempre com cat-file antes.
+$measureLines = array_keys(array_filter($f7Commands, static fn (string $line): bool => strpos($line, 'bash <(sudo git show') !== false && strpos($line, 'medir-polling.sh') !== false));
+assert_same(4, count($measureLines), 'roteiro do F7: status.php e dashboard.php medidos na referencia e na base');
+foreach ($measureLines as $i) {
+    assert_same(1, preg_match('/git cat-file -e (origin\/<BRANCH>:|"\$F7:)scripts\/medir-polling\.sh"? && (URL=http:\/\/127\.0\.0\.1\/api\/portal\/dashboard\.php )?bash <\(sudo git show (origin\/<BRANCH>:|"\$F7:)scripts\/medir-polling\.sh"?\)/', $f7Commands[$i]), 'roteiro do F7: medicao com cat-file e bash <(git show): ' . substr($f7Commands[$i], 0, 60));
+}
+assert_same(2, count(array_filter($measureLines, static fn (int $i): bool => $i < $recordLine)), 'roteiro do F7: referencia antes do deploy, do branch remoto');
+assert_same(2, count(array_filter($measureLines, static fn (int $i): bool => $i > $archiveLine && $i < $mergeLine)), 'roteiro do F7: base do criterio do commit gravado, logo antes do merge');
+// Q-F7 e rotulo antes do merge; desligamento rapido com o interruptor e a recarga.
+assert_same(true, $f7First('AS rotulo_que_o_php_nao_reconhece') >= 0 && $f7First('fora_mapa_escala = 1) AS fora_do_mapa') > $archiveLine && $f7First('fora_mapa_escala = 1) AS fora_do_mapa') < $mergeLine, 'roteiro do F7: Q-F7 completa e rotulo de equipe antes do merge');
+assert_same(true, $f7First("sudo sed -i 's/^STATUS_PRESENCE_ENABLED=.*/STATUS_PRESENCE_ENABLED=0/' /var/www/.env") > $mergeLine && strpos($f7Commands[$f7First('STATUS_PRESENCE_ENABLED=0')] ?? '', "echo 'STATUS_PRESENCE_ENABLED=0' | sudo tee -a /var/www/.env") !== false, 'roteiro do F7: desligamento rapido no /var/www/.env (troca ou acrescenta)');
+assert_same(true, $f7First("sudo grep -rn 'STATUS_PRESENCE_ENABLED' /etc/php/*/fpm/") >= 0 && $f7First('scripts/preflight-deploy.sh /var/www/.env | grep STATUS_PRESENCE_ENABLED') > $f7First('STATUS_PRESENCE_ENABLED=0') && $f7First('sudo systemctl reload "php$(php -r') !== -1, 'roteiro do F7: confere o pool do PHP-FPM, o preflight e recarrega');
+assert_same(true, strpos($f7Runbook, 'STATUS_PRESENCE_ENABLED: OK') !== false && strpos($f7Runbook, 'so a recarga do PHP-FPM aplica') !== false, 'roteiro do F7: o desligamento explica o preflight e a recarga');
+assert_same(true, strpos($f7Runbook, 'Referencia: PENDENTE') !== false, 'roteiro do F7: referencia do dashboard.php marcada como pendente');
+// So contagens: nenhum nome, login ou autor; senha sempre lida sem eco e apagada (F6 e F7).
+assert_same(0, preg_match('/\b(f\.nome|nome AS|SELECT nome|ad_login|registered_by|employee_name)\b/', $f7Text), 'roteiro do F7: nenhuma consulta devolve nome, login ou autor');
+foreach (['### Deploy que traz o F6 (Parte B', '### Deploy que traz o F7 (Parte B'] as $heading) {
+    $passwordLines = array_values(array_filter($commandsOf($runbookOf($heading)), static fn (string $line): bool => strpos($line, 'MYSQL_PWD="$P"') !== false));
+    assert_same(true, count($passwordLines) >= 3, "{$heading}: consultas ao MySQL presentes");
+    foreach ($passwordLines as $line) {
+        assert_same(true, strpos($line, "read -rsp 'Senha root do MySQL: ' P;") !== false && preg_match('/; unset P(;|$)/', rtrim($line)) === 1 && preg_match('/\s-p\S/', $line) === 0, "{$heading}: senha lida sem eco e apagada na mesma linha: " . substr($line, 0, 60));
+    }
+}
+
 echo "QA operational view OK ({$checks} verificacoes)\n";

@@ -921,7 +921,9 @@ foreach (['approved', 'active', 'completed'] as $otherStatus) {
 // ----------------------------------------------------------------------------
 $deployDoc = str_replace("\r\n", "\n", (string)file_get_contents($root . '/DEPLOY_LINUX.md'));
 $f5Start = strpos($deployDoc, "### Deploy que traz o F5 (Parte B");
-$f5End = $f5Start === false ? false : strpos($deployDoc, "\n## ", $f5Start);
+// So a secao do F5: termina no proximo titulo ("### " do F6 em diante, ou "## ").
+$f5Ends = $f5Start === false ? [] : array_filter([strpos($deployDoc, "\n### ", $f5Start + 1), strpos($deployDoc, "\n## ", $f5Start)], static fn ($pos): bool => $pos !== false);
+$f5End = $f5Ends === [] ? false : min($f5Ends);
 assert_same(true, $f5Start !== false && $f5End !== false, 'roteiro do F5: secao presente, antes da secao seguinte');
 $runbook = substr($deployDoc, (int)$f5Start, (int)$f5End - (int)$f5Start);
 preg_match_all('/```bash\n(.*?)```/s', $runbook, $blocks);

@@ -1047,6 +1047,14 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   antes, Q-F6 logo antes do `git merge` do commit conferido (sem `pull`),
   build, recarga e verificacao so com contagens. Entra no roteiro consolidado
   da Parte B (deploy unico depois do F9).
+- Deploy que traz o F7 (Parte B, Visao Operacional no motor): so codigo, sem
+  migration. Siga o roteiro "Deploy que traz o F7", abaixo: aviso a gestao
+  (junto com o do F6), referencia do `dashboard.php`, ensaio do commit gravado
+  com `git archive`, Q-F7 e rotulo de equipe, base do criterio, `git merge`
+  do commit conferido (sem `pull`), build, recarga, verificacao so com
+  contagens e medicao depois. Desligamento rapido: `STATUS_PRESENCE_ENABLED=0`
+  no `/var/www/.env` e recarga do PHP-FPM. Entra no roteiro consolidado da
+  Parte B (deploy unico depois do F9).
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -2174,6 +2182,349 @@ qualquer rollback do F6 so com aprovacao previa do responsavel; prefira
 corrigir para frente. No roteiro consolidado, o rollback do codigo e o do
 consolidado (volta toda a Parte B ao `pre-deploy-commit`); o F6 nao acrescenta
 passo de banco a ele.
+
+### Deploy que traz o F7 (Parte B, Visao Operacional no motor)
+
+Roteiro completo, na ordem. O F7 traz a Visao Operacional pelo motor de
+presenca: o `portal/dashboard.php` passa a mandar `presence_summary` (por
+equipe, com relogio: disponiveis, em pausa, almoco, ausentes, fora do
+expediente e sem escala), `presence_meta` e `server_now`, e "CIs disponiveis"
+passa a vir do servidor; o `portal/technicians.php` passa a mandar a situacao
+de agora de cada tecnico (`presence`); a tela Tecnicos ganha a coluna
+"Situacao agora" e os cartoes de Pausas seguem a mesma situacao. Junto, tres
+controles de exposicao de dado (LGPD, `docs/DOCUMENTACAO_TECNICA.md`, 5.3):
+`role` no `technicians.php` so para admin e Lideranca (DV9); motivo de pausa
+fora da lista como "Pausa" para quem nao e gestao nem o proprio (DV10); e a
+`observacao_reuniao` no `status.php` e no `dashboard.php` so para a gestao e o
+proprio (DV11). **So codigo: sem migration**, sem variavel nova no `.env` (o
+`STATUS_PRESENCE_ENABLED`, do F2, passa a desligar tambem o painel e a tela
+Tecnicos; nos `.env` de exemplo e no preflight so mudou o texto), sem mudanca
+em `.htaccess`, vhost ou dependencia do frontend (o `package.json` so ganhou o
+script `qa:operational-view`; o `package-lock.json` nao mudou). Contrato:
+`docs/API_CONTRACTS_FRONTEND.md`, linhas `status.php`, `portal/dashboard.php`
+e `portal/technicians.php`. Desenho: `docs/DESENHO_PA_ESCALA_AUSENCIA.md`,
+secao 9.9. **A Parte B entra num deploy unico depois do F9:** este roteiro
+vira a parte do F7 do roteiro consolidado (pendencia 16); o que muda na
+consolidacao esta no fim, em "No roteiro consolidado".
+
+Todas as consultas deste roteiro devolvem **so contagens**, nunca nome, login
+nem texto. Onde aparece `<BRANCH>`, use o branch do deploy; onde aparece
+`<ServerName do vhost>`, o `ServerName` do VirtualHost do portal. A senha do
+root do MySQL e sempre lida sem eco (`read -rsp`) e apagada no fim do comando
+(`unset P`); nunca a escreva no comando nem neste documento. O valor do
+cookie da medicao (passos 0b, 5 e 8) vale como senha: nunca em chat,
+chamado ou documento.
+
+**Pre-requisitos.** Deploys 1 a 12 no ar e o F2, o F4, o F5 e o F6 aplicados
+(no roteiro consolidado, as partes deles vem antes desta), inclusive o passo
+da D5 do F4. O codigo do F7 le as colunas da 011 (`fora_mapa_escala`), da 012
+(ausencias do F3) e da 014 (`arquivado_em`); **nao le a 019** (o painel nao
+segue a data de corte, DV3). Conferencia (esperado `migrations_011_014 = 3` e
+`migration_012 = 3`):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME IN ('fora_mapa_escala', 'arquivado_em', 'arquivado_por')) AS migrations_011_014, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_absences' AND COLUMN_NAME IN ('category', 'period_type', 'cancelled_by')) AS migration_012;"; unset P
+```
+
+**0. Antes do dia do deploy.**
+
+0a. **Aviso a gestao, junto com o do F6** (risco 1 do F7 e P13 do F6). Os
+   numeros vem da Q-F6 (`pas_compartilhados_hoje`) e da Q-F7
+   (`n1_n2_sem_regra_hoje`) mais recentes; em 2026-10-15 e 2026-10-26, **6** e
+   **6**. Texto pronto para o Teams, a Lideranca e aos gestores (troque
+   DD/MM e os numeros, se mudarem):
+
+> Pessoal, a partir de DD/MM o ChronoDesk passa a usar a escala cadastrada de
+> cada tecnico no Mapa PA e na Visao Operacional. No Mapa PA, o PA em que duas
+> ou mais pessoas estao presenciais no mesmo dia passa a aparecer com contorno
+> vermelho e os dias do conflito; pelos numeros de hoje, ate 6 PAs podem
+> aparecer assim ja no primeiro dia. E um aviso, nao um bloqueio: a alocacao
+> continua podendo ser salva, e o conflito aceito fica registrado. Na Visao
+> Operacional, "CIs disponiveis" passa a contar pela escala do dia: conta quem
+> esta escalado, dentro do expediente e sem pausa, almoco ou ausencia lancada.
+> Almoco e fora do expediente nao contam como disponiveis. Os 6 tecnicos que
+> ainda nao tem regra de escala aparecem como "Sem escala" e deixam de contar
+> ate a regra ser cadastrada na tela Escala presencial; por isso o numero pode
+> ficar menor que o de hoje, sem que isso seja falha. A Lideranca aparece numa
+> linha a parte, fora dos totais. Tecnicos e perfis de leitura deixam de ver
+> as observacoes de reuniao dos colegas e, no Mapa PA, os logins e as
+> observacoes dos vinculos; a gestao continua vendo. Duvidas, falem comigo.
+
+0b. **Referencia do `dashboard.php` (DV15), com o codigo atual no ar.** O
+   `scripts/medir-polling.sh` ainda nao existe no diretorio da aplicacao no
+   servidor: ele e lido do branch remoto depois do `git fetch`, sem gravar
+   arquivo e sem implantar nada (a medicao nao depende do codigo do F7). O
+   script le o cookie de `/dev/tty`, entao funciona por `<(...)`. Condicoes da
+   base do F2 (secao "Medicao do Polling"): conta do responsavel, sem
+   `CONSULTAS`, `N=200`, aquecimento 5, horario de uso normal, aba do
+   ChronoDesk fechada; **a mesma conta** em todas as medicoes do F7 (a gestao
+   consulta as aprovacoes pendentes no `dashboard.php`: o perfil muda o
+   trabalho). Anote p50 e p95 de cada endpoint, duas ou tres rodadas:
+
+```bash
+cd /var/www/chronodesk; sudo git fetch origin && sudo git cat-file -e origin/<BRANCH>:scripts/medir-polling.sh && bash <(sudo git show origin/<BRANCH>:scripts/medir-polling.sh)
+sudo git cat-file -e origin/<BRANCH>:scripts/medir-polling.sh && URL=http://127.0.0.1/api/portal/dashboard.php bash <(sudo git show origin/<BRANCH>:scripts/medir-polling.sh)
+```
+
+   A 1a linha mede o `status.php` (padrao do script); a 2a, o
+   `dashboard.php`. Alternativa, se `<(...)` nao funcionar no shell do
+   servidor: copiar o arquivo para um diretorio temporario, conferir com
+   `sha256sum` contra `sudo git show origin/<BRANCH>:scripts/medir-polling.sh |
+   sha256sum` e rodar `bash` nessa copia. **Referencia: PENDENTE** (o
+   responsavel mede no servidor e registra na secao 9.9 do desenho).
+
+0c. **Q-F7 e rotulo de equipe, antecipados** (so contagens; num dia util, em
+   horario de expediente). Antes das migrations da Parte B (sem a 011), use a
+   variante da Q-F7, sem `fora_do_mapa`:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) = 'n1') AS ativos_n1, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) = 'n2') AS ativos_n2, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) IN ('lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe')) AS ativos_lideranca, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe')) AS ativos_outras_equipes, (SELECT COUNT(*) FROM funcionarios f WHERE f.ativo = 1 AND LOWER(TRIM(f.equipe)) IN ('n1', 'n2') AND NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= CURDATE() AND (r.effective_until IS NULL OR r.effective_until >= CURDATE()))) AS n1_n2_sem_regra_hoje, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND jornada_entrada >= jornada_saida) AS jornada_invertida, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND NOT (jornada_entrada <= almoco_inicio AND almoco_inicio < almoco_fim AND almoco_fim <= jornada_saida)) AS almoco_fora_da_jornada, (SELECT COUNT(*) FROM portal_absences WHERE status = 'approved' AND starts_on <= CURDATE() AND ends_on >= CURDATE()) AS ausencias_aprovadas_hoje, (SELECT COUNT(*) FROM portal_schedule_exceptions WHERE exception_date = CURDATE() AND exception_type IN ('day_off', 'absence', 'vacation', 'leave')) AS excecoes_de_ausencia_hoje;"; unset P
+```
+
+   E a contagem dos rotulos de equipe que o PHP nao reconhece (fica fora do
+   motor, do painel, dos contadores e do Mapa PA; I7):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT COUNT(*) AS rotulo_que_o_php_nao_reconhece FROM funcionarios WHERE ativo = 1 AND (CAST(LOWER(TRIM(equipe)) AS BINARY) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe') OR LOCATE(CAST('Ç' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0 OR LOCATE(CAST('Ã' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0);"; unset P
+```
+
+   As regras de leitura sao as do passo 4.
+
+**Janela.** Sem 503 e sem alteracao de dado: o F7 nao muda o esquema nem grava
+linha. A partir do `git merge` (passo 6), o `status.php`, o `dashboard.php` e
+o `technicians.php` passam a responder no formato novo (aditivo; a DV9 a DV11
+valem desde ja). Entre o `git merge` e o build (passo 7), o navegador ainda
+carrega as telas anteriores: a Visao Operacional continua contando no
+navegador pelo calculo antigo, a tela Tecnicos mostra a coluna Status antiga e,
+nas pausas de reuniao dos colegas, o tecnico ve "Sem observacao informada" (a
+chave nao vem mais; nada vaza). Prefira horario de pouco uso.
+
+1. **Ponto de rollback, pre-checagem e commit conferido**: itens 1 e 2 de
+   "Atualizacao de Versao e Rollback" (anota `pre-deploy-commit`,
+   `git status` vazio, `git fetch` e preflight da versao nova com
+   `RESULTADO=0`; o preflight mostra `STATUS_PRESENCE_ENABLED: OK (ligado)`).
+   Em seguida, confira o branch e grave o commit que passou pelo preflight:
+   os passos 3 a 6 usam exatamente esse commit, sem novo `fetch` no meio (o
+   `merge` le o `f7-commit`, nao `origin/<BRANCH>`).
+
+```bash
+cd /var/www/chronodesk; B=$(sudo git rev-parse --abbrev-ref HEAD); if [ "$B" = "<BRANCH>" ]; then echo "branch OK: $B"; sudo git rev-parse origin/<BRANCH> | sudo tee /var/backups/chronodesk/f7-commit; else echo "PARE: o clone esta em $B, nao em <BRANCH>"; fi
+```
+
+2. **Backup**: item 3 da mesma secao. Esperado `backup concluido`; anote o
+   diretorio (o F7 nao altera o banco, mas o backup e o padrao de todo
+   deploy).
+
+3. **Ensaio do commit gravado, fora da aplicacao no ar.** O `git cat-file -e`
+   confere que o `f7-commit` existe e traz os arquivos que os passos seguintes
+   usam; o `git archive` extrai esse commit num diretorio temporario, com
+   `pipefail` (sem ele, um `git archive` com falha passaria em silencio pelo
+   `tar`); os QAs do F7 rodam ali com o PHP do servidor, como `www-data`, sem
+   banco, sem rede e sem tocar em `/var/www/chronodesk`.
+
+```bash
+cd /var/www/chronodesk; F7=$(sudo cat /var/backups/chronodesk/f7-commit); sudo git cat-file -e "$F7^{commit}" && sudo git cat-file -e "$F7:scripts/qa-operational-view.php" && sudo git cat-file -e "$F7:scripts/medir-polling.sh" && echo "f7-commit OK" || echo "PARE: f7-commit ausente ou incompleto"
+E=$(sudo mktemp -d /tmp/ensaio-f7.XXXXXX); export F7 E; bash -o pipefail -c 'sudo git archive "$F7" | sudo tar -x -C "$E"' && sudo chown -R www-data: "$E" && echo "extraido em $E" || echo "PARE: falha ao extrair o f7-commit"
+sudo find "$E" -name '*.php' -not -path '*/node_modules/*' -exec sudo -u www-data php -l {} \; | grep -v '^No syntax errors' ; echo "fim do php -l"
+for q in qa-presence-engine qa-operational-view qa-pa-conflicts qa-archive qa-security; do printf '%s: ' "$q"; sudo -u www-data php "$E/scripts/$q.php" >/dev/null 2>&1 && echo OK || echo FALHOU; done
+case "$E" in /tmp/ensaio-f7.*) sudo rm -r "$E" && echo "ensaio removido";; *) echo "PARE: $E fora do padrao, nada apagado";; esac; unset E F7
+```
+
+   Esperado: `f7-commit OK`, `extraido em /tmp/ensaio-f7.<sufixo>`, nenhuma
+   linha entre o `php -l` e `fim do php -l`, os cinco QAs com `OK` e
+   `ensaio removido`. Qualquer `PARE` ou `FALHOU`: **pare** (nada foi
+   alterado no ar) e envie ao responsavel so o nome do QA e a ultima linha
+   da saida dele (`sudo -u www-data php "$E/scripts/<qa>.php" | tail -n 1`,
+   antes de remover o ensaio). O `qa-security` precisa do `php-ldap`
+   (`php -m | grep -x ldap`), que o checklist de validacao ja exige.
+
+4. **Q-F7 completa e rotulo de equipe, imediatamente antes do `git merge`**
+   (so contagens). Com a 011 aplicada (pre-requisito), rode a **versao
+   completa**:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) = 'n1') AS ativos_n1, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) = 'n2') AS ativos_n2, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) IN ('lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe')) AS ativos_lideranca, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe')) AS ativos_outras_equipes, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 1) AS fora_do_mapa, (SELECT COUNT(*) FROM funcionarios f WHERE f.ativo = 1 AND f.fora_mapa_escala = 0 AND LOWER(TRIM(f.equipe)) IN ('n1', 'n2') AND NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= CURDATE() AND (r.effective_until IS NULL OR r.effective_until >= CURDATE()))) AS n1_n2_sem_regra_hoje, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND jornada_entrada >= jornada_saida) AS jornada_invertida, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND NOT (jornada_entrada <= almoco_inicio AND almoco_inicio < almoco_fim AND almoco_fim <= jornada_saida)) AS almoco_fora_da_jornada, (SELECT COUNT(*) FROM portal_absences WHERE status = 'approved' AND starts_on <= CURDATE() AND ends_on >= CURDATE()) AS ausencias_aprovadas_hoje, (SELECT COUNT(*) FROM portal_schedule_exceptions WHERE exception_date = CURDATE() AND exception_type IN ('day_off', 'absence', 'vacation', 'leave')) AS excecoes_de_ausencia_hoje;"; unset P
+```
+
+   E a contagem dos rotulos de equipe (a mesma do passo 0c):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT COUNT(*) AS rotulo_que_o_php_nao_reconhece FROM funcionarios WHERE ativo = 1 AND (CAST(LOWER(TRIM(equipe)) AS BINARY) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe') OR LOCATE(CAST('Ç' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0 OR LOCATE(CAST('Ã' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0);"; unset P
+```
+
+   Referencia (servidor, 2026-10-26, variante): `ativos_n1 = 13`,
+   `ativos_n2 = 9`, `ativos_lideranca = 3`, `ativos_outras_equipes = 0`,
+   `n1_n2_sem_regra_hoje = 6`, `jornada_invertida = 0`,
+   `almoco_fora_da_jornada = 0`, `ausencias_aprovadas_hoje = 0`,
+   `excecoes_de_ausencia_hoje = 0`; rotulo: contagem local 0 (2026-10-27),
+   **a do servidor pendente** (pendencia 16). O que cada numero decide:
+
+   - **`ativos_outras_equipes`, `jornada_invertida`, `almoco_fora_da_jornada`
+     e `rotulo_que_o_php_nao_reconhece`: esperado `0`.** Maior que `0`:
+     **pare e avise o responsavel** (nada foi alterado). O primeiro e
+     cadastro que some do painel (equipe fora de N1, N2 e Lideranca, o caso
+     do Critico, F9); o segundo, tecnico sempre "Fora do expediente"; o
+     terceiro, almoco que nunca aparece ou aparece fora do expediente; o
+     quarto, rotulo que o MySQL aceita e o PHP nao (corrigir o cadastro pela
+     tela de Funcionarios, dado e nao codigo).
+   - `n1_n2_sem_regra_hoje`: quantos deixam de contar como "CIs disponiveis"
+     no primeiro dia. **Maior que o numero do aviso a gestao**: atualize o
+     aviso antes de seguir (nao bloqueia). Pela 16c, o ideal e cadastrar a
+     regra de todos antes do deploy.
+   - `fora_do_mapa`: sai de todas as contagens (0.6). Anote.
+   - `ativos_n1`, `ativos_n2`, `ativos_lideranca`, `ausencias_aprovadas_hoje`
+     e `excecoes_de_ausencia_hoje`: dimensionam a tabela. Anote; o passo 8
+     compara com o painel.
+   - Erro 1054 em `fora_mapa_escala`: a 011 nao esta aplicada, pre-requisito
+     falhou: **pare**.
+
+5. **Base do criterio, logo antes do `git merge`.** Repita a medicao do passo
+   0b nas mesmas condicoes (mesma conta, mesmo tipo de login, `N=200`, aba
+   fechada), com o script do commit gravado. Anote p50 e p95 do `status.php`
+   e do `dashboard.php`: e a base contra a qual o passo 8 compara (decisao de
+   2026-10-06, secao 9.2 do desenho).
+
+```bash
+cd /var/www/chronodesk; F7=$(sudo cat /var/backups/chronodesk/f7-commit); sudo git cat-file -e "$F7:scripts/medir-polling.sh" && bash <(sudo git show "$F7:scripts/medir-polling.sh")
+sudo git cat-file -e "$F7:scripts/medir-polling.sh" && URL=http://127.0.0.1/api/portal/dashboard.php bash <(sudo git show "$F7:scripts/medir-polling.sh"); unset F7
+```
+
+6. **`git merge` do commit conferido** (sem `fetch` e sem `pull`), conferencia
+   do `HEAD` e do que mudou em pontos sensiveis:
+
+```bash
+cd /var/www/chronodesk; F7=$(sudo cat /var/backups/chronodesk/f7-commit); sudo git merge --ff-only "$F7" && [ "$(sudo git rev-parse HEAD)" = "$F7" ] && echo "HEAD = f7-commit" || echo "PARE: merge falhou ou HEAD diferente do f7-commit"
+sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
+```
+
+   Esperado: `HEAD = f7-commit` e o `diff --stat` **vazio** (o F7 nao traz
+   migration nem muda backup ou `.htaccess`). No roteiro consolidado, o
+   `diff --stat` lista so os arquivos das migrations dos outros lotes.
+
+7. **Build do frontend e recarga do PHP-FPM** (limpa o OPcache; `reload` e
+   gracioso). O F7 nao muda vhost nem `.htaccess`: a recarga do Apache nao e
+   necessaria.
+
+```bash
+cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+8. **Verificacao pos-deploy, so com contagens.**
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: <ServerName do vhost>' http://127.0.0.1/api/health.php
+```
+
+   Esperado: health `200`. Repita a Q-F7 e a contagem de rotulo do passo 4:
+   **os mesmos numeros** (o deploy nao altera linha; diferenca so se alguem
+   cadastrou, arquivou ou lancou ausencia na janela). Em seguida, a checagem
+   HTTP de `scripts/test-linux.sh` (item 6 de "Atualizacao de Versao").
+
+   **Medicao depois do deploy**, nas condicoes do passo 5, agora com o script
+   do proprio clone (`bash scripts/medir-polling.sh` e
+   `URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh`).
+   **Criterio (o do F2, para os dois endpoints):** ha piora quando o p95 sobe
+   **mais de 50 ms e mais de 20%** sobre a base do passo 5, as duas
+   condicoes ao mesmo tempo. O `status.php` nao ganhou consulta (DV1); a DV11
+   so filtra em memoria e o `status.php` passou a carregar o `_bootstrap.php`
+   do portal (J2): o efeito, se houver, aparece aqui. Com piora no
+   `dashboard.php` ou no `status.php`: desligamento rapido (abaixo), medir de
+   novo e trazer os numeros. Anote p50 e p95 na secao 9.9 do desenho.
+
+   Pelo navegador, sem gravar e sem anotar nomes:
+   - Como gestor, Visao Operacional: secao "Situacao da equipe agora" com
+     N1, N2, Total e, a parte, "Lideranca, fora dos totais"; em cada linha,
+     `escalados = disponiveis + em pausa + almoco + ausentes + fora do
+     expediente`; Total = N1 + N2; "CIs disponiveis" igual ao Disponiveis do
+     Total. No DevTools, `portal/dashboard.php` com `presence_meta.disponivel`
+     e `pausas_disponiveis` `true` e `escalados + sem_escala` de N1 e N2 igual
+     a `ativos_n1 + ativos_n2 - fora_do_mapa` da Q-F7 num dia util (salvo
+     equipe fora do Mapa por outro motivo). Anote **so os numeros** do Total.
+     Anote o tempo de resposta do `dashboard.php` no DevTools.
+   - Como gestor, tela Tecnicos: coluna "Situacao agora as HH:MM" com selo,
+     icone e rotulo; no DevTools, `portal/technicians.php` sem `role`
+     (gestor nao tem `funcionarios.manage`); como admin ou Lideranca, com
+     `role`.
+   - Como tecnico (a propria conta, nunca a de um colega): Visao Operacional
+     sem a caixa de observacao nas reunioes dos colegas; no DevTools,
+     `status.php` e `dashboard.php` sem a chave `observacao_reuniao` nos itens
+     dos colegas; `technicians.php` sem `role` e sem `categoria` das
+     ausencias dos colegas; tela Pausas sem "Disponivel" para quem esta
+     ausente ou no almoco.
+   - Em 1280 px ou mais, a tabela da Visao Operacional sem rolagem dentro do
+     cartao; em 390 px, a tabela rola dentro do cartao e a pagina nao.
+
+**Desligamento rapido (`STATUS_PRESENCE_ENABLED`).** Para piora de desempenho
+ou falha no calculo, sem voltar o codigo. A variavel fica no `.env` em uso,
+`/var/www/.env` (o mesmo que o preflight le). Ela so vale se o pool do
+PHP-FPM nao a definir: variavel exportada no pool (`env[...]` no `www.conf`)
+vence o `.env`. O PHP-FPM guarda o valor no processo (o `config.php` so grava
+o que o ambiente ainda nao tem), entao **so a recarga do PHP-FPM aplica** a
+mudanca.
+
+```bash
+sudo grep -rn 'STATUS_PRESENCE_ENABLED' /etc/php/*/fpm/ ; echo "fim (esperado: nada acima)"
+if sudo grep -q '^STATUS_PRESENCE_ENABLED=' /var/www/.env; then sudo sed -i 's/^STATUS_PRESENCE_ENABLED=.*/STATUS_PRESENCE_ENABLED=0/' /var/www/.env; else echo 'STATUS_PRESENCE_ENABLED=0' | sudo tee -a /var/www/.env >/dev/null; fi
+cd /var/www/chronodesk && sudo sh scripts/preflight-deploy.sh /var/www/.env | grep STATUS_PRESENCE_ENABLED
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+   Esperado: nada no `grep` do pool e `STATUS_PRESENCE_ENABLED: OK
+   (desligado)` no preflight (que nunca mostra valores). Efeito: o
+   `status.php` deixa de calcular a `presenca` (as 4 consultas saem do
+   polling) e os cartoes de Pausas voltam ao calculo antigo; o
+   `dashboard.php` responde sem o resumo e a Visao Operacional mostra "—" e
+   o aviso "Situacao da equipe indisponivel" (nunca o numero antigo, DV5); a
+   tela Tecnicos mostra "—" com aviso. **A DV9, a DV10 e a DV11 continuam
+   valendo** (nao dependem do interruptor). Para religar: o mesmo comando com
+   `STATUS_PRESENCE_ENABLED=1`, preflight com `OK (ligado)` e a recarga.
+
+**Se a verificacao falhar:**
+
+- **Ensaio (passo 3) ou Q-F7 (passo 4) fora do esperado:** nada foi alterado
+  e o codigo anterior continua no ar; envie as contagens (ou o nome do QA).
+- **O `git merge` falhou ou o `HEAD` difere do `f7-commit`** (alteracao local
+  na arvore, ou o branch local divergiu e o `--ff-only` recusa): o codigo
+  anterior continua no ar. Resolva a causa (item 1 de "Atualizacao de
+  Versao"), **sem `fetch` e sem `pull`**, e repita so a 1a linha do passo 6.
+  Se o `HEAD` mudou para outro commit, pare: o codigo no ar nao e o
+  conferido; rollback do codigo (abaixo) e avise o responsavel.
+- **Piora na medicao, ou "—" com aviso na Visao Operacional** (falha no
+  calculo; o log do PHP traz `[PRESENCE]` so com a classe do erro):
+  desligamento rapido (acima) e avise o responsavel com os numeros e a
+  classe do erro. Nao e rollback.
+- **Erro 500 ou 503 nas telas, health diferente de `200`, ou falha no
+  build:** rollback do codigo (abaixo).
+- **Numeros do Total diferentes do esperado pela Q-F7:** nao reverta; anote
+  as contagens e avise o responsavel (o motor e o mesmo do F2, validado; a
+  diferenca costuma ser regra de ciclo invalida ou excecao de trabalho, 9.9).
+- Restaurar o backup do passo 2 nao e necessario: o F7 nao altera o banco.
+
+**Rollback do F7 (so codigo, sem passo de banco):** `git checkout --detach` do
+`pre-deploy-commit`, build e recarga ("Rollback", acima). Nao ha migration a
+desfazer nem dado a corrigir. O que volta com o codigo anterior: (1) a Visao
+Operacional conta no navegador pelo calculo antigo (jornada e almoco, sem
+escala nem ausencia lancada) e a tela Tecnicos volta a coluna Status; (2)
+**a DV9, a DV10 e a DV11 caem: o `technicians.php` volta a enviar o perfil de
+acesso de cada tecnico a qualquer perfil, e o `status.php` e o
+`dashboard.php` voltam a enviar a observacao de reuniao de todos a qualquer
+perfil** (LGPD, `docs/DOCUMENTACAO_TECNICA.md`, 5.3). Por isso, como no F3 e
+no F6, qualquer rollback do F7 so com aprovacao previa do responsavel; para
+desempenho ou falha no calculo, use o desligamento rapido; prefira corrigir
+para frente.
+
+**No roteiro consolidado (pendencia 16, deploy unico depois do F9):** o aviso
+a gestao e um so (o do passo 0a, com os numeros do dia); a referencia do
+`dashboard.php` (0b) continua antes de tudo; o commit gravado e um so para
+todos os lotes (`partes-b-commit`, no lugar de `f6-commit` e `f7-commit`), e
+o ensaio do passo 3 roda nele, junto com os QAs dos outros lotes; a Q-F7
+completa e a contagem de rotulo rodam **depois das migrations** e do passo da
+D5 do F4 (a 011 vem no mesmo deploy); a base do criterio (passo 5) e medida
+uma vez, logo antes do `git merge` unico; build e recarga uma vez; a
+verificacao do F7 vem depois da do F6. O rollback e o do consolidado (volta
+toda a Parte B ao `pre-deploy-commit`); o F7 nao acrescenta passo de banco a
+ele, e o desligamento rapido continua valendo sem rollback.
 
 ## HTTPS Interno
 
