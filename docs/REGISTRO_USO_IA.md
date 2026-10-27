@@ -820,6 +820,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | A largura e medida no print (navegador), nao no QA, que renderiza HTML sem layout. Servidor simulado e dados ficticios. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Pendente: entra na revisao do commit 4 (zip `_revisao_f7c4.zip`). |
 
+### Parte B, F7 — commit 4 (contratos e documentacao) — 2026-10-27
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Fechar o F7 na documentacao: contratos do `status.php` (DV11), `dashboard.php` e `technicians.php`; roteiro "Deploy que traz o F7" no padrao dos anteriores, ja pensando no roteiro unico depois do F9; LGPD 5.3 (DV9 a DV11); procedimento de medicao do `dashboard.php` e do `status.php`; aviso a gestao. |
+| **Branch e commits** | `dcae273` (aprovacao do commit 3 e ajustes), `f951e26` (commit 4) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `docs/API_CONTRACTS_FRONTEND.md`, `DEPLOY_LINUX.md`, `docs/DOCUMENTACAO_TECNICA.md` (5.3), `scripts/qa-operational-view.php` (travas do roteiro) e `scripts/qa-presence-cutoff.php` (recorte do roteiro do F5 limitado a propria secao); desenho 9.9. |
+| **Decisoes de implementacao** | Seis, a aprovar (desenho 9.9, L1 a L6): ensaio de codigo pelo `git archive` com os QAs do F7 no PHP do servidor; medicao com `cat-file` antes de cada `bash <(git show)`, um `fetch` so; desligamento rapido com `=0` que troca ou acrescenta, conferindo o pool e o preflight; aviso unico F6 e F7; travas do roteiro no QA; recorte do F5 corrigido. |
+| **Validacao executada pela IA** | `qa-operational-view` (293, 37 novas) e `qa-presence-cutoff` (597; as 5 a menos eram linhas do F6 que o recorte antigo pegava, agora checadas no `qa-operational-view`); `php -l` e os 14 QAs PHP. Mutacao **14/14** no roteiro. Consultas copiadas do desenho pelo script que montou o roteiro. |
+| **Limitacoes declaradas** | Roteiro nao executado num servidor Linux; conferido pela estrutura. Referencia do `dashboard.php` e contagem de rotulo do servidor pendentes (responsavel). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do commit 4 (zip `_revisao_f7c4.zip`) e a medicao de referencia no servidor. |
+
 ---
 
 ## 5. Responsabilidade

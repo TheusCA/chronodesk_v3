@@ -2451,7 +2451,7 @@ O que cada número decide: `ativos_n1`, `ativos_n2` e `ativos_lideranca` dimensi
 
 Leitura do servidor: **nenhum número pede tratamento antes do código** (as três colunas com regra de parada em 0). N1 + N2 = 22 ativos e 6 sem regra, os mesmos da contagem da 16c (2026-10-14). Os 6 entram no aviso à gestão (risco 1). Como é a variante, os 6 podem incluir alguém que venha a ser marcado fora do Mapa; a Q-F7 completa roda no deploy, depois das migrations. Coluna Ausentes pequena no dia medido (0 aprovadas e 0 exceções).
 
-**Referência do `dashboard.php`: pendente**, entra no commit 4. O `medir-polling.sh` não está no diretório da aplicação no servidor (código da Parte B não implantado); o responsável mede pelo `git show` do branch remoto ou com cópia manual (complemento acima), nas condições da base do F2 (`N=200`, mesma conta).
+**Referência do `dashboard.php`: pendente** (procedimento no passo 0b do roteiro "Deploy que traz o F7", commit 4; valores na tabela "Medições do F7", no fim desta seção). O `medir-polling.sh` não está no diretório da aplicação no servidor (código da Parte B não implantado); o responsável mede pelo `git show` do branch remoto ou com cópia manual (complemento acima), nas condições da base do F2 (`N=200`, mesma conta).
 
 **Achado da Q-F7 (rótulo de equipe); contagem local 0 em 2026-10-27, I7 aprovada.** A Q-F7 compara a equipe pela colação do MySQL (`LOWER` Unicode e, na colação padrão do 8.0, sem acento); o motor usa `validate_funcionario_equipe` (`security.php:132`): `strtolower` só de ASCII e comparação byte a byte. Um rótulo que o MySQL aceita e o PHP não (mal codificado, ou com maiúscula acentuada, como `LIDERANÇA`) fica **fora do motor**: some do painel, dos contadores, do Mapa PA e do `presence.php`, e a Q-F7 o conta como Liderança (o `qa-operational-view` fixa esse comportamento atual). O cadastro com "ç" do MySQL local não é desse tipo: o "ç" está gravado certo (bytes UTF-8, o PHP reconhece), e o defeito era só a exibição no terminal (conferido pelo responsável em 2026-10-27; a contagem abaixo deu 0 no MySQL local). Proposta: contar no MySQL local antes do commit 3, só contagem (nunca rodou em MySQL; o `CAST(... AS BINARY)` compara bytes, como o PHP, e o `LOCATE` pega maiúscula acentuada, que o `LOWER` do MySQL converte e o PHP não):
 
@@ -2626,6 +2626,46 @@ O resto do item não muda (motivo da lista fechada, pausa, timers, `presenca`); 
 Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do print (Chrome sem janela pelo protocolo DevTools), não do `qa:operational-view`, que renderiza HTML sem layout; o QA fixa a estrutura que garante a quebra e o espaçamento (cabeçalho com `whitespace-normal` e `flex-wrap`, ícone na primeira palavra, `!px-2` nas células). Mutação **16/16** nos ajustes (na 1ª rodada, 15/16: "busca só com espaços conta como termo" sobreviveu; o teste passou a exigir que a mensagem de busca não apareça) e a suíte do commit 3 refeita, **51/51**. 18 `qa:*`, lint, typecheck e build.
 
 **Pendência nova (lote de acabamento):** 17d, Visão Operacional no celular com cartões por equipe no lugar da tabela (junto da 17 e da 17b).
+
+**Commit 4 (contratos e documentação), 2026-10-27: entregue (`f951e26`), aguardando revisão.** Arquivos: `docs/API_CONTRACTS_FRONTEND.md` (linhas `status.php` com a DV11, `portal/dashboard.php` e `portal/technicians.php` novas; quadro da Parte B), `DEPLOY_LINUX.md` (roteiro "Deploy que traz o F7" e o item na lista de deploys), `docs/DOCUMENTACAO_TECNICA.md` (5.3, DV9 a DV11), `scripts/qa-operational-view.php` (travas do roteiro) e `scripts/qa-presence-cutoff.php` (recorte do roteiro do F5).
+
+| Passo do roteiro | O que faz |
+|---|---|
+| 0a | Aviso à gestão **junto com o do F6**, em prosa para o Teams: até 6 PAs em conflito no primeiro dia (aviso, não bloqueio); "CIs disponíveis" pela escala, com os 6 sem regra como "Sem escala" até o cadastro; almoço e fora do expediente fora dos disponíveis; Liderança à parte e fora dos totais; técnicos e leitura sem a observação de reunião dos colegas nem os logins do Mapa PA |
+| 0b | Referência do `dashboard.php` e do `status.php` (p50 e p95), com o código atual no ar: `git fetch`, `git cat-file -e` e `bash <(git show origin/<BRANCH>:scripts/medir-polling.sh)`, mesma conta, `N=200`; alternativa por cópia conferida com `sha256sum`. **Valor: pendente** (responsável) |
+| 0c | Q-F7 (variante, antes das migrations) e contagem de rótulo de equipe, antecipadas |
+| 1 e 2 | Ponto de rollback, preflight (com `STATUS_PRESENCE_ENABLED: OK (ligado)`), conferência do branch e `f7-commit` gravado em `/var/backups/chronodesk` na mesma linha; backup |
+| 3 | Ensaio do commit gravado fora da aplicação no ar: `git cat-file -e` do commit e dos arquivos usados depois; `git archive` com `pipefail` para `/tmp/ensaio-f7.*`; `php -l` e cinco QAs do F7 com o PHP do servidor, como `www-data`, sem banco nem rede; remoção só do próprio diretório (`case` no prefixo) |
+| 4 | Q-F7 completa e rótulo de equipe logo antes do `merge`, com as regras de parada (`ativos_outras_equipes`, `jornada_invertida`, `almoco_fora_da_jornada` e rótulo diferentes de 0 param; sem regra acima do aviso atualiza o aviso) |
+| 5 | Base do critério do `status.php` e do `dashboard.php`, com o script do commit gravado |
+| 6 e 7 | `git merge --ff-only` do `f7-commit` (sem `fetch` nem `pull`), `HEAD` conferido, `diff --stat` vazio em migrations, backup e `.htaccess`; build e recarga do PHP-FPM |
+| 8 | Health, Q-F7 de novo (mesmos números), medição depois com o critério do F2 nos dois endpoints, conferência no navegador e no DevTools por perfil (DV9 a DV11), largura da tabela |
+| Desligamento rápido | `STATUS_PRESENCE_ENABLED=0` no `/var/www/.env` (troca ou acrescenta), conferência de `env[...]` no pool do PHP-FPM, preflight com `OK (desligado)` e recarga do PHP-FPM (necessária: o `config.php` não sobrescreve variável que o processo já tem); a DV9 a DV11 continuam |
+| Rollback | Só código, com aprovação prévia (a DV9 a DV11 caem); para desempenho ou falha no cálculo, o desligamento rápido |
+| Consolidado | O que muda no roteiro único depois do F9 (pendência 16): um aviso, um commit gravado para todos os lotes, Q-F7 depois das migrations e da D5, uma base, um build |
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| L1 | Sem migration, o ensaio do padrão vira **ensaio de código**: o `f7-commit` extraído por `git archive` roda `php -l` e os QAs do F7 (`qa-presence-engine`, `qa-operational-view`, `qa-pa-conflicts`, `qa-archive`, `qa-security`) com o PHP do servidor, antes do `merge` | Pega diferença de versão ou extensão do PHP do servidor sem tocar na aplicação no ar; os QAs não usam banco, rede nem o `.git` |
+| L2 | Medição: referência (0b) lida de `origin/<BRANCH>` depois do `fetch`; base (5) do `f7-commit` gravado; depois (8) do clone. `git cat-file -e` antes de cada `bash <(git show ...)`. O único `fetch` do roteiro é o do 0b, antes de gravar o commit | A base e o depois medem o mesmo script; o `merge` nunca pega um commit diferente do ensaiado |
+| L3 | Desligamento rápido com `=0`, trocando a linha ou acrescentando quando a chave não existe (ausente = ligado), com a conferência do pool do PHP-FPM e do preflight | O valor do pool vence o `.env`, e o `load_env` usa a primeira ocorrência; o preflight confirma sem mostrar valores |
+| L4 | Aviso à gestão único (F6 e F7), com os números de 2026-10-15 e 2026-10-26 (6 e 6) e a troca pelos do dia | O risco 1 do plano já pedia o aviso junto do F6 |
+| L5 | Travas do roteiro no `qa-operational-view.php` (37 verificações: uma linha por comando, sem `pull`, ordem gravar → `cat-file` → `archive` com `pipefail` → `merge`, um `fetch` só, remoção conferida, medição com `cat-file`, Q-F7 antes do `merge`, interruptor, referência pendente, só contagens, senha sem eco nas linhas do F6 e do F7) | Mesmo padrão das travas do roteiro do F5 |
+| L6 | O recorte do "roteiro do F5" no `qa-presence-cutoff` passou a terminar no próximo título (`###` ou `##`); antes ia até o próximo `##` e engolia o F6 e o F7 (o `fetch` do 0b do F7 o derrubava) | Intenção do teste mantida (como a J6). As 5 verificações a menos (602 → 597) eram as linhas de senha do F6, agora conferidas no `qa-operational-view` |
+
+**Validação executada pela IA:** `qa-operational-view` (293 verificações; 37 novas do roteiro) e `qa-presence-cutoff` (597); `php -l` em todos os `.php` e os 14 QAs PHP; frontend sem mudança desde `dba407d` (18 `qa:*`, lint, typecheck e build rodados lá). Mutação **14/14** no roteiro (sem `pipefail`, `pull`, `merge` de `origin`, sem `cat-file`, senha sem `unset`, remoção sem conferir o prefixo, ensaio sem o `qa-security`, medição sem `cat-file`, `fetch` extra antes do `merge`, interruptor que só troca, sem o preflight, referência preenchida, comando com continuação, consulta com nome). As consultas Q-F7 e de rótulo foram copiadas desta seção pelo script que montou o roteiro (sem redigitação).
+
+**Limitações declaradas:** o roteiro não rodou num servidor Linux (não há servidor de teste); os comandos são conferidos pela estrutura (QA e mutação), não pela execução. O `<(...)` com o cookie lido de `/dev/tty` é o do F2, já usado. Os QAs do ensaio rodaram na estação Windows, não como `www-data` num Linux. Referência do `dashboard.php` pendente (responsável). Contagem de rótulo do servidor pendente. `gitleaks` ausente na estação.
+
+**Medições do F7** (p50 e p95 em ms; mesma conta, `N=200`; preencher a cada medição):
+
+| Medição | `status.php` | `dashboard.php` | Conta e data |
+|---|---|---|---|
+| Referência, código atual (0b) | **PENDENTE** | **PENDENTE** | — |
+| Base do critério, logo antes do deploy (5) | no deploy | no deploy | — |
+| Depois do deploy (8) | no deploy | no deploy | — |
 
 ---
 
