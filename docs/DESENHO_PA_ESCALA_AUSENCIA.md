@@ -2439,7 +2439,7 @@ O que cada número decide: `ativos_n1`, `ativos_n2` e `ativos_lideranca` dimensi
 
 | Coluna | Local | Servidor |
 |---|---|---|
-| `ativos_n1` / `ativos_n2` / `ativos_lideranca` | 6 / 8 / 1 (o cadastro com "ç" mal codificado também contado) | 13 / 9 / 3 |
+| `ativos_n1` / `ativos_n2` / `ativos_lideranca` | 6 / 8 / 1 (o cadastro com "ç" contado; o "ç" está gravado certo, em UTF-8, e só a exibição no terminal parecia defeituosa, conferido em 2026-10-27) | 13 / 9 / 3 |
 | `ativos_outras_equipes` | 0 | 0 |
 | `fora_do_mapa` | 1 | não medido (coluna da 011) |
 | `n1_n2_sem_regra_hoje` | 11 (12 na variante, que conta também o fora do Mapa) | 6 (variante) |
@@ -2451,7 +2451,7 @@ Leitura do servidor: **nenhum número pede tratamento antes do código** (as tr�
 
 **Referência do `dashboard.php`: pendente**, entra no commit 4. O `medir-polling.sh` não está no diretório da aplicação no servidor (código da Parte B não implantado); o responsável mede pelo `git show` do branch remoto ou com cópia manual (complemento acima), nas condições da base do F2 (`N=200`, mesma conta).
 
-**Achado da Q-F7 (rótulo de equipe), a decidir.** A Q-F7 compara a equipe pela colação do MySQL (`LOWER` Unicode e, na colação padrão do 8.0, sem acento); o motor usa `validate_funcionario_equipe` (`security.php:132`): `strtolower` só de ASCII e comparação byte a byte. Um rótulo que o MySQL aceita e o PHP não (mal codificado, ou com maiúscula acentuada, como `LIDERANÇA`) fica **fora do motor**: some do painel, dos contadores, do Mapa PA e do `presence.php`, e a Q-F7 o conta como Liderança (o `qa-operational-view` fixa esse comportamento atual). Não dá para saber se o cadastro mal codificado do MySQL local é desse tipo. Proposta: contar no MySQL local antes do commit 3, só contagem (nunca rodou em MySQL; o `CAST(... AS BINARY)` compara bytes, como o PHP, e o `LOCATE` pega maiúscula acentuada, que o `LOWER` do MySQL converte e o PHP não):
+**Achado da Q-F7 (rótulo de equipe); contagem local 0 em 2026-10-27, I7 aprovada.** A Q-F7 compara a equipe pela colação do MySQL (`LOWER` Unicode e, na colação padrão do 8.0, sem acento); o motor usa `validate_funcionario_equipe` (`security.php:132`): `strtolower` só de ASCII e comparação byte a byte. Um rótulo que o MySQL aceita e o PHP não (mal codificado, ou com maiúscula acentuada, como `LIDERANÇA`) fica **fora do motor**: some do painel, dos contadores, do Mapa PA e do `presence.php`, e a Q-F7 o conta como Liderança (o `qa-operational-view` fixa esse comportamento atual). O cadastro com "ç" do MySQL local não é desse tipo: o "ç" está gravado certo (bytes UTF-8, o PHP reconhece), e o defeito era só a exibição no terminal (conferido pelo responsável em 2026-10-27; a contagem abaixo deu 0 no MySQL local). Proposta: contar no MySQL local antes do commit 3, só contagem (nunca rodou em MySQL; o `CAST(... AS BINARY)` compara bytes, como o PHP, e o `LOCATE` pega maiúscula acentuada, que o `LOWER` do MySQL converte e o PHP não):
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT COUNT(*) AS rotulo_que_o_php_nao_reconhece FROM funcionarios WHERE ativo = 1 AND (CAST(LOWER(TRIM(equipe)) AS BINARY) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe') OR LOCATE(CAST('Ç' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0 OR LOCATE(CAST('Ã' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0);"; unset P
@@ -2472,14 +2472,14 @@ Maior que 0: corrigir o cadastro pela tela de Funcionários (dado, não código)
 
 Fora do `status.php` e do `dashboard.php`, a observação sai em `solicitacoes_pendentes.php`, `metricas.php` e `download_relatorio.php` (só gestão) e na resposta do `solicitar_pausa_com_aprovacao.php` (a do próprio): sem mudança. Correção de um fato desta seção: a lista "Pausas em andamento" da Visão Operacional vem do `status.php`, não do `active_pauses` do `dashboard.php` (que a tela não usa); a DV2 garante a coerência dentro do `dashboard.php`, e o risco 4 (contadores e lista em polls diferentes) vale como escrito.
 
-**Commit 1 (resumo no motor e endpoints), 2026-10-23: entregue (`2c1d457`), aguardando revisão e teste no MySQL local.** Arquivos: `services/PresenceService.php` (`operationalSummary`, `technicianPresence` e a carga única `nowPresences`), `classes/GerenciadorPausas.php` (`pausas_atuais`, DV6), `api/portal/dashboard.php`, `api/portal/technicians.php`, `scripts/qa-operational-view.php` (novo, nos dois runners), `scripts/qa-security.php`, `.env.example`, `.env.production.example` e `scripts/preflight-deploy.sh` (só o texto do interruptor, DV4). O `status.php` não mudou (DV1).
+**Commit 1 (resumo no motor e endpoints), 2026-10-23: entregue (`2c1d457`) e aprovado em 2026-10-27, com I1 a I7** (validação humana no fim desta parte). Arquivos: `services/PresenceService.php` (`operationalSummary`, `technicianPresence` e a carga única `nowPresences`), `classes/GerenciadorPausas.php` (`pausas_atuais`, DV6), `api/portal/dashboard.php`, `api/portal/technicians.php`, `scripts/qa-operational-view.php` (novo, nos dois runners), `scripts/qa-security.php`, `.env.example`, `.env.production.example` e `scripts/preflight-deploy.sh` (só o texto do interruptor, DV4). O `status.php` não mudou (DV1).
 
 | Endpoint | O que entrou |
 |---|---|
 | `portal/dashboard.php` | `server_now`; `presence_summary` (`n1`, `n2`, `lideranca`, `total` = N1 + N2), cada um com `escalados`, `disponiveis`, `em_pausa`, `almoco`, `ausentes`, `fora_expediente`, `sem_escala`; `presence_meta` (`disponivel`, `pausas_disponiveis`); `summary.cis_disponiveis` = `total.disponiveis`. Interruptor desligado ou falha no cálculo: `presence_summary` e `cis_disponiveis` nulos, `disponivel = false`, o resto igual (log só com a classe do erro) |
 | `portal/technicians.php` | `server_now`; `presence_meta`; por item, `presence` (`situacao`, `origem`, `detalhe`, mais `parcial` e `categoria` quando houver) ou `null`; `role` só com `funcionarios.manage` (DV9); motivo de pausa fora da lista como "Pausa" para quem não é gestão nem o próprio (DV10). Campos antigos (`status`, `on_break`, `shift`) mantidos |
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-10-27):**
 
 | # | Decisão | Motivo |
 |---|---|---|
@@ -2489,13 +2489,33 @@ Fora do `status.php` e do `dashboard.php`, a observação sai em `solicitacoes_p
 | I4 | Categoria (P9) é a da ausência que decide agora: dia inteiro, senão a primeira parcial ativa; fora dela, a do marcador | Mesma ordem do motor (4.4) e do Calendário (`calendarAbsenceCategory`) |
 | I5 | `presence_meta` também no `technicians.php` (não estava no plano) | `presence: null` sozinho não distingue "fora do Mapa" de "presença desligada ou com falha"; a coluna do commit 3 precisa disso para o "—" com aviso (DV5) |
 | I6 | `summary.cis_disponiveis` passa a existir no JSON (antes o navegador calculava) e vem `null` sem presença | O commit 3 mostra "—" com aviso (DV5), nunca o número antigo |
-| I7 | Rótulo de equipe que o PHP não reconhece fica fora do motor, como hoje no `presence.php` e no Mapa PA; o QA fixa o comportamento atual | Achado registrado acima ("rótulo de equipe"), a decidir |
+| I7 | Rótulo de equipe que o PHP não reconhece fica fora do motor, como hoje no `presence.php` e no Mapa PA; o QA fixa o comportamento atual | Achado registrado acima ("rótulo de equipe"); contagem local 0 (2026-10-27); a do servidor fica pendente e, com 0, a I7 fica como está |
 
 **Validação executada pela IA:** `qa-operational-view` novo (239 verificações; banco simulado e relógio injetado: identidade da soma e total = N1 + N2 em 07:59, 08:00, 10:30, 12:00, 12:59, 13:00, 13:59, 14:00, 16:59, 17:00, 23:30, 00:30 do dia seguinte e sábado com e sem exceção de trabalho; critério de aceite "a partir de 14:00" sai dos disponíveis só às 14:00; remoto disponível; café e reunião em "Em pausa", nunca em "Ausentes"; parcial ativa, futura e encerrada; exceção antiga; sem escala fora da soma; Liderança separada; fora do Mapa, arquivado, equipe desconhecida, rótulo não reconhecido e ausência pendente fora; `GerenciadorPausas` com estado ausente, válido, ilegível e sem a chave; P9, parcial e DV10 por perfil; 4 consultas para 1 e 50 cadastros, sem a tabela do corte nem relógio do banco; estrutura dos endpoints). `qa-security` com 12 casos novos de ponta a ponta (technicians.php por perfil, interruptor e estado ilegível; dashboard.php do gestor e do somente leitura, interruptor, estado ilegível e banco fora, com o log só com a classe do erro); matriz de perfis sem mudança. Bateria PHP completa, 17 `qa:*`, lint e typecheck (sem mudança no frontend). Mutação **26/26** (na 1ª rodada, 7 sobreviveram, todas de borda sem teste: parcial e categoria com duas ausências no dia e o `pausas_disponiveis` do `technicians.php`; os testes novos mataram as 7).
 
 **Limitações declaradas:** nada rodou em MySQL (as 4 consultas são as do F2, já validadas; o que é novo é o cálculo em memória). Medição do `dashboard.php` não feita (referência pendente; entra no commit 4). A tela ainda conta no navegador até o commit 3 (o JSON novo é aditivo e a tela o ignora). A DV11 é o commit 2: até lá, a observação de reunião segue indo a todos no `status.php` e no `dashboard.php`. `gitleaks` ausente na estação.
 
 **Teste sugerido no MySQL 8.0.46 local (antes do commit 2):** (1) `GET portal/dashboard.php` como gestor e como técnico: `presence_summary` igual para os dois; `total` = N1 + N2 em cada coluna; Liderança fora do total; `escalados + sem_escala` de N1 e N2 = `ativos_n1 + ativos_n2 − fora_do_mapa` da Q-F7 (com o cadastro fora do Mapa em N1 ou N2) num dia útil; `sem_escala` = `n1_n2_sem_regra_hoje` da Q-F7 completa (11), salvo quem tem exceção de trabalho hoje (escalado mesmo sem regra) ou regra de ciclo inválida (a Q-F7 conta como com regra; o motor, como sem escala). (2) `GET portal/technicians.php` como admin (com `role`), gestor e técnico (sem `role`); a ausência aprovada de hoje com categoria só para a gestão e o próprio. (3) `STATUS_PRESENCE_ENABLED=false` e recarga: `presence_summary` e `cis_disponiveis` nulos, o resto igual. (4) Só no local, com cópia antes: `estado.json` truncado → `presence_meta.pausas_disponiveis = false` nos dois endpoints.
+
+**Validação humana do commit 1 (responsável, 2026-10-27).** MySQL 8.0.46 local, a partir de um `git archive` do HEAD (a cópia direta dos `.php` para a revisão falhou). **Aprovado, com as sete decisões (I1 a I7).**
+
+- `qa-operational-view` (239), `qa-presence-engine`, `qa-pa-conflicts` e `qa-presence-cutoff` (602): OK.
+- `operationalSummary` com regras, folga de dia inteiro, ausência "a partir de 14:00" e duas pausas (Café e motivo livre), terça 27/10, total N1 + N2 com 7 escalados:
+
+| Instante | Total N1 + N2 |
+|---|---|
+| 07:59 | 6 fora do expediente e 1 ausente |
+| 08:00 | 6 disponíveis |
+| 10:00 | 4 disponíveis e 2 em pausa (pausa nunca em ausentes) |
+| 12:30 | 6 no almoço |
+| 13:59 | 6 disponíveis |
+| 14:00 | 5 disponíveis (critério de aceite da parcial) |
+| 17:00 | 6 fora do expediente |
+| Sábado | Tudo 0 |
+
+  Identidade da soma OK em todas as linhas e equipes; sem escala fora da soma; Liderança separada e fora do total; fora do Mapa fora de tudo; 4 consultas em cada cálculo; pausas ilegíveis com ninguém em pausa.
+- `technicianPresence` por perfil: categoria de todos para o gestor e só a própria para técnico e somente leitura; observação da ausência nunca; motivo de pausa fora da lista para o gestor e o próprio, "Pausa" para os colegas (I2); parcial para todos; fora do Mapa sem chave.
+- Rótulo de equipe (I7): a consulta do achado acima deu 0 no MySQL local. O "ç" do cadastro local está gravado certo (bytes UTF-8, o PHP reconhece); o defeito era só a exibição no terminal (frase corrigida na tabela da Q-F7 e no achado). A contagem do servidor fica pendente (pendência 16 do estado da sessão); com 0, a I7 fica como está.
 
 ---
 
