@@ -62,7 +62,10 @@ export function TechniciansPage() {
           O estado das pausas não pôde ser lido: quem está em pausa aparece pela escala.
         </InlineAlert>
       )}
-      {items.length === 0 ? <EmptyState title="Nenhum técnico cadastrado" description="Os técnicos ativos de N1 e N2 aparecem aqui." /> : (
+      {/* [Ajuste A2] Busca sem resultado não é lista vazia. */}
+      {items.length === 0 && search.trim() !== '' && <EmptyState title="Nenhum técnico encontrado" description="Nenhum técnico corresponde à busca." />}
+      {items.length === 0 && search.trim() === '' && <EmptyState title="Nenhum técnico cadastrado" description="Os técnicos ativos de N1 e N2 aparecem aqui." />}
+      {items.length > 0 && (
         <section className="card table-wrap">
           <table className="data-table">
             <thead>

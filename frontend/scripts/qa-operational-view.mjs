@@ -39,7 +39,14 @@ registerHooks({
   },
   load(url, context, nextLoad) {
     if (url.startsWith('file:') && /\.(jsx|tsx|ts)$/u.test(url)) {
-      const source = readFileSync(fileURLToPath(url), 'utf8')
+      let source = readFileSync(fileURLToPath(url), 'utf8')
+      // [Ajuste A2] O render estático não digita: o teste dá o termo inicial
+      // da busca da tela Técnicos (globalThis.qaInitialSearch).
+      if (url.endsWith('/src/pages/TechniciansPage.jsx')) {
+        const searchState = "const [search, setSearch] = useState('')"
+        if (!source.includes(searchState)) throw new Error('TechniciansPage sem o estado da busca esperado pelo QA')
+        source = source.replace(searchState, "const [search, setSearch] = useState(globalThis.qaInitialSearch ?? '')")
+      }
       const output = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(url) }).outputText
       return { format: 'module', source: output, shortCircuit: true }
     }
@@ -168,18 +175,20 @@ const rowValues = (section, label) => {
 }
 const columnOrder = ['escalados', 'disponiveis', 'em_pausa', 'almoco', 'ausentes', 'fora_expediente', 'sem_escala']
 const expectedRow = (team, dash = []) => columnOrder.map((key) => (dash.includes(key) ? '—' : String(SUMMARY[team][key])))
+const textOf = (html) => html.replace(/^[^>]*>/u, '').replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim()
 const metricValue = (markup, label) => markup.match(new RegExp(`<p class="metric-label">${label}</p><p class="metric-value">([^<]*)</p>`, 'u'))?.[1]
 {
   const markup = renderDashboardWith(dashboardData())
   const section = summarySection(markup)
   assert.deepEqual(rowValues(section, 'N1'), expectedRow('n1'), 'linha N1 pelo presence_summary, na ordem das colunas')
   assert.deepEqual(rowValues(section, 'N2'), expectedRow('n2'), 'linha N2 pelo presence_summary')
-  assert.deepEqual(rowValues(section, 'Total (N1 + N2)'), expectedRow('total'), 'linha Total = total do servidor (N1 + N2)')
+  assert.deepEqual(rowValues(section, 'Total'), expectedRow('total'), 'linha Total = total do servidor (N1 + N2)')
+  assert.ok(section.includes('scope="row">Total<small class="font-normal normal-case tracking-normal">N1 + N2</small></th>'), 'Total com a nota "N1 + N2"')
   assert.deepEqual(rowValues(section, 'Liderança'), expectedRow('lideranca'), 'Liderança separada, com o rótulo "fora dos totais"')
   assert.ok(section.includes('scope="row">Liderança<small class="font-normal normal-case tracking-normal">fora dos totais</small></th>'), 'Liderança com a nota "fora dos totais"')
   const bodies = section.split('<tbody')
   assert.equal(bodies.length, 3, 'Liderança num bloco à parte da tabela (N1, N2 e Total num, Liderança no outro)')
-  assert.match(bodies[1], /N1[\s\S]*N2[\s\S]*Total \(N1 \+ N2\)/u, 'N1, N2 e Total juntos')
+  assert.match(bodies[1], /N1[\s\S]*N2[\s\S]*>Total<small/u, 'N1, N2 e Total juntos')
   assert.ok(!bodies[1].includes('Liderança') && bodies[2].includes('Liderança'), 'Liderança fora do bloco do total')
   // Cabeçalho: cada coluna com o ícone, a cor e o rótulo da legenda.
   const head = section.slice(section.indexOf('<thead>'), section.indexOf('</thead>'))
@@ -188,11 +197,25 @@ const metricValue = (markup, label) => markup.match(new RegExp(`<p class="metric
   OPERATIONAL_SUMMARY_COLUMNS.forEach((column, index) => {
     assert.ok(headers[index].includes(column.tone), `coluna ${column.label} com a cor da legenda (${column.tone})`)
     assert.match(headers[index], /<svg[^>]*aria-hidden="true"/u, `coluna ${column.label} com ícone`)
-    assert.ok(headers[index].includes(`</svg>${column.label}</span>`), `coluna ${column.label} com rótulo`)
+    assert.equal(textOf(headers[index]), column.label, `coluna ${column.label} com rótulo`)
+    // [Ajuste A1] O rótulo pode quebrar em duas linhas, com o ícone preso à
+    // primeira palavra; nada de whitespace-nowrap no selo do cabeçalho.
+    const [first, ...rest] = column.label.split(' ')
+    assert.ok(headers[index].includes(`<span class="inline-flex items-center gap-1 whitespace-nowrap"><svg`) && headers[index].includes(`</svg>${first}</span>`), `coluna ${column.label}: ícone junto da primeira palavra`)
+    if (rest.length > 0) assert.ok(headers[index].includes(`</svg>${first}</span><span class="whitespace-nowrap">${rest.join(' ')}</span>`), `coluna ${column.label}: o resto do rótulo vai inteiro para a linha de baixo (no máximo duas linhas)`)
+    const badge = headers[index].match(/<span class="(status-badge[^"]*)"/u)?.[1] ?? ''
+    assert.match(badge, /\bwhitespace-normal\b/u, `coluna ${column.label}: selo do cabeçalho quebra linha`)
+    assert.match(badge, /\bflex-wrap\b/u, `coluna ${column.label}: selo do cabeçalho em mais de uma linha`)
   })
-  for (const label of ['Escalados', 'Disponíveis', 'Em pausa', 'Almoço', 'Ausentes', 'Fora do expediente', 'Sem escala']) {
-    assert.ok(head.includes(`</svg>${label}</span>`), `coluna "${label}"`)
-  }
+  // [Ajuste A1] Espaçamento menor que o padrão da .data-table, com !px-*
+  // (a regra .data-table th/td é mais específica que a utilidade px-*).
+  assert.ok(headers.every((header) => header.startsWith('class="!px-2 text-center"')), 'A1: cabeçalhos com !px-2')
+  assert.ok(head.includes('<th class="!px-3" scope="col">Equipe</th>'), 'A1: coluna Equipe com !px-3')
+  const cells = section.slice(section.indexOf('<tbody')).match(/<td class="[^"]*"/gu) ?? []
+  assert.equal(cells.length, 4 * OPERATIONAL_SUMMARY_COLUMNS.length, 'A1: uma célula por coluna nas quatro linhas')
+  assert.ok(cells.every((cell) => cell === '<td class="!px-2 text-center"'), 'A1: células com !px-2')
+  assert.equal((section.match(/<th class="whitespace-nowrap !px-3 text-left" scope="row">/gu) ?? []).length, 4, 'A1: rótulos das linhas com !px-3')
+  assert.deepEqual(OPERATIONAL_SUMMARY_COLUMNS.map((column) => textOf(headers[OPERATIONAL_SUMMARY_COLUMNS.indexOf(column)])), ['Escalados', 'Disponíveis', 'Em pausa', 'Almoço', 'Ausentes', 'Fora do expediente', 'Sem escala'], 'rótulos das colunas')
   assert.ok(section.includes('Ausentes: somente ausências lançadas; pausas não entram.'), 'nota dos ausentes')
   assert.ok(section.includes('Situação às 10:32'), 'hora do servidor (server_now), sem o fuso do navegador')
   assert.doesNotMatch(section, /inline-alert/u, 'sem aviso com a presença e as pausas disponíveis')
@@ -217,7 +240,7 @@ for (const [label, data] of [
 ]) {
   const markup = renderDashboardWith(data)
   const section = summarySection(markup)
-  for (const team of ['N1', 'N2', 'Total (N1 + N2)', 'Liderança']) {
+  for (const team of ['N1', 'N2', 'Total', 'Liderança']) {
     assert.deepEqual(rowValues(section, team), Array(7).fill('—'), `${label}: linha ${team} com "—"`)
   }
   assert.ok(section.includes('inline-alert inline-alert-warning') && section.includes('Situação da equipe indisponível'), `${label}: aviso da presença indisponível`)
@@ -231,11 +254,31 @@ for (const [label, data] of [
 {
   const markup = renderDashboardWith(dashboardData({ presence_meta: { disponivel: true, pausas_disponiveis: false } }))
   const section = summarySection(markup)
-  for (const [team, label] of [['n1', 'N1'], ['n2', 'N2'], ['total', 'Total (N1 + N2)'], ['lideranca', 'Liderança']]) {
+  for (const [team, label] of [['n1', 'N1'], ['n2', 'N2'], ['total', 'Total'], ['lideranca', 'Liderança']]) {
     assert.deepEqual(rowValues(section, label), expectedRow(team, ['em_pausa']), `pausas ilegíveis: ${label} com "—" só em Em pausa`)
   }
   assert.ok(section.includes('Pausas indisponíveis') && !section.includes('Situação da equipe indisponível'), 'pausas ilegíveis: o aviso das pausas, não o da presença')
   assert.equal(metricValue(markup, 'CIs disponíveis'), '11', 'pausas ilegíveis: "CIs disponíveis" continua pelo resumo')
+}
+// [Ajuste A3] Ninguém escalado (fim de semana, feriado ou sem regra): texto
+// abaixo da tabela, só com a presença disponível e total.escalados = 0.
+const NOBODY = 'Ninguém escalado neste momento (fim de semana, feriado ou sem regra de escala).'
+{
+  const zero = group(0, 0, 0, 0, 0, 0, 0)
+  const weekend = { n1: zero, n2: { ...zero, sem_escala: 2 }, lideranca: zero, total: { ...zero, sem_escala: 2 } }
+  const section = summarySection(renderDashboardWith(dashboardData({ presence_summary: weekend })))
+  assert.ok(section.includes(NOBODY), 'A3: total.escalados = 0 com a presença disponível: aviso de ninguém escalado')
+  assert.deepEqual(rowValues(section, 'Total'), ['0', '0', '0', '0', '0', '0', '2'], 'A3: a contagem não muda')
+  assert.ok(!summarySection(renderDashboardWith(dashboardData())).includes(NOBODY), 'A3: com gente escalada, sem o aviso')
+  for (const [label, data] of [
+    ['presença indisponível', dashboardData({ presence_summary: weekend, presence_meta: { disponivel: false, pausas_disponiveis: true } })],
+    ['total sem escalados', dashboardData({ presence_summary: { ...weekend, total: { ...weekend.total, escalados: undefined } } })],
+    ['total ausente', dashboardData({ presence_summary: { ...weekend, total: undefined } })],
+  ]) {
+    assert.ok(!summarySection(renderDashboardWith(data)).includes(NOBODY), `A3: ${label}: sem o aviso`)
+  }
+  const onlyLeadership = { ...weekend, lideranca: group(2, 2, 0, 0, 0, 0, 0) }
+  assert.ok(summarySection(renderDashboardWith(dashboardData({ presence_summary: onlyLeadership }))).includes(NOBODY), 'A3: só a Liderança escalada (fora do total) ainda é ninguém escalado no total')
 }
 // Contador fora do formato (texto, negativo, fracionário, ausente): "—".
 {
@@ -335,6 +378,31 @@ for (const [label, meta] of [['disponivel false', { disponivel: false, pausas_di
   const markup = renderTechnicians({ sucesso: true, presence_meta: { disponivel: true, pausas_disponiveis: true }, items: [technician(9, 'QA Desconhecida', { situacao: 'outra', detalhe: 'x' })] })
   assert.ok(technicianRows(markup)[0].includes('title="Situação indisponível">—</span>'), 'situação fora da legenda: "—"')
   assert.ok(!markup.includes('às '), 'sem server_now: sem a hora no cabeçalho')
+}
+// [Ajuste A2] Busca sem resultado × lista vazia de verdade. O campo de busca
+// é estado do componente: o teste o preenche pelo useState real.
+{
+  const technicianMarkup = (items, term) => {
+    globalThis.qaResourceData = { sucesso: true, server_now: '2026-10-27T12:15:09-03:00', presence_meta: { disponivel: true, pausas_disponiveis: true }, items }
+    globalThis.qaInitialSearch = term
+    try {
+      return renderToStaticMarkup(h(TechniciansPage))
+    } finally {
+      delete globalThis.qaResourceData
+      delete globalThis.qaInitialSearch
+    }
+  }
+  const empty = technicianMarkup([], '')
+  assert.ok(empty.includes('Nenhum técnico cadastrado') && !empty.includes('Nenhum técnico encontrado'), 'A2: lista vazia de verdade: "Nenhum técnico cadastrado"')
+  const notFound = technicianMarkup(technicianItems, 'zzz-sem-resultado')
+  assert.ok(notFound.includes('Nenhum técnico encontrado') && notFound.includes('Nenhum técnico corresponde à busca.'), 'A2: busca sem resultado: "Nenhum técnico encontrado"')
+  assert.ok(!notFound.includes('Nenhum técnico cadastrado') && !notFound.includes('<table'), 'A2: busca sem resultado sem a mensagem de lista vazia nem a tabela')
+  const blank = technicianMarkup([], '   ')
+  assert.ok(blank.includes('Nenhum técnico cadastrado') && !blank.includes('Nenhum técnico encontrado'), 'A2: busca só com espaços conta como sem termo (só a mensagem de lista vazia)')
+  const found = technicianMarkup(technicianItems, 'do expediente')
+  assert.equal(technicianRows(found).length, 1, 'A2: busca pelo rótulo da situação ("do expediente" só está no selo)')
+  assert.ok(technicianRows(found)[0].includes('QA Fora'), 'A2: o técnico achado é o fora do expediente')
+  assert.ok(!found.includes('Nenhum técnico'), 'A2: com resultado, sem mensagem de vazio')
 }
 {
   const app = read('src/App.jsx')

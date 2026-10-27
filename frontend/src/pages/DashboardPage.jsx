@@ -27,8 +27,23 @@ function updatedLabel(status, serverNow) {
 }
 
 // [F7] Linhas da tabela da 5.7: N1, N2 e o total N1 + N2; a Liderança fica
-// à parte e fora do total (D10).
-const TEAM_ROWS = [['n1', 'N1'], ['n2', 'N2'], ['total', 'Total (N1 + N2)']]
+// à parte e fora do total (D10). Rótulo e nota em linhas separadas.
+const TEAM_ROWS = [['n1', 'N1'], ['n2', 'N2'], ['total', 'Total', 'N1 + N2']]
+
+// [Ajuste A1] Cabeçalho que quebra em duas linhas quando falta largura: o
+// ícone fica preso à primeira palavra e o resto vai para a linha de baixo.
+// No máximo duas linhas. Assim a tabela cabe de 1280 px para cima sem
+// depender da largura da fonte. O espaçamento das células usa !px-*: a regra
+// .data-table th/td do index.css é mais específica que a utilidade px-*.
+function SummaryHeader({ column }) {
+  const [first, ...rest] = column.label.split(' ')
+  return (
+    <span className={`status-badge flex-wrap justify-center gap-x-1 whitespace-normal rounded-xl px-2 text-center normal-case leading-4 tracking-normal ${column.tone}`}>
+      <span className="inline-flex items-center gap-1 whitespace-nowrap"><Icon className="h-3 w-3 shrink-0" name={column.icon} />{first}</span>
+      {rest.length > 0 && <span className="whitespace-nowrap">{rest.join(' ')}</span>}
+    </span>
+  )
+}
 
 // [F7, desenho 5.7] Situação da equipe agora, pelo presence_summary do
 // dashboard.php (o navegador não conta). Presença indisponível (interruptor
@@ -42,10 +57,10 @@ function OperationalSummary({ data }) {
     if (presence === null || (key === 'em_pausa' && !pausesAvailable)) return '—'
     return summaryCount(presence[team], key) ?? '—'
   }
-  const row = ([team, label], className = '', note = null) => (
+  const row = ([team, label, note = null], className = '') => (
     <tr className={className} key={team}>
-      <th className="whitespace-nowrap px-3 text-left" scope="row">{label}{note && <small className="font-normal normal-case tracking-normal">{note}</small>}</th>
-      {OPERATIONAL_SUMMARY_COLUMNS.map((column) => <td className="px-2 text-center" key={column.key}><strong>{cell(team, column.key)}</strong></td>)}
+      <th className="whitespace-nowrap !px-3 text-left" scope="row">{label}{note && <small className="font-normal normal-case tracking-normal">{note}</small>}</th>
+      {OPERATIONAL_SUMMARY_COLUMNS.map((column) => <td className="!px-2 text-center" key={column.key}><strong>{cell(team, column.key)}</strong></td>)}
     </tr>
   )
   return (
@@ -70,20 +85,20 @@ function OperationalSummary({ data }) {
         <table className="data-table">
           <thead>
             <tr>
-              <th className="px-3" scope="col">Equipe</th>
+              <th className="!px-3" scope="col">Equipe</th>
               {OPERATIONAL_SUMMARY_COLUMNS.map((column) => (
-                <th className="px-2 text-center" key={column.key} scope="col">
-                  <span className={`status-badge gap-1 whitespace-nowrap px-2 normal-case tracking-normal ${column.tone}`}>
-                    <Icon className="h-3 w-3 shrink-0" name={column.icon} />{column.label}
-                  </span>
-                </th>
+                <th className="!px-2 text-center" key={column.key} scope="col"><SummaryHeader column={column} /></th>
               ))}
             </tr>
           </thead>
           <tbody>{TEAM_ROWS.map((team) => row(team))}</tbody>
-          <tbody>{row(['lideranca', 'Liderança'], 'border-t-2 border-white/10', 'fora dos totais')}</tbody>
+          <tbody>{row(['lideranca', 'Liderança', 'fora dos totais'], 'border-t-2 border-white/10')}</tbody>
         </table>
       </div>
+      {/* [Ajuste A3] Tabela toda em zero por falta de escala (fim de semana, feriado ou sem regra), não por falha. */}
+      {presence !== null && summaryCount(presence.total, 'escalados') === 0 && (
+        <p className="mt-3 text-sm leading-6 text-slate-300">Ninguém escalado neste momento (fim de semana, feriado ou sem regra de escala).</p>
+      )}
       <p className="mt-3 text-xs leading-5 text-slate-500">Ausentes: somente ausências lançadas; pausas não entram. Sem escala fica fora de Escalados.</p>
     </section>
   )
