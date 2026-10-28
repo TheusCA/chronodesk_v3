@@ -851,10 +851,10 @@ Base da afirmação:
 | **Finalidade** | Pendencia 17d: na Visao Operacional, a tabela da situacao da equipe rolava dentro do cartao abaixo de 1280 px; no lugar dela, cartoes por equipe (desenho 9.11). |
 | **Branch e commits** | `ac043bb` (numeracao das migrations no desenho, pedida junto), `258dfdd` (codigo e QA) e o commit deste registro. Sem push. |
 | **O que a IA alterou** | `frontend/src/pages/DashboardPage.jsx` (cartoes por equipe, `xl:hidden`; tabela `hidden xl:block`) e `frontend/scripts/qa-operational-view.mjs`; desenho 9.11 (nova) e a numeracao das migrations (018 para o F8, 020 para o F9) na 9.7, 11.3 e 11.4. |
-| **Decisoes de implementacao** | Cinco, a aprovar (desenho 9.11, M1 a M5): troca em 1280 px, onde a tabela cabe (medicao do A1); o mesmo `cell()` para cartoes e tabela; Lideranca num bloco a parte; uma, duas e tres colunas; os dois desenhos no HTML, escolhidos pela largura. |
+| **Decisoes de implementacao** | Cinco, aprovadas em 2026-10-28 (desenho 9.11, M1 a M5): troca em 1280 px, onde a tabela cabe (medicao do A1); o mesmo `cell()` para cartoes e tabela; Lideranca num bloco a parte; uma, duas e tres colunas; os dois desenhos no HTML, escolhidos pela largura. |
 | **Validacao executada pela IA** | `qa:operational-view` ampliado (cartoes iguais a tabela no normal, degradado, pausas ilegiveis e contador fora do formato; legenda, notas, divisor, classes). Mutacao **14/14** numa copia do frontend. 18 `qa:*`, lint, typecheck e build. Medicao e prints com a Inter, servidor simulado e Chrome sem janela em 390, 640, 768, 1024, 1279, 1280 e 1366 px: sem rolagem dentro do cartao nem da pagina, nenhum rotulo cortado; cartao mais estreito com 208 px. |
 | **Limitacoes declaradas** | Sem o backend real; dados ficticios; largura medida no navegador, nao no QA. Prints fora do repositorio. `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: revisao do 17d (zip `_revisao_acab17d.zip`). |
+| **Validacao humana** | Responsavel, 2026-10-28: **17d e numeracao das migrations (`ac043bb`) aprovados**, com M1 a M5 e a condicao C1: confirmar que nenhuma regra do `index.css` vence o `hidden`. Confirmada pela IA no build do `258dfdd`: `getComputedStyle(...).display` da tabela `none` de 390 a 1279 px e dos cartoes `none` em 1280, 1366 e 1920 px, nos estados normal e degradado (20 casos); o `.table-wrap` so tem `overflow-x-auto`. Sem commit de codigo. |
 
 ---
 

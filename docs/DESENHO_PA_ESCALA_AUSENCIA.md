@@ -2695,9 +2695,9 @@ Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do pr
 
 **Ordem aprovada em 2026-10-28:** 17d, 17 e 17b, um commit de entrega cada, com parada para revisão depois de cada um; depois, o plano do F8 na 9.10 (sem a 018). Só frontend: sem PHP, migration, `.env` ou dependência nova. Entra no deploy único da Parte B, pelo build do frontend (pendência 16). Ficam para depois do deploy: feriados, retenção e anonimização (LGPD), BIZ-05, SEC-04, PERF-02, retirada das tabelas legadas, jornada que cruza a meia-noite, dívida técnica 13 e o tipo do `assert_same` nos QAs PHP.
 
-**17d — Visão Operacional com cartões por equipe abaixo de 1280 px, 2026-10-28: entregue (`258dfdd`), aguardando revisão.** Arquivos: `frontend/src/pages/DashboardPage.jsx` e `frontend/scripts/qa-operational-view.mjs`. Até 1279 px, um cartão por equipe (N1, N2, Total com a nota "N1 + N2" e, num bloco à parte, a Liderança com "fora dos totais"); cada cartão lista os sete contadores na ordem das colunas, com o selo da legenda (ícone, cor e rótulo) e o número. De 1280 px para cima, a tabela de sempre (K9, A1).
+**17d — Visão Operacional com cartões por equipe abaixo de 1280 px, 2026-10-28: entregue (`258dfdd`) e aprovado em 2026-10-28, com M1 a M5 e a condição C1 (confirmada, sem commit de código).** Arquivos: `frontend/src/pages/DashboardPage.jsx` e `frontend/scripts/qa-operational-view.mjs`. Até 1279 px, um cartão por equipe (N1, N2, Total com a nota "N1 + N2" e, num bloco à parte, a Liderança com "fora dos totais"); cada cartão lista os sete contadores na ordem das colunas, com o selo da legenda (ícone, cor e rótulo) e o número. De 1280 px para cima, a tabela de sempre (K9, A1).
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-10-28):**
 
 | # | Decisão | Motivo |
 |---|---|---|
@@ -2733,6 +2733,17 @@ Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do pr
 O estado degradado (presença indisponível) foi medido nas mesmas larguras: "—" em todos os cartões, sem rolagem.
 
 **Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; o QA renderiza HTML sem layout, então a largura vem só da medição no navegador; os prints ficam fora do repositório. `gitleaks` ausente na estação.
+
+**Revisão do 17d e da numeração das migrations (`ac043bb`) (responsável, 2026-10-28): aprovados, com M1 a M5 e uma condição (C1).**
+
+**C1 (baixo): confirmar que nenhuma regra do `index.css` vence o `hidden`** (o A1 mostrou que `.data-table th/td` vencia `px-*`). O `.table-wrap` do `index.css` só aplica `overflow-x-auto`, sem `display`. Medição no build do `258dfdd` (servidor simulado, Chrome sem janela), com `getComputedStyle(...).display` do bloco da tabela (`.table-wrap`) e do bloco dos cartões (o `div` com `xl:hidden`), no estado normal e no degradado:
+
+| Janela | Tabela | Cartões |
+|---|---|---|
+| 390, 640, 767, 768, 1023, 1024 e 1279 px | `none` | `block` |
+| 1280, 1366 e 1920 px | `block` | `none` |
+
+Os 20 casos (10 larguras × 2 estados) deram o esperado. Só confirmou: sem commit de código. **17d concluído.**
 
 ---
 
