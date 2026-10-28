@@ -486,8 +486,9 @@ assert.match(appSource, /<LoadingState label="Carregando módulo\.\.\." \/>/, 'L
 assert.doesNotMatch(appSource, /Ã/, 'L-14: sem texto quebrado no App')
 
 // ---------------------------------------------------------------------------
-// 7. [17b] Calendário, visão Semana abaixo de 1536 px: lista por dia com os
-// cartões completos (o mesmo EventCard do painel do dia). A página é
+// 7. [17b] Calendário, visão Semana abaixo de 1280 px: lista por dia com os
+// cartões completos (o mesmo EventCard do painel do dia); [17b, P1] de 1280 a
+// 1535 px, a grade com o painel do dia embaixo; de 1536 px, ao lado. A página é
 // renderizada de verdade (JSX transpilado pelo TypeScript do projeto,
 // react-dom/server); o useResource responde com globalThis.qaResources, sem
 // rede, e o teste dá a visão inicial trocando um useState no carregamento.
@@ -562,7 +563,7 @@ const asideOf = (markup) => markup.slice(markup.indexOf('<aside'), markup.indexO
 {
   const week = renderCalendar('week')
   const list = week.slice(week.indexOf('data-week-list'), week.indexOf('</div>', week.lastIndexOf('data-week-day')))
-  assert.ok(week.includes('<div class="card space-y-6 2xl:hidden" data-week-list="">'), '17b: lista da semana só abaixo de 1536 px (2xl:hidden)')
+  assert.ok(week.includes('<div class="card space-y-6 xl:hidden" data-week-list="">'), '17b, P1: lista da semana só abaixo de 1280 px (xl:hidden), como no 17d e no 17')
   assert.deepEqual([...week.matchAll(/data-week-day="([^"]+)"/gu)].map((match) => match[1]), weekKeys, '17b: um bloco por dia, de segunda a domingo')
   const dayTitles = [...week.matchAll(/id="semana-[^"]+">([^<]+)/gu)].map((match) => match[1])
   assert.deepEqual(dayTitles.map((title) => title.split(',')[0]), ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'], '17b: dia da semana com maiúscula só na primeira letra')
@@ -581,15 +582,19 @@ const asideOf = (markup) => markup.slice(markup.indexOf('<aside'), markup.indexO
   assert.ok(monday0.includes('Categoria: Férias') && monday0.includes('Detalhe e3') && /role="img" title="Ausência parcial a partir de 14:00"/u.test(monday0), '17b: cartão com detalhe, categoria e marcador da parcial')
   assert.doesNotMatch(list, /line-clamp-2/u, '17b: a lista não corta o nome em duas linhas')
   assert.ok(daySection(week, weekKeys[2]).includes('Descrição QA'), '17b: evento de outro tipo com a descrição, como no painel do dia')
-  // Grade e painel do dia só de 1536 px para cima na semana.
-  assert.ok(week.includes('<div class="card overflow-hidden p-0 hidden 2xl:block">'), '17b: grade da semana só de 1536 px para cima')
-  assert.ok(week.includes('<aside class="card h-fit xl:sticky xl:top-28 hidden 2xl:block">'), '17b: painel do dia junto da grade, só de 1536 px para cima na semana')
-  assert.ok(week.includes('<section class="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">'), '17b: na semana, as duas colunas só de 1536 px para cima')
+  // [17b, P1] Na semana, grade e painel do dia de 1280 px para cima; o painel
+  // embaixo da grade até 1535 px (uma coluna) e ao lado, fixo, de 1536 px.
+  const weekGrid = '<div class="card overflow-hidden p-0 hidden xl:block">'
+  const weekAside = '<aside class="card h-fit hidden xl:block 2xl:sticky 2xl:top-28">'
+  assert.ok(week.includes(weekGrid), '17b, P1: grade da semana de 1280 px para cima')
+  assert.ok(week.includes(weekAside), '17b, P1: painel do dia de 1280 px para cima, fixo (sticky) só ao lado da grade, de 1536 px')
+  assert.ok(week.includes('<section class="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">'), '17b, P1: na semana, as duas colunas só de 1536 px para cima (painel embaixo da grade até 1535 px)')
+  assert.ok(week.indexOf(weekGrid) < week.indexOf(weekAside), '17b, P1: o painel do dia vem depois da grade (embaixo dela numa coluna)')
 }
 {
   // Mês: nada muda (sem lista, grade e painel como antes).
   const month = renderCalendar('month')
-  assert.ok(!month.includes('data-week-list') && month.includes('<div class="card overflow-hidden p-0 ">') && month.includes('<aside class="card h-fit xl:sticky xl:top-28 ">') && month.includes('<section class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">'), '17b: no mês, sem a lista; grade, painel e colunas como antes')
+  assert.ok(!month.includes('data-week-list') && month.includes('<div class="card overflow-hidden p-0 ">') && month.includes('<aside class="card h-fit xl:sticky xl:top-28">') && month.includes('<section class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">'), '17b: no mês, sem a lista; grade, painel e colunas como antes')
   // O mesmo cartão no painel do dia e na lista: o dia selecionado (hoje).
   const todayKey = localDate()
   if (weekKeys.includes(todayKey)) {

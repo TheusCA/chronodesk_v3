@@ -254,12 +254,14 @@ export function CalendarPage({ session, notify }) {
         </form>
       )}
 
-      {/* [17b] Semana abaixo de 1536 px: lista por dia, com os cartões completos.
-          Na grade de 7 colunas, com o painel do dia ao lado de 1280 px para
-          cima, o nome do técnico só cabia de cerca de 1440 px em diante. A
-          lista já traz o cartão completo de cada dia: o painel do dia sai junto. */}
+      {/* [17b] Semana abaixo de 1280 px: lista por dia, com os cartões completos
+          (a grade de 7 colunas cortava o nome do técnico). A lista já traz o
+          cartão completo de cada dia: o painel do dia sai junto. [17b, P1] De
+          1280 a 1535 px, a grade fica e o painel do dia desce para baixo dela:
+          ao lado, os 320 px do painel cortavam os nomes; de 1536 px para cima,
+          o painel volta para o lado. */}
       {view === 'week' && (
-        <div className="card space-y-6 2xl:hidden" data-week-list="">
+        <div className="card space-y-6 xl:hidden" data-week-list="">
           {days.map((day) => {
             const key = asLocalDate(day)
             const dayEvents = byDay.get(key) || []
@@ -282,7 +284,7 @@ export function CalendarPage({ session, notify }) {
       )}
 
       <section className={`grid gap-5 ${view === 'week' ? '2xl:grid-cols-[minmax(0,1fr)_320px]' : 'xl:grid-cols-[minmax(0,1fr)_320px]'}`}>
-        <div className={`card overflow-hidden p-0 ${view === 'week' ? 'hidden 2xl:block' : ''}`}>
+        <div className={`card overflow-hidden p-0 ${view === 'week' ? 'hidden xl:block' : ''}`}>
           <div className="grid grid-cols-7 border-b border-white/10 bg-slate-950/40 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
             {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'].map((label) => <div className="p-3" key={label}>{label}</div>)}
           </div>
@@ -316,7 +318,7 @@ export function CalendarPage({ session, notify }) {
             })}
           </div>
         </div>
-        <aside className={`card h-fit xl:sticky xl:top-28 ${view === 'week' ? 'hidden 2xl:block' : ''}`}>
+        <aside className={`card h-fit ${view === 'week' ? 'hidden xl:block 2xl:sticky 2xl:top-28' : 'xl:sticky xl:top-28'}`}>
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Detalhes do dia</p>
           <h3 className="mt-2 text-lg font-bold capitalize text-white">{new Date(`${selectedDay}T12:00:00`).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</h3>
           <div className="mt-5 space-y-3">
