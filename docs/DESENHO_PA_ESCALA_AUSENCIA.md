@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8; commit 1 (migration 014) aprovado em 2026-10-13; commit 2 (planejador puro) aprovado em 2026-10-13; commit 3 (serviço e endpoints) aprovado em 2026-10-13; commit 4 (L-07) aprovado em 2026-10-13, com a decisão 8 (conflito do Mapa PA sem inativos); commit 5 (tela de Funcionários) aprovado em 2026-10-13; commit 6 (ponta a ponta e documentação) aprovado em 2026-10-13: **F4 completo**, no deploy único da Parte B** (seção 9.6). **F5: plano aprovado em 2026-10-13, com ajuste na D2 (corte no 1º dia da competência seguinte ao deploy); commits 1 a 5 aprovados entre 2026-10-14 e 2026-10-15: F5 completo, no deploy único da Parte B** (seção 9.7). **F6 (Mapa PA no motor): plano aprovado em 2026-10-15; commits 1 a 4 aprovados entre 2026-10-15 e 2026-10-23: F6 completo, no deploy único da Parte B** (seção 9.8). **F7 (Visão Operacional): plano aprovado em 2026-10-23, com DV1 a DV15 como recomendadas e ajustes na DV7, DV11, DV14 e no risco 1; Q-F7 validada no MySQL 8.0.46 local; Q-F7 do servidor em 2026-10-26 (nenhum número pede tratamento; 6 sem regra no aviso à gestão); referência do `dashboard.php` no commit 4; commit 1 (resumo no motor e endpoints) entregue em 2026-10-23, aguardando revisão e teste no MySQL local** (seção 9.9). Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8; commit 1 (migration 014) aprovado em 2026-10-13; commit 2 (planejador puro) aprovado em 2026-10-13; commit 3 (serviço e endpoints) aprovado em 2026-10-13; commit 4 (L-07) aprovado em 2026-10-13, com a decisão 8 (conflito do Mapa PA sem inativos); commit 5 (tela de Funcionários) aprovado em 2026-10-13; commit 6 (ponta a ponta e documentação) aprovado em 2026-10-13: **F4 completo**, no deploy único da Parte B** (seção 9.6). **F5: plano aprovado em 2026-10-13, com ajuste na D2 (corte no 1º dia da competência seguinte ao deploy); commits 1 a 5 aprovados entre 2026-10-14 e 2026-10-15: F5 completo, no deploy único da Parte B** (seção 9.7). **F6 (Mapa PA no motor): plano aprovado em 2026-10-15; commits 1 a 4 aprovados entre 2026-10-15 e 2026-10-23: F6 completo, no deploy único da Parte B** (seção 9.8). **F7 (Visão Operacional): plano aprovado em 2026-10-23, com DV1 a DV15 como recomendadas e ajustes na DV7, DV11, DV14 e no risco 1; Q-F7 validada no MySQL 8.0.46 local; Q-F7 do servidor em 2026-10-26 (nenhum número pede tratamento; 6 sem regra no aviso à gestão); commits 1 a 4 aprovados entre 2026-10-27 e 2026-10-28 (o 4 com os ajustes B1 a B5): F7 completo, no deploy único da Parte B; referência do `dashboard.php` e do `status.php` e contagem de rótulo do servidor pendentes com o responsável** (seção 9.9). Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento.
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -2318,7 +2318,7 @@ Correção pedida: as mesmas regras fora de `@layer components`, sem mudar o `ta
 
 **F6 completo (2026-10-23)**, no deploy único da Parte B (pendência 16 do estado da sessão), pelo roteiro "Deploy que traz o F6" do `DEPLOY_LINUX.md`.
 
-### 9.9 F7 — Visão Operacional no motor: plano (2026-10-23, aprovado)
+### 9.9 F7 — Visão Operacional no motor: plano (2026-10-23, aprovado) e F7 completo (2026-10-28)
 
 Plano gravado aqui antes de qualquer código. **Aprovado em 2026-10-23, com DV1 a DV15 como recomendadas e os ajustes registrados em "Aprovação do plano", no fim desta seção.** Base: seções 1.6 e 1.7 (presença e polling hoje), 3.6 (`technicians.php`), 3.7 (`dashboard.php`), 3.8, 4.3 (situação com relógio), 4.5 (contadores), 4.6 (P14), 5.1 (legenda), 5.7 (tela), 0.6 (P2, D10, fora do Mapa); do F2, o interruptor `STATUS_PRESENCE_ENABLED`, a base do polling e a decisão 11 (9.2); do F4, a D14 (9.6); do F5, a D9 (9.7); do F6, a DF2 e a DF7 (9.8); RF-10 do requisito.
 
@@ -2627,7 +2627,7 @@ Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do pr
 
 **Pendência nova (lote de acabamento):** 17d, Visão Operacional no celular com cartões por equipe no lugar da tabela (junto da 17 e da 17b).
 
-**Commit 4 (contratos e documentação), 2026-10-27: entregue (`f951e26`) e aprovado com ajustes em 2026-10-28: L1 a L5 aprovadas, L6 condicionada ao B2; ajustes B1 a B5 em `66e6276`, aguardando revisão** (validação humana e ajustes no fim desta parte). Arquivos: `docs/API_CONTRACTS_FRONTEND.md` (linhas `status.php` com a DV11, `portal/dashboard.php` e `portal/technicians.php` novas; quadro da Parte B), `DEPLOY_LINUX.md` (roteiro "Deploy que traz o F7" e o item na lista de deploys), `docs/DOCUMENTACAO_TECNICA.md` (5.3, DV9 a DV11), `scripts/qa-operational-view.php` (travas do roteiro) e `scripts/qa-presence-cutoff.php` (recorte do roteiro do F5).
+**Commit 4 (contratos e documentação), 2026-10-27: entregue (`f951e26`) e aprovado em 2026-10-28, com L1 a L6 e os ajustes B1 a B5 (`66e6276`)** (validação humana e ajustes no fim desta parte). Arquivos: `docs/API_CONTRACTS_FRONTEND.md` (linhas `status.php` com a DV11, `portal/dashboard.php` e `portal/technicians.php` novas; quadro da Parte B), `DEPLOY_LINUX.md` (roteiro "Deploy que traz o F7" e o item na lista de deploys), `docs/DOCUMENTACAO_TECNICA.md` (5.3, DV9 a DV11), `scripts/qa-operational-view.php` (travas do roteiro) e `scripts/qa-presence-cutoff.php` (recorte do roteiro do F5).
 
 | Passo do roteiro | O que faz |
 |---|---|
@@ -2644,7 +2644,7 @@ Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do pr
 | Rollback | Só código, com aprovação prévia (a DV9 a DV11 caem); para desempenho ou falha no cálculo, o desligamento rápido |
 | Consolidado | O que muda no roteiro único depois do F9 (pendência 16): um aviso, um commit gravado para todos os lotes, Q-F7 depois das migrations e da D5, uma base, um build |
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-10-28; a L6 depois do B2):**
 
 | # | Decisão | Motivo |
 |---|---|---|
@@ -2669,7 +2669,7 @@ Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do pr
 
 **Revisão do commit 4 e dos ajustes A1 a A3 (responsável, 2026-10-28).** **A1 a A3 aprovados** (`dba407d`). **Commit 4 aprovado com ajustes:** L1 a L5 aprovadas; **L6 aprovada condicionada ao B2**. Pendente com o responsável, sem mudança de código: a referência do `dashboard.php` e do `status.php` (passo 0b) e a contagem de rótulo de equipe no servidor.
 
-**Ajustes da revisão (2026-10-28, `66e6276`), aguardando revisão.**
+**Ajustes da revisão (2026-10-28, `66e6276`), aprovados em 2026-10-28.**
 
 | # | Pedido | Feito |
 |---|---|---|
@@ -2685,6 +2685,10 @@ Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do pr
 **Limitações declaradas:** como no commit 4, o roteiro não rodou num servidor Linux; no NTFS da estação o `install -m 600` não aplica o modo (a cópia saiu com 644 no teste), então o `600 root` só se confere no servidor, pela própria linha. As decisões L3 e o quadro do commit 4 acima citam `=0`: era o roteiro entregue; o valor agora é `false` (B3b). `gitleaks` ausente na estação.
 
 **Observação, fora do escopo (sem mudança):** no ensaio, o `config.php` procura o `.env` em `dirname(__DIR__)`, que ali é o próprio `/tmp`; um `/tmp/.env` deixado por outro usuário seria lido pelos QAs como `www-data` (só para chaves que o QA não define antes). Os QAs não abrem banco nem rede, então o efeito é pequeno; se o responsável quiser, o ensaio pode conferir `[ ! -e /tmp/.env ]` antes dos QAs.
+
+**Ajustes B1 a B5 aprovados em 2026-10-28** (revisão do responsável sobre `66e6276` e `cfe957f`); com o B2, **a L6 fica aprovada**. Duas observações entram na pendência 16 (roteiro único depois do F9), sem mudança no roteiro do F7: (1) no ensaio, conferir `[ ! -e /tmp/.env ]` antes dos QAs, ou extrair o commit num diretório cujo nível acima também seja controlado, para o `config.php` não ler um `.env` de fora; (2) um passo de limpeza das cópias `env-antes-interruptor-*` em `/var/backups/chronodesk`, depois de conferidas e com aprovação, porque guardam os segredos do `.env`.
+
+**F7 completo (2026-10-28)**, no deploy único da Parte B (pendência 16 do estado da sessão), pelo roteiro "Deploy que traz o F7" do `DEPLOY_LINUX.md`. Pendentes com o responsável, sem mudança de código: a referência do `dashboard.php` e do `status.php` (passo 0b; tabela "Medições do F7") e a contagem de rótulo de equipe no servidor.
 
 ---
 
