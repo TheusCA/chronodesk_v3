@@ -2804,7 +2804,7 @@ Em 390 px, com o Arquivar clicado no primeiro cartão, a confirmação abre dent
 
 Mutação 2/2: linha sem o login; cartão com o login só para quem promove. Foi junto do código do 17b (`12af078`).
 
-**17b — Calendário, visão Semana como lista por dia abaixo de 1536 px, 2026-10-28: entregue (`12af078`), aguardando revisão.** Arquivos: `frontend/src/pages/CalendarPage.jsx` e `frontend/scripts/qa-calendar-presence.mjs`. Na semana, abaixo de 1536 px, um bloco por dia, de segunda a domingo, com:
+**17b — Calendário, visão Semana como lista por dia abaixo de 1536 px, 2026-10-28: entregue (`12af078`) e aprovado em 2026-10-28 com ajuste: O2 a O7 aprovadas; O1 substituída pelo P1 (lista só abaixo de 1280 px; de 1280 a 1535 px, a grade com o painel do dia embaixo; ver a revisão, abaixo).** Arquivos: `frontend/src/pages/CalendarPage.jsx` e `frontend/scripts/qa-calendar-presence.mjs`. Na semana, abaixo de 1536 px, um bloco por dia, de segunda a domingo, com:
 - o título do dia ("Segunda-feira, 26/10") e o selo "Hoje";
 - o resumo por situação;
 - os cartões completos de todos os eventos do dia.
@@ -2821,11 +2821,11 @@ Os cartões são os mesmos do painel "Detalhes do dia": título inteiro, selo da
 | 1440 px | 109 px | 6 de 70 |
 | 1920 px | 171 px | Nenhum |
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (O2 a O7 aprovadas em 2026-10-28; O1 substituída pelo P1):**
 
 | # | Decisão | Motivo |
 |---|---|---|
-| O1 | A troca é em **1536 px** (`2xl`), não só no celular: de 1280 a 1535 px, a semana também vira lista | De 1280 px para cima o painel do dia divide a linha com a grade, e os nomes saem cortados em 1280 e 1366 px, as larguras mais comuns de notebook. Mesmo critério do M1 e do N1: a grade fica só onde mostra o conteúdo. Em 1536 px, 64 de 70 nomes cabem; os 6 cortados são o nome longo de teste e o cartão com marcador de parcial, com o texto completo no `title`, como antes. Alternativa: trocar em 1280 px e manter a grade cortada de 1280 a 1535 px |
+| O1 | **Substituída pelo P1 na revisão.** A troca é em **1536 px** (`2xl`), não só no celular: de 1280 a 1535 px, a semana também vira lista | De 1280 px para cima o painel do dia divide a linha com a grade, e os nomes saem cortados em 1280 e 1366 px, as larguras mais comuns de notebook. Mesmo critério do M1 e do N1: a grade fica só onde mostra o conteúdo. Em 1536 px, 64 de 70 nomes cabem; os 6 cortados são o nome longo de teste e o cartão com marcador de parcial, com o texto completo no `title`, como antes. Alternativa: trocar em 1280 px e manter a grade cortada de 1280 a 1535 px |
 | O2 | O cartão do painel do dia foi extraído para **`EventCard`**, usado no painel e na lista | Um cartão só, com as mesmas regras de P9 (categoria só quando o servidor manda) e sem a `description` no cartão do motor (ajuste b do F5) |
 | O3 | Na semana, abaixo de 1536 px, **o painel "Detalhes do dia" sai** e a seção fica numa coluna | A lista já mostra o cartão completo de cada dia; o painel repetiria o dia selecionado logo abaixo. No mês, o painel e as duas colunas de 1280 px para cima continuam |
 | O4 | A lista traz **todos os eventos do dia**, na ordem do servidor, **sem o limite de 8** da grade; dia vazio com "Sem eventos neste dia."; sábado e domingo aparecem | Sem esconder evento atrás de "+N eventos", que na grade só levava ao painel do dia |
@@ -2848,7 +2848,7 @@ O recorte antigo do cartão do motor passou para o `EventCard`.
 - conteúdo da lista: com o cartão curto (`EventChip`); com o limite de 8; só com a escala do motor; sem o resumo do dia; dias fora de ordem;
 - detalhes: "Hoje" em todo dia; dia vazio sem aviso; dia da semana em minúsculas; cartão sem a categoria; cartão sem o marcador da parcial.
 
-18 `qa:*`, lint, typecheck e build. Medição depois:
+18 `qa:*`, lint, typecheck e build. Medição depois (do `12af078`; de 1280 a 1535 px vale a medição do P1, abaixo):
 
 | Janela | Mostra | Cartões | Painel do dia | Rolagem da página | Altura da página |
 |---|---|---|---|---|---|
@@ -2895,6 +2895,66 @@ Não medidos: o histórico de regras da Escala presencial (abre por botão, numa
   - As tabelas só de leitura: rolar sem botão não esconde ação. Se valer a pena, uma solução geral depois, por exemplo uma largura mínima menor para as tabelas de poucas colunas.
 
 Total antes do deploy, se as três forem aceitas: **3 commits de entrega**, cada um com o seu de docs e a parada para revisão.
+
+**Revisão do 17b e do pedido (1) do 17 (responsável, 2026-10-28): o `ad_login` está aprovado; o 17b está aprovado com ajuste: O2 a O7 aprovadas, O1 muda (P1).**
+
+**P1 (médio):** de 1280 a 1535 px, manter a grade semanal e mover o painel "Detalhes do dia" para baixo dela, em vez de ao lado. A lista por dia fica só abaixo de 1280 px (`xl`), como no 17d e no 17. Motivo: em 1366 px, a largura de notebook mais comum, a gestão perderia a visão de conjunto da semana; o corte dos nomes vem do painel lateral de 320 px, e em 1279 px sem o painel a coluna tem 135 px e corta só 5 de 70. De 1536 px para cima, o painel volta para o lado, como antes. Medir de novo em 1280, 1366, 1440, 1535 e 1536 px (nomes cortados, `display` calculado dos blocos, rolagem) e ajustar o QA e a mutação.
+
+**Pendência 17e: aceitas as três recomendações, nesta ordem:**
+1. **Chamados críticos**, com a coluna Ações fixa à direita (`sticky`, com fundo opaco, para o conteúdo não aparecer por baixo), conferida de 390 a 1920 px;
+2. **Horas extras e Correção de ponto, pendentes**, em cartões abaixo de 1280 px, medindo também a aba Aprovações da administração;
+3. **Escala presencial (regras)** em cartões e **Ausências** com a troca levada para 1280 px.
+
+Um commit de entrega cada, com parada para revisão. O resto do 17e fica para depois do deploy. A página longa da semana no celular também fica para depois (dias recolhíveis, com hoje aberto).
+
+**P1 — Calendário, semana com a grade de 1280 a 1535 px e o painel do dia embaixo, 2026-10-28: entregue (`abf273a`), aguardando revisão.** Arquivos: `frontend/src/pages/CalendarPage.jsx` e `frontend/scripts/qa-calendar-presence.mjs`. Na visão Semana:
+
+| Janela | Lista por dia | Grade | Painel "Detalhes do dia" |
+|---|---|---|---|
+| Até 1279 px | Visível (`xl:hidden`) | Fora | Fora (O3) |
+| 1280 a 1535 px | Fora | Visível (`hidden xl:block`) | Embaixo da grade, na largura toda, sem `sticky` |
+| 1536 px em diante | Fora | Visível | Ao lado (320 px), `sticky`, como antes |
+
+O mês não muda: painel ao lado e `sticky` de 1280 px para cima. Uma decisão a aprovar:
+
+| # | Decisão | Motivo |
+|---|---|---|
+| P1-a | Na semana, o painel só fica fixo (`sticky`) de 1536 px, quando está ao lado; embaixo da grade, `static` | Embaixo da grade, o `sticky` não tem efeito (o painel é o último item da seção) e só confundiria quem lê o código |
+
+**Medição depois** (build do `abf273a`, Inter, servidor simulado com 14 técnicos por dia útil, gestor, Chrome sem janela):
+
+| Janela | Mostra (`display`) | Coluna do dia | Nomes cortados na grade | Painel do dia | Rolagem horizontal da página | Altura da página |
+|---|---|---|---|---|---|---|
+| 390 px | Lista `block`; grade e painel `none` | — | — (72 cartões completos) | Fora | Não | 11.012 px |
+| 1024 px | Lista `block`; grade e painel `none` | — | — (72) | Fora | Não | 6.021 px |
+| 1279 px | Lista `block`; grade e painel `none` | — | — (72) | Fora | Não | 5.434 px |
+| 1280 px | Grade `block`, lista `none` | 135 px (antes, 86) | 5 de 70 (antes, 70 de 70) | Embaixo, 945 px, `static` | Não | 3.019 px |
+| 1366 px | Grade `block`, lista `none` | 147 px (antes, 98) | 5 de 70 (antes, 70 de 70) | Embaixo, 1.031 px, `static` | Não | 3.019 px |
+| 1440 px | Grade `block`, lista `none` | 158 px (antes, 109) | 5 de 70 (antes, 6) | Embaixo, 1.105 px, `static` | Não | 3.019 px |
+| 1535 px | Grade `block`, lista `none` | 171 px | Nenhum | Embaixo, 1.200 px, `static` | Não | 2.854 px |
+| 1536 px | Grade `block`, lista `none` | 123 px | 6 de 70 | Ao lado, 320 px, `sticky` | Não | 2.766 px |
+| 1920 px | Grade `block`, lista `none` | 171 px | Nenhum | Ao lado, 320 px, `sticky` | Não | 2.731 px |
+
+"Antes" é a grade com o painel ao lado, da medição antes do 17b. De 1280 a 1440 px, os 5 cortados são o mesmo nome longo de teste ("Tecnico 05 Sobrenome Com Nome Comprido"), um por dia útil. Em 1536 px, o mesmo nome e o cartão com o marcador da parcial (Tecnico 03, na quarta). O texto completo fica no `title` e no painel do dia, como antes.
+
+**Observação (sem mudança):** com o painel ao lado, a coluna do dia em 1536 px (123 px) é mais estreita que em 1535 px (171 px). De 1600 a 1840 px, a coluna vai de 132 a 166 px e o nome longo continua cortado (5 de 70); em 1920 px, nenhum. Se o responsável quiser, o painel pode ir para o lado só numa largura maior; fica como está, seguindo a revisão.
+
+**Validação executada pela IA:** `qa:calendar-presence` ajustado. Na semana, confere:
+- a lista só abaixo de 1280 px (`xl:hidden`);
+- a grade e o painel do dia de 1280 px para cima;
+- as duas colunas só de 1536 px, com o painel depois da grade no HTML (embaixo dela numa coluna);
+- o `sticky` do painel só de 1536 px;
+- no mês, o painel com o `sticky` de 1280 px, como antes.
+
+Os demais testes do 17b (conteúdo da lista e igualdade com o painel do dia) seguem iguais.
+
+**Mutação 21/21** numa cópia do frontend:
+- troca e layout: lista sem `xl:hidden`, até `2xl` (O1 antigo) ou até `lg`; grade da semana sempre visível ou só de `2xl`; painel do dia sempre visível ou só de `2xl` (O3 antigo); painel ao lado já de 1280 px; `sticky` já de 1280 px na semana; mês sem o `sticky`;
+- conteúdo da lista (os 11 do 17b que continuam valendo): cartão curto; limite de 8; só a escala do motor; sem o resumo do dia; "Hoje" em todo dia; dia vazio sem aviso; dia da semana em minúsculas; dias fora de ordem; lista também no mês; cartão sem a categoria; cartão sem o marcador da parcial.
+
+18 `qa:*`, lint e typecheck no repositório; build numa pasta temporária (o `app/` do repositório não foi tocado).
+
+**Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura vem só da medição no navegador; os prints ficam fora do repositório. Na grade, os eventos de outro tipo ("Reunião", "Hora extra") continuam numa linha com reticências, como antes do 17b, com o texto completo no painel do dia; a contagem de nomes cortados vale só para os cartões do motor. Embaixo da grade, o painel do dia mostra os cartões numa coluna na largura toda, sem mudança de layout dentro dele. `gitleaks` ausente na estação.
 
 ---
 
