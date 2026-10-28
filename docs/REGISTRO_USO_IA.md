@@ -818,7 +818,7 @@ Base da afirmação:
 | **O que a IA alterou** | `frontend/src/pages/DashboardPage.jsx` (cabecalho que quebra em ate duas linhas com o icone na 1a palavra; `!px-*` nas celulas, porque a regra `.data-table th/td` vencia a utilidade `px-*`; "Total" com a nota "N1 + N2"; aviso do A3), `frontend/src/pages/TechniciansPage.jsx` (A2) e `frontend/scripts/qa-operational-view.mjs`; desenho 9.9; pendencia 17d no estado da sessao. |
 | **Validacao executada pela IA** | Medicao com a Inter carregada (Google Fonts injetada so na pagina de teste do Chrome sem janela; o projeto nao muda), barra lateral aberta: largura minima da tabela 767 px; folga de 15,1% em 1280, 22,4% em 1366, 27,8% em 1440 e 48,7% em 1920 px; em 390 px rola dentro do cartao (K9) e a pagina nao rola. `qa:operational-view` ampliado (estrutura da quebra e do espacamento, A2 com o termo da busca injetado no estado inicial do componente so no teste, A3 com cinco casos). Mutacao **16/16** nos ajustes (1 sobrevivente na 1a rodada, morto com o teste reforcado) e **51/51** na suite do commit 3, refeita. 18 `qa:*`, lint, typecheck e build. |
 | **Limitacoes declaradas** | A largura e medida no print (navegador), nao no QA, que renderiza HTML sem layout. Servidor simulado e dados ficticios. `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: entra na revisao do commit 4 (zip `_revisao_f7c4.zip`). |
+| **Validacao humana** | Responsavel, 2026-10-28, na revisao do commit 4: **A1 a A3 aprovados**. |
 
 ### Parte B, F7 — commit 4 (contratos e documentacao) — 2026-10-27
 
@@ -830,7 +830,19 @@ Base da afirmação:
 | **Decisoes de implementacao** | Seis, a aprovar (desenho 9.9, L1 a L6): ensaio de codigo pelo `git archive` com os QAs do F7 no PHP do servidor; medicao com `cat-file` antes de cada `bash <(git show)`, um `fetch` so; desligamento rapido com `=0` que troca ou acrescenta, conferindo o pool e o preflight; aviso unico F6 e F7; travas do roteiro no QA; recorte do F5 corrigido. |
 | **Validacao executada pela IA** | `qa-operational-view` (293, 37 novas) e `qa-presence-cutoff` (597; as 5 a menos eram linhas do F6 que o recorte antigo pegava, agora checadas no `qa-operational-view`); `php -l` e os 14 QAs PHP. Mutacao **14/14** no roteiro. Consultas copiadas do desenho pelo script que montou o roteiro. |
 | **Limitacoes declaradas** | Roteiro nao executado num servidor Linux; conferido pela estrutura. Referencia do `dashboard.php` e contagem de rotulo do servidor pendentes (responsavel). `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: revisao do commit 4 (zip `_revisao_f7c4.zip`) e a medicao de referencia no servidor. |
+| **Validacao humana** | Responsavel, 2026-10-28: **aprovado com ajustes**; L1 a L5 aprovadas, L6 condicionada ao B2; cinco ajustes (B1 a B5, registro seguinte). Pendentes com o responsavel, sem mudanca de codigo: a referencia do `dashboard.php` e do `status.php` (passo 0b) e a contagem de rotulo de equipe no servidor. |
+
+### Parte B, F7 — ajustes da revisao do commit 4 (B1 a B5) — 2026-10-28
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Atender a revisao do commit 4: permissao e `noexec` do ensaio (B1), prova de cobertura das linhas de senha do F6 depois da L6 (B2), copia do `.env` antes do desligamento e valor unico do interruptor (B3), diagnosticos do editor (B4) e aviso a gestao com marcadores (B5). |
+| **Branch e commits** | `66e6276` (roteiro e QA) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md` (passos 0a, 0b e 3, desligamento rapido e item da lista de deploys), `scripts/qa-operational-view.php` (travas do B1, B3 e B5) e `scripts/qa-presence-cutoff.php` (`catch` sem variavel); desenho 9.9. |
+| **Decisoes de implementacao** | B1: o roteiro ja tinha o `chown -R www-data: "$E"` antes dos QAs; so o texto e as travas mudaram. B2: nenhum mutante sobreviveu, entao o recorte novo do F6 nao foi feito. B3b: padronizado em `false`/`true` (os do `.env.example` e do preflight), alem de cobrir no QA que o PHP e o preflight leem os mesmos valores. B4: corrigidos os 2 P1003; os P1132 do `assert_same` justificados (mesma assinatura nos 14 QAs). |
+| **Validacao executada pela IA** | Mutacao **28/28** numa copia do repositorio (B2: 10 no F6, rodados antes e depois dos ajustes; B1: 6; B3: 9; B5: 3). Diagnosticos levantados com o intelephense sem o editor, no `HEAD` e antes do commit 4 (o 3o do `qa-operational-view` nao se reproduz). Comando novo do desligamento rodado na estacao, sem `sudo` e com caminhos temporarios (troca, acrescenta e `PARE` sem alterar). `qa-operational-view` 301 (8 novas), `qa-presence-cutoff` 597, os 14 QAs PHP, `php -l` e `sh -n` no preflight. |
+| **Limitacoes declaradas** | Roteiro nao executado num servidor Linux; o modo `600` da copia nao se confere no NTFS da estacao (saiu 644 no teste), so no servidor, pela propria linha. Observacao fora do escopo, sem mudanca: no ensaio, o `config.php` le um `/tmp/.env` se existir (desenho 9.9). `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao dos ajustes B1 a B5. |
 
 ---
 
