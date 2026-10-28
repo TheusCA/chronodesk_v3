@@ -892,6 +892,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem o backend real; dados ficticios; larguras medidas no navegador. Em 1536 px, com o painel ao lado, a coluna (123 px) e mais estreita que em 1535 px e 6 de 70 nomes cortam; sem mudanca, seguindo a revisao. Eventos de outro tipo seguem com reticencias na grade, como antes. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Pendente: revisao do P1. |
 
+### Modulo de CHGs (mudancas) — G0: requisito e desenho — 2026-10-28
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Nova demanda: modulo de CHGs no ChronoDesk a partir do modelo HTML de referencia. **Somente requisito e plano, sem codigo.** Inventario do modelo, mapeamento para o ChronoDesk (MySQL e PHP, React sem `innerHTML`, etapa no servidor com `server_now`, RBAC, CSRF e auditoria, cancelar e arquivar, tecnico por `funcionarios.id`, carteiras fora do git, links so `https`, CSV sem CDN), itens A DEFINIR com o que muda conforme a resposta, modelo de dados (migrations 021 e 022), contratos, matriz de perfis, auditoria, LGPD, interruptor `CHG_MODULE_ENABLED`, plano de testes, lotes G1 a G7 e a parte do roteiro unico. |
+| **Branch e commits** | `de93913` (`.gitignore` com `_referencias/`) e o commit deste registro. Sem push. |
+| **O que a IA gerou** | `docs/REQUISITOS_CHG.md` e `docs/DESENHO_CHG.md` (novos); `.gitignore` (`_referencias/`). |
+| **O que a IA executou** | Copiou o modelo de `Downloads` para `_referencias/controle_atualizacoes_modelo.html` (ignorado; `git status` e `git check-ignore` conferidos com o arquivo no lugar) e o leu inteiro. Leitura do repositorio para os fatos com `arquivo:linha`. Varredura local dos dois documentos contra as listas do modelo (carteiras, tecnicos, locais, IP, dominio, solicitante), imprimindo so categoria e contagem: nenhum valor real; as duas coincidencias sao palavras comuns ("matriz", "ativos") no sentido normal. **Nenhum codigo, migration, teste ou configuracao alterado. Nenhum comando contra o servidor.** O documento de padrao (`REQUISITOS_PA_ESCALA_AUSENCIA.md`) foi lido da pasta local do responsavel, fora do repositorio. |
+| **Decisoes de desenho** | C1 a C16, a aprovar (desenho 0.1). Destaques: interruptor com ausente = desligado (o contrario do `STATUS_PRESENCE_ENABLED`); codigo de carteira fora da base recusado; botoes por etapa em vez de arrastar; cancelar so antes de concluir; versao do registro com 409; lista com ate 500 itens e KPIs sobre o filtro inteiro. Achados do modelo M1 a M13 (requisito 1.12), entre eles etapa pelo relogio do navegador, exclusao fisica e dados possivelmente gravados no armazenamento do ambiente de publicacao. |
+| **Limitacoes declaradas** | A IA nao acessa o banco nem o servidor. O volume real de CHGs, o formato do numero da CHG no ServiceNow, a governanca do arquivo de carteiras e o diretorio dele no servidor sao A DEFINIR. Os fatos do modelo citam um arquivo local fora do git (`_referencias/`); quem revisa precisa da mesma copia. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do requisito e do desenho, e respostas aos itens A DEFINIR (requisito, secao 4). |
+
 ---
 
 ## 5. Responsabilidade
