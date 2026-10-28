@@ -446,7 +446,8 @@ assert.match(calendarSource, /\{otherEvents\.slice\(0, limit\)\.map/, 'demais ti
 assert.match(calendarSource, /\{hasEngineEvents && <PresenceLegend \/>\}/, 'legenda do motor só quando há evento do motor (sem corte, igual à atual)')
 assert.match(calendarSource, /<PresenceDaySummary events=\{selectedEvents\} \/>/, 'detalhe do dia com o resumo')
 assert.match(calendarSource, /\{situationLabel\(event\.situacao\)\} · Origem: \{originLabel\(event\.origem\)\}/, 'cartão com situação e origem')
-const engineCardSource = calendarSource.slice(calendarSource.indexOf('[F5, ajuste b] Cartão do técnico'), calendarSource.indexOf(') : (', calendarSource.indexOf('[F5, ajuste b] Cartão do técnico')))
+// [17b] O cartão do técnico fica no EventCard (painel do dia e lista da semana).
+const engineCardSource = calendarSource.slice(calendarSource.indexOf('[F5, ajuste b] Cartão do técnico'), calendarSource.indexOf('\n  return (\n    <article', calendarSource.indexOf('[F5, ajuste b] Cartão do técnico')))
 assert.match(engineCardSource, /\{hasPartialMarker\(event\) && <PartialMarker time=\{partialTime\(event\)\} \/>\}\{event\.detalhe\}/, 'cartão com o detalhe e o marcador do campo parcial')
 assert.match(engineCardSource, /\{event\.categoria && <p className="mt-1 text-sm leading-5 text-slate-400">Categoria: \{event\.categoria\}<\/p>\}/, 'categoria só quando o servidor manda (campo categoria)')
 assert.doesNotMatch(engineCardSource, /event\.description/,'cartão do motor sem a description (sem texto repetido, ajuste b)')
@@ -483,5 +484,119 @@ assert.match(operationalSource, /if \(item\.source === 'implicit'\) return 'Regr
 assert.doesNotMatch(operationalSource, /export function CalendarPage|portal\/calendar\.php/, 'L-13: sem a CalendarPage duplicada')
 assert.match(appSource, /<LoadingState label="Carregando módulo\.\.\." \/>/, 'L-14: "Carregando módulo..." com acento')
 assert.doesNotMatch(appSource, /Ã/, 'L-14: sem texto quebrado no App')
+
+// ---------------------------------------------------------------------------
+// 7. [17b] Calendário, visão Semana abaixo de 1536 px: lista por dia com os
+// cartões completos (o mesmo EventCard do painel do dia). A página é
+// renderizada de verdade (JSX transpilado pelo TypeScript do projeto,
+// react-dom/server); o useResource responde com globalThis.qaResources, sem
+// rede, e o teste dá a visão inicial trocando um useState no carregamento.
+// ---------------------------------------------------------------------------
+const { registerHooks } = await import('node:module')
+const { existsSync } = await import('node:fs')
+const ts = (await import('typescript')).default
+const srcUrl = pathToFileURL(join(frontendRoot, 'src')).href + '/'
+const resourceStub = 'data:text/javascript,' + encodeURIComponent(
+  'export function useResource(path) { const key = Object.keys(globalThis.qaResources ?? {}).find((prefix) => path.startsWith(prefix)); return { loading: false, error: null, data: key ? globalThis.qaResources[key] : null, refresh: async () => null, setData: () => {} } }',
+)
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '../hooks/useResource' && /\/src\/pages\/CalendarPage\.jsx$/u.test(context.parentURL ?? '')) return { url: resourceStub, shortCircuit: true }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.[cm]?[jt]sx?$/u.test(specifier) && context.parentURL?.startsWith(srcUrl)) {
+      for (const extension of ['.ts', '.tsx', '.js', '.jsx']) {
+        const candidate = new URL(specifier + extension, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return nextResolve(candidate.href, context)
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    if (url.startsWith(srcUrl) && /\.(jsx|tsx)$/u.test(url)) {
+      let source = readFileSync(fileURLToPath(url), 'utf8')
+      if (url.endsWith('/src/pages/CalendarPage.jsx')) {
+        const from = "const [view, setView] = useState('month')"
+        if (!source.includes(from)) throw new Error('CalendarPage sem o estado da visão esperado pelo QA')
+        source = source.replace(from, "const [view, setView] = useState(globalThis.qaInitialView ?? 'month')")
+      }
+      const output = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(url) }).outputText
+      return { format: 'module', source: output, shortCircuit: true }
+    }
+    return nextLoad(url, context)
+  },
+})
+const { createElement: h } = await import('react')
+const { renderToStaticMarkup } = await import('react-dom/server')
+const { CalendarPage } = await import(pathToFileURL(join(frontendRoot, 'src', 'pages', 'CalendarPage.jsx')).href)
+const { localDate } = await import(pathToFileURL(join(frontendRoot, 'src', 'lib', 'operational.ts')).href)
+
+// A semana de hoje (segunda a domingo), como a CalendarPage calcula.
+const isoOf = (date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const monday = new Date()
+monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
+const weekKeys = Array.from({ length: 7 }, (_, index) => { const day = new Date(monday); day.setDate(monday.getDate() + index); return isoOf(day) })
+const weekEngine = (id, date, status, situacao, name, extra = {}) => ({ id, event_type: 'schedule', status, situacao, origem: 'regra_escala', title: `${{ onsite: 'Presencial', remote: 'Remoto', absence: 'Ausência', no_schedule: 'Sem escala' }[status]}: ${name}`, starts_at: date, ends_at: date, detalhe: `Detalhe ${id}`, ...extra })
+const WEEK_EVENTS = [
+  weekEngine('e1', weekKeys[0], 'onsite', 'presencial', 'QA Um'),
+  weekEngine('e2', weekKeys[0], 'remote', 'remoto', 'QA Dois'),
+  weekEngine('e3', weekKeys[0], 'absence', 'ausente', 'QA Tres', { origem: 'ausencia', categoria: 'Férias', parcial: 'a partir de 14:00' }),
+  weekEngine('e4', weekKeys[1], 'no_schedule', 'sem_escala', 'QA Quatro'),
+  // Dez eventos de outro tipo num dia: a lista não corta (a grade mostra 8).
+  ...Array.from({ length: 10 }, (_, index) => ({ id: `p${index}`, event_type: 'pause', status: 'approved', title: `Pausa ${index}`, starts_at: `${weekKeys[2]} 10:00:00`, ends_at: `${weekKeys[2]} 10:10:00`, description: index === 0 ? 'Descrição QA' : null })),
+]
+function renderCalendar(view, events = WEEK_EVENTS) {
+  globalThis.qaResources = { 'portal/calendar.php': { sucesso: true, items: events }, 'listar_funcionarios.php': { sucesso: true, funcionarios: [] } }
+  globalThis.qaInitialView = view
+  try {
+    return renderToStaticMarkup(h(CalendarPage, { session: { role: 'gestor', permissions: [], ci: {} }, notify: () => {} }))
+  } finally {
+    delete globalThis.qaResources
+    delete globalThis.qaInitialView
+  }
+}
+const daySection = (markup, key) => {
+  const start = markup.indexOf(`data-week-day="${key}"`)
+  return start < 0 ? '' : markup.slice(start, markup.indexOf('</section>', start))
+}
+const articlesOf = (html) => html.match(/<article class="rounded-xl[\s\S]*?<\/article>/gu) ?? []
+const asideOf = (markup) => markup.slice(markup.indexOf('<aside'), markup.indexOf('</aside>'))
+{
+  const week = renderCalendar('week')
+  const list = week.slice(week.indexOf('data-week-list'), week.indexOf('</div>', week.lastIndexOf('data-week-day')))
+  assert.ok(week.includes('<div class="card space-y-6 2xl:hidden" data-week-list="">'), '17b: lista da semana só abaixo de 1536 px (2xl:hidden)')
+  assert.deepEqual([...week.matchAll(/data-week-day="([^"]+)"/gu)].map((match) => match[1]), weekKeys, '17b: um bloco por dia, de segunda a domingo')
+  const dayTitles = [...week.matchAll(/id="semana-[^"]+">([^<]+)/gu)].map((match) => match[1])
+  assert.deepEqual(dayTitles.map((title) => title.split(',')[0]), ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'], '17b: dia da semana com maiúscula só na primeira letra')
+  assert.ok(dayTitles.every((title, index) => title.endsWith(`, ${weekKeys[index].slice(8, 10)}/${weekKeys[index].slice(5, 7)}`)), '17b: dia e mês no título do dia')
+  for (const key of weekKeys) {
+    const expected = WEEK_EVENTS.filter((event) => event.starts_at.slice(0, 10) === key)
+    const section = daySection(week, key)
+    assert.equal(articlesOf(section).length, expected.length, `17b: ${key} com um cartão completo por evento (sem o limite de 8 da grade)`)
+    if (expected.length === 0) assert.ok(section.includes('Sem eventos neste dia.'), `17b: ${key} vazio com aviso`)
+    assert.equal(section.includes('>Hoje</span>'), key === localDate(), `17b: "Hoje" só no dia de hoje (${key})`)
+    const engineEvents = expected.filter(isEngineScheduleEvent)
+    if (engineEvents.length > 0) assert.ok(section.includes(`aria-label="${daySummaryAriaLabel(presenceDaySummary(engineEvents))}"`), `17b: ${key} com o resumo do dia por situação`)
+  }
+  const monday0 = daySection(week, weekKeys[0])
+  assert.ok(monday0.includes('<strong class="text-sm text-slate-200">Ausência: QA Tres</strong>') && monday0.includes(`${situationLabel('ausente')} · Origem: ${originLabel('ausencia')}`), '17b: cartão completo com o título inteiro (com a situação)')
+  assert.ok(monday0.includes('Categoria: Férias') && monday0.includes('Detalhe e3') && /role="img" title="Ausência parcial a partir de 14:00"/u.test(monday0), '17b: cartão com detalhe, categoria e marcador da parcial')
+  assert.doesNotMatch(list, /line-clamp-2/u, '17b: a lista não corta o nome em duas linhas')
+  assert.ok(daySection(week, weekKeys[2]).includes('Descrição QA'), '17b: evento de outro tipo com a descrição, como no painel do dia')
+  // Grade e painel do dia só de 1536 px para cima na semana.
+  assert.ok(week.includes('<div class="card overflow-hidden p-0 hidden 2xl:block">'), '17b: grade da semana só de 1536 px para cima')
+  assert.ok(week.includes('<aside class="card h-fit xl:sticky xl:top-28 hidden 2xl:block">'), '17b: painel do dia junto da grade, só de 1536 px para cima na semana')
+  assert.ok(week.includes('<section class="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_320px]">'), '17b: na semana, as duas colunas só de 1536 px para cima')
+}
+{
+  // Mês: nada muda (sem lista, grade e painel como antes).
+  const month = renderCalendar('month')
+  assert.ok(!month.includes('data-week-list') && month.includes('<div class="card overflow-hidden p-0 ">') && month.includes('<aside class="card h-fit xl:sticky xl:top-28 ">') && month.includes('<section class="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">'), '17b: no mês, sem a lista; grade, painel e colunas como antes')
+  // O mesmo cartão no painel do dia e na lista: o dia selecionado (hoje).
+  const todayKey = localDate()
+  if (weekKeys.includes(todayKey)) {
+    const events = WEEK_EVENTS.map((event) => ({ ...event, starts_at: todayKey + event.starts_at.slice(10), ends_at: todayKey + event.ends_at.slice(10) }))
+    assert.deepEqual(articlesOf(daySection(renderCalendar('week', events), todayKey)), articlesOf(asideOf(renderCalendar('month', events))), '17b: cartões da lista iguais aos do painel do dia')
+  }
+}
+assert.equal((calendarSource.match(/<EventCard event=\{event\}/gu) ?? []).length, 2, '17b: painel do dia e lista pelo mesmo EventCard')
 
 console.log('qa-calendar-presence OK')

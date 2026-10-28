@@ -448,6 +448,26 @@ for (const [kind, id, title, button] of [['archive', 1, 'Arquivar QA Um?', 'Conf
   const empty = renderEmployees(ADMIN_SESSION, { list: [] })
   assert.deepEqual([cardIds(empty).length, empty.includes('Nenhum funcionário corresponde aos filtros.')], [0, true], '17: lista vazia sem cartao e com a mensagem')
 }
+// [17, pedido da aprovacao] O ad_login aparece na linha e no cartao para os
+// mesmos perfis: os dois leem o mesmo campo, que o servidor so manda a quem
+// tem funcionarios.manage (admin e Lideranca), o mesmo requisito da aba.
+{
+  const loginOf = (html) => html.match(/ID \d+ · ([^<]*)</u)?.[1]
+  for (const [label, session, list] of [
+    ['admin', ADMIN_SESSION, EMPLOYEES],
+    ['Lideranca', LEAD_SESSION, EMPLOYEES],
+    ['resposta sem ad_login', ADMIN_SESSION, EMPLOYEES.map(({ ad_login: _login, ...rest }) => rest)],
+  ]) {
+    const markup = renderEmployees(session, { list, status: '' })
+    for (const item of list) {
+      assert.equal(loginOf(cardOf(markup, item.id)), loginOf(rowOf(markup, item.id)), `17 (${label}): cartao ${item.id} com o mesmo login da linha`)
+      assert.equal(loginOf(rowOf(markup, item.id)), item.ad_login || 'Sem login AD', `17 (${label}): linha ${item.id} com o login do servidor`)
+    }
+  }
+  const listSource = read('../api/listar_funcionarios.php')
+  assert.match(listSource, /\$is_admin = in_array\('funcionarios\.manage', portal_permissions_for_role\(current_portal_role\(\)\), true\);[\s\S]*if \(\$is_admin\) \{\s*\$item\['ad_login'\] = /u, '17: o servidor so manda o ad_login com funcionarios.manage')
+  assert.match(adminSource, /tabs\.filter\(\(\[key\]\) => key === 'aprovacoes' \|\| \(key === 'funcionarios' && canManageEmployees\)\)/u, '17: a aba Funcionarios so com funcionarios.manage (o mesmo requisito do ad_login)')
+}
 assert.equal((adminSource.match(/\{rowActions\(item\)\}/gu) ?? []).length, 2, '17: tabela e cartoes pelo mesmo rowActions()')
 assert.equal((adminSource.match(/\{actionConfirmation\(item\)\}/gu) ?? []).length, 2, '17: tabela e cartoes pela mesma confirmacao')
 
