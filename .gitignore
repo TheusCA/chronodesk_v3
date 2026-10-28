@@ -40,3 +40,6 @@ frontend/dist/
 sessions/
 cache/
 tmp/
+
+# Referências locais com dados reais (modelos de terceiros): nunca no git
+_referencias/
