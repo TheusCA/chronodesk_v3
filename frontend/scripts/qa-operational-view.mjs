@@ -10,7 +10,8 @@ import ts from 'typescript'
 // observacao_reuniao (gestão e o próprio); os cartões de colegas da tela de
 // Pausas não mudam. Commit 3: tabela da 5.7 pelo presence_summary, legenda,
 // Liderança fora do total, nota, estado degradado, DV14, tela Técnicos (DV8)
-// e cartões de Pausas pela presenca (DV12). Os componentes são renderizados
+// e cartões de Pausas pela presenca (DV12). Pendência 17d: abaixo de 1280 px,
+// cartões por equipe no lugar da tabela. Os componentes são renderizados
 // de verdade, como no qa:pa-map (JSX transpilado pelo TypeScript do projeto,
 // react-dom/server).
 
@@ -173,6 +174,14 @@ const rowValues = (section, label) => {
   assert.ok(row, `linha ${label} na tabela`)
   return [...row.matchAll(/<strong>([^<]*)<\/strong>/gu)].map((match) => match[1])
 }
+// [17d] Cartão de uma equipe (abaixo de 1280 px): contadores e rótulos, na
+// ordem das colunas da tabela.
+const teamCard = (section, team) => {
+  const start = section.indexOf(`data-team="${team}"`)
+  assert.ok(start > 0, `cartão da equipe ${team}`)
+  return section.slice(start, section.indexOf('</article>', start))
+}
+const cardValues = (section, team) => [...teamCard(section, team).matchAll(/<dd><strong[^>]*>([^<]*)<\/strong><\/dd>/gu)].map((match) => match[1])
 const columnOrder = ['escalados', 'disponiveis', 'em_pausa', 'almoco', 'ausentes', 'fora_expediente', 'sem_escala']
 const expectedRow = (team, dash = []) => columnOrder.map((key) => (dash.includes(key) ? '—' : String(SUMMARY[team][key])))
 const textOf = (html) => html.replace(/^[^>]*>/u, '').replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim()
@@ -190,6 +199,24 @@ const metricValue = (markup, label) => markup.match(new RegExp(`<p class="metric
   assert.equal(bodies.length, 3, 'Liderança num bloco à parte da tabela (N1, N2 e Total num, Liderança no outro)')
   assert.match(bodies[1], /N1[\s\S]*N2[\s\S]*>Total<small/u, 'N1, N2 e Total juntos')
   assert.ok(!bodies[1].includes('Liderança') && bodies[2].includes('Liderança'), 'Liderança fora do bloco do total')
+  // [17d] Cartões por equipe abaixo de 1280 px, com os mesmos números da tabela.
+  for (const team of ['n1', 'n2', 'total', 'lideranca']) {
+    assert.deepEqual(cardValues(section, team), expectedRow(team), `17d: cartão ${team} com os números da tabela, na ordem das colunas`)
+    const labels = teamCard(section, team).split('<dt>').slice(1)
+    assert.equal(labels.length, OPERATIONAL_SUMMARY_COLUMNS.length, `17d: cartão ${team} com um rótulo por contador`)
+    OPERATIONAL_SUMMARY_COLUMNS.forEach((column, index) => {
+      assert.ok(labels[index].includes(column.tone) && /<svg[^>]*aria-hidden="true"/u.test(labels[index]) && textOf(labels[index].slice(0, labels[index].indexOf('</dt>'))) === column.label, `17d: cartão ${team}, ${column.label} com cor, ícone e rótulo da legenda`)
+    })
+  }
+  assert.ok(teamCard(section, 'total').includes('>Total<small class="ml-2 text-xs font-normal text-slate-400">N1 + N2</small></h3>'), '17d: cartão Total com a nota "N1 + N2"')
+  assert.ok(teamCard(section, 'lideranca').includes('>Liderança<small class="ml-2 text-xs font-normal text-slate-400">fora dos totais</small></h3>'), '17d: cartão Liderança com a nota "fora dos totais"')
+  const cardsStart = section.indexOf('<div class="mt-5 xl:hidden">')
+  const divider = section.indexOf('border-t-2 border-white/10 pt-3', cardsStart)
+  assert.ok(cardsStart > 0 && cardsStart < section.indexOf('<table'), '17d: cartões só abaixo de 1280 px (xl:hidden), antes da tabela')
+  assert.ok(['n1', 'n2', 'total'].every((team) => section.indexOf(`data-team="${team}"`) < divider) && section.indexOf('data-team="lideranca"') > divider, '17d: Liderança num bloco à parte, depois de N1, N2 e Total')
+  assert.ok(section.includes('<div class="table-wrap mt-5 hidden xl:block">'), '17d: a tabela só de 1280 px para cima (hidden xl:block)')
+  assert.equal((section.match(/data-team="/gu) ?? []).length, 4, '17d: quatro cartões')
+  assert.equal((section.match(/<div class="(?:mt-3 )?grid gap-3 (?:border-t-2 border-white\/10 pt-3 )?sm:grid-cols-2 md:grid-cols-3">/gu) ?? []).length, 2, '17d: uma coluna no celular, duas de 640 px e três de 768 px, nos dois blocos (a Liderança com a largura dos outros)')
   // Cabeçalho: cada coluna com o ícone, a cor e o rótulo da legenda.
   const head = section.slice(section.indexOf('<thead>'), section.indexOf('</thead>'))
   const headers = head.split('<th ').slice(2)
@@ -243,6 +270,9 @@ for (const [label, data] of [
   for (const team of ['N1', 'N2', 'Total', 'Liderança']) {
     assert.deepEqual(rowValues(section, team), Array(7).fill('—'), `${label}: linha ${team} com "—"`)
   }
+  for (const team of ['n1', 'n2', 'total', 'lideranca']) {
+    assert.deepEqual(cardValues(section, team), Array(7).fill('—'), `${label}: 17d, cartão ${team} com "—"`)
+  }
   assert.ok(section.includes('inline-alert inline-alert-warning') && section.includes('Situação da equipe indisponível'), `${label}: aviso da presença indisponível`)
   assert.equal(metricValue(markup, 'CIs disponíveis'), '—', `${label}: "CIs disponíveis" com "—" (nunca o cálculo antigo)`)
   assert.ok(markup.includes('Indisponível: presença não calculada'), `${label}: "CIs disponíveis" com o aviso`)
@@ -256,6 +286,7 @@ for (const [label, data] of [
   const section = summarySection(markup)
   for (const [team, label] of [['n1', 'N1'], ['n2', 'N2'], ['total', 'Total'], ['lideranca', 'Liderança']]) {
     assert.deepEqual(rowValues(section, label), expectedRow(team, ['em_pausa']), `pausas ilegíveis: ${label} com "—" só em Em pausa`)
+    assert.deepEqual(cardValues(section, team), expectedRow(team, ['em_pausa']), `pausas ilegíveis: 17d, cartão ${label} com "—" só em Em pausa`)
   }
   assert.ok(section.includes('Pausas indisponíveis') && !section.includes('Situação da equipe indisponível'), 'pausas ilegíveis: o aviso das pausas, não o da presença')
   assert.equal(metricValue(markup, 'CIs disponíveis'), '11', 'pausas ilegíveis: "CIs disponíveis" continua pelo resumo')
@@ -285,6 +316,7 @@ const NOBODY = 'Ninguém escalado neste momento (fim de semana, feriado ou sem r
   const odd = { ...SUMMARY, n1: { ...SUMMARY.n1, escalados: '11', disponiveis: -1, almoco: 1.5, ausentes: undefined } }
   const section = summarySection(renderDashboardWith(dashboardData({ presence_summary: odd })))
   assert.deepEqual(rowValues(section, 'N1'), ['—', '—', '2', '—', '—', '1', '21'], 'contador fora do formato vira "—"')
+  assert.deepEqual(cardValues(section, 'n1'), ['—', '—', '2', '—', '—', '1', '21'], '17d: cartão com o mesmo "—" da tabela')
   const noLeadership = summarySection(renderDashboardWith(dashboardData({ presence_summary: { ...SUMMARY, lideranca: undefined } })))
   assert.deepEqual(rowValues(noLeadership, 'Liderança'), Array(7).fill('—'), 'Liderança sem dados: "—"')
 }
@@ -315,6 +347,7 @@ for (const serverNow of [null, undefined, '', 'x', 0]) {
   const source = read('src/pages/DashboardPage.jsx')
   assert.doesNotMatch(source, /\.disponibilidade\b/u, 'Visão Operacional não lê a disponibilidade do cálculo antigo')
   assert.match(source, /summaryCount\(presence\.total, 'disponiveis'\)/u, '"CIs disponíveis" pelo total do resumo')
+  assert.equal((source.match(/\{cell\(team, column\.key\)\}/gu) ?? []).length, 2, '17d: tabela e cartões pelo mesmo cell()')
 }
 
 // ---------------------------------------------------------------------------

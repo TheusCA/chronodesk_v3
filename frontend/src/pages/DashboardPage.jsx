@@ -29,6 +29,7 @@ function updatedLabel(status, serverNow) {
 // [F7] Linhas da tabela da 5.7: N1, N2 e o total N1 + N2; a Liderança fica
 // à parte e fora do total (D10). Rótulo e nota em linhas separadas.
 const TEAM_ROWS = [['n1', 'N1'], ['n2', 'N2'], ['total', 'Total', 'N1 + N2']]
+const LEADERSHIP_ROW = ['lideranca', 'Liderança', 'fora dos totais']
 
 // [Ajuste A1] Cabeçalho que quebra em duas linhas quando falta largura: o
 // ícone fica preso à primeira palavra e o resto vai para a linha de baixo.
@@ -63,6 +64,22 @@ function OperationalSummary({ data }) {
       {OPERATIONAL_SUMMARY_COLUMNS.map((column) => <td className="!px-2 text-center" key={column.key}><strong>{cell(team, column.key)}</strong></td>)}
     </tr>
   )
+  // [17d] Abaixo de 1280 px, um cartão por equipe no lugar da tabela, que só
+  // cabe sem rolagem de 1280 px para cima (medição do A1). Mesmo cell() da
+  // tabela; a Liderança num bloco à parte, fora dos totais.
+  const card = ([team, label, note = null]) => (
+    <article className="rounded-card border border-white/10 bg-slate-950/45 p-4" data-team={team} key={team}>
+      <h3 className="text-sm font-bold text-white">{label}{note && <small className="ml-2 text-xs font-normal text-slate-400">{note}</small>}</h3>
+      <dl className="mt-3 space-y-2">
+        {OPERATIONAL_SUMMARY_COLUMNS.map((column) => (
+          <div className="flex items-center justify-between gap-3" key={column.key}>
+            <dt><span className={`status-badge gap-1 normal-case tracking-normal ${column.tone}`}><Icon className="h-3 w-3 shrink-0" name={column.icon} />{column.label}</span></dt>
+            <dd><strong className="text-lg text-white">{cell(team, column.key)}</strong></dd>
+          </div>
+        ))}
+      </dl>
+    </article>
+  )
   return (
     <section className="card">
       <SectionHeader
@@ -81,7 +98,11 @@ function OperationalSummary({ data }) {
           O estado das pausas não pôde ser lido: Em pausa aparece como "—", e quem está em pausa conta pela escala até a leitura voltar.
         </InlineAlert>
       )}
-      <div className="table-wrap mt-5">
+      <div className="mt-5 xl:hidden">
+        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">{TEAM_ROWS.map((team) => card(team))}</div>
+        <div className="mt-3 grid gap-3 border-t-2 border-white/10 pt-3 sm:grid-cols-2 md:grid-cols-3">{card(LEADERSHIP_ROW)}</div>
+      </div>
+      <div className="table-wrap mt-5 hidden xl:block">
         <table className="data-table">
           <thead>
             <tr>
@@ -92,7 +113,7 @@ function OperationalSummary({ data }) {
             </tr>
           </thead>
           <tbody>{TEAM_ROWS.map((team) => row(team))}</tbody>
-          <tbody>{row(['lideranca', 'Liderança', 'fora dos totais'], 'border-t-2 border-white/10')}</tbody>
+          <tbody>{row(LEADERSHIP_ROW, 'border-t-2 border-white/10')}</tbody>
         </table>
       </div>
       {/* [Ajuste A3] Tabela toda em zero por falta de escala (fim de semana, feriado ou sem regra), não por falha. */}
