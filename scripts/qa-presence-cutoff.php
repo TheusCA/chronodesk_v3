@@ -276,7 +276,7 @@ $refused = static function (callable $call): string {
     try {
         $call();
         return 'aceito';
-    } catch (InvalidArgumentException $e) {
+    } catch (InvalidArgumentException) {
         return 'recusado';
     }
 };
@@ -459,7 +459,7 @@ foreach (['2026-11-15', '2026-02-30', '2026-13-16', 'xxxx-xx-16', '16/11/2026', 
         try {
             PresenceCutoff::read($cutoffPdo(true, $invalid));
             return 'aceito';
-        } catch (UnexpectedValueException $e) {
+        } catch (UnexpectedValueException) {
             return 'recusado';
         }
     })();

@@ -469,6 +469,23 @@ assert_same(true, $f7First('case "$E" in /tmp/ensaio-f7.*) sudo rm -r "$E"') > $
 foreach (['qa-presence-engine', 'qa-operational-view', 'qa-pa-conflicts', 'qa-archive', 'qa-security'] as $qa) {
     assert_same(true, strpos($f7Commands[$f7First('for q in ')] ?? '', $qa) !== false, "roteiro do F7: ensaio roda o {$qa}");
 }
+// [Revisao B1] O sudo mktemp -d cria o ensaio com dono root e modo 0700: so
+// esse diretorio passa ao www-data, na linha da extracao, antes do php -l e
+// dos QAs. O /tmp da VM tem noexec: o ensaio so chama php arquivo.php.
+$lintLine = $f7First('sudo find "$E" -name');
+$qaLoopLine = $f7First('for q in ');
+$cleanupLine = $f7First('case "$E" in /tmp/ensaio-f7.*) sudo rm -r "$E"');
+$ownerLines = array_keys(array_filter($f7Commands, static fn (string $line): bool => preg_match('/\b(chown|chmod)\b/', $line) === 1));
+assert_same(true, $ownerLines === [$archiveLine] && preg_match('/^E=\$\(sudo mktemp -d \/tmp\/ensaio-f7\.XXXXXX\); .*\' && sudo chown -R www-data: "\$E" && echo "extraido em \$E"/', $f7Commands[$archiveLine] ?? '') === 1 && $archiveLine < $lintLine && $lintLine < $qaLoopLine, 'roteiro do F7: permissao so do diretorio do ensaio, para o www-data, antes do php -l e dos QAs');
+$directRuns = [];
+foreach (array_slice($f7Commands, max(0, $archiveLine), max(0, $cleanupLine - $archiveLine + 1)) as $line) {
+    preg_match_all('/(\S+)\s+"\$E\/[^"]*"/', $line, $paths);
+    $directRuns = array_merge($directRuns, array_values(array_filter($paths[1], static fn (string $before): bool => $before !== 'php')));
+    if (preg_match('/-exec (?!sudo -u www-data php -l \{\} \\\\;)/', $line) === 1 || preg_match('/(^|[\s;&|(])\.\//', $line) === 1) {
+        $directRuns[] = substr($line, 0, 60);
+    }
+}
+assert_same([true, []], [$cleanupLine > $qaLoopLine && strpos($f7Commands[$qaLoopLine] ?? '', 'sudo -u www-data php "$E/scripts/$q.php"') !== false, $directRuns], 'roteiro do F7: ensaio no /tmp (noexec) so com php arquivo.php, como www-data, nunca execucao direta');
 // Medicao: script do branch remoto (0b) e do commit gravado (5), sempre com cat-file antes.
 $measureLines = array_keys(array_filter($f7Commands, static fn (string $line): bool => strpos($line, 'bash <(sudo git show') !== false && strpos($line, 'medir-polling.sh') !== false));
 assert_same(4, count($measureLines), 'roteiro do F7: status.php e dashboard.php medidos na referencia e na base');
@@ -479,10 +496,41 @@ assert_same(2, count(array_filter($measureLines, static fn (int $i): bool => $i 
 assert_same(2, count(array_filter($measureLines, static fn (int $i): bool => $i > $archiveLine && $i < $mergeLine)), 'roteiro do F7: base do criterio do commit gravado, logo antes do merge');
 // Q-F7 e rotulo antes do merge; desligamento rapido com o interruptor e a recarga.
 assert_same(true, $f7First('AS rotulo_que_o_php_nao_reconhece') >= 0 && $f7First('fora_mapa_escala = 1) AS fora_do_mapa') > $archiveLine && $f7First('fora_mapa_escala = 1) AS fora_do_mapa') < $mergeLine, 'roteiro do F7: Q-F7 completa e rotulo de equipe antes do merge');
-assert_same(true, $f7First("sudo sed -i 's/^STATUS_PRESENCE_ENABLED=.*/STATUS_PRESENCE_ENABLED=0/' /var/www/.env") > $mergeLine && strpos($f7Commands[$f7First('STATUS_PRESENCE_ENABLED=0')] ?? '', "echo 'STATUS_PRESENCE_ENABLED=0' | sudo tee -a /var/www/.env") !== false, 'roteiro do F7: desligamento rapido no /var/www/.env (troca ou acrescenta)');
-assert_same(true, $f7First("sudo grep -rn 'STATUS_PRESENCE_ENABLED' /etc/php/*/fpm/") >= 0 && $f7First('scripts/preflight-deploy.sh /var/www/.env | grep STATUS_PRESENCE_ENABLED') > $f7First('STATUS_PRESENCE_ENABLED=0') && $f7First('sudo systemctl reload "php$(php -r') !== -1, 'roteiro do F7: confere o pool do PHP-FPM, o preflight e recarrega');
+$switchLine = $f7First("sudo sed -i 's/^STATUS_PRESENCE_ENABLED=.*/STATUS_PRESENCE_ENABLED=false/' /var/www/.env");
+assert_same(true, $switchLine > $mergeLine && strpos($f7Commands[$switchLine] ?? '', "else echo 'STATUS_PRESENCE_ENABLED=false' | sudo tee -a /var/www/.env >/dev/null; fi") !== false, 'roteiro do F7: desligamento rapido no /var/www/.env (troca ou acrescenta)');
+assert_same(true, $f7First("sudo grep -rn 'STATUS_PRESENCE_ENABLED' /etc/php/*/fpm/") >= 0 && $f7First('scripts/preflight-deploy.sh /var/www/.env | grep STATUS_PRESENCE_ENABLED') > $switchLine && $f7First('sudo systemctl reload "php$(php -r') !== -1, 'roteiro do F7: confere o pool do PHP-FPM, o preflight e recarrega');
+// [Revisao B3a] Copia do .env (modo 600, em /var/backups/chronodesk) no mesmo
+// comando, antes do sed; sem a copia, nada muda.
+assert_same(1, preg_match('/^K=\/var\/backups\/chronodesk\/env-[^;]+; if sudo install -m 600 \/var\/www\/\.env "\$K"; then [^;]*; if sudo grep -q .*sudo sed -i .*; fi; else echo "PARE: copia do \.env falhou, nada alterado"; fi; unset K$/', $f7Commands[$switchLine] ?? ''), 'roteiro do F7: copia do .env com modo 600 antes do sed, no mesmo comando');
+// [Revisao B3b] Um valor so no roteiro (false desliga, true liga), e o PHP e o
+// preflight leem esses valores do mesmo jeito.
+preg_match_all('/STATUS_PRESENCE_ENABLED=([A-Za-z0-9]+)/', $deployDoc, $switchValues);
+$switchUsed = array_values(array_unique($switchValues[1]));
+sort($switchUsed);
+assert_same(['false', 'true'], $switchUsed, 'DEPLOY_LINUX.md: interruptor so com false e true');
+$preflight = (string)file_get_contents(dirname(__DIR__) . '/scripts/preflight-deploy.sh');
+preg_match('/^\s*""\|([a-z0-9|]+)\) echo "STATUS_PRESENCE_ENABLED: OK \(ligado\)"/m', $preflight, $preflightOn);
+preg_match('/^\s*([a-z0-9|]+)\) echo "STATUS_PRESENCE_ENABLED: OK \(desligado\)"/m', $preflight, $preflightOff);
+$switchLists = ['ligado' => explode('|', $preflightOn[1] ?? ''), 'desligado' => explode('|', $preflightOff[1] ?? '')];
+$phpReads = [];
+foreach ($switchLists as $side => $values) {
+    foreach ($values as $value) {
+        putenv('STATUS_PRESENCE_ENABLED=' . $value);
+        $phpReads[$side][] = PresenceService::statusPresenceEnabled();
+    }
+}
+putenv('STATUS_PRESENCE_ENABLED');
+assert_same([true, true], [in_array('true', $switchLists['ligado'], true), in_array('false', $switchLists['desligado'], true)], 'preflight: true ligado e false desligado');
+assert_same(['ligado' => array_fill(0, count($switchLists['ligado']), true), 'desligado' => array_fill(0, count($switchLists['desligado']), false)], $phpReads, 'PresenceService: os valores do preflight ligam e desligam do mesmo jeito');
 assert_same(true, strpos($f7Runbook, 'STATUS_PRESENCE_ENABLED: OK') !== false && strpos($f7Runbook, 'so a recarga do PHP-FPM aplica') !== false, 'roteiro do F7: o desligamento explica o preflight e a recarga');
 assert_same(true, strpos($f7Runbook, 'Referencia: PENDENTE') !== false, 'roteiro do F7: referencia do dashboard.php marcada como pendente');
+// [Revisao B5] Aviso a gestao com marcadores, sem numero de medicao antiga, e
+// a nota do 0a dizendo de qual consulta sai cada um.
+preg_match_all('/^> .*$/m', $f7Runbook, $noticeLines);
+$notice = implode("\n", $noticeLines[0]);
+$f7Prose = (string)preg_replace('/\s+/', ' ', $f7Runbook);
+assert_same([true, true, 0], [strpos($notice, 'ate [N_PAS] PAs') !== false, strpos($notice, 'Os [N_SEM_REGRA] tecnicos') !== false, preg_match('/\d/', $notice)], 'roteiro do F7: aviso a gestao com [N_PAS] e [N_SEM_REGRA], sem numero fixo');
+assert_same([true, true], [strpos($f7Prose, '`[N_PAS]` e o `pas_compartilhados_hoje` da Q-F6') !== false, strpos($f7Prose, '`[N_SEM_REGRA]` e o `n1_n2_sem_regra_hoje` da Q-F7') !== false], 'roteiro do F7: nota do 0a com a consulta de cada marcador');
 // So contagens: nenhum nome, login ou autor; senha sempre lida sem eco e apagada (F6 e F7).
 assert_same(0, preg_match('/\b(f\.nome|nome AS|SELECT nome|ad_login|registered_by|employee_name)\b/', $f7Text), 'roteiro do F7: nenhuma consulta devolve nome, login ou autor');
 foreach (['### Deploy que traz o F6 (Parte B', '### Deploy que traz o F7 (Parte B'] as $heading) {

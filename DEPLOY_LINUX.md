@@ -1052,8 +1052,8 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   (junto com o do F6), referencia do `dashboard.php`, ensaio do commit gravado
   com `git archive`, Q-F7 e rotulo de equipe, base do criterio, `git merge`
   do commit conferido (sem `pull`), build, recarga, verificacao so com
-  contagens e medicao depois. Desligamento rapido: `STATUS_PRESENCE_ENABLED=0`
-  no `/var/www/.env` e recarga do PHP-FPM. Entra no roteiro consolidado da
+  contagens e medicao depois. Desligamento rapido: `STATUS_PRESENCE_ENABLED=false`
+  no `/var/www/.env` (com copia antes) e recarga do PHP-FPM. Entra no roteiro consolidado da
   Parte B (deploy unico depois do F9).
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
@@ -2228,21 +2228,25 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 **0. Antes do dia do deploy.**
 
-0a. **Aviso a gestao, junto com o do F6** (risco 1 do F7 e P13 do F6). Os
-   numeros vem da Q-F6 (`pas_compartilhados_hoje`) e da Q-F7
-   (`n1_n2_sem_regra_hoje`) mais recentes; em 2026-10-15 e 2026-10-26, **6** e
-   **6**. Texto pronto para o Teams, a Lideranca e aos gestores (troque
-   DD/MM e os numeros, se mudarem):
+0a. **Aviso a gestao, junto com o do F6** (risco 1 do F7 e P13 do F6). O
+   texto leva marcadores, preenchidos **no dia do envio** com as consultas
+   rodadas nesse dia (nunca com os numeros de uma medicao antiga): `[N_PAS]`
+   e o `pas_compartilhados_hoje` da Q-F6 (passo 3 do roteiro do F6; antes das
+   migrations, a variante da medicao antecipada) e `[N_SEM_REGRA]` e o
+   `n1_n2_sem_regra_hoje` da Q-F7 (passo 0c, variante; depois das
+   migrations, a completa do passo 4). Troque tambem DD/MM pela data do
+   deploy; nao envie o texto com marcador. Texto para o Teams, a Lideranca e
+   aos gestores:
 
 > Pessoal, a partir de DD/MM o ChronoDesk passa a usar a escala cadastrada de
 > cada tecnico no Mapa PA e na Visao Operacional. No Mapa PA, o PA em que duas
 > ou mais pessoas estao presenciais no mesmo dia passa a aparecer com contorno
-> vermelho e os dias do conflito; pelos numeros de hoje, ate 6 PAs podem
+> vermelho e os dias do conflito; pelos numeros de hoje, ate [N_PAS] PAs podem
 > aparecer assim ja no primeiro dia. E um aviso, nao um bloqueio: a alocacao
 > continua podendo ser salva, e o conflito aceito fica registrado. Na Visao
 > Operacional, "CIs disponiveis" passa a contar pela escala do dia: conta quem
 > esta escalado, dentro do expediente e sem pausa, almoco ou ausencia lancada.
-> Almoco e fora do expediente nao contam como disponiveis. Os 6 tecnicos que
+> Almoco e fora do expediente nao contam como disponiveis. Os [N_SEM_REGRA] tecnicos que
 > ainda nao tem regra de escala aparecem como "Sem escala" e deixam de contar
 > ate a regra ser cadastrada na tela Escala presencial; por isso o numero pode
 > ficar menor que o de hoje, sem que isso seja falha. A Lideranca aparece numa
@@ -2270,7 +2274,8 @@ sudo git cat-file -e origin/<BRANCH>:scripts/medir-polling.sh && URL=http://127.
    `dashboard.php`. Alternativa, se `<(...)` nao funcionar no shell do
    servidor: copiar o arquivo para um diretorio temporario, conferir com
    `sha256sum` contra `sudo git show origin/<BRANCH>:scripts/medir-polling.sh |
-   sha256sum` e rodar `bash` nessa copia. **Referencia: PENDENTE** (o
+   sha256sum` e rodar `bash <copia>` (nunca `./<copia>`: o `/tmp` da VM e
+   montado com `noexec`). **Referencia: PENDENTE** (o
    responsavel mede no servidor e registra na secao 9.9 do desenho).
 
 0c. **Q-F7 e rotulo de equipe, antecipados** (so contagens; num dia util, em
@@ -2320,7 +2325,15 @@ cd /var/www/chronodesk; B=$(sudo git rev-parse --abbrev-ref HEAD); if [ "$B" = "
    usam; o `git archive` extrai esse commit num diretorio temporario, com
    `pipefail` (sem ele, um `git archive` com falha passaria em silencio pelo
    `tar`); os QAs do F7 rodam ali com o PHP do servidor, como `www-data`, sem
-   banco, sem rede e sem tocar em `/var/www/chronodesk`.
+   banco, sem rede e sem tocar em `/var/www/chronodesk`. Permissao: o
+   `sudo mktemp -d` cria o diretorio com dono `root` e modo `0700`, que o
+   `www-data` nao le; por isso a mesma linha da extracao passa **so esse
+   diretorio** para o `www-data` (`chown -R www-data: "$E"`), antes do
+   `php -l` e dos QAs (nada mais no `/tmp` muda). O `/tmp` da VM e montado
+   com `noexec`: o ensaio so chama `php arquivo.php` (o `php -l`, os cinco
+   QAs e os processos filhos do `qa-security`, que rodam o mesmo binario do
+   PHP com o arquivo como argumento) e nunca executa arquivo do ensaio
+   direto (`./x.sh`).
 
 ```bash
 cd /var/www/chronodesk; F7=$(sudo cat /var/backups/chronodesk/f7-commit); sudo git cat-file -e "$F7^{commit}" && sudo git cat-file -e "$F7:scripts/qa-operational-view.php" && sudo git cat-file -e "$F7:scripts/medir-polling.sh" && echo "f7-commit OK" || echo "PARE: f7-commit ausente ou incompleto"
@@ -2461,24 +2474,32 @@ ou falha no calculo, sem voltar o codigo. A variavel fica no `.env` em uso,
 PHP-FPM nao a definir: variavel exportada no pool (`env[...]` no `www.conf`)
 vence o `.env`. O PHP-FPM guarda o valor no processo (o `config.php` so grava
 o que o ambiente ainda nao tem), entao **so a recarga do PHP-FPM aplica** a
-mudanca.
+mudanca. Valores: `false` desliga e `true` liga (os do `.env.example` e os
+que o preflight pede); o PHP (`PresenceService::statusPresenceEnabled`) e o
+preflight aceitam as mesmas listas (`0`/`false`/`off`/`no` desligam), mas o
+roteiro usa so `false` e `true`. Antes de alterar, a 2a linha copia o `.env`
+para `/var/backups/chronodesk` com modo `600` (o `install -m 600` ja cria a
+copia nesse modo; ela tem os segredos do `.env`, como o backup) e so troca a
+linha se a copia der certo.
 
 ```bash
 sudo grep -rn 'STATUS_PRESENCE_ENABLED' /etc/php/*/fpm/ ; echo "fim (esperado: nada acima)"
-if sudo grep -q '^STATUS_PRESENCE_ENABLED=' /var/www/.env; then sudo sed -i 's/^STATUS_PRESENCE_ENABLED=.*/STATUS_PRESENCE_ENABLED=0/' /var/www/.env; else echo 'STATUS_PRESENCE_ENABLED=0' | sudo tee -a /var/www/.env >/dev/null; fi
+K=/var/backups/chronodesk/env-antes-interruptor-$(date +%Y%m%d-%H%M%S); if sudo install -m 600 /var/www/.env "$K"; then echo "copia do .env: $K ($(sudo stat -c '%a %U' "$K"))"; if sudo grep -q '^STATUS_PRESENCE_ENABLED=' /var/www/.env; then sudo sed -i 's/^STATUS_PRESENCE_ENABLED=.*/STATUS_PRESENCE_ENABLED=false/' /var/www/.env; else echo 'STATUS_PRESENCE_ENABLED=false' | sudo tee -a /var/www/.env >/dev/null; fi; else echo "PARE: copia do .env falhou, nada alterado"; fi; unset K
 cd /var/www/chronodesk && sudo sh scripts/preflight-deploy.sh /var/www/.env | grep STATUS_PRESENCE_ENABLED
 sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
 ```
 
-   Esperado: nada no `grep` do pool e `STATUS_PRESENCE_ENABLED: OK
-   (desligado)` no preflight (que nunca mostra valores). Efeito: o
+   Esperado: nada no `grep` do pool, `copia do .env: ... (600 root)` e
+   `STATUS_PRESENCE_ENABLED: OK (desligado)` no preflight (que nunca mostra
+   valores). Com `PARE`, o `.env` nao mudou: nao recarregue. Efeito: o
    `status.php` deixa de calcular a `presenca` (as 4 consultas saem do
    polling) e os cartoes de Pausas voltam ao calculo antigo; o
    `dashboard.php` responde sem o resumo e a Visao Operacional mostra "—" e
    o aviso "Situacao da equipe indisponivel" (nunca o numero antigo, DV5); a
    tela Tecnicos mostra "—" com aviso. **A DV9, a DV10 e a DV11 continuam
    valendo** (nao dependem do interruptor). Para religar: o mesmo comando com
-   `STATUS_PRESENCE_ENABLED=1`, preflight com `OK (ligado)` e a recarga.
+   `STATUS_PRESENCE_ENABLED=true` (faz outra copia antes), preflight com
+   `OK (ligado)` e a recarga.
 
 **Se a verificacao falhar:**
 
