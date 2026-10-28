@@ -844,6 +844,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Roteiro nao executado num servidor Linux; o modo `600` da copia nao se confere no NTFS da estacao (saiu 644 no teste), so no servidor, pela propria linha. Observacao fora do escopo, sem mudanca: no ensaio, o `config.php` le um `/tmp/.env` se existir (desenho 9.9). `gitleaks` ausente na estacao. |
 | **Validacao humana** | **Aprovado em 2026-10-28** (revisao do responsavel sobre `66e6276` e `cfe957f`); com o B2, a L6 fica aprovada e **o F7 esta completo**, no deploy unico da Parte B. Duas observacoes foram para a pendencia 16 (roteiro unico): conferir `[ ! -e /tmp/.env ]` no ensaio (ou extrair num diretorio com o nivel acima controlado) e limpar as copias `env-antes-interruptor-*`, depois de conferidas e com aprovacao. Pendentes com o responsavel: referencia do `dashboard.php` e do `status.php` e contagem de rotulo do servidor. |
 
+### Lote de acabamento — 17d (Visao Operacional com cartoes abaixo de 1280 px) — 2026-10-28
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Pendencia 17d: na Visao Operacional, a tabela da situacao da equipe rolava dentro do cartao abaixo de 1280 px; no lugar dela, cartoes por equipe (desenho 9.11). |
+| **Branch e commits** | `ac043bb` (numeracao das migrations no desenho, pedida junto), `258dfdd` (codigo e QA) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/pages/DashboardPage.jsx` (cartoes por equipe, `xl:hidden`; tabela `hidden xl:block`) e `frontend/scripts/qa-operational-view.mjs`; desenho 9.11 (nova) e a numeracao das migrations (018 para o F8, 020 para o F9) na 9.7, 11.3 e 11.4. |
+| **Decisoes de implementacao** | Cinco, a aprovar (desenho 9.11, M1 a M5): troca em 1280 px, onde a tabela cabe (medicao do A1); o mesmo `cell()` para cartoes e tabela; Lideranca num bloco a parte; uma, duas e tres colunas; os dois desenhos no HTML, escolhidos pela largura. |
+| **Validacao executada pela IA** | `qa:operational-view` ampliado (cartoes iguais a tabela no normal, degradado, pausas ilegiveis e contador fora do formato; legenda, notas, divisor, classes). Mutacao **14/14** numa copia do frontend. 18 `qa:*`, lint, typecheck e build. Medicao e prints com a Inter, servidor simulado e Chrome sem janela em 390, 640, 768, 1024, 1279, 1280 e 1366 px: sem rolagem dentro do cartao nem da pagina, nenhum rotulo cortado; cartao mais estreito com 208 px. |
+| **Limitacoes declaradas** | Sem o backend real; dados ficticios; largura medida no navegador, nao no QA. Prints fora do repositorio. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do 17d (zip `_revisao_acab17d.zip`). |
+
 ---
 
 ## 5. Responsabilidade

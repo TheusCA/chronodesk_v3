@@ -2690,6 +2690,50 @@ Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do pr
 
 **F7 completo (2026-10-28)**, no deploy único da Parte B (pendência 16 do estado da sessão), pelo roteiro "Deploy que traz o F7" do `DEPLOY_LINUX.md`. Pendentes com o responsável, sem mudança de código: a referência do `dashboard.php` e do `status.php` (passo 0b; tabela "Medições do F7") e a contagem de rótulo de equipe no servidor.
 
+
+### 9.11 Lote de acabamento (pendências 17d, 17 e 17b), antes do roteiro único
+
+**Ordem aprovada em 2026-10-28:** 17d, 17 e 17b, um commit de entrega cada, com parada para revisão depois de cada um; depois, o plano do F8 na 9.10 (sem a 018). Só frontend: sem PHP, migration, `.env` ou dependência nova. Entra no deploy único da Parte B, pelo build do frontend (pendência 16). Ficam para depois do deploy: feriados, retenção e anonimização (LGPD), BIZ-05, SEC-04, PERF-02, retirada das tabelas legadas, jornada que cruza a meia-noite, dívida técnica 13 e o tipo do `assert_same` nos QAs PHP.
+
+**17d — Visão Operacional com cartões por equipe abaixo de 1280 px, 2026-10-28: entregue (`258dfdd`), aguardando revisão.** Arquivos: `frontend/src/pages/DashboardPage.jsx` e `frontend/scripts/qa-operational-view.mjs`. Até 1279 px, um cartão por equipe (N1, N2, Total com a nota "N1 + N2" e, num bloco à parte, a Liderança com "fora dos totais"); cada cartão lista os sete contadores na ordem das colunas, com o selo da legenda (ícone, cor e rótulo) e o número. De 1280 px para cima, a tabela de sempre (K9, A1).
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| M1 | A troca é em **1280 px** (`xl`): cartões até 1279, tabela de 1280 para cima. Não só no celular | A medição do A1 mostrou que a tabela só cabe sem rolagem dentro do cartão de 1280 px para cima (largura mínima de 767 px; em 1024, com a barra lateral, o cartão tem 687 px úteis). Trocar em 768 (`md`) deixaria a rolagem dentro do cartão entre 768 e 1279 |
+| M2 | Cartões e tabela pelo **mesmo `cell()`** | Um ramo só para o "—" do estado degradado (presença indisponível, DV5; pausas ilegíveis, DV6; contador fora do formato): os dois nunca divergem. O QA confere que o `cell(team, column.key)` aparece duas vezes |
+| M3 | **Liderança num bloco à parte**, depois de um divisor (`border-t-2`, como na tabela), com a mesma largura dos outros cartões | Fora dos totais (D10), separada como na tabela |
+| M4 | **Uma coluna** no celular, **duas** de 640 px e **três** de 768 px (N1, N2 e Total na mesma linha) | Com duas colunas, o Total ficava sozinho na 2ª linha entre 640 e 1279 px. Com três, o cartão mais estreito tem 208 px (1024 px, barra lateral aberta), sem rótulo cortado |
+| M5 | Os dois desenhos ficam no HTML; a largura decide qual aparece (`xl:hidden` e `hidden xl:block`) | Como a tela de Ausências (`md:hidden`), sem `matchMedia` nem estado; o QA marca cada cartão por `data-team`, como o `data-presence` e o `data-conflict` do Mapa PA |
+
+**Validação executada pela IA:** `qa:operational-view` ampliado. Nos estados normal, presença indisponível (quatro variantes), pausas ilegíveis e contador fora do formato, cada cartão traz os mesmos números da tabela. O QA confere também:
+- rótulo, cor e ícone de cada contador;
+- as notas do Total e da Liderança;
+- a Liderança depois do divisor e quatro cartões;
+- as classes da troca em 1280 px e das colunas.
+
+**Mutação 14/14** numa cópia do frontend:
+- cartões sem `xl:hidden` ou até `lg`; tabela sem `hidden xl:block` ou a partir de `lg`;
+- cartão sem o `cell()`; Liderança junto de N1, N2 e Total; sem o cartão da Liderança;
+- cartão sem a nota, sem o ícone ou sem a cor; colunas fora de ordem; um contador a menos;
+- só duas colunas; Liderança com largura própria.
+
+18 `qa:*`, lint, typecheck e build; nenhum PHP mudou. Prints e medição com a fonte Inter (injetada só na página de teste), servidor simulado com dados fictícios, Chrome sem janela:
+
+| Janela | Mostra | Largura dos cartões | Rolagem dentro do cartão | Rolagem da página |
+|---|---|---|---|---|
+| 390 px | Cartões, uma coluna | 316 px | Não | Não |
+| 640 px | Cartões, duas colunas | 262 px | Não | Não |
+| 768 px | Cartões, três colunas | 213 px | Não | Não |
+| 1024 px (barra lateral) | Cartões, três colunas | 208 px | Não | Não |
+| 1279 px (barra lateral) | Cartões, três colunas | 293 px | Não | Não |
+| 1280 e 1366 px | Tabela | — | Não | Não |
+
+O estado degradado (presença indisponível) foi medido nas mesmas larguras: "—" em todos os cartões, sem rolagem.
+
+**Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; o QA renderiza HTML sem layout, então a largura vem só da medição no navegador; os prints ficam fora do repositório. `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências
