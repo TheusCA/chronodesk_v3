@@ -2745,6 +2745,56 @@ O estado degradado (presença indisponível) foi medido nas mesmas larguras: "�
 
 Os 20 casos (10 larguras × 2 estados) deram o esperado. Só confirmou: sem commit de código. **17d concluído.**
 
+**17 — Tela Funcionários com cartões abaixo de 1280 px, 2026-10-28: entregue (`2d72325`), aguardando revisão.** Arquivos: `frontend/src/pages/AdminPage.jsx` e `frontend/scripts/qa-employee-form.mjs`. Até 1279 px, cada cadastro vira um cartão com:
+- avatar, nome e "ID · login" (ou "Sem login AD");
+- a situação (Ativo, Arquivado com a data, Inativo sem data);
+- equipe, perfil e jornada;
+- as ações da linha (Editar, Arquivar, Arquivar com regularização, Restaurar, ou o aviso "Seu cadastro" ou "Só administradores");
+- a confirmação de arquivar ou restaurar, aberta dentro do próprio cartão.
+
+De 1280 px para cima fica a tabela de sempre.
+
+**Medição antes da mudança** (Inter, servidor simulado, Chrome sem janela). A tabela tem `min-w-[760px]` pela regra `.data-table` do `index.css`, que vale para todas as tabelas, e rolava dentro do cartão em 390, 640, 768 e 1024 px (cartão com 356, 575, 703 e 687 px úteis). Em todas essas larguras, Editar e Arquivar ficavam fora da área visível: em 390 px, com o lado direito em 772 e 781 px. Sem rolagem de 1280 px para cima (943 px úteis). O cartão da lista inteiro rolava (`card table-wrap`), inclusive o título.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| N1 | A troca é em **1280 px** (`xl`), como no 17d (M1), e não em 768 px, como na tela de Ausências | A tabela rola dentro do cartão até cerca de 1100 px. Trocar em 768 px manteria Editar e Arquivar fora da tela entre 768 e 1279 px. Diminuir o `min-w-[760px]` da `.data-table` mexeria em todas as tabelas: fora do escopo |
+| N2 | Cartão e linha pelo **mesmo `rowActions()`** e pela **mesma confirmação** (`actionConfirmation()`, extraída da linha) | As regras de quem edita, arquiva e restaura (Lote 5b, L9, D1, D3) e a recusa do servidor ficam num ramo só. O servidor continua conferindo tudo |
+| N3 | A confirmação abre **dentro do cartão**, abaixo das ações | Sem o `sticky left-0` que prendia o painel na tabela rolada do celular. Na tabela, que agora só aparece de 1280 px para cima e não rola, o painel ficou com `max-w-3xl` |
+| N4 | **Uma coluna** no celular e **duas** de 768 px, com `items-start` | Entre 768 e 1279 px, um cartão por linha deixava muito espaço vazio. O `items-start` evita esticar o cartão vizinho quando a confirmação abre |
+| N5 | O cartão da lista **deixa de rolar inteiro**: o `table-wrap` passou para o bloco da tabela | O título e a contagem não rolam mais com a tabela |
+| N6 | `qa:employee-form` passa a **renderizar a aba** (JSX transpilado pelo TypeScript do projeto, `react-dom/server`, `useResource` simulado), como o `qa:operational-view` | Antes ele só lia o código-fonte. A igualdade entre cartão e linha (ações, situação, equipe, aviso) só se prova com o HTML. O teste dá a confirmação aberta e o filtro iniciais trocando dois `useState` no carregamento (como o A2) |
+
+**Validação executada pela IA:** `qa:employee-form` ampliado:
+- com admin (ativos; ativos e arquivados) e com Liderança: um cartão por cadastro listado, na ordem da tabela, com as mesmas ações da linha, a mesma situação, equipe, perfil e jornada e o mesmo aviso quando não há ação;
+- Editar e Arquivar no ativo, Restaurar no arquivado, "Arquivar (regularizar)" no inativo sem data;
+- a Liderança sem ação no cadastro de Liderança e, no próprio, Editar sem Arquivar (D3), ou "Seu cadastro";
+- confirmação de arquivar e de restaurar só no cartão do cadastro, com a recusa do servidor dentro dele;
+- classes da troca em 1280 px, lista vazia sem cartão.
+
+O teste antigo da confirmação passou para o `actionConfirmation()`.
+
+**Mutação 16/16** numa cópia do frontend:
+- troca: cartões sem `xl:hidden` ou até `lg`; tabela sem `hidden xl:block` ou a partir de `lg`; cartão inteiro rolando de novo; uma coluna só;
+- ações e confirmação: ações fixas no lugar do `rowActions()`; cartão sem a confirmação; confirmação em todo cartão; tabela sem a confirmação;
+- conteúdo do cartão: sem o login, sem a situação, sem o fim da jornada, com a equipe sem o rótulo, sem o perfil;
+- filtro: cartões da lista inteira, sem o filtro.
+
+18 `qa:*`, lint, typecheck e build. Medição depois (Inter, servidor simulado com sete cadastros fictícios, admin e Liderança):
+
+| Janela | Mostra (`display` calculado) | Ações visíveis (admin / Liderança) | Cortadas ou fora da tela | Rolagem dentro do cartão | Rolagem da página |
+|---|---|---|---|---|---|
+| 390 px | Cartões (`grid`), tabela `none` | 10 / 7 | Nenhuma | Não | Não |
+| 640 px | Cartões, uma coluna | 10 / 7 | Nenhuma | Não | Não |
+| 768, 1024 e 1279 px | Cartões, duas colunas | 10 / 7 | Nenhuma | Não | Não |
+| 1280, 1366 e 1920 px | Tabela (`block`), cartões `none` | 10 / 7 | Nenhuma | Não | Não |
+
+Em 390 px, com o Arquivar clicado no primeiro cartão, a confirmação abre dentro dele (de 54 a 336 px), com "Confirmar arquivamento" e "Voltar" dentro da tela, sem diálogo do navegador e sem rolagem da página.
+
+**Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura vem só da medição no navegador; os prints ficam fora do repositório. O `min-w-[760px]` das outras tabelas não muda: as demais telas com tabela continuam rolando dentro do cartão abaixo de cerca de 1100 px, onde não há cartão. `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências
