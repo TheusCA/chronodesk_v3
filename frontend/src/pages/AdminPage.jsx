@@ -620,6 +620,21 @@ function EmployeesTab({
     return <span className="text-xs text-slate-500">{state === 'ativo' ? 'Só administradores' : 'Só administradores restauram'}</span>
   }
 
+  // Confirmação de arquivar ou restaurar, a mesma na tabela e no cartão.
+  function actionConfirmation(item) {
+    if (pendingAction?.id !== item.id) return null
+    return (
+      <EmployeeActionConfirmation
+        busy={acting}
+        error={pendingAction.error}
+        item={item}
+        kind={pendingAction.kind}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={() => archiveOrRestore(item, pendingAction.kind)}
+      />
+    )
+  }
+
   return (
     <div className="space-y-5">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -649,13 +664,37 @@ function EmployeesTab({
           <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="lideranca">Liderança</option><option value="admin">Admin (legado)</option><option value="somente_leitura">Somente leitura</option></select>
           <select aria-label="Situação do cadastro" className="field" value={status} onChange={(event) => { setStatus(event.target.value); setPendingAction(null) }}><option value="ativos">Ativos</option><option value="arquivados">Arquivados</option><option value="">Ativos e arquivados</option></select>
         </FilterBar>
-        <section className="card table-wrap">
+        <section className="card">
           <SectionHeader
             description="Editar, arquivar e restaurar continuam restritos e auditados pelo backend. Arquivados ficam fora do painel, do Mapa PA e da escala; o histórico fica."
             meta={<span className="status-badge status-neutral">{filtered.length} resultado(s)</span>}
             title="Funcionários"
           />
-          <div className="mt-5">
+          {/* [17] Abaixo de 1280 px, cartões: a tabela (min-w-[760px] da .data-table) rolava dentro do cartão e deixava Editar e Arquivar fora da tela. */}
+          <div className="mt-5 grid items-start gap-3 md:grid-cols-2 xl:hidden" data-employee-list="">
+            {filtered.map((item) => (
+              <article className="space-y-3 rounded-card border border-white/10 bg-slate-950/45 p-4" data-employee={item.id} key={item.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <UserAvatar name={item.nome} />
+                    <div className="min-w-0">
+                      <strong className="block break-words text-slate-200">{item.nome}</strong>
+                      <span className="block break-all text-xs text-slate-500">ID {item.id} · {item.ad_login || 'Sem login AD'}</span>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right [&_small]:mt-1 [&_small]:block [&_small]:text-xs [&_small]:text-slate-500"><EmployeeStatusBadge item={item} /></div>
+                </div>
+                <dl className="grid grid-cols-2 gap-3 text-sm">
+                  <div><dt className="text-xs text-slate-500">Equipe</dt><dd className="mt-1"><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></dd></div>
+                  <div><dt className="text-xs text-slate-500">Perfil</dt><dd className="mt-1"><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></dd></div>
+                  <div className="col-span-2"><dt className="text-xs text-slate-500">Jornada</dt><dd className="text-slate-300">{item.jornada_entrada} - {item.jornada_saida}</dd></div>
+                </dl>
+                <div className="border-t border-white/5 pt-3">{rowActions(item)}</div>
+                {actionConfirmation(item)}
+              </article>
+            ))}
+          </div>
+          <div className="table-wrap mt-5 hidden xl:block">
           <table className="data-table">
             <thead><tr><th>Funcionário</th><th>Equipe</th><th>Perfil</th><th>Jornada</th><th>Status</th><th>Ações</th></tr></thead>
             <tbody>
@@ -680,17 +719,7 @@ function EmployeesTab({
                 {pendingAction?.id === item.id && (
                   <tr>
                     <td className="bg-slate-950/40" colSpan={6}>
-                      {/* No celular a tabela rola na horizontal: o painel fica preso à esquerda, na largura da tela. */}
-                      <div className="sticky left-0 max-w-[calc(100vw-5rem)] md:max-w-3xl">
-                        <EmployeeActionConfirmation
-                          busy={acting}
-                          error={pendingAction.error}
-                          item={item}
-                          kind={pendingAction.kind}
-                          onCancel={() => setPendingAction(null)}
-                          onConfirm={() => archiveOrRestore(item, pendingAction.kind)}
-                        />
-                      </div>
+                      <div className="max-w-3xl">{actionConfirmation(item)}</div>
                     </td>
                   </tr>
                 )}

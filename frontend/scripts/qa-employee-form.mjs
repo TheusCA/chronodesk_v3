@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import ts from 'typescript'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const frontendRoot = join(root, '..')
@@ -79,7 +81,10 @@ assert.match(adminSource, /const canRestore = permissions\.has\('funcionarios\.r
 assert.match(adminSource, /const canManageLeadershipTeam = permissions\.has\('escalas\.lideranca'\)/, 'Equipe Lideranca pela permissao da L9')
 const canArchiveSource = adminSource.match(/function canArchive\(item\) \{[\s\S]*?\n  \}/)?.[0] || ''
 assert.match(canArchiveSource, /canManageRecord\(item\)[\s\S]*canManageLeadershipTeam \|\| normalizeTeam\(item\.equipe\) !== 'lideranca'[\s\S]*!isOwnRecord\(item\)/, 'Arquivar: regra do 5b, L9 e nunca o proprio cadastro (D3)')
-assert.match(adminSource, /\{pendingAction\?\.id === item\.id && \([\s\S]*<EmployeeActionConfirmation[\s\S]*onConfirm=\{\(\) => archiveOrRestore\(item, pendingAction\.kind\)\}/, 'Confirmacao na propria linha antes de arquivar ou restaurar')
+// [17] A mesma confirmacao na linha da tabela e no cartao (actionConfirmation).
+const confirmationSource = adminSource.match(/function actionConfirmation\(item\) \{[\s\S]*?\n  \}/)?.[0] || ''
+assert.match(confirmationSource, /if \(pendingAction\?\.id !== item\.id\) return null[\s\S]*<EmployeeActionConfirmation[\s\S]*onConfirm=\{\(\) => archiveOrRestore\(item, pendingAction\.kind\)\}/, 'Confirmacao na propria linha antes de arquivar ou restaurar')
+assert.match(adminSource, /\{pendingAction\?\.id === item\.id && \([\s\S]*?\{actionConfirmation\(item\)\}/, 'Tabela: a confirmacao numa linha logo abaixo do cadastro')
 assert.match(adminSource, /<option value="ativos">Ativos<\/option><option value="arquivados">Arquivados<\/option><option value="">Ativos e arquivados<\/option>/, 'Filtro Ativos/Arquivados')
 assert.match(adminSource, /useState\('ativos'\)/, 'A lista abre nos ativos')
 const archivePanelSource = adminSource.match(/function EmployeeActionConfirmation\([\s\S]*?\n}\n/)?.[0] || ''
@@ -304,5 +309,146 @@ assert.match(adminSource, /const canPromote = permissions\.has\('perfis\.promote
 // F4 (pedido na aprovacao do commit 5): texto do cadastro pela regra do Lote 5b.
 assert.doesNotMatch(adminSource, /aplica automaticamente o perfil/, 'Equipe nao define o perfil (Lote 5b)')
 assert.match(adminSource, /O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS\. A equipe não concede permissão\./u, 'Texto do cadastro com a regra atual do perfil')
+
+// ---------------------------------------------------------------------------
+// [17] Tela Funcionarios abaixo de 1280 px: um cartao por cadastro, com as
+// mesmas acoes (rowActions) e a mesma confirmacao da linha da tabela. A aba
+// e renderizada de verdade (JSX transpilado pelo TypeScript do projeto,
+// react-dom/server); o useResource responde com globalThis.qaResources, sem
+// rede, e o teste da a confirmacao aberta e o filtro iniciais.
+// ---------------------------------------------------------------------------
+const resourceStub = 'data:text/javascript,' + encodeURIComponent(
+  'export function useResource(path) { return { loading: false, error: null, data: globalThis.qaResources?.[path] ?? null, refresh: async () => null, setData: () => {} } }',
+)
+const srcUrl = pathToFileURL(srcRoot).href + '/'
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '../hooks/useResource' && /\/src\/pages\/AdminPage\.jsx(\?.*)?$/u.test(context.parentURL ?? '')) return { url: resourceStub, shortCircuit: true }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.[cm]?[jt]sx?$/u.test(specifier) && context.parentURL?.startsWith(srcUrl)) {
+      for (const extension of ['.ts', '.tsx', '.js', '.jsx']) {
+        const candidate = new URL(specifier + extension, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return nextResolve(candidate.href, context)
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    const path = url.split('?')[0]
+    if (path.startsWith(srcUrl) && /\.(jsx|tsx|ts)$/u.test(path)) {
+      let source = readFileSync(fileURLToPath(path), 'utf8')
+      if (path.endsWith('/src/pages/AdminPage.jsx')) {
+        for (const [from, to] of [
+          ['const [pendingAction, setPendingAction] = useState(null)', 'const [pendingAction, setPendingAction] = useState(globalThis.qaPendingAction ?? null)'],
+          ["const [status, setStatus] = useState('ativos')", "const [status, setStatus] = useState(globalThis.qaInitialStatus ?? 'ativos')"],
+        ]) {
+          if (!source.includes(from)) throw new Error(`AdminPage sem o estado esperado pelo QA: ${from}`)
+          source = source.replace(from, to)
+        }
+      }
+      const output = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(path) }).outputText
+      return { format: 'module', source: output, shortCircuit: true }
+    }
+    return nextLoad(url, context)
+  },
+})
+const { createElement: h } = await import('react')
+const { renderToStaticMarkup } = await import('react-dom/server')
+const { AdminPage } = await import(pathToFileURL(join(pagesRoot, 'AdminPage.jsx')).href)
+
+const employee = (id, nome, equipe, accessRole, extra = {}) => ({
+  id, nome, equipe, ativo: true, em_pausa: false, jornada_entrada: '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00',
+  fora_mapa_escala: false, arquivado_em: null, ad_login: `qa.${id}`, access_role: accessRole, ...extra,
+})
+const EMPLOYEES = [
+  employee(1, 'QA Um', 'n1', 'tecnico'),
+  employee(2, 'QA Dois', 'n2', 'gestor', { jornada_entrada: '14:00', jornada_saida: '23:00' }),
+  employee(3, 'QA Tres', 'lideranca', 'lideranca'),
+  employee(4, 'QA Quatro', 'lideranca', 'tecnico', { ad_login: 'lider.qa' }),
+  employee(5, 'QA Cinco', 'n1', 'somente_leitura', { ad_login: null }),
+  employee(6, 'QA Seis', 'n2', 'tecnico', { ativo: false, arquivado_em: '2026-10-13' }),
+  employee(7, 'QA Sete', 'n1', 'tecnico', { ativo: false, arquivado_em: null }),
+]
+const ADMIN_SESSION = { role: 'admin', permissions: ['funcionarios.manage', 'perfis.promote', 'funcionarios.fora_mapa', 'funcionarios.restaurar', 'escalas.lideranca'], ci: { funcionario_id: 0, username: '' }, gestor: { username: 'admin.qa' } }
+const LEAD_SESSION = { role: 'lideranca', permissions: ['funcionarios.manage'], ci: { funcionario_id: 4, username: 'lider.qa' }, gestor: { username: '' } }
+function renderEmployees(session, { list = EMPLOYEES, pending = null, status } = {}) {
+  globalThis.qaResources = { 'listar_funcionarios.php': { sucesso: true, funcionarios: list } }
+  globalThis.qaPendingAction = pending
+  globalThis.qaInitialStatus = status
+  try {
+    return renderToStaticMarkup(h(AdminPage, { session, search: '?tab=funcionarios', navigate: () => {}, notify: () => {}, refreshStatus: () => {} }))
+  } finally {
+    delete globalThis.qaResources
+    delete globalThis.qaPendingAction
+    delete globalThis.qaInitialStatus
+  }
+}
+const cardOf = (markup, id) => {
+  const start = markup.indexOf(`data-employee="${id}"`)
+  return start < 0 ? '' : markup.slice(start, markup.indexOf('</article>', start))
+}
+const rowOf = (markup, id) => {
+  const table = markup.slice(markup.indexOf('<table'))
+  const start = table.indexOf(`ID ${id} · `)
+  if (start < 0) return ''
+  return table.slice(table.lastIndexOf('<tr>', start), table.indexOf('</tr>', start))
+}
+const actionsOf = (html) => [...html.matchAll(/<button class="table-action[^"]*"[^>]*>([^<]*)<\/button>/gu)].map((match) => match[1])
+const plain = (html) => html.replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim()
+const cardIds = (markup) => [...markup.matchAll(/data-employee="(\d+)"/gu)].map((match) => Number(match[1]))
+const cellOf = (row, index) => plain(row.split('<td')[index] ? '<td' + row.split('<td')[index] : '')
+
+for (const [label, session, status, ids] of [
+  ['admin, ativos', ADMIN_SESSION, undefined, [1, 2, 3, 4, 5]],
+  ['admin, ativos e arquivados', ADMIN_SESSION, '', [1, 2, 3, 4, 5, 6, 7]],
+  ['Lideranca, ativos', LEAD_SESSION, undefined, [1, 2, 3, 4, 5]],
+]) {
+  const markup = renderEmployees(session, { status })
+  assert.deepEqual(cardIds(markup), ids, `17 (${label}): um cartao por cadastro listado, na ordem da tabela`)
+  for (const id of ids) {
+    const item = EMPLOYEES.find((candidate) => candidate.id === id)
+    const card = cardOf(markup, id)
+    const row = rowOf(markup, id)
+    assert.ok(row, `17 (${label}): a linha ${id} continua na tabela`)
+    assert.deepEqual(actionsOf(card), actionsOf(row), `17 (${label}): cartao ${id} com as mesmas acoes da linha`)
+    const text = plain(card)
+    for (const expected of [item.nome, `ID ${id} · ${item.ad_login || 'Sem login AD'}`, item.access_role.replace('_', ' '), `${item.jornada_entrada} - ${item.jornada_saida}`]) {
+      assert.ok(text.includes(expected), `17 (${label}): cartao ${id} com "${expected}"`)
+    }
+    for (const [index, what] of [[2, 'equipe'], [5, 'situacao'], [6, 'acoes ou aviso']]) {
+      const cell = cellOf(row, index)
+      assert.ok(cell && text.includes(cell), `17 (${label}): cartao ${id} com a ${what} da linha ("${cell}")`)
+    }
+  }
+}
+{
+  const admin = renderEmployees(ADMIN_SESSION, { status: '' })
+  assert.deepEqual([actionsOf(cardOf(admin, 1)), actionsOf(cardOf(admin, 6)), actionsOf(cardOf(admin, 7))], [['Editar', 'Arquivar'], ['Restaurar'], ['Arquivar (regularizar)', 'Restaurar']], '17: Editar e Arquivar no ativo, Restaurar no arquivado, regularizar no inativo antigo')
+  const lead = renderEmployees(LEAD_SESSION)
+  assert.deepEqual([actionsOf(cardOf(lead, 3)), actionsOf(cardOf(lead, 4))], [[], ['Editar']], '17: Lideranca sem acao no cadastro de Lideranca; no proprio, Editar sem Arquivar (D3)')
+  const ownOnly = renderEmployees({ ...LEAD_SESSION, permissions: ['funcionarios.manage'] }, { list: [{ ...EMPLOYEES[3], access_role: 'lideranca' }] })
+  assert.deepEqual([actionsOf(cardOf(ownOnly, 4)), plain(cardOf(ownOnly, 4)).includes('Seu cadastro')], [[], true], '17: proprio cadastro sem acao mostra "Seu cadastro" no cartao')
+  assert.ok(plain(cardOf(lead, 3)).includes('Só administradores'), '17: cadastro de Lideranca com "Só administradores" para quem nao promove')
+}
+// Confirmacao aberta: no cartao do cadastro e na linha da tabela, so nele.
+for (const [kind, id, title, button] of [['archive', 1, 'Arquivar QA Um?', 'Confirmar arquivamento'], ['restore', 6, 'Restaurar QA Seis?', 'Confirmar restauração']]) {
+  const markup = renderEmployees(ADMIN_SESSION, { status: '', pending: { id, kind, error: kind === 'restore' ? 'Recusado pelo servidor (QA).' : '' } })
+  assert.equal((markup.match(/role="group"/gu) ?? []).length, 2, `17: confirmacao (${kind}) no cartao e na linha da tabela, uma de cada`)
+  assert.ok(cardOf(markup, id).includes(`aria-label="${title}"`) && cardOf(markup, id).includes(button), `17: confirmacao (${kind}) dentro do cartao ${id}`)
+  assert.ok(cardIds(markup).filter((other) => other !== id).every((other) => !cardOf(markup, other).includes('role="group"')), `17: confirmacao (${kind}) so no cartao do cadastro`)
+  if (kind === 'restore') assert.ok(cardOf(markup, id).includes('role="alert">Recusado pelo servidor (QA).'), '17: recusa do servidor dentro do cartao')
+  assert.ok(markup.slice(markup.indexOf('<table')).includes(`aria-label="${title}"`), `17: confirmacao (${kind}) tambem na linha da tabela`)
+}
+{
+  const markup = renderEmployees(ADMIN_SESSION)
+  const list = markup.slice(markup.indexOf('>Funcionários</h2>'))
+  assert.ok(list.includes('<div class="mt-5 grid items-start gap-3 md:grid-cols-2 xl:hidden" data-employee-list="">'), '17: cartoes so abaixo de 1280 px (xl:hidden), uma coluna no celular e duas de 768 px')
+  assert.ok(list.includes('<div class="table-wrap mt-5 hidden xl:block"><table class="data-table">'), '17: a tabela so de 1280 px para cima, rolando so ela (o cabecalho do cartao nao rola)')
+  assert.ok(list.indexOf('data-employee-list') < list.indexOf('<table'), '17: cartoes antes da tabela')
+  assert.doesNotMatch(markup, /<section class="card table-wrap">/u, '17: o cartao da lista nao rola inteiro')
+  const empty = renderEmployees(ADMIN_SESSION, { list: [] })
+  assert.deepEqual([cardIds(empty).length, empty.includes('Nenhum funcionário corresponde aos filtros.')], [0, true], '17: lista vazia sem cartao e com a mensagem')
+}
+assert.equal((adminSource.match(/\{rowActions\(item\)\}/gu) ?? []).length, 2, '17: tabela e cartoes pelo mesmo rowActions()')
+assert.equal((adminSource.match(/\{actionConfirmation\(item\)\}/gu) ?? []).length, 2, '17: tabela e cartoes pela mesma confirmacao')
 
 console.log('Employee form RHF/Zod QA OK')
