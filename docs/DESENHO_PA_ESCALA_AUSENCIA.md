@@ -2745,7 +2745,7 @@ O estado degradado (presença indisponível) foi medido nas mesmas larguras: "�
 
 Os 20 casos (10 larguras × 2 estados) deram o esperado. Só confirmou: sem commit de código. **17d concluído.**
 
-**17 — Tela Funcionários com cartões abaixo de 1280 px, 2026-10-28: entregue (`2d72325`), aguardando revisão.** Arquivos: `frontend/src/pages/AdminPage.jsx` e `frontend/scripts/qa-employee-form.mjs`. Até 1279 px, cada cadastro vira um cartão com:
+**17 — Tela Funcionários com cartões abaixo de 1280 px, 2026-10-28: entregue (`2d72325`) e aprovado em 2026-10-28, com N1 a N6.** Arquivos: `frontend/src/pages/AdminPage.jsx` e `frontend/scripts/qa-employee-form.mjs`. Até 1279 px, cada cadastro vira um cartão com:
 - avatar, nome e "ID · login" (ou "Sem login AD");
 - a situação (Ativo, Arquivado com a data, Inativo sem data);
 - equipe, perfil e jornada;
@@ -2756,7 +2756,7 @@ De 1280 px para cima fica a tabela de sempre.
 
 **Medição antes da mudança** (Inter, servidor simulado, Chrome sem janela). A tabela tem `min-w-[760px]` pela regra `.data-table` do `index.css`, que vale para todas as tabelas, e rolava dentro do cartão em 390, 640, 768 e 1024 px (cartão com 356, 575, 703 e 687 px úteis). Em todas essas larguras, Editar e Arquivar ficavam fora da área visível: em 390 px, com o lado direito em 772 e 781 px. Sem rolagem de 1280 px para cima (943 px úteis). O cartão da lista inteiro rolava (`card table-wrap`), inclusive o título.
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-10-28):**
 
 | # | Decisão | Motivo |
 |---|---|---|
@@ -2794,6 +2794,8 @@ O teste antigo da confirmação passou para o `actionConfirmation()`.
 Em 390 px, com o Arquivar clicado no primeiro cartão, a confirmação abre dentro dele (de 54 a 336 px), com "Confirmar arquivamento" e "Voltar" dentro da tela, sem diálogo do navegador e sem rolagem da página.
 
 **Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura vem só da medição no navegador; os prints ficam fora do repositório. O `min-w-[760px]` das outras tabelas não muda: as demais telas com tabela continuam rolando dentro do cartão abaixo de cerca de 1100 px, onde não há cartão. `gitleaks` ausente na estação.
+
+**Revisão do 17 (responsável, 2026-10-28): aprovado, com N1 a N6.** Pedidos junto da entrega do 17b, sem commit separado: (1) confirmar que a linha da tabela mostra o `ad_login` para os mesmos perfis que o cartão e travar no `qa:employee-form`; (2) levantar as outras tabelas com `.data-table` que rolam abaixo de 1280 px (pendência 17e). Os dois ficam registrados na entrega do 17b, abaixo.
 
 ---
 

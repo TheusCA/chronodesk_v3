@@ -863,10 +863,10 @@ Base da afirmação:
 | **Finalidade** | Pendencia 17: na tela Funcionarios, a tabela rolava dentro do cartao e deixava Editar e Arquivar fora da tela de 390 px; no lugar dela, cartoes por cadastro (desenho 9.11). |
 | **Branch e commits** | `6de8d8e` (aprovacao do 17d com a C1), `2d72325` (codigo e QA) e o commit deste registro. Sem push. |
 | **O que a IA alterou** | `frontend/src/pages/AdminPage.jsx` (cartoes `xl:hidden`; tabela `hidden xl:block`; confirmacao extraida para `actionConfirmation()`; o cartao da lista deixa de rolar inteiro) e `frontend/scripts/qa-employee-form.mjs` (renderizacao da aba); desenho 9.11. |
-| **Decisoes de implementacao** | Seis, a aprovar (desenho 9.11, N1 a N6): troca em 1280 px, porque o `min-w-[760px]` da `.data-table` faz a tabela rolar ate cerca de 1100 px; mesmo `rowActions()` e mesma confirmacao no cartao e na linha; confirmacao dentro do cartao, sem o `sticky`; uma e duas colunas; o cartao da lista nao rola inteiro; o QA passa a renderizar a aba. |
+| **Decisoes de implementacao** | Seis, aprovadas em 2026-10-28 (desenho 9.11, N1 a N6): troca em 1280 px, porque o `min-w-[760px]` da `.data-table` faz a tabela rolar ate cerca de 1100 px; mesmo `rowActions()` e mesma confirmacao no cartao e na linha; confirmacao dentro do cartao, sem o `sticky`; uma e duas colunas; o cartao da lista nao rola inteiro; o QA passa a renderizar a aba. |
 | **Validacao executada pela IA** | Medicao antes: rolagem dentro do cartao em 390 a 1024 px e Editar e Arquivar fora da tela. `qa:employee-form` ampliado (cartao igual a linha com admin e Lideranca, estados do cadastro, confirmacao e recusa no cartao, classes, lista vazia). Mutacao **16/16** numa copia do frontend. 18 `qa:*`, lint, typecheck e build. Medicao depois, em 390, 640, 768, 1024, 1279, 1280, 1366 e 1920 px: nenhuma acao cortada ou fora da tela, sem rolagem dentro do cartao nem da pagina; confirmacao em 390 px dentro do cartao e da tela. |
 | **Limitacoes declaradas** | Sem o backend real; dados ficticios; largura medida no navegador. As outras tabelas continuam com o `min-w-[760px]` (sem cartao). Prints fora do repositorio. `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: revisao do 17 (zip `_revisao_acab17.zip`). |
+| **Validacao humana** | Responsavel, 2026-10-28: **17 aprovado**, com N1 a N6. Pedidos para a entrega do 17b: igualdade do `ad_login` entre linha e cartao no QA e o levantamento das outras tabelas (17e). |
 
 ---
 
