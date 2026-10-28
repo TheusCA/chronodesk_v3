@@ -868,6 +868,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem o backend real; dados ficticios; largura medida no navegador. As outras tabelas continuam com o `min-w-[760px]` (sem cartao). Prints fora do repositorio. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Responsavel, 2026-10-28: **17 aprovado**, com N1 a N6. Pedidos para a entrega do 17b: igualdade do `ad_login` entre linha e cartao no QA e o levantamento das outras tabelas (17e). |
 
+### Lote de acabamento — 17b (Calendario, visao Semana como lista por dia) e levantamento 17e — 2026-10-28
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Pendencia 17b: na visao Semana do Calendario, o nome do tecnico saia cortado (em 390 px, so o icone e uma letra); no lugar da grade, uma lista por dia com os cartoes completos (desenho 9.11). Junto, os dois pedidos da aprovacao do 17: igualdade do `ad_login` entre linha e cartao no QA, e o levantamento das outras tabelas que rolam (pendencia 17e, sem mudanca de codigo). |
+| **Branch e commits** | `57a0d97` (aprovacao do 17), `12af078` (codigo e QA do 17b e a trava do `ad_login`) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/pages/CalendarPage.jsx` (lista da semana `2xl:hidden`; grade e painel do dia `hidden 2xl:block` na semana; `EventCard` extraido do painel; titulo do dia), `frontend/scripts/qa-calendar-presence.mjs` (renderizacao da pagina) e `frontend/scripts/qa-employee-form.mjs` (`ad_login`); desenho 9.11 (17b e 17e). |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.11, O1 a O7): troca em 1536 px, porque os nomes saem cortados na grade ate 1366 px (o painel do dia divide a linha de 1280 px para cima); o mesmo `EventCard` no painel e na lista; painel do dia fora na semana abaixo de 1536 px; todos os eventos, sem o limite de 8; uma, duas e tres colunas; titulo do dia sem o `capitalize`; QA renderizando a pagina. |
+| **Validacao executada pela IA** | Medicao antes e depois (Inter, servidor simulado, 14 tecnicos por dia) em 390 a 1920 px: lista sem rolagem da pagina e sem nome cortado ate 1535 px; grade com 64 de 70 nomes inteiros em 1536 px e todos em 1920 px. `qa:calendar-presence` ampliado; mutacao **16/16** no 17b e **2/2** no `ad_login`, numa copia do repositorio. 18 `qa:*`, lint, typecheck e build. Levantamento 17e medido no navegador em 14 telas: rolagem, largura sem rolagem e botoes fora da area em 390 e 1024 px. |
+| **Limitacoes declaradas** | Sem o backend real; dados ficticios; larguras medidas no navegador. No celular, a semana com 14 tecnicos por dia fica com 11 mil px de altura. O 17e foi medido como admin; o historico de regras e a aba Aprovacoes nao foram medidos. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do 17b e decisao do 17e (zip `_revisao_acab17b.zip`). |
+
 ---
 
 ## 5. Responsabilidade

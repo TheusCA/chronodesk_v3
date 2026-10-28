@@ -2797,6 +2797,105 @@ Em 390 px, com o Arquivar clicado no primeiro cartão, a confirmação abre dent
 
 **Revisão do 17 (responsável, 2026-10-28): aprovado, com N1 a N6.** Pedidos junto da entrega do 17b, sem commit separado: (1) confirmar que a linha da tabela mostra o `ad_login` para os mesmos perfis que o cartão e travar no `qa:employee-form`; (2) levantar as outras tabelas com `.data-table` que rolam abaixo de 1280 px (pendência 17e). Os dois ficam registrados na entrega do 17b, abaixo.
 
+**Pedido (1) da aprovação do 17: `ad_login` na linha e no cartão.** Linha e cartão leem o mesmo campo (`item.ad_login`, "Sem login AD" quando falta). O `listar_funcionarios.php` só manda o campo a quem tem `funcionarios.manage` (admin e Liderança), o mesmo requisito para a aba Funcionários aparecer. Resultado: os mesmos perfis veem o login nos dois. O `qa:employee-form` passou a conferir:
+- para admin, Liderança e uma resposta sem `ad_login`, o login do cartão igual ao da linha e ao do servidor;
+- a regra do servidor;
+- a regra da aba.
+
+Mutação 2/2: linha sem o login; cartão com o login só para quem promove. Foi junto do código do 17b (`12af078`).
+
+**17b — Calendário, visão Semana como lista por dia abaixo de 1536 px, 2026-10-28: entregue (`12af078`), aguardando revisão.** Arquivos: `frontend/src/pages/CalendarPage.jsx` e `frontend/scripts/qa-calendar-presence.mjs`. Na semana, abaixo de 1536 px, um bloco por dia, de segunda a domingo, com:
+- o título do dia ("Segunda-feira, 26/10") e o selo "Hoje";
+- o resumo por situação;
+- os cartões completos de todos os eventos do dia.
+
+Os cartões são os mesmos do painel "Detalhes do dia": título inteiro, selo da situação, situação e origem, detalhe com o marcador da parcial, categoria quando o servidor manda; nos outros tipos, horário, status e descrição. De 1536 px para cima, a grade e o painel de sempre. O mês não muda.
+
+**Medição antes** (Inter, servidor simulado, 14 técnicos por dia útil, gestor), nomes cortados na grade:
+
+| Janela | Coluna do dia | Nomes cortados |
+|---|---|---|
+| 390, 640, 768 e 1024 px | 51 a 100 px | 70 de 70; em 390, nenhum caractere visível |
+| 1279 px | 135 px | 5 de 70 |
+| 1280 e 1366 px | 86 e 98 px (o painel do dia de 320 px entra ao lado) | 70 de 70 |
+| 1440 px | 109 px | 6 de 70 |
+| 1920 px | 171 px | Nenhum |
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| O1 | A troca é em **1536 px** (`2xl`), não só no celular: de 1280 a 1535 px, a semana também vira lista | De 1280 px para cima o painel do dia divide a linha com a grade, e os nomes saem cortados em 1280 e 1366 px, as larguras mais comuns de notebook. Mesmo critério do M1 e do N1: a grade fica só onde mostra o conteúdo. Em 1536 px, 64 de 70 nomes cabem; os 6 cortados são o nome longo de teste e o cartão com marcador de parcial, com o texto completo no `title`, como antes. Alternativa: trocar em 1280 px e manter a grade cortada de 1280 a 1535 px |
+| O2 | O cartão do painel do dia foi extraído para **`EventCard`**, usado no painel e na lista | Um cartão só, com as mesmas regras de P9 (categoria só quando o servidor manda) e sem a `description` no cartão do motor (ajuste b do F5) |
+| O3 | Na semana, abaixo de 1536 px, **o painel "Detalhes do dia" sai** e a seção fica numa coluna | A lista já mostra o cartão completo de cada dia; o painel repetiria o dia selecionado logo abaixo. No mês, o painel e as duas colunas de 1280 px para cima continuam |
+| O4 | A lista traz **todos os eventos do dia**, na ordem do servidor, **sem o limite de 8** da grade; dia vazio com "Sem eventos neste dia."; sábado e domingo aparecem | Sem esconder evento atrás de "+N eventos", que na grade só levava ao painel do dia |
+| O5 | Cartões em **uma coluna** no celular, **duas** de 768 px e **três** de 1280 px, dentro de cada dia | Com 14 técnicos por dia, uma coluna em telas largas deixaria a página três vezes mais longa |
+| O6 | Título do dia com **maiúscula só na primeira letra**, no código, sem o `capitalize` do CSS | O `capitalize` faria "Segunda-Feira" |
+| O7 | `qa:calendar-presence` passa a **renderizar a página**, como o `qa:employee-form` (N6), dando a visão inicial por um `useState` trocado no carregamento | A lista, os limites e a igualdade com o painel do dia só se provam com o HTML |
+
+**Validação executada pela IA:** `qa:calendar-presence` ampliado. Na semana atual, conferido:
+- um bloco por dia, de segunda a domingo, com o título certo;
+- um cartão completo por evento, sem o limite de 8 (dez pausas num dia), e o aviso no dia vazio;
+- "Hoje" só no dia de hoje e o resumo do dia por situação;
+- título inteiro, detalhe, categoria e marcador da parcial no cartão, sem `line-clamp`;
+- grade, painel e colunas só de 1536 px para cima na semana; o mês como antes;
+- os cartões da lista iguais aos do painel do dia.
+
+O recorte antigo do cartão do motor passou para o `EventCard`.
+
+**Mutação 16/16** numa cópia do repositório:
+- troca e layout: lista sem `2xl:hidden` ou até `xl`; grade sempre visível; painel do dia sempre visível; colunas de `xl` na semana; lista também no mês;
+- conteúdo da lista: com o cartão curto (`EventChip`); com o limite de 8; só com a escala do motor; sem o resumo do dia; dias fora de ordem;
+- detalhes: "Hoje" em todo dia; dia vazio sem aviso; dia da semana em minúsculas; cartão sem a categoria; cartão sem o marcador da parcial.
+
+18 `qa:*`, lint, typecheck e build. Medição depois:
+
+| Janela | Mostra | Cartões | Painel do dia | Rolagem da página | Altura da página |
+|---|---|---|---|---|---|
+| 390 px | Lista (`block`), grade `none` | 72 em 7 dias, completos | Fora | Não | 11.012 px |
+| 1024 px | Lista, duas colunas | 72 | Fora | Não | 6.021 px |
+| 1366 e 1535 px | Lista, três colunas | 72 | Fora | Não | 4.398 e 4.231 px |
+| 1536 px | Grade (`block`), lista `none` | 70 na grade, 6 nomes cortados | Visível | Não | 2.766 px |
+| 1920 px | Grade | 70, nenhum nome cortado | Visível | Não | 2.731 px |
+
+**Limitações declaradas:** servidor simulado e dados fictícios; a largura vem só da medição no navegador. No celular, a semana com 14 técnicos por dia fica longa (11 mil px em 390 px): é o preço dos cartões completos. Se pesar no uso, os dias podem virar seções recolhíveis num lote seguinte (sem mudança agora). O título do painel do dia no mês continua com o `capitalize` de antes ("Quarta-Feira, 28 De Outubro"), fora do escopo. `gitleaks` ausente na estação.
+
+**Pendência 17e — tabelas com `.data-table` que rolam abaixo de 1280 px (levantamento pedido na aprovação do 17, 2026-10-28; sem mudança de código).** A `.data-table` do `index.css` tem `min-w-[760px]` (e a de Chamados críticos, `min-w-[1380px]`). Por isso toda tabela rola dentro do seu bloco quando ele tem menos que isso. Na prática:
+- até 847 px;
+- de novo de 1024 px (quando entra a barra lateral de 256 px) até cerca de 1100 px.
+
+Medição no navegador, como admin (vê todos os botões), com servidor simulado, dados fictícios e a fonte Inter. "Sem rolagem a partir de" é a menor largura a partir da qual a tabela não rola mais. "Fora" conta os botões da tabela que ficam fora da área visível (é preciso rolar a tabela para vê-los).
+
+| Tela | Quem usa (rota; botões) | Sem rolagem a partir de | Botões fora em 390 px | Botões fora em 1024 px |
+|---|---|---|---|---|
+| **Horas extras**, pendentes | Todos os perfis. Aprovar e Rejeitar só gestor, Liderança e admin | 1120 px (sem a barra lateral, cabe de 848 a 1016) | **Todos** (Aprovar e Rejeitar, até 769 px à direita) | **Todos** (até 1041 px) |
+| **Correção de ponto**, pendentes | Igual a Horas extras | 1120 px | **Todos** | **Todos** |
+| Horas extras e Correção de ponto, histórico | Todos | 1120 px | Sem botão | Sem botão |
+| **Escala presencial**, regras vigentes | Todos. Editar: gestor, Liderança e admin; Remover regra: `escalas.manage` (Liderança e admin); Histórico: todos | 1136 px | **Todos** (Editar, Remover regra, Histórico) | **Todos** |
+| Escala presencial, escala gerada | Todos | 1136 px | Sem botão | Sem botão |
+| **Ausências** (cartões abaixo de 768 px) | Todos. Editar e Cancelar com `ausencias.manage` (gestão) | 1136 px (a tabela cabe de 768 a 1016) | — (cartões) | **Todos** (Editar e Cancelar, até 1045 px) |
+| **Chamados críticos** | Todos. Visualizar: todos; Editar, Mitigar, Resolver: gestor, Liderança e admin | **1736 px** (`min-w-[1380px]`) | **Todos** (até 1366 px) | **Todos** (até 1638 px) |
+| Admin, Usuários locais | Só admin, com o admin local ligado | 1504 px | Remover | Remover |
+| Plantonistas | Todos | 1136 px | Sem botão | Sem botão |
+| Relatórios (resumo por colaborador e por equipe) | `relatorios.read` (gestor, Liderança, admin) | Rola em todas as larguras medidas, até 2000 px (as duas tabelas ficam lado a lado) | Sem botão | Sem botão |
+| Métricas | `metricas.read` (gestor, Liderança, admin) | 1136 px | Sem botão | Sem botão |
+| Técnicos | Todos | 1128 px | Sem botão | Sem botão |
+| Avisos, Sobreavisos e Integrações (`ModulePage`) | Todos; Integrações só admin | 1128 px | Sem botão | Sem botão |
+| Mapa PA, aba Ausências da semana | Todos | 1096 px | Sem botão | Sem botão |
+
+Não medidos: o histórico de regras da Escala presencial (abre por botão, numa caixa) e a aba Aprovações da administração. A aba Aprovações tem as horas extras e as correções pendentes em cartões, sem `.data-table`: é um caminho alternativo para a gestão aprovar no celular, mas não conferi a largura.
+
+**Recomendação (decisão do responsável):**
+- **Antes do deploy único:**
+  1. **Horas extras e Correção de ponto, pendentes**: 1 commit, o mesmo `WorkflowPage`. Cartões abaixo de 1280 px, como no 17, com Aprovar e Rejeitar no cartão. É a decisão do dia a dia da gestão e fica inteira fora da tela em 390 e 1024 px.
+  2. **Escala presencial (regras) e Ausências**: 1 commit. São telas da Parte B. Nas regras, cartões abaixo de 1280 px; em Ausências, levar a troca dos cartões de 768 para 1280 px, porque a tabela volta a rolar em 1024 px.
+  3. **Chamados críticos**: 1 commit. Os botões ficam fora da tela até 1735 px, inclusive em 1366 e 1440 px. Como a tabela tem nove colunas, sugiro a coluna Ações fixa à direita (`sticky`) em vez de cartões: menos mudança e vale para qualquer largura.
+- **Depois do deploy:**
+  - Usuários locais: o admin local é bloqueado pelo preflight fora de `development`, então a aba quase não é usada.
+  - As tabelas só de leitura: rolar sem botão não esconde ação. Se valer a pena, uma solução geral depois, por exemplo uma largura mínima menor para as tabelas de poucas colunas.
+
+Total antes do deploy, se as três forem aceitas: **3 commits de entrega**, cada um com o seu de docs e a parada para revisão.
+
 ---
 
 ## 10. Riscos e pendências
