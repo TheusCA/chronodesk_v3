@@ -3107,6 +3107,53 @@ O título "Pendentes de aprovação" rolava junto com a tabela (o cartão inteir
 
 **Observação para a decisão do responsável (fora do pedido):** a aba Aprovações também decide pausas e reuniões com os mesmos botões (`AdminPage.jsx:160`, `aprovar_pausa.php` e `rejeitar_pausa.php`). A decisão da pausa também não volta para pendente (`services/ApprovalRequestService.php:30-40` só atualiza a pendente), mas o efeito é outro: a pausa aprovada pode ser encerrada, e a rejeitada pode ser pedida de novo. Se a confirmação entrar só em horas extras e correção de ponto, a aba terá botões iguais com comportamentos diferentes. Recomendação: incluir as pausas na mesma confirmação, ou decidir explicitamente deixá-las sem.
 
+**17e, item 3 — Escala presencial (regras) em cartões e Ausências com a troca em 1280 px, 2026-10-29: entregue (`36fd697`), aguardando revisão.** Arquivos: `frontend/src/pages/OperationalPages.jsx` (`SchedulePage`), `frontend/src/pages/AbsencesPage.jsx`, `frontend/scripts/qa-schedule-rules.mjs` e `frontend/scripts/qa-absences-form.mjs`.
+- **Escala presencial, "Regras vigentes e agendadas":** até 1279 px, um cartão por regra, com avatar, nome, login, equipe, a regra, a vigência e as ações da linha (Editar, Remover regra e Histórico; na regra fixa da Liderança, só o aviso). De 1280 px para cima, a tabela de sempre.
+- **Ausências:** os cartões que já existiam abaixo de 768 px passam a valer até 1279 px, em duas colunas de 768 px; a tabela, só de 1280 px para cima.
+
+**Medição antes** (build do `9694e7e`, Inter, servidor simulado, admin, Chrome sem janela; Escala com 3 regras vigentes, 1 agendada e a regra fixa da Liderança; Ausências com 4 ausências futuras). "Fora" = botões da lista fora da área visível (janela recortada por todo bloco com rolagem):
+
+| Janela | Escala: mostra, fora de 12, quebrados | Ausências: mostra, fora de 8 |
+|---|---|---|
+| 390, 640 e 767 px | Tabela rolando, 12, 8 ("Remover regra" em duas linhas) | Cartões, 0 |
+| 768 e 1024 px | Tabela rolando, 12, 8 | **Tabela rolando, 8** |
+| 1279 a 1920 px | Tabela, 0, 0 | Tabela, 0 |
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| T1 | Troca em **1280 px** (`xl`) nas duas telas | O pedido; mesma largura do 17, do 17d e dos itens 1 e 2 |
+| T2 | Na Escala, cartão e linha pelos **mesmos blocos**: `ruleBadge(item)`, `ruleValidity(item)` e `ruleActions(item)`, extraídos da linha; a lista filtrada virou `activeRules` | As regras de quem edita (`canManage`), quem remove (`escalas.manage`) e a regra fixa da Liderança ficam num ramo só, como o `rowActions()` do 17 (N2). Remover regra continua com o `window.confirm` de antes (`removeRule`), fora do escopo: fica para a 17f |
+| T3 | Em Ausências, os cartões já usavam `actionsCell` e `statusCell` da linha, com a confirmação de cancelamento dentro do cartão; **só a largura mudou** | Nenhuma regra nova; a confirmação do cancelamento continua a mesma na linha e no cartão |
+| T4 | **Uma coluna** no celular e **duas** de 768 px, com `items-start`, nas duas telas | Como o 17 (N4) e o item 2 (R4). Em Ausências, antes, era sempre uma coluna (só existia abaixo de 768 px) |
+| T5 | O cartão das regras **deixa de rolar inteiro**: o `table-wrap` passou para o bloco da tabela | Como no 17 (N5) e nos itens 1 e 2. Em Ausências, a tabela já ficava num `card table-wrap` só dela |
+| T6 | Os testes entram no `qa:schedule-rules` e no `qa:absences-form`, que passaram a renderizar as telas; a checagem antiga do texto da regra da Liderança foi trocada pela forma nova (`if (item.implicit) return …`) | Sem `qa:*` novo |
+
+**Validação executada pela IA:**
+- `qa:schedule-rules`: com admin, gestor e técnico, um cartão por regra vigente ou agendada (sem a encerrada), na ordem da tabela; em cada cartão, a regra, a vigência e as ações **iguais, em HTML, às da linha**, e a mesma equipe; botões por perfil (admin: Editar, Remover regra e Histórico; gestor: Editar e Histórico, com "Restrito a admin"; técnico: Histórico); a regra da Liderança só com o aviso; as classes da troca e das colunas; o cartão das regras sem `table-wrap`; sem regra ativa, sem a seção. No código: os três botões pelas mesmas funções e o Histórico do próprio colaborador (`employee_id`), com `aria-expanded`.
+- `qa:absences-form`: com gestor (com e sem a confirmação de cancelamento aberta) e técnico, um cartão por ausência, na ordem da tabela; ações iguais às da linha, mesma situação, datas e período; a confirmação só no cartão escolhido; cancelada e Liderança sem a permissão com o aviso; sem a permissão, sem ações; nenhuma classe da troca antiga em 768 px.
+
+**Mutação 18/18 (Escala) e 12/12 (Ausências)** numa cópia do repositório:
+- Escala: cartões sem `xl:hidden` ou até `lg`; tabela sem `hidden xl:block` ou a partir de `lg`; cartão rolando inteiro; uma coluna só; ações fixas no lugar do `ruleActions`; sem as ações; sem a regra; sem a vigência; sem a equipe; sem o login; cartões com a regra encerrada; fora de ordem; Remover regra sem a permissão; Editar sem a checagem de gestão; regra da Liderança com botões; Histórico abrindo outro colaborador (o primeiro rodou com 17/18; a checagem do código foi reforçada e o mutante morreu);
+- Ausências: cartões até 768 px de novo, até `lg` ou sempre; tabela a partir de 768 px ou sempre; uma coluna só; sem as ações; ações fixas; ações para quem não gerencia; sem a situação; sem o período; confirmação em todo cartão.
+
+18 `qa:*`, lint, typecheck e build (numa pasta temporária); `test-local.ps1 -SkipHttp` sem falha. Os chunks passaram de 102,82 para 104,07 kB (`OperationalPages`) e de 15,20 para 15,27 kB (`AbsencesPage`).
+
+**Medição depois** (build do código do `36fd697`, mesmas condições):
+
+| Janela | Escala: mostra (`display`), cartão mais estreito, fora, quebrados | Ausências: mostra, cartão mais estreito, fora |
+|---|---|---|
+| 390 px | Cartões (`grid`), tabela `none`; 316 px; 0; 0 | Cartões (`grid`); 358 px; 0 |
+| 640 e 767 px | Cartões, uma coluna; 535 e 662 px; 0; 0 | Cartões, uma coluna; 577 e 704 px; 0 |
+| 768 e 1024 px | Cartões, duas colunas; 326 e 318 px; 0; 0 | Cartões, duas colunas; 347 e 339 px; 0 |
+| 1279 px | Cartões, duas colunas; 445 px; 0; 0 | Cartões, duas colunas; 466 px; 0 |
+| 1280, 1366, 1440 e 1920 px | Tabela (`block`), cartões `none`; —; 0; 0 | Tabela (`block`), cartões `none`; —; 0 |
+
+Sem rolagem horizontal da página em nenhuma largura.
+
+**Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura vem só da medição no navegador; os prints ficam fora do repositório. Na Escala, o painel do histórico continua abrindo abaixo da lista de regras: no celular, com muitas regras, é preciso rolar até ele (sem mudança). As tabelas do histórico e da escala gerada (sem botão) continuam rolando abaixo de cerca de 1136 px, como decidido no 17e. Remover regra continua com `window.confirm` (17f). O B4 nessas telas fica para a 17f. `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências
