@@ -1,6 +1,6 @@
 # Requisitos — Módulo de CHGs (mudanças) no ChronoDesk
 
-> **Situação:** requisito e plano, **sem código**. Desenho em `docs/DESENHO_CHG.md`. **G0 aprovado como base em 2026-10-29** (seção 7). **G0b (este texto): respostas do responsável, pedidos B1 a B4 e padrão de qualidade, aguardando revisão.** Nenhum código antes da decisão do 4.5 (branch e deploy), que **continua em aberto**.
+> **Situação:** requisito e plano, **sem código**. Desenho em `docs/DESENHO_CHG.md`. **G0 aprovado como base em 2026-10-29** (seção 7). **G0b (`258c6ce`) aprovado em 2026-10-29, com o ajuste A-CHG-1** (seção 7). Nenhum código antes da decisão do 4.5 (branch e deploy), que **continua em aberto**, e das respostas aos itens A CONFIRMAR.
 > **Data:** 2026-10-28 (G0); 2026-10-29 (G0b). **Base analisada:** `de93913` (G0) e `d2a9528` (G0b), no branch `feat/employee-form-rhf-zod`.
 > **Modelo de referência:** `_referencias/controle_atualizacoes_modelo.html` (1.296 linhas, lido inteiro). **Fora do git** (`.gitignore:45`, commit `de93913`; `git status` conferido com o arquivo no lugar). O modelo traz dados reais. Por isso este documento usa só **marcadores**: `[CARTEIRA_COD]`, `[CARTEIRA_NOME]`, `[LOCAL_n]`, `[TECNICO_n]`, `[SOLICITANTE]`, `[SISTEMA]` (o sistema que as atualizações instalam), `[IP_INTERNO]`, `[URL_CONSOLE_ENDPOINT]` e `[ID_ENDPOINT]`.
 
@@ -351,6 +351,7 @@ Abre o formulário com a cópia, sem CHG, status da CHG, técnico, endpoints, **
 - Os cards podem ser arrastados com o mouse entre as seis colunas, como no modelo.
 - O drop chama a **mesma ação do servidor** que o botão chamaria. O servidor valida perfil, estado e `row_version` e devolve a etapa resultante. **O frontend nunca decide a etapa.**
 - Preparação e Execução dependem do relógio: o drop nelas registra a aprovação, e a tela informa a etapa real ("CHG aprovada. Entra em preparação às 16:00"). Drop inválido não move o card e explica o motivo.
+- **Ajuste A-CHG-1 (2026-10-29):** com comitê `agendado` aberto, a aprovação é direta. Sem ele, a aprovação (botão, "Mover para…" ou drop) abre uma confirmação curta pedindo a **data do comitê**, preenchida com a data de hoje do servidor e editável; passado permitido, futuro nunca. O servidor recusa a aprovação sem data e nunca assume a de hoje sozinho (desenho 3.4.1).
 - Atualização otimista só com reversão garantida em erro (409, 403, rede).
 - WCAG 2.1 AA: alternativa por teclado e por botão ("Mover para…") com o mesmo efeito, foco visível e anúncio do resultado (`aria-live`). **Arrastar nunca é o único caminho.**
 - No toque (celular e tablet), a alternativa "Mover para…" fica visível.
@@ -557,4 +558,9 @@ Entregue em `docs/DESENHO_CHG.md` (G0), atualizado no G0b, com:
 
 Respostas aos A DEFINIR na seção 4 (4.5 em aberto). Pedidos novos B1 a B4 nos RF-CHG-19 a RF-CHG-22. Padrão de qualidade na seção 3.
 
-**G0b (2026-10-29): entregue, aguardando revisão.**
+**G0b (2026-10-29): entregue (`258c6ce`).**
+
+**Revisão do G0b (`258c6ce`) pelo responsável, 2026-10-29: APROVADO, com D-CHG-1 a D-CHG-12 como recomendadas e o ajuste A-CHG-1.**
+- QAs separados (`qa:unsaved-changes` e `qa:chg`; bateria com 18 + 2 `qa:*`), porque a peça do B4 também serve fora do módulo.
+- **A-CHG-1 (médio):** sem comitê `agendado`, a aprovação não cria o registro com a data de hoje sem perguntar; abre a confirmação curta com a data do comitê, preenchida com a data de hoje do servidor e editável, nunca futura. Com `agendado`, aprova direto. Incorporado no RF-CHG-21 e no desenho (D-CHG-3, D-CHG-6, 3.4.1, 6.2.1, testes e mutantes; seção 15 do desenho, com uma leitura da IA sobre `agendado` de data futura, a conferir).
+- **G1 continua bloqueado:** o 4.5 e os itens A CONFIRMAR (leitura do técnico, 4.6c, listas da C6 e da C10, formato da C12, 4.6b) serão respondidos na próxima revisão.
