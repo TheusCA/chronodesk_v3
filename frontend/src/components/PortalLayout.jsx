@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { post } from '../lib/api'
 import { navigation, pageMetadata } from '../lib/navigation'
+import { guardLeave } from '../lib/navigationGuard'
 import { useResource } from '../hooks/useResource'
 import { Icon } from './ui/Icon'
 import { BrandMark } from './BrandMark'
@@ -182,7 +183,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
                   </div>
                 )}
               </div>
-              <button className="rounded-lg border border-white/10 bg-slate-900/70 p-2.5 text-slate-300 hover:bg-red-500/10 hover:text-red-300" onClick={onLogout} type="button" aria-label="Sair">
+              <button className="rounded-lg border border-white/10 bg-slate-900/70 p-2.5 text-slate-300 hover:bg-red-500/10 hover:text-red-300" onClick={() => guardLeave(onLogout)} type="button" aria-label="Sair">
                 <Icon name="logout" />
               </button>
             </div>
