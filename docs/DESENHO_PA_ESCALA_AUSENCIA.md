@@ -2964,7 +2964,7 @@ Os demais testes do 17b (conteúdo da lista e igualdade com o painel do dia) seg
 
 **Revisão do G0b do módulo de CHGs (`258c6ce`) (responsável, 2026-10-29): aprovado, com D-CHG-1 a D-CHG-12 e o ajuste A-CHG-1** (registro em `507a0de`; `docs/DESENHO_CHG.md`, seção 15). A D-CHG-5 aprovada põe a pendência 17f antes do deploy, depois dos três itens do 17e. O B4 de Chamados críticos **não** entra no item 1 do 17e: vem depois, com a peça reutilizável.
 
-**17e, item 1 — Chamados críticos com a coluna Ações fixa à direita, 2026-10-29: entregue (`753c659`), aguardando revisão.** Arquivos: `frontend/src/pages/CriticalIncidentsPage.jsx`, `frontend/src/index.css` e `frontend/scripts/qa-visual.mjs`. Em todas as larguras:
+**17e, item 1 — Chamados críticos com a coluna Ações fixa à direita, 2026-10-29: entregue (`753c659`) e aprovado em 2026-10-29, com Q1 a Q6 e a conferência Z1 (ver a revisão, abaixo).** Arquivos: `frontend/src/pages/CriticalIncidentsPage.jsx`, `frontend/src/index.css` e `frontend/scripts/qa-visual.mjs`. Em todas as larguras:
 - a coluna Ações fica fixa à direita (`position: sticky; right: 0`), com fundo opaco da cor do cartão (`#0d1625`), uma linha clara à esquerda e uma sombra, para o conteúdo rolado não aparecer por baixo;
 - os botões ficam numa grade: uma coluna no celular e duas de 640 px para cima;
 - só o bloco da tabela rola; o título "Incidentes e salas críticas" e a contagem não rolam mais junto.
@@ -3015,6 +3015,24 @@ Os demais testes do 17b (conteúdo da lista e igualdade com o painel do dia) seg
 Nos prints (390, 1024, 1366 e 1920 px, tabela no início e no meio), o conteúdo rolado some por baixo da coluna fixa, sem transparência.
 
 **Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura e a cobertura vêm da medição no navegador (o QA renderiza HTML sem layout); os prints ficam fora do repositório. A rolagem com o dedo num aparelho real não foi testada (só a emulação de largura do Chrome). O cabeçalho "CRITICIDADE" quebra em duas linhas de 1280 a 1440 px, como antes (fora do escopo; com Ações mais estreita, as outras colunas ganharam espaço). O `min-w-[1380px]` da tabela não mudou. O B4 de Chamados críticos não entrou (D-CHG-5). `gitleaks` ausente na estação.
+
+**Revisão do item 1 do 17e (`753c659`, docs `ed8c526`) e do registro do G0b (`507a0de`) (responsável, 2026-10-29): APROVADOS**, com Q1 a Q6. A leitura do `agendado` com data futura no módulo de CHGs (troca da data, auditada, em vez de 409) também foi aprovada. Uma conferência pedida:
+
+**Z1 (baixo): a coluna fixa (`z-index: 10`) fica por baixo das camadas da tela?** Medição no build do `753c659` (servidor simulado com dados fictícios, admin, Chrome sem janela), com a tabela rolada ao meio. Em cada cenário, pontos na interseção entre a camada e as células fixas (cabeçalho e 4 linhas), e o elemento por cima de cada ponto (`elementFromPoint`):
+
+| Camada (`z-index` calculado) | 390 px: pontos, por cima | 1366 px: pontos, por cima |
+|---|---|---|
+| Menu lateral aberto no celular (50) | 36, todos da camada | — (só abaixo de 1024 px) |
+| Menu lateral fixo do desktop (40) | — | Sem sobreposição: fica à esquerda, a coluna à direita |
+| Modal Visualizar (50) | 45, todos da camada | 45, todos da camada |
+| Modal Editar (50) | 45, todos da camada | 45, todos da camada |
+| Painel Importar planilha (50) | 45, todos da camada | 45, todos da camada |
+| Aviso (toast) (50) | 18, todos da camada | 18, todos da camada |
+| Menu de notificações, dentro do cabeçalho (30) | 9, todos da camada | 18, todos da camada |
+
+Nenhum ponto com a coluna fixa por cima. Para o menu de notificações cobrir a tabela, a página de teste escondeu (`display: none`) os blocos entre o cabeçalho e a tabela; para o aviso, a página rolou até uma célula fixa ficar sob ele. Os menus suspensos nativos (`<select>` dos filtros e dos formulários) são desenhados pelo navegador fora da página e ficam sempre por cima; não há outro menu suspenso próprio na tela. **Só confirmou: sem commit de código.**
+
+**Achado fora do escopo (sem mudança, registrado):** o cabeçalho do topo (`sticky top-0 z-30`, `frontend/src/components/PortalLayout.jsx:152`) **não fica fixo** ao rolar a página. A `div.portal-tech-shell` (`frontend/src/index.css:267-269`) tem `overflow-x-hidden`, e o navegador calcula `overflow-y: auto` nela; como ela não rola (cresce com o conteúdo), o `sticky` do cabeçalho se prende a ela e não à janela, e o cabeçalho sai junto com a página (medido: com a página rolada 1.133 px, o cabeçalho fica em `top: -1133`). Por isso a coluna fixa nunca chega a ele. Se o cabeçalho deveria ficar fixo, a correção mexe no layout de todas as telas: fica para decisão do responsável, depois do deploy.
 
 ---
 
