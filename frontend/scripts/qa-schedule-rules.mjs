@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import ts from 'typescript'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const frontendRoot = join(root, '..')
@@ -108,7 +110,8 @@ assert.match(operationalPage, /hasPermission\(session, 'escalas\.lideranca'\) \?
 // F3 (commit 6): as opcoes vem de EXCEPTION_TYPE_OPTIONS (P7); o filtro do lider continua.
 assert.match(operationalPage, /EXCEPTION_TYPE_OPTIONS\.filter\(\(option\) => !\(exceptionIsLeadership && option\.value === 'remote'\)\)/, 'Excecao remota nao e oferecida para lider')
 assert.match(operationalPage, /employee\.fora_mapa_escala !== true/, 'Cadastro fora do Mapa PA e da escala nao aparece nos selects de escala')
-assert.match(operationalPage, /item\.implicit \? <span>Regra fixa da Liderança/, 'Regra implicita sem editar nem remover')
+// [17e] Os botoes da regra passaram para ruleActions (linha e cartao); o render, abaixo, confere os dois.
+assert.match(operationalPage, /if \(item\.implicit\) return <span>Regra fixa da Liderança/, 'Regra implicita sem editar nem remover')
 assert.match(operationalPage, /min=\{canRetroactiveRule \? undefined : today\}/, 'Data retroativa so para quem tem escalas.retroativa (P10, L6)')
 assert.match(adminPage, /const canEditOutsideMap = permissions\.has\('funcionarios\.fora_mapa'\)/, 'Campo fora do Mapa por permissao, nao por nome de perfil')
 assert.match(adminPage, /<input disabled=\{!canEditOutsideMap\} type="checkbox" \{\.\.\.register\('fora_mapa_escala'\)\} \/>/, 'Campo fora do Mapa so editavel por quem tem a permissao')
@@ -159,5 +162,103 @@ for (const blockedDependency of [
 ]) {
   assert.equal(installedDependencies[blockedDependency], undefined, `Dependencia nao autorizada: ${blockedDependency}`)
 }
+
+// ---------------------------------------------------------------------------
+// [17e, item 3] Escala presencial, regras vigentes e agendadas abaixo de
+// 1280 px: um cartao por regra, com os mesmos blocos da linha (ruleBadge,
+// ruleValidity e ruleActions: Editar, Remover regra e Historico). A pagina e
+// renderizada de verdade (JSX transpilado, react-dom/server, useResource
+// simulado).
+// ---------------------------------------------------------------------------
+const scheduleSource = readFileSync(join(srcRoot, 'pages', 'OperationalPages.jsx'), 'utf8')
+const schedulePageSource = scheduleSource.slice(scheduleSource.indexOf('export function SchedulePage('), scheduleSource.indexOf('function WorkflowPage('))
+assert.match(schedulePageSource, /<td>\{ruleBadge\(item\)\}<\/td>\s*<td>\{ruleValidity\(item\)\}<\/td>\s*<td>\{ruleActions\(item\)\}<\/td>/, 'Linha da tabela de regras com os blocos compartilhados')
+const ruleActionsSource = schedulePageSource.match(/function ruleActions\(item\) \{[\s\S]*?\n  \}/)?.[0] || ''
+assert.match(ruleActionsSource, /onClick=\{\(\) => editRule\(item\)\}[\s\S]*onClick=\{\(\) => removeRule\(item\)\}[\s\S]*onClick=\{\(\) => setHistoryEmployee\(/, 'Editar, Remover regra e Historico pelas mesmas funcoes, na linha e no cartao')
+assert.match(ruleActionsSource, /aria-expanded=\{String\(historyEmployee\?\.id\) === String\(item\.employee_id\)\}[\s\S]*setHistoryEmployee\(String\(historyEmployee\?\.id\) === String\(item\.employee_id\) \? null : \{ id: item\.employee_id, name: item\.employee_name \}\)/, 'Historico abre e fecha o do proprio colaborador (employee_id), com aria-expanded')
+
+const scheduleSrcUrl = pathToFileURL(srcRoot).href + '/'
+const scheduleResourceStub = 'data:text/javascript,' + encodeURIComponent(
+  'export function useResource(path) { const hit = Object.entries(globalThis.qaResources ?? {}).find(([key]) => path.startsWith(key)); return { loading: false, error: null, data: hit ? hit[1] : null, refresh: async () => null, setData: () => {} } }',
+)
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '../hooks/useResource' && /\/src\/pages\/OperationalPages\.jsx(\?.*)?$/u.test(context.parentURL ?? '')) return { url: scheduleResourceStub, shortCircuit: true }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.[cm]?[jt]sx?$/u.test(specifier) && context.parentURL?.startsWith(scheduleSrcUrl)) {
+      for (const extension of ['.ts', '.tsx', '.js', '.jsx']) {
+        const candidate = new URL(specifier + extension, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return nextResolve(candidate.href, context)
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    const path = url.split('?')[0]
+    if (path.startsWith(scheduleSrcUrl) && /\.(jsx|tsx|ts)$/u.test(path)) {
+      const output = ts.transpileModule(readFileSync(fileURLToPath(path), 'utf8'), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(path) }).outputText
+      return { format: 'module', source: output, shortCircuit: true }
+    }
+    return nextLoad(url, context)
+  },
+})
+const { createElement: h } = await import('react')
+const { renderToStaticMarkup } = await import('react-dom/server')
+const { SchedulePage } = await import(pathToFileURL(join(srcRoot, 'pages', 'OperationalPages.jsx')).href)
+
+const rule = (id, extra = {}) => ({
+  id, employee_id: id, employee_name: `QA Pessoa ${id}`, ad_login: `qa.${id}`, team: id % 2 ? 'n1' : 'n2', rule_type: 'fixed_weekdays', weekdays: [1, 3, 5],
+  rule_label: `Regra QA ${id}`, is_current: true, is_future: false, effective_from: '2026-10-01', effective_until: null, ...extra,
+})
+const RULES = [
+  rule(1),
+  rule(2, { is_current: false, is_future: true, effective_from: '2099-01-16' }),
+  rule(3, { is_current: false, is_future: false, effective_until: '2026-09-30' }),
+  rule(4, { ad_login: null, effective_until: '2099-12-31' }),
+  { id: null, employee_id: 9, employee_name: 'QA Lider', ad_login: 'qa.lider', team: 'lideranca', implicit: true, rule_type: 'fixed_weekdays', weekdays: [1, 2, 3, 4, 5], rule_label: 'Regra QA Lideranca', is_current: true, is_future: false, work_start: '08:00', work_end: '17:00' },
+]
+const ACTIVE_KEYS = ['1', '2', '4', 'implicita-9']
+const scheduleSession = (role, permissions) => ({ role, permissions, ci: { funcionario_id: 0, username: 'qa' }, gestor: { username: 'qa' } })
+function renderSchedule(session, rules = RULES) {
+  globalThis.qaResources = { 'portal/schedules.php': { sucesso: true, rules, generated: [] }, 'listar_funcionarios.php': { sucesso: true, funcionarios: [] } }
+  try {
+    return renderToStaticMarkup(h(SchedulePage, { session, notify: () => {} }))
+  } finally {
+    delete globalThis.qaResources
+  }
+}
+const EXPECTED_RULE_BUTTONS = {
+  admin: ['Editar', 'Remover regra', 'Histórico'],
+  gestor: ['Editar', 'Histórico'],
+  tecnico: ['Histórico'],
+}
+for (const [role, permissions] of [['admin', ['escalas.manage']], ['gestor', []], ['tecnico', []]]) {
+  const markup = renderSchedule(scheduleSession(role, permissions))
+  const start = markup.indexOf('<section class="card"><h2 class="mb-4 font-bold text-white">Regras vigentes e agendadas</h2>')
+  assert.ok(start >= 0, `${role}: o cartao das regras nao rola inteiro (sem table-wrap)`)
+  const section = markup.slice(start, markup.indexOf('</table>', start))
+  assert.match(section, /<div class="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-rule-list="">/, `${role}: cartoes abaixo de 1280 px, uma coluna e duas de 768 px`)
+  assert.match(section, /<div class="table-wrap hidden xl:block"><table class="data-table">/, `${role}: tabela so de 1280 px para cima, e so ela rola`)
+  const cards = section.match(/<article [^>]*data-rule="[^"]+"[\s\S]*?<\/article>/g) || []
+  const rows = (section.slice(section.indexOf('<tbody>')).match(/<tr>[\s\S]*?<\/tr>/g)) || []
+  assert.deepEqual(cards.map((card) => card.match(/data-rule="([^"]+)"/)[1]), ACTIVE_KEYS, `${role}: um cartao por regra vigente ou agendada, na ordem da tabela, sem a encerrada`)
+  assert.equal(rows.length, ACTIVE_KEYS.length, `${role}: a tabela com as mesmas linhas`)
+  cards.forEach((card, index) => {
+    const cells = (rows[index].match(/<td[^>]*>([\s\S]*?)<\/td>(?=<td|<\/tr>)/g) || []).map((cell) => cell.replace(/^<td[^>]*>/, '').slice(0, -5))
+    assert.equal(cells.length, 5, `${role}: linha ${index + 1} com cinco celulas`)
+    const parts = card.match(/<div>([\s\S]*?)<\/div><div class="\[&amp;_small\][^"]*">([\s\S]*?)<\/div><div class="border-t[^"]*">([\s\S]*)<\/div><\/article>$/)
+    assert.ok(parts, `${role}: cartao ${index + 1} com regra, vigencia e acoes`)
+    assert.equal(parts[1], cells[2], `${role}: cartao ${index + 1} com a mesma regra da linha`)
+    assert.equal(parts[2], cells[3], `${role}: cartao ${index + 1} com a mesma vigencia da linha`)
+    assert.equal(parts[3], cells[4], `${role}: cartao ${index + 1} com as mesmas acoes da linha`)
+    assert.ok(card.includes(cells[1]), `${role}: cartao ${index + 1} com a mesma equipe da linha`)
+    const item = RULES.find((entry) => String(entry.id ?? `implicita-${entry.employee_id}`) === ACTIVE_KEYS[index])
+    assert.ok(card.includes(`>${item.employee_name}</strong>`) && card.includes(`>${item.ad_login || 'Sem login AD'}</span>`), `${role}: cartao ${index + 1} com nome e login`)
+    const buttons = (parts[3].match(/<button[^>]*>([^<]*)<\/button>/g) || []).map((button) => button.replace(/<[^>]+>/g, ''))
+    assert.deepEqual(buttons, item.implicit ? [] : EXPECTED_RULE_BUTTONS[role], `${role}: cartao ${index + 1} com os botoes do perfil`)
+    if (item.implicit) assert.match(parts[3], /Regra fixa da Liderança; exceções só pelo admin/u, `${role}: regra da Lideranca com o aviso, sem botao`)
+    else if (role !== 'admin') assert.match(parts[3], /Restrito a admin/, `${role}: sem escalas.manage, Remover regra vira o aviso`)
+  })
+}
+assert.doesNotMatch(renderSchedule(scheduleSession('admin', ['escalas.manage']), [rule(3, { is_current: false, is_future: false, effective_until: '2026-09-30' })]), /data-rule-list|Regras vigentes e agendadas/u, 'Sem regra vigente ou agendada: sem a secao')
 
 console.log('Schedule rules QA OK')

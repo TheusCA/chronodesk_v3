@@ -383,10 +383,10 @@ export function AbsencesPage({ session, notify }) {
             />
           ) : (
             <>
-              {/* Celular: cartões (a tabela larga escondia categoria, situação e ações). */}
-              <section className="space-y-3 md:hidden">
+              {/* Abaixo de 1280 px: cartões (a tabela rolava e escondia categoria, situação e ações até ~1135 px; 17e). */}
+              <section className="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-absence-list="">
                 {items.map((item) => (
-                  <article className="card space-y-3" key={item.id}>
+                  <article className="card space-y-3" data-absence={item.id} key={item.id}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-start gap-3">
                         <UserAvatar name={item.employee_name} />
@@ -403,7 +403,7 @@ export function AbsencesPage({ session, notify }) {
                   </article>
                 ))}
               </section>
-              <section className="card table-wrap hidden md:block">
+              <section className="card table-wrap hidden xl:block">
                 <table className="data-table">
                   <thead><tr><th>Técnico</th><th className="whitespace-nowrap">Equipe</th><th>Data(s)</th><th>Período</th><th>Categoria</th><th className="whitespace-nowrap">Situação</th>{canManage && <th>Ações</th>}</tr></thead>
                   <tbody>{items.map((item) => (

@@ -517,6 +517,34 @@ export function SchedulePage({ session, notify }) {
     )
   }
 
+  // [17e] Regras vigentes e agendadas: linha da tabela e cartão usam os mesmos
+  // blocos (regra, vigência e ações). O servidor confere tudo de novo.
+  const activeRules = (resource.data?.rules || []).filter((item) => item.is_current || item.is_future)
+
+  function ruleBadge(item) {
+    return <span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span>
+  }
+
+  function ruleValidity(item) {
+    return (
+      <>
+        <span className={`status-badge ${item.is_current ? 'status-success' : 'status-info'}`}>{item.is_current ? 'Vigente' : 'Agendada'}</span>
+        <small className="block">{item.implicit ? `Dias úteis, ${item.work_start}–${item.work_end}` : `${formatDate(item.effective_from)}${item.effective_until ? ` até ${formatDate(item.effective_until)}` : ''}`}</small>
+      </>
+    )
+  }
+
+  function ruleActions(item) {
+    if (item.implicit) return <span>Regra fixa da Liderança; exceções só pelo admin</span>
+    return (
+      <div className="flex flex-wrap gap-2">
+        {canManage && <button className="table-action" onClick={() => editRule(item)} type="button">Editar</button>}
+        {canRemoveRule ? <button className="table-action text-red-300" onClick={() => removeRule(item)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
+        <button aria-expanded={String(historyEmployee?.id) === String(item.employee_id)} className="table-action" onClick={() => setHistoryEmployee(String(historyEmployee?.id) === String(item.employee_id) ? null : { id: item.employee_id, name: item.employee_name })} type="button">Histórico</button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       <PeriodFilters filters={filters} setFilters={setFilters} extra={<label className="label">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })} /></label>} />
@@ -678,32 +706,41 @@ export function SchedulePage({ session, notify }) {
         </div>
       )}
       <OperationalShell resource={resource}>
-        {(resource.data?.rules || []).filter((item) => item.is_current || item.is_future).length > 0 && (
-          <section className="card table-wrap">
+        {activeRules.length > 0 && (
+          <section className="card">
             <h2 className="mb-4 font-bold text-white">Regras vigentes e agendadas</h2>
+            {/* [17e] Abaixo de 1280 px, um cartão por regra, com os mesmos blocos e ações da linha. */}
+            <div className="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-rule-list="">{activeRules.map((item) => (
+              <article className="min-w-0 space-y-3 rounded-card border border-white/[0.07] bg-slate-950/30 p-4" data-rule={item.id ?? `implicita-${item.employee_id}`} key={item.id ?? `implicita-${item.employee_id}`}>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <UserAvatar name={item.employee_name} />
+                    <div className="min-w-0">
+                      <strong className="block font-semibold text-slate-200">{item.employee_name}</strong>
+                      <span className="block text-xs text-slate-500 [overflow-wrap:anywhere]">{item.ad_login || 'Sem login AD'}</span>
+                    </div>
+                  </div>
+                  <span className="shrink-0 whitespace-nowrap text-xs text-slate-400">{teamLabel(item.team)}</span>
+                </div>
+                <div>{ruleBadge(item)}</div>
+                <div className="[&_small]:mt-1 [&_small]:text-xs [&_small]:text-slate-500">{ruleValidity(item)}</div>
+                <div className="border-t border-white/5 pt-3 text-xs text-slate-400">{ruleActions(item)}</div>
+              </article>
+            ))}</div>
+            <div className="table-wrap hidden xl:block">
             <table className="data-table">
               <thead><tr><th>Colaborador</th><th>Equipe</th><th>Regra</th><th>Vigência</th><th>Ações</th></tr></thead>
-              <tbody>{(resource.data?.rules || []).filter((item) => item.is_current || item.is_future).map((item) => (
+              <tbody>{activeRules.map((item) => (
                 <tr key={item.id ?? `implicita-${item.employee_id}`}>
                   <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>{item.ad_login || 'Sem login AD'}</small></div></div></td>
                   <td className="whitespace-nowrap">{teamLabel(item.team)}</td>
-                  <td><span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span></td>
-                  <td>
-                    <span className={`status-badge ${item.is_current ? 'status-success' : 'status-info'}`}>{item.is_current ? 'Vigente' : 'Agendada'}</span>
-                    <small className="block">{item.implicit ? `Dias úteis, ${item.work_start}–${item.work_end}` : `${formatDate(item.effective_from)}${item.effective_until ? ` até ${formatDate(item.effective_until)}` : ''}`}</small>
-                  </td>
-                  <td>
-                    {item.implicit ? <span>Regra fixa da Liderança; exceções só pelo admin</span> : (
-                    <div className="flex flex-wrap gap-2">
-                      {canManage && <button className="table-action" onClick={() => editRule(item)} type="button">Editar</button>}
-                      {canRemoveRule ? <button className="table-action text-red-300" onClick={() => removeRule(item)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
-                      <button aria-expanded={String(historyEmployee?.id) === String(item.employee_id)} className="table-action" onClick={() => setHistoryEmployee(String(historyEmployee?.id) === String(item.employee_id) ? null : { id: item.employee_id, name: item.employee_name })} type="button">Histórico</button>
-                    </div>
-                    )}
-                  </td>
+                  <td>{ruleBadge(item)}</td>
+                  <td>{ruleValidity(item)}</td>
+                  <td>{ruleActions(item)}</td>
                 </tr>
               ))}</tbody>
             </table>
+            </div>
           </section>
         )}
         {historyEmployee && (

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import ts from 'typescript'
 
 // [F3, commit 6] Página de Ausências (RHF + Zod) e exceção de escala sem os
 // tipos de ausência (P7). Desenho: docs/DESENHO_PA_ESCALA_AUSENCIA.md, 5.4 e 9.4.
@@ -186,5 +188,94 @@ assert.match(operationalSource, /EXCEPTION_TYPE_OPTIONS\.filter\(\(option\) => !
 assert.match(operationalSource, /\(error\) => setExceptionError\(/, 'Recusa do servidor (400 do P7) guardada para a tela')
 assert.match(operationalSource, /\{exceptionError && <InlineAlert tone="danger" title="Exceção não salva">\{exceptionError\}<\/InlineAlert>\}/, 'Mensagem do servidor junto do formulário de exceção')
 assert.match(operationalSource, /return runAction\(\{\s*action,\s*refresh,\s*notify,\s*successMessage,\s*onSuccess,\s*onError,\s*\}\)/, 'submit repassa onError ao runAction')
+
+// ---------------------------------------------------------------------------
+// [17e, item 3] Ausencias: os cartoes valem abaixo de 1280 px (antes, so abaixo
+// de 768 px; a tabela rolava e escondia Editar e Cancelar de 768 a ~1135 px).
+// Cartao e linha usam os mesmos actionsCell e statusCell. A pagina e
+// renderizada de verdade (JSX transpilado, react-dom/server, useResource
+// simulado); o teste da a confirmacao de cancelamento inicial.
+// ---------------------------------------------------------------------------
+const absenceSrcUrl = pathToFileURL(srcRoot).href + '/'
+const absenceResourceStub = 'data:text/javascript,' + encodeURIComponent(
+  'export function useResource(path) { const hit = Object.entries(globalThis.qaResources ?? {}).find(([key]) => path.startsWith(key)); return { loading: false, error: null, data: hit ? hit[1] : null, refresh: async () => null, setData: () => {} } }',
+)
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '../hooks/useResource' && /\/src\/pages\/AbsencesPage\.jsx(\?.*)?$/u.test(context.parentURL ?? '')) return { url: absenceResourceStub, shortCircuit: true }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.[cm]?[jt]sx?$/u.test(specifier) && context.parentURL?.startsWith(absenceSrcUrl)) {
+      for (const extension of ['.ts', '.tsx', '.js', '.jsx']) {
+        const candidate = new URL(specifier + extension, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return nextResolve(candidate.href, context)
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    const path = url.split('?')[0]
+    if (path.startsWith(absenceSrcUrl) && /\.(jsx|tsx|ts)$/u.test(path)) {
+      let source = readFileSync(fileURLToPath(path), 'utf8')
+      if (path.endsWith('/src/pages/AbsencesPage.jsx')) {
+        const from = 'const [confirmCancelId, setConfirmCancelId] = useState(null)'
+        if (!source.includes(from)) throw new Error(`AbsencesPage sem o estado esperado pelo QA: ${from}`)
+        source = source.replace(from, 'const [confirmCancelId, setConfirmCancelId] = useState(globalThis.qaConfirmCancelId ?? null)')
+      }
+      const output = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(path) }).outputText
+      return { format: 'module', source: output, shortCircuit: true }
+    }
+    return nextLoad(url, context)
+  },
+})
+const { createElement: h } = await import('react')
+const { renderToStaticMarkup } = await import('react-dom/server')
+const { AbsencesPage } = await import(pathToFileURL(join(srcRoot, 'pages', 'AbsencesPage.jsx')).href)
+
+const absence = (id, extra = {}) => ({
+  id, employee_id: id, employee_name: `QA Pessoa ${id}`, team: id % 2 ? 'n1' : 'n2', starts_on: '2099-01-1' + id, ends_on: '2099-01-2' + id,
+  period_type: 'full_day', start_time: null, end_time: null, category: 'folga', status: 'approved', note: null, retroactive: 0, ...extra,
+})
+const ABSENCES = [absence(1), absence(2, { period_type: 'partial', start_time: '13:00:00', end_time: '15:00:00' }), absence(3, { status: 'cancelled' }), absence(4, { team: 'lideranca' })]
+const MANAGER = { role: 'gestor', permissions: ['ausencias.manage', 'ausencias.retroativa'], ci: { funcionario_id: 0, username: 'gestor.qa' }, gestor: { username: 'gestor.qa' } }
+const TECH = { role: 'tecnico', permissions: [], ci: { funcionario_id: 1, username: 'qa.1' }, gestor: {} }
+function renderAbsences(session, { confirmCancelId = null, items = ABSENCES } = {}) {
+  globalThis.qaResources = { 'portal/absences.php': { sucesso: true, limit: 200, truncated: false, items }, 'listar_funcionarios.php': { sucesso: true, funcionarios: [] } }
+  globalThis.qaConfirmCancelId = confirmCancelId
+  try {
+    return renderToStaticMarkup(h(AbsencesPage, { session, notify: () => {} }))
+  } finally {
+    delete globalThis.qaResources
+    delete globalThis.qaConfirmCancelId
+  }
+}
+const absenceCards = (markup) => markup.match(/<article class="card space-y-3" data-absence="\d+">[\s\S]*?<\/article>/g) || []
+const absenceRows = (markup) => (markup.slice(markup.indexOf('<tbody>'), markup.indexOf('</tbody>')).match(/<tr>[\s\S]*?<\/tr>/g)) || []
+const absenceCells = (row) => (row.match(/<td[^>]*>([\s\S]*?)<\/td>(?=<td|<\/tr>)/g) || []).map((cell) => cell.replace(/^<td[^>]*>/, '').slice(0, -5))
+for (const [session, label, confirmCancelId] of [[MANAGER, 'gestor', null], [MANAGER, 'gestor com a confirmacao aberta', 1], [TECH, 'tecnico', null]]) {
+  const markup = renderAbsences(session, { confirmCancelId })
+  assert.match(markup, /<section class="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-absence-list="">/, `${label}: cartoes abaixo de 1280 px, uma coluna e duas de 768 px`)
+  assert.match(markup, /<section class="card table-wrap hidden xl:block"><table class="data-table">/, `${label}: tabela so de 1280 px para cima`)
+  assert.doesNotMatch(markup, /md:hidden|hidden md:block/, `${label}: sem a troca antiga em 768 px`)
+  const cards = absenceCards(markup)
+  const rows = absenceRows(markup)
+  assert.deepEqual(cards.map((card) => Number(card.match(/data-absence="(\d+)"/)[1])), [1, 2, 3, 4], `${label}: um cartao por ausencia, na ordem da tabela`)
+  assert.equal(rows.length, 4, `${label}: a tabela com as mesmas linhas`)
+  cards.forEach((card, index) => {
+    const cells = absenceCells(rows[index])
+    const manages = session === MANAGER
+    assert.equal(cells.length, manages ? 7 : 6, `${label}: linha ${index + 1} com ${manages ? 7 : 6} celulas`)
+    assert.ok(card.includes(cells[5]), `${label}: cartao ${index + 1} com a mesma situacao da linha`)
+    assert.ok(card.includes(`>${cells[2]}</dd>`) && card.includes(`>${cells[3]}</dd>`), `${label}: cartao ${index + 1} com as mesmas datas e o mesmo periodo`)
+    const actions = card.match(/<div class="border-t border-white\/5 pt-3">([\s\S]*)<\/div><\/article>$/)?.[1] ?? null
+    if (manages) assert.equal(actions, cells[6], `${label}: cartao ${index + 1} com as mesmas acoes da linha`)
+    else assert.equal(actions, null, `${label}: sem a permissao, cartao sem acoes, como a linha sem a coluna`)
+  })
+  if (session === MANAGER) {
+    assert.match(cards[0], confirmCancelId === 1 ? /Cancelar esta ausência\?[\s\S]*>Confirmar<\/button>[\s\S]*>Voltar<\/button>/u : />Editar<\/button>[\s\S]*>Cancelar<\/button>/, `${label}: cartao 1 com ${confirmCancelId === 1 ? 'a confirmacao' : 'Editar e Cancelar'}`)
+    assert.doesNotMatch(cards[1], /Cancelar esta ausência\?/u, `${label}: a confirmacao so no cartao da ausencia escolhida`)
+    assert.match(cards[2], /<span class="text-xs">Cancelada<\/span>/, `${label}: cancelada sem acoes, com o aviso`)
+    assert.match(cards[3], /Liderança: só administradores/u, `${label}: Lideranca sem a permissao da L9, com o aviso`)
+  }
+}
+assert.doesNotMatch(renderAbsences(MANAGER, { items: [] }), /data-absence=/, 'Lista vazia sem cartoes')
 
 console.log('Absences form RHF/Zod QA OK')
