@@ -3034,7 +3034,7 @@ Nenhum ponto com a coluna fixa por cima. Para o menu de notificações cobrir a 
 
 **Achado fora do escopo (sem mudança, registrado):** o cabeçalho do topo (`sticky top-0 z-30`, `frontend/src/components/PortalLayout.jsx:152`) **não fica fixo** ao rolar a página. A `div.portal-tech-shell` (`frontend/src/index.css:267-269`) tem `overflow-x-hidden`, e o navegador calcula `overflow-y: auto` nela; como ela não rola (cresce com o conteúdo), o `sticky` do cabeçalho se prende a ela e não à janela, e o cabeçalho sai junto com a página (medido: com a página rolada 1.133 px, o cabeçalho fica em `top: -1133`). Por isso a coluna fixa nunca chega a ele. Se o cabeçalho deveria ficar fixo, a correção mexe no layout de todas as telas: fica para decisão do responsável, depois do deploy.
 
-**17e, item 2 — Horas extras e Correção de ponto, pendentes em cartões abaixo de 1280 px, 2026-10-29: entregue (`b47915d`), aguardando revisão.** Arquivos: `frontend/src/pages/OperationalPages.jsx` (`WorkflowPage`, que serve às duas telas) e `frontend/scripts/qa-operational.mjs`. Na seção "Pendentes de aprovação", até 1279 px, um cartão por solicitação, com:
+**17e, item 2 — Horas extras e Correção de ponto, pendentes em cartões abaixo de 1280 px, 2026-10-29: entregue (`b47915d`) e aprovado em 2026-10-29, com R1 a R7 (ver a revisão, abaixo).** Arquivos: `frontend/src/pages/OperationalPages.jsx` (`WorkflowPage`, que serve às duas telas) e `frontend/scripts/qa-operational.mjs`. Na seção "Pendentes de aprovação", até 1279 px, um cartão por solicitação, com:
 - avatar, nome, equipe, data e o selo da situação;
 - o mesmo detalhe da linha (horas extras: período, total, motivo e justificativa; correção: tipo, registrado, correto e justificativa);
 - a mesma decisão da linha: Aprovar e Rejeitar para quem decide, ou "Aguardando decisão" para os outros perfis.
@@ -3089,6 +3089,23 @@ O título "Pendentes de aprovação" rolava junto com a tabela (o cartão inteir
 | 1280, 1366, 1440 e 1920 px | Tabela (`block`), cartões `none` | — | 0 | 0 | Não | Não |
 
 **Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura vem só da medição no navegador; os prints ficam fora do repositório. A tabela do histórico continua rolando dentro do cartão abaixo de cerca de 1120 px (sem botão; fica para depois do deploy, como decidido no 17e). O B4 nessas telas fica para a pendência 17f. `gitleaks` ausente na estação.
+
+**Revisão do item 2 do 17e (`b47915d`, docs `008a54a`) e da conferência Z1 (`15bba20`) (responsável, 2026-10-29): APROVADOS, com R1 a R7.** O achado do cabeçalho do topo que não fica fixo fica para depois do deploy. Sobre a R3, nova pendência 17g.
+
+**Pendência 17g — confirmação em Aprovar e Rejeitar (horas extras e correção de ponto; levantamento sem mudança de código, 2026-10-29).** Hoje nenhuma das três telas pede confirmação: a linha da tabela e o cartão (`decisionContent`, `frontend/src/pages/OperationalPages.jsx`, chamando `decide()`, `:797`) e a aba Aprovações da administração (`ApprovalActions`, `frontend/src/pages/AdminPage.jsx:69-79`, chamando `decideWorkflow()`, `:104`, e os botões em `:183` e seguintes). A decisão afeta horas extras e correção de ponto, que vão para a folha.
+
+**A decisão pode ser desfeita depois de gravada? Não, pela aplicação.** Fatos:
+- os endpoints só têm as ações `create` e `decision` (`api/portal/overtime.php:32`, `:37`; `api/portal/time_corrections.php:27`, `:32`); qualquer outra ação dá "Acao invalida." (`overtime.php:50`, `time_corrections.php:45`);
+- a decisão só vale para registro **pendente**: com a linha travada (`FOR UPDATE`), outro status dá "Somente registros pendentes podem ser decididos." (`services/OperationalService.php:1409`); não é possível decidir o próprio lançamento (`:1413`);
+- o único `UPDATE` de status dessas tabelas é o da decisão (`:1419`); não há outro caminho no código que volte a `pending` ou troque aprovado por rejeitado;
+- a decisão entra na fila de sincronização com o SharePoint (`portal_sync_queue`, `:1431`; `services/SharePointSyncService.php:5-28`). **Não há consumidor dessa fila no repositório**: se um processo externo a lê e leva a decisão adiante, é A CONFIRMAR com o responsável;
+- na tela, Aprovar e Rejeitar só aparecem para registro pendente e para gestor, Liderança e admin (`decisionContent`; o servidor exige `portal_role_is_manager`, `overtime.php:38`, `time_corrections.php:33`); no histórico, só quem decidiu e quando. A aba Aprovações lista só pendentes.
+
+**Quem pode desfazer:** ninguém pela aplicação, nem o admin. Só com acesso direto ao banco (e, se a fila tiver consumidor externo, também no destino), fora de qualquer trilha de auditoria da tela.
+
+**Recomendação: confirmação curta nos dois botões** (decisão não reversível), com o `Dialog` acessível da peça do B4 (`docs/DESENHO_CHG.md`, seção 6.3), sem `window.confirm`, e nas três telas ao mesmo tempo (linha, cartão e aba Aprovações), pela mesma função. Texto proposto: título "Aprovar hora extra?" (ou "Rejeitar…", "…ajuste de ponto?"), com o nome, a data e o total ou o tipo, e a frase "Esta decisão não pode ser desfeita pelo sistema."; botões "Aprovar" (ou "Rejeitar") e "Cancelar", com o foco inicial em "Cancelar". A 17g entra no mesmo lote da 17f, logo depois da peça reutilizável.
+
+**Observação para a decisão do responsável (fora do pedido):** a aba Aprovações também decide pausas e reuniões com os mesmos botões (`AdminPage.jsx:160`, `aprovar_pausa.php` e `rejeitar_pausa.php`). A decisão da pausa também não volta para pendente (`services/ApprovalRequestService.php:30-40` só atualiza a pendente), mas o efeito é outro: a pausa aprovada pode ser encerrada, e a rejeitada pode ser pedida de novo. Se a confirmação entrar só em horas extras e correção de ponto, a aba terá botões iguais com comportamentos diferentes. Recomendação: incluir as pausas na mesma confirmação, ou decidir explicitamente deixá-las sem.
 
 ---
 
