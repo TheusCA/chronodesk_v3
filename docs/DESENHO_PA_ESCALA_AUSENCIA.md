@@ -3034,6 +3034,62 @@ Nenhum ponto com a coluna fixa por cima. Para o menu de notificações cobrir a 
 
 **Achado fora do escopo (sem mudança, registrado):** o cabeçalho do topo (`sticky top-0 z-30`, `frontend/src/components/PortalLayout.jsx:152`) **não fica fixo** ao rolar a página. A `div.portal-tech-shell` (`frontend/src/index.css:267-269`) tem `overflow-x-hidden`, e o navegador calcula `overflow-y: auto` nela; como ela não rola (cresce com o conteúdo), o `sticky` do cabeçalho se prende a ela e não à janela, e o cabeçalho sai junto com a página (medido: com a página rolada 1.133 px, o cabeçalho fica em `top: -1133`). Por isso a coluna fixa nunca chega a ele. Se o cabeçalho deveria ficar fixo, a correção mexe no layout de todas as telas: fica para decisão do responsável, depois do deploy.
 
+**17e, item 2 — Horas extras e Correção de ponto, pendentes em cartões abaixo de 1280 px, 2026-10-29: entregue (`b47915d`), aguardando revisão.** Arquivos: `frontend/src/pages/OperationalPages.jsx` (`WorkflowPage`, que serve às duas telas) e `frontend/scripts/qa-operational.mjs`. Na seção "Pendentes de aprovação", até 1279 px, um cartão por solicitação, com:
+- avatar, nome, equipe, data e o selo da situação;
+- o mesmo detalhe da linha (horas extras: período, total, motivo e justificativa; correção: tipo, registrado, correto e justificativa);
+- a mesma decisão da linha: Aprovar e Rejeitar para quem decide, ou "Aguardando decisão" para os outros perfis.
+
+De 1280 px para cima, a tabela de sempre. O histórico (sem botão) não muda.
+
+**Medição antes** (build do `15bba20`, Inter, servidor simulado com 2 pendentes e 2 decididos por tela, admin, Chrome sem janela). "Fora" = botões Aprovar e Rejeitar fora da área visível (janela recortada por todo bloco com rolagem), de 4:
+
+| Janela | Horas extras: rola dentro, fora | Correção de ponto: rola dentro, fora |
+|---|---|---|
+| 390, 640, 768 e 1024 px | Sim, 4 | Sim, 4 |
+| 1279, 1280, 1366, 1440 e 1920 px | Não, 0 | Não, 0 |
+
+O título "Pendentes de aprovação" rolava junto com a tabela (o cartão inteiro era `card table-wrap`). Com os dados fictícios, a tabela já cabe em 1279 px; com justificativas mais longas, o levantamento do 17e mediu rolagem até 1119 px.
+
+**Aba Aprovações da administração** (pedido da decisão do 17e), mesmas condições, com 1 pausa, 2 horas extras e 2 correções pendentes: já mostra **cartões** (`approval-card`) em todas as larguras, com os 10 botões Aprovar e Rejeitar visíveis e inteiros de 390 a 1920 px (cartão mais estreito com 358 px em 390 px), sem rolagem horizontal da página. **Nenhuma mudança nela.**
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| R1 | A troca é em **1280 px** (`xl`), como no 17 (N1) e no 17d (M1) | O pedido. Mesma largura das outras telas do lote |
+| R2 | Cartão e linha pelos **mesmos blocos**, `detailContent(item)` e `decisionContent(item)`, extraídos da linha | As regras de quem decide (`canApprove`) e a chamada `decide()` ficam num ramo só, como o `rowActions()` do 17 (N2). O servidor continua conferindo tudo |
+| R3 | **Sem confirmação nova**: Aprovar e Rejeitar decidem direto no cartão, **como na linha da tabela e na aba Aprovações** | Hoje não há confirmação nesses botões em nenhuma das três telas; "a mesma confirmação da linha" é nenhuma. Pôr uma só nos cartões criaria comportamento diferente entre linha e cartão. Se o responsável quiser confirmação (principalmente em Rejeitar), ela entra nas três telas num commit próprio |
+| R4 | **Uma coluna** no celular e **duas** de 768 px, com `items-start` | Como o 17 (N4) |
+| R5 | O cartão dos pendentes **deixa de rolar inteiro**: o `table-wrap` passou para o bloco da tabela | Como no 17 (N5) e no item 1 (Q5). O histórico ficou como estava (`card table-wrap`), fora do pedido |
+| R6 | A data fica numa linha própria, "Data: 28/10/2026", abaixo da equipe | No primeiro build, "Equipe N1 · 28/10/2026" quebrava no meio em 390 px |
+| R7 | O teste entra no `qa:operational`, que passou a renderizar as duas telas, sem `qa:*` novo | Igual ao Q6 do item 1 |
+
+**Validação executada pela IA:** `qa:operational` ampliado. Nas duas telas, com gestor, Liderança, admin, técnico e somente leitura:
+- um cartão por pendente, na ordem da tabela, sem os decididos;
+- em cada cartão, o detalhe e a decisão **iguais, em HTML, aos da linha** da tabela, o mesmo selo da situação, nome, equipe e data;
+- Aprovar e Rejeitar só para gestor, Liderança e admin; "Aguardando decisão" para os outros;
+- as classes da troca em 1280 px e das colunas; o cartão dos pendentes sem `table-wrap`; o histórico sem cartões e como antes; sem pendentes, o aviso e nenhum cartão;
+- no código: a linha e o cartão chamam os mesmos blocos; Aprovar e Rejeitar chamam `decide()` com a decisão certa; nenhum diálogo do navegador.
+
+**Mutação 19/19** numa cópia do frontend:
+- troca e layout: cartões sem `xl:hidden` ou até `lg`; tabela sem `hidden xl:block` ou a partir de `lg`; cartão dos pendentes rolando inteiro; uma coluna só;
+- conteúdo do cartão: ações fixas no lugar do `decisionContent`; sem a decisão; sem o detalhe; sem o status; sem a data; sem a equipe; data errada na correção; cartões com o histórico; cartões fora de ordem;
+- regras: Rejeitar decidindo "aprovado"; decisão sem a checagem de quem aprova; `window.confirm` antes de decidir; histórico também em cartões.
+
+18 `qa:*`, lint, typecheck e build (numa pasta temporária); `test-local.ps1 -SkipHttp` sem falha. O chunk `OperationalPages` passou de 101,41 para 102,82 kB.
+
+**Medição depois** (build do código do `b47915d`, mesmas condições), igual nas duas telas:
+
+| Janela | Mostra (`display` calculado) | Cartão mais estreito | Fora (de 4) | Botão quebrado | Título rola junto | Rolagem horizontal da página |
+|---|---|---|---|---|---|---|
+| 390 px | Cartões (`grid`), tabela `none` | 316 px | 0 | 0 | Não | Não |
+| 640 px | Cartões, uma coluna | 535 px | 0 | 0 | Não | Não |
+| 768 e 1024 px | Cartões, duas colunas | 326 e 318 px | 0 | 0 | Não | Não |
+| 1279 px | Cartões, duas colunas | 445 px | 0 | 0 | Não | Não |
+| 1280, 1366, 1440 e 1920 px | Tabela (`block`), cartões `none` | — | 0 | 0 | Não | Não |
+
+**Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura vem só da medição no navegador; os prints ficam fora do repositório. A tabela do histórico continua rolando dentro do cartão abaixo de cerca de 1120 px (sem botão; fica para depois do deploy, como decidido no 17e). O B4 nessas telas fica para a pendência 17f. `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências
