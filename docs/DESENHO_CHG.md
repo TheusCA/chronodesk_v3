@@ -713,6 +713,8 @@ Fontes: registro do npm (`npm view`, consultado em 2026-10-29) e documentação 
 
 ### 6.3 Proteção contra perda de alterações (B4, D-CHG-4)
 
+**Implementada fora do módulo, no item 1 do lote 17f (`b6a2460`, 2026-10-29; registro no `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, 9.11).** Diferenças em relação ao texto abaixo: o registro de bloqueios ficou em `frontend/src/lib/navigationGuard.ts` e o teclado do diálogo em `frontend/src/lib/dialogFocus.ts`, módulos puros usados pelo `router.js` e pelo `Dialog`. O G4 deste plano passa a só reaproveitar a peça.
+
 Peça reutilizável, em quatro partes:
 
 | Arquivo | O que faz |

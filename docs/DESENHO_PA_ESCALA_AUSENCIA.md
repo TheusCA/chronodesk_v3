@@ -3170,6 +3170,43 @@ Sem rolagem horizontal da página em nenhuma largura.
 
 Nada do módulo de CHGs entra agora.
 
+**17f, item 1 — peça reutilizável contra perda de alterações e `Dialog` acessível, 2026-10-29: entregue (`b6a2460`), aguardando revisão.** Arquivos novos: `frontend/src/lib/navigationGuard.ts`, `frontend/src/lib/dialogFocus.ts`, `frontend/src/components/ui/Dialog.jsx`, `frontend/src/components/ui/ConfirmDiscardDialog.jsx`, `frontend/src/hooks/useUnsavedChangesGuard.ts` e `frontend/scripts/qa-unsaved-changes.mjs`. Alterados: `frontend/src/lib/router.js`, `frontend/src/components/PortalLayout.jsx` ("Sair") e `frontend/package.json` (`qa:unsaved-changes`, o 19º `qa:*`). **Nenhuma tela usa a peça ainda**: os itens 2 a 4 a ligam nos formulários.
+
+O que a peça faz (o desenho é o da seção 6.3 do `docs/DESENHO_CHG.md`):
+- **Bloqueios de navegação** (`navigationGuard.ts`): sem bloqueio registrado, toda saída segue na hora, como antes. Com um formulário sujo, a saída espera a resposta do diálogo; com vários, um diálogo só (o do mais recente).
+- **Roteador** (`router.js`): o `navigate` (menu, abas, links internos) passa pelo bloqueio. No voltar e no avançar, o navegador já trocou o endereço quando o `popstate` chega: com bloqueio, o endereço volta para a última rota aceita e a tela não troca até a resposta; "Descartar" leva ao endereço pedido.
+- **"Sair"** (`PortalLayout.jsx`): passa pelo mesmo bloqueio (`guardLeave(onLogout)`).
+- **`useUnsavedChangesGuard(isDirty)`**: enquanto sujo, registra o bloqueio e o `beforeunload` (o navegador mostra o aviso dele ao recarregar ou fechar a aba); limpo ou desmontado, tira os dois. Devolve `requestLeave(ação)` para as saídas locais (fechar o modal, abrir outra edição) e as props do `ConfirmDiscardDialog`.
+- **`Dialog`**: `role="dialog"` ou `"alertdialog"`, `aria-modal`, título e descrição ligados por id, foco inicial escolhido (senão o primeiro campo), foco preso (Tab e Shift+Tab circulam), Esc e clique fora pedem para fechar, foco devolvido a quem abriu, `z-[60]` (acima dos modais atuais, `z-50`). Com dois abertos, só o de cima responde ao teclado.
+- **`ConfirmDiscardDialog`**: "Descartar alterações?", "Há alterações não salvas. Se sair agora, elas serão perdidas.", "Continuar editando" (principal, com o foco; Esc e clique fora fazem o mesmo) e "Descartar alterações" (vermelho).
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| U1 | O registro de bloqueios e o teclado do `Dialog` ficam em **módulos puros** (`navigationGuard.ts`, `dialogFocus.ts`), e o hook expõe `attachUnsavedChangesGuard`; o roteador expõe `createPopStateHandler` | Sem biblioteca de DOM no projeto (e sem dependência nova), os efeitos do React não rodam no QA. Assim, cada regra é testada por comportamento no Node, e a fiação dos efeitos é conferida no código e no navegador (U6) |
+| U2 | Voltar ou avançar bloqueado **recoloca o endereço com `pushState`** | O `popstate` chega com o endereço já trocado. O `pushState` deixa a barra certa na hora; o efeito colateral é uma entrada a mais no histórico (o "avançar" daquela entrada se perde). `history.go(1)` seria assíncrono e voltaria a disparar `popstate` |
+| U3 | Com vários formulários sujos, **um diálogo só**, do bloqueio mais recente; "Descartar" segue, e as telas que saem levam os seus formulários | Evita diálogos empilhados para uma única saída |
+| U4 | No `Dialog`, o clique fora usa `mousedown` no fundo **com `preventDefault`** | Achado na medição: sem o `preventDefault`, depois de fechar, o navegador levava o foco para o `body` (o fundo não recebe foco), perdendo o foco devolvido a quem abriu |
+| U5 | `requestLeave` é para saídas locais; troca de rota já passa pelo roteador. Depois de salvar com sucesso, a tela limpa o formulário (`reset`) e fecha direto | Evita perguntar duas vezes e evita o aviso logo depois de um salvamento bem-sucedido (o `isDirty` só cai na próxima renderização) |
+| U6 | A conferência no navegador usou uma **página de teste montada só numa cópia temporária** do frontend (fora do repositório), com um modal e um formulário na página usando a peça | Nenhuma tela usa a peça neste item; a página de teste exercita os efeitos reais (foco, teclado, `beforeunload`) com cliques e teclas de verdade |
+
+**Validação executada pela IA:**
+- **`qa:unsaved-changes`** (novo): registro de bloqueios (sem bloqueio segue na hora; com bloqueio espera; um diálogo com dois sujos; "Descartar" segue; desregistrar tira); "Sair" com e sem bloqueio; o `navigate` capturado de um render real (sem bloqueio, `pushState` e `replaceState` como antes; com bloqueio, endereço intacto até "Descartar"); voltar e avançar com e sem bloqueio (endereço devolvido, tela igual, "Descartar" vai ao endereço do voltar); `beforeunload` e bloqueio só enquanto sujo, sem sobra; teclado do diálogo (Esc, Tab, Shift+Tab, foco fora, sem item focável, outras teclas) e a pilha; `Dialog` e `ConfirmDiscardDialog` renderizados (papéis, `aria-*`, textos, ordem e estilo dos botões); fiação dos efeitos no código; `beforeunload` só no hook e `popstate` só no roteador; nenhum diálogo do navegador nos arquivos novos.
+- **Mutação 41/41** numa cópia do repositório: bloqueios (ignorar, perguntar ao primeiro, seguir e perguntar, não desregistrar, "Sair" direto); roteador (navigate sem bloqueio, voltar sem devolver o endereço, voltar sem bloqueio, endereço aceito não guardado, `popstate` sem remover); hook (sem `beforeunload`, `beforeunload` ou bloqueio sobrando, sem `preventDefault`, liga mesmo limpo, limpo também pergunta, "Descartar" não segue, "Continuar" segue); teclado e pilha (Esc, Tab, Shift+Tab, foco fora, sem item, todos respondem, fechar não tira); `Dialog` (papel fixo, sem `aria-modal`, sem `aria-labelledby`, não devolve o foco, ignora o foco inicial, teclado em todos, listener sobrando, clique fora sem `preventDefault`, clique dentro fecha, abaixo dos modais); `ConfirmDiscardDialog` (foco em "Descartar", Esc descarta, botões trocados, texto diferente, `dialog` comum); "Sair" sem bloqueio. Parte deles (fiação dos efeitos) morre pela checagem do código, não por comportamento: ver U1 e a página de teste.
+- **App real sem formulário sujo** (build do `b6a2460`, servidor simulado, admin): os 20 itens do menu em 1366 px (barra lateral) e em 390 px (menu do celular), três voltar e um avançar em cada largura, "Sair" e recarregar. Em todos os passos: rota certa, nenhum diálogo, nenhum `beforeunload`, um `popstate`, nenhum `keydown` no documento (`getEventListeners`); "Sair" chamou o `logout.php` uma vez; recarregar sem aviso. **A saída é idêntica à do build anterior (`918d6bc`).**
+- **Página de teste no navegador** (cliques e teclas reais pelo Chrome), **60 de 60** conferências: modal limpo fecha direto por Esc, X, Cancelar e clique fora, com o foco devolvido; modal sujo pergunta em cada uma das quatro formas, com o foco em "Continuar editando", e Esc, clique fora e "Continuar editando" mantêm os dados, "Descartar" fecha; foco preso no aviso e no modal; erro do servidor mantém os dados e o formulário sujo; salvar com sucesso fecha sem perguntar; menu, voltar, "Editar outro" e "Sair" com o formulário sujo perguntam e respeitam a resposta; recarregar sujo abre o aviso do navegador (`beforeunload`), limpo não; nenhum listener sobrando no fim.
+
+19 `qa:*`, lint (sem aviso novo), typecheck e build (numa pasta temporária); `test-local.ps1 -SkipHttp` sem falha. O chunk principal passou de 203,01 para 203,38 kB (o `Dialog`, o diálogo de descarte e o hook entram nos chunks das telas, quando forem usados).
+
+**Limitações declaradas:**
+- os efeitos do React (foco, teclado, listeners) não rodam no QA do Node; foram conferidos no código, na mutação e na página de teste no navegador;
+- o texto do aviso do `beforeunload` é o do navegador, genérico; o texto próprio não aparece nesse caso;
+- sessão expirada e recarga forçada pelo sistema não passam pelo diálogo;
+- voltar bloqueado deixa uma entrada a mais no histórico (U2);
+- nenhuma tela usa a peça ainda; o comportamento em cada formulário é conferido nos itens 2 a 4;
+- `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências
