@@ -3170,7 +3170,7 @@ Sem rolagem horizontal da página em nenhuma largura.
 
 Nada do módulo de CHGs entra agora.
 
-**17f, item 1 — peça reutilizável contra perda de alterações e `Dialog` acessível, 2026-10-29: entregue (`b6a2460`), aguardando revisão.** Arquivos novos: `frontend/src/lib/navigationGuard.ts`, `frontend/src/lib/dialogFocus.ts`, `frontend/src/components/ui/Dialog.jsx`, `frontend/src/components/ui/ConfirmDiscardDialog.jsx`, `frontend/src/hooks/useUnsavedChangesGuard.ts` e `frontend/scripts/qa-unsaved-changes.mjs`. Alterados: `frontend/src/lib/router.js`, `frontend/src/components/PortalLayout.jsx` ("Sair") e `frontend/package.json` (`qa:unsaved-changes`, o 19º `qa:*`). **Nenhuma tela usa a peça ainda**: os itens 2 a 4 a ligam nos formulários.
+**17f, item 1 — peça reutilizável contra perda de alterações e `Dialog` acessível, 2026-10-29: entregue (`b6a2460`) e aprovado em 2026-10-29, com U1 a U5 e a U6 com o ajuste V1 (ver a revisão, abaixo).** Arquivos novos: `frontend/src/lib/navigationGuard.ts`, `frontend/src/lib/dialogFocus.ts`, `frontend/src/components/ui/Dialog.jsx`, `frontend/src/components/ui/ConfirmDiscardDialog.jsx`, `frontend/src/hooks/useUnsavedChangesGuard.ts` e `frontend/scripts/qa-unsaved-changes.mjs`. Alterados: `frontend/src/lib/router.js`, `frontend/src/components/PortalLayout.jsx` ("Sair") e `frontend/package.json` (`qa:unsaved-changes`, o 19º `qa:*`). **Nenhuma tela usa a peça ainda**: os itens 2 a 4 a ligam nos formulários.
 
 O que a peça faz (o desenho é o da seção 6.3 do `docs/DESENHO_CHG.md`):
 - **Bloqueios de navegação** (`navigationGuard.ts`): sem bloqueio registrado, toda saída segue na hora, como antes. Com um formulário sujo, a saída espera a resposta do diálogo; com vários, um diálogo só (o do mais recente).
@@ -3206,6 +3206,15 @@ O que a peça faz (o desenho é o da seção 6.3 do `docs/DESENHO_CHG.md`):
 - voltar bloqueado deixa uma entrada a mais no histórico (U2);
 - nenhuma tela usa a peça ainda; o comportamento em cada formulário é conferido nos itens 2 a 4;
 - `gitleaks` ausente na estação.
+
+**Revisão do item 1 do lote 17f + 17g (`b6a2460`, docs `8840a8e`) e do registro `bdb9cbf` (responsável, 2026-10-29): APROVADOS, com U1 a U5; a U6 com o ajuste V1.**
+
+**V1 (médio):** a prova com formulário sujo ficou numa página de teste temporária, fora do repositório, e parte da mutação morre só pela checagem do código (U1). Como a peça intercepta a navegação de todas as telas, a prova precisa ser repetível:
+- versionar o roteiro de conferência no navegador em `frontend/scripts/browser/`, com servidor simulado e dados fictícios, caminho do Chrome por variável de ambiente e nenhum dado real. Fica fora dos 19 `qa:*` (precisa de navegador), documentado no `QA_VISUAL_CHECKLIST.md` e no `test-local.ps1` como etapa opcional (`-Browser`), com a saída só de contagens (passou ou falhou por conferência);
+- a partir do item 2, o roteiro roda contra as **telas reais** que recebem a peça (Chamados críticos, depois Funcionários, Ausências e Escala): cada forma de sair, limpo e sujo, foco, erro do servidor mantendo os dados, salvar fechando sem perguntar;
+- sem biblioteca de DOM (jsdom ou parecida) agora; se valer a pena, registrar como proposta com custo e benefício.
+
+O V1 entra junto com o item 2.
 
 ---
 
