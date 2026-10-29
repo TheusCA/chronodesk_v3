@@ -2962,6 +2962,60 @@ Os demais testes do 17b (conteúdo da lista e igualdade com o painel do dia) seg
 
 **Pendência 17f — proteção contra perda de alterações no resto do sistema (levantamento do pedido B4 do módulo de CHGs, 2026-10-29; sem mudança de código).** Nenhum modal do sistema trata Esc, prende o foco ou tem `role="dialog"`, e nenhum formulário avisa antes de fechar, trocar de rota ou recarregar. O levantamento, tela por tela, está em `docs/DESENHO_CHG.md`, seção 14. **Recomendação (D-CHG-5, a decidir):** antes do deploy único, Chamados críticos (novo e editar, formulário longo que some no clique fora), Funcionários (editar e adicionar), Ausências e Escala presencial (regra), com a peça reutilizável num commit próprio, fora do módulo: cerca de 4 commits de entrega, depois dos três itens do 17e. O resto (Horas extras e Correção de ponto, Mapa PA, Calendário, Plantões, envios de arquivo, `window.confirm`) depois do deploy.
 
+**Revisão do G0b do módulo de CHGs (`258c6ce`) (responsável, 2026-10-29): aprovado, com D-CHG-1 a D-CHG-12 e o ajuste A-CHG-1** (registro em `507a0de`; `docs/DESENHO_CHG.md`, seção 15). A D-CHG-5 aprovada põe a pendência 17f antes do deploy, depois dos três itens do 17e. O B4 de Chamados críticos **não** entra no item 1 do 17e: vem depois, com a peça reutilizável.
+
+**17e, item 1 — Chamados críticos com a coluna Ações fixa à direita, 2026-10-29: entregue (`753c659`), aguardando revisão.** Arquivos: `frontend/src/pages/CriticalIncidentsPage.jsx`, `frontend/src/index.css` e `frontend/scripts/qa-visual.mjs`. Em todas as larguras:
+- a coluna Ações fica fixa à direita (`position: sticky; right: 0`), com fundo opaco da cor do cartão (`#0d1625`), uma linha clara à esquerda e uma sombra, para o conteúdo rolado não aparecer por baixo;
+- os botões ficam numa grade: uma coluna no celular e duas de 640 px para cima;
+- só o bloco da tabela rola; o título "Incidentes e salas críticas" e a contagem não rolam mais junto.
+
+**Medição antes** (build do `507a0de`, Inter, servidor simulado com 4 chamados fictícios em aberto, aberto, mitigado e resolvido, admin, Chrome sem janela). A tabela tem `min-w-[1380px]` e o cartão inteiro rolava (`card table-wrap`). A coluna Ações tinha **268 px** (os quatro botões numa linha). "Fora" = botões da tabela fora da área visível, de 13:
+
+| Janela | Área visível da tabela | Fora, tabela no início | Fora, tabela no meio | Fora, tabela no fim |
+|---|---|---|---|---|
+| 390 px | 356 px | 13 | 13 | 0 |
+| 640, 768 e 1024 px | 575, 703 e 687 px | 13 | 13 | 0 |
+| 1279, 1280 e 1366 px | 942, 943 e 1029 px | 13 | 13 | 0 |
+| 1440 px | 1.103 px | 13 | 7 | 0 |
+| 1536 px | 1.199 px | 13 | 3 | 0 |
+| 1736 e 1920 px | Sem rolagem | 0 | 0 | 0 |
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| Q1 | A coluna Ações fica fixa **em todas as larguras**, por uma regra `.data-table .data-table-sticky-end` **fora do `@layer`** | Com um seletor só (`.data-table-sticky-end`), a regra perde para `.data-table th` e `.data-table td`, que têm mais especificidade (lição do A1). Fora do `@layer`, a classe não depende da varredura do Tailwind. De 1756 px para cima a tabela não rola e o `sticky` não tem efeito |
+| Q2 | Fundo opaco **da cor do cartão** (`theme('colors.chrono.card')`); o tom do cabeçalho e o realce da linha (`hover`) entram como `background-image` por cima dele | O cabeçalho usa `bg-slate-950/30` e a linha realçada `bg-white/[0.02]`, os dois transparentes: o conteúdo apareceria por baixo. Assim, a coluna fixa tem o mesmo tom do resto e continua opaca |
+| Q3 | Botões numa grade: **uma coluna abaixo de 640 px** (coluna com 113 px) e **duas de 640 px** (185 px), em vez da linha de quatro (268 px) | Fixar 268 px em 390 px deixaria 88 px para o resto da tabela. Com 113 px, sobram 203 px. As linhas ficam mais altas no celular (quatro botões empilhados) |
+| Q4 | `white-space: nowrap` na coluna fixa | Sem isso, o `overflow-wrap: anywhere` da `.data-table` partiu "Visualizar" em "Visualiz/ar" em 1366 px no primeiro build |
+| Q5 | O `table-wrap` passa do cartão para o bloco da tabela, como no 17 (N5) | O título e a contagem não rolam mais com a tabela, e o `sticky` se prende à borda do bloco da tabela, sem o recuo interno do cartão. Efeito: a tabela só deixa de rolar a partir de 1756 px (antes, 1736), porque o recuo do cartão saiu da área de rolagem; com Ações fixa, isso não esconde nada |
+| Q6 | O teste entra no `qa:visual`, que já trava as regras de layout das tabelas, **sem um `qa:*` novo** | A bateria segue com 18 `qa:*` (18 + 2 com o módulo de CHGs). O `qa:visual` passou a renderizar a página (JSX transpilado pelo TypeScript do projeto, `react-dom/server`, `useResource` simulado), como o `qa:employee-form` (N6) |
+
+**Validação executada pela IA:** `qa:visual` ampliado:
+- regra da coluna fixa fora de qualquer bloco (contagem de chaves), com `sticky`, `right: 0`, `z-index`, `nowrap` e o fundo da cor do cartão; cor do cartão com 6 dígitos (opaca); tom do cabeçalho e realce da linha;
+- página renderizada com gestor, Liderança, admin e técnico: nove colunas, Ações por último e só ela fixa; a célula fixa em cada linha com a grade; todos os botões da linha dentro dela (aberto: Visualizar, Editar, Mitigar e Resolver; mitigado: sem Mitigar; resolvido e cancelado: Visualizar e Editar; técnico: só Visualizar);
+- o cartão sem `table-wrap` e o bloco da tabela com ele, abaixo do título; lista vazia sem tabela.
+
+**Mutação 19/19** numa cópia do frontend:
+- página: cabeçalho ou célula sem a classe fixa; outra coluna fixa; Ações fora do fim; cartão rolando inteiro de novo; bloco sem `table-wrap`; botões em linha; botões sempre numa coluna; Mitigar fora da célula fixa;
+- CSS: sem `sticky`, sem `right: 0`, sem `z-index`, sem `nowrap`, fundo transparente, um seletor só, regra movida para dentro do `@layer components`, cabeçalho sem o tom, sem o realce da linha; cor do cartão com transparência.
+
+18 `qa:*`, lint, typecheck e build (numa pasta temporária; o `app/` do repositório não foi tocado); `test-local.ps1 -SkipHttp` sem falha. O chunk da página passou de 26.133 para cerca de 26.200 bytes, e o CSS de 54.071 para cerca de 54.440 bytes.
+
+**Medição depois** (build do código do `753c659`, mesmas condições). `getComputedStyle` do cabeçalho e das células de Ações: `position: sticky`, `right: 0px`, `z-index: 10`, fundo `rgb(13, 22, 37)` (opaco), em todas as larguras. "Cobertura" = em pontos dentro de cada célula de Ações (cabeçalho e 4 linhas), o elemento por cima (`elementFromPoint`) é a própria célula:
+
+| Janela | Área visível da tabela | Coluna Ações | Fora (início, meio, fim) | Botão quebrado | Cobertura (início, meio, fim) | Título rola junto | Rolagem horizontal da página |
+|---|---|---|---|---|---|---|---|
+| 390 px | 316 px | 113 px | 0, 0, 0 | 0 | 5/5, 5/5, 5/5 | Não | Não |
+| 640, 768 e 1024 px | 535, 663 e 647 px | 185 px | 0, 0, 0 | 0 | 5/5 nas três | Não | Não |
+| 1279, 1280, 1366, 1440 e 1536 px | 902 a 1.159 px | 185 px | 0, 0, 0 | 0 | 5/5 nas três | Não | Não |
+| 1735 e 1736 px | 1.358 e 1.359 px (rola 22 px) | 185 px | 0, 0, 0 | 0 | 5/5 nas três | Não | Não |
+| 1920 px | Sem rolagem | 201 px | 0 | 0 | 5/5 | Não | Não |
+
+Nos prints (390, 1024, 1366 e 1920 px, tabela no início e no meio), o conteúdo rolado some por baixo da coluna fixa, sem transparência.
+
+**Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura e a cobertura vêm da medição no navegador (o QA renderiza HTML sem layout); os prints ficam fora do repositório. A rolagem com o dedo num aparelho real não foi testada (só a emulação de largura do Chrome). O cabeçalho "CRITICIDADE" quebra em duas linhas de 1280 a 1440 px, como antes (fora do escopo; com Ações mais estreita, as outras colunas ganharam espaço). O `min-w-[1380px]` da tabela não mudou. O B4 de Chamados críticos não entrou (D-CHG-5). `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências

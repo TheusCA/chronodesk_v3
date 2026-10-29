@@ -916,6 +916,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Peso de biblioteca no bundle nao medido (nada foi instalado). Arrastar nativo no toque depende do navegador (A CONFIRMAR por aparelho). Comportamento do `isDirty` com `useFieldArray` e do texto do `beforeunload` ficam A CONFIRMAR na documentacao da versao no G4. Leitura do tecnico, listas da C6 e C10, formato da C12, 4.6b e 4.6c seguem em aberto. A IA nao acessa o banco nem o servidor. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Responsavel, 2026-10-29: **G0b (`258c6ce`) aprovado**, com D-CHG-1 a D-CHG-12 como recomendadas; QAs separados (`qa:unsaved-changes` e `qa:chg`, bateria com 18 + 2). **Ajuste A-CHG-1 (medio):** sem comite `agendado`, a aprovacao (botao, "Mover para..." ou drop) abre a confirmacao com a data do comite, preenchida com a data de hoje do servidor e editavel, nunca futura; com `agendado`, aprova direto. Incorporado pela IA no desenho (D-CHG-3, D-CHG-6, 3.4.1, 6.2.1, testes, mutantes, secao 15) e no requisito (RF-CHG-21, secao 7), num commit so de docs; leitura da IA para `agendado` com data futura registrada para conferencia. G1 bloqueado ate o 4.5 e os itens A CONFIRMAR. |
 
+### Lote de acabamento — 17e, item 1 (Chamados criticos com a coluna Acoes fixa a direita) — 2026-10-29
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Item 1 da pendencia 17e: na tela Chamados criticos, os botoes Visualizar, Editar, Mitigar e Resolver ficavam fora da area visivel da tabela de 390 a 1735 px. A coluna Acoes passa a ser fixa a direita, com fundo opaco (desenho 9.11). |
+| **Branch e commits** | `507a0de` (registro da revisao do G0b com o A-CHG-1), `753c659` (codigo e QA) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/pages/CriticalIncidentsPage.jsx` (classe `data-table-sticky-end` no cabecalho e nas celulas de Acoes; botoes em grade de uma e duas colunas; `table-wrap` do cartao para o bloco da tabela), `frontend/src/index.css` (regra da coluna fixa fora do `@layer`, com fundo opaco, tom do cabecalho e realce da linha) e `frontend/scripts/qa-visual.mjs` (regra do CSS e renderizacao da pagina); desenho 9.11. |
+| **Decisoes de implementacao** | Seis, a aprovar (desenho 9.11, Q1 a Q6): coluna fixa em todas as larguras por regra com dois seletores fora do `@layer`; fundo da cor do cartao com o tom do cabecalho e o realce por cima; grade de botoes (113 px no celular, 185 px de 640 px) em vez da linha de 268 px; `nowrap` na coluna fixa; so o bloco da tabela rola; teste no `qa:visual`, sem `qa:*` novo. |
+| **Validacao executada pela IA** | Medicao antes e depois (Inter, servidor simulado, 4 chamados ficticios, admin) em 390, 640, 768, 1024, 1279, 1280, 1366, 1440, 1536, 1735, 1736 e 1920 px, com a tabela no inicio, no meio e no fim: antes, 13 de 13 botoes fora no inicio ate 1536 px; depois, 0 fora em todas as larguras e posicoes, `getComputedStyle` com `sticky`, `right: 0px`, `z-index: 10` e fundo opaco, cobertura 5/5 por `elementFromPoint`, nenhum botao quebrado, sem rolagem horizontal da pagina. `qa:visual` ampliado; mutacao **19/19** numa copia do frontend. 18 `qa:*`, lint, typecheck, build numa pasta temporaria e `test-local.ps1 -SkipHttp`. |
+| **Limitacoes declaradas** | Sem o backend real; dados ficticios; largura e cobertura medidas no navegador; rolagem com o dedo num aparelho real nao testada. Cabecalho "CRITICIDADE" quebra em duas linhas de 1280 a 1440 px, como antes. B4 de Chamados criticos fica para a pendencia 17f. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do item 1 do 17e. |
+
 ---
 
 ## 5. Responsabilidade
