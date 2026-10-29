@@ -2907,7 +2907,7 @@ Total antes do deploy, se as três forem aceitas: **3 commits de entrega**, cada
 
 Um commit de entrega cada, com parada para revisão. O resto do 17e fica para depois do deploy. A página longa da semana no celular também fica para depois (dias recolhíveis, com hoje aberto).
 
-**P1 — Calendário, semana com a grade de 1280 a 1535 px e o painel do dia embaixo, 2026-10-28: entregue (`abf273a`), aguardando revisão.** Arquivos: `frontend/src/pages/CalendarPage.jsx` e `frontend/scripts/qa-calendar-presence.mjs`. Na visão Semana:
+**P1 — Calendário, semana com a grade de 1280 a 1535 px e o painel do dia embaixo, 2026-10-28: entregue (`abf273a`) e aprovado em 2026-10-29, com a P1-a (ver a revisão, abaixo).** Arquivos: `frontend/src/pages/CalendarPage.jsx` e `frontend/scripts/qa-calendar-presence.mjs`. Na visão Semana:
 
 | Janela | Lista por dia | Grade | Painel "Detalhes do dia" |
 |---|---|---|---|
@@ -2955,6 +2955,12 @@ Os demais testes do 17b (conteúdo da lista e igualdade com o painel do dia) seg
 18 `qa:*`, lint e typecheck no repositório; build numa pasta temporária (o `app/` do repositório não foi tocado).
 
 **Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura vem só da medição no navegador; os prints ficam fora do repositório. Na grade, os eventos de outro tipo ("Reunião", "Hora extra") continuam numa linha com reticências, como antes do 17b, com o texto completo no painel do dia; a contagem de nomes cortados vale só para os cartões do motor. Embaixo da grade, o painel do dia mostra os cartões numa coluna na largura toda, sem mudança de layout dentro dele. `gitleaks` ausente na estação.
+
+**Revisão do P1 (`abf273a`, docs `1140d0f`) (responsável, 2026-10-29): APROVADO, com a P1-a.** A observação sobre 1536 px (coluna mais estreita com o painel ao lado) fica como está, sem mudança. **17b concluído.** Próximo do lote de acabamento: o item 1 do 17e (Chamados críticos), **que não começa sem nova ordem do responsável**.
+
+**Revisão do G0 do módulo de CHGs (`de93913`, `d2a9528`) (responsável, 2026-10-29): requisito e desenho aprovados como base**, com C1 a C16, exceto a C4 (trocada pelo arrastar e soltar). O registro completo, as respostas aos A DEFINIR e os pedidos B1 a B4 ficam em `docs/REQUISITOS_CHG.md` (seção 7) e `docs/DESENHO_CHG.md` (seção 15). O G0b (só documentos) foi entregue e aguarda revisão; o 4.5 (deploy único ou depois) segue em aberto.
+
+**Pendência 17f — proteção contra perda de alterações no resto do sistema (levantamento do pedido B4 do módulo de CHGs, 2026-10-29; sem mudança de código).** Nenhum modal do sistema trata Esc, prende o foco ou tem `role="dialog"`, e nenhum formulário avisa antes de fechar, trocar de rota ou recarregar. O levantamento, tela por tela, está em `docs/DESENHO_CHG.md`, seção 14. **Recomendação (D-CHG-5, a decidir):** antes do deploy único, Chamados críticos (novo e editar, formulário longo que some no clique fora), Funcionários (editar e adicionar), Ausências e Escala presencial (regra), com a peça reutilizável num commit próprio, fora do módulo: cerca de 4 commits de entrega, depois dos três itens do 17e. O resto (Horas extras e Correção de ponto, Mapa PA, Calendário, Plantões, envios de arquivo, `window.confirm`) depois do deploy.
 
 ---
 

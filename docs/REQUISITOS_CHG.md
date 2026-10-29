@@ -1,13 +1,15 @@
 # Requisitos — Módulo de CHGs (mudanças) no ChronoDesk
 
-> **Situação:** requisito e plano, **sem código**. Desenho em `docs/DESENHO_CHG.md`. Parar para revisão do responsável antes de qualquer implementação.
-> **Data:** 2026-10-28. **Base analisada:** `de93913` no branch `feat/employee-form-rhf-zod`.
+> **Situação:** requisito e plano, **sem código**. Desenho em `docs/DESENHO_CHG.md`. **G0 aprovado como base em 2026-10-29** (seção 7). **G0b (este texto): respostas do responsável, pedidos B1 a B4 e padrão de qualidade, aguardando revisão.** Nenhum código antes da decisão do 4.5 (branch e deploy), que **continua em aberto**.
+> **Data:** 2026-10-28 (G0); 2026-10-29 (G0b). **Base analisada:** `de93913` (G0) e `d2a9528` (G0b), no branch `feat/employee-form-rhf-zod`.
 > **Modelo de referência:** `_referencias/controle_atualizacoes_modelo.html` (1.296 linhas, lido inteiro). **Fora do git** (`.gitignore:45`, commit `de93913`; `git status` conferido com o arquivo no lugar). O modelo traz dados reais. Por isso este documento usa só **marcadores**: `[CARTEIRA_COD]`, `[CARTEIRA_NOME]`, `[LOCAL_n]`, `[TECNICO_n]`, `[SOLICITANTE]`, `[SISTEMA]` (o sistema que as atualizações instalam), `[IP_INTERNO]`, `[URL_CONSOLE_ENDPOINT]` e `[ID_ENDPOINT]`.
 
 Convenções:
 - **Fato** = lido no código, com `arquivo:linha` (do modelo ou do ChronoDesk).
 - **A DEFINIR** = depende de decisão do responsável ou do solicitante. Para cada um, a seção 4 diz o que muda conforme a resposta.
+- **A CONFIRMAR** = há uma proposta, mas ela depende de confirmação do responsável ou de um dado externo (formato real, documentação da versão).
 - **Proposta** = posição da IA, a aprovar no desenho.
+- **D-CHG-n** = decisão nova do G0b, com recomendação, a aprovar (desenho, seção 0.2).
 - Nenhum dado real (carteira, nome, IP, link ou ID) aparece aqui.
 
 ---
@@ -26,6 +28,15 @@ Levar isso para o ChronoDesk significa, em resumo:
 - links só `https`, validados no servidor;
 - exportação em CSV no padrão atual, sem CDN;
 - interruptor `CHG_MODULE_ENABLED`.
+
+**Acrescentado no G0b (2026-10-29), pelas respostas do responsável:**
+- **tarefas por CHG** e **datas de comitê** fazem parte do módulo (RF-CHG-19 e RF-CHG-20; migration 023);
+- **arrastar e soltar** entre as fases, chamando as mesmas ações dos botões, com alternativa por teclado e por botão (RF-CHG-21; C4');
+- **proteção contra perda de alterações** em todo formulário do módulo (RF-CHG-22);
+- número e status da CHG **digitados à mão** (sem integração com o ServiceNow); exportação **em CSV**; **sem script de importação**: a equipe digita as CHGs existentes;
+- o **padrão de qualidade** da seção 3 é critério de aceite de cada lote.
+
+**Para que serve o módulo** (texto do responsável, 2026-10-29): a equipe de suporte (N1/N2, gestão e Liderança) registra e acompanha as CHGs de atualização de sistemas nas PAs, da solicitação ao comitê, da preparação à janela do Service Desk, até a conclusão, com tarefas por CHG e datas de comitê. É uma ferramenta de controle operacional: um dado errado, uma alteração perdida ou uma transição indevida tem efeito real em produção. O módulo segue o mesmo rigor da Parte B.
 
 **Achados do modelo** que pedem decisão ou correção na migração (detalhe em 1.12):
 1. a etapa depende do relógio de quem abre a página;
@@ -219,7 +230,7 @@ Abre em nova aba com `rel="noopener"`. Vale para a planilha com PAs (`:597`) e p
 |---|---|---|---|
 | M1 | Etapa e KPIs pelo relógio de quem abre a página; "hoje" é o dia do navegador | `:445`, `:740` | Etapa, atraso e KPIs no servidor, com `server_now` (RF-CHG-02) |
 | M2 | Exclusão física, sem registro | `:502-506` | Cancelar e arquivar, sem exclusão (RF-CHG-13) |
-| M3 | Os dados podem estar no armazenamento do ambiente onde a página é publicada, fora da infraestrutura da empresa | `:510-520` | MySQL do ChronoDesk; a carga inicial é A DEFINIR (4.6) |
+| M3 | Os dados podem estar no armazenamento do ambiente onde a página é publicada, fora da infraestrutura da empresa. **Nota do G0b (responsável, 2026-10-29):** o modelo é um artefato publicado no claude.ai, e o modo compartilhado usa o banco desse ambiente (`window.claude.use("db")`, `:508-521`). Os dados do quadro atual podem estar fora da infraestrutura da empresa. **A despublicação do artefato depois da migração é decisão do responsável** | `:508-521` | MySQL do ChronoDesk. Sem importação: a equipe digita as CHGs existentes (4.6a). O quadro antigo vira só referência até o fim da digitação; depois, a despublicação fica com o responsável |
 | M4 | Cancelar vale até para concluída | `:1024` | Cancelar só antes da conclusão (proposta C5 do desenho) |
 | M5 | Duplicar mantém os planos da CHG e o `concluidaEm` | `:1052` | Duplicar sem os planos e sem dados de conclusão (C9) |
 | M6 | O link aceita `http` e transforma texto solto em `https://` | `:583-589` | Só `https://` absoluto, validado no servidor (RF-CHG-09) |
@@ -229,7 +240,7 @@ Abre em nova aba com `rel="noopener"`. Vale para a planilha com PAs (`:597`) e p
 | M10 | Fim igual ao início passa na gravação, mas a barra de SLA some | `:996`, `:649` | Fim estritamente depois do início (C3) |
 | M11 | "Status" da solicitação ("Aprovado") e status da CHG ("Aprovada") convivem; só "Cancelado" muda a etapa | `:441`, `:345` | A DEFINIR, sem prioridade: manter como informativo ou retirar (C7) |
 | M12 | `data-id` entra sem escape no HTML montado por `innerHTML` (o id é gerado pelo navegador ou vem do armazenamento compartilhado) | `:574-577` | React escapa tudo; sem `innerHTML` (RF-CHG-17) |
-| M13 | Soltar em "Em execução" antes do início só aprova a CHG; a coluna escolhida não é a final | `:1017-1019` | Ações explícitas, com o resultado da etapa devolvido pelo servidor (C4) |
+| M13 | Soltar em "Em execução" antes do início só aprova a CHG; a coluna escolhida não é a final | `:1017-1019` | Arrastar e soltar mantido, mas o drop chama a mesma ação do botão e a tela mostra a etapa real devolvida pelo servidor, por exemplo "CHG aprovada. Entra em preparação às 16:00" (C4', RF-CHG-21) |
 
 ---
 
@@ -250,7 +261,8 @@ Abre em nova aba com `rel="noopener"`. Vale para a planilha com PAs (`:597`) e p
 ### RF-CHG-03 — Movimentação
 - Cada movimento de 1.4 vira uma **ação explícita** no servidor (`approve`, `back_to_committee`, `finish`, `reopen`, `cancel`, …).
 - Cada ação confere permissão, estado atual e versão do registro. Devolve o registro com a etapa recalculada e grava auditoria.
-- Arrastar e soltar é A DEFINIR (proposta C4: botões primeiro).
+- Arrastar e soltar entre as colunas chama essas mesmas ações (C4', RF-CHG-21). A C4 do G0 (só botões) foi substituída na revisão de 2026-10-29.
+- O registro da aprovação passa pelo comitê (RF-CHG-20, D-CHG-3).
 
 ### RF-CHG-04 — Quadro
 Seis colunas na ordem do modelo, com contadores, dicas e textos de vazio. Abaixo de 1280 px, uma coluna por vez ou lista por etapa, conforme a lição do 17e (desenho 6).
@@ -285,7 +297,7 @@ Lista por CHG, com link `https` e início do patch (data e hora completas; o for
 - CSV gerado no servidor, no padrão atual: BOM UTF-8, `;`, `csv_neutralize_cell` em toda célula, `Cache-Control: no-store`, auditoria com a contagem (`api/portal/critical_incidents_export.php:11-46`; `security.php:103-110`).
 - Download por link montado com `apiUrl` (`frontend/src/lib/api.ts:40`), como em `frontend/src/pages/CriticalIncidentsPage.jsx:437`, `:492`.
 - **Sem CDN.** As colunas são as da aba "Base" do modelo. A aba "Cards" não tem equivalente em CSV: a cópia da tabela cobre a visão por card.
-- Excel no lugar do CSV é A DEFINIR (4.4).
+- **Decidido (4.4, 2026-10-29): CSV, no padrão atual. Sem Excel e sem dependência.**
 
 ### RF-CHG-12 — Duplicar
 Abre o formulário com a cópia, sem CHG, status da CHG, técnico, endpoints, **planos** e dados de conclusão (corrige M5). A gravação é um `create` comum, auditado.
@@ -305,7 +317,8 @@ Abre o formulário com a cópia, sem CHG, status da CHG, técnico, endpoints, **
 ### RF-CHG-15 — Carteiras e locais
 - Tabelas no MySQL, carregadas no servidor por um script que lê um arquivo **fora do repositório** (desenho 2.1 e 2.5).
 - Nenhum valor real em migration, fixture, QA ou documento.
-- Código fora da base é recusado com mensagem (proposta C2).
+- Código fora da base é recusado com mensagem (C2, aprovada).
+- **Lote futuro (nota da revisão do G0):** ação de admin "incluir carteira" na tela, auditada, para não depender de acesso ao banco a cada carteira nova (desenho 2.5.1). Fora dos lotes deste plano.
 
 ### RF-CHG-16 — Auditoria
 - `audit_log` (`security.php:696-724`) em toda mudança e em toda recusa de perfil, com ids, campos e etapas, **sem texto livre, link ou nome** (desenho 5).
@@ -319,31 +332,108 @@ Abre o formulário com a cópia, sem CHG, status da CHG, técnico, endpoints, **
 ### RF-CHG-18 — Permissões
 - Permissões novas (`chg.*`) na matriz de `portal_permissions_for_role` (`security.php:930-966`), conferidas por `portal_role_can` (`:1092`).
 - Somente leitura barrado na escrita por `require_portal_write_access` (`api/portal/_bootstrap.php:43-51`).
-- Técnico só age na CHG atribuída a ele (checagem por objeto).
-- Matriz proposta no desenho 3.8; perfis A DEFINIR (4.1).
+- Técnico só age na CHG atribuída a ele e na tarefa da qual é responsável (checagem por objeto).
+- Matriz no desenho 3.8, com a resposta do 4.1: gestão, Liderança e admin lançam CHGs e tarefas; o que o técnico **lê** fica A CONFIRMAR.
+
+### RF-CHG-19 — Tarefas por CHG (B1)
+- Lista ordenada de tarefas em cada CHG: título, responsável (`funcionarios.id`), situação, prazo, ordem, autoria e `row_version` (desenho 2.4).
+- Ações: criar, editar, concluir, reabrir, cancelar e reordenar, cada uma no servidor, com permissão, estado, versão, histórico e auditoria sem texto livre (desenho 3.4.2).
+- Efeito na CHG: o card mostra o progresso ("3 de 5 tarefas") e as atrasadas, calculadas pelo `server_now`. **Concluir a CHG exige todas as tarefas concluídas ou canceladas** (recomendação D-CHG-2, a aprovar).
+- Nada é apagado: a tarefa errada é cancelada.
+
+### RF-CHG-20 — Datas de comitê (B2)
+- Uma CHG pode ir ao comitê mais de uma vez. Cada ida é um registro com data, resultado em lista fechada (`agendado`, `aprovada`, `reprovada`, `adiada`, `retirada`) e autoria (desenho 2.4).
+- O resultado mexe no `chg_status` na mesma transação: `aprovada` registra a aprovação; `reprovada` e `adiada` deixam a CHG `pendente` (D-CHG-3).
+- A coluna "Aguardando Comitê" mostra a próxima data; comitê com data passada e sem resultado ganha aviso.
+- "Quem aprovou no comitê" fica pelo histórico (desenho 2.3) e pelo resultado do comitê, **sem tabela de aprovadores** (resposta 4.2).
+
+### RF-CHG-21 — Arrastar e soltar entre as fases (B3, C4')
+- Os cards podem ser arrastados com o mouse entre as seis colunas, como no modelo.
+- O drop chama a **mesma ação do servidor** que o botão chamaria. O servidor valida perfil, estado e `row_version` e devolve a etapa resultante. **O frontend nunca decide a etapa.**
+- Preparação e Execução dependem do relógio: o drop nelas registra a aprovação, e a tela informa a etapa real ("CHG aprovada. Entra em preparação às 16:00"). Drop inválido não move o card e explica o motivo.
+- Atualização otimista só com reversão garantida em erro (409, 403, rede).
+- WCAG 2.1 AA: alternativa por teclado e por botão ("Mover para…") com o mesmo efeito, foco visível e anúncio do resultado (`aria-live`). **Arrastar nunca é o único caminho.**
+- No toque (celular e tablet), a alternativa "Mover para…" fica visível.
+- Biblioteca: D-CHG-1 (recomendação: arrastar nativo do HTML5 com o "Mover para…", sem dependência; desenho 6.2).
+
+### RF-CHG-22 — Proteção contra perda de alterações (B4)
+- Ao fechar um cadastro ou uma edição com mudanças não salvas (formulário da CHG, tarefas, endpoints, comitê), o sistema pede confirmação: **"Há alterações não salvas. Se sair agora, elas serão perdidas."**, com **"Continuar editando"** (padrão e com foco) e **"Descartar alterações"**.
+- Vale para: fechar o modal (X, Esc, clique fora, Cancelar); trocar de rota no menu; recarregar ou fechar a aba (`beforeunload`); trocar de card com outro em edição.
+- "Sujo" pelo estado do formulário (`isDirty` do React Hook Form), não por clique. Salvar com sucesso limpa. Erro do servidor mantém os dados digitados.
+- Sem `window.confirm`. Diálogo próprio, acessível, com o foco preso. Peça reutilizável (`useUnsavedChangesGuard` e `ConfirmDiscardDialog`; desenho 6.3).
+- Os outros formulários do sistema que perdem dados do mesmo jeito foram levantados sem mudança de código (desenho 14) e viram a pendência 17f, com a recomendação do que entra antes do deploy.
 
 ---
 
-## 3. Requisitos não funcionais
+## 3. Padrão de qualidade (critério de aceite de cada lote)
 
-- **Segurança:**
-  - CSRF em toda escrita (`portal_json_input`: CSRF, JSON e 64 KB; `api/portal/_bootstrap.php:53-95`);
-  - SQL parametrizado;
-  - colunas de ordenação e filtro por lista branca;
-  - erros pelo `portal_operational_error` (400, 403, 409, 413, 503; `:97-117`).
-- **Concorrência:** o modelo deixava a última gravação vencer. Proposta: versão do registro, com 409 "alterado por outra pessoa, recarregue" (C11).
-- **LGPD:** desenho 7 (nomes, links, texto livre, carteiras, exportação, retenção).
-- **Acessibilidade:** etapa e status sempre com texto, nunca só cor (já é assim no modelo); quadro utilizável sem arrastar.
-- **Desempenho:** consultas indexadas e sem N+1; atualização de 60 s só com a tela visível; medição no roteiro.
-- **Testes:** QA PHP, `qa:chg`, mutação, `test-local.ps1` e ensaio no roteiro (desenho 8).
+Definido pelo responsável em 2026-10-29. Vale para o módulo inteiro. **Um lote só é entregue com todos os itens abaixo cumpridos ou com a exceção declarada e justificada na entrega.** O desenho (seção 13) traz a lista de conferência por lote.
+
+### 3.1 Segurança
+- Referência: **OWASP ASVS nível 2**.
+- Autorização no servidor em **toda ação e por objeto** (técnico só na própria CHG e na própria tarefa).
+- **CSRF em todo POST** (`portal_json_input`: CSRF, JSON e 64 KB; `api/portal/_bootstrap.php:53-95`).
+- Validação de entrada no servidor, com **lista fechada** onde houver; colunas de ordenação e filtro por lista branca; SQL parametrizado.
+- Saída escapada pelo React, **sem `innerHTML` nem `dangerouslySetInnerHTML`** (já travado por `frontend/scripts/qa-ux-hardening.mjs:56-62`).
+- Links só `https` (C10).
+- **Nenhum segredo, IP, nome de cliente ou dado real** no git, em docs, fixtures ou QA.
+- **Auditoria sem texto livre.**
+- Erros pelo `portal_operational_error` (400, 403, 409, 413, 503; `api/portal/_bootstrap.php:97-117`).
+
+### 3.2 Integridade
+- Transação com **`SELECT … FOR UPDATE`** em toda escrita que lê antes, com ordem de trava fixa (CHG, depois tarefa ou comitê; desenho 2.6).
+- `row_version` com 409 (C11).
+- FKs `RESTRICT`, `CHECK`s e `ENUM`s no banco **espelhando as regras do serviço**.
+- **Nada apagado pela aplicação.**
+- Duplo envio protegido: botão desabilitado durante o envio **e** servidor idempotente onde couber (o `row_version` já recusa o segundo envio da mesma ação).
+- Datas em `America/Sao_Paulo`; etapa, atraso e "hoje" só pelo `server_now`.
+
+### 3.3 Desempenho
+- Consultas indexadas e em **número fixo por requisição** (sem N+1), conferidas no QA pelo SQL registrado no PDO simulado.
+- Lista limitada (C16).
+- Polling de 60 s **só com a tela visível**.
+- Rota em chunk lazy, com o tamanho registrado no `qa:bundle`.
+- Medição p50/p95 do `chg.php` no roteiro.
+
+### 3.4 UX e acessibilidade
+- **WCAG 2.1 AA.**
+- Feedback de sucesso, erro e carregamento em toda ação.
+- Estados vazio, erro e degradado.
+- Layout por largura **sem rolagem horizontal que esconda ação** (lição do 17e; C14).
+- Microcopy em PT-BR acentuado.
+- Etapa e status sempre com texto, nunca só cor.
+
+### 3.5 Testes
+- `qa-chg.php` e `qa:chg` cobrindo regras, **perfis × ações × estados**, B3 (drop válido, inválido, reversão, alternativa por teclado) e B4 (sujo, limpo, cada forma de sair, erro mantendo os dados).
+- **Mutação em cada lote**, com todos os mutantes mortos ou justificados.
+- Bateria completa: 18 + 1 `qa:*`, lint, typecheck, build e QAs PHP; entrada no `test-local.ps1`.
+
+### 3.6 Resto do sistema
+- **Nada muda fora do escopo.** O que for achado vira pendência registrada, com recomendação.
+
+### 3.7 LGPD
+- Desenho 7 (nomes, links, texto livre, carteiras, exportação, retenção). O título da tarefa é texto livre e segue a regra da descrição.
 
 ---
 
 ## 4. A DEFINIR (responsável e solicitante)
 
+**Situação em 2026-10-29 (G0b):** 4.1, 4.2, 4.3, 4.4 e 4.6a respondidos pelo responsável. **4.5 continua em aberto, e nenhum código é escrito antes dessa decisão.** 4.6b e 4.6c seguem A DEFINIR (entram no G5 e no G2, respectivamente). As tabelas abaixo ficam como registro do que cada resposta mudaria.
+
+| # | Resposta do responsável (2026-10-29) | Efeito no plano |
+|---|---|---|
+| 4.1 | A própria equipe (gestão, Liderança e admin, pela matriz 3.8) lança as CHGs e as tarefas, inclusive as que já existem. Solicitante é texto, sem login e sem mudança na autenticação | Linha "Solicitantes sem login". Nenhum lote de autenticação. Leitura do técnico: mantida a proposta (vê todas, escreve só na própria; desenho 3.8), **A CONFIRMAR** |
+| 4.2 | Entram **tarefas por CHG** e **datas de comitê**. Sem tabela de aprovadores: "quem aprovou no comitê" fica pelo histórico e pelo resultado do comitê | Migration 023 com `portal_chg_tasks` e `portal_chg_committees`; o antigo G6 deixa de ser condicional (desenho 10). `portal_chg_approvals` sai |
+| 4.3 | Digitado à mão. Não há API do ServiceNow | O antigo G7 (integração) sai do plano. Validação de formato da C12 mantida, com o formato real **A CONFIRMAR** |
+| 4.4 | CSV, no padrão atual. Sem Excel e sem dependência | RF-CHG-11 como está |
+| 4.5 | **Em aberto** | Nenhum código antes da decisão (tabela 4.5) |
+| 4.6a | Sem script de importação. As CHGs existentes serão digitadas pela equipe | O lote "carga inicial" sai. O quadro antigo vira **só referência** até o fim da digitação. O modelo é um artefato publicado no claude.ai (`window.claude.use("db")`): os dados podem estar fora da infraestrutura da empresa, e a despublicação depois da migração é decisão do responsável (M3) |
+| 4.6b | — | A DEFINIR (proposta "Mudanças (CHG)" em `/mudancas`) |
+| 4.6c | — | A DEFINIR (equipes que podem ser técnico da CHG e responsável de tarefa) |
+
 ### 4.1 Perfis e login dos solicitantes
 
-**Pergunta:** quem cadastra, quem registra a aprovação, quem executa e quem só lê? Os solicitantes têm login no AD e vão entrar no ChronoDesk?
+**Respondido em 2026-10-29** (tabela acima). **Pergunta original:** quem cadastra, quem registra a aprovação, quem executa e quem só lê? Os solicitantes têm login no AD e vão entrar no ChronoDesk?
 
 Fato: os perfis hoje são `admin`, `lideranca`, `gestor`, `tecnico` e `somente_leitura` (`security.php:930-966`). Quem não está em `funcionarios` (ou na allowlist de admin) não tem perfil.
 
@@ -357,7 +447,7 @@ Fato: os perfis hoje são `admin`, `lideranca`, `gestor`, `tecnico` e `somente_l
 
 ### 4.2 Tarefas, atividades, aprovações e comitês
 
-**Pergunta:** o que "tasks, atividades, aprovações e comitês" acrescenta ao modelo?
+**Respondido em 2026-10-29:** tarefas por CHG e datas de comitê, sem tabela de aprovadores (RF-CHG-19 e RF-CHG-20). **Pergunta original:** o que "tasks, atividades, aprovações e comitês" acrescenta ao modelo?
 
 | Resposta | O que muda |
 |---|---|
@@ -369,6 +459,8 @@ Fato: os perfis hoje são `admin`, `lideranca`, `gestor`, `tecnico` e `somente_l
 
 ### 4.3 ServiceNow: digitado à mão ou integrado
 
+**Respondido em 2026-10-29: digitado à mão; não há API do ServiceNow.** A linha "Integrado" abaixo fica só como registro.
+
 Fato: o ChronoDesk só mostra a configuração do ServiceNow (`SERVICENOW_API_URL`) num cartão de situação (`services/integrations/IntegrationRegistry.php:13`; `services/integrations/EnvironmentIntegration.php:25-34`). **Não há cliente que chame o ServiceNow.**
 
 | Resposta | O que muda |
@@ -378,12 +470,16 @@ Fato: o ChronoDesk só mostra a configuração do ServiceNow (`SERVICENOW_API_UR
 
 ### 4.4 CSV ou Excel
 
+**Respondido em 2026-10-29: CSV, no padrão atual, sem Excel e sem dependência.**
+
 | Resposta | O que muda |
 |---|---|
 | **CSV** (proposta) | Padrão atual, sem dependência (RF-CHG-11). Uma visão em linhas (a aba "Base"). Abre no Excel pelo BOM e pelo `;` |
 | **Excel (`.xlsx`)** | Fato: não há `composer.json` no repositório. O `ZipArchive` já é usado, mas só para **ler** `.xlsx` (`services/SpreadsheetImportService.php:84-89`). Duas saídas: (a) dependência nova (biblioteca de planilha via Composer), que exige aprovação, adoção do Composer, lockfile e checagem de CVE; ou (b) gerador mínimo próprio com `ZipArchive` e XML, com mais código e testes de formato. No frontend, nunca CDN. Com estilo e duas abas ("Cards" e "Base"), (b) cresce bastante |
 
 ### 4.5 Deploy único da Parte B ou depois
+
+**AINDA EM ABERTO (2026-10-29). Não escrever código antes da decisão do responsável.** Com a 023 e o B4, o que entra no roteiro cresce: três migrations (021, 022 e 023) em vez de duas, e a peça reutilizável do B4 (desenho 6.3), que pode servir também à pendência 17f.
 
 Fato: todos os lotes ficam no branch `feat/employee-form-rhf-zod`, e o deploy da Parte B é um `git merge --ff-only` único do commit ensaiado (pendência 16 do `ESTADO_SESSAO_CHRONODESK.md`).
 
@@ -396,7 +492,7 @@ Fato: todos os lotes ficam no branch `feat/employee-form-rhf-zod`, e o deploy da
 
 | # | Pergunta | O que muda |
 |---|---|---|
-| 4.6a | **Carga inicial:** começar vazio ou importar os cards em uso? (Fato: o modelo pode estar gravando no armazenamento do ambiente de publicação, `:510-520`.) | Vazio: nada a fazer. Importar: script de importação único, a partir de um arquivo exportado pelo responsável, com o técnico mapeado para `funcionarios.id` e o link validado; o que não passar fica de fora, com relatório só de contagens. E confirmar com o responsável onde esses dados estão hoje (LGPD) |
+| 4.6a | **Carga inicial:** começar vazio ou importar os cards em uso? (Fato: o modelo pode estar gravando no armazenamento do ambiente de publicação, `:510-520`.) **Respondido em 2026-10-29: sem script; a equipe digita as CHGs existentes.** | Começa vazio. O quadro antigo vira só referência até o fim da digitação. O modelo é um artefato publicado no claude.ai (`window.claude.use("db")`, `:508-521`): os dados do quadro atual podem estar fora da infraestrutura da empresa, e **a despublicação do artefato depois da migração é decisão do responsável** (M3). A digitação de CHGs antigas pede registros de comitê com data passada (D-CHG-10) |
 | 4.6b | **Nome do módulo no menu e rota** | Proposta "Mudanças (CHG)" em `/mudancas`, na seção "Fluxos operacionais" (`frontend/src/lib/navigation.ts:39-43`) |
 | 4.6c | **Equipes que podem ser técnico da CHG** (N1, N2, Liderança?) | Filtro do seletor de técnico e checagem no servidor |
 
@@ -426,15 +522,39 @@ Fato: todos os lotes ficam no branch `feat/employee-form-rhf-zod`, e o deploy da
 9. Duas pessoas editando a mesma CHG: a segunda recebe 409.
 10. Todos os `qa:*` e QAs PHP existentes continuam passando; `qa-chg.php` e `qa:chg` novos; mutação com todos os mutantes mortos ou justificados.
 
+**Acrescentados no G0b (2026-10-29):**
+
+11. **Tarefas:** técnico concluindo tarefa de outro responsável: 403 e `CHG_WRITE_DENIED`. Tarefa em CHG concluída, cancelada ou arquivada: 409. Duas pessoas editando a mesma tarefa: a segunda recebe 409. Reordenar com a lista desatualizada (tarefa a mais, a menos ou com versão antiga): 409.
+12. **Concluir com tarefa aberta** (se a D-CHG-2 for aprovada): 409 "Há 2 tarefas abertas. Conclua ou cancele antes de concluir a CHG."; com todas concluídas ou canceladas, ou sem tarefas, conclui.
+13. **Comitê:** resultado `aprovada` grava `chg_status = 'aprovada'` na mesma transação (falha na segunda escrita desfaz a primeira); `reprovada` e `adiada` deixam `pendente`; um segundo `agendado` na mesma CHG é recusado pelo serviço (409) **e** pelo banco (índice único); a coluna "Aguardando Comitê" mostra a próxima data.
+14. **Arrastar e soltar:** para cada par de colunas, o drop chama a ação da tabela do desenho 6.2 (ou nenhuma, com a mensagem) e o card termina na etapa devolvida pelo servidor. Em 409, 403 e erro de rede, o card volta para a coluna de origem e a mensagem aparece. O "Mover para…" pelo teclado produz a mesma chamada e o mesmo resultado; o anúncio sai no `aria-live`.
+15. **Perda de alterações:** com o formulário sujo, cada forma de sair (X, Esc, clique fora, Cancelar, menu, outra CHG, recarregar) mostra o diálogo com o foco em "Continuar editando"; limpo, sai direto; salvar com sucesso limpa; erro do servidor mantém o que foi digitado. Nenhum `window.confirm` no módulo.
+16. **Padrão de qualidade** (seção 3) conferido em cada lote, com a lista do desenho 13.
+
 ---
 
 ## 6. Fase de desenho
 
-Entregue em `docs/DESENHO_CHG.md`, com:
-- modelo de dados (migrations a partir da 021) e contratos da API;
+Entregue em `docs/DESENHO_CHG.md` (G0), atualizado no G0b, com:
+- modelo de dados (migrations 021, 022 e 023) e contratos da API;
 - matriz de perfis e auditoria;
 - LGPD e o interruptor;
-- plano de testes e lotes;
+- arrastar e soltar (C4') e proteção contra perda de alterações;
+- plano de testes, padrão de qualidade por lote e lotes renumerados;
+- decisões novas D-CHG-1 a D-CHG-12;
+- levantamento do B4 nas outras telas (pendência 17f);
 - a parte do roteiro único.
 
-**Parar para a revisão do responsável.**
+**Parar para a revisão do responsável.** Não começar o G1 nem o item 1 da pendência 17e.
+
+---
+
+## 7. Revisões
+
+**Revisão do G0 (`de93913`, `d2a9528`) pelo responsável, 2026-10-29: requisito e desenho APROVADOS como base.** C1 a C16 aprovadas, **exceto a C4**, substituída pelo arrastar e soltar (B3; C4' no desenho). Duas notas, incorporadas no G0b:
+1. ação de admin "incluir carteira" na tela, auditada, como **lote futuro**, para não depender de acesso ao banco a cada carteira nova (C2; desenho 2.5.1);
+2. no M3 e no 4.6a: o modelo é um artefato publicado no claude.ai (`window.claude.use("db")`); os dados do quadro atual podem estar fora da infraestrutura da empresa, e a despublicação do artefato depois da migração é decisão do responsável.
+
+Respostas aos A DEFINIR na seção 4 (4.5 em aberto). Pedidos novos B1 a B4 nos RF-CHG-19 a RF-CHG-22. Padrão de qualidade na seção 3.
+
+**G0b (2026-10-29): entregue, aguardando revisão.**
