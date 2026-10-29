@@ -3216,6 +3216,83 @@ O que a peça faz (o desenho é o da seção 6.3 do `docs/DESENHO_CHG.md`):
 
 O V1 entra junto com o item 2.
 
+**17f, item 2 — Chamados críticos (B4 no novo e no editar, formulário pelo `Dialog`) e o V1 (roteiro de navegador versionado), 2026-10-29: entregue (`e45bc12`), aguardando revisão.**
+
+Arquivos:
+- **Item 2:** `frontend/src/pages/CriticalIncidentsPage.jsx`, `frontend/src/components/ui/Dialog.jsx` (props opcionais e duas correções, abaixo) e `frontend/src/lib/formDirty.ts` (novo).
+- **V1:** `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`, `frontend/scripts/browser/lib/chrome.mjs` e `frontend/scripts/browser/lib/mock-server.mjs` (novos); `scripts/test-local.ps1` (etapa `-Browser`, com `-ChromePath`); `QA_VISUAL_CHECKLIST.md`.
+- **QA:** `frontend/scripts/qa-unsaved-changes.mjs`, que passa a cobrir as telas que usam a peça.
+
+**Chamados críticos, novo e editar:**
+- o formulário abre no `Dialog`: `role="dialog"`, `aria-modal`, Esc, foco preso, foco inicial no campo INCIDENTE e foco devolvido a quem abriu ("Novo chamado" ou "Editar");
+- "sujo" = algum campo diferente do valor com que o formulário abriu (`formValuesChanged`, porque o formulário usa `useState`, sem o `isDirty` do React Hook Form);
+- com o formulário sujo, Esc, clique fora e os dois "Cancelar" pedem confirmação (`ConfirmDiscardDialog`); trocar de tela, voltar, "Sair" e recarregar também (peça do item 1);
+- salvar com sucesso fecha direto, sem perguntar; erro do servidor mantém o formulário aberto com os dados;
+- o fundo antigo (um botão invisível que fechava no clique, sem perguntar) saiu.
+
+Visualizar e Importar planilha continuam com os modais antigos (sem Esc nem foco preso): fora do pedido do item 2; ver a observação no fim desta entrega.
+
+**Medição do layout do formulário** (servidor simulado, admin, Chrome sem janela; antes = build do `b6a2460`; depois = build do código deste item):
+
+| Janela | Largura do painel (antes e depois) | Campos cortados | Título no topo (antes → depois) | Salvar visível rolando ao fim | Rolagem horizontal | Camada (`z-index`) |
+|---|---|---|---|---|---|---|
+| 390 px | 358 px | 0 de 18 | 98 → 82 px | Sim | Não | 50 → 60 |
+| 768 px | 706 px | 0 de 18 | 98 → 82 px | Sim | Não | 50 → 60 |
+| 1024 px | 962 px | 0 de 18 | 98 → 82 px | Sim | Não | 50 → 60 |
+| 1366 e 1920 px | 1.152 px (`max-w-6xl`) | 0 de 18 | 98 → 82 px | Sim | Não | 50 → 60 |
+
+Mesma largura e mesma borda vermelha de antes; o papel passou de `form` solto para `dialog`.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| W1 | "Sujo" por comparação com os valores de abertura, numa função pura e reutilizável (`formValuesChanged`): vazio, nulo e indefinido contam como iguais, e número e texto comparam pelo texto | O formulário usa `useState`. O campo devolve "12" para o 12 do servidor; sem essa regra, abrir e fechar sem mexer já contaria como sujo. Voltar ao valor de abertura limpa de novo. A função serve aos outros formulários com `useState` do 17f |
+| W2 | O `Dialog` ganhou props **opcionais** (`eyebrow`, `headerAction`, `titleClassName`, `panelClassName`) | O formulário tinha eyebrow, título e "Cancelar" à direita; sem as props, o layout mudaria. Os diálogos curtos continuam iguais |
+| W3 | Correção no `Dialog`: o fundo deixou de usar `items-center` e o painel usa `my-auto` | Com `items-center` num fundo que rola, o topo de um conteúdo mais alto que a tela fica fora de alcance. `my-auto` centraliza quando cabe e vira 0 quando não cabe. Conferido em 390 px: título visível no topo e "Salvar" visível rolando ao fim |
+| W4 | Correção no `Dialog`: prop opcional `returnFocusRef`; Chamados guarda o botão que abriu ("Novo chamado" ou "Editar") | **Achado do roteiro de navegador:** "Editar" fica desabilitado ("Carregando") enquanto busca o registro, e o foco cai no `body` antes de o diálogo abrir. Sem a prop, ao fechar o foco não voltava a nenhum lugar. O lint pediu um comentário de supressão justificado: queremos o valor do momento em que o diálogo fecha |
+| W5 | Foco inicial no campo INCIDENTE (`initialFocusRef`), não no "Cancelar" do cabeçalho (o primeiro focável) | Quem abre o formulário quer digitar |
+| W6 | Visualizar e Importar planilha **não** foram trocados agora | O pedido do item 2 é o formulário de novo e editar. Os dois não têm o que perder (Visualizar só lê; Importar perde só o arquivo escolhido). Recomendação: trocar pelo `Dialog` num commit curto depois do item 4, ou depois do deploy |
+
+**V1, roteiro de navegador versionado (`frontend/scripts/browser/`):**
+- **`lib/mock-server.mjs`:** serve o build em `/app` e responde a API com dados fictícios (nomes "Tecnico NN", "Carteira A", "CC 1234"); o salvar de Chamados falha de propósito com o incidente `FALHA-QA` (erro do servidor simulado). Nenhum dado real e nenhuma chamada ao backend.
+- **`lib/chrome.mjs`:** Chrome sem janela pelo caminho em `CHROME_PATH`, porta livre, perfil temporário apagado no fim, cliente CDP sem dependência (cliques, teclas e `getEventListeners` reais).
+- **`qa-unsaved-changes-browser.mjs`:** gera o build numa pasta temporária (nunca em `app/`), ou usa `--app <pasta>`. Saída só com contagens: cada conferência "ok" ou "FALHOU" (com os nomes dos campos que divergiram) e o total; código de saída 1 com falha. Requer Node 22 ou mais novo.
+- **`scripts/test-local.ps1 -Browser`** (com `-ChromePath`, padrão no caminho do Chrome no Windows) roda o roteiro como etapa opcional; sem `-Browser`, avisa e pula. Fora dos 19 `qa:*`.
+- **`QA_VISUAL_CHECKLIST.md`:** seção nova, com requisitos, como rodar e o que cobre.
+
+**O que o roteiro confere hoje (72 conferências, todas na tela real):**
+- **Navegação sem formulário sujo:** os 20 itens do menu em 1366 px e em 390 px, voltar e avançar, "Sair" (logout uma vez) e recarregar (sem aviso), sem diálogo nem listener;
+- **Chamados críticos, novo:** limpo fecha direto por Esc, "Cancelar" do cabeçalho, "Cancelar" do fim e clique fora, com o foco devolvido ao "Novo chamado"; sujo pergunta em cada uma das quatro formas, com o foco em "Continuar editando", e Esc, clique fora e "Continuar" mantêm os dados, "Descartar" fecha; foco preso no formulário e no aviso;
+- **Erro e sucesso:** erro do servidor mostra o aviso, mantém o formulário e os dados e continua sujo; salvar com sucesso fecha sem perguntar (um POST);
+- **Editar:** valores carregados; limpo fecha com o foco de volta no "Editar"; sujo pergunta;
+- **Rota com o formulário sujo:** menu, voltar e "Sair" perguntam e respeitam a resposta; recarregar abre o aviso do navegador e, ficando, mantém os dados;
+- **Celular (390 px):** título visível no topo do formulário longo, "Salvar" visível ao fim, sem rolagem horizontal, Esc sujo pergunta.
+
+**Validação executada pela IA:**
+- `qa:unsaved-changes` ampliado: `formValuesChanged` por comportamento; `Dialog` com as props novas, `my-auto` e o `returnFocusRef`; Chamados renderizado com o formulário aberto (novo e editar): `role="dialog"`, `aria-modal`, largura e borda, eyebrow, título, descrição, os dois "Cancelar", sem o fundo antigo, aviso de descarte fechado, valores carregados; fiação no código (sujo, `close` pelo `requestLeave`, Esc, clique fora e os dois "Cancelar" pelo `close`, nenhum botão fechando direto, foco inicial, quem abriu guardado, salvar fechando direto).
+- **Mutação, 20/20 contra o `qa:unsaved-changes`** numa cópia do repositório: nunca sujo; fechar sem perguntar; Esc e clique fora, "Cancelar" do cabeçalho e do fim fechando direto; sem o aviso de descarte; foco inicial no "Cancelar"; sem devolver o foco; "Editar" e "Novo" sem guardar quem abriu; salvar sem fechar; fundo antigo de volta; formulário sem a largura do `Dialog`; "sujo" com número e texto diferentes e só com as chaves de abertura; `Dialog` com `my-6` no lugar de `my-auto`, sem a ação do cabeçalho, sem o eyebrow, ignorando o `returnFocusRef` e a borda.
+- **Mutação de comportamento contra o roteiro de navegador** (um build e uma rodada por mutante, numa cópia): **7/7**: fechar sem perguntar, nunca sujo, sem devolver o foco a quem abriu, clique fora sem `preventDefault`, `navigate` sem o bloqueio, sem `beforeunload` e Esc que não fecha; cada um derruba de 1 a 8 conferências. Correção de um mutante do item 1: o "navigate sem o bloqueio" da lista do item 1 só definia a função de navegação, sem chamá-la, e morria por quebrar toda a navegação. Refeito chamando a navegação direto (sem o bloqueio): morre no `qa:unsaved-changes` e no roteiro (2 conferências, com o formulário sujo).
+- **Roteiro de navegador no código deste item:** 72 de 72 (direto e pelo `test-local.ps1 -SkipHttp -Browser`).
+- 19 `qa:*`, lint sem aviso novo, typecheck e build (numa pasta temporária); `test-local.ps1 -SkipHttp` sem falha. O chunk `CriticalIncidentsPage` passou de 26,20 para 29,75 kB: o `Dialog`, o aviso de descarte e o hook entram nele.
+
+**Proposta (para decisão do responsável): biblioteca de DOM no Node** (jsdom ou happy-dom, como dependência de desenvolvimento):
+- **Benefício:** os efeitos do React (foco, teclado, listeners) rodariam no QA comum, sem navegador. A parte da mutação que hoje morre só pela checagem do código (U1) passaria a morrer por comportamento, em todo `npm run qa:*`.
+- **Custo:**
+  - dependência nova com árvore grande (o jsdom traz dezenas de pacotes), com `npm audit`, licença e lockfile a manter; o happy-dom é menor, mas menos completo;
+  - QA mais lento;
+  - não substitui o navegador: não há layout, rolagem nem o aviso real do `beforeunload`, e o foco e o clique são simulados.
+- **Recomendação: não agora.** O roteiro de navegador (V1) já prova o comportamento nas telas reais. O ponto fraco dele é ser opcional. Se a preocupação for essa, a alternativa mais barata é tornar o `-Browser` obrigatório antes do deploy e no ensaio, em vez de acrescentar a biblioteca.
+
+**Observação (sem mudança):** os modais de Visualizar e de Importar planilha, nesta mesma tela, continuam sem Esc, sem foco preso e sem `role="dialog"` (W6).
+
+**Limitações declaradas:**
+- servidor simulado e dados fictícios, sem o backend real;
+- o roteiro de navegador é opcional e precisa do Chrome;
+- a recarga com o formulário sujo foi conferida com o aviso do navegador recusado (ficar); aceitar o aviso descarta, como esperado, e não foi exercitado;
+- o roteiro do navegador e o servidor simulado ficam no repositório, mas fora do build (`frontend/scripts`);
+- `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências
