@@ -3107,7 +3107,7 @@ O título "Pendentes de aprovação" rolava junto com a tabela (o cartão inteir
 
 **Observação para a decisão do responsável (fora do pedido):** a aba Aprovações também decide pausas e reuniões com os mesmos botões (`AdminPage.jsx:160`, `aprovar_pausa.php` e `rejeitar_pausa.php`). A decisão da pausa também não volta para pendente (`services/ApprovalRequestService.php:30-40` só atualiza a pendente), mas o efeito é outro: a pausa aprovada pode ser encerrada, e a rejeitada pode ser pedida de novo. Se a confirmação entrar só em horas extras e correção de ponto, a aba terá botões iguais com comportamentos diferentes. Recomendação: incluir as pausas na mesma confirmação, ou decidir explicitamente deixá-las sem.
 
-**17e, item 3 — Escala presencial (regras) em cartões e Ausências com a troca em 1280 px, 2026-10-29: entregue (`36fd697`), aguardando revisão.** Arquivos: `frontend/src/pages/OperationalPages.jsx` (`SchedulePage`), `frontend/src/pages/AbsencesPage.jsx`, `frontend/scripts/qa-schedule-rules.mjs` e `frontend/scripts/qa-absences-form.mjs`.
+**17e, item 3 — Escala presencial (regras) em cartões e Ausências com a troca em 1280 px, 2026-10-29: entregue (`36fd697`) e aprovado em 2026-10-29, com T1 a T6 (ver a revisão, abaixo).** Arquivos: `frontend/src/pages/OperationalPages.jsx` (`SchedulePage`), `frontend/src/pages/AbsencesPage.jsx`, `frontend/scripts/qa-schedule-rules.mjs` e `frontend/scripts/qa-absences-form.mjs`.
 - **Escala presencial, "Regras vigentes e agendadas":** até 1279 px, um cartão por regra, com avatar, nome, login, equipe, a regra, a vigência e as ações da linha (Editar, Remover regra e Histórico; na regra fixa da Liderança, só o aviso). De 1280 px para cima, a tabela de sempre.
 - **Ausências:** os cartões que já existiam abaixo de 768 px passam a valer até 1279 px, em duas colunas de 768 px; a tabela, só de 1280 px para cima.
 
@@ -3153,6 +3153,22 @@ O título "Pendentes de aprovação" rolava junto com a tabela (o cartão inteir
 Sem rolagem horizontal da página em nenhuma largura.
 
 **Limitações declaradas:** servidor simulado e dados fictícios, sem o backend real; a largura vem só da medição no navegador; os prints ficam fora do repositório. Na Escala, o painel do histórico continua abrindo abaixo da lista de regras: no celular, com muitas regras, é preciso rolar até ele (sem mudança). As tabelas do histórico e da escala gerada (sem botão) continuam rolando abaixo de cerca de 1136 px, como decidido no 17e. Remover regra continua com `window.confirm` (17f). O B4 nessas telas fica para a 17f. `gitleaks` ausente na estação.
+
+**Revisão do item 3 do 17e (`36fd697`, docs `918d6bc`) e do registro da 17g (`9694e7e`) (responsável, 2026-10-29): APROVADOS, com T1 a T6. O 17e está concluído.**
+
+**Decisões da 17g (responsável, 2026-10-29):**
+- **Confirmação nos dois botões**, Aprovar e Rejeitar, de horas extras e correção de ponto, nas três telas (linha, cartão e aba Aprovações), pela mesma função, com o `Dialog` acessível da peça reutilizável, foco inicial em "Cancelar" e o texto "Esta decisão não pode ser desfeita pelo sistema.".
+- **Pausas e reuniões da aba Aprovações ficam sem confirmação**, por decisão explícita. Motivo: a aprovação de reunião do N1 é em tempo real, e o efeito de um erro é reversível na operação (a pausa aprovada pode ser encerrada; a rejeitada pode ser pedida de novo).
+- **Pendência 17h (A CONFIRMAR com o responsável, sem mudança):** quem consome a fila `portal_sync_queue` (decisões de horas extras e correção de ponto, escala e plantão enfileiradas pelo `SharePointSyncService`). Não há consumidor no repositório.
+
+**Lote 17f + 17g (fim do acabamento), ordem aprovada em 2026-10-29**, um commit de entrega por item, com parada para revisão depois de cada um:
+1. peça reutilizável (o antigo G4 do `docs/DESENHO_CHG.md`, seção 6.3, fora do módulo de CHGs): `Dialog`, `ConfirmDiscardDialog`, `useUnsavedChangesGuard`, registro de bloqueios na navegação (`navigate`, voltar e avançar, "Sair") e `beforeunload` só com formulário sujo, com o `qa:unsaved-changes` (19 `qa:*`); sem nenhum formulário sujo, a navegação de todas as telas continua igual;
+2. Chamados críticos: B4 no formulário de novo e editar, e o modal com Esc, foco preso e `role="dialog"` pelo `Dialog`;
+3. Funcionários: B4 em editar e adicionar, inclusive "Editar outro funcionário" com o formulário sujo;
+4. Ausências e Escala: B4 nos formulários de ausência e de regra (inclusive "Editar outra" com o formulário sujo); o `window.confirm` de "Remover regra" trocado pelo `Dialog`; no celular, ao abrir o Histórico, a tela vai até o painel e o foco vai para o título dele;
+5. 17g: as confirmações de Aprovar e Rejeitar decididas acima.
+
+Nada do módulo de CHGs entra agora.
 
 ---
 
