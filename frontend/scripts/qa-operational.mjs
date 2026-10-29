@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
@@ -165,6 +166,124 @@ for (const blockedDependency of [
     undefined,
     `Dependencia nao autorizada nesta fase: ${blockedDependency}`,
   )
+}
+
+// ---------------------------------------------------------------------------
+// [17e, item 2] Horas extras e Correcao de ponto, pendentes abaixo de 1280 px:
+// um cartao por solicitacao, com o mesmo detalhe e a mesma decisao da linha
+// da tabela (detailContent e decisionContent). A pagina e renderizada de
+// verdade (JSX transpilado pelo TypeScript do projeto, react-dom/server); o
+// useResource responde com globalThis.qaResources, sem rede.
+// ---------------------------------------------------------------------------
+const pageSource = readFileSync(new URL('../src/pages/OperationalPages.jsx', import.meta.url), 'utf8')
+const workflowSource = pageSource.slice(pageSource.indexOf('function WorkflowPage('), pageSource.indexOf('export function OvertimePage('))
+assert.match(workflowSource, /function renderRows\(rows\) \{[\s\S]*?<td>\{detailContent\(item\)\}<\/td>[\s\S]*?<td>\{decisionContent\(item\)\}<\/td>/, 'Linha da tabela com os blocos compartilhados')
+assert.match(workflowSource, /function renderCards\(rows\) \{[\s\S]*?\{detailContent\(item\)\}[\s\S]*?\{decisionContent\(item\)\}/, 'Cartao com os mesmos blocos da linha')
+const decisionSource = workflowSource.match(/function decisionContent\(item\) \{[\s\S]*?\n  \}/)?.[0] || ''
+assert.match(decisionSource, /onClick=\{\(\) => decide\(item\.id, 'approved'\)\}[\s\S]*onClick=\{\(\) => decide\(item\.id, 'rejected'\)\}/, 'Aprovar e Rejeitar chamam a mesma decisao, na linha e no cartao')
+assert.doesNotMatch(workflowSource, /\bconfirm\(|\balert\(|\bprompt\(/, 'Sem dialogo do navegador nas decisoes')
+
+const srcHref = new URL('../src/', import.meta.url).href
+const resourceStub = 'data:text/javascript,' + encodeURIComponent(
+  'export function useResource(path) { const hit = Object.entries(globalThis.qaResources ?? {}).find(([key]) => path.startsWith(key)); return { loading: false, error: null, data: hit ? hit[1] : null, refresh: async () => null, setData: () => {} } }',
+)
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '../hooks/useResource' && /\/src\/pages\/OperationalPages\.jsx(\?.*)?$/u.test(context.parentURL ?? '')) return { url: resourceStub, shortCircuit: true }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.[cm]?[jt]sx?$/u.test(specifier) && context.parentURL?.startsWith(srcHref)) {
+      for (const extension of ['.ts', '.tsx', '.js', '.jsx']) {
+        const candidate = new URL(specifier + extension, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return nextResolve(candidate.href, context)
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    const path = url.split('?')[0]
+    if (path.startsWith(srcHref) && /\.(jsx|tsx|ts)$/u.test(path)) {
+      const output = ts.transpileModule(readFileSync(fileURLToPath(path), 'utf8'), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(path) }).outputText
+      return { format: 'module', source: output, shortCircuit: true }
+    }
+    return nextLoad(url, context)
+  },
+})
+const { createElement: h } = await import('react')
+const { renderToStaticMarkup } = await import('react-dom/server')
+const { OvertimePage, TimeCorrectionPage } = await import(new URL('../src/pages/OperationalPages.jsx', import.meta.url).href)
+
+const request = (overtimeKind, id, status, extra = {}) => ({
+  id, employee_id: id, employee_name: `QA Pessoa ${id}`, team: id % 2 ? 'n1' : 'n2', status,
+  approved_by: status === 'pending' ? null : 'gestor.qa', approved_at: status === 'pending' ? null : '2026-10-28 09:00:00',
+  justification: `Justificativa QA ${id}`,
+  ...(overtimeKind
+    ? { work_date: `2026-10-2${id}`, start_time: '18:00:00', end_time: '20:30:00', total_minutes: 150, reason: `Motivo QA ${id}` }
+    : { adjustment_date: `2026-10-2${id}`, adjustment_type: id === 2 ? 'absence' : 'entry', recorded_time: id === 2 ? null : '08:10:00', correct_time: id === 2 ? null : '08:00:00' }),
+  ...extra,
+})
+const between = (text, start, end) => { const i = text.indexOf(start); return i < 0 ? '' : text.slice(i, text.indexOf(end, i + start.length) + end.length) }
+const sectionOf = (markup, title) => {
+  const at = markup.indexOf(`>${title}</h2>`)
+  const start = markup.lastIndexOf('<section class="card', at)
+  const next = markup.indexOf('<section class="card', at)
+  return at < 0 ? '' : markup.slice(start, next < 0 ? undefined : next)
+}
+const rowsOfTable = (html) => (html.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1].match(/<tr>[\s\S]*?<\/tr>/g)) || []
+const cellsOfRow = (row) => (row.match(/<td>([\s\S]*?)<\/td>(?=<td>|<\/tr>)/g) || []).map((cell) => cell.slice(4, -5))
+const cardsOf = (html) => html.match(/<article [^>]*data-request="\d+"[\s\S]*?<\/article>/g) || []
+const cardParts = (card) => {
+  const blocks = card.match(/<div class="min-w-0 text-sm[^"]*">([\s\S]*)<\/div><div class="border-t[^"]*">([\s\S]*)<\/div><\/article>$/)
+  return { detail: blocks?.[1] ?? null, decision: blocks?.[2] ?? null }
+}
+const sessionFor = (role) => ({ role, permissions: [], ci: { funcionario_id: 1, username: 'qa' }, gestor: { username: 'qa' } })
+function renderWorkflow(Page, overtimeKind, role, items) {
+  const endpoint = overtimeKind ? 'portal/overtime.php' : 'portal/time_corrections.php'
+  globalThis.qaResources = {
+    [endpoint]: { sucesso: true, limit: 200, truncated: false, totals: { approved_minutes: 150, pending_minutes: 300 }, items },
+    'listar_funcionarios.php': { sucesso: true, funcionarios: [] },
+  }
+  try {
+    return renderToStaticMarkup(h(Page, { session: sessionFor(role), notify: () => {} }))
+  } finally {
+    delete globalThis.qaResources
+  }
+}
+
+for (const [Page, overtimeKind, label] of [[OvertimePage, true, 'Horas extras'], [TimeCorrectionPage, false, 'Correcao de ponto']]) {
+  const items = [request(overtimeKind, 1, 'pending'), request(overtimeKind, 2, 'pending'), request(overtimeKind, 3, 'approved'), request(overtimeKind, 4, 'rejected')]
+  for (const role of ['gestor', 'lideranca', 'admin', 'tecnico', 'somente_leitura']) {
+    const approver = ['gestor', 'lideranca', 'admin'].includes(role)
+    const markup = renderWorkflow(Page, overtimeKind, role, items)
+    const pendingSection = sectionOf(markup, 'Pendentes de aprovação')
+    assert.match(pendingSection, /^<section class="card">/, `${label}/${role}: o cartao dos pendentes nao rola inteiro`)
+    assert.match(pendingSection, /<div class="mt-5 grid items-start gap-3 md:grid-cols-2 xl:hidden" data-request-list="">/, `${label}/${role}: cartoes abaixo de 1280 px, uma coluna e duas de 768 px`)
+    assert.match(pendingSection, /<div class="table-wrap mt-5 hidden xl:block"><table class="data-table">/, `${label}/${role}: tabela de 1280 px para cima, so ela rola`)
+    const cards = cardsOf(pendingSection)
+    const rows = rowsOfTable(between(pendingSection, '<table', '</table>'))
+    assert.deepEqual(cards.map((card) => Number(card.match(/data-request="(\d+)"/)[1])), [1, 2], `${label}/${role}: um cartao por pendente, na ordem da tabela, sem o historico`)
+    assert.equal(rows.length, 2, `${label}/${role}: a tabela dos pendentes com as mesmas duas linhas`)
+    cards.forEach((card, index) => {
+      const cells = cellsOfRow(rows[index])
+      assert.equal(cells.length, 5, `${label}/${role}: linha ${index + 1} com cinco celulas`)
+      const { detail, decision } = cardParts(card)
+      assert.equal(detail, cells[2], `${label}/${role}: cartao ${index + 1} com o mesmo detalhe da linha`)
+      assert.equal(decision, cells[4], `${label}/${role}: cartao ${index + 1} com a mesma decisao da linha`)
+      assert.ok(card.includes(cells[3]), `${label}/${role}: cartao ${index + 1} com o mesmo status da linha`)
+      const item = items[index]
+      assert.ok(card.includes(`>QA Pessoa ${item.id}</strong>`) && card.includes(`Equipe ${item.team.toUpperCase()}</span>`), `${label}/${role}: cartao ${index + 1} com nome e equipe`)
+      const date = (overtimeKind ? item.work_date : item.adjustment_date).split('-').reverse().join('/')
+      assert.ok(card.includes(`Data: ${date}</span>`) && cells[0] === date, `${label}/${role}: cartao ${index + 1} com a data da linha`)
+      const buttons = (decision.match(/<button[^>]*>([^<]*)<\/button>/g) || []).map((button) => button.replace(/<[^>]+>/g, ''))
+      assert.deepEqual(buttons, approver ? ['Aprovar', 'Rejeitar'] : [], `${label}/${role}: cartao ${index + 1}, Aprovar e Rejeitar so para quem decide`)
+      if (!approver) assert.match(decision, /Aguardando decisão/u, `${label}/${role}: sem decisao, o cartao mostra o aguardo, como a linha`)
+    })
+    assert.match(cards[0], overtimeKind ? /Motivo QA 1[\s\S]*Justificativa QA 1/ : /Justificativa QA 1/, `${label}/${role}: motivo e justificativa no cartao`)
+    const historySection = sectionOf(markup, 'Histórico')
+    assert.match(historySection, /^<section class="card table-wrap">/, `${label}/${role}: o historico (sem botao) nao muda`)
+    assert.equal(cardsOf(historySection).length, 0, `${label}/${role}: historico sem cartoes`)
+  }
+  const noPending = renderWorkflow(Page, overtimeKind, 'gestor', [request(overtimeKind, 3, 'approved')])
+  assert.match(sectionOf(noPending, 'Pendentes de aprovação'), /Nenhuma pendência neste filtro/u, `${label}: sem pendentes, o aviso`)
+  assert.doesNotMatch(noPending, /data-request/, `${label}: sem pendentes, sem cartoes`)
 }
 
 console.log('Operational frontend QA OK')

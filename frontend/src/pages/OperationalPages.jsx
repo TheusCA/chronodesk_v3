@@ -806,45 +806,74 @@ function WorkflowPage({ kind, session, notify }) {
   const title = overtime ? 'Horas extras' : 'Correção de ponto'
   const noun = overtime ? 'hora extra' : 'ajuste de ponto'
 
+  // [17e] Linha da tabela e cartão usam os mesmos blocos: detalhe e decisão
+  // (Aprovar e Rejeitar, ou quem decidiu). O servidor confere tudo de novo.
+  function detailContent(item) {
+    return overtime ? (
+      <>
+        <div className="flex flex-wrap gap-2">
+          <DetailPill label="Período" value={`${item.start_time.slice(0, 5)} - ${item.end_time.slice(0, 5)}`} />
+          <DetailPill label="Total" value={minutesLabel(item.total_minutes)} tone="warning" />
+        </div>
+        <small>{item.reason}</small>
+        <small>{item.justification}</small>
+      </>
+    ) : (
+      <>
+        <div className="flex flex-wrap gap-2">
+          <DetailPill label="Tipo" value={adjustmentTypeLabel(item.adjustment_type)} tone="warning" />
+          <DetailPill label="Registrado" value={item.recorded_time?.slice(0, 5) || 'Não informado'} />
+          <DetailPill label="Correto" value={item.correct_time?.slice(0, 5) || 'Sem horário'} />
+        </div>
+        <small>{item.justification}</small>
+      </>
+    )
+  }
+
+  function decisionContent(item) {
+    return canApprove && item.status === 'pending' ? (
+      <div className="flex flex-wrap gap-2">
+        <button className="table-action text-emerald-300" onClick={() => decide(item.id, 'approved')} type="button">Aprovar</button>
+        <button className="table-action text-red-300" onClick={() => decide(item.id, 'rejected')} type="button">Rejeitar</button>
+      </div>
+    ) : (
+      <>
+        <strong>{item.approved_by || 'Aguardando decisão'}</strong>
+        <small>{item.approved_at ? formatDateTime(item.approved_at) : statusLabel(item.status)}</small>
+      </>
+    )
+  }
+
   function renderRows(rows) {
     return rows.map((item) => (
       <tr key={item.id}>
         <td>{formatDate(overtime ? item.work_date : item.adjustment_date)}</td>
         <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>Equipe {item.team.toUpperCase()}</small></div></div></td>
-        {overtime ? (
-          <td>
-            <div className="flex flex-wrap gap-2">
-              <DetailPill label="Período" value={`${item.start_time.slice(0, 5)} - ${item.end_time.slice(0, 5)}`} />
-              <DetailPill label="Total" value={minutesLabel(item.total_minutes)} tone="warning" />
-            </div>
-            <small>{item.reason}</small>
-            <small>{item.justification}</small>
-          </td>
-        ) : (
-          <td>
-            <div className="flex flex-wrap gap-2">
-              <DetailPill label="Tipo" value={adjustmentTypeLabel(item.adjustment_type)} tone="warning" />
-              <DetailPill label="Registrado" value={item.recorded_time?.slice(0, 5) || 'Não informado'} />
-              <DetailPill label="Correto" value={item.correct_time?.slice(0, 5) || 'Sem horário'} />
-            </div>
-            <small>{item.justification}</small>
-          </td>
-        )}
+        <td>{detailContent(item)}</td>
         <td><Status value={item.status} /></td>
-        <td>
-          {canApprove && item.status === 'pending' ? (
-            <div className="flex flex-wrap gap-2">
-              <button className="table-action text-emerald-300" onClick={() => decide(item.id, 'approved')} type="button">Aprovar</button>
-              <button className="table-action text-red-300" onClick={() => decide(item.id, 'rejected')} type="button">Rejeitar</button>
-            </div>
-          ) : (
-            <>
-              <strong>{item.approved_by || 'Aguardando decisão'}</strong>
-              <small>{item.approved_at ? formatDateTime(item.approved_at) : statusLabel(item.status)}</small>
-            </>
-          )}
-        </td>
+        <td>{decisionContent(item)}</td>
       </tr>
+    ))
+  }
+
+  // [17e] Pendentes abaixo de 1280 px: um cartão por solicitação, com os mesmos dados e ações da linha.
+  function renderCards(rows) {
+    return rows.map((item) => (
+      <article className="min-w-0 space-y-3 rounded-card border border-white/[0.07] bg-slate-950/30 p-4" data-request={item.id} key={item.id}>
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <UserAvatar name={item.employee_name} />
+            <div className="min-w-0">
+              <strong className="block font-semibold text-slate-200">{item.employee_name}</strong>
+              <span className="block text-xs text-slate-500">Equipe {item.team.toUpperCase()}</span>
+              <span className="block text-xs text-slate-500">Data: {formatDate(overtime ? item.work_date : item.adjustment_date)}</span>
+            </div>
+          </div>
+          <Status value={item.status} />
+        </div>
+        <div className="min-w-0 text-sm [overflow-wrap:anywhere] [&_small]:mt-1 [&_small]:block [&_small]:text-xs [&_small]:leading-5 [&_small]:text-slate-500">{detailContent(item)}</div>
+        <div className="border-t border-white/5 pt-3 [&_small]:block [&_small]:text-xs [&_small]:text-slate-500 [&_strong]:block [&_strong]:text-slate-200">{decisionContent(item)}</div>
+      </article>
     ))
   }
 
@@ -920,15 +949,18 @@ function WorkflowPage({ kind, session, notify }) {
       <OperationalShell resource={resource}>
         {items.length === 0 ? <EmptyState title={`Nenhum ${noun} encontrado`} description="Ajuste os filtros para consultar outro período ou crie uma nova solicitação." /> : (
           <>
-            <section className="card table-wrap">
+            <section className="card">
               <SectionHeader meta={<span className="status-badge status-warning">{pending.length} pendente(s)</span>} title="Pendentes de aprovação" />
               {pending.length === 0 ? <div className="mt-5"><InlineAlert tone="info" title="Nenhuma pendência neste filtro">Itens pendentes aparecerão aqui para decisão.</InlineAlert></div> : (
-                <div className="mt-5">
-                <table className="data-table">
-                  <thead><tr><th>Data</th><th>Colaborador</th><th>Detalhe</th><th>Status</th><th>Aprovação</th></tr></thead>
-                  <tbody>{renderRows(pending)}</tbody>
-                </table>
-                </div>
+                <>
+                  <div className="mt-5 grid items-start gap-3 md:grid-cols-2 xl:hidden" data-request-list="">{renderCards(pending)}</div>
+                  <div className="table-wrap mt-5 hidden xl:block">
+                  <table className="data-table">
+                    <thead><tr><th>Data</th><th>Colaborador</th><th>Detalhe</th><th>Status</th><th>Aprovação</th></tr></thead>
+                    <tbody>{renderRows(pending)}</tbody>
+                  </table>
+                  </div>
+                </>
               )}
             </section>
             <section className="card table-wrap">
