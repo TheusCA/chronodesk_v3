@@ -1,7 +1,11 @@
 param(
     [string]$BaseUrl = "http://localhost/chronodesk_v3",
     [string]$PhpPath = "C:\xampp\php\php.exe",
-    [switch]$SkipHttp
+    [switch]$SkipHttp,
+    # [17f, V1] Etapa opcional: conferencia no navegador (Chrome sem janela,
+    # servidor simulado, dados ficticios). Fora dos qa:* do npm.
+    [switch]$Browser,
+    [string]$ChromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 )
 
 $ErrorActionPreference = "Stop"
@@ -339,6 +343,28 @@ if ($SkipHttp) {
         } else {
             Fail "Teste de CSRF retornou resposta inesperada: $($_.Exception.Message)"
         }
+    }
+}
+
+Write-Section "Navegador (opcional)"
+if (-not $Browser) {
+    Warn "Conferencia no navegador pulada (use -Browser; precisa do Chrome e do Node 22+)"
+} elseif (!$node) {
+    Fail "Node.js nao encontrado; a conferencia no navegador precisa dele"
+} else {
+    if (-not $env:CHROME_PATH) {
+        $env:CHROME_PATH = $ChromePath
+    }
+    Push-Location (Join-Path $repoRoot "frontend")
+    try {
+        & node "scripts/browser/qa-unsaved-changes-browser.mjs"
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Conferencia no navegador com falhas"
+        } else {
+            Pass "Conferencia no navegador concluida"
+        }
+    } finally {
+        Pop-Location
     }
 }
 

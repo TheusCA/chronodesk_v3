@@ -7,7 +7,11 @@ import { FOCUSABLE_SELECTOR, dialogKeyDown, isTopDialog, popDialog, pushDialog }
 // pedem para fechar, e o foco volta para quem abriu. Com dois abertos (por
 // exemplo, "Descartar alterações?" por cima de um formulário), só o de cima
 // responde ao teclado.
-export function Dialog({ open = true, role = 'dialog', title, description = null, onClose, initialFocusRef = null, size = 'max-w-lg', children }) {
+// Opcionais para formulários longos: eyebrow acima do título, headerAction à
+// direita dele (por exemplo, "Cancelar") e panelClassName para a borda.
+// returnFocusRef: para onde o foco volta quando quem abriu perdeu o foco antes
+// do diálogo montar (por exemplo, um botão que fica desabilitado enquanto carrega).
+export function Dialog({ open = true, role = 'dialog', title, description = null, eyebrow = null, headerAction = null, onClose, initialFocusRef = null, returnFocusRef = null, size = 'max-w-lg', titleClassName = 'text-lg', panelClassName = '', children }) {
   const titleId = useId()
   const descriptionId = useId()
   const panelRef = useRef(null)
@@ -32,14 +36,17 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
     return () => {
       document.removeEventListener('keydown', onKeyDown)
       popDialog(token)
-      if (previous && previous.isConnected && typeof previous.focus === 'function') previous.focus()
+      // Intencional: vale quem abriu no momento em que o diálogo fecha.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const back = returnFocusRef?.current?.isConnected ? returnFocusRef.current : previous
+      if (back && back.isConnected && typeof back.focus === 'function') back.focus()
     }
-  }, [open, initialFocusRef])
+  }, [open, initialFocusRef, returnFocusRef])
 
   if (!open) return null
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm sm:items-center"
+      className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm"
       data-dialog-backdrop=""
       // Sem o preventDefault, o clique no fundo (que não recebe foco) leva o
       // foco para o body depois que o diálogo o devolveu.
@@ -49,13 +56,21 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
         aria-describedby={description ? descriptionId : undefined}
         aria-labelledby={titleId}
         aria-modal="true"
-        className={`card relative my-6 w-full ${size}`}
+        // my-auto centraliza quando cabe e, quando o conteúdo é mais alto que a
+        // tela, vira 0 e deixa o topo alcançável pela rolagem do fundo.
+        className={`card relative my-auto w-full ${size} ${panelClassName}`}
         ref={panelRef}
         role={role}
         tabIndex={-1}
       >
-        <h2 className="text-lg font-bold text-white" id={titleId}>{title}</h2>
-        {description && <p className="mt-2 text-sm leading-6 text-slate-300" id={descriptionId}>{description}</p>}
+        <div className={headerAction ? 'flex items-start justify-between gap-4' : undefined}>
+          <div className="min-w-0">
+            {eyebrow && <p className="section-eyebrow">{eyebrow}</p>}
+            <h2 className={`${eyebrow ? 'mt-2 ' : ''}${titleClassName} font-bold text-white`} id={titleId}>{title}</h2>
+            {description && <p className="mt-2 text-sm leading-6 text-slate-300" id={descriptionId}>{description}</p>}
+          </div>
+          {headerAction}
+        </div>
         {children}
       </div>
     </div>

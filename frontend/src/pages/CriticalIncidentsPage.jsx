@@ -3,6 +3,10 @@ import { isManagerRole } from '../lib/roles'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { useResource } from '../hooks/useResource'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
+import { Dialog } from '../components/ui/Dialog'
+import { formValuesChanged } from '../lib/formDirty'
 import { api, apiUrl, post, postForm } from '../lib/api'
 import { ACTION_FEEDBACK, importFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
@@ -165,9 +169,14 @@ function CalculatedTimeField({ label, value }) {
   )
 }
 
-function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResponsibles }) {
+function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResponsibles, returnFocusRef }) {
   const editing = Boolean(initial?.id)
-  const [form, setForm] = useState(normalizeForForm(initial))
+  // [17f] Sujo = algum campo diferente do valor com que abriu; fechar pergunta antes de descartar.
+  const [openedWith] = useState(() => normalizeForForm(initial))
+  const [form, setForm] = useState(openedWith)
+  const guard = useUnsavedChangesGuard(formValuesChanged(openedWith, form))
+  const close = () => guard.requestLeave(onClose)
+  const firstFieldRef = useRef(null)
   const update = (key, value) => setForm((current) => {
     const next = { ...current, [key]: value }
     if (['incident_opened_at', 'room_opened_at'].includes(key)) {
@@ -202,27 +211,25 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
-      <button aria-label="Fechar formulário" className="fixed inset-0" onClick={onClose} type="button" />
-      <form className="card relative mx-auto my-4 w-full max-w-6xl space-y-6 border-red-500/20" onSubmit={submit}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="section-eyebrow">
-              {editing ? `Registro #${initial.id}` : 'Novo registro'}
-            </p>
-            <h2 className="mt-2 text-xl font-bold text-white">
-              {editing ? 'Editar chamado crítico' : 'Cadastrar chamado crítico'}
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">Alterações ficam vinculadas ao usuário autenticado e registradas em auditoria.</p>
-          </div>
-          <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Cancelar</button>
-        </div>
-
+    <>
+    <Dialog
+      description="Alterações ficam vinculadas ao usuário autenticado e registradas em auditoria."
+      eyebrow={editing ? `Registro #${initial.id}` : 'Novo registro'}
+      headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={close} type="button">Cancelar</button>}
+      initialFocusRef={firstFieldRef}
+      returnFocusRef={returnFocusRef}
+      onClose={close}
+      panelClassName="border-red-500/20"
+      size="max-w-6xl"
+      title={editing ? 'Editar chamado crítico' : 'Cadastrar chamado crítico'}
+      titleClassName="text-xl"
+    >
+      <form className="mt-6 space-y-6" onSubmit={submit}>
         <section className="rounded-card border border-white/5 bg-slate-950/20 p-4">
           <SectionHeader description="Dados principais do incidente e estado atual da sala crítica." eyebrow="Identificação" title="Identificação" />
           <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <label className="label">INCIDENTE *<input className="field mt-2" maxLength="100" required value={form.incident_number} onChange={(event) => update('incident_number', event.target.value)} /></label>
+          <label className="label">INCIDENTE *<input className="field mt-2" maxLength="100" ref={firstFieldRef} required value={form.incident_number} onChange={(event) => update('incident_number', event.target.value)} /></label>
           <label className="label">Data da Sala *<input className="field mt-2" required type="date" value={form.room_date} onChange={(event) => update('room_date', event.target.value)} /></label>
           <label className="label">Origem<select className="field mt-2" value={sourceLabel(form.source) === 'Outros' ? 'other' : form.source} onChange={(event) => update('source', event.target.value)}>{sourceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           <label className="label">Criticidade<select className="field mt-2" value={form.severity} onChange={(event) => update('severity', event.target.value)}>{severityOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
@@ -267,11 +274,13 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
         </section>
 
         <div className="flex justify-end gap-3">
-          <button className="btn-secondary" disabled={submitting} onClick={onClose} type="button">Cancelar</button>
+          <button className="btn-secondary" disabled={submitting} onClick={close} type="button">Cancelar</button>
           <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Salvando...' : editing ? 'Salvar alterações' : 'Cadastrar chamado'}</button>
         </div>
       </form>
-    </div>
+    </Dialog>
+    <ConfirmDiscardDialog {...guard.dialogProps} />
+    </>
   )
 }
 
@@ -432,6 +441,8 @@ export function CriticalIncidentsPage({ session, notify }) {
   const [importOpen, setImportOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [loadingItemId, setLoadingItemId] = useState(null)
+  // [17f] Quem abriu o formulário: o Editar fica desabilitado enquanto carrega e perde o foco.
+  const formTriggerRef = useRef(null)
   const summary = resource.data?.summary || {}
   const sdkResponsibles = responsibleResource.data?.items || []
   const exportUrl = apiUrl(`portal/critical_incidents_export.php${queryString(filters)}`)
@@ -491,7 +502,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         <div className="flex flex-wrap gap-2">
           <a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha CSV</a>
           {canManage && <button className="btn-secondary gap-2" onClick={() => setImportOpen(true)} type="button"><Icon className="h-4 w-4" name="upload" /> Importar planilha</button>}
-          {canCreate && <button className="btn-primary" onClick={() => setFormItem({})} type="button">Novo chamado</button>}
+          {canCreate && <button className="btn-primary" onClick={(event) => { formTriggerRef.current = event.currentTarget; setFormItem({}) }} type="button">Novo chamado</button>}
         </div>
       </section>
 
@@ -548,7 +559,7 @@ export function CriticalIncidentsPage({ session, notify }) {
                   <td className="data-table-sticky-end">
                     <div className="grid gap-1 sm:grid-cols-2">
                       <button className="table-action" disabled={loadingItemId === item.id} onClick={() => openItem(item.id, 'view')} type="button">{loadingItemId === item.id ? 'Carregando' : 'Visualizar'}</button>
-                      {canManage && <button className="table-action" disabled={loadingItemId === item.id} onClick={() => openItem(item.id, 'edit')} type="button">Editar</button>}
+                      {canManage && <button className="table-action" disabled={loadingItemId === item.id} onClick={(event) => { formTriggerRef.current = event.currentTarget; openItem(item.id, 'edit') }} type="button">Editar</button>}
                       {canManage && !['mitigated', 'resolved', 'cancelled'].includes(item.status) && <button className="table-action text-blue-300" onClick={() => changeStatus(item.id, 'mitigated')} type="button">Mitigar</button>}
                       {canManage && item.status !== 'resolved' && item.status !== 'cancelled' && <button className="table-action text-emerald-300" onClick={() => changeStatus(item.id, 'resolved')} type="button">Resolver</button>}
                     </div>
@@ -561,7 +572,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         </section>
       )}
 
-      {formItem && <IncidentForm canManage={canManage} initial={formItem.id ? formItem : null} onClose={() => setFormItem(null)} onSave={save} sdkResponsibles={sdkResponsibles} submitting={submitting} />}
+      {formItem && <IncidentForm canManage={canManage} initial={formItem.id ? formItem : null} onClose={() => setFormItem(null)} onSave={save} returnFocusRef={formTriggerRef} sdkResponsibles={sdkResponsibles} submitting={submitting} />}
       {viewItem && <IncidentDetails item={viewItem} onClose={() => setViewItem(null)} />}
       {importOpen && <ImportPanel onClose={() => setImportOpen(false)} onImported={async (message) => { notify(message); await resource.refresh() }} />}
     </div>

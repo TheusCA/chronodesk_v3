@@ -101,6 +101,22 @@ Checklist objetivo para a Fase 5. Use em homologacao local/controlada antes de c
 - [ ] Exportacao CSV continua disponivel.
 - [ ] Tempos calculados continuam informativos.
 
+- [ ] Novo e editar abrem num dialogo com Esc, foco preso e `role="dialog"`; com alteracoes nao salvas, fechar (X/Cancelar, Esc, clique fora), trocar de tela, voltar, "Sair" e recarregar pedem confirmacao.
+
+## Protecao contra perda de alteracoes (conferencia no navegador, opcional)
+
+Roteiro versionado: `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`. Fora dos `qa:*` do npm, porque precisa de navegador.
+
+- Requisitos: Node 22 ou mais novo e o Chrome (ou Chromium). O caminho vem da variavel `CHROME_PATH`.
+- Usa um servidor simulado com dados ficticios (`frontend/scripts/browser/lib/mock-server.mjs`): nenhum dado real, nenhuma chamada ao backend. O build e gerado numa pasta temporaria (nunca em `app/`), ou passado com `--app <pasta>`.
+- Rodar pela bateria: `powershell -ExecutionPolicy Bypass -File scripts/test-local.ps1 -SkipHttp -Browser` (opcional: `-ChromePath <caminho>`).
+- Rodar direto, na pasta `frontend`: `CHROME_PATH=<caminho> node scripts/browser/qa-unsaved-changes-browser.mjs`.
+- Saida so com contagens: cada conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram) e o total. Codigo de saida 1 se alguma falhar.
+- Cobre hoje:
+  - [ ] Navegacao sem formulario sujo igual a de sempre: todos os itens do menu em 1366 px e 390 px, voltar, avancar, "Sair" e recarregar, sem dialogo nem listener.
+  - [ ] Chamados criticos, novo e editar: cada forma de sair, limpo e sujo; foco inicial, preso e devolvido; erro do servidor mantendo os dados; salvar fechando sem perguntar; menu, voltar, "Sair" e recarregar com o formulario sujo; formulario longo em 390 px.
+- A cada tela que receber a protecao (Funcionarios, Ausencias, Escala), o roteiro ganha o bloco dela.
+
 ## Escalas de Sabado
 
 - [ ] Upload abre e fecha por mouse e teclado.
