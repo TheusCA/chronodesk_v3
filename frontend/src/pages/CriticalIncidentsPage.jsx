@@ -524,15 +524,16 @@ export function CriticalIncidentsPage({ session, notify }) {
         Há mais chamados neste filtro do que os exibidos. Refine os filtros para vê-los; a exportação CSV traz todas as linhas.
       </TruncationNotice>
       {items.length === 0 ? <EmptyState title="Nenhum chamado crítico encontrado" description="Ajuste os filtros ou cadastre o primeiro registro do período." /> : (
-        <section className="card table-wrap">
+        <section className="card">
           <SectionHeader
             description="Priorize chamados críticos abertos, war rooms ativas e registros sem causa raiz."
             meta={<span className="status-badge status-neutral">{items.length} registro(s)</span>}
             title="Incidentes e salas críticas"
           />
-          <div className="mt-5">
+          {/* [17e] Só a tabela rola; a coluna Ações fica fixa à direita, com fundo opaco (index.css). */}
+          <div className="table-wrap mt-5">
           <table className="data-table min-w-[1380px]">
-            <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descrição</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Carteira - CC</th><th>Técnico SDK</th><th>Ações</th></tr></thead>
+            <thead><tr><th>INCIDENTE</th><th>Data da sala</th><th>Descrição</th><th>Tempos</th><th>Criticidade</th><th>Status</th><th>Carteira - CC</th><th>Técnico SDK</th><th className="data-table-sticky-end">Ações</th></tr></thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
@@ -544,8 +545,8 @@ export function CriticalIncidentsPage({ session, notify }) {
                   <td><IncidentBadge value={item.status} /></td>
                   <td><strong>{item.sector || 'Não informado'}</strong><small>{item.responsible_area || 'Sem área responsável'}</small></td>
                   <td><strong>{item.sdk_responsible_name || 'Não definido'}</strong><small>{item.sdk_responsible_login || 'Sem login'}</small></td>
-                  <td>
-                    <div className="flex flex-wrap gap-1">
+                  <td className="data-table-sticky-end">
+                    <div className="grid gap-1 sm:grid-cols-2">
                       <button className="table-action" disabled={loadingItemId === item.id} onClick={() => openItem(item.id, 'view')} type="button">{loadingItemId === item.id ? 'Carregando' : 'Visualizar'}</button>
                       {canManage && <button className="table-action" disabled={loadingItemId === item.id} onClick={() => openItem(item.id, 'edit')} type="button">Editar</button>}
                       {canManage && !['mitigated', 'resolved', 'cancelled'].includes(item.status) && <button className="table-action text-blue-300" onClick={() => changeStatus(item.id, 'mitigated')} type="button">Mitigar</button>}

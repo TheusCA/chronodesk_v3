@@ -420,6 +420,27 @@
   min-width: 0;
 }
 
+/* [17e] Coluna fixa à direita (Ações de Chamados críticos). Fundo opaco para o
+   conteúdo rolado não aparecer por baixo. Fora do @layer e com dois seletores
+   para vencer `.data-table th` e `.data-table td` (lição do A1). */
+.data-table .data-table-sticky-end {
+  position: sticky;
+  right: 0;
+  z-index: 10;
+  /* Sem isso, o `overflow-wrap: anywhere` acima parte "Visualizar" ao meio. */
+  white-space: nowrap;
+  background-color: theme('colors.chrono.card');
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08), -12px 0 12px -12px rgba(0, 0, 0, 0.7);
+}
+
+.data-table th.data-table-sticky-end {
+  background-image: linear-gradient(rgba(2, 6, 23, 0.3), rgba(2, 6, 23, 0.3));
+}
+
+.data-table tbody tr:hover > .data-table-sticky-end {
+  background-image: linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
+}
+
 @keyframes skeleton-scan {
   0% {
     background-position: 120% 0;

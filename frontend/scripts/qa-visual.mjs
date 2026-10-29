@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import ts from 'typescript'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const frontendRoot = join(root, '..')
@@ -239,5 +241,115 @@ for (const removedJsFile of [
 }
 
 assert.equal(statSync(join(projectRoot, 'app/index.html')).isFile(), true, '/app/index.html deve existir apos build')
+
+// ---------------------------------------------------------------------------
+// [17e, item 1] Chamados criticos: a coluna Acoes fica fixa a direita
+// (sticky, fundo opaco), so a tabela rola (o titulo do cartao nao) e os botoes
+// ficam numa grade estreita. A largura vem da medicao no navegador (desenho
+// 9.11); aqui, a regra do CSS e o HTML renderizado de verdade (JSX transpilado
+// pelo TypeScript do projeto, react-dom/server, useResource simulado).
+// ---------------------------------------------------------------------------
+const stickyRule = cssSource.match(/\n\.data-table \.data-table-sticky-end \{([^}]*)\}/)?.[1] || ''
+assert.notEqual(stickyRule, '', 'Regra .data-table .data-table-sticky-end fora do @layer (dois seletores vencem .data-table th/td)')
+// Fora de qualquer bloco: profundidade de chaves 0 no seletor (comentarios removidos, mesmo tamanho).
+const cssNoComments = cssSource.replace(/\/\*[\s\S]*?\*\//g, (comment) => ' '.repeat(comment.length))
+const stickyAt = cssNoComments.indexOf('\n.data-table .data-table-sticky-end {')
+const depthAt = (text, index) => [...text.slice(0, index)].reduce((depth, char) => depth + (char === '{') - (char === '}'), 0)
+assert.equal(depthAt(cssNoComments, stickyAt), 0, 'Coluna fixa fora do @layer components (e de qualquer bloco)')
+for (const [pattern, label] of [
+  [/(^|\n)\s*position:\s*sticky;/, 'position: sticky'],
+  [/(^|\n)\s*right:\s*0;/, 'right: 0'],
+  [/(^|\n)\s*z-index:\s*10;/, 'z-index acima das outras celulas'],
+  [/(^|\n)\s*white-space:\s*nowrap;/, 'botoes sem quebra no meio da palavra'],
+  [/(^|\n)\s*background-color:\s*theme\('colors\.chrono\.card'\);/, 'fundo da cor do cartao'],
+]) {
+  assert.match(stickyRule, pattern, `Coluna fixa: ${label}`)
+}
+const tailwindSource = read('tailwind.config.js')
+assert.match(tailwindSource, /chrono:\s*\{[\s\S]*?\bcard:\s*'#[0-9a-f]{6}'/i, 'Cor do cartao com 6 digitos: fundo opaco, sem transparencia')
+assert.match(cssSource, /\n\.data-table th\.data-table-sticky-end \{[^}]*background-image:\s*linear-gradient\(rgba\(2, 6, 23, 0\.3\)/, 'Cabecalho fixo com o mesmo tom do cabecalho, por cima do fundo opaco')
+assert.match(cssSource, /\n\.data-table tbody tr:hover > \.data-table-sticky-end \{[^}]*background-image:/, 'Realce da linha tambem na celula fixa, sem perder o fundo opaco')
+
+const resourceStub = 'data:text/javascript,' + encodeURIComponent(
+  'export function useResource(path) { const hit = Object.entries(globalThis.qaResources ?? {}).find(([key]) => path.startsWith(key)); return { loading: false, error: null, data: hit ? hit[1] : null, refresh: async () => null, setData: () => {} } }',
+)
+const srcUrl = pathToFileURL(srcRoot).href + '/'
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '../hooks/useResource' && /\/src\/pages\/CriticalIncidentsPage\.jsx(\?.*)?$/u.test(context.parentURL ?? '')) return { url: resourceStub, shortCircuit: true }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.[cm]?[jt]sx?$/u.test(specifier) && context.parentURL?.startsWith(srcUrl)) {
+      for (const extension of ['.ts', '.tsx', '.js', '.jsx']) {
+        const candidate = new URL(specifier + extension, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return nextResolve(candidate.href, context)
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    const path = url.split('?')[0]
+    if (path.startsWith(srcUrl) && /\.(jsx|tsx|ts)$/u.test(path)) {
+      const output = ts.transpileModule(readFileSync(fileURLToPath(path), 'utf8'), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(path) }).outputText
+      return { format: 'module', source: output, shortCircuit: true }
+    }
+    return nextLoad(url, context)
+  },
+})
+const { createElement: h } = await import('react')
+const { renderToStaticMarkup } = await import('react-dom/server')
+const { CriticalIncidentsPage } = await import(pathToFileURL(join(srcRoot, 'pages', 'CriticalIncidentsPage.jsx')).href)
+
+const incident = (id, status) => ({
+  id, incident_number: `INC-QA-${id}`, title: `Incidente QA ${id}`, room_date: '2026-10-28', room_description: `Sala QA ${id}`,
+  room_duration_minutes: 90, room_opening_duration_minutes: 15, severity: 'critical', status, sector: 'Carteira QA', responsible_area: 'CC QA',
+  sdk_responsible_name: 'Tecnico QA', sdk_responsible_login: 'tecnico.qa', sdk_activity: 'Acompanhamento', opened_at: '2026-10-28 08:00:00', source: 'manual',
+})
+const INCIDENTS = [incident(1, 'open'), incident(2, 'mitigated'), incident(3, 'resolved'), incident(4, 'cancelled')]
+function renderIncidents(role, items = INCIDENTS) {
+  globalThis.qaResources = {
+    'portal/critical_incidents.php': { sucesso: true, limit: 200, truncated: false, summary: {}, items },
+    'portal/sdk_responsibles.php': { sucesso: true, items: [] },
+  }
+  try {
+    return renderToStaticMarkup(h(CriticalIncidentsPage, { session: { role, permissions: [], ci: { funcionario_id: 0 }, gestor: {} }, notify: () => {} }))
+  } finally {
+    delete globalThis.qaResources
+  }
+}
+const tableOf = (markup) => markup.slice(markup.indexOf('<table'), markup.indexOf('</table>') + 8)
+const cellsOf = (row) => row.match(/<t[hd][\s>][\s\S]*?<\/t[hd]>/g) || []
+const rowsOf = (table) => table.match(/<tr>[\s\S]*?<\/tr>/g) || []
+const buttonsOf = (cell) => (cell.match(/<button[^>]*>([^<]*)<\/button>/g) || []).map((button) => button.replace(/<[^>]+>/g, ''))
+const EXPECTED_BUTTONS = {
+  gestor: [['Visualizar', 'Editar', 'Mitigar', 'Resolver'], ['Visualizar', 'Editar', 'Resolver'], ['Visualizar', 'Editar'], ['Visualizar', 'Editar']],
+  tecnico: [['Visualizar'], ['Visualizar'], ['Visualizar'], ['Visualizar']],
+}
+for (const role of ['gestor', 'lideranca', 'admin', 'tecnico']) {
+  const markup = renderIncidents(role)
+  const table = tableOf(markup)
+  const [head, ...body] = rowsOf(table)
+  assert.equal(body.length, INCIDENTS.length, `${role}: uma linha por chamado`)
+  const headCells = cellsOf(head)
+  assert.equal(headCells.length, 9, `${role}: nove colunas`)
+  assert.match(headCells.at(-1), /^<th class="data-table-sticky-end">Ações<\/th>$/u, `${role}: Ações e a ultima coluna e a fixa`)
+  for (const cell of headCells.slice(0, -1)) assert.doesNotMatch(cell, /data-table-sticky-end/, `${role}: so a coluna Ações fica fixa no cabecalho`)
+  body.forEach((row, index) => {
+    const cells = cellsOf(row)
+    assert.equal(cells.length, 9, `${role}: linha ${index + 1} com nove celulas`)
+    assert.match(cells.at(-1), /^<td class="data-table-sticky-end"><div class="grid gap-1 sm:grid-cols-2">/, `${role}: linha ${index + 1}, celula de Ações fixa, com os botoes em grade (uma coluna no celular, duas de 640 px)`)
+    for (const cell of cells.slice(0, -1)) assert.doesNotMatch(cell, /data-table-sticky-end|<button/, `${role}: linha ${index + 1}, nenhuma outra celula fixa ou com botao`)
+    assert.deepEqual(buttonsOf(cells.at(-1)), EXPECTED_BUTTONS[role === 'tecnico' ? 'tecnico' : 'gestor'][index], `${role}: linha ${index + 1}, botoes da linha todos na celula fixa`)
+  })
+  assert.equal((markup.match(/data-table-sticky-end/g) || []).length, INCIDENTS.length + 1, `${role}: cabecalho e uma celula por linha, nada mais`)
+  // So a tabela rola: o table-wrap e o bloco da tabela, depois do titulo; o cartao nao rola.
+  // O SectionHeader tambem e um <section>: o cartao e o <section class="card..."> antes do titulo.
+  const sectionStart = markup.lastIndexOf('<section class="card', markup.indexOf('Incidentes e salas críticas'))
+  const section = markup.slice(sectionStart, markup.indexOf('</table>', sectionStart))
+  assert.match(section, /^<section class="card">/, `${role}: o cartao da lista nao rola inteiro`)
+  assert.match(section, /Incidentes e salas críticas[\s\S]*<div class="table-wrap mt-5"><table class="data-table min-w-\[1380px\]">/u, `${role}: o table-wrap envolve so a tabela, abaixo do titulo`)
+  assert.equal((markup.match(/table-wrap/g) || []).length, 1, `${role}: um so bloco com rolagem`)
+}
+const emptyMarkup = renderIncidents('gestor', [])
+assert.doesNotMatch(emptyMarkup, /<table|data-table-sticky-end/, 'Lista vazia sem tabela nem coluna fixa')
+assert.match(emptyMarkup, /Nenhum chamado crítico encontrado/u, 'Lista vazia com o estado vazio')
 
 console.log('Visual frontend QA OK')
