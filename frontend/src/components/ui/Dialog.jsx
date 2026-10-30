@@ -1,13 +1,13 @@
 import { useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { FOCUSABLE_SELECTOR, dialogKeyDown, isTopDialog, popDialog, pushDialog } from '../../lib/dialogFocus'
+import { FOCUSABLE_SELECTOR, dialogKeyDown, focusPageTitleIfLost, isTopDialog, lockPageScroll, openDialogCount, popDialog, pushDialog } from '../../lib/dialogFocus'
 
 // [17f] Diálogo acessível (docs/DESENHO_CHG.md, seção 6.3): role="dialog" ou
 // "alertdialog", aria-modal, título e descrição ligados por id, foco inicial
 // escolhido, foco preso (Tab e Shift+Tab circulam dentro), Esc e clique fora
 // pedem para fechar, e o foco volta para quem abriu. Com dois abertos (por
 // exemplo, "Descartar alterações?" por cima de um formulário), só o de cima
-// responde ao teclado.
+// responde ao teclado. Aberto, a janela atrás não rola.
 // Opcionais para formulários longos: eyebrow acima do título, headerAction à
 // direita dele (por exemplo, "Cancelar") e panelClassName para a borda.
 // headerLead: conteúdo acima do título (por exemplo, selos). placement="end":
@@ -29,6 +29,7 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
     const token = {}
     const previous = document.activeElement
     pushDialog(token)
+    const unlockScroll = lockPageScroll(document)
     const panel = panelRef.current
     const target = initialFocusRef?.current || panel?.querySelector(FOCUSABLE_SELECTOR) || panel
     target?.focus()
@@ -39,10 +40,12 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
     return () => {
       document.removeEventListener('keydown', onKeyDown)
       popDialog(token)
+      unlockScroll()
       // Intencional: vale quem abriu no momento em que o diálogo fecha.
       // eslint-disable-next-line react-hooks/exhaustive-deps
       const back = returnFocusRef?.current?.isConnected ? returnFocusRef.current : previous
-      if (back && back.isConnected && typeof back.focus === 'function') back.focus()
+      if (back && back.isConnected && back !== document.body && typeof back.focus === 'function') back.focus()
+      else if (openDialogCount() === 0) focusPageTitleIfLost(document)
     }
   }, [open, initialFocusRef, returnFocusRef])
 

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { useForm } from 'react-hook-form'
 import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
-import { Dialog } from '../components/ui/Dialog'
+import { ConfirmActionDialog } from '../components/ui/ConfirmActionDialog'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { PartialMarker, PresenceBadge } from '../components/ui/Presence'
@@ -337,7 +337,6 @@ export function SchedulePage({ session, notify }) {
   }, [historyEmployeeId])
   const [removeTarget, setRemoveTarget] = useState(null)
   const [removing, setRemoving] = useState(false)
-  const removeCancelRef = useRef(null)
   const removeReturnRef = useRef(null)
   const rulesTitleRef = useRef(null)
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
@@ -482,10 +481,11 @@ export function SchedulePage({ session, notify }) {
         removeReturnRef.current = rulesTitleRef.current
         // Com alterações não salvas, o formulário fica: remover não é descartar.
         if (!ruleDirty && Number(rule.employee_id) === Number(item.employee_id)) resetRule(emptyScheduleRule())
+        setRemoveTarget(null)
       },
     )
+    // Com erro, o diálogo fica aberto, com o aviso por cima: dá para tentar de novo ou cancelar.
     setRemoving(false)
-    setRemoveTarget(null)
   }
 
   function toggleHistory(item, trigger) {
@@ -826,19 +826,16 @@ export function SchedulePage({ session, notify }) {
         )}
       </OperationalShell>
       {removeTarget && (
-        <Dialog
+        <ConfirmActionDialog
+          busy={removing}
+          busyLabel="Removendo..."
+          confirmLabel="Remover regra"
           description={`Deseja remover a regra de escala de ${removeTarget.employee_name}?`}
-          initialFocusRef={removeCancelRef}
-          onClose={() => { if (!removing) setRemoveTarget(null) }}
+          onCancel={() => setRemoveTarget(null)}
+          onConfirm={removeRule}
           returnFocusRef={removeReturnRef}
-          role="alertdialog"
           title="Remover regra de escala?"
-        >
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
-            <button className="btn-danger" disabled={removing} onClick={removeRule} type="button">{removing ? 'Removendo...' : 'Remover regra'}</button>
-            <button className="btn-secondary" disabled={removing} onClick={() => setRemoveTarget(null)} ref={removeCancelRef} type="button">Cancelar</button>
-          </div>
-        </Dialog>
+        />
       )}
       <ConfirmDiscardDialog {...ruleGuard.dialogProps} />
     </div>

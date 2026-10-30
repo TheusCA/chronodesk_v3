@@ -158,7 +158,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
               </button>
               <div className="min-w-0">
                 <p className="hidden text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300/70 sm:block">Portal SDK</p>
-                <h1 className="truncate text-lg font-bold text-white sm:text-xl">{metadata[0]}</h1>
+                <h1 className="truncate text-lg font-bold text-white outline-none sm:text-xl" data-page-title="" tabIndex={-1}>{metadata[0]}</h1>
                 <p className="hidden truncate text-xs text-slate-500 sm:block">{metadata[1]}</p>
               </div>
             </div>

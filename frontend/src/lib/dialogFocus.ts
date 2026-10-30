@@ -22,6 +22,50 @@ export function openDialogCount(): number {
   return openDialogs.length
 }
 
+// [17f, BB2] Enquanto houver um diálogo aberto, a janela não rola. A barra some
+// e a largura dela vira padding, para a página não pular. Sai com o último.
+let scrollLocks = 0
+let restoreScroll: (() => void) | null = null
+
+export function lockPageScroll(doc: Document): () => void {
+  scrollLocks += 1
+  if (scrollLocks === 1) {
+    const { body, documentElement } = doc
+    const { overflow, paddingRight } = body.style
+    const barWidth = (doc.defaultView?.innerWidth ?? documentElement.clientWidth) - documentElement.clientWidth
+    if (barWidth > 0) {
+      const current = Number.parseFloat(doc.defaultView?.getComputedStyle(body).paddingRight ?? '0') || 0
+      body.style.paddingRight = `${current + barWidth}px`
+    }
+    body.style.overflow = 'hidden'
+    restoreScroll = () => {
+      body.style.overflow = overflow
+      body.style.paddingRight = paddingRight
+    }
+  }
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    scrollLocks -= 1
+    if (scrollLocks === 0) {
+      restoreScroll?.()
+      restoreScroll = null
+    }
+  }
+}
+
+// [17f, BB3] Sem destino para o foco, ele vai ao título da página, nunca ao body.
+// Sem rolar: quem está no meio da página continua vendo o mesmo lugar.
+export function focusPageTitle(doc: Document): void {
+  doc.querySelector<HTMLElement>('[data-page-title]')?.focus({ preventScroll: true })
+}
+
+export function focusPageTitleIfLost(doc: Document): void {
+  const active = doc.activeElement
+  if (!active || active === doc.body || !active.isConnected) focusPageTitle(doc)
+}
+
 type KeyEventLike = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'preventDefault' | 'stopPropagation'>
 type FocusableLike = { focus: () => void; getClientRects?: () => ArrayLike<unknown> }
 type ContainerLike = FocusableLike & {

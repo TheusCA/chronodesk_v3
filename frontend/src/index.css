@@ -268,6 +268,20 @@
     @apply relative isolate overflow-x-hidden;
   }
 
+  /* [17f, BB1] Com um diálogo aberto, o aviso sobe para o canto esquerdo: embaixo,
+     por cima de tudo, ele cobriria os botões do fim do formulário. */
+  body:has([data-dialog-backdrop]) .portal-toast {
+    top: 1rem;
+    bottom: auto;
+  }
+
+  @media (min-width: 640px) {
+    body:has([data-dialog-backdrop]) .portal-toast {
+      left: 1rem;
+      right: auto;
+    }
+  }
+
   .portal-tech-shell::before {
     content: '';
     @apply pointer-events-none fixed inset-0 -z-10 opacity-50;

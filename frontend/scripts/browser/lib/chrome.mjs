@@ -76,6 +76,11 @@ export async function openPage(debugPort) {
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 })
     await sleep(200)
   }
+  // Roda do mouse real naquele ponto.
+  const wheel = async (x, y, deltaY = 400) => {
+    await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY })
+    await sleep(250)
+  }
   // Clique real no centro do elemento (expressao JS que devolve o elemento).
   const click = async (elementExpression) => {
     const point = await evaluate(`(() => { const el = ${elementExpression}; if (!el) return null; el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
@@ -95,5 +100,5 @@ export async function openPage(debugPort) {
   await send('Page.enable')
   await send('Runtime.enable')
   await send('Network.enable')
-  return { send, evaluate, waitFor, click, clickAt, press, typeText, screenshot, events, close }
+  return { send, evaluate, waitFor, click, clickAt, wheel, press, typeText, screenshot, events, close }
 }

@@ -937,12 +937,18 @@ async function schedule(page, port, mock) {
   await expectRule('Remover regra, "Cancelar": fecha, foco volta, nada removido', { aviso: null, foco: 'Remover regra', regras: 4 })
   report('Escala, Remover regra, Esc, clique fora e "Cancelar": nenhum POST', removes() === before)
 
-  // Falha do servidor: fecha para mostrar o erro, a regra fica e o foco volta.
+  // [BB1] Falha do servidor: o dialogo fica aberto, o aviso aparece por cima e da para tentar de novo.
+  before = removes()
   await page.click(ROW_BUTTON('Remover regra', 3))
   await page.click(REMOVE_CONFIRM)
-  await page.waitFor(`!${ALERT}`)
-  await expectRule('Remover regra, erro do servidor: fecha, regra mantida, foco volta ao botao', { aviso: null, regras: 4, foco: 'Remover regra', dialogos: 0 })
-  report('Escala, Remover regra, erro do servidor: mensagem na tela', await page.evaluate(`document.body.textContent.includes('Falha simulada')`))
+  await page.waitFor(`document.body.textContent.includes('Falha simulada')`)
+  await sleep(150)
+  await expectRule('Remover regra, erro do servidor: continua aberto, aviso de erro, regra mantida, foco no "Cancelar"', { aviso: 'Remover regra de escala?', aviso_erro: true, regras: 4, foco: 'Cancelar', dialogos: 1, keydown: 1 })
+  await page.click(REMOVE_CONFIRM)
+  await sleep(300)
+  report('Escala, Remover regra, tentar de novo: outro POST', removes() === before + 2)
+  await page.press('Escape')
+  await expectRule('Remover regra, erro do servidor, Esc: fecha, foco volta ao botao, regra mantida', { aviso: null, regras: 4, foco: 'Remover regra', dialogos: 0 })
 
   // Sucesso: sai da lista, foco no titulo; o formulario limpo daquele colaborador esvazia.
   await page.click(ROW_BUTTON('Editar', 2))
@@ -1094,6 +1100,231 @@ async function dialogCoverage(page, port) {
   await expectState(page, 'clique na faixa do topo (y = 10): fecha o dialogo, foco volta ao "Visualizar"', { dialogos: 0, foco: 'Visualizar' })
 }
 
+// 8. [BB1] O aviso fica acima de qualquer Dialog, da coluna fixa e do menu do celular.
+const TOAST = `document.querySelector('body > [role="alert"], body > [role="status"]')`
+const TOAST_STATE = `(() => {
+  const toast = ${TOAST}
+  if (!toast) return { aviso: false }
+  const box = toast.getBoundingClientRect()
+  const close = toast.querySelector('[aria-label="Fechar mensagem"]').getBoundingClientRect()
+  const on = (rect) => toast.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))
+  return { aviso: true, centro: on(box), fechar: on(close), z: getComputedStyle(toast).zIndex, foco_dentro: !!document.activeElement.closest('[data-dialog-backdrop]') }
+})()`
+const ON_TOP = { aviso: true, centro: true, fechar: true, z: '70' }
+const DIALOG_BUTTONS_FREE = `[...document.querySelector('[role="alertdialog"]').querySelectorAll('button')].every((b) => { const r = b.getBoundingClientRect(); return b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) })`
+
+async function toastAboveLayers(page, port) {
+  const failToast = `[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada'))`
+  for (const width of [390, 1366]) {
+    // Chamados: formulario aberto, erro do servidor.
+    await goto(page, port, '/chamados-criticos', width)
+    await page.click(button('Novo chamado'))
+    await page.waitFor(`!!${FORM_PANEL}`)
+    await makeDirty(page, FAILING_INCIDENT)
+    await page.evaluate(`${SUBMIT}.click()`)
+    await page.waitFor(failToast)
+    await expectState(page, `${width} px, Chamados, erro com o formulario aberto: aviso por cima`, { ...ON_TOP, foco_dentro: (value) => value === true || value === false }, TOAST_STATE)
+    const covered = await page.evaluate(`(() => { const toast = ${TOAST}.getBoundingClientRect(); return [...${FORM_PANEL}.querySelectorAll('form button')].filter((b) => { const r = b.getBoundingClientRect(); return r.left < toast.right && r.right > toast.left && r.top < toast.bottom && r.bottom > toast.top }).length })()`)
+    await page.evaluate(`document.querySelector('[data-dialog-backdrop]').scrollTop = 1e6`)
+    await sleep(100)
+    report(`${width} px, Chamados, erro: o aviso nao cobre os botoes do fim do formulario`, await page.evaluate(`(() => { const r = ${SUBMIT}.getBoundingClientRect(); return ${SUBMIT}.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) })()`), `sobrepostos ${covered}`)
+    await page.press('Escape')
+    await expectState(page, `${width} px, Chamados, com o aviso na tela, Esc: o dialogo responde (pergunta)`, { descartar: true, formulario: true })
+    await page.click(button('Continuar editando', ALERT))
+    await page.evaluate(`${SUBMIT}.focus()`)
+    await page.press('Tab')
+    await expectState(page, `${width} px, Chamados, com o aviso na tela: Tab segue preso no dialogo`, { foco: 'Cancelar', formulario: true })
+    await page.press('Escape')
+    await page.click(button('Descartar alterações', ALERT))
+    await expectState(page, `${width} px, Chamados, Descartar: fecha, aviso continua acima da pagina`, { aviso: true, z: '70' }, TOAST_STATE)
+
+    // Coluna fixa de Chamados (z-10): uma celula passa embaixo do aviso.
+    const sticky = await page.evaluate(`(() => {
+      const toast = ${TOAST}
+      if (!toast) return null
+      const cells = [...document.querySelectorAll('td.data-table-sticky-end')].filter((cell) => cell.getClientRects().length)
+      if (!cells.length) return 'sem celula'
+      const cell = cells.at(-1)
+      const box = toast.getBoundingClientRect()
+      window.scrollBy(0, cell.getBoundingClientRect().top + cell.offsetHeight / 2 - (box.top + box.height / 2))
+      const at = cell.getBoundingClientRect()
+      const x = (Math.max(at.left, box.left) + Math.min(at.right, box.right)) / 2
+      const y = (Math.max(at.top, box.top) + Math.min(at.bottom, box.bottom)) / 2
+      return { cruzam: at.left < box.right && at.right > box.left && at.top < box.bottom && at.bottom > box.top, aviso: toast.contains(document.elementFromPoint(x, y)) }
+    })()`)
+    if (sticky === 'sem celula') report(`${width} px, sem a coluna fixa nesta largura (cartoes)`, true)
+    else report(`${width} px, coluna fixa de Chamados embaixo do aviso: aviso por cima`, sticky?.cruzam && sticky.aviso, JSON.stringify(sticky))
+
+    // Funcionarios: edicao aberta, erro do servidor.
+    await goto(page, port, '/admin?tab=funcionarios', width)
+    await page.waitFor(`!!${ROW_EDIT(0)}`)
+    await page.click(ROW_EDIT(0))
+    await page.waitFor(`!!${EMPLOYEE_PANEL}`)
+    await page.evaluate(`${EMPLOYEE_NAME}.select()`)
+    await page.typeText(FAILING_EMPLOYEE)
+    await page.evaluate(`${EMPLOYEE_SUBMIT}.click()`)
+    await page.waitFor(failToast)
+    await expectState(page, `${width} px, Funcionarios, erro com a edicao aberta: aviso por cima`, { ...ON_TOP }, TOAST_STATE)
+    await page.press('Escape')
+    await expectState(page, `${width} px, Funcionarios, com o aviso na tela, Esc: o dialogo responde (pergunta)`, { descartar: 1, edicao: true }, EMPLOYEE_STATE)
+    await page.click(button('Descartar alterações', ALERT))
+
+    // Remover regra: o caso que a AA4 fechava.
+    await goto(page, port, '/escala-presencial', width)
+    await page.waitFor(`!!${ROW_BUTTON('Remover regra', 3)}`)
+    await page.click(ROW_BUTTON('Remover regra', 3))
+    await page.click(button('Remover regra', ALERT))
+    await page.waitFor(failToast)
+    await sleep(150)
+    await expectState(page, `${width} px, Remover regra, erro: aviso por cima, foco no dialogo`, { ...ON_TOP, foco_dentro: true }, TOAST_STATE)
+    report(`${width} px, Remover regra, erro: o aviso nao cobre os botoes do dialogo`, await page.evaluate(DIALOG_BUTTONS_FREE))
+    const toastBox = await page.evaluate(`(() => { const r = ${TOAST}.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 12 } })()`)
+    await page.clickAt(toastBox.x, toastBox.y)
+    await expectState(page, `${width} px, Remover regra, clique no texto do aviso: o dialogo nao fecha`, { dialogos: 1, descartar: 1 }, `(() => ({ dialogos: document.querySelectorAll('[data-dialog-backdrop]').length, descartar: document.querySelectorAll('[role="alertdialog"]').length }))()`)
+    await page.evaluate(`document.querySelector('[role="alertdialog"] button:last-child').focus()`)
+    await page.click(`${TOAST}.querySelector('[aria-label="Fechar mensagem"]')`)
+    await expectState(page, `${width} px, Remover regra, fechar o aviso com o mouse: aviso sai, dialogo aberto, foco no "Cancelar"`, { aviso: false }, TOAST_STATE)
+    await expectState(page, `${width} px, Remover regra, depois de fechar o aviso: foco continua no dialogo`, { foco: 'Cancelar', dialogos: 1 })
+    await page.press('Escape')
+    await expectState(page, `${width} px, Remover regra, Esc: o dialogo ainda responde`, { dialogos: 0, foco: 'Remover regra' })
+  }
+
+  // Menu do celular (z-50) aberto, com o aviso na tela.
+  await goto(page, port, '/admin?tab=funcionarios', 390)
+  await page.waitFor(`!!${CREATE_FORM}`)
+  await page.evaluate(`${CREATE_ID}.focus()`)
+  await page.typeText('900')
+  await page.evaluate(`${CREATE_NAME}.focus()`)
+  await page.typeText(FAILING_EMPLOYEE)
+  await page.evaluate(`${CREATE_SUBMIT}.click()`)
+  await page.waitFor(failToast)
+  await page.evaluate(`document.querySelector('[aria-label="Abrir menu"]').click()`)
+  await sleep(200)
+  await expectState(page, '390 px, menu do celular aberto: aviso por cima', { ...ON_TOP }, TOAST_STATE)
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await page.click(button('Descartar alterações', ALERT))
+}
+
+// 9. [BB2] Com um Dialog aberto, a janela nao rola; ao fechar o ultimo, tudo volta.
+const SCROLL_STATE = `(() => {
+  const main = document.querySelector('main').getBoundingClientRect()
+  return {
+    rolagem: Math.round(scrollY),
+    overflow: document.body.style.overflow,
+    padding: document.body.style.paddingRight,
+    esquerda: Math.round(main.left * 100) / 100,
+    largura: Math.round(main.width * 100) / 100,
+    barra: innerWidth - document.documentElement.clientWidth,
+    dialogos: document.querySelectorAll('[data-dialog-backdrop]').length,
+    fundo: document.querySelector('[data-dialog-backdrop]')?.scrollTop ?? null,
+  }
+})()`
+
+async function scrollLock(page, port) {
+  for (const [width, bar] of [[1366, 15], [390, 0]]) {
+    const expectScroll = (label, expected) => expectState(page, `${width} px, ${label}`, expected, SCROLL_STATE)
+    await goto(page, port, '/chamados-criticos', width)
+    await page.waitFor(`!!${button('Visualizar')}`)
+    await page.evaluate(`${button('Visualizar')}.scrollIntoView({ block: 'center' })`)
+    await sleep(100)
+    const start = await page.evaluate(SCROLL_STATE)
+    report(`${width} px, rolagem: pagina rolada antes de abrir, barra de ${bar} px`, start.rolagem > 0 && start.barra === bar, `rolagem ${start.rolagem}, barra ${start.barra}`)
+    const same = { rolagem: start.rolagem, esquerda: start.esquerda, largura: start.largura }
+    await page.evaluate(`${button('Visualizar')}.click()`)
+    await page.waitFor(`!!document.querySelector('[role="dialog"]')`)
+    await sleep(100)
+    await expectScroll('dialogo aberto: body travado, barra compensada, pagina nao pula', { ...same, overflow: 'hidden', padding: bar ? `${bar}px` : '', barra: 0, dialogos: 1 })
+    await page.wheel(5, 450)
+    await expectScroll('roda no fundo: a pagina nao muda', { ...same })
+    const panel = await page.evaluate(`(() => { const r = document.querySelector('[role="dialog"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()`)
+    await page.wheel(panel.x, panel.y)
+    await expectScroll('roda no painel: a pagina nao muda', { ...same })
+    await page.press('Escape')
+    await expectScroll('fechar: nada mudou (posicao, largura, estilo do body e barra)', { ...same, overflow: '', padding: '', barra: bar, dialogos: 0 })
+
+    // Dois empilhados: a trava so sai com o ultimo.
+    await page.click(button('Novo chamado'))
+    await page.waitFor(`!!${FORM_PANEL}`)
+    await makeDirty(page, 'x')
+    await page.press('Escape')
+    const stacked = await expectScroll('dois empilhados: travado', { overflow: 'hidden', padding: bar ? `${bar}px` : '', dialogos: 2 })
+    await page.click(button('Continuar editando', ALERT))
+    await expectScroll('fechou o de cima: continua travado', { overflow: 'hidden', padding: bar ? `${bar}px` : '', dialogos: 1, rolagem: stacked.rolagem })
+    await page.press('Escape')
+    await page.click(button('Descartar alterações', ALERT))
+    await expectScroll('fechou o ultimo: destravado, mesma posicao', { overflow: '', padding: '', barra: bar, dialogos: 0, rolagem: stacked.rolagem })
+  }
+
+  // Formulario mais alto que a tela: o fundo do dialogo continua rolando.
+  await goto(page, port, '/chamados-criticos', 390)
+  await page.click(button('Novo chamado'))
+  await page.waitFor(`!!${FORM_PANEL}`)
+  await page.evaluate(`document.querySelector('[data-dialog-backdrop]').scrollTop = 0`)
+  const tall = await page.evaluate(SCROLL_STATE)
+  await page.wheel(195, 450)
+  await expectState(page, '390 px, formulario alto, roda: o fundo do dialogo rola, a pagina nao', { rolagem: tall.rolagem, fundo: (value) => value > 0 }, SCROLL_STATE)
+  await page.press('Escape')
+
+  // Sair do dialogo trocando de tela tambem destrava.
+  await goto(page, port, '/dashboard')
+  await page.evaluate(`${NAV_BUTTON('Chamados críticos')}.click()`)
+  await page.waitFor(`!!${button('Novo chamado')}`)
+  await page.click(button('Novo chamado'))
+  await page.waitFor(`!!${FORM_PANEL}`)
+  await makeDirty(page, 'x')
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await page.click(button('Descartar alterações', ALERT)); await sleep(300)
+  await expectState(page, 'menu, Descartar: troca de tela e destrava', { overflow: '', padding: '', dialogos: 0 }, SCROLL_STATE)
+}
+
+// 10. [BB3] O destino do foco sumiu: vai para o titulo, nunca para o body.
+const FOCUS_STATE = `(() => {
+  const active = document.activeElement
+  return { titulo_da_pagina: !!active?.hasAttribute?.('data-page-title'), body: active === document.body, foco: (active?.textContent || '').trim().slice(0, 40), dialogos: document.querySelectorAll('[data-dialog-backdrop]').length }
+})()`
+
+async function focusFallback(page, port, mock) {
+  for (const width of [1366, 390]) {
+    mock.keepOnlyRule(1)
+    await goto(page, port, '/escala-presencial', width)
+    await page.waitFor(`!!${ROW_BUTTON('Remover regra')}`)
+    await page.click(ROW_BUTTON('Remover regra'))
+    await page.click(button('Remover regra', ALERT))
+    await page.waitFor(`!${ALERT}`)
+    await sleep(150)
+    await expectState(page, `${width} px, ultima regra removida: foco no titulo da pagina`, { titulo_da_pagina: true, body: false, foco: 'Escala presencial', dialogos: 0 }, FOCUS_STATE)
+    mock.restoreRules()
+
+    const expectLost = (label) => expectState(page, `${width} px, Ausencias, ${label}: foco no titulo da pagina`, { titulo_da_pagina: true, body: false, dialogos: 0 }, FOCUS_STATE)
+    const openNewAbsence = async () => { await page.click(ROW_BUTTON('Nova ausência')); await page.waitFor(`!!${ABSENCE_FORM}`) }
+    await goto(page, port, '/ausencias', width)
+    await page.waitFor(`!!${ROW_BUTTON('Nova ausência')} && !!${ROW_BUTTON('Editar')}`)
+    await openNewAbsence()
+    await page.click(ABSENCE_CLOSE)
+    await expectLost('Fechar limpo')
+    await openNewAbsence()
+    await page.evaluate(`${ABSENCE_NOTE}.focus()`)
+    await page.typeText('x')
+    await page.click(ABSENCE_CLOSE)
+    await page.click(button('Descartar alterações', ALERT))
+    await expectLost('Fechar sujo, Descartar')
+    await page.click(ROW_BUTTON('Editar', 0))
+    await page.waitFor(`!!${ABSENCE_FORM}`)
+    await page.click(ABSENCE_SUBMIT)
+    await page.waitFor(`!${ABSENCE_FORM}`)
+    await sleep(150)
+    await expectLost('salvar com sucesso')
+    await page.click(ROW_BUTTON('Editar', 0))
+    await page.waitFor(`!!${ABSENCE_FORM}`)
+    await page.click(ROW_BUTTON('Cancelar', 0))
+    await page.click(ROW_BUTTON('Confirmar'))
+    await page.waitFor(`!${ABSENCE_FORM}`)
+    await sleep(150)
+    // No servidor simulado a linha continua (a ausencia nao muda): o foco fica nela, sem cair no body.
+    await expectState(page, `${width} px, Ausencias, cancelar a propria ausencia pela linha: foco nao cai no body`, { body: false, dialogos: 0 }, FOCUS_STATE)
+  }
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -1121,6 +1352,12 @@ try {
   await schedule(page, mock.port, mock)
   console.log('== Fundo dos dialogos (Z2)')
   await dialogCoverage(page, mock.port)
+  console.log('== Avisos acima dos dialogos (BB1)')
+  await toastAboveLayers(page, mock.port)
+  console.log('== Trava de rolagem (BB2)')
+  await scrollLock(page, mock.port)
+  console.log('== Foco sem destino (BB3)')
+  await focusFallback(page, mock.port, mock)
 } catch (error) {
   failed++
   console.log(`FALHOU  execucao interrompida: ${error.message}`)

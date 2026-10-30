@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
@@ -15,6 +15,7 @@ import {
   ABSENCE_RETROACTIVE_MESSAGE,
   absenceFormSchema,
 } from '../lib/formSchemas'
+import { focusPageTitleIfLost } from '../lib/dialogFocus'
 import { localDate, queryString } from '../lib/operational'
 import { canSeeAbsenceDetails, hasPermission, isManagerRole } from '../lib/roles'
 
@@ -110,6 +111,12 @@ export function AbsencesPage({ session, notify }) {
   } = useForm({ defaultValues: emptyAbsence() })
   // [17f] Abrir, fechar e salvar passam por reset: fechado, nunca fica sujo.
   const guard = useUnsavedChangesGuard(isDirty)
+  // [17f, BB3] O botão que fechou o formulário some com ele: o foco não fica no body.
+  const formWasOpen = useRef(false)
+  useEffect(() => {
+    if (formWasOpen.current && !formOpen) focusPageTitleIfLost(document)
+    formWasOpen.current = formOpen
+  }, [formOpen])
   const values = watch()
   const singleDay = Boolean(values.starts_on) && values.starts_on === values.ends_on
   const noteLength = Array.from(String(values.note || '')).length

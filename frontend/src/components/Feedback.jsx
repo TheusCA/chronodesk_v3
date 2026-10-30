@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { Icon } from './ui/Icon'
 
 const variants = {
@@ -31,9 +32,9 @@ export function Feedback({ feedback, onClose }) {
   if (!feedback) return null
   const variant = variants[feedback.type] || variants.success
 
-  return (
+  const toast = (
     <div
-      className={`fixed bottom-4 left-4 right-4 z-50 flex max-w-md items-start gap-3 rounded-card border px-4 py-3 text-sm shadow-2xl backdrop-blur sm:left-auto ${variant.colors}`}
+      className={`portal-toast fixed bottom-4 left-4 right-4 z-[70] flex max-w-md items-start gap-3 rounded-card border px-4 py-3 text-sm shadow-2xl backdrop-blur sm:left-auto ${variant.colors}`}
       role={variant.role}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" name={variant.icon} />
@@ -46,6 +47,8 @@ export function Feedback({ feedback, onClose }) {
           aria-label="Fechar mensagem"
           className="-mr-1 rounded-md p-1 text-current/70 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
           onClick={onClose}
+          // Fechar o aviso não tira o foco de quem está com ele (por exemplo, um diálogo aberto).
+          onMouseDown={(event) => event.preventDefault()}
           type="button"
         >
           <Icon className="h-4 w-4" name="close" />
@@ -53,4 +56,8 @@ export function Feedback({ feedback, onClose }) {
       )}
     </div>
   )
+  // [17f, BB1] No body e acima do Dialog (z-[60]): dentro da página, o isolate da
+  // .portal-tech-shell deixaria o aviso abaixo de qualquer diálogo. Sem document
+  // (QA no Node), sem portal.
+  return typeof document === 'undefined' ? toast : createPortal(toast, document.body)
 }

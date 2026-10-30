@@ -86,8 +86,10 @@ const importSrc = (relativePath) => import(pathToFileURL(join(srcRoot, relativeP
 const { guardLeave, guardNavigation, navigationBlockerCount, registerNavigationBlocker } = await importSrc('lib/navigationGuard.ts')
 const { createPopStateHandler, useRouter } = await importSrc('lib/router.js')
 const { attachUnsavedChangesGuard, onBeforeUnloadWhileDirty } = await importSrc('hooks/useUnsavedChangesGuard.ts')
-const { dialogKeyDown, isTopDialog, openDialogCount, popDialog, pushDialog } = await importSrc('lib/dialogFocus.ts')
+const { dialogKeyDown, focusPageTitle, focusPageTitleIfLost, isTopDialog, lockPageScroll, openDialogCount, popDialog, pushDialog } = await importSrc('lib/dialogFocus.ts')
 const { Dialog } = await importSrc('components/ui/Dialog.jsx')
+const { ConfirmActionDialog } = await importSrc('components/ui/ConfirmActionDialog.jsx')
+const { Feedback } = await importSrc('components/Feedback.jsx')
 const { ConfirmDiscardDialog, DISCARD_MESSAGE } = await importSrc('components/ui/ConfirmDiscardDialog.jsx')
 const { createElement: h } = await import('react')
 const { renderToStaticMarkup } = await import('react-dom/server')
@@ -282,7 +284,8 @@ const { renderToStaticMarkup } = await import('react-dom/server')
 const dialogSource = read('src/components/ui/Dialog.jsx')
 assert.match(dialogSource, /const target = initialFocusRef\?\.current \|\| panel\?\.querySelector\(FOCUSABLE_SELECTOR\) \|\| panel\s*\n\s*target\?\.focus\(\)/, 'Dialog: foco inicial no pedido, senao no primeiro focavel')
 assert.match(dialogSource, /if \(isTopDialog\(token\)\) dialogKeyDown\(event, panelRef\.current, \(\) => onCloseRef\.current\?\.\(\)\)/, 'Dialog: teclado so no de cima')
-assert.match(dialogSource, /return \(\) => \{\s*document\.removeEventListener\('keydown', onKeyDown\)\s*popDialog\(token\)\s*(?:\/\/[^\n]*\n\s*)*const back = returnFocusRef\?\.current\?\.isConnected \? returnFocusRef\.current : previous\s*if \(back && back\.isConnected && typeof back\.focus === 'function'\) back\.focus\(\)/, 'Dialog: ao fechar, tira o listener, sai da pilha e devolve o foco (a quem abriu, ou ao returnFocusRef)')
+assert.match(dialogSource, /return \(\) => \{\s*document\.removeEventListener\('keydown', onKeyDown\)\s*popDialog\(token\)\s*unlockScroll\(\)\s*(?:\/\/[^\n]*\n\s*)*const back = returnFocusRef\?\.current\?\.isConnected \? returnFocusRef\.current : previous\s*if \(back && back\.isConnected && back !== document\.body && typeof back\.focus === 'function'\) back\.focus\(\)\s*else if \(openDialogCount\(\) === 0\) focusPageTitleIfLost\(document\)/, 'Dialog: ao fechar, tira o listener, sai da pilha, destrava a janela e devolve o foco (a quem abriu, ao returnFocusRef ou, sem destino e sem outro dialogo, ao titulo da pagina)')
+assert.match(dialogSource, /pushDialog\(token\)\s*const unlockScroll = lockPageScroll\(document\)/, 'Dialog: aberto, trava a rolagem da janela')
 assert.match(dialogSource, /onMouseDown=\{\(event\) => \{ if \(event\.target === event\.currentTarget\) \{ event\.preventDefault\(\); onClose\?\.\(\) \} \}\}/, 'Dialog: clique fora (no fundo) pede para fechar, sem levar o foco para o body')
 // [17f, Z2] No body: dentro da pagina, a margem do space-y-* do pai descia o fundo.
 assert.match(dialogSource, /import \{ createPortal \} from 'react-dom'/, 'Dialog: importa o portal')
@@ -481,11 +484,11 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.doesNotMatch(operationalSource, /window\.confirm/, 'Escala: sem window.confirm')
   // Remover regra
   assert.match(scheduleSource, /removeReturnRef\.current = trigger\s*setRemoveTarget\(item\)/, 'Remover regra: guarda quem abriu')
-  assert.match(scheduleSource, /role="alertdialog"\s*title="Remover regra de escala\?"/, 'Remover regra: alertdialog')
-  assert.match(scheduleSource, /initialFocusRef=\{removeCancelRef\}/, 'Remover regra: foco inicial no Cancelar')
-  assert.match(scheduleSource, /onClick=\{\(\) => setRemoveTarget\(null\)\} ref=\{removeCancelRef\} type="button">Cancelar<\/button>/, 'Remover regra: Cancelar fecha sem remover')
+  assert.match(scheduleSource, /<ConfirmActionDialog\s+busy=\{removing\}/, 'Remover regra: pela confirmacao compartilhada')
+  assert.match(scheduleSource, /title="Remover regra de escala\?"/, 'Remover regra: titulo')
+  assert.match(scheduleSource, /onCancel=\{\(\) => setRemoveTarget\(null\)\}/, 'Remover regra: Cancelar fecha sem remover')
   assert.match(scheduleSource, /returnFocusRef=\{removeReturnRef\}/, 'Remover regra: devolve o foco')
-  assert.match(scheduleSource, /onClose=\{\(\) => \{ if \(!removing\) setRemoveTarget\(null\) \}\}/, 'Remover regra: Esc e clique fora nao fecham durante a remocao')
+  assert.match(scheduleSource, /resetRule\(emptyScheduleRule\(\)\)\s*setRemoveTarget\(null\)\s*\},\s*\)\s*(?:\/\/[^\n]*\n\s*)*setRemoving\(false\)/, 'Remover regra: so fecha com sucesso; com erro, fica aberto (BB1)')
   assert.match(scheduleSource, /removeReturnRef\.current = rulesTitleRef\.current/, 'Remover regra: com sucesso, foco no titulo da lista')
   assert.match(scheduleSource, /if \(!ruleDirty && Number\(rule\.employee_id\) === Number\(item\.employee_id\)\) resetRule\(emptyScheduleRule\(\)\)/, 'Remover regra: formulario sujo nao se perde')
   assert.match(scheduleSource, /action: 'remove_rule', employee_id: Number\(item\.employee_id\)/, 'Remover regra: mesmo payload de antes')
@@ -497,6 +500,72 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.match(scheduleSource, /onClick=\{closeHistory\} type="button">Fechar<\/button>/, 'Historico: Fechar ligado')
   // Formulario de excecao e importacao ficam fora da protecao (pedido do item 4).
   assert.equal((scheduleSource.match(/useUnsavedChangesGuard\(/g) || []).length, 1, 'Escala: uma protecao so, a da regra')
+}
+
+// ---------------------------------------------------------------------------
+// 11. [17f, BB] Aviso acima dos dialogos, trava de rolagem e foco sem destino.
+// ---------------------------------------------------------------------------
+{
+  // BB1: camada do aviso e o portal.
+  const toast = renderToStaticMarkup(h(Feedback, { feedback: { message: 'Mensagem QA', type: 'error' }, onClose: () => {} }))
+  assert.match(toast, /^<div class="portal-toast fixed bottom-4 left-4 right-4 z-\[70\] /, 'Aviso: z-[70], acima do Dialog (z-[60])')
+  assert.match(read('src/index.css'), /body:has\(\[data-dialog-backdrop\]\) \.portal-toast \{\s*top: 1rem;\s*bottom: auto;/, 'Aviso: com dialogo aberto, sobe (embaixo cobriria os botoes do fim do formulario)')
+  assert.match(toast, /role="alert"/, 'Aviso de erro continua com role="alert"')
+  const feedbackSource = read('src/components/Feedback.jsx')
+  assert.match(feedbackSource, /return typeof document === 'undefined' \? toast : createPortal\(toast, document\.body\)/, 'Aviso: no body (dentro da pagina, o isolate o deixaria abaixo do Dialog)')
+  assert.match(feedbackSource, /onMouseDown=\{\(event\) => event\.preventDefault\(\)\}/, 'Aviso: o botao de fechar nao tira o foco do dialogo')
+
+  // Confirmacao compartilhada.
+  const confirm = renderToStaticMarkup(h(ConfirmActionDialog, { title: 'Titulo QA', description: 'Descricao QA', confirmLabel: 'Confirmar QA', busyLabel: 'Enviando QA', onConfirm: () => {}, onCancel: () => {} }))
+  assert.match(confirm, /role="alertdialog"/, 'Confirmacao: alertdialog')
+  assert.match(confirm, /<button class="btn-danger" type="button">Confirmar QA<\/button><button class="btn-secondary" type="button">Cancelar<\/button>/, 'Confirmacao: botoes')
+  const busy = renderToStaticMarkup(h(ConfirmActionDialog, { title: 'Titulo QA', confirmLabel: 'Confirmar QA', busyLabel: 'Enviando QA', busy: true, onConfirm: () => {}, onCancel: () => {} }))
+  assert.match(busy, /<button class="btn-danger" disabled="" type="button">Enviando QA<\/button><button class="btn-secondary" disabled="" type="button">Cancelar<\/button>/, 'Confirmacao: enviando, os dois botoes desabilitados')
+  const confirmSource = read('src/components/ui/ConfirmActionDialog.jsx')
+  assert.match(confirmSource, /initialFocusRef=\{cancelRef\}/, 'Confirmacao: foco inicial no Cancelar')
+  assert.match(confirmSource, /onClose=\{\(\) => \{ if \(!busy\) onCancel\(\) \}\}/, 'Confirmacao: Esc e clique fora nao fecham durante o envio')
+  assert.match(confirmSource, /if \(wasBusy\.current && !busy\) cancelRef\.current\?\.focus\(\)/, 'Confirmacao: ao terminar o envio aberto, o foco volta ao Cancelar')
+
+  // BB2: trava com contagem, largura da barra e restauracao.
+  const fakeDocument = ({ innerWidth, clientWidth, overflow = '', paddingRight = '', computedPadding = '0px' }) => {
+    const body = { style: { overflow, paddingRight } }
+    return { body, documentElement: { clientWidth }, defaultView: { innerWidth, getComputedStyle: () => ({ paddingRight: computedPadding }) } }
+  }
+  const doc = fakeDocument({ innerWidth: 1366, clientWidth: 1351 })
+  const releaseFirst = lockPageScroll(doc)
+  assert.deepEqual(doc.body.style, { overflow: 'hidden', paddingRight: '15px' }, 'Trava: overflow hidden e a largura da barra em padding')
+  const releaseSecond = lockPageScroll(doc)
+  assert.deepEqual(doc.body.style, { overflow: 'hidden', paddingRight: '15px' }, 'Trava: o segundo dialogo nao soma padding')
+  releaseSecond()
+  assert.deepEqual(doc.body.style, { overflow: 'hidden', paddingRight: '15px' }, 'Trava: sai um, continua travado')
+  releaseSecond()
+  assert.equal(doc.body.style.overflow, 'hidden', 'Trava: soltar duas vezes conta uma so')
+  releaseFirst()
+  assert.deepEqual(doc.body.style, { overflow: '', paddingRight: '' }, 'Trava: sai o ultimo, tudo volta')
+  const noBar = fakeDocument({ innerWidth: 390, clientWidth: 390 })
+  const releaseNoBar = lockPageScroll(noBar)
+  assert.deepEqual(noBar.body.style, { overflow: 'hidden', paddingRight: '' }, 'Trava: sem barra, sem padding')
+  releaseNoBar()
+  const styled = fakeDocument({ innerWidth: 1000, clientWidth: 985, overflow: 'scroll', paddingRight: '4px', computedPadding: '4px' })
+  const releaseStyled = lockPageScroll(styled)
+  assert.equal(styled.body.style.paddingRight, '19px', 'Trava: soma ao padding que ja existe')
+  releaseStyled()
+  assert.deepEqual(styled.body.style, { overflow: 'scroll', paddingRight: '4px' }, 'Trava: volta o estilo que estava')
+
+  // BB3: foco sem destino.
+  const focused = []
+  const title = { focus: (options) => focused.push(options) }
+  const focusDoc = (active) => ({ body: 'corpo', activeElement: active, querySelector: (selector) => (selector === '[data-page-title]' ? title : null) })
+  focusPageTitle(focusDoc(null))
+  assert.deepEqual(focused, [{ preventScroll: true }], 'Foco: vai ao titulo da pagina, sem rolar')
+  focusPageTitleIfLost(focusDoc('corpo'))
+  assert.equal(focused.length, 2, 'Foco no body: vai ao titulo')
+  focusPageTitleIfLost(focusDoc({ isConnected: false }))
+  assert.equal(focused.length, 3, 'Foco em quem saiu da tela: vai ao titulo')
+  focusPageTitleIfLost(focusDoc({ isConnected: true }))
+  assert.equal(focused.length, 3, 'Foco em quem esta na tela: fica')
+  assert.match(read('src/components/PortalLayout.jsx'), /<h1 className="[^"]*" data-page-title="" tabIndex=\{-1\}>\{metadata\[0\]\}<\/h1>/, 'Titulo da pagina focavel')
+  assert.match(read('src/pages/AbsencesPage.jsx'), /if \(formWasOpen\.current && !formOpen\) focusPageTitleIfLost\(document\)/, 'Ausencias: fechar o formulario nao deixa o foco no body')
 }
 
 console.log('Unsaved changes QA OK')
