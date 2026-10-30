@@ -9,7 +9,7 @@
 //   ... --app <pasta-do-build>   usa um build pronto (sem isso, gera um build numa pasta temporaria; nunca em ../app)
 // Requer Node 22 ou mais novo (WebSocket nativo).
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,6 +42,8 @@ const STATE = `(() => {
   return {
     rota: location.pathname,
     formulario: !!panel,
+    titulo: document.querySelector('[role="dialog"] h2')?.textContent ?? null,
+    modal: document.querySelector('[role="dialog"]')?.getAttribute('aria-modal') ?? null,
     descartar: !!document.querySelector('[role="alertdialog"]'),
     foco: !active || active === document.body ? 'body' : active.tagName === 'INPUT' ? 'campo:' + (active.closest('label')?.childNodes[0]?.textContent.trim() || '') : (active.textContent || '').trim(),
     incidente: panel ? panel.querySelector('input[maxlength="100"]').value : null,
@@ -245,6 +247,84 @@ async function criticalIncidents(page, port, mock) {
   await expectState(page, '390 px, Descartar: fecha, sem listener', { formulario: false, beforeunload: 0, keydown: 0 })
 }
 
+// 3. Chamados criticos: Visualizar e Importar (X1). Sem a protecao de alteracoes:
+// Esc e clique fora fecham direto, inclusive com um arquivo escolhido.
+async function criticalIncidentsViewAndImport(page, port, mock) {
+  await goto(page, port, '/chamados-criticos')
+  await page.waitFor(`!!${button('Visualizar')}`)
+  const openView = async () => { await page.click(button('Visualizar')); await page.waitFor(`!!document.querySelector('[role="dialog"]')`) }
+  const FECHAR = button('Fechar', `document.querySelector('[role="dialog"]')`)
+  const sem = { descartar: false, beforeunload: 0 }
+  for (const [how, exit] of [['Esc', () => page.press('Escape')], ['Fechar', () => page.click(FECHAR)], ['clique fora', () => page.clickAt(5, 450)]]) {
+    await openView()
+    await expectState(page, `Visualizar, abrir: role="dialog", foco no Fechar, um keydown`, { ...sem, titulo: 'INC-QA-004', modal: 'true', foco: 'Fechar', keydown: 1, dialogos: 1 })
+    await exit()
+    await expectState(page, `Visualizar, ${how}: fecha sem perguntar, foco volta ao "Visualizar"`, { ...sem, titulo: null, foco: 'Visualizar', keydown: 0, dialogos: 0 })
+  }
+  await openView()
+  await page.press('Tab', true)
+  await expectState(page, 'Visualizar: Shift+Tab no primeiro vai ao ultimo (link da sala)', { foco: 'Abrir sala de crise' })
+  await page.press('Tab')
+  await expectState(page, 'Visualizar: Tab no ultimo volta ao primeiro', { foco: 'Fechar' })
+  const viewWidth = await page.evaluate(`document.querySelector('[role="dialog"]').getBoundingClientRect().width`)
+  report('Visualizar: largura do painel (896 px em 1366)', viewWidth === 896, `largura ${viewWidth}`)
+  await page.press('Escape')
+
+  const openImport = async () => { await page.click(button('Importar planilha')); await page.waitFor(`!!document.querySelector('[role="dialog"]')`) }
+  for (const [how, exit] of [['Esc', () => page.press('Escape')], ['Fechar', () => page.click(FECHAR)], ['clique fora', () => page.clickAt(5, 450)]]) {
+    await openImport()
+    await expectState(page, `Importar, abrir: role="dialog", foco no Fechar, um keydown`, { ...sem, titulo: 'Importar planilha War Room', modal: 'true', foco: 'Fechar', keydown: 1, dialogos: 1 })
+    await exit()
+    await expectState(page, `Importar, ${how}: fecha sem perguntar, foco volta ao "Importar planilha"`, { ...sem, titulo: null, foco: 'Importar planilha', keydown: 0, dialogos: 0 })
+  }
+  await openImport()
+  await page.press('Tab')
+  await expectState(page, 'Importar: Tab vai a area de arquivo', { foco: 'Clique ou arraste CSV/XLSX' })
+  await page.press('Tab')
+  await expectState(page, 'Importar: Tab na area de arquivo volta ao Fechar (o input escondido nao conta, o foco nao sai)', { foco: 'Fechar' })
+  await page.press('Tab', true)
+  await expectState(page, 'Importar: Shift+Tab no primeiro vai a area de arquivo', { foco: 'Clique ou arraste CSV/XLSX' })
+  const importLayout = await page.evaluate(`(() => { const r = document.querySelector('[role="dialog"]').getBoundingClientRect(); return { width: r.width, right: r.right === document.documentElement.clientWidth, bottom: r.bottom === innerHeight } })()`)
+  report('Importar: painel lateral colado a direita e ao fim da tela (672 px em 1366)', importLayout.width === 672 && importLayout.right && importLayout.bottom, `largura ${importLayout.width}`)
+
+  const chooseFile = async (path) => {
+    const { result } = await page.send('Runtime.evaluate', { expression: `document.querySelector('[role="dialog"] input[type="file"]')` })
+    await page.send('DOM.setFileInputFiles', { files: [path], objectId: result.objectId })
+    await page.waitFor(`document.querySelector('[role="dialog"]').textContent.includes('válida(s)')`)
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'chronodesk-qa-import-'))
+  try {
+    const csv = join(dir, 'planilha-ficticia.csv')
+    writeFileSync(csv, 'INCIDENTE;Data da Sala\nINC-QA-IMP;2026-10-28\n')
+    await chooseFile(csv)
+    report('Importar, arquivo escolhido: preview na tela', await page.evaluate(`document.querySelector('[role="dialog"]').textContent.includes('INC-QA-IMP')`))
+    await page.press('Escape')
+    await expectState(page, 'Importar, arquivo escolhido, Esc: fecha sem perguntar (so perde a escolha)', { ...sem, titulo: null, foco: 'Importar planilha', keydown: 0 })
+    await openImport()
+    report('Importar, reabrir: sem a escolha anterior', !(await page.evaluate(`document.querySelector('[role="dialog"]').textContent.includes('INC-QA-IMP')`)))
+    await chooseFile(csv)
+    const confirms = mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/critical_incidents_import.php').length
+    await page.click(button('Confirmar importação', `document.querySelector('[role="dialog"]')`))
+    await page.waitFor(`!document.querySelector('[role="dialog"]')`)
+    await expectState(page, 'Importar, confirmar: fecha, foco volta ao "Importar planilha"', { ...sem, titulo: null, foco: 'Importar planilha', keydown: 0 })
+    report('Importar, confirmar: um POST', mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/critical_incidents_import.php').length === confirms + 1)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+
+  await goto(page, port, '/chamados-criticos', 390)
+  await page.waitFor(`!!${button('Visualizar')}`)
+  await openView()
+  report('390 px, Visualizar: sem rolagem horizontal da pagina', await page.evaluate(`document.documentElement.scrollWidth <= innerWidth`))
+  await page.press('Escape')
+  await expectState(page, '390 px, Visualizar, Esc: fecha, foco volta', { ...sem, titulo: null, foco: 'Visualizar', keydown: 0 })
+  await openImport()
+  const importSmall = await page.evaluate(`document.querySelector('[role="dialog"]').getBoundingClientRect().width`)
+  report('390 px, Importar: painel na largura toda', importSmall === 390, `largura ${importSmall}`)
+  await page.press('Escape')
+  await expectState(page, '390 px, Importar, Esc: fecha, foco volta', { ...sem, titulo: null, foco: 'Importar planilha', keydown: 0 })
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -262,6 +342,8 @@ try {
   await navigationWithoutDirtyForm(page, mock.port, mock)
   console.log('== Chamados criticos (novo e editar)')
   await criticalIncidents(page, mock.port, mock)
+  console.log('== Chamados criticos (Visualizar e Importar)')
+  await criticalIncidentsViewAndImport(page, mock.port, mock)
 } catch (error) {
   failed++
   console.log(`FALHOU  execucao interrompida: ${error.message}`)

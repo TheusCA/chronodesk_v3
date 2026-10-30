@@ -47,7 +47,11 @@ const resourceStub = 'data:text/javascript,' + encodeURIComponent(
 )
 // Estado inicial que o teste escolhe (formulario aberto), trocado no carregamento.
 const INITIAL_STATE = {
-  '/src/pages/CriticalIncidentsPage.jsx': [['const [formItem, setFormItem] = useState(null)', 'const [formItem, setFormItem] = useState(globalThis.qaFormItem ?? null)']],
+  '/src/pages/CriticalIncidentsPage.jsx': [
+    ['const [formItem, setFormItem] = useState(null)', 'const [formItem, setFormItem] = useState(globalThis.qaFormItem ?? null)'],
+    ['const [viewItem, setViewItem] = useState(null)', 'const [viewItem, setViewItem] = useState(globalThis.qaViewItem ?? null)'],
+    ['const [importOpen, setImportOpen] = useState(false)', 'const [importOpen, setImportOpen] = useState(globalThis.qaImportOpen ?? false)'],
+  ],
 }
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -208,6 +212,14 @@ const { renderToStaticMarkup } = await import('react-dom/server')
   assert.equal(focused.at(-1), 'a', 'Foco fora do dialogo volta para dentro')
   dialogKeyDown(key('Tab'), container(null, []))
   assert.equal(focused.at(-1), 'painel', 'Sem item focavel, o foco fica no painel')
+  const notRendered = { name: 'arquivo', focus: () => focused.push('arquivo'), getClientRects: () => [] }
+  const rendered = { name: 'botao', focus: () => focused.push('botao'), getClientRects: () => [{}] }
+  const withHidden = key('Tab')
+  dialogKeyDown(withHidden, container(rendered, [a, rendered, notRendered]))
+  assert.deepEqual([focused.at(-1), withHidden.prevented], ['a', true], 'Elemento sem caixa na tela (input de arquivo escondido) nao conta como o ultimo: Tab no botao volta ao primeiro')
+  const backHidden = key('Tab', true)
+  dialogKeyDown(backHidden, container(a, [a, rendered, notRendered]))
+  assert.deepEqual([focused.at(-1), backHidden.prevented], ['botao', true], 'Shift+Tab no primeiro vai ao ultimo que aparece')
   closed = 0
   dialogKeyDown(key('Enter'), container(b), () => { closed++ })
   assert.equal(closed, 0, 'Outras teclas nao fecham')
@@ -241,6 +253,11 @@ const { renderToStaticMarkup } = await import('react-dom/server')
   const header = renderToStaticMarkup(h(Dialog, { title: 'Titulo QA', eyebrow: 'Eyebrow QA', headerAction: h('button', { type: 'button' }, 'Cancelar'), titleClassName: 'text-xl', panelClassName: 'border-red-500/20', size: 'max-w-6xl', onClose: () => {} }))
   assert.match(header, /<div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="section-eyebrow">Eyebrow QA<\/p><h2 class="mt-2 text-xl font-bold text-white" id="[^"]+">Titulo QA<\/h2><\/div><button type="button">Cancelar<\/button><\/div>/, 'Cabecalho com eyebrow, titulo e acao a direita')
   assert.match(header, /class="card relative my-auto w-full max-w-6xl border-red-500\/20"/, 'Tamanho e borda do painel pelas props')
+  const lead = renderToStaticMarkup(h(Dialog, { title: 'Titulo QA', headerLead: h('span', null, 'Selo QA'), titleClassName: 'mt-4 text-xl', onClose: () => {} }))
+  assert.match(lead, /<div class="min-w-0"><span>Selo QA<\/span><h2 class="mt-4 text-xl font-bold text-white" id="[^"]+">Titulo QA<\/h2>/, 'headerLead acima do titulo')
+  const lateral = renderToStaticMarkup(h(Dialog, { title: 'Titulo QA', placement: 'end', size: 'max-w-2xl', onClose: () => {} }))
+  assert.match(lateral, /^<div class="fixed inset-0 z-\[60\] flex justify-end bg-black\/75 backdrop-blur-sm" data-dialog-backdrop="">/, 'placement="end": fundo alinhado a direita')
+  assert.match(lateral, /class="relative h-full w-full max-w-2xl overflow-y-auto border-l border-white\/10 bg-slate-950 p-6 "/, 'placement="end": painel lateral na altura toda, sem o card')
 
   assert.equal(DISCARD_MESSAGE, 'Há alterações não salvas. Se sair agora, elas serão perdidas.', 'Texto do pedido B4')
   assert.equal(renderToStaticMarkup(h(ConfirmDiscardDialog, { open: false, onContinue: () => {}, onDiscard: () => {} })), '', 'Fechado nao renderiza nada')
@@ -299,17 +316,20 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
 // ---------------------------------------------------------------------------
 {
   const { CriticalIncidentsPage } = await importSrc('pages/CriticalIncidentsPage.jsx')
-  const renderCritical = (formItem) => {
+  const renderCritical = (formItem, initial = {}) => {
     globalThis.qaResources = {
       'portal/critical_incidents.php': { sucesso: true, limit: 200, truncated: false, summary: {}, items: [] },
       'portal/sdk_responsibles.php': { sucesso: true, items: [] },
     }
     globalThis.qaFormItem = formItem
+    Object.assign(globalThis, initial)
     try {
       return renderToStaticMarkup(h(CriticalIncidentsPage, { session: { role: 'gestor', permissions: [], ci: { funcionario_id: 0 }, gestor: {} }, notify: () => {} }))
     } finally {
       delete globalThis.qaResources
       delete globalThis.qaFormItem
+      delete globalThis.qaViewItem
+      delete globalThis.qaImportOpen
     }
   }
   for (const [label, formItem, eyebrow, title, submitLabel] of [
@@ -333,14 +353,36 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.match(formSource, /const \[openedWith\] = useState\(\(\) => normalizeForForm\(initial\)\)\s*const \[form, setForm\] = useState\(openedWith\)\s*const guard = useUnsavedChangesGuard\(formValuesChanged\(openedWith, form\)\)\s*const close = \(\) => guard\.requestLeave\(onClose\)/, 'Chamados: sujo = diferente do que abriu; fechar pergunta antes de descartar')
   assert.match(formSource, /onClose=\{close\}/, 'Chamados: Esc e clique fora pelo close (pergunta)')
   assert.match(formSource, /initialFocusRef=\{firstFieldRef\}\s*returnFocusRef=\{returnFocusRef\}/, 'Chamados: foco inicial no primeiro campo; ao fechar, volta a quem abriu')
-  assert.match(criticalSource, /onClick=\{\(event\) => \{ formTriggerRef\.current = event\.currentTarget; setFormItem\(\{\}\) \}\} type="button">Novo chamado<\/button>/, 'Chamados: Novo chamado guarda quem abriu')
-  assert.match(criticalSource, /onClick=\{\(event\) => \{ formTriggerRef\.current = event\.currentTarget; openItem\(item\.id, 'edit'\) \}\} type="button">Editar<\/button>/, 'Chamados: Editar guarda quem abriu (ele fica desabilitado enquanto carrega)')
-  assert.match(criticalSource, /returnFocusRef=\{formTriggerRef\}/, 'Chamados: o formulario recebe quem abriu')
+  assert.match(criticalSource, /onClick=\{\(event\) => \{ dialogTriggerRef\.current = event\.currentTarget; setFormItem\(\{\}\) \}\} type="button">Novo chamado<\/button>/, 'Chamados: Novo chamado guarda quem abriu')
+  assert.match(criticalSource, /onClick=\{\(event\) => \{ dialogTriggerRef\.current = event\.currentTarget; openItem\(item\.id, 'edit'\) \}\} type="button">Editar<\/button>/, 'Chamados: Editar guarda quem abriu (ele fica desabilitado enquanto carrega)')
+  assert.match(criticalSource, /<IncidentForm [^\n]*returnFocusRef=\{dialogTriggerRef\}/, 'Chamados: o formulario recebe quem abriu')
   assert.match(formSource, /INCIDENTE \*<input className="field mt-2" maxLength="100" ref=\{firstFieldRef\}/, 'Chamados: o primeiro campo e o INCIDENTE')
   assert.equal((formSource.match(/onClick=\{close\} type="button">Cancelar<\/button>/g) || []).length, 2, 'Chamados: os dois Cancelar pelo close (pergunta)')
   assert.doesNotMatch(formSource, /onClick=\{onClose\}/, 'Chamados: nenhum botao fecha direto sem perguntar')
   assert.match(formSource, /<ConfirmDiscardDialog \{\.\.\.guard\.dialogProps\} \/>/, 'Chamados: aviso de descarte ligado ao guard')
   assert.match(criticalSource, /onSuccess: \(\) => setFormItem\(null\),/, 'Chamados: salvar com sucesso fecha direto, sem perguntar; erro mantem o formulario aberto')
+
+  // [17f, X1] Visualizar e Importar pelo Dialog, sem a protecao de alteracoes.
+  const viewMarkup = renderCritical(null, { qaViewItem: { id: 7, incident_number: 'INC-QA-7', room_date: '2026-10-28', severity: 'critical', status: 'open', source: 'teams', room_description: 'Sala QA', meeting_url: 'https://sala.invalid/qa' } })
+  const viewPanel = viewMarkup.slice(viewMarkup.indexOf('data-dialog-backdrop'))
+  assert.match(viewPanel, /aria-modal="true" class="card relative my-auto w-full max-w-4xl border-red-500\/20" role="dialog" tabindex="-1">/, 'Visualizar: role="dialog", aria-modal, largura e borda de antes')
+  assert.match(viewPanel, /<div class="flex flex-wrap gap-2"><span class="status-badge[^"]*">Crítica<\/span><span class="status-badge[^"]*">Aberto<\/span><\/div><h2 class="mt-4 text-xl font-bold text-white" id="[^"]+">INC-QA-7<\/h2>/u, 'Visualizar: selos acima do titulo')
+  assert.match(viewPanel, /Sala em 2026-10-28 \/ origem Teams \/ incidente aberto em/u, 'Visualizar: linha da sala como descricao')
+  assert.match(viewPanel, />Fechar<\/button>/, 'Visualizar: botao Fechar')
+  assert.match(viewPanel, /href="https:\/\/sala\.invalid\/qa"/, 'Visualizar: link da sala')
+  assert.doesNotMatch(viewMarkup, /aria-label="Fechar detalhes"|fixed inset-0 z-50/, 'Visualizar: sem o fundo antigo')
+  const importMarkup = renderCritical(null, { qaImportOpen: true })
+  const importPanel = importMarkup.slice(importMarkup.indexOf('data-dialog-backdrop'))
+  assert.match(importMarkup, /<div class="fixed inset-0 z-\[60\] flex justify-end bg-black\/75 backdrop-blur-sm" data-dialog-backdrop="">/, 'Importar: fundo do painel lateral')
+  assert.match(importPanel, /aria-modal="true" class="relative h-full w-full max-w-2xl overflow-y-auto border-l border-white\/10 bg-slate-950 p-6 " role="dialog" tabindex="-1">/, 'Importar: role="dialog", aria-modal e o painel lateral de antes')
+  assert.ok(importPanel.includes('>Preview obrigatório</p>') && importPanel.includes('>Importar planilha War Room</h2>') && importPanel.includes('>Fechar</button>'), 'Importar: eyebrow, titulo e Fechar')
+  assert.doesNotMatch(importMarkup, /aria-label="Fechar importação"|<aside/u, 'Importar: sem o fundo antigo')
+  const detailsSource = criticalSource.slice(criticalSource.indexOf('function IncidentDetails('), criticalSource.indexOf('export function CriticalIncidentsPage('))
+  assert.equal((detailsSource.match(/^\s*onClose=\{onClose\}$/gm) || []).length, 2, 'Visualizar e Importar: Esc e clique fora fecham direto')
+  assert.doesNotMatch(detailsSource, /useUnsavedChangesGuard|ConfirmDiscardDialog/, 'Visualizar e Importar: sem a protecao de alteracoes (decisao X1)')
+  assert.match(detailsSource, /returnFocusRef=\{returnFocusRef\}/, 'Visualizar: foco de volta a quem abriu')
+  assert.match(criticalSource, /<IncidentDetails [^\n]*returnFocusRef=\{dialogTriggerRef\}/, 'Visualizar: recebe quem abriu')
+  assert.match(criticalSource, /onClick=\{\(event\) => \{ dialogTriggerRef\.current = event\.currentTarget; openItem\(item\.id, 'view'\) \}\}/, 'Visualizar: guarda quem abriu (fica desabilitado enquanto carrega)')
 }
 
 console.log('Unsaved changes QA OK')

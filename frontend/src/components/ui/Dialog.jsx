@@ -9,9 +9,11 @@ import { FOCUSABLE_SELECTOR, dialogKeyDown, isTopDialog, popDialog, pushDialog }
 // responde ao teclado.
 // Opcionais para formulários longos: eyebrow acima do título, headerAction à
 // direita dele (por exemplo, "Cancelar") e panelClassName para a borda.
+// headerLead: conteúdo acima do título (por exemplo, selos). placement="end":
+// painel lateral à direita, na altura toda, em vez de centralizado.
 // returnFocusRef: para onde o foco volta quando quem abriu perdeu o foco antes
 // do diálogo montar (por exemplo, um botão que fica desabilitado enquanto carrega).
-export function Dialog({ open = true, role = 'dialog', title, description = null, eyebrow = null, headerAction = null, onClose, initialFocusRef = null, returnFocusRef = null, size = 'max-w-lg', titleClassName = 'text-lg', panelClassName = '', children }) {
+export function Dialog({ open = true, role = 'dialog', title, description = null, eyebrow = null, headerLead = null, headerAction = null, placement = 'center', onClose, initialFocusRef = null, returnFocusRef = null, size = 'max-w-lg', titleClassName = 'text-lg', panelClassName = '', children }) {
   const titleId = useId()
   const descriptionId = useId()
   const panelRef = useRef(null)
@@ -44,9 +46,10 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
   }, [open, initialFocusRef, returnFocusRef])
 
   if (!open) return null
+  const lateral = placement === 'end'
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm"
+      className={lateral ? 'fixed inset-0 z-[60] flex justify-end bg-black/75 backdrop-blur-sm' : 'fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm'}
       data-dialog-backdrop=""
       // Sem o preventDefault, o clique no fundo (que não recebe foco) leva o
       // foco para o body depois que o diálogo o devolveu.
@@ -58,7 +61,7 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
         aria-modal="true"
         // my-auto centraliza quando cabe e, quando o conteúdo é mais alto que a
         // tela, vira 0 e deixa o topo alcançável pela rolagem do fundo.
-        className={`card relative my-auto w-full ${size} ${panelClassName}`}
+        className={lateral ? `relative h-full w-full ${size} overflow-y-auto border-l border-white/10 bg-slate-950 p-6 ${panelClassName}` : `card relative my-auto w-full ${size} ${panelClassName}`}
         ref={panelRef}
         role={role}
         tabIndex={-1}
@@ -66,6 +69,7 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
         <div className={headerAction ? 'flex items-start justify-between gap-4' : undefined}>
           <div className="min-w-0">
             {eyebrow && <p className="section-eyebrow">{eyebrow}</p>}
+            {headerLead}
             <h2 className={`${eyebrow ? 'mt-2 ' : ''}${titleClassName} font-bold text-white`} id={titleId}>{title}</h2>
             {description && <p className="mt-2 text-sm leading-6 text-slate-300" id={descriptionId}>{description}</p>}
           </div>

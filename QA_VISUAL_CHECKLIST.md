@@ -102,6 +102,7 @@ Checklist objetivo para a Fase 5. Use em homologacao local/controlada antes de c
 - [ ] Tempos calculados continuam informativos.
 
 - [ ] Novo e editar abrem num dialogo com Esc, foco preso e `role="dialog"`; com alteracoes nao salvas, fechar (X/Cancelar, Esc, clique fora), trocar de tela, voltar, "Sair" e recarregar pedem confirmacao.
+- [ ] Visualizar e Importar planilha abrem num dialogo com Esc, foco preso e `role="dialog"`; fechar nao pergunta nada, e o foco volta a quem abriu.
 
 ## Protecao contra perda de alteracoes (conferencia no navegador)
 
@@ -117,6 +118,7 @@ Roteiro versionado: `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`. F
 - Cobre hoje:
   - [ ] Navegacao sem formulario sujo igual a de sempre: todos os itens do menu em 1366 px e 390 px, voltar, avancar, "Sair" e recarregar, sem dialogo nem listener.
   - [ ] Chamados criticos, novo e editar: cada forma de sair, limpo e sujo; foco inicial, preso e devolvido; erro do servidor mantendo os dados; salvar fechando sem perguntar; menu, voltar, "Sair" e recarregar com o formulario sujo; formulario longo em 390 px.
+  - [ ] Chamados criticos, Visualizar e Importar planilha: abrir, Esc, clique fora e Fechar sem perguntar (nao ha protecao de alteracoes nestes dois); foco inicial, preso e devolvido a quem abriu; preview do arquivo, reabrir sem a escolha anterior e confirmar; 390 px.
 - A cada tela que receber a protecao (Funcionarios, Ausencias, Escala), o roteiro ganha o bloco dela.
 
 ## Escalas de Sabado

@@ -284,7 +284,7 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
   )
 }
 
-function IncidentDetails({ item, onClose }) {
+function IncidentDetails({ item, onClose, returnFocusRef }) {
   const fields = [
     ['Descrição da sala', item.room_description || item.summary],
     ['Descrição da finalização da sala', item.room_finalization_description],
@@ -292,28 +292,27 @@ function IncidentDetails({ item, onClose }) {
     ['Observações', item.notes],
   ]
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
-      <button aria-label="Fechar detalhes" className="fixed inset-0" onClick={onClose} type="button" />
-      <article className="card relative mx-auto my-6 max-w-4xl border-red-500/20">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex flex-wrap gap-2"><IncidentBadge value={item.severity} /><IncidentBadge value={item.status} /></div>
-            <h2 className="mt-4 text-xl font-bold text-white">{item.incident_number || item.ticket_number}</h2>
-            <p className="mt-2 text-sm text-slate-500">Sala em {item.room_date} / origem {sourceLabel(item.source)} / incidente aberto em {formatDateTime(item.incident_opened_at || item.opened_at)}</p>
-          </div>
-          <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
-        </div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <DetailPill label="Carteira - CC" value={item.sector || 'Não informado'} />
-          <DetailPill label="Técnico SDK" value={item.sdk_responsible_name || 'Não definido'} tone="info" />
-          <DetailPill label="Área responsável" value={item.responsible_area || 'Não informado'} />
-          <DetailPill label="Tempo para abrir sala" value={minutesLabel(item.room_opening_duration_minutes)} tone="warning" />
-          <DetailPill label="Tempo de sala" value={minutesLabel(item.room_duration_minutes)} tone="warning" />
-          {fields.map(([label, value]) => value && <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4 sm:col-span-2" key={label}><small className="text-slate-600">{label}</small><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{value}</p></div>)}
-        </div>
-        {item.meeting_url && <a className="btn-secondary mt-5" href={item.meeting_url} rel="noreferrer" target="_blank">Abrir sala de crise</a>}
-      </article>
-    </div>
+    <Dialog
+      description={`Sala em ${item.room_date} / origem ${sourceLabel(item.source)} / incidente aberto em ${formatDateTime(item.incident_opened_at || item.opened_at)}`}
+      headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>}
+      headerLead={<div className="flex flex-wrap gap-2"><IncidentBadge value={item.severity} /><IncidentBadge value={item.status} /></div>}
+      onClose={onClose}
+      panelClassName="border-red-500/20"
+      returnFocusRef={returnFocusRef}
+      size="max-w-4xl"
+      title={item.incident_number || item.ticket_number}
+      titleClassName="mt-4 text-xl"
+    >
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <DetailPill label="Carteira - CC" value={item.sector || 'Não informado'} />
+        <DetailPill label="Técnico SDK" value={item.sdk_responsible_name || 'Não definido'} tone="info" />
+        <DetailPill label="Área responsável" value={item.responsible_area || 'Não informado'} />
+        <DetailPill label="Tempo para abrir sala" value={minutesLabel(item.room_opening_duration_minutes)} tone="warning" />
+        <DetailPill label="Tempo de sala" value={minutesLabel(item.room_duration_minutes)} tone="warning" />
+        {fields.map(([label, value]) => value && <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4 sm:col-span-2" key={label}><small className="text-slate-600">{label}</small><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{value}</p></div>)}
+      </div>
+      {item.meeting_url && <a className="btn-secondary mt-5" href={item.meeting_url} rel="noreferrer" target="_blank">Abrir sala de crise</a>}
+    </Dialog>
   )
 }
 
@@ -371,50 +370,51 @@ function ImportPanel({ onClose, onImported }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm">
-      <button aria-label="Fechar importação" className="absolute inset-0" onClick={onClose} type="button" />
-      <aside className="relative h-full w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-slate-950 p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Preview obrigatório</p><h2 className="mt-2 text-xl font-bold text-white">Importar planilha War Room</h2></div>
-          <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
-        </div>
-        <p className="mt-3 text-sm leading-6 text-slate-500">CSV ou XLSX com cabeçalhos da planilha War Room, como INCIDENTE e Data da Sala. Campos incompletos podem ser ajustados depois. Limite de 500 linhas e 2 MB.</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <FileTypeBadge extension="csv" />
-          <FileTypeBadge extension="xlsx" />
-        </div>
-        <button
-          className={`mt-6 grid w-full place-items-center rounded-2xl border border-dashed px-5 py-10 ${dragging ? 'border-blue-400 bg-blue-500/10' : 'border-white/15 bg-slate-900/50'}`}
-          onClick={() => inputRef.current?.click()}
-          onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
-          onDragLeave={(event) => { event.preventDefault(); setDragging(false) }}
-          onDragOver={(event) => event.preventDefault()}
-          onDrop={(event) => { event.preventDefault(); setDragging(false); choose(event.dataTransfer.files) }}
-          type="button"
-        >
-          <Icon className="h-8 w-8 text-blue-400" name="upload" />
-          <strong className="mt-3 text-sm text-slate-200">Clique ou arraste CSV/XLSX</strong>
-        </button>
-        <input ref={inputRef} accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => choose(event.target.files)} type="file" />
-        {loading && <InlineAlert title="Processando arquivo">Validando planilha antes da confirmação.</InlineAlert>}
-        {error && <InlineAlert tone="danger" title="Falha na importação">{error}</InlineAlert>}
-        {preview && (
-          <div className="mt-5 space-y-4">
-            <p className="text-sm text-slate-300">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s).</p>
-            <div className="max-h-80 overflow-auto rounded-xl border border-white/5">
-              {preview.rows.map((row) => (
-                <div className="border-b border-white/5 px-3 py-3 text-sm" key={row.line}>
-                  <span className={row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span>
-                  <p className="mt-1 text-slate-400">{row.ticket_number || 'Sem chamado'} / {row.title || 'Sem título'}</p>
-                  {row.errors.length > 0 && <p className="mt-1 text-xs text-red-300">{row.errors.join(' ')}</p>}
-                </div>
-              ))}
-            </div>
-            <button className="btn-primary w-full" disabled={loading || preview.invalid_count > 0 || rows.length === 0} onClick={confirm} type="button">Confirmar importação</button>
+    <Dialog
+      description="CSV ou XLSX com cabeçalhos da planilha War Room, como INCIDENTE e Data da Sala. Campos incompletos podem ser ajustados depois. Limite de 500 linhas e 2 MB."
+      eyebrow="Preview obrigatório"
+      headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>}
+      onClose={onClose}
+      placement="end"
+      size="max-w-2xl"
+      title="Importar planilha War Room"
+      titleClassName="text-xl"
+    >
+      <div className="mt-4 flex flex-wrap gap-2">
+        <FileTypeBadge extension="csv" />
+        <FileTypeBadge extension="xlsx" />
+      </div>
+      <button
+        className={`mt-6 grid w-full place-items-center rounded-2xl border border-dashed px-5 py-10 ${dragging ? 'border-blue-400 bg-blue-500/10' : 'border-white/15 bg-slate-900/50'}`}
+        onClick={() => inputRef.current?.click()}
+        onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
+        onDragLeave={(event) => { event.preventDefault(); setDragging(false) }}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => { event.preventDefault(); setDragging(false); choose(event.dataTransfer.files) }}
+        type="button"
+      >
+        <Icon className="h-8 w-8 text-blue-400" name="upload" />
+        <strong className="mt-3 text-sm text-slate-200">Clique ou arraste CSV/XLSX</strong>
+      </button>
+      <input ref={inputRef} accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => choose(event.target.files)} type="file" />
+      {loading && <InlineAlert title="Processando arquivo">Validando planilha antes da confirmação.</InlineAlert>}
+      {error && <InlineAlert tone="danger" title="Falha na importação">{error}</InlineAlert>}
+      {preview && (
+        <div className="mt-5 space-y-4">
+          <p className="text-sm text-slate-300">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s).</p>
+          <div className="max-h-80 overflow-auto rounded-xl border border-white/5">
+            {preview.rows.map((row) => (
+              <div className="border-b border-white/5 px-3 py-3 text-sm" key={row.line}>
+                <span className={row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span>
+                <p className="mt-1 text-slate-400">{row.ticket_number || 'Sem chamado'} / {row.title || 'Sem título'}</p>
+                {row.errors.length > 0 && <p className="mt-1 text-xs text-red-300">{row.errors.join(' ')}</p>}
+              </div>
+            ))}
           </div>
-        )}
-      </aside>
-    </div>
+          <button className="btn-primary w-full" disabled={loading || preview.invalid_count > 0 || rows.length === 0} onClick={confirm} type="button">Confirmar importação</button>
+        </div>
+      )}
+    </Dialog>
   )
 }
 
@@ -441,8 +441,8 @@ export function CriticalIncidentsPage({ session, notify }) {
   const [importOpen, setImportOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [loadingItemId, setLoadingItemId] = useState(null)
-  // [17f] Quem abriu o formulário: o Editar fica desabilitado enquanto carrega e perde o foco.
-  const formTriggerRef = useRef(null)
+  // [17f] Quem abriu o diálogo: Editar e Visualizar ficam desabilitados enquanto carregam e perdem o foco.
+  const dialogTriggerRef = useRef(null)
   const summary = resource.data?.summary || {}
   const sdkResponsibles = responsibleResource.data?.items || []
   const exportUrl = apiUrl(`portal/critical_incidents_export.php${queryString(filters)}`)
@@ -502,7 +502,7 @@ export function CriticalIncidentsPage({ session, notify }) {
         <div className="flex flex-wrap gap-2">
           <a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha CSV</a>
           {canManage && <button className="btn-secondary gap-2" onClick={() => setImportOpen(true)} type="button"><Icon className="h-4 w-4" name="upload" /> Importar planilha</button>}
-          {canCreate && <button className="btn-primary" onClick={(event) => { formTriggerRef.current = event.currentTarget; setFormItem({}) }} type="button">Novo chamado</button>}
+          {canCreate && <button className="btn-primary" onClick={(event) => { dialogTriggerRef.current = event.currentTarget; setFormItem({}) }} type="button">Novo chamado</button>}
         </div>
       </section>
 
@@ -558,8 +558,8 @@ export function CriticalIncidentsPage({ session, notify }) {
                   <td><strong>{item.sdk_responsible_name || 'Não definido'}</strong><small>{item.sdk_responsible_login || 'Sem login'}</small></td>
                   <td className="data-table-sticky-end">
                     <div className="grid gap-1 sm:grid-cols-2">
-                      <button className="table-action" disabled={loadingItemId === item.id} onClick={() => openItem(item.id, 'view')} type="button">{loadingItemId === item.id ? 'Carregando' : 'Visualizar'}</button>
-                      {canManage && <button className="table-action" disabled={loadingItemId === item.id} onClick={(event) => { formTriggerRef.current = event.currentTarget; openItem(item.id, 'edit') }} type="button">Editar</button>}
+                      <button className="table-action" disabled={loadingItemId === item.id} onClick={(event) => { dialogTriggerRef.current = event.currentTarget; openItem(item.id, 'view') }} type="button">{loadingItemId === item.id ? 'Carregando' : 'Visualizar'}</button>
+                      {canManage && <button className="table-action" disabled={loadingItemId === item.id} onClick={(event) => { dialogTriggerRef.current = event.currentTarget; openItem(item.id, 'edit') }} type="button">Editar</button>}
                       {canManage && !['mitigated', 'resolved', 'cancelled'].includes(item.status) && <button className="table-action text-blue-300" onClick={() => changeStatus(item.id, 'mitigated')} type="button">Mitigar</button>}
                       {canManage && item.status !== 'resolved' && item.status !== 'cancelled' && <button className="table-action text-emerald-300" onClick={() => changeStatus(item.id, 'resolved')} type="button">Resolver</button>}
                     </div>
@@ -572,8 +572,8 @@ export function CriticalIncidentsPage({ session, notify }) {
         </section>
       )}
 
-      {formItem && <IncidentForm canManage={canManage} initial={formItem.id ? formItem : null} onClose={() => setFormItem(null)} onSave={save} returnFocusRef={formTriggerRef} sdkResponsibles={sdkResponsibles} submitting={submitting} />}
-      {viewItem && <IncidentDetails item={viewItem} onClose={() => setViewItem(null)} />}
+      {formItem && <IncidentForm canManage={canManage} initial={formItem.id ? formItem : null} onClose={() => setFormItem(null)} onSave={save} returnFocusRef={dialogTriggerRef} sdkResponsibles={sdkResponsibles} submitting={submitting} />}
+      {viewItem && <IncidentDetails item={viewItem} onClose={() => setViewItem(null)} returnFocusRef={dialogTriggerRef} />}
       {importOpen && <ImportPanel onClose={() => setImportOpen(false)} onImported={async (message) => { notify(message); await resource.refresh() }} />}
     </div>
   )

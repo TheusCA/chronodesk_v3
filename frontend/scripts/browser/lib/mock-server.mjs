@@ -30,7 +30,7 @@ const incidents = each((name, id) => ({
   room_description: 'Sala de teste', room_duration_minutes: 90, room_opening_duration_minutes: 15, room_finalization_description: null,
   severity: 'critical', status: ['open', 'open', 'mitigated', 'resolved'][id - 1], sector: 'Carteira A', responsible_area: 'CC 1234',
   sdk_responsible_login: 'tecnico.1', sdk_responsible_name: NAMES[0], sdk_activity: 'Acompanhamento', opened_at: `${DAY} 08:00:00`,
-  incident_opened_at: `${DAY} 07:50:00`, meeting_url: null, notes: null, source: 'manual',
+  incident_opened_at: `${DAY} 07:50:00`, meeting_url: id === 4 ? 'https://sala.invalid/qa' : null, notes: null, source: 'manual',
 }))
 const summaryValue = { overtime_approved_minutes: 120, overtime_pending_minutes: 60, adjustments: 2, oncall: 1, onsite_days: 10, remote_days: 8 }
 
@@ -61,6 +61,10 @@ function apiResponse(method, key, search, body) {
       if (body?.incident_number === FAILING_INCIDENT) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
       return [200, { sucesso: true, mensagem: 'Registro salvo.', id: body?.id || 99 }]
     }
+  }
+  if (key === 'portal/critical_incidents_import.php' && method === 'POST') {
+    if (body?.action === 'confirm') return [200, { sucesso: true, imported: 1 }]
+    return [200, { sucesso: true, parsed_rows: [{ ticket_number: 'INC-QA-IMP' }], valid_count: 1, invalid_count: 0, rows: [{ line: 2, valid: true, ticket_number: 'INC-QA-IMP', title: 'Linha de teste', errors: [] }] }]
   }
   if (key === 'logout.php') return [200, { sucesso: true, csrf_token: 'teste' }]
   if (method === 'POST') return [200, { sucesso: true, mensagem: 'ok' }]

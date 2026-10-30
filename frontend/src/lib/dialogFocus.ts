@@ -23,11 +23,17 @@ export function openDialogCount(): number {
 }
 
 type KeyEventLike = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'preventDefault' | 'stopPropagation'>
-type FocusableLike = { focus: () => void }
+type FocusableLike = { focus: () => void; getClientRects?: () => ArrayLike<unknown> }
 type ContainerLike = FocusableLike & {
   querySelectorAll: (selector: string) => ArrayLike<FocusableLike>
   contains: (node: unknown) => boolean
   ownerDocument: { activeElement: unknown }
+}
+
+// Sem caixa na tela (display: none, como um input de arquivo escondido), o
+// elemento não recebe foco e não pode ser o último da volta.
+function isRendered(item: FocusableLike): boolean {
+  return !item.getClientRects || item.getClientRects().length > 0
 }
 
 // Esc pede para fechar; Tab e Shift+Tab circulam dentro do diálogo (e trazem
@@ -40,7 +46,7 @@ export function dialogKeyDown(event: KeyEventLike, container: ContainerLike | nu
     return
   }
   if (event.key !== 'Tab' || !container) return
-  const items = Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR))
+  const items = Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter(isRendered)
   const active = container.ownerDocument.activeElement
   if (items.length === 0) {
     event.preventDefault()
