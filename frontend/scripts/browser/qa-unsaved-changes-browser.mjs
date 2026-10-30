@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChrome, openPage, sleep } from './lib/chrome.mjs'
-import { FAILING_INCIDENT, startMockServer } from './lib/mock-server.mjs'
+import { FAILING_EMPLOYEE, FAILING_INCIDENT, startMockServer } from './lib/mock-server.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const appArg = process.argv.indexOf('--app')
@@ -29,8 +29,8 @@ function report(label, ok, detail = '') {
   console.log(`${ok ? 'ok     ' : 'FALHOU '} ${label}${ok || !detail ? '' : ` (${detail})`}`)
 }
 // Compara so os campos pedidos; na falha, imprime os NOMES dos campos.
-async function expectState(page, label, expected) {
-  const state = await page.evaluate(STATE)
+async function expectState(page, label, expected, stateExpression = STATE) {
+  const state = await page.evaluate(stateExpression)
   const wrong = Object.entries(expected).filter(([key, value]) => (typeof value === 'function' ? !value(state[key]) : state[key] !== value)).map(([key]) => key)
   report(label, wrong.length === 0, wrong.length ? `campos: ${wrong.join(', ')}` : '')
   return state
@@ -325,6 +325,327 @@ async function criticalIncidentsViewAndImport(page, port, mock) {
   await expectState(page, '390 px, Importar, Esc: fecha, foco volta', { ...sem, titulo: null, foco: 'Importar planilha', keydown: 0 })
 }
 
+// 4. Funcionarios (tela real): editar (Dialog) e adicionar (formulario na tela).
+const EMPLOYEE_PANEL = `[...document.querySelectorAll('[role="dialog"]')].find((el) => el.querySelector('h2')?.textContent === 'Editar funcionário')`
+const EMPLOYEE_NAME = `${EMPLOYEE_PANEL}.querySelector('input[minlength="3"]')`
+const EMPLOYEE_HEADER_CANCEL = `${EMPLOYEE_PANEL}.firstElementChild.querySelector(':scope > button')`
+const EMPLOYEE_BOTTOM_CANCEL = button('Cancelar', `${EMPLOYEE_PANEL}.querySelector('form')`)
+const EMPLOYEE_SUBMIT = `${EMPLOYEE_PANEL}.querySelector('form button[type="submit"]')`
+const CREATE_FORM = `[...document.querySelectorAll('form')].find((form) => !form.closest('[data-dialog-backdrop]') && form.querySelector('input[minlength="3"]'))`
+const CREATE_NAME = `${CREATE_FORM}.querySelector('input[minlength="3"]')`
+const CREATE_ID = `${CREATE_FORM}.querySelector('input[type="number"]')`
+const CREATE_SUBMIT = `${CREATE_FORM}.querySelector('button[type="submit"]')`
+const ROW_EDIT = (index) => `[...document.querySelectorAll('button')].filter((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')[${index}]`
+const TAB = (label) => `[...document.querySelectorAll('button.tab-button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
+const EMPLOYEE_STATE = `(() => {
+  const active = document.activeElement
+  const panel = ${EMPLOYEE_PANEL}
+  const edits = [...document.querySelectorAll('button')].filter((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')
+  const create = ${CREATE_FORM}
+  return {
+    rota: location.pathname,
+    busca: location.search,
+    edicao: !!panel,
+    modal: panel?.getAttribute('aria-modal') ?? null,
+    descartar: document.querySelectorAll('[role="alertdialog"]').length,
+    foco: !active || active === document.body ? 'body' : active.tagName === 'INPUT' ? 'campo:' + (active.closest('label')?.childNodes[0]?.textContent.trim() || '') : (active.textContent || '').trim(),
+    linha_do_foco: edits.indexOf(active),
+    id: panel ? panel.querySelector('input[type="number"]').value : null,
+    nome: panel ? panel.querySelector('input[minlength="3"]').value : null,
+    novo_nome: create ? create.querySelector('input[minlength="3"]').value : null,
+    beforeunload: (getEventListeners(window).beforeunload || []).length,
+    keydown: (getEventListeners(document).keydown || []).length,
+    dialogos: document.querySelectorAll('[data-dialog-backdrop]').length,
+    aviso_erro: [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada')),
+  }
+})()`
+// Troca um select controlado como o usuario troca (o React so ve o evento change).
+const setSelect = (scope, label, value) => `(() => { const select = [...${scope}.querySelectorAll('label')].find((item) => item.childNodes[0]?.textContent.trim() === ${JSON.stringify(label)}).querySelector('select'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(value)}); select.dispatchEvent(new Event('change', { bubbles: true })) })()`
+
+async function employees(page, port, mock) {
+  const expectEmployee = (label, expected) => expectState(page, label, expected, EMPLOYEE_STATE)
+  const openFromList = async () => {
+    await goto(page, port, '/dashboard')
+    await page.evaluate(`${NAV_BUTTON('Aprovações e admin')}.click()`)
+    await page.waitFor(`!!${TAB('Funcionários')}`)
+    await page.evaluate(`${TAB('Funcionários')}.click()`)
+    await page.waitFor(`!!${ROW_EDIT(0)}`)
+    await sleep(200)
+  }
+  const openEdit = async (index = 0) => {
+    await page.click(ROW_EDIT(index))
+    await page.waitFor(`!!${EMPLOYEE_PANEL}`)
+  }
+  const dirtyEdit = async (text = ' editado') => {
+    await page.evaluate(`${EMPLOYEE_NAME}.focus()`)
+    await page.typeText(text)
+  }
+  const dirtyCreate = async (text = 'Rascunho QA') => {
+    await page.evaluate(`${CREATE_NAME}.focus()`)
+    await page.typeText(text)
+  }
+  await openFromList()
+  const originalName = await page.evaluate(`[...document.querySelectorAll('tbody strong')][0].textContent`)
+
+  // Abrir e fechar sem mexer nao conta como sujo, em cadastros diferentes.
+  for (const index of [0, 1, 2, 3]) {
+    await openEdit(index)
+    await expectEmployee(`editar, cadastro ${index + 1}, abrir: role="dialog", foco no Nome, um keydown, nao esta sujo`, { edicao: true, modal: 'true', foco: 'campo:Nome', keydown: 1, beforeunload: 0, id: String(index + 1) })
+    await page.press('Escape')
+    await expectEmployee(`editar, cadastro ${index + 1}, Esc: fecha sem perguntar, foco volta ao Editar dele`, { edicao: false, descartar: 0, foco: 'Editar', linha_do_foco: index, keydown: 0, dialogos: 0 })
+  }
+
+  const exits = [
+    ['Esc', () => page.press('Escape')],
+    ['Cancelar do cabecalho', () => page.click(EMPLOYEE_HEADER_CANCEL)],
+    ['Cancelar do fim', () => page.click(EMPLOYEE_BOTTOM_CANCEL)],
+    ['clique fora', () => page.clickAt(5, 450)],
+  ]
+  for (const [how, exit] of exits) {
+    await openEdit()
+    await exit()
+    await expectEmployee(`editar limpo, ${how}: fecha sem perguntar, foco volta ao Editar`, { edicao: false, descartar: 0, foco: 'Editar', linha_do_foco: 0, keydown: 0, dialogos: 0 })
+  }
+  const dirtyName = `${originalName} editado`
+  for (const [how, exit] of exits) {
+    await openEdit()
+    await dirtyEdit()
+    await expectEmployee(`editar sujo (${how}): beforeunload registrado`, { beforeunload: 1 })
+    await exit()
+    await expectEmployee(`editar sujo, ${how}: pergunta, foco em "Continuar editando"`, { edicao: true, descartar: 1, foco: 'Continuar editando', dialogos: 2 })
+    await page.press('Escape')
+    await expectEmployee(`editar sujo, ${how}, Esc no aviso: continua, dados mantidos`, { edicao: true, descartar: 0, nome: dirtyName })
+    await exit()
+    await page.clickAt(5, 450)
+    await expectEmployee(`editar sujo, ${how}, clique fora do aviso: continua`, { edicao: true, descartar: 0, nome: dirtyName })
+    await exit()
+    await page.click(button('Continuar editando', ALERT))
+    await expectEmployee(`editar sujo, ${how}, "Continuar editando": dados mantidos`, { edicao: true, descartar: 0, nome: dirtyName })
+    await exit()
+    await page.click(button('Descartar alterações', ALERT))
+    await expectEmployee(`editar sujo, ${how}, "Descartar": fecha, foco volta, sem listener`, { edicao: false, descartar: 0, foco: 'Editar', beforeunload: 0, keydown: 0, dialogos: 0 })
+  }
+
+  // Sujo acompanha o valor: voltar ao de abertura limpa de novo.
+  await openEdit()
+  await dirtyEdit('x')
+  await expectEmployee('editar, texto mudou: sujo', { beforeunload: 1 })
+  await page.evaluate(`${EMPLOYEE_NAME}.select()`)
+  await page.typeText(originalName)
+  await expectEmployee('editar, texto de volta ao de abertura: limpo', { beforeunload: 0 })
+  await page.evaluate(setSelect(EMPLOYEE_PANEL, 'Equipe operacional', 'n2'))
+  await sleep(150)
+  await expectEmployee('editar, equipe mudou (select): sujo', { beforeunload: 1 })
+  await page.evaluate(setSelect(EMPLOYEE_PANEL, 'Equipe operacional', 'n1'))
+  await sleep(150)
+  await expectEmployee('editar, equipe de volta: limpo', { beforeunload: 0 })
+  await page.evaluate(setSelect(EMPLOYEE_PANEL, 'Perfil de acesso', 'gestor'))
+  await sleep(150)
+  await expectEmployee('editar, perfil mudou (select): sujo', { beforeunload: 1 })
+  await page.evaluate(setSelect(EMPLOYEE_PANEL, 'Perfil de acesso', 'tecnico'))
+  await sleep(150)
+  await expectEmployee('editar, perfil de volta: limpo', { beforeunload: 0 })
+  await page.click(`${EMPLOYEE_PANEL}.querySelector('input[type="checkbox"]')`)
+  await expectEmployee('editar, "Fora do Mapa PA" marcado: sujo', { beforeunload: 1 })
+  await page.click(`${EMPLOYEE_PANEL}.querySelector('input[type="checkbox"]')`)
+  await expectEmployee('editar, "Fora do Mapa PA" desmarcado: limpo', { beforeunload: 0 })
+  await page.press('Escape')
+  await expectEmployee('editar, limpo de novo, Esc: fecha sem perguntar', { edicao: false, descartar: 0 })
+
+  // Foco preso no formulario.
+  await openEdit()
+  await page.evaluate(`${EMPLOYEE_SUBMIT}.focus()`)
+  await page.press('Tab')
+  await expectEmployee('editar: Tab no ultimo volta ao primeiro (Cancelar do cabecalho)', { foco: 'Cancelar' })
+  await page.press('Tab', true)
+  await expectEmployee('editar: Shift+Tab no primeiro vai ao ultimo', { foco: 'Salvar alterações' })
+
+  // Erro do servidor mantem os dados; salvar com sucesso fecha sem perguntar.
+  await page.evaluate(`${EMPLOYEE_NAME}.select()`)
+  await page.typeText(FAILING_EMPLOYEE)
+  await page.click(EMPLOYEE_SUBMIT)
+  await page.waitFor(`[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada'))`)
+  await expectEmployee('editar, erro do servidor: aviso de erro, formulario aberto, dados mantidos, ainda sujo', { aviso_erro: true, edicao: true, nome: FAILING_EMPLOYEE, beforeunload: 1 })
+  await page.press('Escape')
+  await expectEmployee('editar, erro do servidor, Esc: ainda pergunta', { descartar: 1 })
+  await page.click(button('Continuar editando', ALERT))
+  await page.evaluate(`${EMPLOYEE_NAME}.select()`)
+  await page.typeText('Tecnico Salvo QA')
+  const updates = mock.requests.filter((r) => r.method === 'POST' && r.key === 'atualizar_funcionario.php').length
+  await page.click(EMPLOYEE_SUBMIT)
+  await page.waitFor(`!${EMPLOYEE_PANEL}`)
+  await expectEmployee('editar, salvar com sucesso: fecha sem perguntar, foco volta, sem listener', { edicao: false, descartar: 0, foco: 'Editar', linha_do_foco: 0, beforeunload: 0, keydown: 0, dialogos: 0 })
+  report('editar, salvar com sucesso: um POST', mock.requests.filter((r) => r.method === 'POST' && r.key === 'atualizar_funcionario.php').length === updates + 1)
+
+  // "Editar outro funcionario" com o formulario sujo. Com o dialogo aberto, o
+  // mouse nao alcanca a lista (o fundo cobre) e o Tab nao sai dele; o caminho
+  // do botao e exercitado pelo clique no elemento.
+  await openEdit(0)
+  await dirtyEdit()
+  const reachable = await page.evaluate(`(() => { const target = ${ROW_EDIT(1)}; const r = target.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === target })()`)
+  report('editar outro, sujo: com o dialogo aberto, o mouse nao alcanca o Editar de outra linha', !reachable)
+  await page.evaluate(`${ROW_EDIT(1)}.click()`)
+  await sleep(200)
+  await expectEmployee('editar outro, sujo: pergunta e nao troca de cadastro', { edicao: true, descartar: 1, id: '1', nome: dirtyName, foco: 'Continuar editando' })
+  await page.click(button('Continuar editando', ALERT))
+  await expectEmployee('editar outro, sujo, "Continuar editando": mesmo cadastro, dados mantidos', { edicao: true, descartar: 0, id: '1', nome: dirtyName, beforeunload: 1 })
+  await page.evaluate(`${ROW_EDIT(1)}.click()`)
+  await sleep(200)
+  await page.click(button('Descartar alterações', ALERT))
+  const secondName = await page.evaluate(`[...document.querySelectorAll('tbody strong')][1].textContent`)
+  await expectEmployee('editar outro, sujo, "Descartar": abre o outro cadastro, limpo', { edicao: true, descartar: 0, id: '2', nome: secondName, beforeunload: 0, dialogos: 1 })
+  await page.evaluate(`${ROW_EDIT(2)}.click()`)
+  await sleep(200)
+  await expectEmployee('editar outro, limpo: troca sem perguntar', { edicao: true, descartar: 0, id: '3', beforeunload: 0 })
+  await page.press('Escape')
+  await expectEmployee('editar outro, Esc: foco volta ao Editar da ultima linha aberta', { edicao: false, foco: 'Editar', linha_do_foco: 2, keydown: 0 })
+
+  // Rota com a edicao suja: menu, aba, voltar, "Sair" e recarregar.
+  await page.evaluate(`${TAB('Aprovações')}.click()`); await sleep(250)
+  await page.evaluate(`${TAB('Funcionários')}.click()`)
+  await page.waitFor(`!!${ROW_EDIT(0)}`)
+  await openEdit(); await dirtyEdit()
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await expectEmployee('editar sujo, menu: pergunta e nao troca de tela', { descartar: 1, rota: '/app/admin', busca: '?tab=funcionarios' })
+  await page.click(button('Continuar editando', ALERT))
+  await expectEmployee('editar sujo, menu, Continuar: fica, dados mantidos', { rota: '/app/admin', edicao: true, nome: dirtyName })
+  await page.evaluate('history.back()'); await sleep(400)
+  await expectEmployee('editar sujo, voltar: pergunta, endereco devolvido', { descartar: 1, rota: '/app/admin', busca: '?tab=funcionarios', edicao: true })
+  await page.click(button('Continuar editando', ALERT))
+  const logouts = mock.requests.filter((r) => r.key === 'logout.php').length
+  await page.evaluate(`document.querySelector('[aria-label="Sair"]').click()`); await sleep(300)
+  await expectEmployee('editar sujo, Sair: pergunta', { descartar: 1 })
+  await page.click(button('Continuar editando', ALERT))
+  report('editar sujo, Sair, Continuar: nao sai (sem logout)', mock.requests.filter((r) => r.key === 'logout.php').length === logouts)
+  page.events.length = 0
+  await page.send('Page.reload').catch(() => {})
+  await sleep(800)
+  const editPrompt = page.events.find((e) => e.method === 'Page.javascriptDialogOpening')
+  report('editar sujo, recarregar: aviso do navegador (beforeunload)', editPrompt?.params.type === 'beforeunload')
+  if (editPrompt) { await page.send('Page.handleJavaScriptDialog', { accept: false }); await sleep(300) }
+  await expectEmployee('editar sujo, recarregar, ficar: dados mantidos', { edicao: true, nome: dirtyName })
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await page.click(button('Descartar alterações', ALERT))
+  await expectEmployee('editar sujo, menu, Descartar: troca de tela, sem listener', { rota: '/app/calendario', edicao: false, beforeunload: 0, keydown: 0 })
+
+  // Adicionar: o formulario fica na tela, sem dialogo.
+  await openFromList()
+  await expectEmployee('adicionar, abrir: limpo, sem dialogo nem listener', { novo_nome: '', beforeunload: 0, dialogos: 0, keydown: 0 })
+  await page.evaluate(`${TAB('Aprovações')}.click()`); await sleep(250)
+  await expectEmployee('adicionar limpo, trocar de aba: sem perguntar', { busca: '?tab=aprovacoes', descartar: 0 })
+  await page.evaluate(`${TAB('Funcionários')}.click()`)
+  await page.waitFor(`!!${CREATE_FORM}`)
+  await dirtyCreate()
+  await expectEmployee('adicionar sujo: beforeunload registrado', { novo_nome: 'Rascunho QA', beforeunload: 1 })
+  await page.evaluate(`${CREATE_NAME}.select()`)
+  await page.send('Input.insertText', { text: '' }); await page.evaluate(`document.execCommand('delete')`); await sleep(150)
+  await expectEmployee('adicionar, texto apagado: limpo', { novo_nome: '', beforeunload: 0 })
+  await dirtyCreate()
+  await page.evaluate(`${TAB('Configurações')}.click()`); await sleep(300)
+  await expectEmployee('adicionar sujo, trocar de aba: pergunta, fica na aba', { descartar: 1, busca: '?tab=funcionarios', foco: 'Continuar editando' })
+  await page.click(button('Continuar editando', ALERT))
+  await expectEmployee('adicionar sujo, aba, Continuar: dados mantidos', { descartar: 0, busca: '?tab=funcionarios', novo_nome: 'Rascunho QA' })
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await expectEmployee('adicionar sujo, menu: pergunta e nao troca de tela', { descartar: 1, rota: '/app/admin' })
+  await page.press('Escape')
+  await expectEmployee('adicionar sujo, menu, Esc no aviso: dados mantidos', { descartar: 0, rota: '/app/admin', novo_nome: 'Rascunho QA' })
+  await page.evaluate('history.back()'); await sleep(400)
+  await expectEmployee('adicionar sujo, voltar: pergunta, endereco devolvido', { descartar: 1, rota: '/app/admin', busca: '?tab=funcionarios' })
+  await page.click(button('Continuar editando', ALERT))
+  const logoutsCreate = mock.requests.filter((r) => r.key === 'logout.php').length
+  await page.evaluate(`document.querySelector('[aria-label="Sair"]').click()`); await sleep(300)
+  await expectEmployee('adicionar sujo, Sair: pergunta', { descartar: 1 })
+  await page.click(button('Continuar editando', ALERT))
+  report('adicionar sujo, Sair, Continuar: nao sai (sem logout)', mock.requests.filter((r) => r.key === 'logout.php').length === logoutsCreate)
+  page.events.length = 0
+  await page.send('Page.reload').catch(() => {})
+  await sleep(800)
+  const createPrompt = page.events.find((e) => e.method === 'Page.javascriptDialogOpening')
+  report('adicionar sujo, recarregar: aviso do navegador (beforeunload)', createPrompt?.params.type === 'beforeunload')
+  if (createPrompt) { await page.send('Page.handleJavaScriptDialog', { accept: false }); await sleep(300) }
+  await expectEmployee('adicionar sujo, recarregar, ficar: dados mantidos', { novo_nome: 'Rascunho QA' })
+
+  // Os dois formularios: cada um com a sua protecao.
+  await openEdit(1)
+  await expectEmployee('adicionar sujo, Editar: abre sem perguntar (nada se perde)', { edicao: true, descartar: 0, id: '2', beforeunload: 1 })
+  await page.press('Escape')
+  await expectEmployee('adicionar sujo, edicao limpa, Esc: fecha sem perguntar, adicionar mantido', { edicao: false, descartar: 0, novo_nome: 'Rascunho QA', beforeunload: 1 })
+  await openEdit(1)
+  await dirtyEdit()
+  await expectEmployee('os dois sujos: dois beforeunload', { beforeunload: 2 })
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await expectEmployee('os dois sujos, menu: um aviso so', { descartar: 1, rota: '/app/admin' })
+  await page.click(button('Continuar editando', ALERT))
+  await page.click(EMPLOYEE_BOTTOM_CANCEL)
+  await expectEmployee('os dois sujos, Cancelar a edicao: pergunta', { descartar: 1, edicao: true })
+  await page.click(button('Descartar alterações', ALERT))
+  await expectEmployee('os dois sujos, Descartar a edicao: fecha so a edicao, adicionar mantido', { edicao: false, descartar: 0, novo_nome: 'Rascunho QA', beforeunload: 1 })
+
+  // Erro do servidor mantem o adicionar; sucesso limpa, sem perguntar.
+  await page.evaluate(`${CREATE_ID}.focus()`)
+  await page.typeText('900')
+  await page.evaluate(`${CREATE_NAME}.select()`)
+  await page.typeText(FAILING_EMPLOYEE)
+  await page.click(CREATE_SUBMIT)
+  await page.waitFor(`[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada'))`)
+  await expectEmployee('adicionar, erro do servidor: aviso de erro, dados mantidos, ainda sujo', { aviso_erro: true, novo_nome: FAILING_EMPLOYEE, beforeunload: 1 })
+  await page.evaluate(`${CREATE_NAME}.select()`)
+  await page.typeText('Tecnico Novo QA')
+  const creates = mock.requests.filter((r) => r.method === 'POST' && r.key === 'adicionar_funcionario.php').length
+  await page.click(CREATE_SUBMIT)
+  await page.waitFor(`${CREATE_NAME}.value === ''`)
+  await expectEmployee('adicionar com sucesso: formulario limpo, sem perguntar, sem listener', { novo_nome: '', descartar: 0, beforeunload: 0, dialogos: 0 })
+  report('adicionar com sucesso: um POST', mock.requests.filter((r) => r.method === 'POST' && r.key === 'adicionar_funcionario.php').length === creates + 1)
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await expectEmployee('depois de adicionar, menu: troca de tela sem perguntar', { rota: '/app/calendario', descartar: 0 })
+  await page.evaluate('history.back()'); await page.waitFor(`!!${CREATE_FORM}`)
+  await dirtyCreate()
+  await page.evaluate(`${TAB('Aprovações')}.click()`); await sleep(300)
+  await page.click(button('Descartar alterações', ALERT))
+  await expectEmployee('adicionar sujo, aba, Descartar: troca de aba, sem listener', { busca: '?tab=aprovacoes', descartar: 0, beforeunload: 0 })
+  await page.evaluate(`${TAB('Funcionários')}.click()`)
+  await page.waitFor(`!!${CREATE_FORM}`)
+  await expectEmployee('adicionar, voltar a aba depois de descartar: vazio', { novo_nome: '', beforeunload: 0 })
+  await dirtyCreate()
+  const logoutsDiscard = mock.requests.filter((r) => r.key === 'logout.php').length
+  await page.evaluate(`document.querySelector('[aria-label="Sair"]').click()`); await sleep(300)
+  await page.click(button('Descartar alterações', ALERT)); await sleep(400)
+  report('adicionar sujo, Sair, Descartar: sai (logout chamado)', mock.requests.filter((r) => r.key === 'logout.php').length === logoutsDiscard + 1)
+
+  // Celular (390 px): cartoes, topo e fim do formulario alcancaveis.
+  await goto(page, port, '/admin?tab=funcionarios', 390)
+  await page.waitFor(`!!${ROW_EDIT(0)}`)
+  await openEdit()
+  await expectEmployee('390 px, abrir: foco no Nome', { edicao: true, foco: 'campo:Nome', beforeunload: 0 })
+  const layout = await page.evaluate(`(() => { const backdrop = document.querySelector('[data-dialog-backdrop]'); backdrop.scrollTop = 0; const top = ${EMPLOYEE_PANEL}.querySelector('h2').getBoundingClientRect().top; backdrop.scrollTop = backdrop.scrollHeight; const submit = ${EMPLOYEE_SUBMIT}.getBoundingClientRect(); return { titleTop: top, submitVisible: submit.top >= 0 && submit.bottom <= innerHeight, pageScroll: document.documentElement.scrollWidth > innerWidth } })()`)
+  report('390 px: titulo visivel no topo do formulario', layout.titleTop >= 0 && layout.titleTop < 200)
+  report('390 px: rolando o fundo, o botao de salvar aparece inteiro', layout.submitVisible)
+  report('390 px: sem rolagem horizontal da pagina', !layout.pageScroll)
+  await dirtyEdit()
+  await page.press('Escape')
+  await expectEmployee('390 px, sujo, Esc: pergunta', { descartar: 1, foco: 'Continuar editando' })
+  await page.click(button('Descartar alterações', ALERT))
+  await expectEmployee('390 px, Descartar: fecha, foco volta ao Editar, sem listener', { edicao: false, foco: 'Editar', linha_do_foco: 0, beforeunload: 0, keydown: 0 })
+
+  // Lideranca: o "Fora do Mapa PA" fica desabilitado e nao pode contar como sujo.
+  mock.useLeadershipSession()
+  try {
+    await goto(page, port, '/admin?tab=funcionarios')
+    await page.waitFor(`!!${ROW_EDIT(0)}`)
+    const editable = await page.evaluate(`[...document.querySelectorAll('button')].filter((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar').length`)
+    for (let index = 0; index < editable; index++) {
+      await openEdit(index)
+      const disabled = await page.evaluate(`${EMPLOYEE_PANEL}.querySelector('input[type="checkbox"]').disabled`)
+      await expectEmployee(`Lideranca, cadastro ${index + 1}, abrir: nao esta sujo`, { edicao: true, beforeunload: 0 })
+      report(`Lideranca, cadastro ${index + 1}: "Fora do Mapa PA" desabilitado`, disabled)
+      await page.press('Escape')
+      await expectEmployee(`Lideranca, cadastro ${index + 1}, Esc: fecha sem perguntar`, { edicao: false, descartar: 0, keydown: 0 })
+    }
+  } finally {
+    mock.useAdminSession()
+  }
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -344,6 +665,8 @@ try {
   await criticalIncidents(page, mock.port, mock)
   console.log('== Chamados criticos (Visualizar e Importar)')
   await criticalIncidentsViewAndImport(page, mock.port, mock)
+  console.log('== Funcionarios (editar e adicionar)')
+  await employees(page, mock.port, mock)
 } catch (error) {
   failed++
   console.log(`FALHOU  execucao interrompida: ${error.message}`)

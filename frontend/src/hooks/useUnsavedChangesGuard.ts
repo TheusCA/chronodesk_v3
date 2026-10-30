@@ -17,10 +17,13 @@ export function onBeforeUnloadWhileDirty(event: BeforeUnloadEvent): void {
 
 export function attachUnsavedChangesGuard(target: ListenerTarget, ask: (proceed: () => void) => void): () => void {
   const unregister = registerNavigationBlocker({ ask })
-  target.addEventListener('beforeunload', onBeforeUnloadWhileDirty)
+  // Um listener por formulário: o navegador registra a mesma função uma vez só,
+  // e o primeiro formulário a sair levaria embora o aviso de quem ainda está sujo.
+  const onBeforeUnload = (event: BeforeUnloadEvent) => onBeforeUnloadWhileDirty(event)
+  target.addEventListener('beforeunload', onBeforeUnload)
   return () => {
     unregister()
-    target.removeEventListener('beforeunload', onBeforeUnloadWhileDirty)
+    target.removeEventListener('beforeunload', onBeforeUnload)
   }
 }
 

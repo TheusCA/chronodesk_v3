@@ -1,6 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useResource } from '../hooks/useResource'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
+import { Dialog } from '../components/ui/Dialog'
 import { post } from '../lib/api'
 import { ACTION_FEEDBACK, decisionFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
@@ -289,9 +292,14 @@ function normalizeTeamValue(value) {
   return String(value || 'n1').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
+// Entrega o elemento do campo também a um ref próprio, além do React Hook Form.
+function withFieldRef(field, fieldRef) {
+  return { ...field, ref: (element) => { field.ref(element); if (fieldRef) fieldRef.current = element } }
+}
+
 // Lote 5b: equipe e perfil são independentes. Promover à Liderança é só do
 // admin (perfis.promote); admin não é perfil de cadastro (allowlist AD_ADMIN_USERS).
-function EmployeeFields({ form, register, setValue, errors = {}, editing = false, canPromote = false, canEditOutsideMap = false }) {
+function EmployeeFields({ form, register, setValue, errors = {}, editing = false, canPromote = false, canEditOutsideMap = false, nameRef = null }) {
   function updateRole(role) {
     setValue('access_role', role, { shouldDirty: true })
   }
@@ -307,7 +315,7 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
         {errors.id && <span className="mt-1 block text-xs text-red-300">{errors.id.message}</span>}
       </label>
       <label className="label xl:col-span-2">Nome
-        <input aria-invalid={Boolean(errors.nome)} className="field mt-2" maxLength="100" minLength="3" required {...register('nome')} />
+        <input aria-invalid={Boolean(errors.nome)} className="field mt-2" maxLength="100" minLength="3" required {...withFieldRef(register('nome'), nameRef)} />
         {errors.nome && <span className="mt-1 block text-xs text-red-300">{errors.nome.message}</span>}
       </label>
       <label className="label">Login AD
@@ -420,7 +428,7 @@ function EmployeesTab({
 }) {
   const {
     clearErrors: clearCreateEmployeeErrors,
-    formState: { errors: createEmployeeErrors },
+    formState: { errors: createEmployeeErrors, isDirty: createEmployeeDirty },
     handleSubmit: handleCreateEmployeeSubmit,
     register: registerCreateEmployee,
     reset: resetCreateEmployee,
@@ -433,7 +441,7 @@ function EmployeesTab({
   })
   const {
     clearErrors: clearEditEmployeeErrors,
-    formState: { errors: editEmployeeErrors },
+    formState: { errors: editEmployeeErrors, isDirty: editEmployeeDirty },
     handleSubmit: handleEditEmployeeSubmit,
     register: registerEditEmployee,
     reset: resetEditEmployee,
@@ -447,6 +455,12 @@ function EmployeesTab({
   const createForm = watchCreateEmployee()
   const editEmployeeForm = watchEditEmployee()
   const [editForm, setEditForm] = useState(null)
+  // [17f] Uma proteção para cada formulário: fechar a edição limpa não pergunta
+  // por causa de um cadastro sujo, e descartar a edição não apaga o cadastro.
+  const createGuard = useUnsavedChangesGuard(createEmployeeDirty)
+  const editGuard = useUnsavedChangesGuard(Boolean(editForm) && editEmployeeDirty)
+  const editNameRef = useRef(null)
+  const editTriggerRef = useRef(null)
   const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
   const [team, setTeam] = useState('')
@@ -490,7 +504,8 @@ function EmployeesTab({
     setFocus(firstField)
   }
 
-  function edit(item) {
+  function openEdit(item, trigger) {
+    editTriggerRef.current = trigger
     const nextForm = {
       ...emptyEmployee,
       ...item,
@@ -501,6 +516,15 @@ function EmployeesTab({
     }
     setEditForm(nextForm)
     resetEditEmployee(nextForm)
+  }
+
+  // [17f] Com a edição suja, trocar de cadastro pergunta antes.
+  function edit(item, trigger) {
+    editGuard.requestLeave(() => openEdit(item, trigger))
+  }
+
+  function closeEdit() {
+    editGuard.requestLeave(() => setEditForm(null))
   }
 
   function validateUnique(form, editing = false) {
@@ -607,7 +631,7 @@ function EmployeesTab({
     const state = employeeArchiveState(item)
     const actions = []
     if (state === 'ativo' && canManageRecord(item)) {
-      actions.push(<button className="table-action" key="edit" onClick={() => edit(item)} type="button">Editar</button>)
+      actions.push(<button className="table-action" key="edit" onClick={(event) => edit(item, event.currentTarget)} type="button">Editar</button>)
     }
     if (state !== 'arquivado' && canArchive(item)) {
       actions.push(<button className="table-action text-red-300" key="archive" onClick={() => setPendingAction({ id: item.id, kind: 'archive', error: '' })} type="button">{state === 'inativo_antigo' ? 'Arquivar (regularizar)' : 'Arquivar'}</button>)
@@ -733,25 +757,29 @@ function EmployeesTab({
       </div>
 
       {editForm && (
-        <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm">
-          <button aria-label="Cancelar edição" className="absolute inset-0" onClick={() => setEditForm(null)} type="button" />
-          <form className="card relative w-full max-w-5xl space-y-5 border-cyan-500/20" onSubmit={handleEditEmployeeSubmit(update)}>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="section-eyebrow">Alteração auditada</p>
-                <h3 className="mt-2 text-xl font-bold text-white">Editar funcionário</h3>
-                <p className="mt-1 text-sm text-slate-500">Dados atuais do CI carregados. Alterações de perfil são restritas a administradores e registradas em auditoria.</p>
-              </div>
-              <button className="text-sm text-slate-400 hover:text-white" onClick={() => setEditForm(null)} type="button">Cancelar</button>
-            </div>
-            <EmployeeFields canEditOutsideMap={canEditOutsideMap} canPromote={canPromote} editing errors={editEmployeeErrors} form={editEmployeeForm} register={registerEditEmployee} setValue={setEditEmployeeValue} />
+        <Dialog
+          description="Dados atuais do CI carregados. Alterações de perfil são restritas a administradores e registradas em auditoria."
+          eyebrow="Alteração auditada"
+          headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={closeEdit} type="button">Cancelar</button>}
+          initialFocusRef={editNameRef}
+          onClose={closeEdit}
+          panelClassName="border-cyan-500/20"
+          returnFocusRef={editTriggerRef}
+          size="max-w-5xl"
+          title="Editar funcionário"
+          titleClassName="text-xl"
+        >
+          <form className="mt-5 space-y-5" onSubmit={handleEditEmployeeSubmit(update)}>
+            <EmployeeFields canEditOutsideMap={canEditOutsideMap} canPromote={canPromote} editing errors={editEmployeeErrors} form={editEmployeeForm} nameRef={editNameRef} register={registerEditEmployee} setValue={setEditEmployeeValue} />
             <div className="flex justify-end gap-3">
-              <button className="btn-secondary" disabled={submitting} onClick={() => setEditForm(null)} type="button">Cancelar</button>
+              <button className="btn-secondary" disabled={submitting} onClick={closeEdit} type="button">Cancelar</button>
               <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Salvando...' : 'Salvar alterações'}</button>
             </div>
           </form>
-        </div>
+        </Dialog>
       )}
+      <ConfirmDiscardDialog {...createGuard.dialogProps} />
+      <ConfirmDiscardDialog {...editGuard.dialogProps} />
     </div>
   )
 }

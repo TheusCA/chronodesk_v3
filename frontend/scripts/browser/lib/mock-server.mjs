@@ -14,6 +14,8 @@ const each = (fn) => NAMES.map((name, index) => fn(name, index + 1, TEAMS[index]
 
 // Numero de incidente que faz o salvar falhar (erro do servidor simulado).
 export const FAILING_INCIDENT = 'FALHA-QA'
+// Nome de funcionario que faz o salvar falhar (erro do servidor simulado).
+export const FAILING_EMPLOYEE = 'FALHA-QA'
 
 const workflow = (overtime) => ({
   sucesso: true, limit: 200, truncated: false, totals: { approved_minutes: 120, pending_minutes: 240 },
@@ -36,7 +38,8 @@ const summaryValue = { overtime_approved_minutes: 120, overtime_pending_minutes:
 
 const GET = {
   'session.php': { sucesso: true, csrf_token: 'teste', role: 'admin', permissions: ADMIN_PERMISSIONS, ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' }, gestor: { autenticado: true, admin: true, username: 'admin.qa', role: 'admin' } },
-  'listar_funcionarios.php': { sucesso: true, funcionarios: each((nome, id, equipe) => ({ id, nome, equipe, ativo: true, jornada_entrada: '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ad_login: `tecnico.${id}`, access_role: 'tecnico', arquivado_em: null, fora_mapa_escala: false })) },
+  // Cadastros variados de proposito: abrir e fechar sem mexer nao pode contar como sujo.
+  'listar_funcionarios.php': { sucesso: true, funcionarios: each((nome, id, equipe) => ({ id, nome, equipe, ativo: true, jornada_entrada: id === 3 ? '08:00:00' : '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ad_login: id === 3 ? null : `tecnico.${id}`, access_role: id === 4 ? 'somente_leitura' : 'tecnico', arquivado_em: null, fora_mapa_escala: id === 2 })) },
   'portal/overtime.php': workflow(true),
   'portal/time_corrections.php': workflow(false),
   'portal/schedules.php': { sucesso: true, rules: each((employee_name, id, team) => ({ id, employee_id: id, employee_name, ad_login: `tecnico.${id}`, team, rule_type: 'fixed_weekdays', weekdays: [1, 3, 5], rule_label: 'Presencial seg, qua e sex', is_current: true, is_future: false, effective_from: '2026-10-01', effective_until: null })), generated: [] },
@@ -66,6 +69,7 @@ function apiResponse(method, key, search, body) {
     if (body?.action === 'confirm') return [200, { sucesso: true, imported: 1 }]
     return [200, { sucesso: true, parsed_rows: [{ ticket_number: 'INC-QA-IMP' }], valid_count: 1, invalid_count: 0, rows: [{ line: 2, valid: true, ticket_number: 'INC-QA-IMP', title: 'Linha de teste', errors: [] }] }]
   }
+  if ((key === 'adicionar_funcionario.php' || key === 'atualizar_funcionario.php') && method === 'POST' && body?.nome === FAILING_EMPLOYEE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
   if (key === 'logout.php') return [200, { sucesso: true, csrf_token: 'teste' }]
   if (method === 'POST') return [200, { sucesso: true, mensagem: 'ok' }]
   return [200, GET[key] ?? { sucesso: true, items: [] }]
@@ -73,7 +77,11 @@ function apiResponse(method, key, search, body) {
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' }
 
-// Sobe o servidor numa porta livre; devolve { port, requests, close }.
+// Sessao de Lideranca: sem as permissoes so de admin (por exemplo, funcionarios.fora_mapa).
+const LEADERSHIP_SESSION = { sucesso: true, csrf_token: 'teste', role: 'lideranca', permissions: ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage'], ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' }, gestor: { autenticado: true, admin: false, username: 'lider.qa', role: 'lideranca' } }
+const ADMIN_SESSION = GET['session.php']
+
+// Sobe o servidor numa porta livre; devolve { port, requests, useLeadershipSession, useAdminSession, close }.
 export function startMockServer(appDir) {
   const requests = []
   const server = createServer((req, res) => {
@@ -100,7 +108,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

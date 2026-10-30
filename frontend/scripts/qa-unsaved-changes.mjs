@@ -52,6 +52,7 @@ const INITIAL_STATE = {
     ['const [viewItem, setViewItem] = useState(null)', 'const [viewItem, setViewItem] = useState(globalThis.qaViewItem ?? null)'],
     ['const [importOpen, setImportOpen] = useState(false)', 'const [importOpen, setImportOpen] = useState(globalThis.qaImportOpen ?? false)'],
   ],
+  '/src/pages/AdminPage.jsx': [['const [editForm, setEditForm] = useState(null)', 'const [editForm, setEditForm] = useState(globalThis.qaEditForm ?? null)']],
 }
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -178,6 +179,14 @@ const { renderToStaticMarkup } = await import('react-dom/server')
   detach()
   assert.equal(listenerCount('beforeunload'), 0, 'Limpo ou desmontado: o beforeunload sai')
   assert.equal(navigationBlockerCount(), 0, 'Limpo ou desmontado: o bloqueio sai')
+  const first = attachUnsavedChangesGuard(globalThis.window, () => {})
+  const second = attachUnsavedChangesGuard(globalThis.window, () => {})
+  const [firstListener, secondListener] = listeners.get('beforeunload')
+  assert.notEqual(firstListener, secondListener, 'Dois formularios sujos: funcoes diferentes (o navegador registra a mesma funcao uma vez so)')
+  second()
+  assert.equal(listenerCount('beforeunload'), 1, 'Um formulario sai: o aviso de quem ainda esta sujo fica')
+  first()
+  assert.equal(listenerCount('beforeunload'), 0, 'Os dois saem: nenhum beforeunload')
   const event = { prevented: false, returnValue: undefined, preventDefault() { this.prevented = true } }
   onBeforeUnloadWhileDirty(event)
   assert.equal(event.prevented, true, 'beforeunload: preventDefault (aviso do navegador)')
@@ -380,9 +389,67 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   const detailsSource = criticalSource.slice(criticalSource.indexOf('function IncidentDetails('), criticalSource.indexOf('export function CriticalIncidentsPage('))
   assert.equal((detailsSource.match(/^\s*onClose=\{onClose\}$/gm) || []).length, 2, 'Visualizar e Importar: Esc e clique fora fecham direto')
   assert.doesNotMatch(detailsSource, /useUnsavedChangesGuard|ConfirmDiscardDialog/, 'Visualizar e Importar: sem a protecao de alteracoes (decisao X1)')
+  assert.equal((detailsSource.match(/onClick=\{onClose\} type="button">Fechar<\/button>/g) || []).length, 2, 'Visualizar e Importar: o botao Fechar fecha')
   assert.match(detailsSource, /returnFocusRef=\{returnFocusRef\}/, 'Visualizar: foco de volta a quem abriu')
   assert.match(criticalSource, /<IncidentDetails [^\n]*returnFocusRef=\{dialogTriggerRef\}/, 'Visualizar: recebe quem abriu')
   assert.match(criticalSource, /onClick=\{\(event\) => \{ dialogTriggerRef\.current = event\.currentTarget; openItem\(item\.id, 'view'\) \}\}/, 'Visualizar: guarda quem abriu (fica desabilitado enquanto carrega)')
+}
+
+// ---------------------------------------------------------------------------
+// 9. [17f, item 3] Funcionarios: editar (Dialog) e adicionar (formulario na tela).
+// ---------------------------------------------------------------------------
+{
+  const { AdminPage } = await importSrc('pages/AdminPage.jsx')
+  const renderEmployees = (editForm) => {
+    globalThis.qaResources = {
+      'listar_funcionarios.php': { sucesso: true, funcionarios: [{ id: 3, nome: 'Tecnico QA', equipe: 'n1', ativo: true, jornada_entrada: '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ad_login: 'tecnico.qa', access_role: 'tecnico', arquivado_em: null, fora_mapa_escala: false }] },
+      'solicitacoes_pendentes.php': { solicitacoes: [], overtime: [], time_adjustments: [] },
+      'configuracoes.php': { sucesso: true, configuracoes: {} },
+    }
+    globalThis.qaEditForm = editForm
+    try {
+      return renderToStaticMarkup(h(AdminPage, { session: { role: 'admin', permissions: ['funcionarios.manage', 'perfis.promote', 'funcionarios.fora_mapa', 'funcionarios.restaurar', 'escalas.lideranca'], ci: { funcionario_id: 0 }, gestor: { username: 'admin.qa' } }, search: '?tab=funcionarios', navigate: () => {}, notify: () => {}, refreshStatus: () => {} }))
+    } finally {
+      delete globalThis.qaResources
+      delete globalThis.qaEditForm
+    }
+  }
+  const closed = renderEmployees(null)
+  assert.ok(closed.includes('>Adicionar funcionário</h2>') || closed.includes('Adicionar funcionário'), 'Funcionarios: formulario de adicionar na tela')
+  assert.doesNotMatch(closed, /data-dialog-backdrop/, 'Funcionarios: sem edicao aberta, nenhum dialogo')
+  const opened = renderEmployees({ id: 3, nome: 'Tecnico QA' })
+  const panel = opened.slice(opened.indexOf('data-dialog-backdrop'))
+  assert.match(opened, /<div class="fixed inset-0 z-\[60\][^"]*" data-dialog-backdrop="">/, 'Funcionarios: edicao no Dialog, acima dos modais')
+  assert.match(panel, /aria-modal="true" class="card relative my-auto w-full max-w-5xl border-cyan-500\/20" role="dialog" tabindex="-1">/, 'Funcionarios: role="dialog", aria-modal, largura e borda de antes')
+  assert.ok(panel.includes('<p class="section-eyebrow">Alteração auditada</p>') && panel.includes('>Editar funcionário</h2>'), 'Funcionarios: eyebrow e titulo')
+  assert.match(panel, /Dados atuais do CI carregados\./u, 'Funcionarios: descricao')
+  assert.equal((panel.match(/>Cancelar<\/button>/g) || []).length, 2, 'Funcionarios: Cancelar no cabecalho e no fim')
+  assert.ok(panel.includes('>Salvar alterações</button>'), 'Funcionarios: botao de salvar')
+  assert.ok(panel.includes('Fora do Mapa PA e da escala'), 'Funcionarios: campo so da edicao')
+  assert.doesNotMatch(opened, /aria-label="Cancelar edição"|fixed inset-0 z-50/u, 'Funcionarios: sem o fundo antigo (botao que fechava no clique, sem perguntar)')
+  assert.doesNotMatch(opened, /role="alertdialog"/, 'Funcionarios: o aviso de descarte so abre ao sair com o formulario sujo')
+
+  const adminSource = read('src/pages/AdminPage.jsx')
+  const tabSource = adminSource.slice(adminSource.indexOf('function EmployeesTab('), adminSource.indexOf('function UsersTab('))
+  assert.match(tabSource, /formState: \{ errors: createEmployeeErrors, isDirty: createEmployeeDirty \}/, 'Funcionarios: sujo do adicionar pelo React Hook Form')
+  assert.match(tabSource, /formState: \{ errors: editEmployeeErrors, isDirty: editEmployeeDirty \}/, 'Funcionarios: sujo do editar pelo React Hook Form')
+  assert.match(tabSource, /const createGuard = useUnsavedChangesGuard\(createEmployeeDirty\)/, 'Funcionarios: protecao propria do adicionar')
+  assert.match(tabSource, /const editGuard = useUnsavedChangesGuard\(Boolean\(editForm\) && editEmployeeDirty\)/, 'Funcionarios: protecao da edicao so com a edicao aberta')
+  assert.match(tabSource, /function edit\(item, trigger\) \{\s*editGuard\.requestLeave\(\(\) => openEdit\(item, trigger\)\)\s*\}/, 'Funcionarios: "Editar outro" com a edicao suja pergunta antes')
+  assert.match(tabSource, /function closeEdit\(\) \{\s*editGuard\.requestLeave\(\(\) => setEditForm\(null\)\)\s*\}/, 'Funcionarios: fechar a edicao pergunta com ela suja')
+  assert.match(tabSource, /function openEdit\(item, trigger\) \{\s*editTriggerRef\.current = trigger/, 'Funcionarios: guarda quem abriu')
+  assert.match(tabSource, /onClick=\{\(event\) => edit\(item, event\.currentTarget\)\} type="button">Editar<\/button>/, 'Funcionarios: o Editar passa pelo edit com quem abriu')
+  assert.match(tabSource, /initialFocusRef=\{editNameRef\}\s*onClose=\{closeEdit\}/, 'Funcionarios: foco inicial no Nome; Esc e clique fora pelo closeEdit')
+  assert.match(tabSource, /returnFocusRef=\{editTriggerRef\}/, 'Funcionarios: foco de volta a quem abriu')
+  assert.match(tabSource, /nameRef=\{editNameRef\}/, 'Funcionarios: o Nome da edicao recebe o ref do foco inicial')
+  assert.equal((tabSource.match(/onClick=\{closeEdit\} type="button">Cancelar<\/button>/g) || []).length, 2, 'Funcionarios: os dois Cancelar pelo closeEdit (pergunta)')
+  assert.doesNotMatch(tabSource, /onClick=\{\(\) => setEditForm\(null\)\}/, 'Funcionarios: nenhum botao fecha a edicao direto sem perguntar')
+  assert.match(tabSource, /<ConfirmDiscardDialog \{\.\.\.createGuard\.dialogProps\} \/>\s*<ConfirmDiscardDialog \{\.\.\.editGuard\.dialogProps\} \/>/, 'Funcionarios: um aviso de descarte para cada formulario')
+  assert.match(tabSource, /ACTION_FEEDBACK\.employeeCreated,\s*\(\) => resetCreateEmployee\(emptyEmployee\),/, 'Funcionarios: adicionar com sucesso limpa o formulario (deixa de estar sujo)')
+  assert.match(tabSource, /ACTION_FEEDBACK\.employeeUpdated,\s*\(\) => setEditForm\(null\),/, 'Funcionarios: salvar com sucesso fecha direto, sem perguntar; erro mantem o formulario')
+  const fieldsSource = adminSource.slice(adminSource.indexOf('function EmployeeFields('), adminSource.indexOf('const archiveStateLabels'))
+  assert.match(fieldsSource, /\{\.\.\.withFieldRef\(register\('nome'\), nameRef\)\}/, 'Funcionarios: o Nome continua registrado no React Hook Form e entrega o ref')
+  assert.match(adminSource, /ref: \(element\) => \{ field\.ref\(element\); if \(fieldRef\) fieldRef\.current = element \}/, 'Funcionarios: withFieldRef chama o ref do React Hook Form e o proprio')
 }
 
 console.log('Unsaved changes QA OK')
