@@ -3218,6 +3218,8 @@ O V1 entra junto com o item 2.
 
 **Correção na mutação do item 1 (registrada na revisão do item 2, responsável, 2026-10-30):** os 41/41 da mutação do item 1 tinham **um mutante mal construído**. O "navigate sem bloqueio" só definia a função de navegação, sem chamá-la, e morria por quebrar toda a navegação, não por faltar o bloqueio. Foi refeito chamando a navegação direto, sem o bloqueio: morre no `qa:unsaved-changes` e no roteiro de navegador (2 conferências, com o formulário sujo). A correção está aprovada.
 
+**Correção na peça do item 1 (registrada na revisão do X1 e do item 3, responsável, 2026-10-30):** o `beforeunload` passou a ter **um listener por formulário** (`bee0ec7`, `useUnsavedChangesGuard.ts`). Antes, a mesma função era registrada por todos: o navegador a guarda uma vez só, e com dois formulários sujos o primeiro a sair tirava o aviso de recarga do outro. Teste de regressão: `qa:unsaved-changes` e, no roteiro de navegador, "os dois sujos: dois beforeunload" e "os dois sujos, Descartar a edicao: fecha so a edicao, adicionar mantido".
+
 **17f, item 2 — Chamados críticos (B4 no novo e no editar, formulário pelo `Dialog`) e o V1 (roteiro de navegador versionado), 2026-10-29: entregue (`e45bc12`), aguardando revisão.**
 
 Arquivos:
@@ -3305,7 +3307,7 @@ Mesma largura e mesma borda vermelha de antes; o papel passou de `form` solto pa
 
 **Marcadores provisórios (pedido da revisão):** procurados nos documentos antes dos commits (`COMMIT_*`, `RESULTADO_*`, `HASH_*`, `TODO`, `XXX`, `FIXME`, `TBD`, `PREENCHER`, conflitos de merge): **nenhum sobrou**. Os únicos resultados são os modelos `XXXXXX` do `mktemp` no `DEPLOY_LINUX.md`, que são parte dos comandos.
 
-**17f, X1 (`6184d76`) e item 3 — Funcionários (`bee0ec7`), 2026-10-30: entregues, aguardando revisão (uma só, como pedido).**
+**17f, X1 (`6184d76`) e item 3 — Funcionários (`bee0ec7`), 2026-10-30: entregues e aprovados em 2026-10-30, com Y1 a Y7 (ver a revisão, abaixo).**
 
 Arquivos:
 - **X1:** `frontend/src/pages/CriticalIncidentsPage.jsx`, `frontend/src/components/ui/Dialog.jsx` (`headerLead`, `placement`) e `frontend/src/lib/dialogFocus.ts`.
@@ -3376,6 +3378,15 @@ Arquivos:
 - "Editar outro" sujo só é alcançável por script hoje (ver acima);
 - a mutação do item 3 rodou o roteiro só no bloco de Funcionários; o roteiro inteiro roda no código final (209/209);
 - `gitleaks` ausente na estação.
+
+**Revisão do X1 (`6184d76`) e do item 3 de Funcionários (`bee0ec7`, docs `2ed73d4`) (responsável, 2026-10-30): APROVADOS, com Y1 a Y7.**
+
+- O "Adicionar" de Funcionários sem botão de cancelar **fica como está**.
+- A correção do `beforeunload` por formulário foi apontada na revisão do item 1, para quem ler aquele item.
+
+**Z2 (médio), antes do item 4:** investigar a "faixa de 20 px". Medir com `elementFromPoint`, em pontos do topo (y = 2, 10 e 19) e das bordas, se o fundo de cada `Dialog` aberto (Chamados: novo, editar, Visualizar, Importar; Funcionários: editar; `ConfirmDiscardDialog`) cobre a janela inteira em 390 e 1366 px. Se algum não cobrir, passar o `Dialog` a renderizar num portal (`createPortal` para `document.body`), mantendo o foco preso, a pilha de diálogos, a devolução do foco, o `placement="end"` e o `my-auto`. O roteiro de navegador passa a conferir que, com qualquer `Dialog` aberto, os pontos do topo e das bordas caem no fundo ou no painel, nunca na página, com mutação. Se a causa for outra, explicar e corrigir no lugar certo. Registrar a medição antes e depois.
+
+**Próximo, na mesma revisão:** item 4 (Ausências e Escala). Parar para revisão depois do Z2 e do item 4 (uma revisão só). Sem push.
 
 ---
 
