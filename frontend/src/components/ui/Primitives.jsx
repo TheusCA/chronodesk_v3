@@ -1,11 +1,11 @@
 import { Icon } from './Icon'
 
-export function SectionHeader({ eyebrow, title, description, action = null, meta = null }) {
+export function SectionHeader({ eyebrow, title, description, action = null, meta = null, titleRef = null }) {
   return (
     <section className="section-header">
       <div className="min-w-0">
         {eyebrow && <p className="section-eyebrow">{eyebrow}</p>}
-        <h2 className="section-title">{title}</h2>
+        <h2 className="section-title" ref={titleRef} tabIndex={titleRef ? -1 : undefined}>{title}</h2>
         {description && <p className="section-description">{description}</p>}
       </div>
       {(action || meta) && (

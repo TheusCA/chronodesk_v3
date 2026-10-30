@@ -4,6 +4,9 @@ import { useQuery } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { useForm } from 'react-hook-form'
 import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
+import { DecisionConfirmDialog } from '../components/ui/DecisionConfirmDialog'
+import { useDecisionConfirm } from '../hooks/useDecisionConfirm'
+import { adjustmentTypeLabel } from '../lib/decisionConfirm'
 import { ConfirmActionDialog } from '../components/ui/ConfirmActionDialog'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
@@ -11,7 +14,7 @@ import { PartialMarker, PresenceBadge } from '../components/ui/Presence'
 import { useResource } from '../hooks/useResource'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { api, apiUrl, post, postForm } from '../lib/api'
-import { ACTION_FEEDBACK, decisionFeedback, importFeedback } from '../lib/actionFeedback'
+import { ACTION_FEEDBACK, importFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { reportFiltersSchema, scheduleRuleSchema } from '../lib/formSchemas'
@@ -94,17 +97,6 @@ function statusLabel(value) {
     absence: 'Ausência',
     no_schedule: 'Sem escala',
   }[value] || String(value || 'Não informado').replaceAll('_', ' ')
-}
-
-function adjustmentTypeLabel(value) {
-  return {
-    entry: 'Entrada',
-    lunch_out: 'Saída para almoço',
-    lunch_return: 'Retorno do almoço',
-    exit: 'Saída',
-    absence: 'Ausência',
-    other: 'Outro',
-  }[value] || 'Ajuste'
 }
 
 function weekdaySummary(weekdays = []) {
@@ -872,6 +864,8 @@ function WorkflowPage({ kind, session, notify }) {
     : { employee_id: ownEmployee, adjustment_date: today, adjustment_type: 'entry', correct_time: '08:00', recorded_time: '', justification: '' })
   const preview = overtime ? overtimePreview(form) : null
   const exportUrl = apiUrl(`${endpoint}${queryString({ ...filters, format: 'csv' })}`)
+  const pendingTitleRef = useRef(null)
+  const decision = useDecisionConfirm(notify, [resource.refresh])
 
   async function create(event) {
     event.preventDefault()
@@ -888,10 +882,6 @@ function WorkflowPage({ kind, session, notify }) {
         ? { ...form, reason: '', justification: '' }
         : { ...form, justification: '', recorded_time: '' }),
     )
-  }
-
-  async function decide(id, decision) {
-    await submit(() => post(endpoint, { action: 'decision', id, decision }), resource.refresh, notify, decisionFeedback(decision))
   }
 
   const items = resource.data?.items || []
@@ -929,8 +919,8 @@ function WorkflowPage({ kind, session, notify }) {
   function decisionContent(item) {
     return canApprove && item.status === 'pending' ? (
       <div className="flex flex-wrap gap-2">
-        <button className="table-action text-emerald-300" onClick={() => decide(item.id, 'approved')} type="button">Aprovar</button>
-        <button className="table-action text-red-300" onClick={() => decide(item.id, 'rejected')} type="button">Rejeitar</button>
+        <button className="table-action text-emerald-300" onClick={(event) => decision.ask(overtime ? 'overtime' : 'adjustment', item, 'approved', event.currentTarget, pendingTitleRef)} type="button">Aprovar</button>
+        <button className="table-action text-red-300" onClick={(event) => decision.ask(overtime ? 'overtime' : 'adjustment', item, 'rejected', event.currentTarget, pendingTitleRef)} type="button">Rejeitar</button>
       </div>
     ) : (
       <>
@@ -1046,7 +1036,7 @@ function WorkflowPage({ kind, session, notify }) {
         {items.length === 0 ? <EmptyState title={`Nenhum ${noun} encontrado`} description="Ajuste os filtros para consultar outro período ou crie uma nova solicitação." /> : (
           <>
             <section className="card">
-              <SectionHeader meta={<span className="status-badge status-warning">{pending.length} pendente(s)</span>} title="Pendentes de aprovação" />
+              <SectionHeader meta={<span className="status-badge status-warning">{pending.length} pendente(s)</span>} title="Pendentes de aprovação" titleRef={pendingTitleRef} />
               {pending.length === 0 ? <div className="mt-5"><InlineAlert tone="info" title="Nenhuma pendência neste filtro">Itens pendentes aparecerão aqui para decisão.</InlineAlert></div> : (
                 <>
                   <div className="mt-5 grid items-start gap-3 md:grid-cols-2 xl:hidden" data-request-list="">{renderCards(pending)}</div>
@@ -1073,6 +1063,7 @@ function WorkflowPage({ kind, session, notify }) {
           </>
         )}
       </OperationalShell>
+      <DecisionConfirmDialog {...decision.dialogProps} />
     </div>
   )
 }

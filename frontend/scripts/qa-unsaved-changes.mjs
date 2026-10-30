@@ -568,4 +568,64 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.match(read('src/pages/AbsencesPage.jsx'), /if \(formWasOpen\.current && !formOpen\) focusPageTitleIfLost\(document\)/, 'Ausencias: fechar o formulario nao deixa o foco no body')
 }
 
+// ---------------------------------------------------------------------------
+// 12. [17g] Aprovar e Rejeitar: a mesma confirmacao na linha, no cartao e na aba.
+// ---------------------------------------------------------------------------
+{
+  const { DECISION_ENDPOINTS, DECISION_WARNING, adjustmentTypeLabel, decisionDialogText } = await importSrc('lib/decisionConfirm.ts')
+  const { DecisionConfirmDialog } = await importSrc('components/ui/DecisionConfirmDialog.jsx')
+  assert.equal(DECISION_WARNING, 'Esta decisão não pode ser desfeita pelo sistema.', 'Texto do pedido')
+  assert.deepEqual(DECISION_ENDPOINTS, { overtime: 'portal/overtime.php', adjustment: 'portal/time_corrections.php' }, 'Endpoints de antes')
+  const overtimeItem = { id: 7, employee_name: 'Tecnico QA', work_date: '2026-10-28', start_time: '18:00:00', end_time: '20:30:00', total_minutes: 150 }
+  const adjustmentItem = { id: 8, employee_name: 'Tecnico QA', adjustment_date: '2026-10-27', adjustment_type: 'lunch_out', correct_time: '12:05:00' }
+  assert.deepEqual(decisionDialogText('overtime', overtimeItem, 'approved'), { title: 'Aprovar hora extra?', employee: 'Tecnico QA', detail: '28/10/2026, 18:00 - 20:30, total 2h 30min', confirmLabel: 'Aprovar', busyLabel: 'Aprovando...', confirmClassName: 'btn-primary' }, 'Hora extra, aprovar')
+  assert.deepEqual(decisionDialogText('overtime', overtimeItem, 'rejected'), { title: 'Rejeitar hora extra?', employee: 'Tecnico QA', detail: '28/10/2026, 18:00 - 20:30, total 2h 30min', confirmLabel: 'Rejeitar', busyLabel: 'Rejeitando...', confirmClassName: 'btn-danger' }, 'Hora extra, rejeitar')
+  assert.equal(decisionDialogText('adjustment', adjustmentItem, 'approved').title, 'Aprovar ajuste de ponto?', 'Ajuste, aprovar')
+  assert.equal(decisionDialogText('adjustment', adjustmentItem, 'rejected').title, 'Rejeitar ajuste de ponto?', 'Ajuste, rejeitar')
+  assert.equal(decisionDialogText('adjustment', adjustmentItem, 'approved').detail, '27/10/2026, Saída para almoço, horário correto 12:05', 'Ajuste: data, tipo e horario')
+  assert.equal(decisionDialogText('adjustment', { ...adjustmentItem, adjustment_type: 'absence', correct_time: null }, 'approved').detail, '27/10/2026, Ausência, horário correto não informado', 'Ajuste sem horario')
+  assert.equal(adjustmentTypeLabel('desconhecido'), 'Ajuste', 'Tipo desconhecido')
+  assert.equal(renderToStaticMarkup(h(DecisionConfirmDialog, { request: null })), '', 'Sem pedido, sem dialogo')
+  const dialog = renderToStaticMarkup(h(DecisionConfirmDialog, { request: { kind: 'overtime', item: overtimeItem, decision: 'approved' }, busy: false, onConfirm: () => {}, onCancel: () => {} }))
+  assert.match(dialog, /role="alertdialog"/, 'alertdialog')
+  assert.match(dialog, />Aprovar hora extra\?<\/h2>/, 'Titulo')
+  assert.ok(dialog.includes('>Tecnico QA</span>') && dialog.includes('28/10/2026, 18:00 - 20:30, total 2h 30min') && dialog.includes(DECISION_WARNING), 'Nome, detalhe e aviso na descricao (lida pelo leitor de tela)')
+  assert.match(dialog, /<button class="btn-primary" type="button">Aprovar<\/button><button class="btn-secondary" type="button">Cancelar<\/button>/, 'Botoes')
+  const rejecting = renderToStaticMarkup(h(DecisionConfirmDialog, { request: { kind: 'overtime', item: overtimeItem, decision: 'rejected' }, busy: true, onConfirm: () => {}, onCancel: () => {} }))
+  assert.match(rejecting, /<button class="btn-danger" disabled="" type="button">Rejeitando\.\.\.<\/button>/, 'Rejeitar em vermelho; enviando, desabilitado')
+
+  const hookSource = read('src/hooks/useDecisionConfirm.ts')
+  assert.match(hookSource, /action: \(\) => post\(DECISION_ENDPOINTS\[kind\], \{ action: 'decision', id: item\.id, decision \}\)/, 'Payload de antes')
+  assert.match(hookSource, /onSuccess: \(\) => setRequest\(null\)/, 'So fecha com sucesso')
+  assert.match(hookSource, /onError: \(\) => \{ for \(const refreshList of refresh\) void Promise\.resolve\(refreshList\(\)\)\.catch\(\(\) => \{\}\) \}/, 'Recusa: a lista atualiza por tras')
+  assert.match(hookSource, /return trigger\?\.isConnected \? trigger : sectionTitle\?\.current \?\? null/, 'Foco: o botao, ou o titulo da secao se ele saiu da lista')
+  assert.match(hookSource, /successMessage: decisionFeedback\(decision\)/, 'Aviso de sucesso de antes')
+
+  const operationalSource = read('src/pages/OperationalPages.jsx')
+  const workflowSource = operationalSource.slice(operationalSource.indexOf('function WorkflowPage('), operationalSource.indexOf('export function OvertimePage('))
+  assert.match(workflowSource, /const decision = useDecisionConfirm\(notify, \[resource\.refresh\]\)/, 'Linha e cartao: a mesma funcao')
+  for (const value of ['approved', 'rejected']) {
+    assert.ok(workflowSource.includes(`onClick={(event) => decision.ask(overtime ? 'overtime' : 'adjustment', item, '${value}', event.currentTarget, pendingTitleRef)}`), `Linha e cartao: ${value} pergunta antes`)
+  }
+  assert.equal((workflowSource.match(/\{decisionContent\(item\)\}/g) || []).length, 2, 'Linha e cartao usam o mesmo bloco de decisao')
+  assert.match(workflowSource, /<DecisionConfirmDialog \{\.\.\.decision\.dialogProps\} \/>/, 'Dialogo ligado')
+  assert.match(workflowSource, /title="Pendentes de aprovação" titleRef=\{pendingTitleRef\}/u, 'Titulo da secao recebe o foco')
+  assert.doesNotMatch(workflowSource, /action: 'decision'/, 'Nenhuma decisao direta em Horas extras e Correcao')
+
+  const adminSource = read('src/pages/AdminPage.jsx')
+  const approvalsSource = adminSource.slice(adminSource.indexOf('function ApprovalsTab('), adminSource.indexOf('function SettingsTab('))
+  assert.match(approvalsSource, /const decision = useDecisionConfirm\(notify, \[refresh, refreshStatus\]\)/, 'Aba: a mesma funcao')
+  for (const [kind, ref] of [['overtime', 'overtimeTitleRef'], ['adjustment', 'adjustmentTitleRef']]) {
+    for (const value of ['approved', 'rejected']) {
+      assert.ok(approvalsSource.includes(`decision.ask('${kind}', item, '${value}', event.currentTarget, ${ref})`), `Aba: ${kind} ${value} pergunta antes`)
+    }
+  }
+  assert.match(approvalsSource, /<DecisionConfirmDialog \{\.\.\.decision\.dialogProps\} \/>/, 'Aba: dialogo ligado')
+  assert.doesNotMatch(approvalsSource, /action: 'decision'/, 'Aba: nenhuma decisao direta')
+  assert.match(approvalsSource, /onApprove=\{\(\) => decidePause\(request\.id, 'aprovar'\)\} onReject=\{\(\) => decidePause\(request\.id, 'rejeitar'\)\}/, 'Pausas e reunioes sem confirmacao (decisao de 2026-10-29)')
+  for (const code of [hookSource, workflowSource, approvalsSource, read('src/components/ui/DecisionConfirmDialog.jsx')]) {
+    assert.doesNotMatch(code, /window\.confirm/, 'Sem window.confirm')
+  }
+}
+
 console.log('Unsaved changes QA OK')

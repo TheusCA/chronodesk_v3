@@ -2,10 +2,13 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useResource } from '../hooks/useResource'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
+import { useDecisionConfirm } from '../hooks/useDecisionConfirm'
 import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
+import { DecisionConfirmDialog } from '../components/ui/DecisionConfirmDialog'
 import { Dialog } from '../components/ui/Dialog'
 import { post } from '../lib/api'
-import { ACTION_FEEDBACK, decisionFeedback } from '../lib/actionFeedback'
+import { ACTION_FEEDBACK } from '../lib/actionFeedback'
+import { adjustmentTypeLabel } from '../lib/decisionConfirm'
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { archiveEffectsSummary, employeeArchiveState, matchesArchiveFilter } from '../lib/employeeArchive'
@@ -58,17 +61,6 @@ function workflowStatusLabel(value) {
   }[value] || String(value || 'Não informado').replaceAll('_', ' ')
 }
 
-function adjustmentTypeLabel(value) {
-  return {
-    entry: 'Entrada',
-    lunch_out: 'Saída para almoço',
-    lunch_return: 'Retorno do almoço',
-    exit: 'Saída',
-    absence: 'Ausência',
-    other: 'Outro',
-  }[value] || 'Ajuste'
-}
-
 function ApprovalActions({ onApprove, onReject }) {
   return (
     <div className="flex flex-wrap gap-2 lg:justify-end">
@@ -82,12 +74,13 @@ function ApprovalActions({ onApprove, onReject }) {
   )
 }
 
-function ApprovalSection({ title, count, children }) {
+function ApprovalSection({ title, count, titleRef = null, children }) {
   return (
     <section className="space-y-3">
       <SectionHeader
         meta={<span className="status-badge status-warning">{count} pendente(s)</span>}
         title={title}
+        titleRef={titleRef}
       />
       {count === 0 ? <EmptyState title="Nenhuma aprovação pendente" description="Não há itens desta categoria para decisão agora." /> : children}
     </section>
@@ -95,21 +88,18 @@ function ApprovalSection({ title, count, children }) {
 }
 
 function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
+  const overtimeTitleRef = useRef(null)
+  const adjustmentTitleRef = useRef(null)
+  const decision = useDecisionConfirm(notify, [refresh, refreshStatus])
+
+  // Pausas e reuniões ficam sem confirmação, por decisão de 2026-10-29: a aprovação
+  // de reunião do N1 é em tempo real e o efeito de um erro é reversível na operação.
   async function decidePause(id, action) {
     await perform(
       () => post(`${action}_pausa.php`, { funcionario_id: id }),
       [refresh, refreshStatus],
       notify,
       action === 'aprovar' ? ACTION_FEEDBACK.requestApproved : ACTION_FEEDBACK.requestRejected,
-    )
-  }
-
-  async function decideWorkflow(endpoint, id, decision) {
-    await perform(
-      () => post(endpoint, { action: 'decision', id, decision }),
-      [refresh, refreshStatus],
-      notify,
-      decisionFeedback(decision),
     )
   }
 
@@ -165,7 +155,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
         ))}
       </ApprovalSection>
 
-      <ApprovalSection count={overtime.length} title="Horas extras pendentes">
+      <ApprovalSection count={overtime.length} title="Horas extras pendentes" titleRef={overtimeTitleRef}>
         {overtime.map((item) => (
           <article className="approval-card" key={`overtime-${item.id}`}>
             <div className="min-w-0 flex-1">
@@ -183,12 +173,12 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
               <p className="mt-3 rounded-card border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400">{item.reason} - {item.justification}</p>
               <p className="mt-2 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
             </div>
-            <ApprovalActions onApprove={() => decideWorkflow('portal/overtime.php', item.id, 'approved')} onReject={() => decideWorkflow('portal/overtime.php', item.id, 'rejected')} />
+            <ApprovalActions onApprove={(event) => decision.ask('overtime', item, 'approved', event.currentTarget, overtimeTitleRef)} onReject={(event) => decision.ask('overtime', item, 'rejected', event.currentTarget, overtimeTitleRef)} />
           </article>
         ))}
       </ApprovalSection>
 
-      <ApprovalSection count={adjustments.length} title="Ajustes de ponto pendentes">
+      <ApprovalSection count={adjustments.length} title="Ajustes de ponto pendentes" titleRef={adjustmentTitleRef}>
         {adjustments.map((item) => (
           <article className="approval-card" key={`adjustment-${item.id}`}>
             <div className="min-w-0 flex-1">
@@ -206,12 +196,13 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
               <p className="mt-3 rounded-card border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400">{item.justification}</p>
               <p className="mt-2 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
             </div>
-            <ApprovalActions onApprove={() => decideWorkflow('portal/time_corrections.php', item.id, 'approved')} onReject={() => decideWorkflow('portal/time_corrections.php', item.id, 'rejected')} />
+            <ApprovalActions onApprove={(event) => decision.ask('adjustment', item, 'approved', event.currentTarget, adjustmentTitleRef)} onReject={(event) => decision.ask('adjustment', item, 'rejected', event.currentTarget, adjustmentTitleRef)} />
           </article>
         ))}
       </ApprovalSection>
         </>
       )}
+      <DecisionConfirmDialog {...decision.dialogProps} />
     </div>
   )
 }

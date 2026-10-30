@@ -180,7 +180,7 @@ const workflowSource = pageSource.slice(pageSource.indexOf('function WorkflowPag
 assert.match(workflowSource, /function renderRows\(rows\) \{[\s\S]*?<td>\{detailContent\(item\)\}<\/td>[\s\S]*?<td>\{decisionContent\(item\)\}<\/td>/, 'Linha da tabela com os blocos compartilhados')
 assert.match(workflowSource, /function renderCards\(rows\) \{[\s\S]*?\{detailContent\(item\)\}[\s\S]*?\{decisionContent\(item\)\}/, 'Cartao com os mesmos blocos da linha')
 const decisionSource = workflowSource.match(/function decisionContent\(item\) \{[\s\S]*?\n  \}/)?.[0] || ''
-assert.match(decisionSource, /onClick=\{\(\) => decide\(item\.id, 'approved'\)\}[\s\S]*onClick=\{\(\) => decide\(item\.id, 'rejected'\)\}/, 'Aprovar e Rejeitar chamam a mesma decisao, na linha e no cartao')
+assert.match(decisionSource, /decision\.ask\(overtime \? 'overtime' : 'adjustment', item, 'approved', event\.currentTarget, pendingTitleRef\)[\s\S]*decision\.ask\(overtime \? 'overtime' : 'adjustment', item, 'rejected', event\.currentTarget, pendingTitleRef\)/, 'Aprovar e Rejeitar pedem a mesma confirmacao, na linha e no cartao (17g)')
 assert.doesNotMatch(workflowSource, /\bconfirm\(|\balert\(|\bprompt\(/, 'Sem dialogo do navegador nas decisoes')
 
 const srcHref = new URL('../src/', import.meta.url).href

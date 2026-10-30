@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChrome, openPage, sleep } from './lib/chrome.mjs'
-import { FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, startMockServer } from './lib/mock-server.mjs'
+import { ALREADY_DECIDED, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, startMockServer } from './lib/mock-server.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const appArg = process.argv.indexOf('--app')
@@ -1325,6 +1325,187 @@ async function focusFallback(page, port, mock) {
   }
 }
 
+// 11. [17g] Aprovar e Rejeitar: linha, cartao e aba Aprovacoes, pela mesma confirmacao.
+const DECISION_WARNING = 'Esta decisão não pode ser desfeita pelo sistema.'
+const OVERTIME_API = 'portal/overtime.php'
+const ADJUSTMENT_API = 'portal/time_corrections.php'
+const APPROVAL_SECTION = (title) => `[...document.querySelectorAll('main h2')].find((h) => h.textContent === ${JSON.stringify(title)}).closest('.section-header').parentElement`
+const DECISION_SCREENS = [
+  { name: 'Horas extras, linha', path: '/horas-extras', width: 1366, api: OVERTIME_API, noun: 'hora extra', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['18:00 - 20:00', 'total 2h 00min'] },
+  { name: 'Horas extras, cartao', path: '/horas-extras', width: 390, api: OVERTIME_API, noun: 'hora extra', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['18:00 - 20:00', 'total 2h 00min'] },
+  { name: 'Correcao de ponto, linha', path: '/correcao-ponto', width: 1366, api: ADJUSTMENT_API, noun: 'ajuste de ponto', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['Entrada', 'horário correto 08:00'] },
+  { name: 'Correcao de ponto, cartao', path: '/correcao-ponto', width: 1024, api: ADJUSTMENT_API, noun: 'ajuste de ponto', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['Entrada', 'horário correto 08:00'] },
+  { name: 'Aba Aprovacoes, horas extras', path: '/admin?tab=aprovacoes', width: 1366, api: OVERTIME_API, noun: 'hora extra', section: 'Horas extras pendentes', scope: APPROVAL_SECTION('Horas extras pendentes'), details: ['18:00 - 20:00', 'total 2h 00min'] },
+  { name: 'Aba Aprovacoes, ajustes', path: '/admin?tab=aprovacoes', width: 390, api: ADJUSTMENT_API, noun: 'ajuste de ponto', section: 'Ajustes de ponto pendentes', scope: APPROVAL_SECTION('Ajustes de ponto pendentes'), details: ['Entrada', 'horário correto 08:00'] },
+]
+const DECISION_STATE = `(() => {
+  const dialog = ${ALERT}
+  const active = document.activeElement
+  return {
+    titulo: dialog?.querySelector('h2')?.textContent ?? null,
+    texto: dialog?.textContent ?? '',
+    modal: dialog?.getAttribute('aria-modal') ?? null,
+    descrito: !!dialog && document.getElementById(dialog.getAttribute('aria-describedby') || 'x')?.textContent.includes(${JSON.stringify(DECISION_WARNING)}),
+    foco: !active || active === document.body ? 'body' : (active.textContent || '').trim(),
+    dialogos: document.querySelectorAll('[data-dialog-backdrop]').length,
+    keydown: (getEventListeners(document).keydown || []).length,
+    travado: document.body.style.overflow,
+    habilitados: dialog ? [...dialog.querySelectorAll('button')].filter((b) => !b.disabled).length : null,
+    botoes: dialog ? [...dialog.querySelectorAll('button')].map((b) => b.textContent.trim()).join('|') : null,
+    aviso: ${TOAST}?.textContent ?? null,
+    aviso_erro: ${TOAST}?.getAttribute('role') === 'alert',
+  }
+})()`
+
+async function decisionConfirm(page, port, mock) {
+  const decisionPosts = () => mock.requests.filter((r) => r.method === 'POST' && r.body?.action === 'decision')
+  for (const screen of DECISION_SCREENS) {
+    const { name, path, width, api, noun, section, scope, details } = screen
+    const expectDecision = (label, expected) => expectState(page, `${name}, ${label}`, expected, DECISION_STATE)
+    const BTN = (text, index = 0) => `[...${scope}.querySelectorAll('button')].filter((b) => b.getClientRects().length && b.textContent.trim() === ${JSON.stringify(text)})[${index}]`
+    const CONFIRM = (text) => `[...${ALERT}.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`
+    const pendingCount = () => page.evaluate(`[...${scope}.querySelectorAll('button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Aprovar').length`)
+    const open = async () => {
+      mock.restoreDecisions()
+      await goto(page, port, path, width)
+      await page.waitFor(`!!document.querySelector('main h2') && !!${BTN('Aprovar')}`)
+      await sleep(150)
+    }
+
+    // Abrir: nada e enviado antes de confirmar.
+    await open()
+    const startPosts = decisionPosts().length
+    await page.click(BTN('Aprovar'))
+    await expectDecision('Aprovar, abrir: role="alertdialog", foco em "Cancelar", janela travada', { titulo: `Aprovar ${noun}?`, modal: 'true', foco: 'Cancelar', keydown: 1, dialogos: 1, travado: 'hidden', botoes: 'Aprovar|Cancelar', descrito: true })
+    await expectDecision('Aprovar, texto: nome, data, detalhe e o aviso de que nao se desfaz', { texto: (value) => [ 'Tecnico 01 Sobrenome', '28/10/2026', ...details, DECISION_WARNING].every((part) => value.includes(part)) })
+    await page.press('Tab')
+    await expectDecision('Tab no ultimo vai ao primeiro', { foco: 'Aprovar' })
+    await page.press('Tab', true)
+    await expectDecision('Shift+Tab volta ao "Cancelar"', { foco: 'Cancelar' })
+    await page.press('Escape')
+    await expectDecision('Aprovar, Esc: fecha, foco volta ao botao', { titulo: null, foco: 'Aprovar', dialogos: 0, keydown: 0, travado: '' })
+    report(`${name}, Esc: e o botao da mesma linha`, await page.evaluate(`document.activeElement === ${BTN('Aprovar')}`))
+    await page.click(BTN('Aprovar'))
+    await page.clickAt(5, 450)
+    await expectDecision('Aprovar, clique fora: fecha, foco volta', { titulo: null, foco: 'Aprovar', dialogos: 0 })
+    await page.click(BTN('Rejeitar'))
+    await expectDecision('Rejeitar, abrir: titulo e botao proprios, foco em "Cancelar"', { titulo: `Rejeitar ${noun}?`, foco: 'Cancelar', botoes: 'Rejeitar|Cancelar', texto: (value) => value.includes(DECISION_WARNING) })
+    await page.click(CONFIRM('Cancelar'))
+    await expectDecision('Rejeitar, "Cancelar": fecha, foco volta ao "Rejeitar"', { titulo: null, foco: 'Rejeitar', dialogos: 0 })
+    report(`${name}, Esc, clique fora e "Cancelar": nenhum POST`, decisionPosts().length === startPosts)
+
+    // Confirmar: um POST por decisao, com o payload de antes.
+    const pendingBefore = await pendingCount()
+    await page.click(BTN('Rejeitar'))
+    await page.click(CONFIRM('Rejeitar'))
+    await page.waitFor(`!${ALERT}`)
+    await sleep(200)
+    const rejected = decisionPosts().at(-1)
+    report(`${name}, Rejeitar confirmado: um POST, no endpoint certo, payload de antes`, decisionPosts().length === startPosts + 1 && rejected.key === api && JSON.stringify(rejected.body) === JSON.stringify({ action: 'decision', id: 1, decision: 'rejected' }), JSON.stringify(rejected?.body))
+    await expectDecision('Rejeitar confirmado: fecha, aviso de sucesso, destrava, foco no titulo da secao', { titulo: null, dialogos: 0, keydown: 0, travado: '', foco: section, aviso: (value) => value?.includes('Solicitação rejeitada com sucesso.'), aviso_erro: false })
+    report(`${name}, Rejeitar confirmado: a solicitacao sai da lista de pendentes`, (await pendingCount()) === pendingBefore - 1)
+    // Sem dialogo, o aviso fica embaixo, como sempre: no fim da pagina, no celular, cobre o botao ate fechar.
+    await page.evaluate(`${TOAST}?.querySelector('[aria-label="Fechar mensagem"]').click()`)
+    await page.click(BTN('Aprovar'))
+    await page.click(CONFIRM('Aprovar'))
+    await page.waitFor(`!${ALERT}`)
+    await sleep(200)
+    const approved = decisionPosts().at(-1)
+    report(`${name}, Aprovar confirmado: payload de antes`, approved.key === api && JSON.stringify(approved.body) === JSON.stringify({ action: 'decision', id: 2, decision: 'approved' }), JSON.stringify(approved?.body))
+    await expectDecision('Aprovar confirmado: aviso de sucesso, foco no titulo da secao', { dialogos: 0, foco: section, aviso: (value) => value?.includes('Solicitação aprovada com sucesso.') })
+
+    // Decidida por outra pessoa enquanto a tela estava aberta.
+    await open()
+    mock.decideElsewhere(api, 1)
+    await page.click(BTN('Aprovar'))
+    await page.click(CONFIRM('Aprovar'))
+    await page.waitFor(`(${TOAST}?.textContent || '').includes(${JSON.stringify(ALREADY_DECIDED)})`)
+    await sleep(250)
+    await expectState(page, `${name}, ja decidida por outra pessoa: aviso por cima do dialogo`, { aviso: true, centro: true, fechar: true, z: '70' }, TOAST_STATE)
+    await expectDecision('ja decidida por outra pessoa: dialogo aberto, foco em "Cancelar", aviso de erro', { titulo: `Aprovar ${noun}?`, foco: 'Cancelar', aviso_erro: true, habilitados: 2 })
+    report(`${name}, ja decidida por outra pessoa: a lista atualiza por tras do dialogo`, (await pendingCount()) === 1)
+    await page.press('Escape')
+    await expectDecision('ja decidida por outra pessoa, Esc: fecha, o botao saiu da lista, foco no titulo da secao', { titulo: null, dialogos: 0, foco: section })
+
+    // Outras recusas do servidor: o dialogo fica aberto e da para tentar de novo.
+    for (const [status, message, text] of [
+      [409, 'Nao e permitido aprovar o proprio lancamento.', 'proprio lancamento'],
+      [403, 'Apenas gestores podem decidir lancamentos.', null],
+      [500, 'Nao foi possivel concluir a operacao.', 'Nao foi possivel'],
+    ]) {
+      await open()
+      mock.refuseDecision(api, 1, status, message)
+      const before = decisionPosts().length
+      await page.click(BTN('Rejeitar'))
+      await page.click(CONFIRM('Rejeitar'))
+      await page.waitFor(`${TOAST}?.getAttribute('role') === 'alert'`)
+      await sleep(250)
+      await expectState(page, `${name}, recusa ${status}: aviso por cima do dialogo`, { aviso: true, centro: true, fechar: true, z: '70' }, TOAST_STATE)
+      await expectDecision(`recusa ${status}: dialogo aberto, foco em "Cancelar", mensagem do servidor`, { titulo: `Rejeitar ${noun}?`, foco: 'Cancelar', aviso_erro: true, habilitados: 2, aviso: (value) => !text || value?.includes(text) })
+      report(`${name}, recusa ${status}: nada muda na lista`, (await pendingCount()) === 2)
+      await page.click(CONFIRM('Rejeitar'))
+      await sleep(350)
+      report(`${name}, recusa ${status}, tentar de novo: outro POST`, decisionPosts().length === before + 2)
+      await page.click(CONFIRM('Cancelar'))
+      await expectDecision(`recusa ${status}, "Cancelar": fecha, foco volta ao "Rejeitar"`, { titulo: null, foco: 'Rejeitar', dialogos: 0 })
+    }
+
+    // Durante o envio: um clique so, e Esc ou clique fora nao fecham.
+    await open()
+    mock.setDecisionDelay(900)
+    const beforeBusy = decisionPosts().length
+    await page.click(BTN('Aprovar'))
+    await page.click(CONFIRM('Aprovar'))
+    await expectDecision('enviando: botoes desabilitados, rotulo de envio', { botoes: 'Aprovando...|Cancelar', habilitados: 0 })
+    await page.press('Escape')
+    await page.clickAt(5, 450)
+    await expectDecision('enviando, Esc e clique fora: nao fecha', { titulo: `Aprovar ${noun}?`, dialogos: 1 })
+    await page.waitFor(`!${ALERT}`)
+    await sleep(200)
+    report(`${name}, enviando: um POST so`, decisionPosts().length === beforeBusy + 1)
+    mock.setDecisionDelay(0)
+
+    // Fundo do dialogo cobre a janela (Z2).
+    await open()
+    await page.click(BTN('Aprovar'))
+    await expectCoverage(page, `${width} px, ${name}`)
+    await page.press('Escape')
+  }
+
+  // Ultima decisao da aba: as secoes somem; o foco vai ao titulo da pagina.
+  mock.restoreDecisions()
+  await goto(page, port, '/admin?tab=aprovacoes')
+  await page.waitFor(`!!${ROW_BUTTON('Aprovar')}`)
+  const decideFirst = async (title, text) => {
+    const scope = APPROVAL_SECTION(title)
+    await page.click(`[...${scope}.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`)
+    await page.click(`[...${ALERT}.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`)
+    await page.waitFor(`!${ALERT}`)
+    await sleep(200)
+  }
+  await decideFirst('Horas extras pendentes', 'Aprovar')
+  await decideFirst('Horas extras pendentes', 'Rejeitar')
+  await decideFirst('Ajustes de ponto pendentes', 'Aprovar')
+  await page.click(ROW_BUTTON('Aprovar'))
+  report('Aba Aprovacoes, pausa com pendencias de outro tipo: Aprovar nao pergunta', !(await page.evaluate(`!!${ALERT}`)))
+  await sleep(300)
+  await decideFirst('Ajustes de ponto pendentes', 'Rejeitar')
+  await expectState(page, 'Aba Aprovacoes, ultima decisao: as secoes somem, foco no titulo da pagina', { titulo_da_pagina: true, body: false, dialogos: 0 }, FOCUS_STATE)
+
+  // Pausas e reunioes: sem confirmacao, como decidido.
+  for (const [text, endpoint] of [['Aprovar', 'aprovar_pausa.php'], ['Rejeitar', 'rejeitar_pausa.php']]) {
+    mock.restoreDecisions()
+    await goto(page, port, '/admin?tab=aprovacoes')
+    await page.waitFor(`!!${ROW_BUTTON(text)}`)
+    const before = mock.requests.filter((r) => r.key === endpoint).length
+    const scope = APPROVAL_SECTION('Pausas/Reuniões pendentes')
+    await page.click(`[...${scope}.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`)
+    await sleep(300)
+    report(`Aba Aprovacoes, pausa, ${text}: sem dialogo, POST na hora`, !(await page.evaluate(`!!${ALERT}`)) && mock.requests.filter((r) => r.key === endpoint).length === before + 1)
+  }
+  mock.restoreDecisions()
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -1358,6 +1539,8 @@ try {
   await scrollLock(page, mock.port)
   console.log('== Foco sem destino (BB3)')
   await focusFallback(page, mock.port, mock)
+  console.log('== Aprovar e Rejeitar (17g)')
+  await decisionConfirm(page, mock.port, mock)
 } catch (error) {
   failed++
   console.log(`FALHOU  execucao interrompida: ${error.message}`)
