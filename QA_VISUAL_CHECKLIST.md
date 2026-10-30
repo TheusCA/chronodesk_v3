@@ -121,7 +121,9 @@ Roteiro versionado: `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`. F
   - [ ] Chamados criticos, Visualizar e Importar planilha: abrir, Esc, clique fora e Fechar sem perguntar (nao ha protecao de alteracoes nestes dois); foco inicial, preso e devolvido a quem abriu; preview do arquivo, reabrir sem a escolha anterior e confirmar; 390 px.
   - [ ] Funcionarios, editar: cada forma de sair, limpo e sujo; cadastros variados abertos e fechados sem contar como sujo; sujo que acompanha texto, select e caixa de marcar; foco inicial no Nome, preso e devolvido ao Editar da linha; erro do servidor; salvar; "Editar outro" com o formulario sujo; menu, voltar, "Sair" e recarregar; 390 px; Lideranca com o "Fora do Mapa PA" desabilitado.
   - [ ] Funcionarios, adicionar: limpo sem perguntar; sujo em aba, menu, voltar, "Sair" e recarregar; erro do servidor; sucesso limpando; os dois formularios sujos, cada um com a sua protecao.
-- A cada tela que receber a protecao (Ausencias, Escala), o roteiro ganha o bloco dela.
+  - [ ] Ausencias: novo e editar, limpo e sujo; periodos variados abertos sem contar como sujo; "Editar outra" sujo com clique real na lista; cancelar outra ausencia e a propria; erro do servidor; sucesso fechando; menu, voltar, "Sair" e recarregar.
+  - [ ] Escala: regras variadas abertas sem contar como sujo; "Editar outra" sujo; "Remover regra" pelo Dialog (Esc, clique fora, Cancelar, erro, sucesso, formulario sujo mantido); Historico em 390 px (rola e foca o titulo; Fechar devolve o foco), sem mudanca em 768 e 1366 px.
+  - [ ] Fundo dos dialogos: em 390 e 1366 px, com a pagina no topo e rolada, os 14 pontos do topo e das bordas caem no fundo ou no painel, nunca na pagina; clique real na faixa do topo fecha o dialogo.
 
 ## Escalas de Sabado
 

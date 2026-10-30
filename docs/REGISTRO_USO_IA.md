@@ -988,6 +988,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Servidor simulado e dados ficticios. Aceitar o aviso do navegador ao recarregar nao exercitado. "Editar outro" sujo so e alcancavel por script hoje: pela tela, o fundo cobre a lista e o Tab nao sai do dialogo. Faixa de 20 px no topo sem o fundo, igual a antes, sem causa investigada. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Responsavel, 2026-10-30: **X1 e item 3 aprovados**, com Y1 a Y7; o "Adicionar" de Funcionarios sem botao de cancelar fica como esta. Pedido o **Z2 (medio)**, antes do item 4: investigar a faixa de 20 px do fundo dos dialogos, medir com `elementFromPoint` e, se o fundo nao cobrir a janela, renderizar o `Dialog` em portal, com conferencia no roteiro e mutacao. |
 
+### Lote 17f + 17g — Z2 (fundo dos dialogos) e item 4 (Ausencias e Escala) — 2026-10-30
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Z2: investigar a faixa de 20 px do fundo dos dialogos e corrigir a causa. Item 4: protecao contra perda de alteracoes nos formularios de ausencia e de regra, inclusive "Editar outra"; `window.confirm` de "Remover regra" trocado pelo `Dialog`; no celular, abrir o Historico leva ate o painel e move o foco para o titulo. |
+| **Branch e commits** | `3f9c924` (aprovacao do X1 e do item 3), `d97ad7f` (Z2), `a4337bc` (item 4) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/components/ui/Dialog.jsx` (portal para o `body`); `frontend/src/pages/AbsencesPage.jsx`; `frontend/src/pages/OperationalPages.jsx` (`SchedulePage`); `frontend/scripts/qa-unsaved-changes.mjs`; `frontend/scripts/qa-employee-form.mjs`, `qa-calendar-presence.mjs` e `qa-schedule-rules.mjs` (atualizados de forma deliberada); `frontend/scripts/browser/qa-unsaved-changes-browser.mjs` e `lib/mock-server.mjs`; `QA_VISUAL_CHECKLIST.md`. |
+| **Decisoes de implementacao** | Oito, a aprovar (desenho 9.11, AA1 a AA8): portal so com `document` definido; `isDirty` sem conferir se o formulario esta aberto; cancelar a propria ausencia fecha sem perguntar; "Remover regra" fecha ao terminar; remover com o formulario sujo o mantem; foco no titulo da lista depois de remover; celular abaixo de 768 px, com "Fechar" devolvendo o foco; excecao e importacao fora da protecao. |
+| **Validacao executada pela IA** | Medicao com `elementFromPoint`, 28 casos: antes, fundo em y = 20 e 5 de 14 pontos no fundo ou no painel; depois, y = 0 e 14 de 14. Causa confirmada: `margin-top: 20px` vindo do `space-y-5` do pai. Roteiro de navegador **371/371**, direto e pelo `test-local.ps1 -SkipHttp -Browser`. Mutacao do Z2 **6/6** e do item 4 **39/39** (a primeira rodada deu 38/39, e o roteiro ganhou a conferencia que faltava). 19 `qa:*`, lint, typecheck e build em pasta temporaria. |
+| **Limitacoes declaradas** | Servidor simulado e dados ficticios. Aceitar o aviso do navegador ao recarregar nao exercitado. Foco no `body` depois de remover a ultima regra e ao fechar o formulario de Ausencias, pelo codigo, sem exercicio no roteiro. Esc e clique fora durante a remocao so com conferencia no codigo. Modais antigos de Documentacao, Escalas de Sabado e Mapa PA, com a mesma faixa pela leitura do codigo: nao medidos nem alterados. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do Z2 e do item 4 do lote 17f + 17g (uma so). |
+
 ---
 
 ## 5. Responsabilidade

@@ -3388,6 +3388,64 @@ Arquivos:
 
 **Próximo, na mesma revisão:** item 4 (Ausências e Escala). Parar para revisão depois do Z2 e do item 4 (uma revisão só). Sem push.
 
+**17f, Z2 (`d97ad7f`) e item 4 — Ausências e Escala (`a4337bc`), 2026-10-30: entregues, aguardando revisão (uma só, como pedido).**
+
+**Z2, fundo dos diálogos.** Causa medida: o `Dialog` era filho de um `space-y-5`, e a margem de cima dessa classe também desloca um elemento `fixed`. No navegador, o fundo do Importar tinha `margin-top: 20px`, `top: 0px` e começava em y = 20. Nos 20 px de cima, o clique alcançava a página. Correção: `createPortal` para `document.body`.
+
+Medição com `elementFromPoint`, 14 pontos em cada caso (y = 2, 10 e 19 em três colunas; meio e fim da altura nas duas bordas; meio do fim), em 390 e 1366 px, com a página no topo e rolada até o fim:
+
+| Diálogo | Antes: fundo (topo a fim) | Antes: pontos no fundo ou no painel | Depois: fundo | Depois: pontos |
+|---|---|---|---|---|
+| Chamados: novo, editar, Visualizar, Importar | y = 20 a 900 | 5 de 14 (os 9 do topo caem na página) | y = 0 a 900 | 14 de 14 |
+| Chamados: `ConfirmDiscardDialog` | y = 20 a 900 | 5 de 14 | y = 0 a 900 | 14 de 14 |
+| Funcionários: editar | y = 20 a 900 | 5 de 14 | y = 0 a 900 | 14 de 14 |
+| Funcionários: `ConfirmDiscardDialog` | y = 20 a 900 | 5 de 14 | y = 0 a 900 | 14 de 14 |
+
+São 28 medições antes e 28 depois, com o mesmo resultado nas duas larguras e nas duas posições de rolagem. Em 1366 px, a largura do fundo vai até 1351 px, porque a barra de rolagem da janela fica fora dele, antes e depois.
+
+O que muda na tela, com a mesma largura de todos os painéis:
+- painéis altos e painéis laterais sobem 20 px; o Importar, colado no topo, fica 20 px mais alto (880 → 900 px em 900 px de janela);
+- painéis centralizados (Visualizar, editar funcionário em 1366 px) sobem 10 px.
+
+**Item 4.** Arquivos: `frontend/src/pages/AbsencesPage.jsx` e `frontend/src/pages/OperationalPages.jsx` (`SchedulePage`).
+- **Ausências:** proteção no formulário de novo e editar. "Fechar" e "Cancelar edição" perguntam quando sujo; "Editar" de outra linha, também. Salvar com sucesso fecha sem perguntar; erro do servidor mantém os dados e o formulário sujo.
+- **Escala, regra:** a mesma proteção. O formulário não tem botão de fechar: as saídas são "Editar" de outra regra, menu, voltar, "Sair" e recarregar.
+- **Remover regra:** o `window.confirm` virou `Dialog` (`alertdialog`), com o nome do colaborador na pergunta, foco em "Cancelar", Esc e clique fora cancelando, foco devolvido ao botão. O payload não mudou. O inventário de `window.confirm` do `qa:employee-form` e o `qa:calendar-presence` foram atualizados de forma deliberada: `OperationalPages.jsx` agora tem zero.
+- **Histórico, abaixo de 768 px:** ao abrir, a tela rola até o título do painel e o foco vai para ele; o título fica a cerca de 112 px do topo. "Fechar" devolve o foco ao botão de quem abriu. Com outra pessoa, a rolagem e o foco se repetem. De 768 px para cima, abrir não rola nem move o foco.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| AA1 | Portal só com `document` definido (`typeof document === 'undefined' ? backdrop : createPortal(...)`) | O `renderToStaticMarkup` dos `qa:*`, no Node, não aceita portal. O app não renderiza no servidor: esse ramo só serve ao QA. Eventos do React continuam subindo pela mesma árvore, e a pilha de diálogos, o foco e o `z-[60]` não mudaram |
+| AA2 | Em Ausências, `useUnsavedChangesGuard(isDirty)` sem conferir se o formulário está aberto | Abrir, fechar e salvar passam por `reset`: fechado, não fica sujo. Em Funcionários a conferência existe porque a edição fecha sem `reset` |
+| AA3 | Cancelar pela linha a ausência que está sendo editada fecha o formulário **sem perguntar** | A linha já pede confirmação, e a ausência cancelada não pode mais ser salva. Cancelar outra ausência mantém o formulário |
+| AA4 | "Remover regra" fecha ao terminar, com sucesso ou com erro; Esc e clique fora não fecham durante o envio | O aviso de erro do sistema (`z-50`) fica abaixo do diálogo (`z-[60]`): com o diálogo aberto, a mensagem não apareceria |
+| AA5 | Remover uma regra com o formulário **sujo** mantém o formulário, mesmo sendo do mesmo colaborador; limpo, esvazia como antes | Remover não é descartar: o rascunho pode virar a regra nova |
+| AA6 | Depois de remover, o foco vai para o título "Regras vigentes e agendadas" | O botão que abriu saiu da lista junto com a linha |
+| AA7 | "Celular" é abaixo de 768 px (`md` do Tailwind), e "Fechar" devolve o foco em todas as larguras | O pedido fala em celular; os cartões vão até 1279 px, então 768 a 1279 px podem ser estendidos depois. Devolver o foco é consequência de movê-lo: sem isso, "Fechar" deixaria o foco no `body` |
+| AA8 | "Exceção por data" e "Importar planilha de regras" da Escala ficam **fora** da proteção | O pedido cita os formulários de ausência e de regra. Exceção digitada e não salva se perde sem aviso ao sair da tela |
+
+**Validação executada pela IA:**
+- **Roteiro de navegador 371/371** na tela real, com servidor simulado e dados fictícios, direto e por `test-local.ps1 -SkipHttp -Browser`: 12 de navegação, 60 de Chamados, 28 de Visualizar e Importar, 109 de Funcionários, 47 de Ausências, 54 de Escala, 61 do fundo dos diálogos. As 209 anteriores continuam passando em portal, o que cobre foco preso, pilha, devolução do foco, `placement="end"` e `my-auto`. O bloco do fundo também cobre o aviso de descarte de Ausências e Escala e o "Remover regra", e clica de verdade em y = 10.
+- **Mutação do Z2 6/6**, todos mortos no `qa:unsaved-changes`. Cinco também no roteiro (fora do portal derrubou 43 conferências; portal no `#root`, 14). O sexto, `z-20` no lugar de `z-[60]`, sobrevive no roteiro: em portal, o `isolate` da `.portal-tech-shell` já deixa toda a página abaixo do fundo, então esse valor não tem efeito visível hoje.
+- **Mutação do item 4 39/39.** 35 mortos no `qa:unsaved-changes`, 37 no roteiro. A primeira rodada deu 38/39: o mutante "mesmo botão não fecha o Histórico" sobreviveu, o roteiro ganhou a conferência em 768 e 1366 px, e ele morreu (2 falhas). Quatro morrem só no roteiro ("não fecha ao terminar", "sem o nome", "não guarda quem abriu", "mesmo botão não fecha"); dois só no QA ("volta o `window.confirm`", que travaria o navegador, e "fecha durante a remoção", que o servidor simulado responde rápido demais para exercitar). Nesta mutação, o roteiro rodou só os blocos de Ausências e Escala.
+- 19 `qa:*`, lint sem aviso novo, typecheck e build em pasta temporária. Prints conferidos, fora do repositório.
+- Chunks: Ausências 15,28 → 15,40 kB; Operacional 104,08 → 105,30 kB; Chamados 25,40 → 25,36 kB; Admin 42,83 → 42,79 kB; principal 203,48 → 203,44 kB.
+
+**Achados fora do pedido, sem mudança:**
+- **Modais antigos** de Documentação, Escalas de Sábado e Mapa PA usam `fixed inset-0` e são filhos de `space-y-5`. Pela leitura do código, têm a mesma faixa de 20 px. **Não medi**: o servidor simulado não abre esses modais.
+- **Cabeçalho "sticky":** nos prints, ele some ao rolar a página. O `overflow-x-hidden` da `.portal-tech-shell` também recorta o eixo vertical, e o `sticky` passa a valer dentro dela, que não rola. Por isso o `scroll-mt-28` do Histórico hoje só dá folga do topo.
+- **Sem trava de rolagem:** com um diálogo aberto, a barra de rolagem da janela continua disponível, como antes. Nenhum clique na faixa do topo alcança a página, mas a página de trás ainda pode rolar.
+- **"Editar" no celular:** em Ausências e na regra, a tela não vai até o formulário, que fica no alto. Comportamento anterior.
+
+**Limitações declaradas:**
+- servidor simulado e dados fictícios, sem o backend real; aceitar o aviso do navegador ao recarregar continua não exercitado;
+- pelo código, sem exercício no roteiro: remover a **última** regra deixa o foco no `body`, porque o título sai da tela; fechar o formulário de Ausências deixa o foco no `body`, porque o botão que o fechou some (limpo, já era assim);
+- "voltar" com o formulário sujo foi conferido entrando pelo menu; entrando direto pela URL, o voltar sai do app e cai no aviso do próprio navegador;
+- Esc e clique fora durante a remoção só têm conferência no código;
+- `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências
