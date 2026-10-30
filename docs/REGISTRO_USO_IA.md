@@ -976,6 +976,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Servidor simulado e dados ficticios. Roteiro de navegador opcional. Visualizar e Importar seguem com os modais antigos. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Responsavel, 2026-10-30: **item 2 e V1 aprovados**, com W1 a W5; W6 com o ajuste **X1 (baixo)**: Visualizar e Importar planilha pelo `Dialog`, sem a protecao de alteracoes, em commit proprio antes do item 3. Biblioteca de DOM: nao adotar. **`-Browser` passa a ser obrigatorio antes do deploy unico**, na estacao, sobre o commit que vai ser gravado (pendencia 16 e `QA_VISUAL_CHECKLIST.md`). Marcadores provisorios procurados nos docs: nenhum. Registro em `02d18af`. |
 
+### Lote 17f + 17g — X1 (Visualizar e Importar de Chamados criticos) e item 3 (Funcionarios) — 2026-10-30
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | X1: Visualizar e Importar planilha pelo `Dialog`, sem a protecao de alteracoes. Item 3: protecao contra perda de alteracoes em editar e adicionar de Funcionarios, inclusive "Editar outro funcionario" com o formulario sujo (desenho 9.11). |
+| **Branch e commits** | `2e6736e` (aprovacao do item 2 e do V1), `6184d76` (X1), `bee0ec7` (item 3) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/pages/CriticalIncidentsPage.jsx`; `frontend/src/components/ui/Dialog.jsx` (`headerLead`, `placement`); `frontend/src/lib/dialogFocus.ts` (elemento sem caixa na tela fora do foco preso); `frontend/src/pages/AdminPage.jsx`; `frontend/src/hooks/useUnsavedChangesGuard.ts` (um `beforeunload` por formulario); `frontend/scripts/qa-unsaved-changes.mjs`; `frontend/scripts/browser/` (blocos novos; cadastros variados e sessao de Lideranca no servidor simulado); `QA_VISUAL_CHECKLIST.md`; desenho 9.11. |
+| **Decisoes de implementacao** | Sete, a aprovar (desenho 9.11, Y1 a Y7): uma protecao por formulario; `isDirty` do React Hook Form, o da edicao so com ela aberta; foco inicial no Nome com `withFieldRef`; "Editar outro" pelo `requestLeave`; props opcionais no `Dialog`; foco preso por `getClientRects`; correcoes nos commits de codigo do lote. |
+| **Validacao executada pela IA** | Roteiro de navegador **209/209** na tela real (72 anteriores, 28 do X1, 109 de Funcionarios), direto e pelo `test-local.ps1 -SkipHttp -Browser`. Mutacao do X1 **18/18** e do item 3 **25/25**, numa copia; no item 3, o roteiro rodou so o bloco de Funcionarios. Dois defeitos achados pelo roteiro e corrigidos: `beforeunload` compartilhado entre dois formularios (peca do item 1) e foco preso saindo pelo input de arquivo escondido. Medicao do layout dos tres modais em 390 a 1920 px, antes e depois. 19 `qa:*`, lint sem aviso novo, typecheck e build numa pasta temporaria. Marcadores provisorios procurados: nenhum. |
+| **Limitacoes declaradas** | Servidor simulado e dados ficticios. Aceitar o aviso do navegador ao recarregar nao exercitado. "Editar outro" sujo so e alcancavel por script hoje: pela tela, o fundo cobre a lista e o Tab nao sai do dialogo. Faixa de 20 px no topo sem o fundo, igual a antes, sem causa investigada. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do X1 e do item 3 do lote 17f + 17g (uma so). |
+
 ---
 
 ## 5. Responsabilidade

@@ -3305,6 +3305,78 @@ Mesma largura e mesma borda vermelha de antes; o papel passou de `form` solto pa
 
 **Marcadores provisórios (pedido da revisão):** procurados nos documentos antes dos commits (`COMMIT_*`, `RESULTADO_*`, `HASH_*`, `TODO`, `XXX`, `FIXME`, `TBD`, `PREENCHER`, conflitos de merge): **nenhum sobrou**. Os únicos resultados são os modelos `XXXXXX` do `mktemp` no `DEPLOY_LINUX.md`, que são parte dos comandos.
 
+**17f, X1 (`6184d76`) e item 3 — Funcionários (`bee0ec7`), 2026-10-30: entregues, aguardando revisão (uma só, como pedido).**
+
+Arquivos:
+- **X1:** `frontend/src/pages/CriticalIncidentsPage.jsx`, `frontend/src/components/ui/Dialog.jsx` (`headerLead`, `placement`) e `frontend/src/lib/dialogFocus.ts`.
+- **Item 3:** `frontend/src/pages/AdminPage.jsx` e `frontend/src/hooks/useUnsavedChangesGuard.ts` (correção na peça do item 1, abaixo).
+- **Os dois:** `frontend/scripts/qa-unsaved-changes.mjs`, `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`, `frontend/scripts/browser/lib/mock-server.mjs` e `QA_VISUAL_CHECKLIST.md`.
+
+**X1, Visualizar e Importar planilha no `Dialog`, sem a proteção de alterações:**
+- `role="dialog"`, `aria-modal`, Esc, clique fora, foco preso e foco devolvido a quem abriu; foco inicial no "Fechar". Visualizar guarda quem abriu, porque o botão fica desabilitado enquanto carrega (como o "Editar", W4).
+- Fechar nunca pergunta, nem com um arquivo escolhido; ao reabrir, Importar volta sem a escolha.
+- Importar continua painel lateral à direita.
+
+**Item 3, Funcionários:**
+- **Editar** abre no `Dialog`: foco inicial no Nome e devolvido ao "Editar" da linha. Com o formulário sujo, Esc, clique fora, os dois "Cancelar", trocar de aba ou de tela, voltar, "Sair" e recarregar pedem confirmação.
+- **Adicionar** continua na tela, sem diálogo: com ele sujo, trocar de aba ou de tela, voltar, "Sair" e recarregar pedem confirmação. Não há botão de cancelar nesse formulário, e não foi criado.
+- Salvar com sucesso não pergunta (editar fecha; adicionar limpa); erro do servidor mantém os dados e o formulário continua sujo.
+- **"Editar outro funcionário" com o formulário sujo:** pergunta e não troca de cadastro; "Continuar" mantém os dados; "Descartar" abre o outro cadastro, limpo. **Como isso acontece de fato:** com o diálogo aberto, o mouse não alcança a lista (o fundo cobre; conferido com `elementFromPoint`) e o Tab não sai dele. O caminho do botão foi exercitado pelo clique no elemento, por script. Pela tela, a pessoa fecha primeiro, e fechar pergunta.
+
+**Achado do roteiro de navegador, defeito na peça do item 1 (corrigido no `bee0ec7`):** com dois formulários sujos na mesma tela, os dois usavam a mesma função de `beforeunload`. O navegador registra a mesma função uma vez só, e o primeiro formulário a sair retirava o aviso do outro: descartar a edição deixava o cadastro sujo sem aviso ao recarregar. Agora há um listener por formulário, com teste de regressão no `qa:unsaved-changes` e no roteiro. Chamados críticos tem um formulário só por vez e não chegava a esse caso, mas a Ausências e a Escala (item 4) herdam a correção.
+
+**Achado do roteiro no X1 (corrigido no `6184d76`):** o foco preso contava o `input` de arquivo escondido do Importar como o último da volta. O Tab saía do diálogo para a página. Agora, elemento sem caixa na tela não conta.
+
+**Medição do layout, antes e depois** (servidor simulado, admin, Chrome sem janela, janela de 900 px de altura; camada `z-index` 50 → 60 nos três):
+
+| Modal | Janela | Largura do painel (antes e depois) | Altura (antes → depois) | Topo do painel (antes → depois) | Rolagem horizontal |
+|---|---|---|---|---|---|
+| Visualizar | 390 px | 358 px | 651 → 659 px | 60 → 131 px | Não |
+| Visualizar | 768 px | 721 px | 547 → 551 px | 60 → 185 px | Não |
+| Visualizar | 1024, 1366 e 1920 px | 896 px | 547 → 551 px | 60 → 185 px | Não |
+| Importar | 390 px | 390 px | 880 px | 20 px | Não |
+| Importar | 768 a 1920 px | 672 px | 880 px | 20 px | Não |
+| Editar funcionário | 390 px | 358 px | 1.165 → 1.185 px | 36 px | Não |
+| Editar funcionário | 768 px | 721 px | 746 → 758 px | 87 → 81 px | Não |
+| Editar funcionário | 1024 px | 977 px | 710 → 718 px | 105 → 101 px | Não |
+| Editar funcionário | 1366 e 1920 px | 1.024 px | 479 → 487 px | 221 → 217 px | Não |
+
+**O que muda na aparência (para o seu olho):**
+- Visualizar passa a abrir centralizado na altura (o `my-auto` do `Dialog`, W3), em vez de colado no topo;
+- nos três, a descrição passa de `text-slate-500` para `text-slate-300`, mais legível, e o painel cresce de 4 a 20 px;
+- em Importar, o eyebrow "Preview obrigatório" passa de azul para o `section-eyebrow` (ciano), como os outros diálogos;
+- em Editar funcionário, o título passa de `h3` para `h2`, sem mudança visual.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| Y1 | Em Funcionários, **uma proteção para cada formulário** (`createGuard` e `editGuard`), cada uma com o seu `ConfirmDiscardDialog` | Com uma só, fechar a edição limpa perguntaria por causa de um cadastro sujo, e descartar a edição pareceria apagar o cadastro. Na troca de tela, continua um aviso só (U3) |
+| Y2 | "Sujo" pelo `isDirty` do React Hook Form; o da edição só vale com ela aberta (`Boolean(editForm) && isDirty`) | Depois de descartar, o formulário fechado continua sujo no React Hook Form; sem a condição, o bloqueio ficaria ligado. Conferido em cadastros variados (hora com segundos, login nulo, "Fora do Mapa" marcado, Liderança com o campo desabilitado): abrir e fechar não conta como sujo |
+| Y3 | Foco inicial no **Nome**, não no ID (somente leitura na edição); `withFieldRef` entrega o elemento ao `Dialog` sem tirar o campo do React Hook Form | Mesmo critério da W5 |
+| Y4 | "Editar outro" passa pelo `requestLeave` mesmo sem caminho hoje pela tela (ver acima) | O pedido é explícito, e a proteção fica no ponto que troca o cadastro, para qualquer caminho futuro |
+| Y5 | `Dialog` ganhou `headerLead` (selos acima do título) e `placement="end"` (painel lateral), ambos opcionais | Sem eles, Visualizar perderia os selos no lugar e Importar deixaria de ser painel lateral |
+| Y6 | Foco preso ignora elemento sem caixa na tela (`getClientRects`), em vez de excluir só a classe `hidden` | Cobre também um ancestral escondido, não só o próprio campo |
+| Y7 | Correção do `beforeunload` por formulário e do foco preso nos commits de código deste lote, sem commit à parte | Saíram da conferência destes itens, e cada um tem teste de regressão |
+
+**Validação executada pela IA:**
+- **Roteiro de navegador, 209 de 209** na tela real, direto e pelo `test-local.ps1 -SkipHttp -Browser`: 72 anteriores, **28 do X1** (Visualizar e Importar: abrir, Esc, Fechar, clique fora, foco preso e devolvido, arquivo escolhido com preview, reabrir, confirmar, 390 px) e **109 de Funcionários** (editar: quatro cadastros, cada forma de sair, limpo e sujo, sujo por texto, select e caixa de marcar, foco, erro, salvar, "Editar outro", menu, voltar, "Sair", recarregar, 390 px, Liderança; adicionar: aba, menu, voltar, "Sair", recarregar, erro, sucesso; os dois sujos ao mesmo tempo).
+- **Mutação do X1, 18/18** numa cópia do frontend, 12 deles também com o roteiro inteiro. Dois ("botão Fechar não fecha", em cada modal) só morriam no navegador: o QA ganhou a checagem no `bee0ec7`, e os dois morrem nele (reconferido). Um ("painel lateral sem `h-full`") morre só no QA: não muda nada na tela, porque o `flex` já estica o painel.
+- **Mutação do item 3, 25/25**, todos mortos no `qa:unsaved-changes`; 21 também com o roteiro, cada um derrubando conferências de comportamento (de 1 a 30). Para reduzir o tempo, nesses 21 o roteiro rodou **só o bloco de Funcionários**, porque todos os mutantes atingem essa tela. Parte das rodadas para no primeiro erro de execução, e por isso a contagem de falhas não indica a gravidade.
+- 19 `qa:*`, lint sem aviso novo, typecheck e build numa pasta temporária; `test-local.ps1 -SkipHttp -Browser` sem falha. Chunks: `CriticalIncidentsPage` de 29,75 para 25,40 kB (o `Dialog` passa a ser compartilhado); `AdminPage` de 42,81 para 42,83 kB; principal de 203,44 para 203,48 kB.
+- Marcadores provisórios: procurados de novo nos documentos antes deste commit; nenhum.
+
+**Observações (sem mudança):**
+- **Faixa de 20 px no topo:** o fundo e o painel de Importar começam 20 px abaixo do topo da janela, deixando essa faixa do portal visível. Já era assim no build anterior (mesma medida antes e depois). Parece vir de um ancestral com `transform`; não investiguei a causa. Fica para depois do deploy, se incomodar.
+- **`docs/SCHEDULE_FORM_RHF_ZOD - Copia.md`:** arquivo não versionado, idêntico ao original, fora de todos os commits. Não apaguei: não é deste trabalho.
+
+**Limitações declaradas:**
+- servidor simulado e dados fictícios, sem o backend real;
+- aceitar o aviso do navegador ao recarregar (descartar) não foi exercitado; só ficar;
+- "Editar outro" sujo só é alcançável por script hoje (ver acima);
+- a mutação do item 3 rodou o roteiro só no bloco de Funcionários; o roteiro inteiro roda no código final (209/209);
+- `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências
