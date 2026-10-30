@@ -646,6 +646,69 @@ async function employees(page, port, mock) {
   }
 }
 
+// 5. [Z2] Com qualquer Dialog aberto, o topo e as bordas da janela caem no fundo
+// ou no painel, nunca na pagina (tambem com a pagina rolada ate o fim).
+const COVERAGE = `(() => {
+  const width = document.documentElement.clientWidth
+  const height = innerHeight
+  const backdrop = [...document.querySelectorAll('[data-dialog-backdrop]')].at(-1)
+  const points = []
+  for (const y of [2, 10, 19]) for (const x of [2, Math.floor(width / 2), width - 3]) points.push([x, y])
+  for (const y of [Math.floor(height / 2), height - 3]) for (const x of [2, width - 3]) points.push([x, y])
+  points.push([Math.floor(width / 2), height - 3])
+  const wrong = points.filter(([x, y]) => { const el = document.elementFromPoint(x, y); return !el || !(el === backdrop || el.closest('[role="dialog"],[role="alertdialog"]')) }).map(([x, y]) => x + ',' + y)
+  const rect = backdrop.getBoundingClientRect()
+  return { pontos: wrong, cobre: rect.top === 0 && rect.left === 0 && rect.right === width && rect.bottom === height, no_body: backdrop.parentElement === document.body }
+})()`
+async function expectCoverage(page, label) {
+  const covered = await page.evaluate(COVERAGE)
+  report(`${label}: 14 pontos do topo e das bordas no fundo ou no painel`, covered.pontos.length === 0, `pontos: ${covered.pontos.join(' ')}`)
+  report(`${label}: fundo do tamanho da janela, direto no body`, covered.cobre && covered.no_body)
+  await page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)')
+  await sleep(100)
+  const scrolled = await page.evaluate(COVERAGE)
+  report(`${label}, pagina rolada: 14 pontos no fundo ou no painel`, scrolled.pontos.length === 0, `pontos: ${scrolled.pontos.join(' ')}`)
+}
+
+async function dialogCoverage(page, port) {
+  const anyDialog = `!!document.querySelector('[role="dialog"]')`
+  const dirtyThenAsk = (field) => async () => {
+    await page.evaluate(`document.querySelector('[role="dialog"] ${field}').focus()`)
+    await page.typeText('x')
+    await page.press('Escape')
+    await page.waitFor(`!!${ALERT}`)
+  }
+  const discard = async () => { await page.click(button('Descartar alterações', ALERT)); await sleep(200) }
+  const closeAll = async () => { await page.press('Escape'); await sleep(200) }
+  const scenarios = [
+    ['Chamados, novo', '/chamados-criticos', 'Novo chamado', null, closeAll],
+    ['Chamados, editar', '/chamados-criticos', 'Editar', null, closeAll],
+    ['Chamados, Visualizar', '/chamados-criticos', 'Visualizar', null, closeAll],
+    ['Chamados, Importar', '/chamados-criticos', 'Importar planilha', null, closeAll],
+    ['Chamados, descarte', '/chamados-criticos', 'Novo chamado', dirtyThenAsk('input[maxlength="100"]'), discard],
+    ['Funcionarios, editar', '/admin?tab=funcionarios', 'Editar', null, closeAll],
+    ['Funcionarios, descarte', '/admin?tab=funcionarios', 'Editar', dirtyThenAsk('input[minlength="3"]'), discard],
+  ]
+  for (const width of [390, 1366]) {
+    for (const [name, path, opener, afterOpen, close] of scenarios) {
+      await goto(page, port, path, width)
+      await page.waitFor(`!!${button(opener)}`)
+      await page.click(`[...document.querySelectorAll('button')].filter((b) => b.getClientRects().length && b.textContent.trim() === ${JSON.stringify(opener)})[0]`)
+      await page.waitFor(anyDialog)
+      await sleep(150)
+      if (afterOpen) await afterOpen()
+      await expectCoverage(page, `${width} px, ${name}`)
+      await close()
+    }
+  }
+  // Clique de verdade na faixa do topo: fecha, em vez de alcancar a pagina.
+  await goto(page, port, '/chamados-criticos')
+  await page.click(button('Visualizar'))
+  await page.waitFor(anyDialog)
+  await page.clickAt(683, 10)
+  await expectState(page, 'clique na faixa do topo (y = 10): fecha o dialogo, foco volta ao "Visualizar"', { dialogos: 0, foco: 'Visualizar' })
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -667,6 +730,8 @@ try {
   await criticalIncidentsViewAndImport(page, mock.port, mock)
   console.log('== Funcionarios (editar e adicionar)')
   await employees(page, mock.port, mock)
+  console.log('== Fundo dos dialogos (Z2)')
+  await dialogCoverage(page, mock.port)
 } catch (error) {
   failed++
   console.log(`FALHOU  execucao interrompida: ${error.message}`)

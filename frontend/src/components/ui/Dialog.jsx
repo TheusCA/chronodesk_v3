@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { FOCUSABLE_SELECTOR, dialogKeyDown, isTopDialog, popDialog, pushDialog } from '../../lib/dialogFocus'
 
 // [17f] Diálogo acessível (docs/DESENHO_CHG.md, seção 6.3): role="dialog" ou
@@ -47,7 +48,7 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
 
   if (!open) return null
   const lateral = placement === 'end'
-  return (
+  const backdrop = (
     <div
       className={lateral ? 'fixed inset-0 z-[60] flex justify-end bg-black/75 backdrop-blur-sm' : 'fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm'}
       data-dialog-backdrop=""
@@ -79,4 +80,7 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
       </div>
     </div>
   )
+  // No body: dentro da página, a margem do space-y-* do pai descia o fundo 20 px
+  // e o topo da janela ficava clicável. Sem document (QA no Node), sem portal.
+  return typeof document === 'undefined' ? backdrop : createPortal(backdrop, document.body)
 }

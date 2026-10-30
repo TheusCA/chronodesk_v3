@@ -284,6 +284,9 @@ assert.match(dialogSource, /const target = initialFocusRef\?\.current \|\| panel
 assert.match(dialogSource, /if \(isTopDialog\(token\)\) dialogKeyDown\(event, panelRef\.current, \(\) => onCloseRef\.current\?\.\(\)\)/, 'Dialog: teclado so no de cima')
 assert.match(dialogSource, /return \(\) => \{\s*document\.removeEventListener\('keydown', onKeyDown\)\s*popDialog\(token\)\s*(?:\/\/[^\n]*\n\s*)*const back = returnFocusRef\?\.current\?\.isConnected \? returnFocusRef\.current : previous\s*if \(back && back\.isConnected && typeof back\.focus === 'function'\) back\.focus\(\)/, 'Dialog: ao fechar, tira o listener, sai da pilha e devolve o foco (a quem abriu, ou ao returnFocusRef)')
 assert.match(dialogSource, /onMouseDown=\{\(event\) => \{ if \(event\.target === event\.currentTarget\) \{ event\.preventDefault\(\); onClose\?\.\(\) \} \}\}/, 'Dialog: clique fora (no fundo) pede para fechar, sem levar o foco para o body')
+// [17f, Z2] No body: dentro da pagina, a margem do space-y-* do pai descia o fundo.
+assert.match(dialogSource, /import \{ createPortal \} from 'react-dom'/, 'Dialog: importa o portal')
+assert.match(dialogSource, /return typeof document === 'undefined' \? backdrop : createPortal\(backdrop, document\.body\)/, 'Dialog: renderiza no body')
 const confirmSource = read('src/components/ui/ConfirmDiscardDialog.jsx')
 assert.match(confirmSource, /initialFocusRef=\{continueRef\} onClose=\{onContinue\}/, 'Descartar: foco inicial e Esc ou clique fora = Continuar editando')
 assert.match(confirmSource, /onClick=\{onContinue\} ref=\{continueRef\}/, 'Descartar: o foco inicial e o "Continuar editando"')
