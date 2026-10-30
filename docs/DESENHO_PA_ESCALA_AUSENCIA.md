@@ -3220,7 +3220,7 @@ O V1 entra junto com o item 2.
 
 **Correção na peça do item 1 (registrada na revisão do X1 e do item 3, responsável, 2026-10-30):** o `beforeunload` passou a ter **um listener por formulário** (`bee0ec7`, `useUnsavedChangesGuard.ts`). Antes, a mesma função era registrada por todos: o navegador a guarda uma vez só, e com dois formulários sujos o primeiro a sair tirava o aviso de recarga do outro. Teste de regressão: `qa:unsaved-changes` e, no roteiro de navegador, "os dois sujos: dois beforeunload" e "os dois sujos, Descartar a edicao: fecha so a edicao, adicionar mantido".
 
-**17f, item 2 — Chamados críticos (B4 no novo e no editar, formulário pelo `Dialog`) e o V1 (roteiro de navegador versionado), 2026-10-29: entregue (`e45bc12`), aguardando revisão.**
+**17f, item 2 — Chamados críticos (B4 no novo e no editar, formulário pelo `Dialog`) e o V1 (roteiro de navegador versionado), 2026-10-29: entregue (`e45bc12`) e aprovado em 2026-10-30, com W1 a W5; a W6 com o ajuste X1 (ver a revisão, abaixo).**
 
 Arquivos:
 - **Item 2:** `frontend/src/pages/CriticalIncidentsPage.jsx`, `frontend/src/components/ui/Dialog.jsx` (props opcionais e duas correções, abaixo) e `frontend/src/lib/formDirty.ts` (novo).
@@ -3388,7 +3388,7 @@ Arquivos:
 
 **Próximo, na mesma revisão:** item 4 (Ausências e Escala). Parar para revisão depois do Z2 e do item 4 (uma revisão só). Sem push.
 
-**17f, Z2 (`d97ad7f`) e item 4 — Ausências e Escala (`a4337bc`), 2026-10-30: entregues, aguardando revisão (uma só, como pedido).**
+**17f, Z2 (`d97ad7f`) e item 4 — Ausências e Escala (`a4337bc`), 2026-10-30: entregues e aprovados em 2026-10-30, com AA1 a AA8 (ver a revisão, abaixo; a AA4 foi revista no BB1).**
 
 **Z2, fundo dos diálogos.** Causa medida: o `Dialog` era filho de um `space-y-5`, e a margem de cima dessa classe também desloca um elemento `fixed`. No navegador, o fundo do Importar tinha `margin-top: 20px`, `top: 0px` e começava em y = 20. Nos 20 px de cima, o clique alcançava a página. Correção: `createPortal` para `document.body`.
 
@@ -3446,6 +3446,17 @@ O que muda na tela, com a mesma largura de todos os painéis:
 - Esc e clique fora durante a remoção só têm conferência no código;
 - `gitleaks` ausente na estação.
 
+**Revisão do Z2 (`d97ad7f`) e do item 4 (`a4337bc`) (responsável, 2026-10-30): APROVADOS, com AA1 a AA8.** O título do item 2, nesta seção, foi corrigido: estava "aguardando revisão" e foi aprovado em 2026-10-30.
+
+**Antes do item 5, um commit de ajustes na peça compartilhada (BB), porque o item 5 usa o `Dialog` com respostas do servidor:**
+- **BB1 (médio), avisos acima dos diálogos:** o aviso de erro do sistema (`z-50`) fica abaixo do `Dialog` (`z-[60]`), e por isso a AA4 fecha o "Remover regra" no erro. Colocar a camada dos avisos acima de qualquer `Dialog`, mantendo a coluna fixa de Chamados (`z-10`) e o menu do celular conferidos no Z1. Rever a AA4: o "Remover regra" com erro pode continuar aberto, com o aviso visível; decidir e justificar. Conferir no roteiro: erro do servidor com um diálogo aberto mostra o aviso por cima (`elementFromPoint` no aviso) e o diálogo continua respondendo.
+- **BB2 (baixo), trava de rolagem:** com pelo menos um `Dialog` aberto, o `body` não rola, com a largura da barra compensada. Ao fechar o último, tudo volta como estava, inclusive a posição. Conferir no roteiro: com o diálogo aberto, a rolagem da janela não muda a posição da página; ao fechar, nada mudou; com dois empilhados, a trava só sai no último.
+- **BB3 (baixo), foco sem destino:** quando o elemento que deveria receber o foco não existe mais (última regra removida; formulário de Ausências fechado pelo botão que some), o foco vai para o título da seção ou, na falta dele, para o título principal da página, nunca para o `body`. Conferir os dois casos no roteiro.
+
+**Registrar como pendência para depois do deploy:** os modais antigos de Documentação, Escalas de Sábado e Mapa PA (provável faixa de 20 px e sem o `Dialog`) e a AA8 (Exceção por data e Importar planilha de regras sem proteção).
+
+**Próximo, na mesma revisão:** item 5 (17g): confirmação em Aprovar e Rejeitar de horas extras e correção de ponto, na linha, no cartão e na aba Aprovações, pela mesma função, com o `Dialog`, foco em "Cancelar" e o texto "Esta decisão não pode ser desfeita pelo sistema."; pausas e reuniões sem confirmação, como decidido; cada recusa do servidor, inclusive a solicitação já decidida por outra pessoa, aparece com o aviso por cima do diálogo. Parar para revisão depois do BB e do item 5 (uma revisão só). Sem push.
+
 ---
 
 ## 10. Riscos e pendências
@@ -3462,7 +3473,7 @@ O que muda na tela, com a mesma largura de todos os painéis:
 | `AdminPage.jsx` denso, alterado de novo em F4 | Mudança restrita à aba Funcionários; sem refatoração junto |
 | Carga extra no polling de 15 s (P14) | Referência de 2026-10-06 (p95 26,8 ms; seção 9.2). Base do critério: medição repetida logo antes do deploy do F2 (decisão de 2026-10-06); medir de novo depois, nas mesmas condições; piora (p95 + 50 ms **e** + 20% sobre essa base) desliga `STATUS_PRESENCE_ENABLED` |
 
-**Pendências fora desta entrega:** feriados; política de retenção e anonimização (LGPD); BIZ-05 (paridade na virada do mês); SEC-04 (Liderança ⇒ admin); PERF-02 (listas truncadas); remoção das tabelas legadas `portal_schedules` e `portal_pa_map`; horário de jornada que cruza a meia-noite. Tabela de Funcionários no celular (cartões no lugar da tabela que rola na horizontal; lote de acabamento, pedido de 2026-10-13).
+**Pendências fora desta entrega:** feriados; política de retenção e anonimização (LGPD); BIZ-05 (paridade na virada do mês); SEC-04 (Liderança ⇒ admin); PERF-02 (listas truncadas); remoção das tabelas legadas `portal_schedules` e `portal_pa_map`; horário de jornada que cruza a meia-noite. Tabela de Funcionários no celular (cartões no lugar da tabela que rola na horizontal; lote de acabamento, pedido de 2026-10-13). **Para depois do deploy (pedido de 2026-10-30):** modais antigos de Documentação, Escalas de Sábado e Mapa PA (provável faixa de 20 px e sem o `Dialog`); AA8 (Exceção por data e Importar planilha de regras sem proteção contra perda de alterações).
 
 ---
 
