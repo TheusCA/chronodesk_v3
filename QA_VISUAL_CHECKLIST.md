@@ -124,6 +124,10 @@ Roteiro versionado: `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`. F
   - [ ] Ausencias: novo e editar, limpo e sujo; periodos variados abertos sem contar como sujo; "Editar outra" sujo com clique real na lista; cancelar outra ausencia e a propria; erro do servidor; sucesso fechando; menu, voltar, "Sair" e recarregar.
   - [ ] Escala: regras variadas abertas sem contar como sujo; "Editar outra" sujo; "Remover regra" pelo Dialog (Esc, clique fora, Cancelar, erro, sucesso, formulario sujo mantido); Historico em 390 px (rola e foca o titulo; Fechar devolve o foco), sem mudanca em 768 e 1366 px.
   - [ ] Fundo dos dialogos: em 390 e 1366 px, com a pagina no topo e rolada, os 14 pontos do topo e das bordas caem no fundo ou no painel, nunca na pagina; clique real na faixa do topo fecha o dialogo.
+  - [ ] Avisos: erro do servidor com dialogo aberto (Chamados, Funcionarios, "Remover regra") mostra o aviso por cima, no topo, sem cobrir os botoes; o dialogo segue respondendo (Esc e Tab); o aviso fica acima da coluna fixa de Chamados e do menu do celular.
+  - [ ] Rolagem: com dialogo aberto, a roda nao move a pagina e a pagina nao pula; ao fechar o ultimo, tudo volta como estava; formulario alto continua rolando dentro do fundo.
+  - [ ] Foco: ultima regra removida e formulario de Ausencias fechado levam o foco ao titulo da pagina, nunca ao body.
+  - [ ] Aprovar e Rejeitar (horas extras e correcao de ponto; linha, cartao e aba Aprovacoes): dialogo com nome, data, detalhe e a frase de que nao se desfaz; foco em "Cancelar"; recusas do servidor com o aviso por cima e o dialogo aberto; pausas e reunioes sem confirmacao.
 
 ## Escalas de Sabado
 

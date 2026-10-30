@@ -3457,6 +3457,67 @@ O que muda na tela, com a mesma largura de todos os painéis:
 
 **Próximo, na mesma revisão:** item 5 (17g): confirmação em Aprovar e Rejeitar de horas extras e correção de ponto, na linha, no cartão e na aba Aprovações, pela mesma função, com o `Dialog`, foco em "Cancelar" e o texto "Esta decisão não pode ser desfeita pelo sistema."; pausas e reuniões sem confirmação, como decidido; cada recusa do servidor, inclusive a solicitação já decidida por outra pessoa, aparece com o aviso por cima do diálogo. Parar para revisão depois do BB e do item 5 (uma revisão só). Sem push.
 
+**17f, BB (`548e5e4`) e 17g, item 5 (`90f74af`), 2026-10-30: entregues, aguardando revisão (uma só, como pedido).**
+
+**Medição antes e depois do BB** (build do `77da444` contra o build do `548e5e4`, servidor simulado, admin, Chrome sem janela):
+
+| Caso | Antes | Depois |
+|---|---|---|
+| BB1: centro do aviso, erro com Chamados novo aberto, 390 e 1366 px | Diálogo por cima; aviso em `z-50`, dentro da `.portal-tech-shell` | Aviso por cima; `z-index` 70, direto no `body` |
+| BB1: centro do aviso, erro com Funcionários editar aberto, 390 e 1366 px | Diálogo por cima | Aviso por cima |
+| BB1: menu do celular aberto, 390 px | Aviso por cima (empate em 50, venceu a ordem) | Aviso por cima (70 contra 50) |
+| BB2: página em y = 300, Visualizar aberto, roda de 400 px | y = 700 em 390 px; y = 562 em 1366 px | y = 300 nas duas |
+| BB2: largura útil com o diálogo aberto, 1366 px | 1351 px, com a barra na tela | 1366 px, sem a barra; `main` continua em x = 256 |
+| BB3: última regra removida | Foco no `body` | Foco no título "Escala presencial" |
+| BB3: Ausências, "Fechar" limpo | Foco no `body` | Foco no título "Ausências" |
+
+Na medição, o clique em Visualizar foi feito por script num botão fora da tela. Ao fechar, a devolução do foco leva a página até esse botão, antes e depois. Pelo mouse, o botão está na tela; o roteiro confere esse caso, e a posição não muda.
+
+**BB1.** Só subir o `z-index` não resolvia: a `.portal-tech-shell` tem `isolate`, então nada dentro dela passa do `Dialog`, que está no `body`. O aviso agora também vai para o `body`, em `z-[70]`. Sem diálogo aberto, ele continua no mesmo lugar, acima do menu do celular e da coluna fixa de Chamados, com as duas sobreposições conferidas com `elementFromPoint`.
+
+**Revisão da AA4 (decisão): "Remover regra" com erro continua aberto.** Motivo: o aviso agora aparece por cima, e fechar só existia para mostrar a mensagem. Aberto, a pessoa lê o motivo e tenta de novo ou cancela, sem procurar a linha outra vez. O foco volta para "Cancelar", porque o botão desabilitado durante o envio o perdeu. Com sucesso, fecha como antes.
+
+**BB2.** Com um `Dialog` aberto, o `body` fica com `overflow: hidden`, e a largura da barra (15 px em 1366 px) vira `padding-right`. A contagem fica em `lockPageScroll`, e o estilo original volta quando o último fecha. O fundo de um formulário mais alto que a tela continua rolando.
+
+**BB3.** Sem destino para o foco, ele vai para o título da página. Vale para os dois casos pedidos e também para qualquer `Dialog` que feche com o elemento de volta fora da tela (por exemplo, "Descartar" que troca de tela). Ausências não tem título de seção depois que o formulário fecha, por isso o destino é o título principal.
+
+**Item 5.** Arquivos novos: `frontend/src/hooks/useDecisionConfirm.ts`, `frontend/src/lib/decisionConfirm.ts` e `frontend/src/components/ui/DecisionConfirmDialog.jsx`. A linha, o cartão e a aba Aprovações chamam a mesma função (`decision.ask`). O diálogo mostra o título ("Aprovar hora extra?", "Rejeitar ajuste de ponto?"), o nome, a data, o período e o total ou o tipo e o horário, e a frase pedida. O foco começa em "Cancelar". O payload não mudou. Pausas e reuniões continuam decidindo na hora, sem diálogo.
+
+**Recusas do servidor conferidas nas seis telas:** já decidida por outra pessoa (409, "Somente registros pendentes podem ser decididos."), o próprio lançamento (409), sem permissão (403) e erro interno (500). Em todas, o aviso fica por cima do diálogo (`elementFromPoint`), o diálogo continua aberto e o foco fica em "Cancelar". "Já decidida" atualiza a lista por trás, e ao fechar o foco vai para o título da seção, porque o botão saiu da lista. Nos outros casos, tentar de novo envia outro POST, e "Cancelar" devolve o foco ao botão.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| CC1 | AA4 revista: "Remover regra" com erro continua aberto | Ver acima |
+| CC2 | **Com um diálogo aberto, o aviso sobe para o topo** (canto esquerdo a partir de 640 px); sem diálogo, fica embaixo como sempre. **Não estava no pedido** | Com o aviso por cima de tudo, a primeira rodada do roteiro mostrou o clique em "Cadastrar chamado" caindo nele: o aviso cobria os botões do fim do formulário. Em 390 px, ele pode cobrir o topo do formulário até fechar (5 s ou no X) |
+| CC3 | O X do aviso não tira o foco do diálogo (`preventDefault` no `mousedown`). Com o diálogo aberto, o X só é alcançável pelo mouse | O foco preso continua valendo; o aviso some sozinho em 5 s |
+| CC4 | Trava por `overflow: hidden` no `body`, sem `position: fixed` | A posição fica onde está, sem precisar restaurar. Elementos `fixed` se deslocam os 15 px da barra enquanto o diálogo está aberto; no Safari do iPhone, não testei |
+| CC5 | O título da página recebe o foco **sem rolar** (`preventScroll`), e só quando o foco está mesmo perdido | Quem está no meio da página não perde o lugar. Sem a segunda condição, o título roubava o foco de quem já o tinha recebido, quando dois diálogos fecham juntos (15 falhas na primeira rodada) |
+| CC6 | Nova peça `ConfirmActionDialog`, usada por "Remover regra" e pelo item 5 | Os dois têm as mesmas regras de envio, foco e fechamento. Duas telas, uma regra |
+| CC7 | Depois de decidir, o foco vai para o título da seção; na aba, sem nenhuma pendência, para o título da página | O botão saiu da lista. O alvo é lido ao fechar, porque a lista pode ter atualizado antes |
+| CC8 | Recusa do servidor atualiza a lista por trás, sem esperar a resposta; "já decidida" mantém o botão de confirmar ativo | A lista pode estar velha. Tentar de novo só repete a recusa: o servidor continua sendo quem decide |
+| CC9 | `adjustmentTypeLabel` passou das duas telas para `lib/decisionConfirm.ts`; `SectionHeader` ganhou `titleRef` opcional | Evita uma terceira cópia. Sem `titleRef`, o título sai igual |
+| CC10 | Título diz "ajuste de ponto", como no texto proposto na 17g; a tela se chama "Correção de ponto" | Texto aprovado em 2026-10-29. Trocar é uma linha |
+
+**Validação executada pela IA:**
+- **Roteiro de navegador 673/673** na tela real, com servidor simulado e dados fictícios, direto e por `test-local.ps1 -SkipHttp -Browser`: 12 de navegação, 60 de Chamados, 28 de Visualizar e Importar, 109 de Funcionários, 47 de Ausências, 55 de Escala, 61 do fundo dos diálogos, 29 dos avisos, 18 da trava, 10 do foco e 244 de Aprovar e Rejeitar. Roda de verdade (`mouseWheel`), cliques reais e seis telas: horas extras e correção, em linha e em cartão, e a aba, nos dois tipos, em 390, 1024 e 1366 px.
+- **Mutação do BB 28/28.** 27 mortos no `qa:unsaved-changes`; 21 rodaram no roteiro e 20 morreram lá. O sobrevivente no roteiro, "rouba o foco de quem não se perdeu", depende do bloco de Chamados, que essa mutação não rodou; foi exatamente o que falhou na primeira rodada do roteiro inteiro, e morre no QA. Um só morre no roteiro ("erro fecha o diálogo", a AA4 antiga).
+- **Mutação do item 5 32/32**, de primeira. 28 mortos no QA; 29 rodaram no roteiro e todos morreram. Quatro só morrem no roteiro (seção sem `ref`, título sem `tabIndex`, não marca e não desmarca o envio). Nas duas mutações, o roteiro rodou só os blocos ligados à mudança.
+- 19 `qa:*`, lint sem aviso novo, typecheck e build em pasta temporária. O `qa:operational` e o `qa:action-feedback` foram atualizados de forma deliberada, porque a decisão saiu das telas para a função comum. Prints conferidos, fora do repositório.
+- Chunks: Ausências 15,40 → 15,51 kB; Operacional 105,30 → 104,95 kB; Admin 42,79 → 42,76 kB; novo `DecisionConfirmDialog` 3,03 kB; principal 203,44 → 203,71 kB; CSS 54,73 → 55,00 kB.
+
+**Achados fora do pedido, sem mudança:**
+- **`window.confirm` restantes:** derrubar pausa (`App.jsx:143`), remover documento (`DocumentsPage.jsx:197`) e, em Usuários locais, trocar perfil e remover (`AdminPage.jsx:797` e `:802`).
+- **Aviso sem diálogo, no celular:** fica embaixo, na largura toda, e pode cobrir um botão no fim da página até fechar. Vinha de antes; apareceu na aba Aprovações, com a próxima decisão logo abaixo.
+
+**Limitações declaradas:**
+- servidor simulado e dados fictícios, sem o backend real; as mensagens de recusa foram copiadas do `OperationalService.php` e do `overtime.php`, sem exercer o PHP; o 403 passa pela mensagem unificada do `api.ts`;
+- "cancelar a própria ausência": o servidor simulado mantém a linha, então o roteiro confere só que o foco não cai no `body`; a ida ao título nesse caso vem do mesmo código de "Fechar", exercido;
+- aceitar o aviso do navegador ao recarregar continua não exercitado; Safari e iPhone não testados;
+- com a confirmação, decidir várias solicitações em sequência pede um clique a mais por item, como decidido;
+- `gitleaks` ausente na estação.
+
 ---
 
 ## 10. Riscos e pendências

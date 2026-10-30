@@ -1000,6 +1000,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Servidor simulado e dados ficticios. Aceitar o aviso do navegador ao recarregar nao exercitado. Foco no `body` depois de remover a ultima regra e ao fechar o formulario de Ausencias, pelo codigo, sem exercicio no roteiro. Esc e clique fora durante a remocao so com conferencia no codigo. Modais antigos de Documentacao, Escalas de Sabado e Mapa PA, com a mesma faixa pela leitura do codigo: nao medidos nem alterados. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Responsavel, 2026-10-30: **Z2 e item 4 aprovados**, com AA1 a AA8. Pedido o **BB** (avisos acima dos dialogos, trava de rolagem e foco sem destino) antes do item 5; modais antigos e AA8 ficam como pendencia para depois do deploy. |
 
+### Lote 17f + 17g — BB (avisos, trava de rolagem e foco) e item 5 (17g) — 2026-10-30
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | BB: colocar os avisos acima dos dialogos, travar a rolagem da janela com dialogo aberto e dar destino ao foco quando o elemento sumiu. Item 5: confirmacao em Aprovar e Rejeitar de horas extras e correcao de ponto, na linha, no cartao e na aba Aprovacoes, pela mesma funcao; pausas e reunioes sem confirmacao. |
+| **Branch e commits** | `77da444` (aprovacao do Z2 e do item 4, pedido do BB), `548e5e4` (BB), `90f74af` (item 5) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/components/Feedback.jsx`, `frontend/src/components/ui/Dialog.jsx`, `frontend/src/lib/dialogFocus.ts`, `frontend/src/index.css`, `frontend/src/components/PortalLayout.jsx`, `frontend/src/components/ui/Primitives.jsx`, `frontend/src/pages/AbsencesPage.jsx`, `frontend/src/pages/OperationalPages.jsx`, `frontend/src/pages/AdminPage.jsx`; novos: `frontend/src/components/ui/ConfirmActionDialog.jsx`, `frontend/src/components/ui/DecisionConfirmDialog.jsx`, `frontend/src/hooks/useDecisionConfirm.ts`, `frontend/src/lib/decisionConfirm.ts`; testes: `qa-unsaved-changes`, `qa-operational`, `qa-action-feedback` e o roteiro de navegador com o servidor simulado. |
+| **Decisoes de implementacao** | Dez, a aprovar (desenho 9.11, CC1 a CC10). Entre elas: "Remover regra" com erro continua aberto (AA4 revista); com dialogo aberto, o aviso sobe para o topo, o que nao estava no pedido, porque cobria os botoes do fim do formulario; titulo da pagina recebe o foco sem rolar e so quando o foco esta perdido; recusa do servidor atualiza a lista por tras. |
+| **Validacao executada pela IA** | Medicao antes e depois com `elementFromPoint`, roda do mouse e foco. Roteiro de navegador 673/673 na tela real, direto e por `test-local.ps1 -SkipHttp -Browser`. Mutacao do BB 28/28 e do item 5 32/32, com o roteiro rodando so os blocos ligados a mudanca. 19 `qa:*`, lint, typecheck e build em pasta temporaria. Prints conferidos. |
+| **Limitacoes declaradas** | Servidor simulado e dados ficticios; mensagens de recusa copiadas do PHP, sem exerce-lo. "Cancelar a propria ausencia" so confere que o foco nao cai no `body`. Aceitar o aviso do navegador ao recarregar nao exercitado. Safari e iPhone nao testados. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do BB e do item 5 do lote 17f + 17g (uma so). |
+
 ---
 
 ## 5. Responsabilidade
