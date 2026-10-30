@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { FilterBar, InlineAlert, SectionHeader, TruncationNotice, UserAvatar } from '../components/ui/Primitives'
 import { useResource } from '../hooks/useResource'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { post } from '../lib/api'
 import { ACTION_FEEDBACK } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
@@ -97,7 +99,7 @@ export function AbsencesPage({ session, notify }) {
   const [confirmCancelId, setConfirmCancelId] = useState(null)
   const {
     clearErrors,
-    formState: { errors },
+    formState: { errors, isDirty },
     handleSubmit,
     register,
     reset,
@@ -106,6 +108,8 @@ export function AbsencesPage({ session, notify }) {
     setValue,
     watch,
   } = useForm({ defaultValues: emptyAbsence() })
+  // [17f] Abrir, fechar e salvar passam por reset: fechado, nunca fica sujo.
+  const guard = useUnsavedChangesGuard(isDirty)
   const values = watch()
   const singleDay = Boolean(values.starts_on) && values.starts_on === values.ends_on
   const noteLength = Array.from(String(values.note || '')).length
@@ -127,6 +131,10 @@ export function AbsencesPage({ session, notify }) {
     clearErrors()
     reset(emptyAbsence())
     setFormOpen(false)
+  }
+
+  function requestCloseForm() {
+    guard.requestLeave(closeForm)
   }
 
   function editAbsence(item) {
@@ -260,7 +268,7 @@ export function AbsencesPage({ session, notify }) {
     }
     return (
       <div className="flex flex-wrap gap-2">
-        <button className="table-action" onClick={() => editAbsence(item)} type="button">Editar</button>
+        <button className="table-action" onClick={() => guard.requestLeave(() => editAbsence(item))} type="button">Editar</button>
         <button className="table-action text-red-300" onClick={() => setConfirmCancelId(item.id)} type="button">Cancelar</button>
       </div>
     )
@@ -366,7 +374,7 @@ export function AbsencesPage({ session, notify }) {
           {formError && <InlineAlert tone="danger" title="Não foi possível salvar">{formError}</InlineAlert>}
           <div className="flex flex-wrap gap-2">
             <button className="btn-primary" disabled={saving} type="submit">{saving ? 'Salvando...' : editing ? 'Salvar alteração' : 'Lançar ausência'}</button>
-            <button className="btn-secondary" disabled={saving} onClick={closeForm} type="button">{editing ? 'Cancelar edição' : 'Fechar'}</button>
+            <button className="btn-secondary" disabled={saving} onClick={requestCloseForm} type="button">{editing ? 'Cancelar edição' : 'Fechar'}</button>
           </div>
         </form>
       )}
@@ -423,6 +431,7 @@ export function AbsencesPage({ session, notify }) {
           )}
         </>
       )}
+      <ConfirmDiscardDialog {...guard.dialogProps} />
     </div>
   )
 }

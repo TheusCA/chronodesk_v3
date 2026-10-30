@@ -463,7 +463,7 @@ assert.match(presenceSource, /aria-label=\{daySummaryAriaLabel\(summary\)\} clas
 for (const source of [calendarSource, presenceSource, legendSource]) {
   assert.doesNotMatch(source, /\bconfirm\(/, 'sem confirm() no Calendário e na legenda')
 }
-assert.equal(operationalSource.match(/\bconfirm\(/g)?.length, 1, 'OperationalPages: só o confirm que já existia (remover regra), nenhum novo')
+assert.doesNotMatch(operationalSource, /\bconfirm\(/, 'OperationalPages: sem confirm() (remover regra passou para o Dialog no 17f)')
 
 // ---------------------------------------------------------------------------
 // 6. Tela Escala (8a), relatório, L-13 e L-14.

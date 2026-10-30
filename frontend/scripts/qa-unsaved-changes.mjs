@@ -455,4 +455,48 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.match(adminSource, /ref: \(element\) => \{ field\.ref\(element\); if \(fieldRef\) fieldRef\.current = element \}/, 'Funcionarios: withFieldRef chama o ref do React Hook Form e o proprio')
 }
 
+// ---------------------------------------------------------------------------
+// 10. [17f, item 4] Ausencias e Escala: protecao, Remover regra e Historico.
+// ---------------------------------------------------------------------------
+{
+  const absenceSource = read('src/pages/AbsencesPage.jsx')
+  assert.match(absenceSource, /formState: \{ errors, isDirty \}/, 'Ausencias: sujo vem do React Hook Form')
+  assert.match(absenceSource, /const guard = useUnsavedChangesGuard\(isDirty\)/, 'Ausencias: protecao ligada ao formulario')
+  assert.match(absenceSource, /function requestCloseForm\(\) \{\s*guard\.requestLeave\(closeForm\)\s*\}/, 'Ausencias: fechar passa pela protecao')
+  assert.match(absenceSource, /disabled=\{saving\} onClick=\{requestCloseForm\} type="button">/, 'Ausencias: o botao de fechar pergunta quando sujo')
+  assert.match(absenceSource, /onClick=\{\(\) => guard\.requestLeave\(\(\) => editAbsence\(item\)\)\} type="button">Editar<\/button>/, 'Ausencias: "Editar outra" passa pela protecao')
+  assert.match(absenceSource, /onSuccess: \(\) => closeForm\(\),/, 'Ausencias: salvar com sucesso fecha direto, sem perguntar')
+  assert.match(absenceSource, /if \(editing\?\.id === item\.id\) closeForm\(\)/, 'Ausencias: cancelar a propria ausencia fecha direto (ja confirmado na linha)')
+  assert.match(absenceSource, /<ConfirmDiscardDialog \{\.\.\.guard\.dialogProps\} \/>/, 'Ausencias: aviso de descarte ligado')
+  assert.ok(absenceSource.indexOf('<ConfirmDiscardDialog') > absenceSource.indexOf('</form>'), 'Ausencias: aviso fora do formulario')
+  assert.doesNotMatch(absenceSource, /window\.confirm/, 'Ausencias: sem window.confirm')
+
+  const operationalSource = read('src/pages/OperationalPages.jsx')
+  const scheduleSource = operationalSource.slice(operationalSource.indexOf('export function SchedulePage('), operationalSource.indexOf('function WorkflowPage('))
+  assert.match(scheduleSource, /formState: \{ errors: ruleErrors, isDirty: ruleDirty \}/, 'Escala: sujo vem do React Hook Form')
+  assert.match(scheduleSource, /const ruleGuard = useUnsavedChangesGuard\(ruleDirty\)/, 'Escala: protecao ligada ao formulario de regra')
+  assert.match(scheduleSource, /onClick=\{\(\) => ruleGuard\.requestLeave\(\(\) => editRule\(item\)\)\} type="button">Editar<\/button>/, 'Escala: "Editar outra" passa pela protecao')
+  assert.match(scheduleSource, /setRuleValue\(field, ordered, \{ shouldDirty: true \}\)/, 'Escala: dias da semana contam como alteracao')
+  assert.match(scheduleSource, /<ConfirmDiscardDialog \{\.\.\.ruleGuard\.dialogProps\} \/>/, 'Escala: aviso de descarte ligado')
+  assert.doesNotMatch(operationalSource, /window\.confirm/, 'Escala: sem window.confirm')
+  // Remover regra
+  assert.match(scheduleSource, /removeReturnRef\.current = trigger\s*setRemoveTarget\(item\)/, 'Remover regra: guarda quem abriu')
+  assert.match(scheduleSource, /role="alertdialog"\s*title="Remover regra de escala\?"/, 'Remover regra: alertdialog')
+  assert.match(scheduleSource, /initialFocusRef=\{removeCancelRef\}/, 'Remover regra: foco inicial no Cancelar')
+  assert.match(scheduleSource, /onClick=\{\(\) => setRemoveTarget\(null\)\} ref=\{removeCancelRef\} type="button">Cancelar<\/button>/, 'Remover regra: Cancelar fecha sem remover')
+  assert.match(scheduleSource, /returnFocusRef=\{removeReturnRef\}/, 'Remover regra: devolve o foco')
+  assert.match(scheduleSource, /onClose=\{\(\) => \{ if \(!removing\) setRemoveTarget\(null\) \}\}/, 'Remover regra: Esc e clique fora nao fecham durante a remocao')
+  assert.match(scheduleSource, /removeReturnRef\.current = rulesTitleRef\.current/, 'Remover regra: com sucesso, foco no titulo da lista')
+  assert.match(scheduleSource, /if \(!ruleDirty && Number\(rule\.employee_id\) === Number\(item\.employee_id\)\) resetRule\(emptyScheduleRule\(\)\)/, 'Remover regra: formulario sujo nao se perde')
+  assert.match(scheduleSource, /action: 'remove_rule', employee_id: Number\(item\.employee_id\)/, 'Remover regra: mesmo payload de antes')
+  // Historico
+  assert.match(operationalSource, /const PHONE_MEDIA_QUERY = '\(max-width: 767px\)'/, 'Historico: celular abaixo do md')
+  assert.match(scheduleSource, /if \(historyEmployeeId === null \|\| !window\.matchMedia\(PHONE_MEDIA_QUERY\)\.matches\) return\s*historyTitleRef\.current\?\.scrollIntoView\(\{ block: 'start' \}\)\s*historyTitleRef\.current\?\.focus\(\{ preventScroll: true \}\)\s*\}, \[historyEmployeeId\]\)/, 'Historico: so no celular, rola e foca o titulo')
+  assert.match(scheduleSource, /<h2 className="scroll-mt-28 font-bold text-white" ref=\{historyTitleRef\} tabIndex=\{-1\}>Histórico de/, 'Historico: titulo focavel, com folga do topo ao rolar')
+  assert.match(scheduleSource, /if \(historyTriggerRef\.current\?\.isConnected\) historyTriggerRef\.current\.focus\(\)/, 'Historico: Fechar devolve o foco a quem abriu')
+  assert.match(scheduleSource, /onClick=\{closeHistory\} type="button">Fechar<\/button>/, 'Historico: Fechar ligado')
+  // Formulario de excecao e importacao ficam fora da protecao (pedido do item 4).
+  assert.equal((scheduleSource.match(/useUnsavedChangesGuard\(/g) || []).length, 1, 'Escala: uma protecao so, a da regra')
+}
+
 console.log('Unsaved changes QA OK')

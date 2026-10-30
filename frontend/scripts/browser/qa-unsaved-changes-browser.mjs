@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChrome, openPage, sleep } from './lib/chrome.mjs'
-import { FAILING_EMPLOYEE, FAILING_INCIDENT, startMockServer } from './lib/mock-server.mjs'
+import { FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, startMockServer } from './lib/mock-server.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const appArg = process.argv.indexOf('--app')
@@ -646,7 +646,369 @@ async function employees(page, port, mock) {
   }
 }
 
-// 5. [Z2] Com qualquer Dialog aberto, o topo e as bordas da janela caem no fundo
+// 5. Ausencias (tela real): o formulario fica na tela, sem Dialog.
+const ABSENCE_FORM = `[...document.querySelectorAll('main form')].find((form) => form.querySelector('textarea'))`
+const ABSENCE_NOTE = `${ABSENCE_FORM}.querySelector('textarea')`
+const ABSENCE_SUBMIT = `${ABSENCE_FORM}.querySelector('button[type="submit"]')`
+const ABSENCE_CLOSE = `${ABSENCE_FORM}.querySelector('button[type="button"]')`
+const ROW_BUTTON = (text, index = 0) => `[...document.querySelectorAll('main button')].filter((b) => b.offsetParent !== null && b.textContent.trim() === ${JSON.stringify(text)})[${index}]`
+const COMMON_STATE = `
+    rota: location.pathname,
+    descartar: document.querySelectorAll('[role="alertdialog"]').length,
+    foco: !document.activeElement || document.activeElement === document.body ? 'body' : (document.activeElement.textContent || '').trim(),
+    beforeunload: (getEventListeners(window).beforeunload || []).length,
+    keydown: (getEventListeners(document).keydown || []).length,
+    dialogos: document.querySelectorAll('[data-dialog-backdrop]').length,
+    aviso_erro: [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada')),`
+const ABSENCE_STATE = `(() => {
+  const form = ${ABSENCE_FORM}
+  return {${COMMON_STATE}
+    aberto: !!form,
+    titulo: form?.querySelector('h2')?.textContent ?? null,
+    tecnico: form?.querySelector('p.field')?.textContent ?? null,
+    nota: form ? form.querySelector('textarea').value : null,
+    categoria: form ? [...form.querySelectorAll('select')].at(-1).value : null,
+  }
+})()`
+
+// Abre pelo menu: o "voltar" fica dentro do app (sem isso, sairia para a pagina anterior do navegador).
+async function openFromMenu(page, port, label, width) {
+  await goto(page, port, '/dashboard', width)
+  if (width < 1024) { await page.evaluate(`document.querySelector('[aria-label="Abrir menu"]').click()`); await sleep(200) }
+  await page.evaluate(`${NAV_BUTTON(label)}.click()`)
+  await sleep(300)
+}
+
+async function leaveByRoute(page, mock, expectLocal, stayed) {
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await expectLocal('menu: pergunta e nao troca de tela', { descartar: 1, ...stayed })
+  await page.click(button('Continuar editando', ALERT))
+  await expectLocal('menu, Continuar: fica, dados mantidos', { descartar: 0, ...stayed })
+  await page.evaluate('history.back()'); await sleep(400)
+  await expectLocal('voltar: pergunta, endereco devolvido', { descartar: 1, ...stayed })
+  await page.press('Escape')
+  await expectLocal('voltar, Esc no aviso: fica', { descartar: 0, ...stayed })
+  const logouts = mock.requests.filter((r) => r.key === 'logout.php').length
+  await page.evaluate(`document.querySelector('[aria-label="Sair"]').click()`); await sleep(300)
+  await expectLocal('Sair: pergunta', { descartar: 1 })
+  await page.click(button('Continuar editando', ALERT))
+  report('Sair, Continuar: nao sai (sem logout)', mock.requests.filter((r) => r.key === 'logout.php').length === logouts)
+  page.events.length = 0
+  await page.send('Page.reload').catch(() => {})
+  await sleep(800)
+  const prompt = page.events.find((e) => e.method === 'Page.javascriptDialogOpening')
+  report('recarregar: aviso do navegador (beforeunload)', prompt?.params.type === 'beforeunload')
+  if (prompt) { await page.send('Page.handleJavaScriptDialog', { accept: false }); await sleep(300) }
+  await expectLocal('recarregar, ficar: dados mantidos', { descartar: 0, ...stayed })
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await page.click(button('Descartar alterações', ALERT)); await sleep(300)
+  await expectLocal('menu, Descartar: troca de tela, sem listener', { rota: '/app/calendario', descartar: 0, beforeunload: 0, keydown: 0 })
+}
+
+async function absences(page, port, mock) {
+  const expectAbsence = (label, expected) => expectState(page, `Ausencias, ${label}`, expected, ABSENCE_STATE)
+  const openNew = async () => { await page.click(ROW_BUTTON('Nova ausência')); await page.waitFor(`!!${ABSENCE_FORM}`) }
+  const openEdit = async (index) => { await page.click(ROW_BUTTON('Editar', index)); await sleep(200) }
+  const dirty = async (text = 'Rascunho QA') => { await page.evaluate(`${ABSENCE_NOTE}.focus()`); await page.send('Input.insertText', { text }); await sleep(150) }
+  const open = async (width = 1366) => {
+    await openFromMenu(page, port, 'Ausências', width)
+    await page.waitFor(`!!${ROW_BUTTON('Nova ausência')} && !!${ROW_BUTTON('Editar')}`)
+  }
+  await open()
+  await expectAbsence('abrir a tela: sem listener', { aberto: false, beforeunload: 0, keydown: 0, dialogos: 0 })
+
+  // Novo: limpo fecha direto; cada tipo de campo suja; voltar ao de abertura limpa.
+  await openNew()
+  await expectAbsence('novo, abrir: limpo', { aberto: true, titulo: 'Nova ausência', beforeunload: 0 })
+  await page.click(ABSENCE_CLOSE)
+  await expectAbsence('novo limpo, Fechar: fecha sem perguntar', { aberto: false, descartar: 0, beforeunload: 0 })
+  await openNew()
+  await dirty('x')
+  await expectAbsence('novo, observacao mudou: sujo', { beforeunload: 1 })
+  await page.evaluate(`${ABSENCE_NOTE}.select()`)
+  await page.evaluate(`document.execCommand('delete')`); await sleep(150)
+  await expectAbsence('novo, observacao apagada: limpo', { nota: '', beforeunload: 0 })
+  await page.evaluate(setSelect(ABSENCE_FORM, 'Categoria', 'ferias')); await sleep(150)
+  await expectAbsence('novo, categoria mudou (select): sujo', { categoria: 'ferias', beforeunload: 1 })
+  await page.evaluate(setSelect(ABSENCE_FORM, 'Categoria', 'folga')); await sleep(150)
+  await expectAbsence('novo, categoria de volta: limpo', { beforeunload: 0 })
+  await page.click(`${ABSENCE_FORM}.querySelector('input[type="radio"][value="from_time"]')`)
+  await expectAbsence('novo, periodo mudou (radio): sujo', { beforeunload: 1 })
+  await page.click(`${ABSENCE_FORM}.querySelector('input[type="radio"][value="full_day"]')`)
+  await expectAbsence('novo, periodo de volta: limpo', { beforeunload: 0 })
+
+  // Novo sujo: Fechar pergunta, e cada resposta respeita os dados.
+  await dirty()
+  await page.click(ABSENCE_CLOSE)
+  await expectAbsence('novo sujo, Fechar: pergunta, foco em "Continuar editando"', { aberto: true, descartar: 1, foco: 'Continuar editando', dialogos: 1 })
+  await page.press('Escape')
+  await expectAbsence('novo sujo, Esc no aviso: continua, foco volta, dados mantidos', { descartar: 0, foco: 'Fechar', nota: 'Rascunho QA' })
+  await page.click(ABSENCE_CLOSE)
+  await page.clickAt(5, 450)
+  await expectAbsence('novo sujo, clique fora do aviso: continua', { descartar: 0, nota: 'Rascunho QA' })
+  await page.click(ABSENCE_CLOSE)
+  await page.click(button('Continuar editando', ALERT))
+  await expectAbsence('novo sujo, "Continuar editando": dados mantidos', { descartar: 0, aberto: true, nota: 'Rascunho QA' })
+  await page.click(ABSENCE_CLOSE)
+  await page.click(button('Descartar alterações', ALERT))
+  await expectAbsence('novo sujo, "Descartar": fecha, sem listener', { aberto: false, descartar: 0, beforeunload: 0, keydown: 0, dialogos: 0 })
+  await openNew()
+  await expectAbsence('novo, reabrir depois de descartar: vazio e limpo', { nota: '', beforeunload: 0 })
+  await page.click(ABSENCE_CLOSE)
+
+  // Editar: periodos diferentes, sem mexer, nao contam como sujo.
+  for (const index of [0, 1, 2, 3]) {
+    await openEdit(index)
+    await expectAbsence(`editar, ausencia ${index + 1}, abrir: limpo`, { aberto: true, titulo: 'Editar ausência', tecnico: (value) => value?.startsWith(`Tecnico 0${index + 1}`), beforeunload: 0 })
+    await page.click(ABSENCE_CLOSE)
+    await expectAbsence(`editar, ausencia ${index + 1}, Cancelar edicao: fecha sem perguntar`, { aberto: false, descartar: 0 })
+  }
+
+  // "Editar outra" com o formulario sujo: alcancavel pela tela, com clique real.
+  await openEdit(0)
+  await dirty()
+  await page.click(ROW_BUTTON('Editar', 1))
+  await expectAbsence('editar outra, sujo: pergunta e nao troca', { descartar: 1, tecnico: (value) => value?.startsWith('Tecnico 01'), nota: 'Rascunho QA', foco: 'Continuar editando' })
+  await page.click(button('Continuar editando', ALERT))
+  await expectAbsence('editar outra, sujo, "Continuar editando": mesma ausencia, dados mantidos', { descartar: 0, tecnico: (value) => value?.startsWith('Tecnico 01'), nota: 'Rascunho QA', beforeunload: 1 })
+  await page.click(ROW_BUTTON('Editar', 1))
+  await page.press('Escape')
+  await expectAbsence('editar outra, sujo, Esc no aviso: mesma ausencia', { descartar: 0, tecnico: (value) => value?.startsWith('Tecnico 01'), nota: 'Rascunho QA' })
+  await page.click(ROW_BUTTON('Editar', 1))
+  await page.click(button('Descartar alterações', ALERT))
+  await expectAbsence('editar outra, sujo, "Descartar": abre a outra, limpa', { descartar: 0, tecnico: (value) => value?.startsWith('Tecnico 02'), nota: '', beforeunload: 0, dialogos: 0 })
+  await page.click(ROW_BUTTON('Editar', 2))
+  await expectAbsence('editar outra, limpo: troca sem perguntar', { descartar: 0, tecnico: (value) => value?.startsWith('Tecnico 03'), nota: 'Observacao de teste' })
+
+  // Cancelar uma ausencia pela linha, com o formulario sujo.
+  await dirty(' mais')
+  await page.click(ROW_BUTTON('Cancelar', 0))
+  await page.click(ROW_BUTTON('Confirmar'))
+  await sleep(300)
+  await expectAbsence('sujo, cancelar OUTRA ausencia pela linha: nao pergunta, formulario mantido', { descartar: 0, aberto: true, nota: 'Observacao de teste mais' })
+  const cancels = mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/absences.php').length
+  await page.click(ROW_BUTTON('Cancelar', 2))
+  await page.click(ROW_BUTTON('Confirmar'))
+  await sleep(300)
+  await expectAbsence('sujo, cancelar a PROPRIA ausencia, depois de confirmar na linha: fecha sem perguntar', { descartar: 0, aberto: false, beforeunload: 0 })
+  report('sujo, cancelar a propria ausencia: um POST', mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/absences.php').length === cancels + 1)
+
+  // Erro do servidor mantem os dados; salvar com sucesso fecha sem perguntar.
+  await openEdit(0)
+  await dirty(FAILING_ABSENCE_NOTE)
+  await page.click(ABSENCE_SUBMIT)
+  await page.waitFor(`[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada'))`)
+  await expectAbsence('erro do servidor: aviso de erro, dados mantidos, ainda sujo', { aviso_erro: true, aberto: true, nota: FAILING_ABSENCE_NOTE, beforeunload: 1 })
+  await page.click(ABSENCE_CLOSE)
+  await expectAbsence('erro do servidor, Cancelar edicao: ainda pergunta', { descartar: 1 })
+  await page.click(button('Continuar editando', ALERT))
+  await page.evaluate(`${ABSENCE_NOTE}.select()`)
+  await page.send('Input.insertText', { text: 'Salva QA' }); await sleep(150)
+  const saves = mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/absences.php').length
+  await page.click(ABSENCE_SUBMIT)
+  await page.waitFor(`!${ABSENCE_FORM}`)
+  await expectAbsence('salvar com sucesso: fecha sem perguntar, sem listener', { aberto: false, descartar: 0, beforeunload: 0, keydown: 0, dialogos: 0 })
+  report('Ausencias, salvar com sucesso: um POST', mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/absences.php').length === saves + 1)
+
+  // Rota com o formulario sujo.
+  await openNew()
+  await dirty()
+  await leaveByRoute(page, mock, expectAbsence, { rota: '/app/ausencias', aberto: true, nota: 'Rascunho QA' })
+
+  // Celular (390 px): cartoes; "Editar outra" sujo pergunta.
+  await open(390)
+  await openEdit(0)
+  await dirty()
+  await page.click(ROW_BUTTON('Editar', 1))
+  await expectAbsence('390 px, editar outra, sujo: pergunta', { descartar: 1, foco: 'Continuar editando', tecnico: (value) => value?.startsWith('Tecnico 01') })
+  await page.click(button('Descartar alterações', ALERT))
+  await expectAbsence('390 px, editar outra, "Descartar": abre a outra, limpa', { descartar: 0, tecnico: (value) => value?.startsWith('Tecnico 02'), beforeunload: 0 })
+  report('390 px: sem rolagem horizontal da pagina', await page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+}
+
+// 6. Escala (tela real): formulario de regra, Remover regra e Historico.
+const RULE_FORM = `[...document.querySelectorAll('main form')].find((form) => form.querySelector('select[name="rule_type"]'))`
+const RULE_SELECT = (name) => `${RULE_FORM}.querySelector('select[name="${name}"]')`
+const SCHEDULE_STATE = `(() => {
+  const form = ${RULE_FORM}
+  const alert = ${ALERT}
+  const title = [...document.querySelectorAll('main h2')].find((h) => h.textContent.startsWith('Histórico de'))
+  return {${COMMON_STATE}
+    colaborador: form?.querySelector('select[name="employee_id"]').value ?? null,
+    regra: form?.querySelector('select[name="rule_type"]').value ?? null,
+    aviso: alert?.querySelector('h2')?.textContent ?? null,
+    regras: [...document.querySelectorAll('main button')].filter((b) => b.offsetParent !== null && b.textContent.trim() === 'Remover regra').length,
+    historico: title?.textContent ?? null,
+    topo_historico: title ? Math.round(title.getBoundingClientRect().top) : null,
+    rolagem: Math.round(scrollY),
+  }
+})()`
+
+async function schedule(page, port, mock) {
+  const expectRule = (label, expected) => expectState(page, `Escala, ${label}`, expected, SCHEDULE_STATE)
+  const open = async (width = 1366) => {
+    mock.restoreRules()
+    await openFromMenu(page, port, 'Escala presencial', width)
+    await page.waitFor(`!!${RULE_FORM} && !!${ROW_BUTTON('Editar')}`)
+    await sleep(200)
+  }
+  const setRule = async (name, value) => { await page.evaluate(`(() => { const select = ${RULE_SELECT(name)}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(value)}); select.dispatchEvent(new Event('change', { bubbles: true })) })()`); await sleep(150) }
+  const REMOVE_CONFIRM = button('Remover regra', ALERT)
+  const REMOVE_CANCEL = button('Cancelar', ALERT)
+  await open()
+  await expectRule('abrir a tela: limpo, sem listener', { colaborador: '', regra: 'undefined', beforeunload: 0, keydown: 0, dialogos: 0 })
+
+  // Editar: regras diferentes, sem mexer, nao contam como sujo, e trocar nao pergunta.
+  for (const [index, type] of [[0, 'fixed_weekdays'], [1, 'fixed_weekdays'], [2, 'cycle'], [3, 'always_onsite']]) {
+    await page.click(ROW_BUTTON('Editar', index))
+    await sleep(200)
+    await expectRule(`editar, regra ${index + 1}, abrir: limpo, sem perguntar`, { descartar: 0, colaborador: index === 1 ? (value) => value === '' || value === '2' : String(index + 1), regra: type, beforeunload: 0 })
+  }
+
+  // Cada tipo de campo suja; voltar ao valor de abertura limpa.
+  await page.click(ROW_BUTTON('Editar', 0))
+  await sleep(200)
+  await setRule('rule_type', 'always_remote')
+  await expectRule('regra mudou (select): sujo', { regra: 'always_remote', beforeunload: 1 })
+  await page.click(ROW_BUTTON('Editar', 0))
+  await page.click(button('Descartar alterações', ALERT)); await sleep(150)
+  await expectRule('mesma regra, sujo, "Descartar": valores de abertura de novo, limpo', { regra: 'fixed_weekdays', beforeunload: 0 })
+  const WEEKDAY = (value) => `${RULE_FORM}.querySelector('input[type="checkbox"][value="${value}"]').closest('label')`
+  await page.click(WEEKDAY('tue'))
+  await expectRule('dia da semana marcado: sujo', { beforeunload: 1 })
+  await page.click(WEEKDAY('tue'))
+  await expectRule('dia da semana desmarcado: limpo', { beforeunload: 0 })
+  await page.click(`${RULE_FORM}.querySelector('input[type="radio"][value="home"]')`)
+  await expectRule('modo home (radio): sujo', { beforeunload: 1 })
+  await page.click(`${RULE_FORM}.querySelector('input[type="radio"][value="onsite"]')`)
+  await expectRule('modo presencial de volta: limpo', { beforeunload: 0 })
+
+  // "Editar outra" com o formulario sujo: clique real na lista.
+  await setRule('rule_type', 'always_remote')
+  await page.click(ROW_BUTTON('Editar', 3))
+  await expectRule('editar outra, sujo: pergunta e nao troca', { descartar: 1, colaborador: '1', regra: 'always_remote', foco: 'Continuar editando', dialogos: 1 })
+  await page.click(button('Continuar editando', ALERT))
+  await expectRule('editar outra, sujo, "Continuar editando": mesma regra, dados mantidos', { descartar: 0, colaborador: '1', regra: 'always_remote', foco: 'Editar', beforeunload: 1 })
+  await page.click(ROW_BUTTON('Editar', 3))
+  await page.clickAt(5, 450)
+  await expectRule('editar outra, sujo, clique fora do aviso: mesma regra', { descartar: 0, colaborador: '1', regra: 'always_remote' })
+  await page.click(ROW_BUTTON('Editar', 3))
+  await page.click(button('Descartar alterações', ALERT)); await sleep(150)
+  await expectRule('editar outra, sujo, "Descartar": abre a outra, limpa', { descartar: 0, colaborador: '4', regra: 'always_onsite', beforeunload: 0, dialogos: 0 })
+
+  // Erro do servidor mantem os dados; salvar com sucesso limpa sem perguntar.
+  await setRule('rule_type', 'always_remote')
+  await page.click(button('Ver prévia', RULE_FORM))
+  await page.waitFor(`!${RULE_FORM}.querySelector('button[type="submit"]').disabled`)
+  await page.click(`${RULE_FORM}.querySelector('button[type="submit"]')`)
+  await page.waitFor(`[...document.querySelectorAll('[role="alert"],[role="status"]')].some((el) => el.textContent.includes('Falha simulada'))`)
+  await expectRule('erro do servidor: dados mantidos, ainda sujo', { colaborador: '4', regra: 'always_remote', beforeunload: 1 })
+  await page.click(ROW_BUTTON('Editar', 0))
+  await page.click(button('Descartar alterações', ALERT)); await sleep(150)
+  await setRule('rule_type', 'always_remote')
+  await page.click(button('Ver prévia', RULE_FORM))
+  await page.waitFor(`!${RULE_FORM}.querySelector('button[type="submit"]').disabled`)
+  const ruleSaves = mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/schedules.php').length
+  await page.click(`${RULE_FORM}.querySelector('button[type="submit"]')`)
+  await page.waitFor(`${RULE_SELECT('employee_id')}.value === ''`)
+  await expectRule('salvar com sucesso: limpo, sem perguntar, sem listener', { colaborador: '', regra: 'undefined', descartar: 0, beforeunload: 0, keydown: 0 })
+  report('Escala, salvar com sucesso: um POST', mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/schedules.php').length === ruleSaves + 1)
+
+  // Remover regra pelo Dialog, sem window.confirm.
+  page.events.length = 0
+  const removes = () => mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/schedules.php').length
+  let before = removes()
+  await page.click(ROW_BUTTON('Remover regra', 0))
+  const removeDialog = await page.evaluate(`(() => { const el = ${ALERT}; return el ? { role: el.getAttribute('role'), modal: el.getAttribute('aria-modal'), texto: el.textContent } : null })()`)
+  report('Escala, Remover regra: Dialog com role="alertdialog" e o nome do colaborador', removeDialog?.role === 'alertdialog' && removeDialog.modal === 'true' && removeDialog.texto.includes('Tecnico 01'))
+  await expectRule('Remover regra, abrir: foco em "Cancelar", um keydown', { aviso: 'Remover regra de escala?', foco: 'Cancelar', keydown: 1, dialogos: 1 })
+  report('Escala, Remover regra: sem window.confirm', !page.events.some((e) => e.method === 'Page.javascriptDialogOpening'))
+  await page.press('Tab')
+  await expectRule('Remover regra: Tab no ultimo vai ao primeiro', { foco: 'Remover regra' })
+  await page.press('Tab', true)
+  await expectRule('Remover regra: Shift+Tab volta ao "Cancelar"', { foco: 'Cancelar' })
+  await page.press('Escape')
+  await expectRule('Remover regra, Esc: fecha, foco volta ao botao, nada removido', { aviso: null, foco: 'Remover regra', regras: 4, keydown: 0, dialogos: 0 })
+  await page.click(ROW_BUTTON('Remover regra', 0))
+  await page.clickAt(5, 450)
+  await expectRule('Remover regra, clique fora: fecha, foco volta, nada removido', { aviso: null, foco: 'Remover regra', regras: 4 })
+  await page.click(ROW_BUTTON('Remover regra', 0))
+  await page.click(REMOVE_CANCEL)
+  await expectRule('Remover regra, "Cancelar": fecha, foco volta, nada removido', { aviso: null, foco: 'Remover regra', regras: 4 })
+  report('Escala, Remover regra, Esc, clique fora e "Cancelar": nenhum POST', removes() === before)
+
+  // Falha do servidor: fecha para mostrar o erro, a regra fica e o foco volta.
+  await page.click(ROW_BUTTON('Remover regra', 3))
+  await page.click(REMOVE_CONFIRM)
+  await page.waitFor(`!${ALERT}`)
+  await expectRule('Remover regra, erro do servidor: fecha, regra mantida, foco volta ao botao', { aviso: null, regras: 4, foco: 'Remover regra', dialogos: 0 })
+  report('Escala, Remover regra, erro do servidor: mensagem na tela', await page.evaluate(`document.body.textContent.includes('Falha simulada')`))
+
+  // Sucesso: sai da lista, foco no titulo; o formulario limpo daquele colaborador esvazia.
+  await page.click(ROW_BUTTON('Editar', 2))
+  await sleep(150)
+  await expectRule('antes de remover: formulario com o colaborador 3', { colaborador: '3', beforeunload: 0 })
+  before = removes()
+  await page.click(ROW_BUTTON('Remover regra', 2))
+  await page.click(REMOVE_CONFIRM)
+  await page.waitFor(`!${ALERT}`)
+  await expectRule('Remover regra, sucesso: sai da lista, foco no titulo das regras, formulario limpo esvazia', { aviso: null, regras: 3, foco: 'Regras vigentes e agendadas', colaborador: '', dialogos: 0 })
+  report('Escala, Remover regra, sucesso: um POST', removes() === before + 1)
+
+  // Remover nao e descartar: o formulario sujo fica, mesmo sendo do mesmo colaborador.
+  await page.click(ROW_BUTTON('Editar', 0))
+  await sleep(150)
+  await setRule('rule_type', 'always_remote')
+  await page.click(ROW_BUTTON('Remover regra', 1))
+  await page.click(REMOVE_CONFIRM)
+  await page.waitFor(`!${ALERT}`)
+  await expectRule('sujo, remover a regra de OUTRO: formulario mantido', { regras: 2, colaborador: '1', regra: 'always_remote', beforeunload: 1, descartar: 0 })
+  await page.click(ROW_BUTTON('Remover regra', 0))
+  await page.click(REMOVE_CONFIRM)
+  await page.waitFor(`!${ALERT}`)
+  await expectRule('sujo, remover a regra do MESMO colaborador: formulario mantido, ainda sujo', { regras: 1, colaborador: '1', regra: 'always_remote', beforeunload: 1, descartar: 0 })
+
+  // Rota com o formulario sujo.
+  await leaveByRoute(page, mock, expectRule, { rota: '/app/escala-presencial', colaborador: '1', regra: 'always_remote' })
+
+  // Historico: no celular, a tela vai ate o painel e o foco vai para o titulo.
+  await open(390)
+  const titleFocused = (name) => `Histórico de ${name}`
+  const startScroll = (await page.evaluate(SCHEDULE_STATE)).rolagem
+  await page.click(ROW_BUTTON('Histórico', 0))
+  await page.waitFor(`!!document.querySelector('main h2[tabindex="-1"]') && document.activeElement.tagName === 'H2'`)
+  await sleep(300)
+  await expectRule('390 px, abrir Historico: foco no titulo do painel, titulo perto do topo, com folga', { historico: titleFocused('Tecnico 01 Sobrenome'), foco: titleFocused('Tecnico 01 Sobrenome'), topo_historico: (value) => value >= 80 && value < 200, rolagem: (value) => value > startScroll })
+  await page.press('Tab')
+  await expectRule('390 px, Historico: Tab a partir do titulo vai ao "Fechar"', { foco: 'Fechar' })
+  const historyButtons = await page.evaluate(`${ROW_BUTTON('Histórico', 1)}.getBoundingClientRect().top`)
+  report('390 px, Historico: botao de outra pessoa continua na pagina', typeof historyButtons === 'number')
+  await page.click(ROW_BUTTON('Histórico', 1))
+  await sleep(400)
+  await expectRule('390 px, Historico de outra pessoa: titulo e foco trocam', { historico: titleFocused(`Tecnico 02 Com Um Nome Bem Comprido`), foco: titleFocused('Tecnico 02 Com Um Nome Bem Comprido'), topo_historico: (value) => value >= 80 && value < 200 })
+  await page.click(ROW_BUTTON('Fechar'))
+  await expectRule('390 px, Historico, Fechar: painel fecha, foco volta ao botao de quem abriu', { historico: null, foco: 'Histórico' })
+  const reopen = await page.evaluate(`document.activeElement === ${ROW_BUTTON('Histórico', 1)}`)
+  report('390 px, Historico, Fechar: e o botao da mesma linha', reopen)
+  report('390 px: sem rolagem horizontal da pagina', await page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+
+  // Fora do celular, nada muda: nao rola nem move o foco ao abrir.
+  for (const width of [768, 1366]) {
+    await open(width)
+    await page.evaluate(`${ROW_BUTTON('Histórico', 0)}.scrollIntoView({ block: 'center' })`)
+    await sleep(100)
+    const scrollBefore = (await page.evaluate(SCHEDULE_STATE)).rolagem
+    await page.click(ROW_BUTTON('Histórico', 0))
+    await sleep(400)
+    await expectRule(`${width} px, abrir Historico: painel abre, sem rolar nem mover o foco`, { historico: titleFocused('Tecnico 01 Sobrenome'), foco: 'Histórico', rolagem: scrollBefore })
+    await page.click(ROW_BUTTON('Histórico', 0))
+    await sleep(200)
+    await expectRule(`${width} px, mesmo botao de novo: painel fecha, foco fica no botao`, { historico: null, foco: 'Histórico' })
+  }
+  mock.restoreRules()
+}
+
+// 7. [Z2] Com qualquer Dialog aberto, o topo e as bordas da janela caem no fundo
 // ou no painel, nunca na pagina (tambem com a pagina rolada ate o fim).
 const COVERAGE = `(() => {
   const width = document.documentElement.clientWidth
@@ -701,6 +1063,29 @@ async function dialogCoverage(page, port) {
       await close()
     }
   }
+  // Ausencias e Escala: o aviso de descarte e o Remover regra.
+  for (const width of [390, 1366]) {
+    await goto(page, port, '/ausencias', width)
+    await page.waitFor(`!!${ROW_BUTTON('Nova ausência')}`)
+    await page.click(ROW_BUTTON('Nova ausência'))
+    await page.waitFor(`!!${ABSENCE_FORM}`)
+    await page.evaluate(`${ABSENCE_NOTE}.focus()`)
+    await page.typeText('x')
+    await page.click(ABSENCE_CLOSE)
+    await expectCoverage(page, `${width} px, Ausencias, descarte`)
+    await discard()
+    await goto(page, port, '/escala-presencial', width)
+    await page.waitFor(`!!${ROW_BUTTON('Remover regra')}`)
+    await page.click(ROW_BUTTON('Remover regra'))
+    await expectCoverage(page, `${width} px, Escala, Remover regra`)
+    await closeAll()
+    await page.evaluate(`(() => { const select = ${RULE_SELECT('rule_type')}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'always_remote'); select.dispatchEvent(new Event('change', { bubbles: true })) })()`)
+    await sleep(150)
+    await page.click(ROW_BUTTON('Editar'))
+    await expectCoverage(page, `${width} px, Escala, descarte`)
+    await discard()
+  }
+
   // Clique de verdade na faixa do topo: fecha, em vez de alcancar a pagina.
   await goto(page, port, '/chamados-criticos')
   await page.click(button('Visualizar'))
@@ -730,6 +1115,10 @@ try {
   await criticalIncidentsViewAndImport(page, mock.port, mock)
   console.log('== Funcionarios (editar e adicionar)')
   await employees(page, mock.port, mock)
+  console.log('== Ausencias')
+  await absences(page, mock.port, mock)
+  console.log('== Escala')
+  await schedule(page, mock.port, mock)
   console.log('== Fundo dos dialogos (Z2)')
   await dialogCoverage(page, mock.port)
 } catch (error) {

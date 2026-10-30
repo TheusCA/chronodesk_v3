@@ -16,6 +16,10 @@ const each = (fn) => NAMES.map((name, index) => fn(name, index + 1, TEAMS[index]
 export const FAILING_INCIDENT = 'FALHA-QA'
 // Nome de funcionario que faz o salvar falhar (erro do servidor simulado).
 export const FAILING_EMPLOYEE = 'FALHA-QA'
+// Observacao de ausencia que faz o salvar falhar (erro do servidor simulado).
+export const FAILING_ABSENCE_NOTE = 'FALHA-QA'
+// Colaborador cuja regra de escala falha ao salvar e ao remover (erro do servidor simulado).
+export const FAILING_RULE_EMPLOYEE = 4
 
 const workflow = (overtime) => ({
   sucesso: true, limit: 200, truncated: false, totals: { approved_minutes: 120, pending_minutes: 240 },
@@ -34,6 +38,23 @@ const incidents = each((name, id) => ({
   sdk_responsible_login: 'tecnico.1', sdk_responsible_name: NAMES[0], sdk_activity: 'Acompanhamento', opened_at: `${DAY} 08:00:00`,
   incident_opened_at: `${DAY} 07:50:00`, meeting_url: id === 4 ? 'https://sala.invalid/qa' : null, notes: null, source: 'manual',
 }))
+// Regras variadas de proposito: abrir para editar, sem mexer, nao pode contar como sujo.
+const scheduleRules = [
+  { rule_type: 'fixed_weekdays', weekdays: ['mon', 'wed', 'fri'], config: {}, rule_label: 'Presencial seg, qua e sex', is_current: true, is_future: false, effective_from: '2026-10-01' },
+  { rule_type: 'fixed_weekdays', weekdays: ['tue', 'thu'], config: { input_mode: 'home' }, rule_label: 'Home seg, qua e sex', is_current: true, is_future: false, effective_from: '2026-10-01' },
+  { rule_type: 'cycle', weekdays: [], config: { pattern: ['onsite', 'onsite', 'remote'] }, rule_label: 'Ciclo 2 e 1', is_current: false, is_future: true, effective_from: '2099-01-05' },
+  { rule_type: 'always_onsite', weekdays: [], config: {}, rule_label: 'Sempre presencial', is_current: true, is_future: false, effective_from: '2026-10-01' },
+].map((rule, index) => ({ ...rule, id: index + 1, employee_id: index + 1, employee_name: NAMES[index], ad_login: `tecnico.${index + 1}`, team: TEAMS[index], effective_until: null, updated_by: 'gestor.qa' }))
+// Periodos variados de proposito, pelo mesmo motivo.
+const absencePeriods = [
+  { starts_on: '2099-01-10', ends_on: '2099-01-12', period_type: 'full_day', start_time: null, end_time: null, note: null },
+  { starts_on: '2099-01-20', ends_on: '2099-01-20', period_type: 'from_time', start_time: '13:30:00', end_time: null, note: '' },
+  { starts_on: '2099-01-21', ends_on: '2099-01-21', period_type: 'interval', start_time: '09:00:00', end_time: '10:30:00', note: 'Observacao de teste' },
+  { starts_on: '2099-01-22', ends_on: '2099-01-22', period_type: 'full_day', start_time: null, end_time: null, note: null },
+]
+// Escala gerada: abaixo do Historico, a pagina continua, como na tela real.
+const generatedDays = Array.from({ length: 20 }, (_, index) => ({ employee_id: 1, employee_name: NAMES[0], team: TEAMS[0], date: `2026-10-${String(index + 1).padStart(2, '0')}`, rule_type: 'always_onsite', weekdays: [], rule_label: 'Sempre presencial', presence_type: 'onsite', source: 'rule' }))
+const removedRules = new Set()
 const summaryValue = { overtime_approved_minutes: 120, overtime_pending_minutes: 60, adjustments: 2, oncall: 1, onsite_days: 10, remote_days: 8 }
 
 const GET = {
@@ -42,8 +63,7 @@ const GET = {
   'listar_funcionarios.php': { sucesso: true, funcionarios: each((nome, id, equipe) => ({ id, nome, equipe, ativo: true, jornada_entrada: id === 3 ? '08:00:00' : '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ad_login: id === 3 ? null : `tecnico.${id}`, access_role: id === 4 ? 'somente_leitura' : 'tecnico', arquivado_em: null, fora_mapa_escala: id === 2 })) },
   'portal/overtime.php': workflow(true),
   'portal/time_corrections.php': workflow(false),
-  'portal/schedules.php': { sucesso: true, rules: each((employee_name, id, team) => ({ id, employee_id: id, employee_name, ad_login: `tecnico.${id}`, team, rule_type: 'fixed_weekdays', weekdays: [1, 3, 5], rule_label: 'Presencial seg, qua e sex', is_current: true, is_future: false, effective_from: '2026-10-01', effective_until: null })), generated: [] },
-  'portal/absences.php': { sucesso: true, limit: 200, truncated: false, items: each((employee_name, id, team) => ({ id, employee_id: id, employee_name, team, starts_on: '2099-01-10', ends_on: '2099-01-12', period_type: 'full_day', start_time: null, end_time: null, category: 'folga', status: 'approved', note: null, retroactive: 0 })) },
+  'portal/absences.php': { sucesso: true, limit: 200, truncated: false, items: each((employee_name, id, team) => ({ id, employee_id: id, employee_name, team, ...absencePeriods[id - 1], category: 'folga', status: 'approved', retroactive: 0 })) },
   'portal/oncall.php': { sucesso: true, items: [] },
   'portal/reports.php': { sucesso: true, summary: { overtime_approved_minutes: 0, overtime_pending_minutes: 0, adjustments_count: 0, oncall_count: 0, onsite_days: 0, remote_days: 0, pending: 0, rejected: 0, sync_errors: 0 }, by_employee: { [NAMES[0]]: summaryValue }, by_team: { N1: summaryValue } },
   'portal/critical_incidents.php': { sucesso: true, limit: 200, truncated: false, summary: {}, items: incidents },
@@ -70,6 +90,13 @@ function apiResponse(method, key, search, body) {
     return [200, { sucesso: true, parsed_rows: [{ ticket_number: 'INC-QA-IMP' }], valid_count: 1, invalid_count: 0, rows: [{ line: 2, valid: true, ticket_number: 'INC-QA-IMP', title: 'Linha de teste', errors: [] }] }]
   }
   if ((key === 'adicionar_funcionario.php' || key === 'atualizar_funcionario.php') && method === 'POST' && body?.nome === FAILING_EMPLOYEE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
+  if (key === 'portal/absences.php' && method === 'POST' && body?.note === FAILING_ABSENCE_NOTE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
+  if (key === 'portal/schedules.php') {
+    if (method === 'GET') return [200, { sucesso: true, rules: scheduleRules.filter((rule) => !removedRules.has(rule.employee_id)), generated: generatedDays }]
+    if (body?.action === 'rule_preview') return [200, { sucesso: true, rule_label: 'Previa de teste', preview: [] }]
+    if (['rule', 'remove_rule'].includes(body?.action) && body?.employee_id === FAILING_RULE_EMPLOYEE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
+    if (body?.action === 'remove_rule') removedRules.add(body.employee_id)
+  }
   if (key === 'logout.php') return [200, { sucesso: true, csrf_token: 'teste' }]
   if (method === 'POST') return [200, { sucesso: true, mensagem: 'ok' }]
   return [200, GET[key] ?? { sucesso: true, items: [] }]
@@ -81,7 +108,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
 const LEADERSHIP_SESSION = { sucesso: true, csrf_token: 'teste', role: 'lideranca', permissions: ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage'], ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' }, gestor: { autenticado: true, admin: false, username: 'lider.qa', role: 'lideranca' } }
 const ADMIN_SESSION = GET['session.php']
 
-// Sobe o servidor numa porta livre; devolve { port, requests, useLeadershipSession, useAdminSession, close }.
+// Sobe o servidor numa porta livre; devolve { port, requests, useLeadershipSession, useAdminSession, restoreRules, close }.
 export function startMockServer(appDir) {
   const requests = []
   const server = createServer((req, res) => {
@@ -108,7 +135,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, restoreRules: () => removedRules.clear(), close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

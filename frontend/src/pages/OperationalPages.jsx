@@ -1,12 +1,15 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { hasPermission, isManagerRole } from '../lib/roles'
 import { useQuery } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { useForm } from 'react-hook-form'
+import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
+import { Dialog } from '../components/ui/Dialog'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { PartialMarker, PresenceBadge } from '../components/ui/Presence'
 import { useResource } from '../hooks/useResource'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { api, apiUrl, post, postForm } from '../lib/api'
 import { ACTION_FEEDBACK, decisionFeedback, importFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
@@ -288,6 +291,9 @@ function RulePreviewPanel({ preview, fresh }) {
   )
 }
 
+// Mesmo limite do md do Tailwind: abaixo dele, a lista de regras ocupa a tela toda.
+const PHONE_MEDIA_QUERY = '(max-width: 767px)'
+
 export function SchedulePage({ session, notify }) {
   const canManage = isManagerRole(session.role)
   const canRemoveRule = hasPermission(session, 'escalas.manage')
@@ -297,7 +303,7 @@ export function SchedulePage({ session, notify }) {
   const resource = useResource(`portal/schedules.php${queryString(filters)}`)
   const {
     clearErrors: clearRuleErrors,
-    formState: { errors: ruleErrors },
+    formState: { errors: ruleErrors, isDirty: ruleDirty },
     handleSubmit: handleRuleSubmit,
     register: registerRule,
     reset: resetRule,
@@ -309,6 +315,7 @@ export function SchedulePage({ session, notify }) {
     defaultValues: emptyScheduleRule(),
   })
   const rule = watchRule()
+  const ruleGuard = useUnsavedChangesGuard(ruleDirty)
   // F2B: Salvar só com a prévia do servidor para os valores atuais do formulário.
   const [rulePreview, setRulePreview] = useState(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -319,6 +326,20 @@ export function SchedulePage({ session, notify }) {
     `portal/schedules.php${queryString({ from: filters.from, to: filters.to, employee_id: historyEmployee?.id ?? '', include_history: 1 })}`,
     { enabled: historyEmployee !== null },
   )
+  const historyTitleRef = useRef(null)
+  const historyTriggerRef = useRef(null)
+  // [17f] No celular, o painel abre abaixo de toda a lista: a tela vai até ele e o foco, para o título.
+  const historyEmployeeId = historyEmployee?.id ?? null
+  useEffect(() => {
+    if (historyEmployeeId === null || !window.matchMedia(PHONE_MEDIA_QUERY).matches) return
+    historyTitleRef.current?.scrollIntoView({ block: 'start' })
+    historyTitleRef.current?.focus({ preventScroll: true })
+  }, [historyEmployeeId])
+  const [removeTarget, setRemoveTarget] = useState(null)
+  const [removing, setRemoving] = useState(false)
+  const removeCancelRef = useRef(null)
+  const removeReturnRef = useRef(null)
+  const rulesTitleRef = useRef(null)
   const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
   const [exceptionError, setExceptionError] = useState('')
   // [F5, D13] Filtro só da tela, desligado por padrão; não muda o schedules.php.
@@ -443,17 +464,42 @@ export function SchedulePage({ session, notify }) {
     })
   }
 
-  async function removeRule(item) {
-    if (!window.confirm('Deseja remover a regra de escala deste colaborador?')) return
+  function askRemoveRule(item, trigger) {
+    removeReturnRef.current = trigger
+    setRemoveTarget(item)
+  }
+
+  async function removeRule() {
+    const item = removeTarget
+    setRemoving(true)
     await submit(
       () => post('portal/schedules.php', { action: 'remove_rule', employee_id: Number(item.employee_id) }),
       resource.refresh,
       notify,
       ACTION_FEEDBACK.scheduleRuleRemoved,
       () => {
-        if (Number(rule.employee_id) === Number(item.employee_id)) resetRule(emptyScheduleRule())
+        // A linha de quem abriu saiu da lista: o foco vai para o título dela.
+        removeReturnRef.current = rulesTitleRef.current
+        // Com alterações não salvas, o formulário fica: remover não é descartar.
+        if (!ruleDirty && Number(rule.employee_id) === Number(item.employee_id)) resetRule(emptyScheduleRule())
       },
     )
+    setRemoving(false)
+    setRemoveTarget(null)
+  }
+
+  function toggleHistory(item, trigger) {
+    if (String(historyEmployee?.id) === String(item.employee_id)) {
+      setHistoryEmployee(null)
+      return
+    }
+    historyTriggerRef.current = trigger
+    setHistoryEmployee({ id: item.employee_id, name: item.employee_name })
+  }
+
+  function closeHistory() {
+    if (historyTriggerRef.current?.isConnected) historyTriggerRef.current.focus()
+    setHistoryEmployee(null)
   }
 
   async function saveException(event) {
@@ -538,9 +584,9 @@ export function SchedulePage({ session, notify }) {
     if (item.implicit) return <span>Regra fixa da Liderança; exceções só pelo admin</span>
     return (
       <div className="flex flex-wrap gap-2">
-        {canManage && <button className="table-action" onClick={() => editRule(item)} type="button">Editar</button>}
-        {canRemoveRule ? <button className="table-action text-red-300" onClick={() => removeRule(item)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
-        <button aria-expanded={String(historyEmployee?.id) === String(item.employee_id)} className="table-action" onClick={() => setHistoryEmployee(String(historyEmployee?.id) === String(item.employee_id) ? null : { id: item.employee_id, name: item.employee_name })} type="button">Histórico</button>
+        {canManage && <button className="table-action" onClick={() => ruleGuard.requestLeave(() => editRule(item))} type="button">Editar</button>}
+        {canRemoveRule ? <button className="table-action text-red-300" onClick={(event) => askRemoveRule(item, event.currentTarget)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
+        <button aria-expanded={String(historyEmployee?.id) === String(item.employee_id)} className="table-action" onClick={(event) => toggleHistory(item, event.currentTarget)} type="button">Histórico</button>
       </div>
     )
   }
@@ -708,7 +754,7 @@ export function SchedulePage({ session, notify }) {
       <OperationalShell resource={resource}>
         {activeRules.length > 0 && (
           <section className="card">
-            <h2 className="mb-4 font-bold text-white">Regras vigentes e agendadas</h2>
+            <h2 className="mb-4 font-bold text-white" ref={rulesTitleRef} tabIndex={-1}>Regras vigentes e agendadas</h2>
             {/* [17e] Abaixo de 1280 px, um cartão por regra, com os mesmos blocos e ações da linha. */}
             <div className="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-rule-list="">{activeRules.map((item) => (
               <article className="min-w-0 space-y-3 rounded-card border border-white/[0.07] bg-slate-950/30 p-4" data-rule={item.id ?? `implicita-${item.employee_id}`} key={item.id ?? `implicita-${item.employee_id}`}>
@@ -746,8 +792,8 @@ export function SchedulePage({ session, notify }) {
         {historyEmployee && (
           <section className="card table-wrap">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-bold text-white">Histórico de {historyEmployee.name}</h2>
-              <button className="table-action" onClick={() => setHistoryEmployee(null)} type="button">Fechar</button>
+              <h2 className="scroll-mt-28 font-bold text-white" ref={historyTitleRef} tabIndex={-1}>Histórico de {historyEmployee.name}</h2>
+              <button className="table-action" onClick={closeHistory} type="button">Fechar</button>
             </div>
             <OperationalShell resource={history}>
               <table className="data-table">
@@ -779,6 +825,22 @@ export function SchedulePage({ session, notify }) {
           </section>
         )}
       </OperationalShell>
+      {removeTarget && (
+        <Dialog
+          description={`Deseja remover a regra de escala de ${removeTarget.employee_name}?`}
+          initialFocusRef={removeCancelRef}
+          onClose={() => { if (!removing) setRemoveTarget(null) }}
+          returnFocusRef={removeReturnRef}
+          role="alertdialog"
+          title="Remover regra de escala?"
+        >
+          <div className="mt-5 flex flex-wrap justify-end gap-2">
+            <button className="btn-danger" disabled={removing} onClick={removeRule} type="button">{removing ? 'Removendo...' : 'Remover regra'}</button>
+            <button className="btn-secondary" disabled={removing} onClick={() => setRemoveTarget(null)} ref={removeCancelRef} type="button">Cancelar</button>
+          </div>
+        </Dialog>
+      )}
+      <ConfirmDiscardDialog {...ruleGuard.dialogProps} />
     </div>
   )
 }

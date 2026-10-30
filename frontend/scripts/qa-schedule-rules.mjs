@@ -174,8 +174,9 @@ const scheduleSource = readFileSync(join(srcRoot, 'pages', 'OperationalPages.jsx
 const schedulePageSource = scheduleSource.slice(scheduleSource.indexOf('export function SchedulePage('), scheduleSource.indexOf('function WorkflowPage('))
 assert.match(schedulePageSource, /<td>\{ruleBadge\(item\)\}<\/td>\s*<td>\{ruleValidity\(item\)\}<\/td>\s*<td>\{ruleActions\(item\)\}<\/td>/, 'Linha da tabela de regras com os blocos compartilhados')
 const ruleActionsSource = schedulePageSource.match(/function ruleActions\(item\) \{[\s\S]*?\n  \}/)?.[0] || ''
-assert.match(ruleActionsSource, /onClick=\{\(\) => editRule\(item\)\}[\s\S]*onClick=\{\(\) => removeRule\(item\)\}[\s\S]*onClick=\{\(\) => setHistoryEmployee\(/, 'Editar, Remover regra e Historico pelas mesmas funcoes, na linha e no cartao')
-assert.match(ruleActionsSource, /aria-expanded=\{String\(historyEmployee\?\.id\) === String\(item\.employee_id\)\}[\s\S]*setHistoryEmployee\(String\(historyEmployee\?\.id\) === String\(item\.employee_id\) \? null : \{ id: item\.employee_id, name: item\.employee_name \}\)/, 'Historico abre e fecha o do proprio colaborador (employee_id), com aria-expanded')
+assert.match(ruleActionsSource, /onClick=\{\(\) => ruleGuard\.requestLeave\(\(\) => editRule\(item\)\)\}[\s\S]*onClick=\{\(event\) => askRemoveRule\(item, event\.currentTarget\)\}[\s\S]*onClick=\{\(event\) => toggleHistory\(item, event\.currentTarget\)\}/, 'Editar, Remover regra e Historico pelas mesmas funcoes, na linha e no cartao')
+assert.match(ruleActionsSource, /aria-expanded=\{String\(historyEmployee\?\.id\) === String\(item\.employee_id\)\}/, 'Historico: botao indica o painel aberto')
+assert.match(schedulePageSource, /function toggleHistory\(item, trigger\) \{\s*if \(String\(historyEmployee\?\.id\) === String\(item\.employee_id\)\) \{\s*setHistoryEmployee\(null\)[\s\S]*?setHistoryEmployee\(\{ id: item\.employee_id, name: item\.employee_name \}\)/, 'Historico: o mesmo botao abre e fecha o painel do colaborador')
 
 const scheduleSrcUrl = pathToFileURL(srcRoot).href + '/'
 const scheduleResourceStub = 'data:text/javascript,' + encodeURIComponent(
@@ -233,7 +234,7 @@ const EXPECTED_RULE_BUTTONS = {
 }
 for (const [role, permissions] of [['admin', ['escalas.manage']], ['gestor', []], ['tecnico', []]]) {
   const markup = renderSchedule(scheduleSession(role, permissions))
-  const start = markup.indexOf('<section class="card"><h2 class="mb-4 font-bold text-white">Regras vigentes e agendadas</h2>')
+  const start = markup.indexOf('<section class="card"><h2 class="mb-4 font-bold text-white" tabindex="-1">Regras vigentes e agendadas</h2>')
   assert.ok(start >= 0, `${role}: o cartao das regras nao rola inteiro (sem table-wrap)`)
   const section = markup.slice(start, markup.indexOf('</table>', start))
   assert.match(section, /<div class="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-rule-list="">/, `${role}: cartoes abaixo de 1280 px, uma coluna e duas de 768 px`)
