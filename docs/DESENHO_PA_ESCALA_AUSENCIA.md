@@ -3216,6 +3216,8 @@ O que a peça faz (o desenho é o da seção 6.3 do `docs/DESENHO_CHG.md`):
 
 O V1 entra junto com o item 2.
 
+**Correção na mutação do item 1 (registrada na revisão do item 2, responsável, 2026-10-30):** os 41/41 da mutação do item 1 tinham **um mutante mal construído**. O "navigate sem bloqueio" só definia a função de navegação, sem chamá-la, e morria por quebrar toda a navegação, não por faltar o bloqueio. Foi refeito chamando a navegação direto, sem o bloqueio: morre no `qa:unsaved-changes` e no roteiro de navegador (2 conferências, com o formulário sujo). A correção está aprovada.
+
 **17f, item 2 — Chamados críticos (B4 no novo e no editar, formulário pelo `Dialog`) e o V1 (roteiro de navegador versionado), 2026-10-29: entregue (`e45bc12`), aguardando revisão.**
 
 Arquivos:
@@ -3292,6 +3294,16 @@ Mesma largura e mesma borda vermelha de antes; o papel passou de `form` solto pa
 - a recarga com o formulário sujo foi conferida com o aviso do navegador recusado (ficar); aceitar o aviso descarta, como esperado, e não foi exercitado;
 - o roteiro do navegador e o servidor simulado ficam no repositório, mas fora do build (`frontend/scripts`);
 - `gitleaks` ausente na estação.
+
+**Revisão do item 2 do lote 17f + 17g (`e45bc12`, docs `02d18af`) e do V1 (responsável, 2026-10-30): APROVADOS, com W1 a W5; a W6 com o ajuste X1.**
+
+- **Mutação:** aprovada a correção do "navigate sem o bloqueio" (registrada na revisão do item 1).
+- **Biblioteca de DOM:** não adotar, como recomendado.
+- **Roteiro de navegador (`-Browser`): OBRIGATÓRIO antes do deploy único**, rodado na estação sobre o commit que vai ser gravado. Registrado na pendência 16 (roteiro único) e no `QA_VISUAL_CHECKLIST.md`. No dia a dia, `test-local.ps1` sem `-Browser` continua avisando e pulando, agora com o aviso de que é obrigatório antes do deploy.
+
+**X1 (baixo):** na mesma tela de Chamados críticos, Visualizar e Importar planilha passam para o `Dialog` (`role="dialog"`, Esc, foco preso, foco devolvido a quem abriu), **sem** a proteção de alterações: Visualizar não tem formulário; Importar só perde a escolha do arquivo. Cobrir no QA e no roteiro de navegador (abrir, Esc, clique fora, foco devolvido), com mutação. Num commit próprio, antes do item 3. A revisão do X1 e do item 3 é uma só.
+
+**Marcadores provisórios (pedido da revisão):** procurados nos documentos antes dos commits (`COMMIT_*`, `RESULTADO_*`, `HASH_*`, `TODO`, `XXX`, `FIXME`, `TBD`, `PREENCHER`, conflitos de merge): **nenhum sobrou**. Os únicos resultados são os modelos `XXXXXX` do `mktemp` no `DEPLOY_LINUX.md`, que são parte dos comandos.
 
 ---
 

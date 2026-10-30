@@ -103,7 +103,9 @@ Checklist objetivo para a Fase 5. Use em homologacao local/controlada antes de c
 
 - [ ] Novo e editar abrem num dialogo com Esc, foco preso e `role="dialog"`; com alteracoes nao salvas, fechar (X/Cancelar, Esc, clique fora), trocar de tela, voltar, "Sair" e recarregar pedem confirmacao.
 
-## Protecao contra perda de alteracoes (conferencia no navegador, opcional)
+## Protecao contra perda de alteracoes (conferencia no navegador)
+
+**Obrigatoria antes do deploy unico da Parte B:** rodar `-Browser` na estacao, sobre o commit que vai ser gravado, com todas as conferencias passando (decisao do responsavel, 2026-10-30; pendencia 16). No dia a dia e opcional.
 
 Roteiro versionado: `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`. Fora dos `qa:*` do npm, porque precisa de navegador.
 

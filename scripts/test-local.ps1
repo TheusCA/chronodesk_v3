@@ -346,9 +346,9 @@ if ($SkipHttp) {
     }
 }
 
-Write-Section "Navegador (opcional)"
+Write-Section "Navegador (opcional no dia a dia; obrigatorio antes do deploy unico)"
 if (-not $Browser) {
-    Warn "Conferencia no navegador pulada (use -Browser; precisa do Chrome e do Node 22+)"
+    Warn "Conferencia no navegador pulada (use -Browser; precisa do Chrome e do Node 22+). Obrigatoria antes do deploy unico, sobre o commit que vai ser gravado"
 } elseif (!$node) {
     Fail "Node.js nao encontrado; a conferencia no navegador precisa dele"
 } else {
