@@ -1,5 +1,6 @@
 /* global process */
 // [17f, V1] Conferencia no navegador da protecao contra perda de alteracoes,
+// dos avisos (tempo e leitor de tela, DD2) e das confirmacoes (17g, DD3),
 // nas TELAS REAIS que usam a peca, com servidor simulado e dados ficticios.
 // Fora dos qa:* (precisa de navegador). Saida so com contagens: cada
 // conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram).
@@ -7,6 +8,7 @@
 // Uso (na pasta frontend):
 //   CHROME_PATH="C:\Program Files\Google\Chrome\Application\chrome.exe" node scripts/browser/qa-unsaved-changes-browser.mjs
 //   ... --app <pasta-do-build>   usa um build pronto (sem isso, gera um build numa pasta temporaria; nunca em ../app)
+//   ... --blocos 12,13           roda so esses blocos (numeros dos comentarios "// N."); sem isso, todos
 // Requer Node 22 ou mais novo (WebSocket nativo).
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -14,12 +16,14 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChrome, openPage, sleep } from './lib/chrome.mjs'
-import { ALREADY_DECIDED, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, startMockServer } from './lib/mock-server.mjs'
+import { ALREADY_DECIDED, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, NOT_PAUSED, startMockServer } from './lib/mock-server.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const appArg = process.argv.indexOf('--app')
 let appDir = appArg > 0 ? process.argv[appArg + 1] : null
 let tempBuild = null
+const blocksArg = process.argv.indexOf('--blocos')
+const onlyBlocks = blocksArg > 0 ? new Set(process.argv[blocksArg + 1].split(',').map(Number)) : null
 
 let passed = 0
 let failed = 0
@@ -1101,7 +1105,8 @@ async function dialogCoverage(page, port) {
 }
 
 // 8. [BB1] O aviso fica acima de qualquer Dialog, da coluna fixa e do menu do celular.
-const TOAST = `document.querySelector('body > [role="alert"], body > [role="status"]')`
+const TOAST = `document.querySelector('body > [data-feedback-region] > .portal-toast')`
+const TOAST_ROLE = `${TOAST}?.parentElement.getAttribute('role')`
 const TOAST_STATE = `(() => {
   const toast = ${TOAST}
   if (!toast) return { aviso: false }
@@ -1333,10 +1338,10 @@ const APPROVAL_SECTION = (title) => `[...document.querySelectorAll('main h2')].f
 const DECISION_SCREENS = [
   { name: 'Horas extras, linha', path: '/horas-extras', width: 1366, api: OVERTIME_API, noun: 'hora extra', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['18:00 - 20:00', 'total 2h 00min'] },
   { name: 'Horas extras, cartao', path: '/horas-extras', width: 390, api: OVERTIME_API, noun: 'hora extra', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['18:00 - 20:00', 'total 2h 00min'] },
-  { name: 'Correcao de ponto, linha', path: '/correcao-ponto', width: 1366, api: ADJUSTMENT_API, noun: 'ajuste de ponto', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['Entrada', 'horário correto 08:00'] },
-  { name: 'Correcao de ponto, cartao', path: '/correcao-ponto', width: 1024, api: ADJUSTMENT_API, noun: 'ajuste de ponto', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['Entrada', 'horário correto 08:00'] },
+  { name: 'Correcao de ponto, linha', path: '/correcao-ponto', width: 1366, api: ADJUSTMENT_API, noun: 'correção de ponto', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['Entrada', 'horário correto 08:00'] },
+  { name: 'Correcao de ponto, cartao', path: '/correcao-ponto', width: 1024, api: ADJUSTMENT_API, noun: 'correção de ponto', section: 'Pendentes de aprovação', scope: `document.querySelector('main')`, details: ['Entrada', 'horário correto 08:00'] },
   { name: 'Aba Aprovacoes, horas extras', path: '/admin?tab=aprovacoes', width: 1366, api: OVERTIME_API, noun: 'hora extra', section: 'Horas extras pendentes', scope: APPROVAL_SECTION('Horas extras pendentes'), details: ['18:00 - 20:00', 'total 2h 00min'] },
-  { name: 'Aba Aprovacoes, ajustes', path: '/admin?tab=aprovacoes', width: 390, api: ADJUSTMENT_API, noun: 'ajuste de ponto', section: 'Ajustes de ponto pendentes', scope: APPROVAL_SECTION('Ajustes de ponto pendentes'), details: ['Entrada', 'horário correto 08:00'] },
+  { name: 'Aba Aprovacoes, ajustes', path: '/admin?tab=aprovacoes', width: 390, api: ADJUSTMENT_API, noun: 'correção de ponto', section: 'Ajustes de ponto pendentes', scope: APPROVAL_SECTION('Ajustes de ponto pendentes'), details: ['Entrada', 'horário correto 08:00'] },
 ]
 const DECISION_STATE = `(() => {
   const dialog = ${ALERT}
@@ -1353,7 +1358,7 @@ const DECISION_STATE = `(() => {
     habilitados: dialog ? [...dialog.querySelectorAll('button')].filter((b) => !b.disabled).length : null,
     botoes: dialog ? [...dialog.querySelectorAll('button')].map((b) => b.textContent.trim()).join('|') : null,
     aviso: ${TOAST}?.textContent ?? null,
-    aviso_erro: ${TOAST}?.getAttribute('role') === 'alert',
+    aviso_erro: ${TOAST_ROLE} === 'alert',
   }
 })()`
 
@@ -1438,7 +1443,7 @@ async function decisionConfirm(page, port, mock) {
       const before = decisionPosts().length
       await page.click(BTN('Rejeitar'))
       await page.click(CONFIRM('Rejeitar'))
-      await page.waitFor(`${TOAST}?.getAttribute('role') === 'alert'`)
+      await page.waitFor(`${TOAST_ROLE} === 'alert'`)
       await sleep(250)
       await expectState(page, `${name}, recusa ${status}: aviso por cima do dialogo`, { aviso: true, centro: true, fechar: true, z: '70' }, TOAST_STATE)
       await expectDecision(`recusa ${status}: dialogo aberto, foco em "Cancelar", mensagem do servidor`, { titulo: `Rejeitar ${noun}?`, foco: 'Cancelar', aviso_erro: true, habilitados: 2, aviso: (value) => !text || value?.includes(text) })
@@ -1506,6 +1511,283 @@ async function decisionConfirm(page, port, mock) {
   mock.restoreDecisions()
 }
 
+// 12. [DD2] Avisos: erro e aviso 10 s, sucesso 5 s; duas regioes vivas permanentes no body
+// (erro em role="alert"/assertive, sucesso em role="status"/polite). O aviso entra na
+// regiao que ja existia, e a mesma mensagem repetida entra de novo.
+const REGIONS = `(() => {
+  const regions = [...document.querySelectorAll('body > [data-feedback-region]')]
+  const by = (kind) => regions.find((el) => el.dataset.feedbackRegion === kind)
+  const attrs = (kind) => by(kind) ? [by(kind).getAttribute('role'), by(kind).getAttribute('aria-live'), by(kind).getAttribute('aria-atomic')].join('|') : null
+  return {
+    regioes: regions.length,
+    polite: attrs('polite'),
+    assertive: attrs('assertive'),
+    polite_texto: by('polite')?.textContent ?? null,
+    assertive_texto: by('assertive')?.textContent ?? null,
+    marcadas: regions.filter((el) => el.__qaMark === 1).length,
+    dialogos: document.querySelectorAll('[data-dialog-backdrop]').length,
+  }
+})()`
+const MARK_REGIONS = `(() => { document.querySelectorAll('body > [data-feedback-region]').forEach((el) => { el.__qaMark = 1 }); return true })()`
+// Linha do tempo do aviso na pagina (performance.now): '+' entrou, '-' saiu, por no
+// (na troca de um aviso por outro, a saida do antigo pode vir depois da entrada do novo).
+const TOAST_LOG = `(() => {
+  window.__qaToastLog = []
+  let next = 0
+  window.__qaToastObserver?.disconnect()
+  window.__qaToastObserver = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) if (node.classList?.contains('portal-toast')) { node.__qaId = ++next; window.__qaToastLog.push({ sinal: '+', no: node.__qaId, t: performance.now(), regiao: node.parentElement?.dataset.feedbackRegion ?? null }) }
+      for (const node of record.removedNodes) if (node.classList?.contains('portal-toast')) window.__qaToastLog.push({ sinal: '-', no: node.__qaId, t: performance.now() })
+    }
+  })
+  window.__qaToastObserver.observe(document.body, { childList: true, subtree: true })
+  return true
+})()`
+const LAST_TOAST_MS = `(() => {
+  const log = window.__qaToastLog || []
+  const start = log.filter((entry) => entry.sinal === '+').at(-1)
+  if (!start) return null
+  const end = log.find((entry) => entry.sinal === '-' && entry.no === start.no)
+  return end ? Math.round(end.t - start.t) : null
+})()`
+
+// No da arvore de acessibilidade do Chrome: papel, ignorado e as propriedades de regiao viva.
+async function axOf(page, expression) {
+  const { result } = await page.send('Runtime.evaluate', { expression, returnByValue: false })
+  if (!result.objectId) return null
+  const { nodes } = await page.send('Accessibility.getPartialAXTree', { objectId: result.objectId, fetchRelatives: false })
+  const node = nodes[0]
+  const prop = (name) => node.properties?.find((item) => item.name === name)?.value?.value
+  return { papel: node.role?.value, ignorado: node.ignored, live: prop('live'), atomic: prop('atomic') }
+}
+const REGION = (kind) => `document.querySelector('body > [data-feedback-region="${kind}"]')`
+
+async function feedbackTimingAndAnnouncement(page, port, mock) {
+  await page.send('Accessibility.enable')
+  const removeButton = (index) => ROW_BUTTON('Remover regra', index)
+  const confirmRemove = () => page.click(button('Remover regra', ALERT))
+  const errorToast = `(${TOAST}?.textContent || '').includes('Falha simulada')`
+  const successToast = `(${TOAST}?.textContent || '').includes('Regra de escala removida com sucesso.')`
+  const waitToastGone = async (timeoutMs) => { await page.waitFor(`!${TOAST}`, timeoutMs); await sleep(100) }
+  const within = (value, low, high) => typeof value === 'number' && value >= low && value <= high
+
+  for (const width of [1366, 390]) {
+    mock.restoreRules()
+    await goto(page, port, '/escala-presencial', width)
+    await page.waitFor(`!!${removeButton(3)}`)
+    await expectState(page, `${width} px, sem aviso: duas regioes vivas no body, vazias, com papel e aria-live`, { regioes: 2, polite: 'status|polite|true', assertive: 'alert|assertive|true', polite_texto: '', assertive_texto: '' }, REGIONS)
+    report(`${width} px, sem aviso: regiao de erro na arvore de acessibilidade (alert, assertive, atomic)`, JSON.stringify(await axOf(page, REGION('assertive'))) === JSON.stringify({ papel: 'alert', ignorado: false, live: 'assertive', atomic: true }), JSON.stringify(await axOf(page, REGION('assertive'))))
+    report(`${width} px, sem aviso: regiao de sucesso na arvore de acessibilidade (status, polite, atomic)`, JSON.stringify(await axOf(page, REGION('polite'))) === JSON.stringify({ papel: 'status', ignorado: false, live: 'polite', atomic: true }), JSON.stringify(await axOf(page, REGION('polite'))))
+    await page.evaluate(MARK_REGIONS)
+    await page.evaluate(TOAST_LOG)
+
+    // Erro com o dialogo aberto: entra na regiao de erro que ja existia, que continua na arvore.
+    await page.click(removeButton(3))
+    await confirmRemove()
+    await page.waitFor(errorToast)
+    await sleep(150)
+    await expectState(page, `${width} px, erro com o dialogo aberto: o aviso entra na regiao de erro que ja existia`, { regioes: 2, marcadas: 2, polite_texto: '', assertive_texto: (value) => value?.includes('Falha simulada'), dialogos: 1 }, REGIONS)
+    report(`${width} px, erro com o dialogo aberto: regiao de erro nao ignorada pela arvore (aria-modal)`, (await axOf(page, REGION('assertive')))?.ignorado === false)
+    report(`${width} px, erro: o aviso visivel e o de dentro da regiao (sem papel proprio)`, await page.evaluate(`!${TOAST}.hasAttribute('role') && ${TOAST}.dataset.feedbackType === 'error'`))
+    if (width === 390) {
+      await page.press('Escape')
+      await waitToastGone(12000)
+      continue
+    }
+
+    // Erro: cerca de 10 s na tela.
+    await waitToastGone(12000)
+    const errorMs = await page.evaluate(LAST_TOAST_MS)
+    report(`${width} px, erro: fica cerca de 10 s na tela (9,7 a 10,6 s)`, within(errorMs, 9700, 10600), `${errorMs} ms`)
+    await expectState(page, `${width} px, erro, depois do tempo: regioes vazias, as mesmas`, { regioes: 2, marcadas: 2, assertive_texto: '', polite_texto: '' }, REGIONS)
+
+    // A mesma mensagem duas vezes: entra de novo (outro no) e o tempo recomeca.
+    const additions = () => page.evaluate(`(window.__qaToastLog || []).filter((entry) => entry.sinal === '+').length`)
+    const before = await additions()
+    await confirmRemove()
+    await page.waitFor(errorToast)
+    await sleep(1500)
+    await confirmRemove()
+    await sleep(400)
+    report(`${width} px, a mesma mensagem duas vezes: o aviso entra de novo (dois avisos na linha do tempo)`, (await additions()) === before + 2, `${(await additions()) - before}`)
+    await waitToastGone(12000)
+    const repeatedMs = await page.evaluate(LAST_TOAST_MS)
+    report(`${width} px, a mesma mensagem duas vezes: o tempo recomeca no segundo (cerca de 10 s)`, within(repeatedMs, 9700, 10600), `${repeatedMs} ms`)
+    await page.press('Escape')
+
+    // Erro na tela e, logo depois, sucesso: o sucesso troca o erro e fica 5 s.
+    await page.click(removeButton(3))
+    await confirmRemove()
+    await page.waitFor(errorToast)
+    await page.press('Escape')
+    await page.click(removeButton(0))
+    await confirmRemove()
+    await page.waitFor(successToast)
+    await sleep(150)
+    await expectState(page, `${width} px, sucesso: entra na regiao de sucesso que ja existia; a de erro esvazia`, { regioes: 2, marcadas: 2, assertive_texto: '', polite_texto: (value) => value?.includes('Regra de escala removida com sucesso.') }, REGIONS)
+    report(`${width} px, sucesso: o aviso visivel e o de dentro da regiao`, await page.evaluate(`!${TOAST}.hasAttribute('role') && ${TOAST}.dataset.feedbackType === 'success'`))
+    await waitToastGone(8000)
+    const successMs = await page.evaluate(LAST_TOAST_MS)
+    report(`${width} px, sucesso: continua com cerca de 5 s (4,7 a 5,6 s)`, within(successMs, 4700, 5600), `${successMs} ms; ${await page.evaluate(`(window.__qaToastLog || []).slice(-4).map((e) => e.sinal + Math.round(e.t) + (e.regiao || '')).join(' ')`)}`)
+    const log = await page.evaluate('window.__qaToastLog')
+    report(`${width} px, linha do tempo: erros na regiao de erro, sucesso na de sucesso`, log.filter((entry) => entry.sinal === '+').every((entry, index, all) => entry.regiao === (index === all.length - 1 ? 'polite' : 'assertive')), log.map((entry) => entry.regiao).join(','))
+  }
+  mock.restoreRules()
+}
+
+// 13. [DD3] Derrubar pausa e remover documento: ConfirmActionDialog no lugar do window.confirm.
+const ACTION_WARNING = 'Esta ação não pode ser desfeita pelo sistema.'
+const CONFIRM_STATE = `(() => {
+  const dialog = ${ALERT}
+  const active = document.activeElement
+  return {
+    titulo: dialog?.querySelector('h2')?.textContent ?? null,
+    texto: dialog?.textContent ?? '',
+    modal: dialog?.getAttribute('aria-modal') ?? null,
+    descrito: !!dialog && (document.getElementById(dialog.getAttribute('aria-describedby') || 'x')?.textContent || '').includes(${JSON.stringify(ACTION_WARNING)}),
+    foco: !active || active === document.body ? 'body' : active.hasAttribute('data-page-title') ? 'titulo da pagina' : (active.getAttribute('aria-label') || active.textContent || '').trim(),
+    dialogos: document.querySelectorAll('[data-dialog-backdrop]').length,
+    travado: document.body.style.overflow,
+    habilitados: dialog ? [...dialog.querySelectorAll('button, textarea')].filter((el) => !el.disabled).length : null,
+    botoes: dialog ? [...dialog.querySelectorAll('button')].map((b) => b.textContent.trim()).join('|') : null,
+    aviso: ${TOAST}?.textContent ?? null,
+    aviso_erro: ${TOAST_ROLE} === 'alert',
+  }
+})()`
+
+async function confirmActionScreens(page, port, mock) {
+  const nativeDialogs = () => page.events.filter((event) => event.method === 'Page.javascriptDialogOpening').length
+  const nativeBefore = nativeDialogs()
+  const CONFIRM = (text) => `[...${ALERT}.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(text)})`
+  const screens = [
+    { name: 'Dashboard, derrubar pausa', path: '/dashboard', kind: 'pause' },
+    { name: 'Pausas, derrubar pausa', path: '/pausas', kind: 'pause' },
+    { name: 'Documentacao, remover documento', path: '/documentacao', kind: 'document' },
+  ]
+  for (const width of [1366, 390]) {
+    for (const { name, path, kind } of screens) {
+      const label = `${width} px, ${name}`
+      const expectConfirm = (text, expected) => expectState(page, `${label}, ${text}`, expected, CONFIRM_STATE)
+      const pause = kind === 'pause'
+      const api = pause ? 'portal/admin_force_end_break.php' : 'portal/documents_delete.php'
+      const posts = () => mock.requests.filter((r) => r.method === 'POST' && r.key === api)
+      const triggerText = pause ? 'Derrubar pausa' : 'Remover Documento de teste 1'
+      const TRIGGER = pause
+        ? `[...document.querySelectorAll('main button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Derrubar pausa')[0]`
+        : `document.querySelector('main button[aria-label="Remover Documento de teste 1"]')`
+      const triggers = () => page.evaluate(pause ? `[...document.querySelectorAll('main button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Derrubar pausa').length` : `document.querySelectorAll('main button[aria-label="Remover Documento de teste 1"]').length`)
+      const confirmText = pause ? 'Derrubar pausa' : 'Remover documento'
+      const title = pause ? 'Derrubar pausa?' : 'Remover documento?'
+      const subject = pause ? 'Tecnico 01 Sobrenome' : '"Documento de teste 1"'
+      const open = async () => {
+        mock.restoreDecisions()
+        mock.restoreDocuments()
+        mock.refuseForceEnd(null)
+        mock.setPausedEmployee(true)
+        await goto(page, port, path, width)
+        await page.waitFor(`!!${TRIGGER}`)
+        await sleep(150)
+      }
+
+      // Abrir: nada e enviado antes de confirmar.
+      await open()
+      const start = posts().length
+      await page.click(TRIGGER)
+      await expectConfirm('abrir: role="alertdialog", foco em "Cancelar", janela travada', { titulo: title, modal: 'true', foco: 'Cancelar', dialogos: 1, travado: 'hidden', botoes: `${confirmText}|Cancelar`, descrito: true })
+      await expectConfirm('texto: o alvo e o aviso de que nao se desfaz', { texto: (value) => [subject, ACTION_WARNING, ...(pause ? ['Justificativa da derrubada (opcional)'] : ['auditoria'])].every((part) => value.includes(part)) })
+      await page.press('Escape')
+      await expectConfirm('Esc: fecha, foco volta ao botao', { titulo: null, foco: triggerText, dialogos: 0, travado: '' })
+      await page.click(TRIGGER)
+      await page.clickAt(5, 450)
+      await expectConfirm('clique fora: fecha, foco volta ao botao', { titulo: null, foco: triggerText, dialogos: 0 })
+      await page.click(TRIGGER)
+      await page.click(CONFIRM('Cancelar'))
+      await expectConfirm('"Cancelar": fecha, foco volta ao botao', { titulo: null, foco: triggerText, dialogos: 0 })
+      report(`${label}, Esc, clique fora e "Cancelar": nenhum POST`, posts().length === start)
+
+      // Ja resolvido por outra pessoa: aviso por cima, dialogo aberto, lista atualiza por tras.
+      await open()
+      if (pause) { mock.setPausedEmployee(false) } else { mock.removeDocumentElsewhere(1) }
+      await page.click(TRIGGER)
+      await page.click(CONFIRM(confirmText))
+      const refusal = pause ? NOT_PAUSED : DOCUMENT_NOT_FOUND
+      await page.waitFor(`(${TOAST}?.textContent || '').includes(${JSON.stringify(refusal)})`)
+      await sleep(300)
+      await expectState(page, `${label}, ja resolvido por outra pessoa: aviso por cima do dialogo`, { aviso: true, centro: true, fechar: true, z: '70' }, TOAST_STATE)
+      await expectConfirm('ja resolvido por outra pessoa: dialogo aberto, foco em "Cancelar", aviso de erro', { titulo: title, foco: 'Cancelar', aviso_erro: true, habilitados: pause ? 3 : 2 })
+      report(`${label}, ja resolvido por outra pessoa: a lista atualiza por tras do dialogo`, (await triggers()) === 0)
+      await page.press('Escape')
+      await expectConfirm('ja resolvido, Esc: fecha, o botao saiu, foco no titulo da pagina', { titulo: null, dialogos: 0, foco: 'titulo da pagina' })
+
+      // Outras recusas: o dialogo fica aberto e da para tentar de novo.
+      for (const [status, message] of [[403, pause ? 'Apenas administradores e Liderança podem derrubar pausas.' : 'Seu perfil nao possui permissao para gerenciar documentos.'], [500, pause ? 'Nao foi possivel concluir a operacao.' : 'Nao foi possivel remover o documento.']]) {
+        await open()
+        if (pause) mock.refuseForceEnd(status, message)
+        else mock.refuseDocument(status, message)
+        const before = posts().length
+        await page.click(TRIGGER)
+        await page.click(CONFIRM(confirmText))
+        await page.waitFor(`${TOAST_ROLE} === 'alert'`)
+        await sleep(300)
+        await expectState(page, `${label}, recusa ${status}: aviso por cima do dialogo`, { aviso: true, centro: true, fechar: true, z: '70' }, TOAST_STATE)
+        await expectConfirm(`recusa ${status}: dialogo aberto, foco em "Cancelar"`, { titulo: title, foco: 'Cancelar', aviso_erro: true })
+        report(`${label}, recusa ${status}: o botao continua na lista`, (await triggers()) >= 1)
+        await page.click(CONFIRM(confirmText))
+        await sleep(400)
+        report(`${label}, recusa ${status}, tentar de novo: outro POST`, posts().length === before + 2)
+        await page.click(CONFIRM('Cancelar'))
+        await expectConfirm(`recusa ${status}, "Cancelar": fecha, foco volta ao botao`, { titulo: null, foco: triggerText, dialogos: 0 })
+        mock.refuseForceEnd(null)
+        mock.refuseDocument(null)
+      }
+
+      // Confirmar: um POST, com o payload de antes; fecha e o foco vai ao titulo da pagina.
+      await open()
+      const beforeOk = posts().length
+      await page.click(TRIGGER)
+      if (pause && width === 1366) {
+        await page.evaluate(`${ALERT}.querySelector('textarea').focus()`)
+        await page.typeText('Justificativa de teste')
+      }
+      await page.click(CONFIRM(confirmText))
+      await page.waitFor(`!${ALERT}`)
+      await sleep(250)
+      const sent = posts().at(-1)
+      const payload = pause ? { funcionario_id: 1, justificativa: width === 1366 ? 'Justificativa de teste' : '' } : { id: 1 }
+      report(`${label}, confirmado: um POST, payload de antes`, posts().length === beforeOk + 1 && JSON.stringify(sent?.body) === JSON.stringify(payload), JSON.stringify(sent?.body))
+      await expectConfirm('confirmado: fecha, aviso de sucesso, destrava, foco no titulo da pagina', { titulo: null, dialogos: 0, travado: '', foco: 'titulo da pagina', aviso_erro: false, aviso: (value) => value?.includes(pause ? 'finalizou a pausa' : 'Documento removido com sucesso.') })
+      report(`${label}, confirmado: o botao saiu da lista`, (await triggers()) === 0)
+
+      // Durante o envio: botoes e campo desabilitados; Esc e clique fora nao fecham.
+      await open()
+      mock.setDecisionDelay(900)
+      const beforeBusy = posts().length
+      await page.click(TRIGGER)
+      await page.click(CONFIRM(confirmText))
+      await expectConfirm('enviando: tudo desabilitado, rotulo de envio', { botoes: `${pause ? 'Derrubando...' : 'Removendo...'}|Cancelar`, habilitados: 0 })
+      await page.press('Escape')
+      await page.clickAt(5, 450)
+      await expectConfirm('enviando, Esc e clique fora: nao fecha', { titulo: title, dialogos: 1 })
+      await page.waitFor(`!${ALERT}`, 4000)
+      await sleep(250)
+      report(`${label}, enviando: um POST so`, posts().length === beforeBusy + 1)
+      mock.setDecisionDelay(0)
+
+      // Fundo do dialogo cobre a janela (Z2).
+      await open()
+      await page.click(TRIGGER)
+      await expectCoverage(page, label)
+      await page.press('Escape')
+    }
+  }
+  report('derrubar pausa e remover documento: nenhum dialogo nativo do navegador', nativeDialogs() === nativeBefore)
+  mock.restoreDecisions()
+  mock.restoreDocuments()
+  mock.refuseForceEnd(null)
+  mock.setPausedEmployee(false)
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -1519,28 +1801,26 @@ try {
   mock = await startMockServer(appDir)
   chrome = await launchChrome()
   page = await openPage(chrome.port)
-  console.log('== Navegacao sem formulario sujo')
-  await navigationWithoutDirtyForm(page, mock.port, mock)
-  console.log('== Chamados criticos (novo e editar)')
-  await criticalIncidents(page, mock.port, mock)
-  console.log('== Chamados criticos (Visualizar e Importar)')
-  await criticalIncidentsViewAndImport(page, mock.port, mock)
-  console.log('== Funcionarios (editar e adicionar)')
-  await employees(page, mock.port, mock)
-  console.log('== Ausencias')
-  await absences(page, mock.port, mock)
-  console.log('== Escala')
-  await schedule(page, mock.port, mock)
-  console.log('== Fundo dos dialogos (Z2)')
-  await dialogCoverage(page, mock.port)
-  console.log('== Avisos acima dos dialogos (BB1)')
-  await toastAboveLayers(page, mock.port)
-  console.log('== Trava de rolagem (BB2)')
-  await scrollLock(page, mock.port)
-  console.log('== Foco sem destino (BB3)')
-  await focusFallback(page, mock.port, mock)
-  console.log('== Aprovar e Rejeitar (17g)')
-  await decisionConfirm(page, mock.port, mock)
+  const blocks = [
+    [1, 'Navegacao sem formulario sujo', () => navigationWithoutDirtyForm(page, mock.port, mock)],
+    [2, 'Chamados criticos (novo e editar)', () => criticalIncidents(page, mock.port, mock)],
+    [3, 'Chamados criticos (Visualizar e Importar)', () => criticalIncidentsViewAndImport(page, mock.port, mock)],
+    [4, 'Funcionarios (editar e adicionar)', () => employees(page, mock.port, mock)],
+    [5, 'Ausencias', () => absences(page, mock.port, mock)],
+    [6, 'Escala', () => schedule(page, mock.port, mock)],
+    [7, 'Fundo dos dialogos (Z2)', () => dialogCoverage(page, mock.port)],
+    [8, 'Avisos acima dos dialogos (BB1)', () => toastAboveLayers(page, mock.port)],
+    [9, 'Trava de rolagem (BB2)', () => scrollLock(page, mock.port)],
+    [10, 'Foco sem destino (BB3)', () => focusFallback(page, mock.port, mock)],
+    [11, 'Aprovar e Rejeitar (17g)', () => decisionConfirm(page, mock.port, mock)],
+    [12, 'Avisos: tempo e leitor de tela (DD2)', () => feedbackTimingAndAnnouncement(page, mock.port, mock)],
+    [13, 'Derrubar pausa e remover documento (DD3)', () => confirmActionScreens(page, mock.port, mock)],
+  ]
+  for (const [number, title, run] of blocks) {
+    if (onlyBlocks && !onlyBlocks.has(number)) continue
+    console.log(`== ${number}. ${title}`)
+    await run()
+  }
 } catch (error) {
   failed++
   console.log(`FALHOU  execucao interrompida: ${error.message}`)

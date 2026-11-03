@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
+import { ConfirmActionDialog } from '../components/ui/ConfirmActionDialog'
 import { Icon } from '../components/ui/Icon'
 import { FileTypeBadge, FilterBar, InlineAlert, MetricCard, SectionHeader, TruncationNotice } from '../components/ui/Primitives'
 import { useResource } from '../hooks/useResource'
@@ -178,6 +179,8 @@ export function DocumentsPage({ notify }) {
   const resource = useResource('portal/documents.php')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [removeTarget, setRemoveTarget] = useState(null)
+  const removeReturnRef = useRef(null)
   const [filters, setFilters] = useState({ search: '', extension: '', date: '', category: '', uploadedBy: '' })
   const items = useMemo(() => resource.data?.items || [], [resource.data?.items])
   const filtered = useMemo(() => {
@@ -193,15 +196,28 @@ export function DocumentsPage({ notify }) {
     ))
   }, [filters, items])
 
-  async function remove(item) {
-    if (!window.confirm(`Remover "${item.title}" da listagem? O evento ficará registrado em auditoria.`)) return
+  // [17f, DD3] Remover pelo ConfirmActionDialog (antes, confirmação nativa). O
+  // payload é o de antes. Recusa do servidor: o diálogo fica aberto, com o aviso
+  // por cima, e a lista atualiza por trás (o documento pode ter saído antes).
+  function askRemove(item, trigger) {
+    removeReturnRef.current = trigger
+    setRemoveTarget(item)
+  }
+
+  async function remove() {
+    const item = removeTarget
+    if (!item || deletingId) return
     setDeletingId(item.id)
     try {
       await post('portal/documents_delete.php', { id: item.id })
       notify(ACTION_FEEDBACK.documentRemoved)
+      // Fecha depois de atualizar: o cartão de quem abriu já saiu, e o foco vai
+      // para o título da página (BB3), nunca para o body.
       await resource.refresh()
+      setRemoveTarget(null)
     } catch (error) {
       notify(error.message, 'error')
+      resource.refresh()
     } finally {
       setDeletingId(null)
     }
@@ -268,7 +284,7 @@ export function DocumentsPage({ notify }) {
                   <Icon name="download" className="h-4 w-4" /> Baixar
                 </a>
                 {resource.data?.can_upload && (
-                  <button className="btn-secondary px-3 text-red-300" disabled={deletingId === item.id} onClick={() => remove(item)} type="button" aria-label={`Remover ${item.title}`}>
+                  <button className="btn-secondary px-3 text-red-300" disabled={deletingId === item.id} onClick={(event) => askRemove(item, event.currentTarget)} type="button" aria-label={`Remover ${item.title}`}>
                     <Icon name="trash" className="h-4 w-4" />
                   </button>
                 )}
@@ -276,6 +292,19 @@ export function DocumentsPage({ notify }) {
             </article>
           ))}
         </section>
+      )}
+
+      {removeTarget && (
+        <ConfirmActionDialog
+          busy={deletingId === removeTarget.id}
+          busyLabel="Removendo..."
+          confirmLabel="Remover documento"
+          description={`Remover "${removeTarget.title}" da listagem? O evento ficará registrado em auditoria. Esta ação não pode ser desfeita pelo sistema.`}
+          onCancel={() => setRemoveTarget(null)}
+          onConfirm={remove}
+          returnFocusRef={removeReturnRef}
+          title="Remover documento?"
+        />
       )}
 
       {uploadOpen && (

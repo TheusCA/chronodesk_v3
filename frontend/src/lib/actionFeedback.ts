@@ -1,3 +1,12 @@
+// [17f, DD2] Tempo do aviso na tela, por tipo: erro e aviso pedem leitura e
+// ficam 10 s; sucesso e informação, 5 s, como antes. O X fecha antes.
+export const FEEDBACK_DURATION_MS: Readonly<Record<string, number>> = Object.freeze({
+  error: 10000,
+  warning: 10000,
+  success: 5000,
+  info: 5000,
+})
+
 export const ACTION_FEEDBACK = Object.freeze({
   changesSaved: 'Alterações salvas com sucesso.',
   calendarCreated: 'Registro adicionado com sucesso.',

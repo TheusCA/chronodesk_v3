@@ -153,11 +153,13 @@ const confirmInventory = Object.fromEntries(sourceFiles
   .map((path) => [relative(frontendRoot, path).replaceAll('\\', '/'), readFileSync(path, 'utf8').match(/\bwindow\.confirm\(/g)?.length || 0])
   .filter(([, count]) => count > 0))
 assert.deepEqual(confirmInventory, {
-  'src/App.jsx': 1,
+  // 17f, DD3: sairam os confirms de derrubar pausa (App.jsx) e de remover documento
+  // (DocumentsPage.jsx), agora pelo ConfirmActionDialog.
   // Lote 5b: saiu o aviso de "sair de Lideranca" (equipe nao define mais o perfil).
   // F4: saiu o confirm do "Desativar" (arquivar confirma na linha).
+  // Ficam os 2 de Usuarios locais (trocar perfil e remover): a aba so tem conteudo
+  // com ENABLE_LOCAL_ADMIN=true, que o preflight do deploy reprova (decisao de 2026-11-03).
   'src/pages/AdminPage.jsx': 2,
-  'src/pages/DocumentsPage.jsx': 1,
   // 17f, item 4: saiu o confirm de "Remover regra" (agora pelo Dialog).
   // F6 (P13): saiu o confirm do remoto no Mapa PA (salvar nunca pede confirmacao).
 }, 'Fase 21 nao deve adicionar novo window.confirm')

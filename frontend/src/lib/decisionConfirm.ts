@@ -41,7 +41,7 @@ export function decisionDialogText(kind: DecisionKind, item: DecisionItem, decis
   const approving = decision === 'approved'
   const overtime = kind === 'overtime'
   return {
-    title: `${approving ? 'Aprovar' : 'Rejeitar'} ${overtime ? 'hora extra' : 'ajuste de ponto'}?`,
+    title: `${approving ? 'Aprovar' : 'Rejeitar'} ${overtime ? 'hora extra' : 'correção de ponto'}?`,
     employee: item.employee_name ?? '',
     detail: overtime
       ? `${formatDate(item.work_date as string)}, ${hour(item.start_time)} - ${hour(item.end_time)}, total ${minutesLabel(item.total_minutes)}`

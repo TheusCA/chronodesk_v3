@@ -2,9 +2,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Feedback } from './components/Feedback'
 import { PortalLayout } from './components/PortalLayout'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
+import { ConfirmActionDialog } from './components/ui/ConfirmActionDialog'
 import { LoadingState } from './components/ui/States'
 import { LoginPage } from './pages/LoginPage'
 import { api, post, setCsrfToken } from './lib/api'
+import { FEEDBACK_DURATION_MS } from './lib/actionFeedback'
 import { navigation } from './lib/navigation'
 import { useRouter } from './lib/router'
 import { useLivePauses } from './hooks/useLivePauses'
@@ -55,17 +57,25 @@ export default function App() {
   const [actionLoading, setActionLoading] = useState(false)
   const [feedback, setFeedback] = useState(null)
   const feedbackTimer = useRef(null)
+  const feedbackSequence = useRef(0)
+  const [forceEndTarget, setForceEndTarget] = useState(null)
+  const [forceEndNote, setForceEndNote] = useState('')
+  const [forceEndBusy, setForceEndBusy] = useState(false)
+  const forceEndReturnRef = useRef(null)
   const authenticated = session.ci.autenticado || session.gestor.autenticado
   const livePauses = useLivePauses({ enabled: authenticated })
   const status = livePauses.status
 
   const notify = useCallback((message, type = 'success') => {
     if (feedbackTimer.current) window.clearTimeout(feedbackTimer.current)
-    setFeedback({ message, type })
+    // O id troca a cada aviso: a mesma mensagem repetida entra de novo na
+    // região viva e é lida outra vez pelo leitor de tela.
+    feedbackSequence.current += 1
+    setFeedback({ message, type, id: feedbackSequence.current })
     feedbackTimer.current = window.setTimeout(() => {
       setFeedback(null)
       feedbackTimer.current = null
-    }, 5000)
+    }, FEEDBACK_DURATION_MS[type] ?? FEEDBACK_DURATION_MS.success)
   }, [])
 
   useEffect(() => () => {
@@ -138,14 +148,33 @@ export default function App() {
   const allowed = !route?.permission || permissions.has(route.permission)
   const funcionarioId = session.ci.funcionario_id
 
-  async function forceEndBreak(employee) {
-    if (!hasPermission(session, 'pausas.force_end') || !employee?.em_pausa) return null
-    if (!window.confirm(`Tem certeza que deseja derrubar a pausa de ${employee.nome}?`)) return null
-    const justificativa = window.prompt('Justificativa da derrubada (opcional):', '') || ''
-    return runAction(() => post('portal/admin_force_end_break.php', {
-      funcionario_id: Number(employee.id),
-      justificativa,
+  // [17f, DD3] Derrubar pausa pelo ConfirmActionDialog (antes, confirmação e
+  // pergunta nativas do navegador). O payload é o de antes; a justificativa continua opcional.
+  function forceEndBreak(employee) {
+    if (!hasPermission(session, 'pausas.force_end') || !employee?.em_pausa) return
+    forceEndReturnRef.current = document.activeElement
+    setForceEndNote('')
+    setForceEndTarget(employee)
+  }
+
+  // Sessão encerrada ou expirada (401) com o diálogo aberto: o pedido não volta
+  // sozinho depois de entrar de novo.
+  useEffect(() => {
+    if (!authenticated) setForceEndTarget(null)
+  }, [authenticated])
+
+  async function confirmForceEnd() {
+    if (!forceEndTarget || forceEndBusy) return
+    setForceEndBusy(true)
+    const result = await runAction(() => post('portal/admin_force_end_break.php', {
+      funcionario_id: Number(forceEndTarget.id),
+      justificativa: forceEndNote,
     }))
+    setForceEndBusy(false)
+    // Recusa do servidor: o diálogo fica aberto, com o aviso por cima, e o painel
+    // atualiza por trás (a pausa pode ter sido encerrada por outra pessoa).
+    if (result) setForceEndTarget(null)
+    else refreshStatus().catch(() => {})
   }
 
   const closeFeedback = useCallback(() => {
@@ -210,27 +239,46 @@ export default function App() {
     content = <AccessDenied navigate={router.navigate} />
   }
 
+  let screen
   if (loading) {
-    return <div className="grid min-h-screen place-items-center text-sm text-slate-400">Carregando Portal Operacional...</div>
-  }
-
-  if (!authenticated) {
-    return (
-      <>
-        <LoginPage onLoginCI={loginCI} loading={actionLoading} />
-        <Feedback feedback={feedback} onClose={closeFeedback} />
-      </>
+    screen = <div className="grid min-h-screen place-items-center text-sm text-slate-400">Carregando Portal Operacional...</div>
+  } else if (!authenticated) {
+    screen = <LoginPage onLoginCI={loginCI} loading={actionLoading} />
+  } else {
+    screen = (
+      <PortalLayout session={session} path={router.path} navigate={router.navigate} onLogout={logout}>
+        <RouteErrorBoundary resetKey={router.path}>
+          <Suspense fallback={<LoadingState label="Carregando módulo..." />}>
+            {content}
+          </Suspense>
+        </RouteErrorBoundary>
+        {forceEndTarget && (
+          <ConfirmActionDialog
+            busy={forceEndBusy}
+            busyLabel="Derrubando..."
+            confirmLabel="Derrubar pausa"
+            description={`Deseja derrubar a pausa de ${forceEndTarget.nome}? Esta ação não pode ser desfeita pelo sistema.`}
+            onCancel={() => setForceEndTarget(null)}
+            onConfirm={confirmForceEnd}
+            returnFocusRef={forceEndReturnRef}
+            title="Derrubar pausa?"
+          >
+            <label className="label mt-4 block">
+              Justificativa da derrubada (opcional)
+              <textarea className="field mt-2 min-h-20" disabled={forceEndBusy} maxLength={500} value={forceEndNote} onChange={(event) => setForceEndNote(event.target.value)} />
+            </label>
+          </ConfirmActionDialog>
+        )}
+      </PortalLayout>
     )
   }
 
+  // [17f, DD2] O Feedback fica montado o tempo todo (carregando, login e portal):
+  // as regiões vivas já existem quando o aviso chega, e o leitor de tela o lê.
   return (
-    <PortalLayout session={session} path={router.path} navigate={router.navigate} onLogout={logout}>
-      <RouteErrorBoundary resetKey={router.path}>
-        <Suspense fallback={<LoadingState label="Carregando módulo..." />}>
-          {content}
-        </Suspense>
-      </RouteErrorBoundary>
+    <>
+      {screen}
       <Feedback feedback={feedback} onClose={closeFeedback} />
-    </PortalLayout>
+    </>
   )
 }

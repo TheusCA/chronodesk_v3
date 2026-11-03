@@ -43,7 +43,9 @@ assert.equal(existsSync(join(srcRoot, 'lib', 'actionFeedback.ts')), true, 'Helpe
 for (const type of ['success', 'error', 'warning', 'info']) {
   assert.match(feedbackSource, new RegExp(`${type}: \\{`), `Feedback deve suportar tipo ${type}`)
 }
-assert.match(feedbackSource, /role=\{variant\.role\}/, 'Feedback deve usar role por tipo')
+// [17f, DD2] O papel fica nas duas regioes vivas permanentes; o aviso entra na do seu tipo.
+assert.match(feedbackSource, /\{variant\?\.role === 'status' && toast\}/, 'Feedback deve usar role por tipo (regiao status)')
+assert.match(feedbackSource, /\{variant\?\.role === 'alert' && toast\}/, 'Feedback deve usar role por tipo (regiao alert)')
 assert.match(feedbackSource, /role: 'alert'/, 'Feedback de erro deve usar role alert')
 assert.match(feedbackSource, /role: 'status'/, 'Feedback de sucesso/info/aviso deve usar role status')
 assert.match(feedbackSource, /aria-label="Fechar mensagem"/, 'Feedback deve permitir fechamento manual acessivel')

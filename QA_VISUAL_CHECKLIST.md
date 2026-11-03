@@ -114,6 +114,7 @@ Roteiro versionado: `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`. F
 - Usa um servidor simulado com dados ficticios (`frontend/scripts/browser/lib/mock-server.mjs`): nenhum dado real, nenhuma chamada ao backend. O build e gerado numa pasta temporaria (nunca em `app/`), ou passado com `--app <pasta>`.
 - Rodar pela bateria: `powershell -ExecutionPolicy Bypass -File scripts/test-local.ps1 -SkipHttp -Browser` (opcional: `-ChromePath <caminho>`).
 - Rodar direto, na pasta `frontend`: `CHROME_PATH=<caminho> node scripts/browser/qa-unsaved-changes-browser.mjs`.
+- So alguns blocos (por exemplo, na mutacao): `--blocos 12,13`, com os numeros dos blocos impressos na saida (`== 12. ...`). Antes do deploy, sempre o roteiro inteiro.
 - Saida so com contagens: cada conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram) e o total. Codigo de saida 1 se alguma falhar.
 - Cobre hoje:
   - [ ] Navegacao sem formulario sujo igual a de sempre: todos os itens do menu em 1366 px e 390 px, voltar, avancar, "Sair" e recarregar, sem dialogo nem listener.
@@ -128,6 +129,8 @@ Roteiro versionado: `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`. F
   - [ ] Rolagem: com dialogo aberto, a roda nao move a pagina e a pagina nao pula; ao fechar o ultimo, tudo volta como estava; formulario alto continua rolando dentro do fundo.
   - [ ] Foco: ultima regra removida e formulario de Ausencias fechado levam o foco ao titulo da pagina, nunca ao body.
   - [ ] Aprovar e Rejeitar (horas extras e correcao de ponto; linha, cartao e aba Aprovacoes): dialogo com nome, data, detalhe e a frase de que nao se desfaz; foco em "Cancelar"; recusas do servidor com o aviso por cima e o dialogo aberto; pausas e reunioes sem confirmacao.
+  - [ ] Avisos, tempo e leitor de tela (DD2): duas regioes vivas no body desde o inicio (erro em `role="alert"`/`assertive`, sucesso em `role="status"`/`polite`, `aria-atomic`), conferidas tambem na arvore de acessibilidade do Chrome, inclusive com dialogo aberto; o aviso entra na regiao que ja existia; erro cerca de 10 s, sucesso cerca de 5 s; a mesma mensagem repetida entra de novo e o tempo recomeca; 390 e 1366 px.
+  - [ ] Derrubar pausa (Dashboard e Pausas) e remover documento (Documentacao), em 390 e 1366 px: dialogo com o alvo e a frase de que nao se desfaz, foco em "Cancelar"; Esc, clique fora e "Cancelar" sem POST; ja resolvido por outra pessoa, 403 e 500 com o aviso por cima e o dialogo aberto; confirmar com o payload de antes (justificativa opcional na derrubada); durante o envio, nada fecha; nenhum dialogo nativo do navegador.
 
 ## Escalas de Sabado
 

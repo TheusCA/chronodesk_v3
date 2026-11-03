@@ -22,6 +22,9 @@ export const FAILING_ABSENCE_NOTE = 'FALHA-QA'
 export const FAILING_RULE_EMPLOYEE = 4
 // Mensagem real do servidor para decidir o que nao esta mais pendente (OperationalService).
 export const ALREADY_DECIDED = 'Somente registros pendentes podem ser decididos.'
+// [DD3] Mensagens reais: pausa ja encerrada (GerenciadorPausas) e documento que ja saiu (DocumentService).
+export const NOT_PAUSED = 'Tecnico 01 Sobrenome não está em pausa.'
+export const DOCUMENT_NOT_FOUND = 'Documento nao encontrado.'
 
 // Decisoes de horas extras e correcao de ponto: a situacao muda com o POST, como no servidor real.
 const OVERTIME_KEY = 'portal/overtime.php'
@@ -64,6 +67,13 @@ const absencePeriods = [
 // Escala gerada: abaixo do Historico, a pagina continua, como na tela real.
 const generatedDays = Array.from({ length: 20 }, (_, index) => ({ employee_id: 1, employee_name: NAMES[0], team: TEAMS[0], date: `2026-10-${String(index + 1).padStart(2, '0')}`, rule_type: 'always_onsite', weekdays: [], rule_label: 'Sempre presencial', presence_type: 'onsite', source: 'rule' }))
 const removedRules = new Set()
+// [DD3] Pausa em andamento (desligada por padrao: os outros blocos veem o painel vazio) e documentos.
+let pausedEmployee = false
+let forceEndRefusal = null
+const documents = [1, 2].map((id) => ({ id, title: `Documento de teste ${id}`, original_name: `documento-${id}.pdf`, extension: 'pdf', size_bytes: 2048, category: 'Procedimento', description: null, visibility: 'internal', uploaded_by: 'gestor.qa', uploaded_at: `${DAY} 08:00:00` }))
+const removedDocuments = new Set()
+let documentRefusal = null
+const pausedStatus = () => ({ ...GET['status.php'], n1: pausedEmployee ? [{ id: 1, nome: NAMES[0], equipe: 'n1', ativo: true, em_pausa: true, motivo_pausa: 'Café', inicio_pausa: `${DAY}T09:55:00-03:00`, elapsed_seconds: 300, jornada_entrada: '08:00', jornada_saida: '17:00' }] : [] })
 const summaryValue = { overtime_approved_minutes: 120, overtime_pending_minutes: 60, adjustments: 2, oncall: 1, onsite_days: 10, remote_days: 8 }
 
 const GET = {
@@ -83,6 +93,20 @@ const GET = {
 }
 
 function apiResponse(method, key, search, body) {
+  if (key === 'status.php' && method === 'GET') return [200, pausedStatus()]
+  if (key === 'portal/admin_force_end_break.php' && method === 'POST') {
+    if (forceEndRefusal) return forceEndRefusal
+    if (!pausedEmployee) return [409, { sucesso: false, mensagem: NOT_PAUSED }]
+    pausedEmployee = false
+    return [200, { sucesso: true, mensagem: `${NAMES[0]} finalizou a pausa às 10:00. Duração: 300 segundos.` }]
+  }
+  if (key === 'portal/documents.php' && method === 'GET') return [200, { sucesso: true, can_upload: true, limit: 200, truncated: false, items: documents.filter((item) => !removedDocuments.has(item.id)) }]
+  if (key === 'portal/documents_delete.php' && method === 'POST') {
+    if (documentRefusal) return documentRefusal
+    if (removedDocuments.has(body?.id)) return [404, { sucesso: false, mensagem: DOCUMENT_NOT_FOUND }]
+    removedDocuments.add(body?.id)
+    return [200, { sucesso: true, mensagem: 'Documento removido da listagem.' }]
+  }
   if (key === OVERTIME_KEY || key === ADJUSTMENT_KEY) {
     if (method === 'GET') return [200, workflow(key === OVERTIME_KEY)]
     if (body?.action === 'decision') {
@@ -136,7 +160,8 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
 const LEADERSHIP_SESSION = { sucesso: true, csrf_token: 'teste', role: 'lideranca', permissions: ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage'], ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' }, gestor: { autenticado: true, admin: false, username: 'lider.qa', role: 'lideranca' } }
 const ADMIN_SESSION = GET['session.php']
 
-// Sobe o servidor numa porta livre; devolve { port, requests, useLeadershipSession, useAdminSession, restoreRules, keepOnlyRule, decideElsewhere, refuseDecision, restoreDecisions, setDecisionDelay, close }.
+// Sobe o servidor numa porta livre; devolve { port, requests, useLeadershipSession, useAdminSession, restoreRules, keepOnlyRule, decideElsewhere, refuseDecision, restoreDecisions, setDecisionDelay, setPausedEmployee, refuseForceEnd, restoreDocuments, removeDocumentElsewhere, refuseDocument, close }.
+// setDecisionDelay tambem atrasa derrubar pausa e remover documento (DD3).
 export function startMockServer(appDir) {
   const requests = []
   let decisionDelay = 0
@@ -154,7 +179,7 @@ export function startMockServer(appDir) {
         setTimeout(() => {
           res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
           res.end(JSON.stringify(payload))
-        }, body?.action === 'decision' ? decisionDelay : 0)
+        }, body?.action === 'decision' || ['portal/admin_force_end_break.php', 'portal/documents_delete.php'].includes(key) ? decisionDelay : 0)
       })
       return
     }
@@ -166,7 +191,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

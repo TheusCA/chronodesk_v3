@@ -28,14 +28,19 @@ const variants = {
   },
 }
 
+// [17f, DD2] Duas regiões vivas ficam no body o tempo todo, vazias sem aviso:
+// erro em role="alert" (assertive) e os demais em role="status" (polite). O
+// aviso entra dentro da região já existente, e o leitor de tela o anuncia; uma
+// região criada junto com o texto pode não ser lida. A key (id do aviso) faz a
+// mesma mensagem repetida entrar de novo e ser lida outra vez.
 export function Feedback({ feedback, onClose }) {
-  if (!feedback) return null
-  const variant = variants[feedback.type] || variants.success
+  const variant = feedback ? variants[feedback.type] || variants.success : null
 
-  const toast = (
+  const toast = feedback && (
     <div
       className={`portal-toast fixed bottom-4 left-4 right-4 z-[70] flex max-w-md items-start gap-3 rounded-card border px-4 py-3 text-sm shadow-2xl backdrop-blur sm:left-auto ${variant.colors}`}
-      role={variant.role}
+      data-feedback-type={feedback.type || 'success'}
+      key={feedback.id ?? feedback.message}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" name={variant.icon} />
       <div className="min-w-0 flex-1">
@@ -56,8 +61,15 @@ export function Feedback({ feedback, onClose }) {
       )}
     </div>
   )
+  const regions = (
+    <>
+      <div aria-atomic="true" aria-live="polite" data-feedback-region="polite" role="status">{variant?.role === 'status' && toast}</div>
+      <div aria-atomic="true" aria-live="assertive" data-feedback-region="assertive" role="alert">{variant?.role === 'alert' && toast}</div>
+    </>
+  )
   // [17f, BB1] No body e acima do Dialog (z-[60]): dentro da página, o isolate da
-  // .portal-tech-shell deixaria o aviso abaixo de qualquer diálogo. Sem document
-  // (QA no Node), sem portal.
-  return typeof document === 'undefined' ? toast : createPortal(toast, document.body)
+  // .portal-tech-shell deixaria o aviso abaixo de qualquer diálogo. As regiões
+  // não têm posição nem z-index: o aviso fixo continua no contexto do body.
+  // Sem document (QA no Node), sem portal.
+  return typeof document === 'undefined' ? regions : createPortal(regions, document.body)
 }

@@ -507,12 +507,13 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
 // ---------------------------------------------------------------------------
 {
   // BB1: camada do aviso e o portal.
+  // [DD2] O aviso agora entra numa regiao viva permanente (secao 13).
   const toast = renderToStaticMarkup(h(Feedback, { feedback: { message: 'Mensagem QA', type: 'error' }, onClose: () => {} }))
-  assert.match(toast, /^<div class="portal-toast fixed bottom-4 left-4 right-4 z-\[70\] /, 'Aviso: z-[70], acima do Dialog (z-[60])')
+  assert.match(toast, /role="alert"><div class="portal-toast fixed bottom-4 left-4 right-4 z-\[70\] /, 'Aviso: z-[70], acima do Dialog (z-[60])')
   assert.match(read('src/index.css'), /body:has\(\[data-dialog-backdrop\]\) \.portal-toast \{\s*top: 1rem;\s*bottom: auto;/, 'Aviso: com dialogo aberto, sobe (embaixo cobriria os botoes do fim do formulario)')
-  assert.match(toast, /role="alert"/, 'Aviso de erro continua com role="alert"')
+  assert.match(toast, /data-feedback-region="assertive" role="alert"><div class="portal-toast/, 'Aviso de erro continua dentro de role="alert"')
   const feedbackSource = read('src/components/Feedback.jsx')
-  assert.match(feedbackSource, /return typeof document === 'undefined' \? toast : createPortal\(toast, document\.body\)/, 'Aviso: no body (dentro da pagina, o isolate o deixaria abaixo do Dialog)')
+  assert.match(feedbackSource, /return typeof document === 'undefined' \? regions : createPortal\(regions, document\.body\)/,'Aviso: no body (dentro da pagina, o isolate o deixaria abaixo do Dialog)')
   assert.match(feedbackSource, /onMouseDown=\{\(event\) => event\.preventDefault\(\)\}/, 'Aviso: o botao de fechar nao tira o foco do dialogo')
 
   // Confirmacao compartilhada.
@@ -580,8 +581,9 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   const adjustmentItem = { id: 8, employee_name: 'Tecnico QA', adjustment_date: '2026-10-27', adjustment_type: 'lunch_out', correct_time: '12:05:00' }
   assert.deepEqual(decisionDialogText('overtime', overtimeItem, 'approved'), { title: 'Aprovar hora extra?', employee: 'Tecnico QA', detail: '28/10/2026, 18:00 - 20:30, total 2h 30min', confirmLabel: 'Aprovar', busyLabel: 'Aprovando...', confirmClassName: 'btn-primary' }, 'Hora extra, aprovar')
   assert.deepEqual(decisionDialogText('overtime', overtimeItem, 'rejected'), { title: 'Rejeitar hora extra?', employee: 'Tecnico QA', detail: '28/10/2026, 18:00 - 20:30, total 2h 30min', confirmLabel: 'Rejeitar', busyLabel: 'Rejeitando...', confirmClassName: 'btn-danger' }, 'Hora extra, rejeitar')
-  assert.equal(decisionDialogText('adjustment', adjustmentItem, 'approved').title, 'Aprovar ajuste de ponto?', 'Ajuste, aprovar')
-  assert.equal(decisionDialogText('adjustment', adjustmentItem, 'rejected').title, 'Rejeitar ajuste de ponto?', 'Ajuste, rejeitar')
+  // [DD1] Titulo com o nome da tela (era "ajuste de ponto", CC10).
+  assert.equal(decisionDialogText('adjustment', adjustmentItem, 'approved').title, 'Aprovar correção de ponto?', 'Correcao, aprovar')
+  assert.equal(decisionDialogText('adjustment', adjustmentItem, 'rejected').title, 'Rejeitar correção de ponto?', 'Correcao, rejeitar')
   assert.equal(decisionDialogText('adjustment', adjustmentItem, 'approved').detail, '27/10/2026, Saída para almoço, horário correto 12:05', 'Ajuste: data, tipo e horario')
   assert.equal(decisionDialogText('adjustment', { ...adjustmentItem, adjustment_type: 'absence', correct_time: null }, 'approved').detail, '27/10/2026, Ausência, horário correto não informado', 'Ajuste sem horario')
   assert.equal(adjustmentTypeLabel('desconhecido'), 'Ajuste', 'Tipo desconhecido')
@@ -625,6 +627,77 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.match(approvalsSource, /onApprove=\{\(\) => decidePause\(request\.id, 'aprovar'\)\} onReject=\{\(\) => decidePause\(request\.id, 'rejeitar'\)\}/, 'Pausas e reunioes sem confirmacao (decisao de 2026-10-29)')
   for (const code of [hookSource, workflowSource, approvalsSource, read('src/components/ui/DecisionConfirmDialog.jsx')]) {
     assert.doesNotMatch(code, /window\.confirm/, 'Sem window.confirm')
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 13. [17f, DD] Titulo "correcao de ponto", avisos (tempo e leitor de tela) e
+// derrubar pausa e remover documento pelo ConfirmActionDialog.
+// ---------------------------------------------------------------------------
+{
+  // DD2: tempo por tipo.
+  const { FEEDBACK_DURATION_MS } = await importSrc('lib/actionFeedback.ts')
+  assert.deepEqual({ ...FEEDBACK_DURATION_MS }, { error: 10000, warning: 10000, success: 5000, info: 5000 }, 'Erro e aviso 10 s; sucesso e informacao 5 s')
+  const appSource = read('src/App.jsx')
+  assert.match(appSource, /\}, FEEDBACK_DURATION_MS\[type\] \?\? FEEDBACK_DURATION_MS\.success\)/, 'O tempo do aviso vem do tipo')
+  assert.match(appSource, /feedbackSequence\.current \+= 1\n\s*setFeedback\(\{ message, type, id: feedbackSequence\.current \}\)/, 'Cada aviso tem um id novo (a mesma mensagem entra de novo)')
+  assert.equal((appSource.match(/<Feedback /g) || []).length, 1, 'Um Feedback so, montado o tempo todo')
+  assert.match(appSource, /return \(\n\s*<>\n\s*\{screen\}\n\s*<Feedback feedback=\{feedback\} onClose=\{closeFeedback\} \/>\n\s*<\/>\n\s*\)\n\}$/m, 'Feedback fora dos ramos de carregando, login e portal')
+
+  // DD2: duas regioes vivas permanentes; o aviso entra na do seu tipo.
+  const empty = renderToStaticMarkup(h(Feedback, { feedback: null, onClose: () => {} }))
+  assert.equal(empty, '<div aria-atomic="true" aria-live="polite" data-feedback-region="polite" role="status"></div><div aria-atomic="true" aria-live="assertive" data-feedback-region="assertive" role="alert"></div>', 'Sem aviso: as duas regioes, vazias')
+  const parts = (markup) => { const cut = markup.indexOf('data-feedback-region="assertive"'); return { polite: markup.slice(0, cut), assertive: markup.slice(cut) } }
+  for (const [type, kind, other] of [['error', 'assertive', 'polite'], ['success', 'polite', 'assertive'], ['warning', 'polite', 'assertive'], ['info', 'polite', 'assertive'], [undefined, 'polite', 'assertive']]) {
+    const markup = renderToStaticMarkup(h(Feedback, { feedback: { message: 'Mensagem QA', type, id: 3 }, onClose: () => {} }))
+    const split = parts(markup)
+    assert.ok(split[kind].includes('Mensagem QA') && split[kind].includes('class="portal-toast'), `Aviso ${type}: dentro da regiao ${kind}`)
+    assert.ok(!split[other].includes('portal-toast') && !split[other].includes('Mensagem QA'), `Aviso ${type}: a regiao ${other} fica vazia`)
+    assert.doesNotMatch(markup, /class="portal-toast[^"]*"[^>]*role=/, `Aviso ${type}: sem papel proprio (o papel e da regiao)`)
+  }
+  const feedbackSource = read('src/components/Feedback.jsx')
+  assert.match(feedbackSource, /key=\{feedback\.id \?\? feedback\.message\}/, 'Aviso com key: a mesma mensagem repetida e outro no')
+  assert.match(feedbackSource, /\{variant\?\.role === 'status' && toast\}<\/div>/, 'Regiao polite recebe os de role status')
+  assert.match(feedbackSource, /\{variant\?\.role === 'alert' && toast\}<\/div>/, 'Regiao assertive recebe os de role alert')
+
+  // DD1: titulo com o nome da tela.
+  const { decisionDialogText } = await importSrc('lib/decisionConfirm.ts')
+  assert.equal(decisionDialogText('adjustment', { id: 1 }, 'approved').title, 'Aprovar correção de ponto?', 'DD1: aprovar')
+  assert.equal(decisionDialogText('adjustment', { id: 1 }, 'rejected').title, 'Rejeitar correção de ponto?', 'DD1: rejeitar')
+
+  // DD3: ConfirmActionDialog aceita campos acima dos botoes.
+  const withField = renderToStaticMarkup(h(ConfirmActionDialog, { title: 'Titulo QA', confirmLabel: 'Confirmar QA', busyLabel: 'Enviando QA', onConfirm: () => {}, onCancel: () => {} }, h('textarea', { 'data-qa': 'campo' })))
+  assert.match(withField, /<textarea data-qa="campo"><\/textarea><div class="mt-5 flex flex-wrap justify-end gap-2"><button class="btn-danger"/, 'Confirmacao: campo antes dos botoes')
+  const ACTION_WARNING = 'Esta ação não pode ser desfeita pelo sistema.'
+
+  // DD3: derrubar pausa.
+  const forceEnd = appSource.slice(appSource.indexOf('function forceEndBreak('), appSource.indexOf('const closeFeedback'))
+  assert.match(forceEnd, /if \(!hasPermission\(session, 'pausas\.force_end'\) \|\| !employee\?\.em_pausa\) return\n\s*forceEndReturnRef\.current = document\.activeElement/, 'Derrubar: sem permissao ou sem pausa, nada; senao guarda quem abriu')
+  assert.match(forceEnd, /post\('portal\/admin_force_end_break\.php', \{\n\s*funcionario_id: Number\(forceEndTarget\.id\),\n\s*justificativa: forceEndNote,\n\s*\}\)/, 'Derrubar: payload de antes')
+  assert.match(forceEnd, /if \(result\) setForceEndTarget\(null\)\n\s*else refreshStatus\(\)\.catch\(\(\) => \{\}\)/, 'Derrubar: fecha so com sucesso; recusa atualiza o painel por tras')
+  assert.match(forceEnd, /if \(!forceEndTarget \|\| forceEndBusy\) return/, 'Derrubar: um envio por vez')
+  assert.match(forceEnd, /useEffect\(\(\) => \{\n\s*if \(!authenticated\) setForceEndTarget\(null\)\n\s*\}, \[authenticated\]\)/, 'Derrubar: sessao encerrada fecha o pedido (nao volta depois do login)')
+  const forceDialog = appSource.slice(appSource.indexOf('{forceEndTarget && ('), appSource.indexOf('</ConfirmActionDialog>'))
+  assert.ok(forceDialog.includes(`description={\`Deseja derrubar a pausa de \${forceEndTarget.nome}? ${ACTION_WARNING}\`}`), 'Derrubar: nome e aviso de que nao se desfaz')
+  for (const piece of ['busy={forceEndBusy}', 'confirmLabel="Derrubar pausa"', 'busyLabel="Derrubando..."', 'onConfirm={confirmForceEnd}', 'returnFocusRef={forceEndReturnRef}', 'title="Derrubar pausa?"', 'onCancel={() => setForceEndTarget(null)}', 'disabled={forceEndBusy} maxLength={500}', 'Justificativa da derrubada (opcional)']) {
+    assert.ok(forceDialog.includes(piece), `Derrubar: ${piece}`)
+  }
+
+  // DD3: remover documento.
+  const documentsSource = read('src/pages/DocumentsPage.jsx')
+  assert.match(documentsSource, /onClick=\{\(event\) => askRemove\(item, event\.currentTarget\)\}/, 'Documento: o botao pergunta antes')
+  assert.match(documentsSource, /await post\('portal\/documents_delete\.php', \{ id: item\.id \}\)/, 'Documento: payload de antes')
+  assert.match(documentsSource, /if \(!item \|\| deletingId\) return/, 'Documento: um envio por vez')
+  assert.match(documentsSource, /notify\(ACTION_FEEDBACK\.documentRemoved\)\n(?:\s*\/\/.*\n)*\s*await resource\.refresh\(\)\n\s*setRemoveTarget\(null\)/, 'Documento: fecha depois de atualizar (o cartao ja saiu)')
+  assert.match(documentsSource, /notify\(error\.message, 'error'\)\n\s*resource\.refresh\(\)/, 'Documento: recusa mantem aberto e atualiza a lista por tras')
+  const documentDialog = documentsSource.slice(documentsSource.indexOf('{removeTarget && ('), documentsSource.indexOf('{uploadOpen && ('))
+  assert.ok(documentDialog.includes(`description={\`Remover "\${removeTarget.title}" da listagem? O evento ficará registrado em auditoria. ${ACTION_WARNING}\`}`), 'Documento: alvo, auditoria e aviso de que nao se desfaz')
+  for (const piece of ['busy={deletingId === removeTarget.id}', 'confirmLabel="Remover documento"', 'busyLabel="Removendo..."', 'onConfirm={remove}', 'returnFocusRef={removeReturnRef}', 'title="Remover documento?"', 'onCancel={() => setRemoveTarget(null)}']) {
+    assert.ok(documentDialog.includes(piece), `Documento: ${piece}`)
+  }
+
+  for (const code of [appSource, documentsSource]) {
+    assert.doesNotMatch(code, /window\.confirm\(|window\.prompt\(/, 'Sem window.confirm nem window.prompt')
   }
 }
 
