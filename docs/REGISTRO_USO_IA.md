@@ -1012,6 +1012,20 @@ Base da afirmação:
 | **Limitacoes declaradas** | Servidor simulado e dados ficticios; mensagens de recusa copiadas do PHP, sem exerce-lo. "Cancelar a propria ausencia" so confere que o foco nao cai no `body`. Aceitar o aviso do navegador ao recarregar nao exercitado. Safari e iPhone nao testados. `gitleaks` ausente na estacao. |
 | **Validacao humana** | Responsavel, 2026-11-03: **BB e item 5 aprovados**, com CC1 a CC9; a CC10 foi trocada pelo DD1. Pedido o ultimo commit do acabamento (DD: titulo "correcao de ponto", avisos de erro por cerca de 10 s e anunciados ao leitor de tela, `window.confirm` de derrubar pausa e remover documento trocados pelo `ConfirmActionDialog`) e, em seguida, o plano do F8 na 9.10, sem a 018. |
 
+### Lote de acabamento — DD (titulo, avisos e confirmacoes) e fim do lote — 2026-11-03
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Ultimo commit do acabamento. DD1: "correcao de ponto" no titulo do dialogo de Aprovar e Rejeitar. DD2: avisos de erro por cerca de 10 s (sucesso continua 5 s) e anunciados ao leitor de tela. DD3: derrubar pausa e remover documento pelo `ConfirmActionDialog`, no lugar do `window.confirm`; os dois de Usuarios locais ficam. |
+| **Branch e commits** | `19ecb95` (aprovacao do BB e do item 5, pedido do DD), `87d21b4` (DD) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | `frontend/src/App.jsx`, `frontend/src/components/Feedback.jsx`, `frontend/src/components/ui/ConfirmActionDialog.jsx`, `frontend/src/lib/actionFeedback.ts`, `frontend/src/lib/decisionConfirm.ts`, `frontend/src/pages/DocumentsPage.jsx`; testes: `qa-unsaved-changes` (secao 13), `qa-employee-form` e `qa-action-feedback` (atualizados de forma deliberada), roteiro de navegador (blocos 12 e 13, opcao `--blocos`) e o servidor simulado; `QA_VISUAL_CHECKLIST.md`. |
+| **Decisoes de implementacao** | Doze, a aprovar (desenho 9.11, EE1 a EE12). Entre elas: aviso (`warning`) tambem 10 s; regioes vivas permanentes com o papel nelas; justificativa da derrubada dentro do dialogo, no lugar do `window.prompt` (nao estava no pedido); a aba Usuarios locais depende do `ENABLE_LOCAL_ADMIN`, barrado pelo preflight, e nao do `APP_ENV` no codigo; JS da abertura mais 7,1 kB; pedido descartado se a sessao cair com o dialogo aberto. |
+| **Validacao executada pela IA** | Medicao antes e depois: regioes vivas 0 → 2; erro 5,0 → 10,0 s; sucesso 5,0 → 5,0 s; regiao de erro nao ignorada pela arvore de acessibilidade do Chrome com dialogo aberto. `test-local.ps1 -SkipHttp -Browser` com saida 0: 14 QAs PHP OK e roteiro **868/868**. 19 `qa:*`, lint (sem aviso), typecheck e build, cada um com saida 0 conferida sem pipe. Mutacao 33/33 (25 mortos tambem no roteiro; 5 so no QA, inalcancaveis pela tela e justificados; 4 so no QA de proposito). |
+| **Limitacoes declaradas** | Nenhum leitor de tela real usado (conferencia pelo DOM e pela arvore de acessibilidade do Chrome). Servidor simulado e dados ficticios; mensagens de recusa copiadas do PHP, sem exerce-lo. Safari e iPhone nao testados. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do DD junto com a do plano do F8 (uma so). |
+
+**Lote de acabamento (17, 17b, 17d, 17e, 17f e 17g): concluido com o DD.** Para depois do deploy: modais antigos de Documentacao, Escalas de Sabado e Mapa PA; AA8; o resto do 17f (Horas extras e Correcao, Mapa PA, Calendario, Plantoes, envios); o resto do 17e (Usuarios locais e tabelas so de leitura); dias recolheveis da Semana no celular (17b); `window.confirm` de Usuarios locais; cabecalho `sticky`; "Editar" no celular; aviso sem dialogo cobrindo botao no celular; varios avisos seguidos e tempo do aviso sem pausa; conferencia com leitor de tela real e no Safari do iPhone (lista na 9.11).
+
 ---
 
 ## 5. Responsabilidade
