@@ -131,6 +131,9 @@ check_status "/login.php" public
 check_status "/admin_login.php" public
 check_status "/metricas.php" public
 check_status "/admin.php" public
+check_status "/admin_logout.php" public
+check_status "/static/js/admin.js" blocked
+check_status "/static/js/admin_users.js" blocked
 check_status "/api/status.php" public
 check_status "/api/session.php" public
 # Fora da allowlist responde 403; com o IP liberado, 200. 503 (banco fora) reprova.
@@ -166,11 +169,16 @@ check_status "/scripts/backup-chronodesk.sh" blocked
 check_status "/deploy/backup/backup.env.example" blocked
 check_status "/deploy/systemd/chronodesk-backup.service" blocked
 
-legacy_post_status="$(curl -k -s -o /dev/null -w '%{http_code}' -X POST "${BASE_URL}/login.php")"
-echo "$legacy_post_status POST /login.php"
-case "$legacy_post_status" in
-    3*) echo "Legacy POST must not be redirected"; exit 1 ;;
-esac
+# [9.12] Paginas legadas retiradas: POST responde 410 pelo .htaccess (sem
+# redirecionar nem chegar ao PHP); o GET das paginas segue com 302 (acima).
+for legacy_path in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php; do
+    legacy_post_status="$(curl -k -s -o /dev/null -w '%{http_code}' -X POST "${BASE_URL}${legacy_path}")"
+    echo "$legacy_post_status POST $legacy_path"
+    if [ "$legacy_post_status" != 410 ]; then
+        echo "Legacy POST must return 410: $legacy_path returned $legacy_post_status"
+        exit 1
+    fi
+done
 
 # Modo de manutencao. Opt-in: derruba o portal por alguns segundos.
 # Uso: sudo MAINTENANCE_TEST=1 sh scripts/test-linux.sh

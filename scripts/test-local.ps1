@@ -231,6 +231,9 @@ if ($SkipHttp) {
         @{ Url = "$BaseUrl/admin_login.php"; Expect = @(302) },
         @{ Url = "$BaseUrl/admin.php"; Expect = @(302) },
         @{ Url = "$BaseUrl/metricas.php"; Expect = @(302) },
+        @{ Url = "$BaseUrl/admin_logout.php"; Expect = @(302) },
+        @{ Url = "$BaseUrl/static/js/admin.js"; Expect = @(403) },
+        @{ Url = "$BaseUrl/static/js/admin_users.js"; Expect = @(403) },
         @{ Url = "$BaseUrl/api/status.php"; Expect = @(200) },
         @{ Url = "$BaseUrl/api/session.php"; Expect = @(200) },
         @{ Url = "$BaseUrl/app/"; Expect = @(200) },
@@ -311,28 +314,33 @@ if ($SkipHttp) {
         }
     }
 
-    try {
-        $legacyPost = Invoke-WebRequest `
-            -Uri "$BaseUrl/login.php" `
-            -Method POST `
-            -ContentType "application/x-www-form-urlencoded" `
-            -Body "" `
-            -UseBasicParsing `
-            -MaximumRedirection 0 `
-            -ErrorAction Stop
-        $legacyPostStatus = [int]$legacyPost.StatusCode
-    } catch {
-        if ($_.Exception.Response) {
-            $legacyPostStatus = [int]$_.Exception.Response.StatusCode
-        } else {
-            Fail "Falha ao validar POST legado: $($_.Exception.Message)"
-            $legacyPostStatus = 0
+    # [9.12] Paginas legadas retiradas: POST (formularios de login e logout, e
+    # as paginas) responde 410 pelo .htaccess, sem redirecionar nem chegar ao PHP.
+    $legacyPostPaths = @("/", "/index.php", "/login.php", "/admin_login.php", "/admin_logout.php", "/admin.php", "/metricas.php")
+    foreach ($legacyPath in $legacyPostPaths) {
+        try {
+            $legacyPost = Invoke-WebRequest `
+                -Uri "$BaseUrl$legacyPath" `
+                -Method POST `
+                -ContentType "application/x-www-form-urlencoded" `
+                -Body "" `
+                -UseBasicParsing `
+                -MaximumRedirection 0 `
+                -ErrorAction Stop
+            $legacyPostStatus = [int]$legacyPost.StatusCode
+        } catch {
+            if ($_.Exception.Response) {
+                $legacyPostStatus = [int]$_.Exception.Response.StatusCode
+            } else {
+                Fail "Falha ao validar POST legado em ${legacyPath}: $($_.Exception.Message)"
+                continue
+            }
         }
-    }
-    if ($legacyPostStatus -ge 300 -and $legacyPostStatus -lt 400) {
-        Fail "POST legado foi redirecionado com HTTP $legacyPostStatus"
-    } elseif ($legacyPostStatus -gt 0) {
-        Pass "POST legado nao foi redirecionado (HTTP $legacyPostStatus)"
+        if ($legacyPostStatus -eq 410) {
+            Pass "POST legado em $legacyPath retornou HTTP 410"
+        } else {
+            Fail "POST legado em $legacyPath retornou HTTP $legacyPostStatus; esperado 410"
+        }
     }
 
     try {

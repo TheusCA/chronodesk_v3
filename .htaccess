@@ -74,6 +74,10 @@ RewriteRule "^migrar_.*\.php$" - [F,L]
 RewriteRule "(^|/)(\.env(\..*)?|composer\..*|package.*\.json)$" - [F,L]
 RewriteRule "\.(json|csv|xlsx|doc|docx|sql|md|log|bak|backup|zip|rar|7z|old|orig|save)$" - [F,L]
 
+# JavaScript da tela legada admin.php (retirada no deploy unico; desenho 9.12,
+# passo 3). Sem a pagina, nao faz nada sozinho; negado para nao ficar servido.
+RewriteRule "^static/js/admin(?:_users)?\.js$" - [F,L]
+
 # Modo de manutencao exclusivo do ChronoDesk: com o arquivo-sinal presente
 # FORA do DocumentRoot (/var/www/chronodesk.maintenance na instalacao padrao),
 # toda requisicao recebe 503 sem chegar ao PHP. Os outros sites da VM seguem
@@ -98,8 +102,19 @@ RewriteRule ^var/www/chronodesk(/.*)?$ /app/ [R=302,L]
 RewriteRule ^chronodesk(/.*)?$ /app/ [R=302,L]
 
 # SPA fallback limitado ao build público React.
-# O portal React e a entrada oficial. Apenas paginas visuais GET/HEAD sao
-# redirecionadas; POSTs legados permanecem como fallback protegido.
+# O portal React e a entrada oficial. As paginas legadas foram retiradas no
+# deploy unico (desenho 9.12, decisao de 2026-11-03): GET/HEAD sao
+# redirecionados para o /app; qualquer outro metodo (o POST dos formularios
+# legados de login e logout, e o das paginas, que o PHP renderizaria) responde
+# 410, sem chegar ao PHP. As APIs (api/...) nao mudam. Os arquivos sao
+# apagados depois do deploy, pelo responsavel.
+RewriteCond %{REQUEST_METHOD} !^(?:GET|HEAD)$
+RewriteRule ^(?:(?:admin|admin_login|admin_logout|index|login|metricas)\.php)?$ - [G,L]
+# Com PATH_INFO (/admin.php/x), o PHP executaria a pagina sem passar pelo
+# redirecionamento abaixo: 410 em qualquer metodo.
+RewriteRule ^(?:admin|admin_login|admin_logout|index|login|metricas)\.php/ - [G,L]
+RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
+RewriteRule ^admin_logout\.php$ app/admin [R=302,L]
 RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
 RewriteRule ^$ app/ [R=302,L]
 RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$

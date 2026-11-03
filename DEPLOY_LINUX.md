@@ -1055,6 +1055,18 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   contagens e medicao depois. Desligamento rapido: `STATUS_PRESENCE_ENABLED=false`
   no `/var/www/.env` (com copia antes) e recarga do PHP-FPM. Entra no roteiro consolidado da
   Parte B (deploy unico depois do F9).
+- Deploy que retira as paginas legadas (Parte B, desenho 9.12; so `.htaccess`
+  e testes, sem migration nem build): o `.htaccess` e lido a cada requisicao,
+  sem recarga. Depois do `merge`, conferir so com o codigo HTTP (sem IP; use a
+  URL base do vhost, `<URL>`):
+  `for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "<URL>$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>/static/js/$j")"; done`
+  Esperado: `GET 302` e `POST 410` em todas as paginas; `403` nos dois JS. Ou
+  `sh scripts/test-linux.sh`, que confere o mesmo. `GET 200` numa pagina
+  legada = o `.htaccess` nao vale no vhost (`AllowOverride`): PARAR e avisar o
+  responsavel. Rollback: o `.htaccess` anterior (git). Os arquivos das paginas
+  sao apagados depois de um ciclo estavel, em lote proprio, pelo responsavel
+  (passo 5 da 9.12). Entra no roteiro consolidado da Parte B (deploy unico
+  depois do F9).
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois

@@ -2835,4 +2835,107 @@ assert_same(true, strpos($pollingScript, "#!/usr/bin/env bash\n") === 0 && preg_
 assert_same(true, strpos($pollingCode, "trap 'COOKIE=\"\"; P=\"\"; unset COOKIE P' EXIT") !== false, 'medicao: cookie e senha apagados no fim');
 assert_same(true, strpos($pollingCode, 'MYSQL_PWD="$P" docker exec -i -e MYSQL_PWD "$CONTAINER"') !== false && strpos($pollingCode, '-e MYSQL_PWD="$P"') === false, 'medicao: senha do MySQL fora dos argumentos');
 
+// ============================================================================
+// 11. [9.12] Paginas legadas retiradas no deploy unico: regras do .htaccess
+// ============================================================================
+// Sem Apache na estacao: interpretador minimo das RewriteCond/RewriteRule do
+// .htaccess, na ordem do arquivo, com PCRE (como o mod_rewrite). Metodo:
+// avaliado; arquivo-sinal da manutencao: ausente; REQUEST_FILENAME !-f/!-d:
+// verdadeiros (caminho sem arquivo). Caminho relativo ao diretorio, sem a
+// barra inicial. A prova contra o Apache e o test-local.ps1 e o test-linux.sh.
+$htaccess = (string)file_get_contents($root . '/.htaccess');
+$rewriteRules = [];
+$pendingConds = [];
+foreach (preg_split('/\R/', $htaccess) as $htLine) {
+    $htLine = trim($htLine);
+    if (preg_match('/^RewriteCond\s+(\S+)\s+(\S+)/', $htLine, $m) === 1) {
+        $pendingConds[] = [$m[1], $m[2]];
+        continue;
+    }
+    if (preg_match('/^RewriteRule\s+("[^"]*"|\S+)\s+(\S+)(?:\s+\[([^\]]*)\])?/', $htLine, $m) === 1) {
+        $rewriteRules[] = ['pattern' => trim($m[1], '"'), 'target' => $m[2], 'flags' => $m[3] ?? '', 'conds' => $pendingConds];
+        $pendingConds = [];
+    }
+}
+assert_same(true, count($rewriteRules) >= 10 && $pendingConds === [], '.htaccess: regras lidas, sem condicao solta no fim');
+$simulateRewrite = static function (string $method, string $path) use ($rewriteRules): string {
+    foreach ($rewriteRules as $rule) {
+        foreach ($rule['conds'] as [$var, $test]) {
+            if ($var === '%{REQUEST_METHOD}') {
+                $negate = $test[0] === '!';
+                if ((preg_match('~' . ltrim($test, '!') . '~', $method) === 1) === $negate) {
+                    continue 2;
+                }
+            } elseif (strpos($var, '%{DOCUMENT_ROOT}') === 0) {
+                continue 2;
+            } elseif ($var === '%{REQUEST_FILENAME}') {
+                if ($test[0] !== '!') {
+                    continue 2;
+                }
+            } elseif ($var !== '%{REMOTE_ADDR}') {
+                throw new RuntimeException("Condicao do .htaccess nao simulada: {$var}");
+            }
+        }
+        if (preg_match('~' . $rule['pattern'] . '~', $path) !== 1) {
+            continue;
+        }
+        $flags = explode(',', $rule['flags']);
+        if (in_array('F', $flags, true)) {
+            return '403';
+        }
+        if (in_array('G', $flags, true)) {
+            return '410';
+        }
+        foreach ($flags as $flag) {
+            if (strpos($flag, 'R=') === 0) {
+                return substr($flag, 2) . ' ' . $rule['target'];
+            }
+        }
+        return 'reescrito ' . $rule['target'];
+    }
+    return 'servido';
+};
+$legacyPages = ['' => 'app/', 'index.php' => 'app/', 'login.php' => 'app/', 'admin_login.php' => 'app/admin', 'admin_logout.php' => 'app/admin', 'admin.php' => 'app/admin', 'metricas.php' => 'app/metricas'];
+foreach ($legacyPages as $page => $destination) {
+    foreach (['GET', 'HEAD'] as $method) {
+        assert_same('302 ' . $destination, $simulateRewrite($method, $page), "pagina legada {$method} /{$page}: 302 para /{$destination}");
+    }
+    foreach (['POST', 'PUT', 'DELETE', 'PATCH'] as $method) {
+        assert_same('410', $simulateRewrite($method, $page), "pagina legada {$method} /{$page}: 410");
+    }
+    if ($page !== '') {
+        foreach (['GET', 'POST'] as $method) {
+            assert_same('410', $simulateRewrite($method, $page . '/x'), "pagina legada {$method} /{$page}/x (PATH_INFO): 410");
+        }
+    }
+}
+foreach (['static/js/admin.js', 'static/js/admin_users.js'] as $legacyJs) {
+    foreach (['GET', 'HEAD', 'POST'] as $method) {
+        assert_same('403', $simulateRewrite($method, $legacyJs), "JS legado {$method} /{$legacyJs}: 403");
+    }
+}
+// Fora da retirada: as APIs, o portal e os demais estaticos nao mudam.
+foreach ([
+    ['POST', 'api/login_ci.php', 'servido'], ['POST', 'api/login_admin.php', 'servido'], ['POST', 'api/logout.php', 'servido'],
+    ['POST', 'api/logout_ci.php', 'servido'], ['POST', 'api/atualizar_funcionario.php', 'servido'], ['GET', 'api/status.php', 'servido'],
+    ['GET', 'static/js/admin.js.map', 'servido'], ['GET', 'static/js/metricas.js', 'servido'], ['GET', 'static/css/admin.css', 'servido'],
+    ['POST', 'logout.php', 'servido'], ['GET', 'app/admin', 'reescrito app/index.html'],
+    ['GET', 'xadmin.php', 'servido'], ['GET', 'admin.phpx', 'servido'], ['POST', 'api/admin.php', 'servido'],
+    ['GET', 'scripts/test-local.ps1', '403'], ['GET', '.env', '403'],
+] as [$method, $path, $expected]) {
+    assert_same($expected, $simulateRewrite($method, $path), ".htaccess fora da retirada: {$method} /{$path} -> {$expected}");
+}
+// Os runners conferem contra o Apache: 302 do GET, 410 do POST e 403 do JS.
+$testLocal = (string)file_get_contents($root . '/scripts/test-local.ps1');
+$testLinux = (string)file_get_contents($root . '/scripts/test-linux.sh');
+assert_same(true, strpos($testLocal, '$legacyPostPaths = @("/", "/index.php", "/login.php", "/admin_login.php", "/admin_logout.php", "/admin.php", "/metricas.php")') !== false && strpos($testLocal, 'if ($legacyPostStatus -eq 410) {') !== false, 'test-local.ps1: POST das paginas legadas com 410');
+assert_same(true, strpos($testLinux, 'for legacy_path in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php; do') !== false && strpos($testLinux, 'if [ "$legacy_post_status" != 410 ]; then') !== false, 'test-linux.sh: POST das paginas legadas com 410');
+foreach (['admin.js', 'admin_users.js'] as $legacyJs) {
+    assert_same(true, strpos($testLocal, "@{ Url = \"\$BaseUrl/static/js/{$legacyJs}\"; Expect = @(403) }") !== false, "test-local.ps1: {$legacyJs} com 403");
+    assert_same(true, strpos($testLinux, "check_status \"/static/js/{$legacyJs}\" blocked") !== false, "test-linux.sh: {$legacyJs} bloqueado");
+}
+foreach (['index.php', 'login.php', 'admin_login.php', 'admin_logout.php', 'admin.php', 'metricas.php'] as $page) {
+    assert_same(true, strpos($testLocal, "@{ Url = \"\$BaseUrl/{$page}\"; Expect = @(302) }") !== false, "test-local.ps1: GET /{$page} com 302");
+}
+
 echo "qa-security OK\n";
