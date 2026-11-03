@@ -1038,6 +1038,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | Sem MySQL na estacao: a 018 so sera provada no ensaio do responsavel. As respostas da Lideranca podem mudar o modelo (AD1): o plano para nesses casos. |
 | **Validacao humana** | Responsavel, 2026-11-03: **plano aprovado**, com DL1 a DL16; DL17: ordem F8 → F9 mantida, reavaliacao em uma semana se a Lideranca nao responder. Pedido o commit 1 (DL16). |
 
+### F8 — commit 1 (regra pura do almoco), EE5 e levantamento da tela legada — 2026-11-03
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Commit 1 do F8 (DL16): regra pura do almoco por contrato, sem banco e sem duracoes reais. Junto: a ajuda da EE5 no campo de justificativa de derrubar pausa e o levantamento da tela legada `admin.php` para decisao do responsavel antes do deploy unico. |
+| **Branch e commits** | `ddb64e2` (aprovacao do DD e do plano do F8), `38c98da` (commit 1), `5719cd6` (EE5) e o commit deste registro. Sem push. |
+| **O que a IA alterou** | Novos: `services/EmployeeLunchPolicy.php` e `scripts/qa-employee-lunch.php`; `scripts/test-local.ps1` e `scripts/test-linux.sh` (rodam o QA novo); `frontend/src/App.jsx` (ajuda da EE5), `frontend/scripts/qa-unsaved-changes.mjs` e o roteiro de navegador (bloco 13). Levantamento da tela legada so em docs (desenho 9.12), sem mudanca de codigo. |
+| **Decisoes de implementacao** | FF1 a FF11, a aprovar (desenho 9.10). Entre elas: motivo enviado sem lista da AD2 da 400; a permissao e conferida depois do formato (pedido malformado da 400, sem evento de negacao); duracao gravada invalida da 409; a EE5 num commit proprio, e nao dentro do commit 1 como pedido (um proposito por commit). |
+| **Validacao executada pela IA** | `qa-employee-lunch.php` com 199 verificacoes. Mutacao da regra 46/47 (a 1a rodada deu 45/47 e o QA ganhou a ordem das recusas; o sobrevivente e equivalente e esta justificado). Mutacao da EE5 3/3, no QA e no roteiro. 19 `qa:*`, lint (sem saida), typecheck e build com saida 0; `test-local.ps1 -SkipHttp -Browser` com saida 0: 15 QAs PHP e roteiro 872/872. |
+| **Limitacoes declaradas** | Sem banco: a regra so entra em uso no commit 4. PHPStan e Psalm ausentes na estacao. Duracoes e motivos do QA ficticios. Levantamento da tela legada pelo codigo: o `.htaccess` no servidor e o uso real (logs) ficam com o responsavel, so com contagens. `gitleaks` ausente na estacao. |
+| **Validacao humana** | Pendente: revisao do commit 1, da EE5 e do levantamento da tela legada (decisao do responsavel antes do deploy unico). |
+
 ---
 
 ## 5. Responsabilidade

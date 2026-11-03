@@ -2704,7 +2704,7 @@ Plano gravado aqui antes de qualquer código, pela ordem aprovada em 2026-10-28 
 | A edição já trava a linha (`SELECT ... FOR UPDATE`), confere o `fora_mapa_escala` por permissão própria e audita a negação como `FUNCIONARIO_ALTERACAO_NEGADA` com `contexto=fora_mapa` | `api/atualizar_funcionario.php:119-150` |
 | Permissões: `funcionarios.manage` é da Liderança e do admin; o gestor não edita cadastro. A Liderança não altera cadastro de Liderança ou admin (Lote 5b) | `security.php:930-960`, `funcionario_change_denied` |
 | O motor e a tela de Pausas leem `almoco_inicio`/`almoco_fim` direto de `funcionarios` | `services/PresenceRepository.php:26`; `classes/Funcionario.php:73`, `:119` |
-| A tela legada `admin.php` (`static/js/admin.js`) continua servida e grava pelos mesmos endpoints, mandando início e fim | `admin.php:255`; `static/js/admin.js` |
+| A tela legada `admin.php` (`static/js/admin.js`) continua servida e grava pelos mesmos endpoints, mandando início e fim. **Corrigido em 2026-11-03 (9.12):** o `GET` dela é redirecionado pelo `.htaccess` para `/app/admin`, e só o admin chegava a ela | `admin.php:255`; `static/js/admin.js` |
 | Formulário novo: `employeeFormSchema` (Zod) com `almoco_inicio < almoco_fim`; dois formulários na aba Funcionários (editar no `Dialog`, adicionar na tela), com a proteção do 17f | `frontend/src/lib/formSchemas.ts:64-81`; `frontend/src/pages/AdminPage.jsx:344-349` |
 | Na Q-F7 do servidor (2026-10-26, variante sem a 011): `almoco_fora_da_jornada` = 0 e `jornada_invertida` = 0 | Seção 9.9 |
 | `config.php` só regrava todos os cadastros (com almoço) quando o MySQL e o `funcionarios.json` estão vazios (carga inicial) | `config.php:586-598`, `salvar_funcionarios_mysql` |
@@ -2847,6 +2847,44 @@ O que cada número decide: `almoco_fora_da_jornada` maior que 0 é cadastro que 
 **Próximo passo:** revisão deste plano junto com a do DD (uma só). Nenhum código do F8 antes da aprovação.
 
 **Aprovação do plano (responsável, 2026-11-03): APROVADO, com DL1 a DL16.** **DL17:** a ordem F8 → F9 fica mantida por enquanto; o responsável reavalia em uma semana (por volta de 2026-11-10) se a Liderança não responder. Pedido seguinte: o commit 1 (DL16), regra pura sem banco e sem durações reais, com mutação e bateria completa; os commits 2 a 6 esperam AD1 e AD2.
+
+**F8, commit 1 — regra pura do almoço (`38c98da`), e EE5 (`5719cd6`), 2026-11-03: entregues, aguardando revisão (junto com o levantamento da 9.12).** Os commits 2 a 6 esperam AD1 e AD2.
+
+**Commit 1.** `services/EmployeeLunchPolicy.php`, função pura, sem banco, arquivo, relógio nem duração real:
+- `minutes`, `format` e `endFor(início, minutos)`: fim pela duração; `null` se passar de 23:59.
+- `withinShift(entrada, saída, início, fim)`: `jornada_entrada ≤ almoco_inicio < almoco_fim ≤ jornada_saida` (DL7), com o campo e a mensagem.
+- `decide($input, $current, $contracts, $canMarkException, $reasons)`: valores a gravar, `fim_calculado` e os eventos, ou a recusa (`400`, `403` ou `409`, com o campo, a mensagem e, no 403, o evento de negação). Chave ausente mantém o gravado (DL12); contrato inativo só se já for o atual (DL4); fim enviado ignorado com contrato e sem exceção (DL5); desmarcar recalcula (DL9). `$reasons = null` é a resposta "não" da AD2; uma lista é a resposta "sim", com os códigos que a Liderança mandar.
+- `auditMessages($eventos, $id, $perfil)`: mensagens dos eventos da DL10 que o cadastro grava (`FUNCIONARIO_CONTRATO_ALTERADO`, `FUNCIONARIO_ALMOCO_EXCECAO_ALTERADO` e `FUNCIONARIO_ALTERACAO_NEGADA` com `contexto=almoco_excecao`, no formato do fora do Mapa). Só IDs, perfil, horários e códigos; nunca nome de pessoa nem de contrato. Os eventos de contrato (`CONTRATO_*`) ficam para o commit 3.
+
+`scripts/qa-employee-lunch.php` (novo, **199 verificações**), em tabela, com contratos e minutos fictícios (37, 75, 50 e 600 min; códigos `motivo_qa_a` e `motivo_qa_b`): formato, meia-noite, jornada, cada regra de contrato, exceção e motivo, permissão, eventos, mensagens de auditoria com marcador de texto livre, dado de quem chama fora do formato e a ordem das recusas. Confere também que a regra não usa banco, arquivo, relógio, `$_*`, `getenv` nem `audit_log`, que não há duração no código e que os dois runners rodam o QA. Registrado no `test-local.ps1` e no `test-linux.sh`.
+
+**EE5.** No diálogo de derrubar pausa, abaixo do campo: "Não inclua informações pessoais ou de saúde.", ligada por `aria-describedby` (id do `useId`) e **fora do `<label>`**: dentro, a ajuda entraria no nome do campo. Conferido pela árvore de acessibilidade do Chrome: nome "Justificativa da derrubada (opcional)", descrição com a frase. A troca por lista fechada fica para depois do deploy (seção 10).
+
+**Correção do plano (levantamento da 9.12):** o fato "a tela legada `admin.php` continua servida" da 9.10 estava incompleto: o `GET` dela já é redirecionado pelo `.htaccess` para `/app/admin`, e só o admin chegava a ela. A DL12 continua valendo (chamada direta à API e `.htaccess` não confirmado no servidor).
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| FF1 | Sem lista de motivos (AD2 = não), motivo enviado diferente de nulo dá 400; nulo ou vazio é aceito | Entrada validada na fronteira: campo que o modelo não tem não é ignorado em silêncio |
+| FF2 | Com a exceção desligada, o motivo gravado é sempre nulo, mesmo que venha no corpo (o valor ainda passa pela lista) | A 018 terá o `CHECK` "nulo sem a exceção"; o formulário pode mandar o último valor ao desmarcar |
+| FF3 | Ordem das recusas: jornada, início, contrato, formato da marca, motivo, **permissão**, fim, dentro da jornada | Pedido malformado sem a permissão recebe 400, não 403, e não gera evento de negação: a negação só registra pedido bem formado |
+| FF4 | Trocar só o motivo, com a exceção ligada, conta como mudança da exceção (permissão e evento WARNING) | O motivo faz parte da exceção |
+| FF5 | Duração gravada fora de 1 a 1439 min dá 409 ("Contrato com duração inválida."), não exceção | É dado do banco que a pessoa não corrige no formulário; o `CHECK` da 018 impede, a regra não confia |
+| FF6 | Estado gravado, contratos carregados ou lista de motivos fora do formato: `UnexpectedValueException` | Erro de quem chama, como no `EmployeeArchivePlanner` do F4 |
+| FF7 | `contrato_id` aceita inteiro positivo ou texto só de dígitos, sem zero à esquerda; recusa decimal, booleano, `'07'` | Lista fechada de formatos; `'07'` e `7.0` escondem erro de cliente |
+| FF8 | Horários gravados como `HH:MM` (segundos descartados) | Mesmo resultado do `normalizar_hora_funcionario` de hoje |
+| FF9 | Mensagens de auditoria sem acento, só com IDs; perfil fora de `[a-z_]` vira "desconhecido" | Padrão das demais mensagens de auditoria; o perfil vem da sessão, mas a regra não confia |
+| FF10 | A regra devolve `fim_calculado`, sem aviso pronto | O endpoint (commit 4) e a tela (commit 5) decidem o texto; a regra fica sem microcopy de tela |
+| FF11 | **EE5 num commit próprio, na mesma entrega**, e não dentro do commit 1. O pedido dizia "no commit 1 do F8" | Um propósito por commit: o commit 1 é PHP puro; a ajuda é frontend e se reverte sozinha |
+
+**Validação executada pela IA:**
+- `qa-employee-lunch.php`: 199 verificações, saída 0.
+- **Mutação da regra 46/47**, numa cópia mínima (a regra, o QA e os dois runners). A primeira rodada deu 45/47: "jornada invertida aceita no `decide`" sobreviveu, porque o `withinShift` recusava depois; o QA ganhou três conferências da ordem das recusas, e ele morreu. O sobrevivente, "inteiro negativo aceito como `contrato_id`", é **equivalente**: a regra exige chave de contrato maior que zero, então um negativo nunca é encontrado e recebe o mesmo 400.
+- **Mutação da EE5 3/3** (sem `aria-describedby`, ajuda dentro do `label`, outro texto): mortos no `qa:unsaved-changes` e no roteiro (4 falhas cada).
+- **Bateria completa com o código de saída real de cada comando** (sem `tail` nem pipe): 19 `qa:*` com 0; `npm run lint` com 0 e nenhuma saída; `npm run typecheck` com 0; build em pasta temporária com 0; `test-local.ps1 -SkipHttp -Browser` com 0: 15 QAs PHP (o novo com 199) e o roteiro de navegador **872/872** (868 de antes e 4 da EE5, no bloco 13).
+
+**Limitações declaradas:** sem banco: a regra só entra em uso no commit 4; PHPStan e Psalm não estão instalados na estação (só `php -l` e os QAs); os códigos de motivo e as durações do QA são fictícios; leitor de tela real não usado.
 
 
 ### 9.11 Lote de acabamento (pendências 17d, 17 e 17b), antes do roteiro único
@@ -3758,6 +3796,56 @@ Os pendentes gerais da introdução desta seção (feriados, retenção e anonim
 
 **Nova pendência, para decisão do responsável antes do deploy único:** destino da tela legada `admin.php` (`static/js/admin.js`): o que ela faz que a tela nova não faz, quem a usa e o que seria preciso para retirá-la com redirecionamento para `/app` no deploy único. Levantamento sem mudar código, com recomendação.
 
+### 9.12 Tela legada `admin.php`: levantamento para decisão (2026-11-03; sem mudança de código)
+
+Pedido do responsável em 2026-11-03: decidir, antes do deploy único, o destino da tela legada `admin.php` (`static/js/admin.js` e `static/js/admin_users.js`). Leitura do código em 2026-11-03; nada foi alterado.
+
+**Como ela é alcançada hoje:**
+
+| Fato | Onde |
+|---|---|
+| **`GET` e `HEAD` de `admin.php` já são redirecionados** para `/app/admin` (302), assim como `/`, `index.php`, `login.php`, `admin_login.php` e `metricas.php`. `POST` legado e APIs não são redirecionados (decisão da modernização do portal) | `.htaccess` (bloco `RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$`); `PORTAL_MODERNIZATION.md`, "Compatibilidade" |
+| O redirecionamento depende do `.htaccess` valer no servidor (`AllowOverride All` e `mod_rewrite`). O exemplo do vhost tem `AllowOverride All`; **no servidor, A CONFIRMAR** | `deploy/apache/chronodesk.conf.example:15` |
+| O `test-local.ps1` (sem `-SkipHttp`) já confere o 302 dessas seis páginas e que o `POST` legado **não** é redirecionado | `scripts/test-local.ps1:220-225`, bloco "POST legado" |
+| A página exige `admin_logged_in`, que só vale para o perfil admin (AD em `AD_ADMIN_USERS` ou admin local com `ENABLE_LOCAL_ADMIN`). Liderança, gestor, técnico e somente leitura nunca a abrem | `config.php:409` (`verificar_admin_login`); `api/login_admin.php:74-75` |
+| `admin_login.php` ainda aceita `POST` (formulário próprio: CSRF, limite por IP e por usuário, AD) e, no sucesso, manda para `admin.php`, que redireciona para `/app/admin`. É um ponto de entrada de login a mais | `admin_login.php:12-60`; `scripts/qa-security.php:1004` (lista dos que chamam o AD) |
+| O JavaScript legado não tem endpoint próprio: chama as mesmas APIs da tela nova (`salvar_configuracao.php`, `alterar_senha_admin.php`, `usuarios.php`, `adicionar_funcionario.php`, `atualizar_funcionario.php`, `remover_funcionario.php`, `listar_funcionarios.php`) | `static/js/admin.js`, `static/js/admin_users.js` |
+
+**O que ela faz e a tela nova (`/app/admin`) não faz:** nada de útil.
+
+| Função da tela legada | Tela nova |
+|---|---|
+| Limite de pausas, duração e alertas de 15 e 20 min | Aba Configurações, mesmo endpoint e mesmos campos (`AdminPage.jsx:220-240`) |
+| Trocar a senha do admin local | Mesma chamada (`AdminPage.jsx:901`) |
+| Usuários locais: criar e remover | Criar, trocar perfil e remover (`AdminPage.jsx:788-803`) |
+| Funcionários: adicionar, editar e "remover" (arquivar, pelo F4) | Tudo isso, mais perfil de acesso, fora do Mapa, restaurar, filtro de arquivados, cartões e proteção contra perda de alterações |
+| Lista com a "disponibilidade" do cálculo antigo | A Visão Operacional e a tela de Pausas usam o motor desde o F7 |
+| Cadastro novo com "ativo" desmarcado | **Quebrado desde o F4**: o servidor recusa com 400 ("Cadastro novo é sempre ativo") |
+
+**Riscos de manter, achados no levantamento (sem mudança):**
+- **Editar pela tela legada rebaixa o perfil de acesso.** Ela não manda `access_role`, e o `atualizar_funcionario.php` usa `'tecnico'` quando o campo falta (`api/atualizar_funcionario.php:28`): um cadastro de Liderança, admin ou somente leitura volta a técnico ao ser salvo ali. O almoço tem o mesmo padrão (12:00 e 13:00 quando o campo falta, `:32-33`). Só é alcançável se o `.htaccess` não valer ou por chamada direta à API; a tela nova sempre manda os campos. É a mesma classe de problema da DL12 do F8 (campo ausente tem de manter o gravado).
+- Dois pontos de entrada de login a mais (`admin_login.php` e `login.php`, este o antigo das Métricas), com limite próprio, que a tela nova não usa.
+
+**Quantos usam:** pelo código, só o perfil admin. Uso real a medir no servidor, **só com contagens** (sem IP, sem usuário), nos logs de acesso do vhost dos últimos dias:
+
+```
+sudo sh -c 'cat /var/log/apache2/chronodesk_access.log /var/log/apache2/chronodesk_access.log.1 2>/dev/null; zcat /var/log/apache2/chronodesk_access.log.*.gz 2>/dev/null' | awk '{print $6, $7, $9}' | sed -E 's/\?[^ ]*//' | grep -E '^"(GET|POST) /(admin|admin_login|admin_logout|login|metricas|index)\.php |^"GET /static/js/admin(_users)?\.js ' | sort | uniq -c
+```
+
+E a confirmação do redirecionamento, sem o IP: `curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' http://<ServerName do vhost>/admin.php` (esperado `302` para `/app/admin`).
+
+**O que seria preciso para retirá-la no deploy único (um commit, antes do roteiro consolidado):**
+1. Manter o redirecionamento de `GET`/`HEAD` (já existe) e conferir no servidor com o `curl` acima.
+2. No `.htaccess`, responder **410** ao `POST` de `admin_login.php`, `login.php` e `admin_logout.php` (formulários legados); as APIs (`api/...`) não mudam. Com 410, a trava do `test-local.ps1` ("POST legado não redirecionado") continua valendo, porque 410 não é redirecionamento; ela ganha a conferência do 410.
+3. Negar o `GET` de `static/js/admin.js` e `static/js/admin_users.js` (opcional: sem a página, não fazem nada sozinhos).
+4. Atualizar de forma deliberada o `test-local.ps1` (410 nos `POST` legados), a lista do `qa-security.php` (quem chama o AD continua a mesma enquanto os arquivos existirem) e um passo no roteiro consolidado (pendência 16): `curl` do 302 e do 410, só com o código HTTP.
+5. **Depois do deploy, num lote próprio:** apagar `admin.php`, `admin_login.php`, `admin_logout.php`, `static/js/admin.js`, `static/js/admin_users.js` e `static/css/admin.css`, depois de um ciclo estável. A remoção de arquivos é feita pelo responsável (o hook de Segurança da Informação bloqueia remoção pela IA).
+6. **Independente da retirada:** campo ausente no `atualizar_funcionario.php` mantém o gravado para `access_role` (e, no F8, para o almoço, pela DL12). Proposta: entrar no commit 4 do F8, que já mexe nesse endpoint, ou num commit próprio antes do deploy único, com teste negativo no `qa-security.php`.
+
+**Recomendação:** retirar no deploy único, pelos passos 1 a 4 (só `.htaccess`, testes e roteiro; nenhum PHP de tela muda), e apagar os arquivos depois do deploy (passo 5). A tela não tem função que falte na nova, só é alcançável pelo admin, e já está fora do caminho do navegador pelo redirecionamento; o que sobra é superfície de ataque (`POST` de login legado) e o risco de rebaixar o perfil ao editar. Fazer **também o passo 6 antes do deploy**, porque protege as APIs mesmo que o `.htaccess` não valha. As outras páginas legadas (`index.php`, `login.php`, `metricas.php`) estão na mesma situação; a decisão pode valer para todas, se o responsável quiser.
+
+**A decidir pelo responsável:** retirar ou manter; se retirar, se vale para todas as páginas legadas; onde entra o passo 6 (commit 4 do F8 ou commit próprio antes); rodar a contagem dos logs e o `curl` no servidor.
+
 ---
 
 ## 10. Riscos e pendências
@@ -3774,7 +3862,7 @@ Os pendentes gerais da introdução desta seção (feriados, retenção e anonim
 | `AdminPage.jsx` denso, alterado de novo em F4 | Mudança restrita à aba Funcionários; sem refatoração junto |
 | Carga extra no polling de 15 s (P14) | Referência de 2026-10-06 (p95 26,8 ms; seção 9.2). Base do critério: medição repetida logo antes do deploy do F2 (decisão de 2026-10-06); medir de novo depois, nas mesmas condições; piora (p95 + 50 ms **e** + 20% sobre essa base) desliga `STATUS_PRESENCE_ENABLED` |
 
-**Pendências fora desta entrega:** feriados; política de retenção e anonimização (LGPD); BIZ-05 (paridade na virada do mês); SEC-04 (Liderança ⇒ admin); PERF-02 (listas truncadas); remoção das tabelas legadas `portal_schedules` e `portal_pa_map`; horário de jornada que cruza a meia-noite. Tabela de Funcionários no celular (cartões no lugar da tabela que rola na horizontal; lote de acabamento, pedido de 2026-10-13). **Para depois do deploy (pedido de 2026-10-30):** modais antigos de Documentação, Escalas de Sábado e Mapa PA (provável faixa de 20 px e sem o `Dialog`); AA8 (Exceção por data e Importar planilha de regras sem proteção contra perda de alterações). **Lote de acabamento concluído em 2026-11-03 (DD, `87d21b4`; aprovado em 2026-11-03):** a lista completa do que fica para depois do deploy está no fim da 9.11. **Para depois do deploy (EE5, 2026-11-03):** justificativa de "derrubar pausa" em lista fechada de motivos, no lugar do texto livre que vai para a auditoria.
+**Pendências fora desta entrega:** feriados; política de retenção e anonimização (LGPD); BIZ-05 (paridade na virada do mês); SEC-04 (Liderança ⇒ admin); PERF-02 (listas truncadas); remoção das tabelas legadas `portal_schedules` e `portal_pa_map`; horário de jornada que cruza a meia-noite. Tabela de Funcionários no celular (cartões no lugar da tabela que rola na horizontal; lote de acabamento, pedido de 2026-10-13). **Para depois do deploy (pedido de 2026-10-30):** modais antigos de Documentação, Escalas de Sábado e Mapa PA (provável faixa de 20 px e sem o `Dialog`); AA8 (Exceção por data e Importar planilha de regras sem proteção contra perda de alterações). **Lote de acabamento concluído em 2026-11-03 (DD, `87d21b4`; aprovado em 2026-11-03):** a lista completa do que fica para depois do deploy está no fim da 9.11. **Para depois do deploy (EE5, 2026-11-03):** justificativa de "derrubar pausa" em lista fechada de motivos, no lugar do texto livre que vai para a auditoria (até lá, a ajuda "Não inclua informações pessoais ou de saúde.", `5719cd6`). **Antes do deploy único, decisão do responsável:** destino da tela legada `admin.php` (seção 9.12, com a recomendação de retirar).
 
 ---
 
