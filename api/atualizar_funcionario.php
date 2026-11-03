@@ -25,12 +25,21 @@ if (!$funcionario_id) {
 }
 $nome = validate_nome($data['nome'] ?? '', 3, 100);
 $equipe = validate_funcionario_equipe($data['equipe'] ?? '');
-$access_role = validate_access_role($data['access_role'] ?? 'tecnico');
-$ad_login = validate_ad_login($data['ad_login'] ?? null);
-$jornada_entrada = isset($data['jornada_entrada']) ? trim($data['jornada_entrada']) : '08:00';
-$jornada_saida = isset($data['jornada_saida']) ? trim($data['jornada_saida']) : '17:00';
-$almoco_inicio = isset($data['almoco_inicio']) ? trim($data['almoco_inicio']) : '12:00';
-$almoco_fim = isset($data['almoco_fim']) ? trim($data['almoco_fim']) : '13:00';
+// [9.12, passo 6] Campo ausente no corpo mantem o valor gravado (perfil,
+// login AD e horarios), lido adiante do cadastro; presente, e validado como
+// antes. Nulo presente: o login AD e removido; perfil e horario nulos dao 400.
+// Antes, o ausente caia no padrao ('tecnico', 08:00, 17:00, 12:00, 13:00) e
+// sobrescrevia o cadastro (a tela legada nao manda access_role).
+$access_role_sent = array_key_exists('access_role', $data);
+$access_role = $access_role_sent ? validate_access_role($data['access_role']) : null;
+$ad_login_sent = array_key_exists('ad_login', $data);
+$ad_login = $ad_login_sent ? validate_ad_login($data['ad_login']) : null;
+$horarios_enviados = [];
+foreach (['jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim'] as $campo_hora) {
+    if (array_key_exists($campo_hora, $data)) {
+        $horarios_enviados[$campo_hora] = is_string($data[$campo_hora]) ? trim($data[$campo_hora]) : '';
+    }
+}
 // [F4, D4] Situacao do cadastro so por Arquivar e Restaurar: ausente mantem;
 // valor diferente do atual da 409 (conferido com o cadastro travado).
 $ativo_input = array_key_exists('ativo', $data) ? $data['ativo'] : null;
@@ -51,7 +60,7 @@ if ($equipe === null) {
     json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2 ou Liderança.'], 400);
 }
 
-if ($access_role === null) {
+if ($access_role_sent && $access_role === null) {
     json_response(['sucesso' => false, 'mensagem' => 'Perfil de acesso inválido.'], 400);
 }
 
@@ -61,33 +70,18 @@ if ($ad_login === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Login AD inválido. Use letras, números, ponto, hífen, underscore ou @.'], 400);
 }
 
-// Validar formato de horários (HH:MM ou HH:MM:SS)
-if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $jornada_entrada)) {
-    json_response(['sucesso' => false, 'mensagem' => 'Horário de entrada inválido (formato: HH:MM)'], 400);
-}
-if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $jornada_saida)) {
-    json_response(['sucesso' => false, 'mensagem' => 'Horário de saída inválido (formato: HH:MM)'], 400);
-}
-if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $almoco_inicio)) {
-    json_response(['sucesso' => false, 'mensagem' => 'Horário de início do almoço inválido (formato: HH:MM)'], 400);
-}
-if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $almoco_fim)) {
-    json_response(['sucesso' => false, 'mensagem' => 'Horário de fim do almoço inválido (formato: HH:MM)'], 400);
-}
-
-$jornada_entrada = normalizar_hora_funcionario($jornada_entrada, '08:00');
-$jornada_saida = normalizar_hora_funcionario($jornada_saida, '17:00');
-$almoco_inicio = normalizar_hora_funcionario($almoco_inicio, '12:00');
-$almoco_fim = normalizar_hora_funcionario($almoco_fim, '13:00');
-
-// Validar que entrada < saída
-if ($jornada_entrada >= $jornada_saida) {
-    json_response(['sucesso' => false, 'mensagem' => 'Horário de entrada deve ser anterior ao horário de saída'], 400);
-}
-
-// Validar que almoço início < almoço fim
-if ($almoco_inicio >= $almoco_fim) {
-    json_response(['sucesso' => false, 'mensagem' => 'Horário de início do almoço deve ser anterior ao horário de fim'], 400);
+// Validar formato de horários (HH:MM ou HH:MM:SS), só dos enviados.
+$mensagens_hora = [
+    'jornada_entrada' => 'Horário de entrada inválido (formato: HH:MM)',
+    'jornada_saida' => 'Horário de saída inválido (formato: HH:MM)',
+    'almoco_inicio' => 'Horário de início do almoço inválido (formato: HH:MM)',
+    'almoco_fim' => 'Horário de fim do almoço inválido (formato: HH:MM)',
+];
+foreach ($horarios_enviados as $campo_hora => $valor_hora) {
+    if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $valor_hora)) {
+        json_response(['sucesso' => false, 'mensagem' => $mensagens_hora[$campo_hora]], 400);
+    }
+    $horarios_enviados[$campo_hora] = normalizar_hora_funcionario($valor_hora);
 }
 
 global $gerenciador;
@@ -101,7 +95,7 @@ if ($ad_login !== null && funcionario_ad_login_em_uso($ad_login, $funcionario_id
 
 try {
     $pdo = get_db_connection();
-    $currentStmt = $pdo->prepare('SELECT access_role, ad_login FROM funcionarios WHERE id = :id LIMIT 1');
+    $currentStmt = $pdo->prepare('SELECT access_role, ad_login, jornada_entrada, jornada_saida, almoco_inicio, almoco_fim FROM funcionarios WHERE id = :id LIMIT 1');
     $currentStmt->execute([':id' => $funcionario_id]);
     $current = $currentStmt->fetch(PDO::FETCH_ASSOC);
     if (!is_array($current)) {
@@ -109,7 +103,29 @@ try {
     }
     $currentRole = (string)$current['access_role'];
     $currentAdLogin = normalizar_ad_login($current['ad_login'] ?? null);
+    // Perfil ausente chega aqui como null ("perfil nao muda"): a regra de 2.3
+    // continua valendo para o cadastro atual (Lideranca nao edita Lideranca nem admin).
     require_funcionario_change($actor_role, $currentRole, $access_role, 'atualizar');
+    $access_role = $access_role ?? $currentRole;
+    if (!$ad_login_sent) {
+        $ad_login = $currentAdLogin;
+    }
+    // Horario ausente: o gravado (TIME NOT NULL, sempre valido).
+    $horarios = [];
+    foreach (['jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim'] as $campo_hora) {
+        $horarios[$campo_hora] = $horarios_enviados[$campo_hora] ?? normalizar_hora_funcionario($current[$campo_hora] ?? '');
+    }
+    $jornada_entrada = $horarios['jornada_entrada'];
+    $jornada_saida = $horarios['jornada_saida'];
+    $almoco_inicio = $horarios['almoco_inicio'];
+    $almoco_fim = $horarios['almoco_fim'];
+    // Validar que entrada < saída e almoço início < fim, com os valores finais.
+    if ($jornada_entrada >= $jornada_saida) {
+        json_response(['sucesso' => false, 'mensagem' => 'Horário de entrada deve ser anterior ao horário de saída'], 400);
+    }
+    if ($almoco_inicio >= $almoco_fim) {
+        json_response(['sucesso' => false, 'mensagem' => 'Horário de início do almoço deve ser anterior ao horário de fim'], 400);
+    }
 
     // [P12, F1] Fora do Mapa PA e da escala: cadastro travado ate o commit,
     // como a gravacao de vinculo no Mapa PA, para a checagem do vinculo

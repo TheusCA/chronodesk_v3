@@ -147,10 +147,15 @@ final class QaChildStatement extends PDOStatement {
         // Lote 5b: leituras e gravacoes dos endpoints de funcionario. Gravacao
         // e aceita sem efeito (o teste olha a resposta e o audit_log).
         $byId = static fn (QaChildPdo $pdo, $id): ?array => $pdo->db['funcionarios'][(string)$id] ?? null;
-        if ($this->sql === 'SELECT access_role, ad_login FROM funcionarios WHERE id = :id LIMIT 1'
+        // [9.12, passo 6] O atualizar le o cadastro inteiro que o ausente mantem;
+        // horario sem valor no simulado vem com o padrao da coluna (TIME NOT NULL).
+        if ($this->sql === 'SELECT access_role, ad_login, jornada_entrada, jornada_saida, almoco_inicio, almoco_fim FROM funcionarios WHERE id = :id LIMIT 1'
             || $this->sql === 'SELECT access_role FROM funcionarios WHERE id = :id LIMIT 1') {
             $row = $byId($this->pdo, $params[':id'] ?? 0);
-            $columns = strpos($this->sql, 'ad_login') !== false ? ['access_role', 'ad_login'] : ['access_role'];
+            $columns = strpos($this->sql, 'ad_login') !== false
+                ? ['access_role', 'ad_login', 'jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim']
+                : ['access_role'];
+            $row = $row === null ? null : $row + ['jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00', 'almoco_inicio' => '12:00:00', 'almoco_fim' => '13:00:00'];
             $this->rows = $row ? [array_intersect_key($row, array_flip($columns))] : [];
             return true;
         }
@@ -228,7 +233,8 @@ final class QaChildStatement extends PDOStatement {
         if (strpos($this->sql, 'INSERT INTO funcionarios (') === 0
             || strpos($this->sql, 'UPDATE funcionarios SET nome = :nome') === 0
             || $this->sql === 'UPDATE funcionarios SET ativo = 0 WHERE id = :id') {
-            error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? '?') . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-') . ' fora_mapa=' . ($params[':fora_mapa_escala'] ?? '-'));
+            error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? '?') . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-') . ' fora_mapa=' . ($params[':fora_mapa_escala'] ?? '-')
+                . ' horarios=' . ($params[':jornada_entrada'] ?? '-') . '-' . ($params[':jornada_saida'] ?? '-') . '/' . ($params[':almoco_inicio'] ?? '-') . '-' . ($params[':almoco_fim'] ?? '-'));
             return true;
         }
         // F4: arquivamento e restauracao (EmployeeArchiveService). Cadastro
@@ -1788,6 +1794,91 @@ foreach (['lid_cria_tecnico', 'admin_lideranca_tecnico', 'login_tecnico'] as $ca
     assert_same(false, strpos($employeeCases[$case]['log'], 'FUNCIONARIO_PERFIL_ALTERADO') !== false, "funcionario {$case}: sem evento de perfil");
 }
 
+// [9.12, passo 6] Campo ausente no corpo mantem o gravado: perfil, login AD e
+// horarios. Antes, editar sem access_role (a tela legada nao manda) gravava
+// 'tecnico', e sem os horarios gravava 08:00-17:00 e 12:00-13:00. Cadastros
+// com horarios fora do padrao, para o ausente nao coincidir com ele.
+$keepDb = QA_DB;
+foreach (['1', '2', '4', '5'] as $keepId) {
+    $keepDb['funcionarios'][$keepId] += ['jornada_entrada' => '07:30:00', 'jornada_saida' => '16:30:00', 'almoco_inicio' => '11:15:00', 'almoco_fim' => '12:30:00'];
+}
+$keepStored = 'horarios=07:30:00-16:30:00/11:15:00-12:30:00';
+$keepBody = static function (int $id, string $login, array $omit, array $override = []) use ($employeeBody): string {
+    // Como o formulario: manda os horarios gravados, salvo os omitidos no caso.
+    $body = json_decode($employeeBody($override + [
+        'funcionario_id' => $id, 'id' => $id, 'ad_login' => $login, 'equipe' => 'n1',
+        'jornada_entrada' => '07:30', 'jornada_saida' => '16:30', 'almoco_inicio' => '11:15', 'almoco_fim' => '12:30',
+    ]), true);
+    return (string)json_encode(array_diff_key($body, array_flip($omit)));
+};
+$timeFields = ['jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim'];
+$keepCases = qa_run_endpoints($qaDir, [
+    'sem_perfil_lideranca' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(2, 'qa.lider', ['access_role'], ['equipe' => 'lideranca']), $keepDb),
+    'sem_perfil_admin' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(5, 'qa.lider.legado', ['access_role'], ['equipe' => 'lideranca']), $keepDb),
+    'sem_perfil_leitura' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(4, 'qa.leitura', ['access_role']), $keepDb),
+    'sem_perfil_tecnico_lid' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $keepBody(1, 'joao.silva', ['access_role']), $keepDb),
+    'sem_horarios' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', $timeFields), $keepDb),
+    'sem_login' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', ['ad_login']), $keepDb),
+    // Corpo da tela legada (static/js/admin.js:220-229): horarios e ativo, sem access_role.
+    'legado_sem_perfil' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(2, 'qa.lider', ['access_role'], [
+        'equipe' => 'lideranca', 'jornada_entrada' => '07:30', 'jornada_saida' => '16:30', 'almoco_inicio' => '11:15', 'almoco_fim' => '12:30', 'ativo' => true,
+    ]), $keepDb),
+    'so_fim_almoco' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', ['jornada_entrada', 'jornada_saida', 'almoco_inicio'], ['almoco_fim' => '13:00']), $keepDb),
+    'fim_antes_do_gravado' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', ['jornada_entrada', 'jornada_saida', 'almoco_inicio'], ['almoco_fim' => '11:00']), $keepDb),
+    'saida_antes_do_gravado' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', ['jornada_entrada', 'almoco_inicio', 'almoco_fim'], ['jornada_saida' => '07:00']), $keepDb),
+    'login_nulo' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', [], ['ad_login' => null]), $keepDb),
+    'perfil_nulo' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', [], ['access_role' => null]), $keepDb),
+    'hora_nula' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', [], ['jornada_entrada' => null]), $keepDb),
+    'hora_lista' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', [], ['almoco_inicio' => ['12:00']]), $keepDb),
+    'lid_sem_perfil_lider' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $keepBody(2, 'qa.lider', ['access_role'], ['equipe' => 'lideranca']), $keepDb),
+    'lid_sem_perfil_admin' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $keepBody(5, 'qa.lider.legado', ['access_role'], ['equipe' => 'lideranca']), $keepDb),
+]);
+foreach ([
+    'sem_perfil_lideranca' => 'id=2 perfil=lideranca login=qa.lider fora_mapa=0 ' . $keepStored,
+    'sem_perfil_admin' => 'id=5 perfil=admin login=qa.lider.legado fora_mapa=0 ' . $keepStored,
+    'sem_perfil_leitura' => 'id=4 perfil=somente_leitura login=qa.leitura fora_mapa=0 ' . $keepStored,
+    'sem_perfil_tecnico_lid' => 'id=1 perfil=tecnico login=joao.silva fora_mapa=0 ' . $keepStored,
+    'legado_sem_perfil' => 'id=2 perfil=lideranca login=qa.lider fora_mapa=0 ' . $keepStored,
+    'sem_horarios' => 'id=1 perfil=tecnico login=joao.silva fora_mapa=0 ' . $keepStored,
+    'sem_login' => 'id=1 perfil=tecnico login=joao.silva fora_mapa=0 ' . $keepStored,
+    'so_fim_almoco' => 'id=1 perfil=tecnico login=joao.silva fora_mapa=0 horarios=07:30:00-16:30:00/11:15:00-13:00:00',
+    'login_nulo' => 'id=1 perfil=tecnico login=- fora_mapa=0 ' . $keepStored,
+] as $case => $write) {
+    $result = $keepCases[$case];
+    assert_same(200, $result['status'], "campo ausente {$case}: HTTP 200");
+    assert_same(true, strpos($result['log'], '[QA_WRITE] UPDATE funcionarios SET nome = :nome') !== false && strpos($result['log'], $write) !== false, "campo ausente {$case}: grava {$write}");
+    if ($case !== 'login_nulo') {
+        assert_same(false, strpos($result['log'], 'FUNCIONARIO_AD_LOGIN_ALTERADO') !== false, "campo ausente {$case}: login AD nao muda, sem evento");
+    }
+    assert_same(false, strpos($result['log'], 'FUNCIONARIO_PERFIL_ALTERADO') !== false, "campo ausente {$case}: perfil nao muda, sem evento");
+}
+foreach (['sem_horarios', 'sem_perfil_lideranca', 'sem_login', 'legado_sem_perfil'] as $case) {
+    // So o UPDATE: a carga de emergencia do init.php grava INSERT com o padrao.
+    assert_same(0, preg_match('/\[QA_WRITE\] UPDATE funcionarios SET nome[^\n]*horarios=08:00:00-17:00:00\/12:00:00-13:00:00/', $keepCases[$case]['log']), "campo ausente {$case}: nao grava o padrao antigo");
+}
+// Nulo presente no login AD continua removendo o vinculo, com o evento.
+assert_same(true, strpos($keepCases['login_nulo']['log'], '[QA_AUDIT] FUNCIONARIO_AD_LOGIN_ALTERADO [WARNING]: Login AD do funcionario ID 1 alterado de joao.silva para vazio por admin') !== false, 'login AD nulo presente: remove e audita');
+foreach ([
+    'fim_antes_do_gravado' => [400, 'Horário de início do almoço deve ser anterior ao horário de fim'],
+    'saida_antes_do_gravado' => [400, 'Horário de entrada deve ser anterior ao horário de saída'],
+    'perfil_nulo' => [400, 'Perfil de acesso inválido.'],
+    'hora_nula' => [400, 'Horário de entrada inválido (formato: HH:MM)'],
+    'hora_lista' => [400, 'Horário de início do almoço inválido (formato: HH:MM)'],
+    'lid_sem_perfil_lider' => [403, 'não altera cadastros de Liderança'],
+    'lid_sem_perfil_admin' => [403, 'não altera cadastros de Liderança'],
+] as $case => [$status, $message]) {
+    $result = $keepCases[$case];
+    assert_same($status, $result['status'], "campo ausente {$case}: HTTP {$status}");
+    assert_same(true, strpos((string)(json_decode($result['body'], true)['mensagem'] ?? ''), $message) !== false, "campo ausente {$case}: mensagem");
+    assert_same(false, strpos($result['log'], '[QA_WRITE] UPDATE ') !== false, "campo ausente {$case}: nada gravado");
+    if ($status === 403) {
+        assert_same(true, strpos($result['log'], '[QA_AUDIT] FUNCIONARIO_ALTERACAO_NEGADA [WARNING]: contexto=atualizar perfil_ator=lideranca') !== false, "campo ausente {$case}: recusa auditada");
+    }
+}
+// Estrutural: o ausente nao volta a cair em padrao fixo.
+$keepSource = (string)preg_replace('#//[^\n]*#', '', (string)file_get_contents($root . '/api/atualizar_funcionario.php'));
+assert_same(0, preg_match('/\$data\[\'(access_role|ad_login|jornada_entrada|jornada_saida|almoco_inicio|almoco_fim)\'\] \?\?|isset\(\$data\[\'(jornada|almoco)_/', $keepSource), 'atualizar: perfil, login AD e horarios sem padrao para o ausente (?? ou isset)');
+
 // F4 (desenho 9.6): arquivar e restaurar pelos endpoints reais. O banco
 // simulado devolve o cadastro travado e linhas vazias de escala, excecao,
 // ausencia e PA (os efeitos sao testados no qa-archive); as gravacoes vao
@@ -2162,7 +2253,9 @@ sort($roleWriters);
 assert_same(['api/adicionar_funcionario.php', 'api/atualizar_funcionario.php', 'config.php'], $roleWriters, 'so os caminhos conhecidos gravam access_role (caminho novo exige revisao)');
 foreach (['adicionar_funcionario.php', 'atualizar_funcionario.php'] as $file) {
     $source = (string)file_get_contents($root . '/api/' . $file);
-    assert_same(true, strpos($source, '$ad_login = validate_ad_login(') !== false && strpos($source, "':ad_login' => \$ad_login,") !== false, "{$file}: ad_login gravado so depois de validate_ad_login()");
+    // [9.12, passo 6] No atualizar, o ausente fica com o login gravado (normalizar_ad_login do banco).
+    $adLoginRead = $file === 'atualizar_funcionario.php' ? "\$ad_login = \$ad_login_sent ? validate_ad_login(\$data['ad_login']) : null;" : '$ad_login = validate_ad_login(';
+    assert_same(true, strpos($source, $adLoginRead) !== false && strpos($source, "':ad_login' => \$ad_login,") !== false, "{$file}: ad_login gravado so depois de validate_ad_login()");
     assert_same(true, preg_match('/require_funcionario_change\(\$actor_role, null, \$access_role, /', $source) === 1, "{$file}: regra do perfil novo antes do banco");
 }
 assert_same(true, strpos((string)file_get_contents($root . '/api/atualizar_funcionario.php'), 'require_funcionario_change($actor_role, $currentRole, $access_role, ') !== false, 'atualizar: regra com o perfil atual lido do banco');
