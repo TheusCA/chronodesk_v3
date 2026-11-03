@@ -3518,6 +3518,16 @@ Na medição, o clique em Visualizar foi feito por script num botão fora da tel
 - com a confirmação, decidir várias solicitações em sequência pede um clique a mais por item, como decidido;
 - `gitleaks` ausente na estação.
 
+**Revisão do BB (`548e5e4`) e do item 5 da 17g (`90f74af`, docs `3ffcdb8`) (responsável, 2026-11-03): APROVADOS, com CC1 a CC9.** A CC10 é trocada pelo DD1, abaixo. A mensagem que repetiu o pedido de 30/10 foi engano, conferido antes de refazer.
+
+**Último commit do acabamento (DD), pequeno:**
+- **DD1 (CC10):** "ajuste de ponto" vira "correção de ponto" nos títulos do diálogo, como o nome da tela.
+- **DD2 (CC2/CC3):** avisos de erro ficam na tela por cerca de 10 s (os de sucesso continuam com 5 s) e são anunciados ao leitor de tela (`role="alert"` ou `aria-live="assertive"` nos de erro; `polite` nos de sucesso). Conferir no roteiro.
+- **DD3:** "derrubar pausa" (`App.jsx:143`) e "remover documento" (`DocumentsPage.jsx:197`) trocam o `window.confirm` pelo `ConfirmActionDialog`, com o texto de que a ação não pode ser desfeita, o foco em "Cancelar" e a recusa do servidor com o aviso por cima. Os `window.confirm` de Usuários locais (`AdminPage.jsx:797` e `:802`) ficam, porque a tela só existe em desenvolvimento; registrar.
+- Lint e typecheck conferindo o código de saída real (sem `tail` mascarando, ou com `pipefail`), além dos QAs PHP pelo `test-local.ps1`, registrados.
+
+Mesmo padrão: roteiro de navegador inteiro, mutação e bateria completa. Registrar aqui e no `REGISTRO_USO_IA.md`, marcando o lote de acabamento (17, 17b, 17d, 17e, 17f e 17g) como concluído, com a lista do que fica para depois do deploy. Em seguida, pela ordem aprovada em 2026-10-28, o plano do F8 na 9.10, sem a 018. Parar para revisão depois do DD e do plano do F8 (uma revisão só). Sem push.
+
 ---
 
 ## 10. Riscos e pendências

@@ -1010,7 +1010,7 @@ Base da afirmação:
 | **Decisoes de implementacao** | Dez, a aprovar (desenho 9.11, CC1 a CC10). Entre elas: "Remover regra" com erro continua aberto (AA4 revista); com dialogo aberto, o aviso sobe para o topo, o que nao estava no pedido, porque cobria os botoes do fim do formulario; titulo da pagina recebe o foco sem rolar e so quando o foco esta perdido; recusa do servidor atualiza a lista por tras. |
 | **Validacao executada pela IA** | Medicao antes e depois com `elementFromPoint`, roda do mouse e foco. Roteiro de navegador 673/673 na tela real, direto e por `test-local.ps1 -SkipHttp -Browser`. Mutacao do BB 28/28 e do item 5 32/32, com o roteiro rodando so os blocos ligados a mudanca. 19 `qa:*`, lint, typecheck e build em pasta temporaria. Prints conferidos. |
 | **Limitacoes declaradas** | Servidor simulado e dados ficticios; mensagens de recusa copiadas do PHP, sem exerce-lo. "Cancelar a propria ausencia" so confere que o foco nao cai no `body`. Aceitar o aviso do navegador ao recarregar nao exercitado. Safari e iPhone nao testados. `gitleaks` ausente na estacao. |
-| **Validacao humana** | Pendente: revisao do BB e do item 5 do lote 17f + 17g (uma so). |
+| **Validacao humana** | Responsavel, 2026-11-03: **BB e item 5 aprovados**, com CC1 a CC9; a CC10 foi trocada pelo DD1. Pedido o ultimo commit do acabamento (DD: titulo "correcao de ponto", avisos de erro por cerca de 10 s e anunciados ao leitor de tela, `window.confirm` de derrubar pausa e remover documento trocados pelo `ConfirmActionDialog`) e, em seguida, o plano do F8 na 9.10, sem a 018. |
 
 ---
 
