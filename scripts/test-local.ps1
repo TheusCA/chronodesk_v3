@@ -158,6 +158,14 @@ if (!$phpExecutable) {
         Pass "QA do arquivamento concluido"
     }
 
+    # Sem banco: almoco por contrato (F8, commit 1): regra pura, sem duracoes reais.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-employee-lunch.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do almoco por contrato falhou"
+    } else {
+        Pass "QA do almoco por contrato concluido"
+    }
+
     # Sem banco: motor de presenca, presence.php e presenca no status.php (F2).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-presence-engine.php")
     if ($LASTEXITCODE -ne 0) {
