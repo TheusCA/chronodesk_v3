@@ -679,6 +679,11 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.match(forceEnd, /useEffect\(\(\) => \{\n\s*if \(!authenticated\) setForceEndTarget\(null\)\n\s*\}, \[authenticated\]\)/, 'Derrubar: sessao encerrada fecha o pedido (nao volta depois do login)')
   const forceDialog = appSource.slice(appSource.indexOf('{forceEndTarget && ('), appSource.indexOf('</ConfirmActionDialog>'))
   assert.ok(forceDialog.includes(`description={\`Deseja derrubar a pausa de \${forceEndTarget.nome}? ${ACTION_WARNING}\`}`), 'Derrubar: nome e aviso de que nao se desfaz')
+  // [EE5] Ajuda do campo, ligada por aria-describedby e fora do label.
+  assert.match(appSource, /const FORCE_END_NOTE_HELP = 'Não inclua informações pessoais ou de saúde\.'/u, 'EE5: texto da ajuda')
+  assert.match(forceDialog, /<textarea aria-describedby=\{forceEndHelpId\} /, 'EE5: campo descrito pela ajuda')
+  assert.match(forceDialog, /<\/label>\n(?:\s*\{\/\*.*\*\/\}\n)?\s*<p className="mt-1 text-xs text-slate-400" id=\{forceEndHelpId\}>\{FORCE_END_NOTE_HELP\}<\/p>/, 'EE5: ajuda fora do label, com o id do aria-describedby')
+  assert.match(appSource, /const forceEndHelpId = useId\(\)/, 'EE5: id unico')
   for (const piece of ['busy={forceEndBusy}', 'confirmLabel="Derrubar pausa"', 'busyLabel="Derrubando..."', 'onConfirm={confirmForceEnd}', 'returnFocusRef={forceEndReturnRef}', 'title="Derrubar pausa?"', 'onCancel={() => setForceEndTarget(null)}', 'disabled={forceEndBusy} maxLength={500}', 'Justificativa da derrubada (opcional)']) {
     assert.ok(forceDialog.includes(piece), `Derrubar: ${piece}`)
   }

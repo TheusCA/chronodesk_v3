@@ -1696,6 +1696,13 @@ async function confirmActionScreens(page, port, mock) {
       await page.click(TRIGGER)
       await expectConfirm('abrir: role="alertdialog", foco em "Cancelar", janela travada', { titulo: title, modal: 'true', foco: 'Cancelar', dialogos: 1, travado: 'hidden', botoes: `${confirmText}|Cancelar`, descrito: true })
       await expectConfirm('texto: o alvo e o aviso de que nao se desfaz', { texto: (value) => [subject, ACTION_WARNING, ...(pause ? ['Justificativa da derrubada (opcional)'] : ['auditoria'])].every((part) => value.includes(part)) })
+      if (pause) {
+        // [EE5] Nome e descricao do campo pela arvore de acessibilidade do Chrome.
+        const { result } = await page.send('Runtime.evaluate', { expression: `${ALERT}.querySelector('textarea')`, returnByValue: false })
+        const field = result.objectId ? (await page.send('Accessibility.getPartialAXTree', { objectId: result.objectId, fetchRelatives: false })).nodes[0] : null
+        const ax = { nome: field?.name?.value ?? null, descricao: field?.description?.value ?? null }
+        report(`${label}, campo da justificativa: nome so do rotulo e a ajuda como descricao (EE5)`, ax.nome === 'Justificativa da derrubada (opcional)' && ax.descricao === 'Não inclua informações pessoais ou de saúde.', JSON.stringify(ax))
+      }
       await page.press('Escape')
       await expectConfirm('Esc: fecha, foco volta ao botao', { titulo: null, foco: triggerText, dialogos: 0, travado: '' })
       await page.click(TRIGGER)

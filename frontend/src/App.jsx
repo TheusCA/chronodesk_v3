@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Feedback } from './components/Feedback'
 import { PortalLayout } from './components/PortalLayout'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
@@ -33,6 +33,9 @@ const TimeCorrectionPage = lazyPage(() => import('./pages/OperationalPages'), 'T
 const PausasPage = lazyPage(() => import('./pages/PausasPage'), 'PausasPage')
 const TechniciansPage = lazyPage(() => import('./pages/TechniciansPage'), 'TechniciansPage')
 
+// [EE5] Ajuda do campo de justificativa de derrubar pausa (vai para a auditoria).
+const FORCE_END_NOTE_HELP = 'Não inclua informações pessoais ou de saúde.'
+
 const emptySession = {
   role: null,
   permissions: [],
@@ -62,6 +65,7 @@ export default function App() {
   const [forceEndNote, setForceEndNote] = useState('')
   const [forceEndBusy, setForceEndBusy] = useState(false)
   const forceEndReturnRef = useRef(null)
+  const forceEndHelpId = useId()
   const authenticated = session.ci.autenticado || session.gestor.autenticado
   const livePauses = useLivePauses({ enabled: authenticated })
   const status = livePauses.status
@@ -265,8 +269,11 @@ export default function App() {
           >
             <label className="label mt-4 block">
               Justificativa da derrubada (opcional)
-              <textarea className="field mt-2 min-h-20" disabled={forceEndBusy} maxLength={500} value={forceEndNote} onChange={(event) => setForceEndNote(event.target.value)} />
+              {/* [EE5] O texto vai para a auditoria: até virar lista fechada (depois do deploy), só a ajuda. */}
+              <textarea aria-describedby={forceEndHelpId} className="field mt-2 min-h-20" disabled={forceEndBusy} maxLength={500} value={forceEndNote} onChange={(event) => setForceEndNote(event.target.value)} />
             </label>
+            {/* Fora do label: a ajuda é descrição do campo, não parte do nome dele. */}
+            <p className="mt-1 text-xs text-slate-400" id={forceEndHelpId}>{FORCE_END_NOTE_HELP}</p>
           </ConfirmActionDialog>
         )}
       </PortalLayout>
