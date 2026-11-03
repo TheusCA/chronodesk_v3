@@ -1026,6 +1026,18 @@ Base da afirmação:
 
 **Lote de acabamento (17, 17b, 17d, 17e, 17f e 17g): concluido com o DD.** Para depois do deploy: modais antigos de Documentacao, Escalas de Sabado e Mapa PA; AA8; o resto do 17f (Horas extras e Correcao, Mapa PA, Calendario, Plantoes, envios); o resto do 17e (Usuarios locais e tabelas so de leitura); dias recolheveis da Semana no celular (17b); `window.confirm` de Usuarios locais; cabecalho `sticky`; "Editar" no celular; aviso sem dialogo cobrindo botao no celular; varios avisos seguidos e tempo do aviso sem pausa; conferencia com leitor de tela real e no Safari do iPhone (lista na 9.11).
 
+### F8 — plano (almoco por contrato), sem a migration 018 — 2026-11-03
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Plano do F8 na secao 9.10 do desenho, pela ordem aprovada em 2026-10-28, sem a migration 018: o que depende da Lideranca fica A DEFINIR (AD1, contratos e duracoes; AD2, se a excecao exige motivo), com o que muda conforme cada resposta. |
+| **Branch e commits** | O commit deste plano (so docs). Sem push. |
+| **O que a IA alterou** | `docs/DESENHO_PA_ESCALA_AUSENCIA.md` (secao 9.10 nova). Nenhum codigo, migration ou `.env`. |
+| **Decisoes de implementacao** | DL1 a DL17, a aprovar. Desenho da 11.1 e decisoes de 2026-10-06 mantidos. Novos, fora da 11.1: permissao `contratos.manage` (so admin), tres eventos de auditoria (`CONTRATO_CRIADO`, `CONTRATO_ATIVO_ALTERADO`, `CONTRATO_ALTERACAO_NEGADA`), mudanca de duracao em dois passos, campos ausentes = manter (tela legada) e o commit 1 (regra pura) antes das respostas (DL16). |
+| **Validacao executada pela IA** | Leitura do codigo (fatos com arquivo e linha na 9.10). Nenhuma consulta rodada: a Q-F8 (so contagens) fica com o responsavel. |
+| **Limitacoes declaradas** | Sem MySQL na estacao: a 018 so sera provada no ensaio do responsavel. As respostas da Lideranca podem mudar o modelo (AD1): o plano para nesses casos. |
+| **Validacao humana** | Pendente: revisao junto com a do DD. |
+
 ---
 
 ## 5. Responsabilidade

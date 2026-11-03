@@ -3,7 +3,7 @@
 **Fase:** A6 — Fase de Desenho da Parte B (`REQUISITOS_PA_ESCALA_AUSENCIA.md`, seção 9)
 **Data:** 2026-09-30
 **Base analisada:** `beff99d` no branch `feat/employee-form-rhf-zod` (= `c049868` + registro do A5)
-**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8; commit 1 (migration 014) aprovado em 2026-10-13; commit 2 (planejador puro) aprovado em 2026-10-13; commit 3 (serviço e endpoints) aprovado em 2026-10-13; commit 4 (L-07) aprovado em 2026-10-13, com a decisão 8 (conflito do Mapa PA sem inativos); commit 5 (tela de Funcionários) aprovado em 2026-10-13; commit 6 (ponta a ponta e documentação) aprovado em 2026-10-13: **F4 completo**, no deploy único da Parte B** (seção 9.6). **F5: plano aprovado em 2026-10-13, com ajuste na D2 (corte no 1º dia da competência seguinte ao deploy); commits 1 a 5 aprovados entre 2026-10-14 e 2026-10-15: F5 completo, no deploy único da Parte B** (seção 9.7). **F6 (Mapa PA no motor): plano aprovado em 2026-10-15; commits 1 a 4 aprovados entre 2026-10-15 e 2026-10-23: F6 completo, no deploy único da Parte B** (seção 9.8). **F7 (Visão Operacional): plano aprovado em 2026-10-23, com DV1 a DV15 como recomendadas e ajustes na DV7, DV11, DV14 e no risco 1; Q-F7 validada no MySQL 8.0.46 local; Q-F7 do servidor em 2026-10-26 (nenhum número pede tratamento; 6 sem regra no aviso à gestão); commits 1 a 4 aprovados entre 2026-10-27 e 2026-10-28 (o 4 com os ajustes B1 a B5): F7 completo, no deploy único da Parte B; referência do `dashboard.php` e do `status.php` e contagem de rótulo do servidor pendentes com o responsável** (seção 9.9). Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento. **Lote de acabamento (17, 17b, 17d, 17e, 17f e 17g) concluído em 2026-11-03 com o DD (`87d21b4`), aguardando a revisão do DD** (seção 9.11).
+**Situação:** **aprovado em 2026-09-30**; os três pontos em aberto (P2, P12 e o tratamento dos relatórios) foram **decididos em 2026-10-02** — ver seção 0.6. **F1 entregue, revisado em MySQL 8.0.46 pelo responsável, corrigido e aprovado em 2026-10-05** (seção 9.1). **F2 entregue e aprovado em 2026-10-06**, com escopo reduzido, após revisão e teste do responsável em MySQL 8.0.46 (seção 9.2). **F2B: plano aprovado em 2026-10-07 com ajustes; backend aprovado em 2026-10-07 após teste do responsável em MySQL 8.0.46 estrito; frontend aprovado em 2026-10-07; F2B completo, deploy 10 da fila** (seção 9.3). **F3: plano aprovado em 2026-10-07 (seção 9.4); commit 1, filtro "só aprovada" e migration 012 aprovados; commit 3 aprovado; commit 4 (ausência parcial no motor) aprovado em 2026-10-08, com o ajuste do marcador; commits 5 a 7 aprovados em 2026-10-08; F3 completo, deploy 11 da fila** (seção 9.4). **SEC-07b (texto livre do calendário): plano aprovado em 2026-10-09 com ajuste na D2; implementado e aprovado em 2026-10-09; deploy 12 da fila** (seção 9.5). **F4 (arquivamento): plano aprovado em 2026-10-13 com ajuste na D8; commit 1 (migration 014) aprovado em 2026-10-13; commit 2 (planejador puro) aprovado em 2026-10-13; commit 3 (serviço e endpoints) aprovado em 2026-10-13; commit 4 (L-07) aprovado em 2026-10-13, com a decisão 8 (conflito do Mapa PA sem inativos); commit 5 (tela de Funcionários) aprovado em 2026-10-13; commit 6 (ponta a ponta e documentação) aprovado em 2026-10-13: **F4 completo**, no deploy único da Parte B** (seção 9.6). **F5: plano aprovado em 2026-10-13, com ajuste na D2 (corte no 1º dia da competência seguinte ao deploy); commits 1 a 5 aprovados entre 2026-10-14 e 2026-10-15: F5 completo, no deploy único da Parte B** (seção 9.7). **F6 (Mapa PA no motor): plano aprovado em 2026-10-15; commits 1 a 4 aprovados entre 2026-10-15 e 2026-10-23: F6 completo, no deploy único da Parte B** (seção 9.8). **F7 (Visão Operacional): plano aprovado em 2026-10-23, com DV1 a DV15 como recomendadas e ajustes na DV7, DV11, DV14 e no risco 1; Q-F7 validada no MySQL 8.0.46 local; Q-F7 do servidor em 2026-10-26 (nenhum número pede tratamento; 6 sem regra no aviso à gestão); commits 1 a 4 aprovados entre 2026-10-27 e 2026-10-28 (o 4 com os ajustes B1 a B5): F7 completo, no deploy único da Parte B; referência do `dashboard.php` e do `status.php` e contagem de rótulo do servidor pendentes com o responsável** (seção 9.9). Os lotes F são desenvolvidos antes do deploy; o deploy do A4 virou regra de **ordem de deploy** (os F entram na fila depois do deploy 6), não pré-requisito de desenvolvimento. **Lote de acabamento (17, 17b, 17d, 17e, 17f e 17g) concluído em 2026-11-03 com o DD (`87d21b4`), aguardando a revisão do DD** (seção 9.11). **F8 (almoço por contrato): plano em 2026-11-03, aguardando aprovação, sem a migration 018; contratos e durações e o motivo da exceção A DEFINIR com a Liderança** (seção 9.10).
 
 Convenções: **Fato** = lido no código, com `arquivo:linha`. **TO CONFIRM** = depende de dado do servidor, que a IA não acessa. As consultas para confirmar estão na seção 2.8 e só devolvem contagens, nunca nomes.
 
@@ -2689,6 +2689,162 @@ Em 1280 px, com a Inter, os sete rótulos cabem numa linha. A medição é do pr
 **Ajustes B1 a B5 aprovados em 2026-10-28** (revisão do responsável sobre `66e6276` e `cfe957f`); com o B2, **a L6 fica aprovada**. Duas observações entram na pendência 16 (roteiro único depois do F9), sem mudança no roteiro do F7: (1) no ensaio, conferir `[ ! -e /tmp/.env ]` antes dos QAs, ou extrair o commit num diretório cujo nível acima também seja controlado, para o `config.php` não ler um `.env` de fora; (2) um passo de limpeza das cópias `env-antes-interruptor-*` em `/var/backups/chronodesk`, depois de conferidas e com aprovação, porque guardam os segredos do `.env`.
 
 **F7 completo (2026-10-28)**, no deploy único da Parte B (pendência 16 do estado da sessão), pelo roteiro "Deploy que traz o F7" do `DEPLOY_LINUX.md`. Pendentes com o responsável, sem mudança de código: a referência do `dashboard.php` e do `status.php` (passo 0b; tabela "Medições do F7") e a contagem de rótulo de equipe no servidor.
+
+
+### 9.10 F8 — Almoço por contrato: plano (2026-11-03, aguardando aprovação; sem a migration 018)
+
+Plano gravado aqui antes de qualquer código, pela ordem aprovada em 2026-10-28 (depois do lote de acabamento). **A migration 018 não é escrita neste plano** (11.1): ela espera duas respostas da Liderança, marcadas abaixo como **A DEFINIR**, com o que muda conforme cada resposta. Base: desenho da 11.1 (aprovado em 2026-10-06) e as quatro decisões do responsável de 2026-10-06; 11.3 e 11.4 (o F9 usa a duração do contrato no alerta do almoço do Crítico); do Lote 5b, a regra de quem edita qual cadastro; do F1, o precedente do `fora_mapa_escala` (permissão própria, auditoria e negação); do F4, a D14 (sessão revalidada); do F7, a Q-F7 do servidor de 2026-10-26; do 17f, o `Dialog`, o `ConfirmActionDialog` e a proteção contra perda de alterações.
+
+**Fatos lidos no código (2026-11-03):**
+
+| Fato | Onde |
+|---|---|
+| `funcionarios.almoco_inicio` e `almoco_fim` são `TIME NOT NULL` (padrão 12:00 e 13:00). Não há contrato nem marca de exceção | `database_SECURED.sql:23-24` |
+| Cadastro e edição recebem início e fim do cliente; sem o campo, usam 12:00 e 13:00. A única regra do almoço é `almoco_inicio < almoco_fim`: **não confere a jornada** | `api/adicionar_funcionario.php:30-31`, `:89`; `api/atualizar_funcionario.php:32-33`, `:89` |
+| A edição já trava a linha (`SELECT ... FOR UPDATE`), confere o `fora_mapa_escala` por permissão própria e audita a negação como `FUNCIONARIO_ALTERACAO_NEGADA` com `contexto=fora_mapa` | `api/atualizar_funcionario.php:119-150` |
+| Permissões: `funcionarios.manage` é da Liderança e do admin; o gestor não edita cadastro. A Liderança não altera cadastro de Liderança ou admin (Lote 5b) | `security.php:930-960`, `funcionario_change_denied` |
+| O motor e a tela de Pausas leem `almoco_inicio`/`almoco_fim` direto de `funcionarios` | `services/PresenceRepository.php:26`; `classes/Funcionario.php:73`, `:119` |
+| A tela legada `admin.php` (`static/js/admin.js`) continua servida e grava pelos mesmos endpoints, mandando início e fim | `admin.php:255`; `static/js/admin.js` |
+| Formulário novo: `employeeFormSchema` (Zod) com `almoco_inicio < almoco_fim`; dois formulários na aba Funcionários (editar no `Dialog`, adicionar na tela), com a proteção do 17f | `frontend/src/lib/formSchemas.ts:64-81`; `frontend/src/pages/AdminPage.jsx:344-349` |
+| Na Q-F7 do servidor (2026-10-26, variante sem a 011): `almoco_fora_da_jornada` = 0 e `jornada_invertida` = 0 | Seção 9.9 |
+| `config.php` só regrava todos os cadastros (com almoço) quando o MySQL e o `funcionarios.json` estão vazios (carga inicial) | `config.php:586-598`, `salvar_funcionarios_mysql` |
+
+**Escopo.** (1) Tabela de contratos com a duração do almoço, editada só pelo admin, numa aba nova da Administração. (2) No cadastro: contrato, início do almoço e, sem exceção, o fim calculado no servidor; com a exceção ("jornada pré-acordada"), o fim manual. (3) Validação do almoço dentro da jornada, para todos. (4) Mudar a duração de um contrato recalcula, na mesma transação, o fim dos cadastros daquele contrato sem exceção. (5) Permissão `funcionarios.almoco_excecao` e auditoria. **Fora do escopo:** o motor e o `status.php` (sem mudança: o fim calculado fica gravado nas mesmas colunas, 11.1); o almoço do Crítico (F9); carga em lote de quem é de qual contrato (DL15); almoço em dois intervalos.
+
+#### 9.10.1 A DEFINIR (Liderança) e o que muda conforme cada resposta
+
+| # | Pergunta | Resposta possível | O que muda |
+|---|---|---|---|
+| AD1 | **Lista de contratos e duração do almoço de cada um** | Lista com nome e minutos, um valor por contrato | Só dados: o admin cadastra pela tela depois do deploy (nenhuma duração no código nem na migration, 11.1). Na 018, a faixa do `CHECK` de `almoco_minutos` sai da lista (proposta: do menor ao maior valor, com folga; por exemplo, 15 a 180) |
+| | | A duração depende da carga horária, e não só do contrato (por exemplo, 6 h → 15 min, 8 h → 60 min) | A decisão 1 de 2026-10-06 (tipo de contrato) não cobre: a duração passaria a ser por contrato **e** faixa de jornada. **Parar e redesenhar a tabela** antes da 018 |
+| | | A duração muda por dia da semana, ou o almoço é em dois intervalos | Fora do modelo: o cadastro tem um intervalo só, igual todo dia. **Parar e redesenhar**; o motor também mudaria |
+| | | Quem é de qual contrato | **Não vai para o git nem para o chat** (dado funcional de pessoa). A gestão marca o contrato de cada cadastro pela tela, depois do deploy (DL15) |
+| AD2 | **A exceção exige motivo?** | Não | A 018 fica sem coluna de motivo; a exceção é só a marca `almoco_excecao`; a auditoria registra a marca |
+| | | Sim | **Lista fechada, sem texto livre** (decisão de 2026-10-06; texto livre tende a receber dado de saúde, LGPD). Os itens da lista também vêm da Liderança (A DEFINIR). Na 018 entra `almoco_excecao_motivo` (nulo, código curto) com `CHECK` coerente: obrigatório com a exceção e nulo sem ela. Com até uns seis itens estáveis, a lista fica no código e no `CHECK` (mudar exige migration); se a Liderança quiser mudar a lista sozinha, vira tabela própria com tela do admin (mais um commit). Auditoria com o código do motivo, nunca texto |
+
+Enquanto AD1 e AD2 não chegam, nada da 018, do serviço de contratos ou das telas é escrito. A DL16 propõe o que pode andar antes.
+
+#### 9.10.2 Desenho por ponto
+
+| Ponto | Desenho |
+|---|---|
+| Migration 018 (depois de AD1 e AD2) | `contratos_trabalho` (`id`, `nome` único sem diferenciar maiúsculas, `almoco_minutos` `SMALLINT` com `CHECK` na faixa de AD1, `ativo` 0/1, `criado_por`, `criado_em`, `atualizado_por`, `atualizado_em`); em `funcionarios`, `contrato_id` (nulo, FK `RESTRICT`, índice) e `almoco_excecao` (0/1, padrão 0) e, se AD2 = sim, `almoco_excecao_motivo`. Regra do A4 (`SET time_zone`), idempotente (confere `information_schema`), rollback que **para** se existir algum `*_bkp_018` (padrão da 011) e copia antes de desfazer, ensaio por `scripts/ensaio-migration.sh`, verificação só com contagens: `sem_contrato`, `com_excecao`, `almoco_fora_da_jornada`, `almoco_diferente_da_duracao` (contrato sem exceção cujo fim não é início + duração) e `contrato_inativo_em_uso`. Sem carga de dados |
+| Cálculo | Sem exceção e com contrato: `almoco_fim = almoco_inicio + almoco_minutos`, calculado no servidor; o fim enviado é **ignorado** (vale para a tela nova e para a legada). A tela mostra o fim só para leitura, com a mesma conta, como prévia. Com exceção: fim manual, validado. Sem contrato: fim manual, com aviso (decisão 3) |
+| Validação nova, para todos (DL7) | `jornada_entrada ≤ almoco_inicio < almoco_fim ≤ jornada_saida`, senão 400 com a mensagem do campo. Fim calculado que passa de 23:59 cai na mesma regra. Cadastros que hoje violam só são barrados ao editar; a Q-F8 conta antes (no servidor, 0 em 2026-10-26) |
+| Duração do contrato (decisão 4; DL3) | Ação `preview_duration` devolve só contagens (`afetados`, `fora_da_jornada`) para o diálogo de confirmação. Ação `update` refaz tudo sob trava: `FOR UPDATE` no contrato e depois nos cadastros do contrato sem exceção, por `id`; se algum ficar fora da jornada, **409 com a contagem e nada é alterado** (`ROLLBACK`); senão grava a duração e o fim de todos na mesma transação. A prévia nunca é confiada |
+| Contrato inativo (DL4) | Desativar não apaga (FK `RESTRICT`; nada apagado). Contrato inativo não pode ser escolhido em cadastro novo nem em troca de contrato; quem já está nele continua calculando pela duração gravada e a tela mostra "(inativo)". Reativar volta a aceitar. Mudar a duração de um inativo segue a decisão 4 |
+| Permissões (DL1, DL8) | `contratos.manage`, **só admin** (decisão 2), para criar, editar, desativar e mudar a duração. `funcionarios.almoco_excecao`, **Liderança e admin** (11.1), para marcar e desmarcar a exceção (e o motivo, se houver). Hoje coincide com quem tem `funcionarios.manage`, mas fica separada para RBAC e auditoria claros. Sem a permissão, mudar a marca dá 403 e `FUNCIONARIO_ALTERACAO_NEGADA` com `contexto=almoco_excecao` (precedente do fora do Mapa). A regra do Lote 5b continua valendo antes de tudo |
+| Campos ausentes (DL12) | No `atualizar_funcionario.php`, `contrato_id`, `almoco_excecao` e o motivo **ausentes no corpo = manter** o que está gravado (a tela legada não os conhece). Presentes, são validados: `contrato_id` inteiro de contrato ativo ou nulo; `almoco_excecao` booleano estrito |
+| Auditoria (DL10; aprovação item a item) | `FUNCIONARIO_ALMOCO_EXCECAO_ALTERADO` (WARNING: ID, antes e depois, perfil do ator, início e fim; motivo por código se AD2 = sim; sem nome); `FUNCIONARIO_CONTRATO_ALTERADO` (INFO: ID do cadastro, ID do contrato antes e depois); `CONTRATO_DURACAO_ALTERADA` (WARNING: ID do contrato, minutos antes e depois, quantos recalculados). **Novos, fora da 11.1, a aprovar:** `CONTRATO_CRIADO` e `CONTRATO_ATIVO_ALTERADO` (INFO, só IDs e minutos) e `CONTRATO_ALTERACAO_NEGADA` (WARNING). O nome do contrato é texto do admin: **não vai para a auditoria**, só o ID |
+| Exposição (DL11; DF7) | `contrato_id`, o nome do contrato, `almoco_excecao` e o motivo saem no `listar_funcionarios.php` só para quem tem `funcionarios.manage` (como o `arquivado_em` do F4). Técnico, somente leitura e gestor continuam sem esses campos. `GET portal/contracts.php`: Liderança e admin (para o formulário); inativos e autoria só para o admin |
+| Motor e painel (DL13) | **Sem mudança** (11.1). `PresenceRepository::employees`, `Funcionario::esta_disponivel`, `status.php` e Mapa PA leem as mesmas colunas. Nenhuma consulta nova no polling |
+| Tela legada (DL12) | Sem mudança no `static/js/admin.js`: o servidor aplica a regra. Ao editar um cadastro com contrato pela tela legada, o fim digitado é trocado pelo calculado, sem aviso na tela legada (ela não lê `avisos[]`). O responsável decide se a tela legada continua servida depois do deploy (fora deste lote) |
+| Tela nova | **Aba "Contratos"** na Administração, só com `contratos.manage`: lista (nome, duração, ativo, quantos cadastros), criar, editar o nome, mudar a duração (com o `ConfirmActionDialog`, que mostra "N cadastros sem exceção terão o fim recalculado" e mantém o diálogo aberto no 409, com o aviso por cima) e desativar ou reativar; formulário com a proteção contra perda de alterações. **Formulário de Funcionário** (editar e adicionar): campo Contrato (só ativos, mais o atual se inativo), "Exceção (jornada pré-acordada)" só com a permissão, fim só leitura sem exceção, aviso "Sem contrato: o fim do almoço é informado à mão" sem contrato, mensagem do servidor no campo. Cartões abaixo de 1280 px como no 17 |
+| Primeiro dia (DL15) | Depois do deploy, todo cadastro está sem contrato: **nada muda** no almoço de ninguém (decisão 3). A gestão marca o contrato de cada um pela tela; a contagem `sem_contrato` acompanha. Sem carga em lote por script (o vínculo pessoa-contrato não entra no git) |
+
+#### 9.10.3 Consulta antes (Q-F8, só contagens; a rodar pelo responsável)
+
+Antes de aprovar a 018, no servidor, com o padrão das consultas anteriores (`read -rsp`, `MYSQL_PWD`, `SET time_zone`):
+
+```
+SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1) AS ativos,
+       (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND jornada_entrada >= jornada_saida) AS jornada_invertida,
+       (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND NOT (jornada_entrada <= almoco_inicio AND almoco_inicio < almoco_fim AND almoco_fim <= jornada_saida)) AS almoco_fora_da_jornada;
+SELECT TIMESTAMPDIFF(MINUTE, almoco_inicio, almoco_fim) AS minutos_de_almoco, COUNT(*) AS cadastros
+  FROM funcionarios WHERE ativo = 1 GROUP BY minutos_de_almoco ORDER BY minutos_de_almoco;
+```
+
+O que cada número decide: `almoco_fora_da_jornada` maior que 0 é cadastro que a validação nova barra na próxima edição (decidir antes: corrigir pela tela ou aceitar); a distribuição de minutos, comparada com a lista da AD1, diz quantos cadastros terão o fim alterado quando a gestão marcar o contrato (aviso à gestão). Nenhum nome, só contagens.
+
+#### 9.10.4 Decisões de implementação (a aprovar)
+
+| # | Proposta | Motivo |
+|---|---|---|
+| DL1 | Permissão nova `contratos.manage`, só admin, no lugar de reaproveitar `configuracoes.manage` | Decisão 2 (só o admin); auditoria e RBAC por ação, como `funcionarios.fora_mapa` |
+| DL2 | Endpoint novo `api/portal/contracts.php`: `GET` (lista) e `POST` com `action` (`create`, `update`, `preview_duration`, `set_active`), CSRF, entrada JSON, validação na fronteira (nome de 2 a 60 caracteres, sem controle; minutos inteiros na faixa da 018) | Padrão dos endpoints do portal (`portal_json_input`, `require_post_method`) |
+| DL3 | Mudar a duração em dois passos: prévia só com contagens, depois `update` que refaz a conta sob `FOR UPDATE` | A decisão 4 pede 409 sem mudar nada; a prévia deixa a pessoa ver o efeito antes; nunca se confia nela |
+| DL4 | Contrato nunca é apagado; inativo continua valendo para quem já está nele | FK `RESTRICT` e "nada apagado"; desativar não pode mudar o almoço de ninguém sem aviso |
+| DL5 | Sem exceção e com contrato, o fim enviado é ignorado, sem erro | A tela legada manda o fim sempre; recusar quebraria a edição dela |
+| DL6 | Sem contrato, fim manual com aviso na tela (decisão 3) | Primeiro dia sem mudança (DL15) |
+| DL7 | Almoço dentro da jornada vale para todos, só ao gravar | 11.1; quem viola hoje não é alterado sozinho |
+| DL8 | `funcionarios.almoco_excecao` separada, com negação auditada como no fora do Mapa | 11.1; precedente do F1 |
+| DL9 | Desmarcar a exceção recalcula o fim pelo contrato; marcar passa a aceitar o fim enviado | A marca decide quem manda no fim |
+| DL10 | Três eventos da 11.1 mais `CONTRATO_CRIADO`, `CONTRATO_ATIVO_ALTERADO` e `CONTRATO_ALTERACAO_NEGADA`; nome do contrato fora da auditoria | Auditoria sem texto livre; criar e desativar também mudam o resultado do cálculo |
+| DL11 | Contrato e exceção só para quem tem `funcionarios.manage` | Minimização (LGPD); padrão da DF7 |
+| DL12 | Campos novos ausentes no corpo = manter; tela legada sem mudança | A tela legada não conhece os campos; ausente não pode virar "sem contrato" |
+| DL13 | Motor, `status.php` e polling sem mudança | O fim fica gravado; nada a medir no polling |
+| DL14 | A verificação conta `almoco_diferente_da_duracao` para pegar fim mudado por fora da aplicação | O fim é materializado; a contagem mostra desvio sem precisar de tarefa agendada |
+| DL15 | Sem carga em lote de quem é de qual contrato; a gestão marca pela tela | O vínculo pessoa-contrato não vai para o git nem para o chat |
+| DL16 | **Pode andar antes das respostas:** só o commit 1 (regra pura, sem banco, sem durações). Os commits 2 a 6 esperam AD1 e AD2 | Adianta o que não depende da Liderança sem escrever a 018; se a resposta mudar o modelo (AD1, segunda e terceira linhas), o commit 1 é revisto |
+| DL17 | Ordem F8 → F9 mantida. Se a Liderança demorar, o responsável decide se o F9 anda antes, com o alerta do almoço do Crítico em "sem contrato: sem limite automático, com aviso" (11.3, tratamento 1) | Hoje o F9 depende do F8 só pela duração; o caminho sem contrato já está descrito |
+
+#### 9.10.5 Commits planejados (um de entrega cada, com o commit de docs e parada para revisão)
+
+| # | Conteúdo | Depende de | Testes |
+|---|---|---|---|
+| 1 | `services/EmployeeLunchPolicy.php`, função pura: fim pela duração, validação na jornada, decisão do fim (contrato, exceção, sem contrato, campo ausente), decisão de permissão da marca e lista de eventos de auditoria a gravar | Aprovação do plano (DL16) | `scripts/qa-employee-lunch.php` novo, em tabela; mutação |
+| 2 | Migration 018, rollback com guarda, verificação só com contagens, ensaio | AD1 e AD2; **parar para o teste do responsável no MySQL local** | Revisão da SQL; ensaio do responsável |
+| 3 | `services/ContractService.php`, `api/portal/contracts.php`, recálculo em transação, `contratos.manage`, auditoria | Commit 2 aprovado | `qa-employee-lunch.php` (serviço com banco simulado, ENUM e `CHECK` da 018 espelhados), `qa-security.php` (e2e por perfil, CSRF, 409); mutação |
+| 4 | `adicionar_funcionario.php`, `atualizar_funcionario.php` e `listar_funcionarios.php` com contrato, exceção e validação; `funcionarios.almoco_excecao`; compatibilidade da tela legada | Commit 3 aprovado | `qa-security.php`, `qa-archive.php` (travas existentes), `qa-smoke.php`; mutação |
+| 5 | Frontend: aba Contratos, formulário de Funcionário, `formSchemas.ts`, `ConfirmActionDialog` da duração, proteção contra perda de alterações | Commit 4 aprovado | `qa:employee-form`, `qa:unsaved-changes`, `qa:bundle`; roteiro de navegador (bloco novo, abaixo); mutação |
+| 6 | `API_CONTRACTS_FRONTEND.md`, `DEPLOY_LINUX.md` "Deploy que traz o F8" (Q-F8, 018 com ensaio, verificação, rollback só com aprovação prévia, aviso à gestão), LGPD 5.3 e `DOCUMENTACAO_TECNICA.md` | Commit 5 aprovado | Travas do roteiro no `qa-employee-lunch.php` |
+
+#### 9.10.6 Critérios de aceite
+
+**Funcionais:**
+- com contrato e sem exceção, o fim gravado é sempre início + duração, venha o pedido da tela nova ou da legada, e o fim enviado não muda nada;
+- com exceção, só Liderança e admin marcam ou desmarcam; os outros recebem 403 e a negação fica auditada;
+- almoço fora da jornada dá 400 em cadastro e edição; mudar a duração com algum cadastro fora da jornada dá 409 com a contagem, e nenhuma linha muda (conferido por contagem antes e depois);
+- só o admin cria, edita, desativa e muda a duração de contratos; a Liderança vê a lista no formulário, sem a aba;
+- campos novos ausentes no corpo mantêm o que estava gravado;
+- o motor, o `status.php`, o Mapa PA e a tela de Pausas dão o mesmo resultado de antes para quem está sem contrato (`qa-presence-engine` e `qa-operational-view` sem mudança de expectativa);
+- a 018 aplica, verifica e desfaz no ensaio do responsável, com as contagens esperadas.
+
+**Lista de conferência do padrão de qualidade** (a mesma da seção 13 do `docs/DESENHO_CHG.md`; cada entrega traz a linha dela preenchida: cumprido, ou exceção justificada; "—" = não se aplica):
+
+| Item | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| Autorização no servidor por ação e por objeto, com a negação auditada | Decisão pura | — | Sim | Sim (Lote 5b + `almoco_excecao`) | Servidor já cobre; a tela só esconde | — |
+| CSRF em todo POST | — | — | Sim | Sim (já existe) | — | — |
+| Entrada validada no servidor, listas fechadas (motivo, se AD2 = sim) | Sim | `CHECK` | Sim | Sim | Zod espelha | — |
+| Sem `innerHTML`/`dangerouslySetInnerHTML` | — | — | — | — | Sim | — |
+| Nenhum dado real, segredo ou IP; consultas só com contagens | Sim | Sim | Sim | Sim | Sim | Sim |
+| Auditoria sem texto livre (marcador injetado no nome do contrato não aparece) | Lista de eventos | — | Sim | Sim | — | — |
+| `FOR UPDATE` na ordem contrato → cadastros por `id`; 409 sem alterar nada | — | — | Sim | Sim (linha do cadastro) | Diálogo aberto no 409 | — |
+| FK `RESTRICT`, `CHECK` e índice único espelhando o serviço | — | Sim | Conferido | — | — | — |
+| Nada apagado; duplo envio protegido (botão e servidor) | — | Rollback com guarda | Sim | Sim | Botão desabilitado | — |
+| Horários em `America/Sao_Paulo`; sem relógio do navegador na regra | — | `SET time_zone` | Sim | Sim | — | — |
+| Consultas em número fixo e indexadas (SQL registrado) | — | Índices | Sim | Sim | — | — |
+| Chunk lazy com o tamanho no `qa:bundle` | — | — | — | — | Sim | — |
+| WCAG 2.1 AA (foco, teclado, `aria-live` dos avisos do DD2, texto além da cor) | — | — | — | — | Sim | — |
+| Feedback de sucesso, erro e carregamento; estados vazio, erro e degradado | — | — | Mensagens | Mensagens | Sim | — |
+| Sem rolagem horizontal que esconda ação, medido no navegador (390, 1024, 1366 px) | — | — | — | — | Sim | — |
+| Microcopy em PT-BR acentuado | — | — | Mensagens | Mensagens | Sim | Sim |
+| QA do lote (`qa-employee-lunch.php`, `qa-security.php`, `qa:employee-form`, `qa:unsaved-changes`) | Sim | — | Sim | Sim | Sim | Travas do roteiro |
+| Mutação com todos os mutantes mortos ou justificados | Sim | — | Sim | Sim | Sim | — |
+| Bateria completa (`qa:*`, lint e typecheck com o código de saída real, build em pasta temporária, QAs PHP pelo `test-local.ps1`) | Sim | Sim | Sim | Sim | Sim (com `-Browser`) | Sim |
+| Nada fora do escopo; achados viram pendência | Sim | Sim | Sim | Sim | Sim | Sim |
+
+**Roteiro de navegador (commit 5; bloco novo no `frontend/scripts/browser/qa-unsaved-changes-browser.mjs`, com o servidor simulado e dados fictícios; obrigatório no `test-local.ps1 -SkipHttp -Browser` antes do deploy único):**
+- formulário de Funcionário, editar e adicionar, em 390, 1024 e 1366 px: escolher um contrato deixa o fim só leitura e igual a início + duração; trocar o início atualiza a prévia; o valor gravado é o que o servidor devolve;
+- sem contrato: fim editável e o aviso; com exceção (Liderança e admin): fim editável; sessão sem a permissão: a marca não aparece;
+- recusa do servidor (400 fora da jornada, 403 da marca, 409): aviso por cima, anunciado ao leitor de tela, dados mantidos, foco no campo ou no diálogo;
+- aba Contratos: só para o admin (a sessão da Liderança não vê a aba nem chega a ela pela URL); criar, editar e desativar; mudar a duração abre o `ConfirmActionDialog` com a contagem; 409 mantém o diálogo aberto com o aviso por cima e o foco em "Cancelar"; sucesso fecha e o foco vai ao título;
+- proteção contra perda de alterações no formulário de contrato e nos dois de Funcionário (Esc, fechar, trocar de rota, "Sair");
+- nenhum botão fora da tela nem rolagem horizontal que esconda ação; fundo dos diálogos cobrindo a janela (Z2); trava de rolagem (BB2).
+
+#### 9.10.7 Riscos
+
+| Risco | Mitigação |
+|---|---|
+| A resposta da Liderança muda o modelo (AD1, duração por carga ou por dia) | Parada explícita antes da 018; só o commit 1 anda antes (DL16) e é revisto se preciso |
+| A demora da Liderança segura o F9 e o deploy único | DL17: o responsável decide a ordem; o F9 tem o caminho "sem contrato" |
+| Tela legada troca o fim sem avisar | DL12 declarada; decisão sobre a tela legada fica com o responsável |
+| Fim materializado diverge por alteração fora da aplicação | Contagem `almoco_diferente_da_duracao` na verificação (DL14) |
+| Validação nova barra a edição de quem já está fora da jornada | Q-F8 antes; no servidor, 0 em 2026-10-26 |
+| Rollback de código depois de contratos gravados | O código anterior ignora `contrato_id` e `almoco_excecao` e volta a aceitar o fim do cliente; o almoço gravado continua o mesmo. Rollback só com aprovação prévia, como nos outros lotes |
+
+**Próximo passo:** revisão deste plano junto com a do DD (uma só). Nenhum código do F8 antes da aprovação.
 
 
 ### 9.11 Lote de acabamento (pendências 17d, 17 e 17b), antes do roteiro único
