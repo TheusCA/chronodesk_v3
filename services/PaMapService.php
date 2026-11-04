@@ -173,12 +173,21 @@ final class PaMapService {
             if ((int)$employee['fora_mapa_escala'] === 1) {
                 throw new DomainException('Cadastro marcado como fora do Mapa PA e da escala: não recebe vínculo de PA.');
             }
-            $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? $this->today(), 'Início da validade');
-            $validUntil = $this->nullableDate($data['valid_until'] ?? null, 'Fim da validade');
+            // [9.12.1] Na edicao (com id), chave ausente mantem o gravado, lido
+            // com trava: o formulario nao manda valid_until, e antes editar
+            // pela tela apagava o fim da validade (e a observacao, se faltasse).
+            // Presente, validada como antes: valid_until e notes nulos ou
+            // vazios continuam limpando. O gravado passa pelos mesmos validadores.
+            $stored = $id === null ? null : $this->lockedAssignment($id);
+            $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? ($stored === null ? $this->today() : $stored['valid_from']), 'Início da validade');
+            $validUntil = $this->nullableDate(
+                $stored !== null && !array_key_exists('valid_until', $data) ? $stored['valid_until'] : ($data['valid_until'] ?? null),
+                'Fim da validade'
+            );
             if ($validUntil !== null && $validUntil < $validFrom) {
                 throw new InvalidArgumentException('Fim da validade não pode ser anterior ao início.');
             }
-            $notes = $this->text($data['notes'] ?? '', 1000, true);
+            $notes = $this->text($stored !== null && !array_key_exists('notes', $data) ? ($stored['notes'] ?? '') : ($data['notes'] ?? ''), 1000, true);
             $employeeId = (int)$employee['id'];
             $this->assertNoOtherPa($employeeId, $validFrom, $validUntil, $id);
 
@@ -253,6 +262,27 @@ final class PaMapService {
                 'conflict_audit' => self::conflictAudit($id, $paNumber, $conflicts),
             ];
         });
+    }
+
+    /**
+     * [9.12.1] Vinculo da edicao, travado depois do colaborador (a ordem do
+     * save): o gravado que a chave ausente mantem. Inexistente ou desocupado
+     * da a mesma recusa da gravacao.
+     */
+    private function lockedAssignment(int $id): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT valid_from, valid_until, notes
+             FROM portal_pa_assignments
+             WHERE id = :id AND active = 1
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch();
+        if (!$row) {
+            throw new DomainException('Vínculo de PA não encontrado.');
+        }
+        return $row;
     }
 
     /**

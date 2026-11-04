@@ -24,6 +24,32 @@ final class AbsenceRules {
     public const PERIOD_TYPES = ['full_day', 'from_time', 'interval'];
     public const MAX_DAYS = 366;
     public const NOTE_MAX_CHARS = 500;
+    /**
+     * [9.12.1] Opcionais na criacao (o ausente vira ends_on = starts_on,
+     * dia inteiro e sem observacao) e obrigatorias na edicao, onde o padrao
+     * sobrescreveria o gravado. O formulario manda as tres sempre.
+     */
+    public const UPDATE_REQUIRED_KEYS = ['ends_on', 'period_type', 'note'];
+
+    /**
+     * [9.12.1] Edicao com o corpo completo: chave ausente da 400, em vez de
+     * virar o padrao da criacao. ends_on e period_type nulos contam como
+     * ausentes (o nulo tambem cairia no padrao); note nula continua apagando a
+     * observacao. Os horarios seguem o periodo: o formulario nao manda horario
+     * no dia inteiro nem o fim no "a partir de", e o periodo que pede horario
+     * ja recusa o ausente em normalize().
+     */
+    public static function assertCompleteUpdate(array $data): void {
+        $missing = [];
+        foreach (self::UPDATE_REQUIRED_KEYS as $key) {
+            if (!array_key_exists($key, $data) || ($key !== 'note' && $data[$key] === null)) {
+                $missing[] = $key;
+            }
+        }
+        if ($missing !== []) {
+            throw new InvalidArgumentException('Na edição, envie todos os campos da ausência; faltando: ' . implode(', ', $missing) . '.');
+        }
+    }
 
     /**
      * Payload de create/update validado (400 em InvalidArgumentException):

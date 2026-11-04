@@ -2,6 +2,8 @@
 // [17f, V1] Conferencia no navegador da protecao contra perda de alteracoes,
 // dos avisos (tempo e leitor de tela, DD2) e das confirmacoes (17g, DD3),
 // nas TELAS REAIS que usam a peca, com servidor simulado e dados ficticios.
+// [9.12.1] Tambem o corpo que Ausencias, Mapa PA e Configuracoes mandam ao
+// salvar uma edicao (blocos 5, 14 e 15): as chaves que o servidor exige.
 // Fora dos qa:* (precisa de navegador). Saida so com contagens: cada
 // conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram).
 //
@@ -16,7 +18,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChrome, openPage, sleep } from './lib/chrome.mjs'
-import { ALREADY_DECIDED, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, NOT_PAUSED, startMockServer } from './lib/mock-server.mjs'
+import { ALREADY_DECIDED, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, NOT_PAUSED, PA_ASSIGNMENT, startMockServer } from './lib/mock-server.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const appArg = process.argv.indexOf('--app')
@@ -651,6 +653,9 @@ async function employees(page, port, mock) {
 }
 
 // 5. Ausencias (tela real): o formulario fica na tela, sem Dialog.
+// [9.12.1] O servidor recusa a edicao sem estas chaves (AbsenceRules::UPDATE_REQUIRED_KEYS);
+// os horarios seguem o periodo (sem horario no dia inteiro, sem o fim no "a partir de").
+const ABSENCE_UPDATE_KEYS = ['ends_on', 'period_type', 'note']
 const ABSENCE_FORM = `[...document.querySelectorAll('main form')].find((form) => form.querySelector('textarea'))`
 const ABSENCE_NOTE = `${ABSENCE_FORM}.querySelector('textarea')`
 const ABSENCE_SUBMIT = `${ABSENCE_FORM}.querySelector('button[type="submit"]')`
@@ -813,6 +818,24 @@ async function absences(page, port, mock) {
   await page.waitFor(`!${ABSENCE_FORM}`)
   await expectAbsence('salvar com sucesso: fecha sem perguntar, sem listener', { aberto: false, descartar: 0, beforeunload: 0, keydown: 0, dialogos: 0 })
   report('Ausencias, salvar com sucesso: um POST', mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/absences.php').length === saves + 1)
+
+  // [9.12.1] Corpo da edicao nos tres periodos: as chaves que o servidor exige, e os horarios conforme o periodo.
+  const absencePosts = () => mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/absences.php')
+  const checkUpdateBody = (label, body, times) => {
+    const missing = ABSENCE_UPDATE_KEYS.filter((key) => !(key in (body || {})))
+    report(`Ausencias, ${label}: o corpo da edicao tem ${ABSENCE_UPDATE_KEYS.join(', ')} (o servidor recusa sem elas)`, body?.action === 'update' && missing.length === 0, missing.length ? `faltando: ${missing.join(', ')}` : '')
+    const wrongTimes = Object.entries(times).filter(([key, sent]) => (key in (body || {})) !== sent).map(([key]) => key)
+    report(`Ausencias, ${label}: horarios no corpo conforme o periodo`, wrongTimes.length === 0, wrongTimes.length ? `campos: ${wrongTimes.join(', ')}` : '')
+  }
+  checkUpdateBody('dia inteiro', absencePosts().at(-1)?.body, { start_time: false, end_time: false })
+  for (const [index, label, times] of [[1, '"a partir de"', { start_time: true, end_time: false }], [2, 'intervalo', { start_time: true, end_time: true }]]) {
+    await openEdit(index)
+    const before = absencePosts().length
+    await page.click(ABSENCE_SUBMIT)
+    await page.waitFor(`!${ABSENCE_FORM}`)
+    report(`Ausencias, editar ${label} e salvar sem mexer: um POST`, absencePosts().length === before + 1)
+    checkUpdateBody(label, absencePosts().at(-1)?.body, times)
+  }
 
   // Rota com o formulario sujo.
   await openNew()
@@ -1795,6 +1818,60 @@ async function confirmActionScreens(page, port, mock) {
   mock.setPausedEmployee(false)
 }
 
+// Espera, do lado do Node, o pedido que o servidor simulado recebeu depois de "before".
+async function waitForRequest(mock, predicate, before, timeoutMs = 8000) {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    const found = mock.requests.slice(before).find(predicate)
+    if (found) return found
+    await sleep(50)
+  }
+  return null
+}
+
+// 14. [9.12.1] Mapa PA: editar um vinculo manda o corpo que o servidor espera.
+// O formulario nao tem o fim da validade: o corpo vai sem valid_until e o
+// servidor mantem o gravado (PaMapService::save, chave ausente na edicao).
+const PA_MODAL = `[...document.querySelectorAll('form')].find((form) => /^PA /.test(form.querySelector('h2')?.textContent || ''))`
+async function paMapEdit(page, port, mock) {
+  await goto(page, port, '/mapa-pa')
+  const card = `[...document.querySelectorAll('main button')].find((b) => b.textContent.includes(${JSON.stringify(PA_ASSIGNMENT.pa_number)}))`
+  await page.waitFor(`!!${card}`)
+  await page.evaluate(`${card}.click()`)
+  await page.waitFor(`!!${PA_MODAL}`)
+  await page.evaluate(`[...${PA_MODAL}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Editar').click()`)
+  await sleep(200)
+  const filled = await page.evaluate(`(() => { const form = ${PA_MODAL}; return { editar: [...form.querySelectorAll('h3')].some((h) => h.textContent === 'Editar vínculo'), colaborador: form.querySelector('select').value, inicio: form.querySelector('input[type="date"]').value, nota: form.querySelector('textarea').value } })()`)
+  report('Mapa PA, Editar: o formulario traz o vinculo gravado', filled.editar && filled.colaborador === String(PA_ASSIGNMENT.employee_id) && filled.inicio === PA_ASSIGNMENT.valid_from && filled.nota === PA_ASSIGNMENT.notes)
+  await page.evaluate(`${PA_MODAL}.querySelector('textarea').focus()`)
+  await page.send('Input.insertText', { text: ' editada' }); await sleep(150)
+  const before = mock.requests.length
+  await page.click(`${PA_MODAL}.querySelector('button[type="submit"]')`)
+  const body = (await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'portal/pa_map.php', before))?.body || {}
+  report('Mapa PA, salvar a edicao: um POST de save com o vinculo', body.action === 'save' && body.id === PA_ASSIGNMENT.id && body.pa_number === PA_ASSIGNMENT.pa_number && String(body.employee_id) === String(PA_ASSIGNMENT.employee_id))
+  report('Mapa PA, salvar a edicao: inicio e observacao do formulario no corpo', body.valid_from === PA_ASSIGNMENT.valid_from && body.notes === `${PA_ASSIGNMENT.notes} editada`)
+  report('Mapa PA, salvar a edicao: sem valid_until no corpo (o servidor mantem o fim gravado)', !('valid_until' in body))
+  await page.waitFor(`![...${PA_MODAL}?.querySelectorAll('h3') || []].some((h) => h.textContent === 'Editar vínculo')`)
+  report('Mapa PA, salvar a edicao: o formulario volta para "Adicionar colaborador"', await page.evaluate(`[...${PA_MODAL}.querySelectorAll('h3')].some((h) => h.textContent === 'Adicionar colaborador')`))
+}
+
+// 15. [9.12.1] Configuracoes: salvar manda os quatro campos, com o valor
+// carregado nos que nao mudaram (o servidor mantem o atual do ausente).
+const SETTINGS_KEYS = ['limite_pausa_por_equipe', 'duracao_pausa_minutos', 'alerta_15minutos', 'alerta_20minutos']
+const SETTINGS_FORM = `[...document.querySelectorAll('main form')].find((form) => form.textContent.includes('Configurações de pausas'))`
+async function settingsSave(page, port, mock) {
+  await goto(page, port, '/admin?tab=configuracoes')
+  await page.waitFor(`!!${SETTINGS_FORM}`)
+  await page.evaluate(`(() => { const input = ${SETTINGS_FORM}.querySelector('input[type="number"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '3'); input.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+  await sleep(150)
+  const before = mock.requests.length
+  await page.click(`${SETTINGS_FORM}.querySelector('button[type="submit"]')`)
+  const body = (await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'salvar_configuracao.php', before))?.body || {}
+  const missing = SETTINGS_KEYS.filter((key) => !(key in body))
+  report('Configuracoes, salvar: um POST com os quatro campos', missing.length === 0, missing.length ? `faltando: ${missing.join(', ')}` : '')
+  report('Configuracoes, salvar: o campo alterado e os outros com o valor carregado', body.limite_pausa_por_equipe === 3 && body.duracao_pausa_minutos === 20 && body.alerta_15minutos === true && body.alerta_20minutos === true)
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -1822,6 +1899,8 @@ try {
     [11, 'Aprovar e Rejeitar (17g)', () => decisionConfirm(page, mock.port, mock)],
     [12, 'Avisos: tempo e leitor de tela (DD2)', () => feedbackTimingAndAnnouncement(page, mock.port, mock)],
     [13, 'Derrubar pausa e remover documento (DD3)', () => confirmActionScreens(page, mock.port, mock)],
+    [14, 'Mapa PA: corpo da edicao (9.12.1)', () => paMapEdit(page, mock.port, mock)],
+    [15, 'Configuracoes: corpo do salvar (9.12.1)', () => settingsSave(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

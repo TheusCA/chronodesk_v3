@@ -1059,8 +1059,9 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   e testes, sem migration nem build): o `.htaccess` e lido a cada requisicao,
   sem recarga. Depois do `merge`, conferir so com o codigo HTTP (sem IP; use a
   URL base do vhost, `<URL>`):
-  `for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "<URL>$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>/static/js/$j")"; done`
-  Esperado: `GET 302` e `POST 410` em todas as paginas; `403` nos dois JS. Ou
+  `for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "<URL>$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>/static/js/$j")"; done`
+  Esperado: `GET 302` e `POST 410` em todas as paginas, menos o `/logout.php`
+  (logout das Metricas legadas, HH5), com `GET 410` e `POST 410`; `403` nos dois JS. Ou
   `sh scripts/test-linux.sh`, que confere o mesmo. `GET 200` numa pagina
   legada = o `.htaccess` nao vale no vhost (`AllowOverride`): PARAR e avisar o
   responsavel. Rollback: o `.htaccess` anterior (git). Os arquivos das paginas

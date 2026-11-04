@@ -287,15 +287,23 @@ final class QaPaStatement extends PDOStatement {
             return true;
         }
         if (strpos($sql, 'INSERT INTO portal_pa_assignments (') === 0) {
-            $db->assignments[max(array_keys($db->assignments)) + 1] = ['pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'], 'valid_from' => $params[':valid_from'], 'valid_until' => $params[':valid_until']];
+            $db->assignments[max(array_keys($db->assignments)) + 1] = ['pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'], 'valid_from' => $params[':valid_from'], 'valid_until' => $params[':valid_until'], 'notes' => $params[':notes']];
             $db->written[] = $params;
             return true;
         }
         if (strpos($sql, 'UPDATE portal_pa_assignments SET pa_number = :pa_number,') === 0) {
             $this->affected = isset($db->assignments[$params[':id']]) && ($db->assignments[$params[':id']]['active'] ?? 1) === 1 ? 1 : 0;
             if ($this->affected === 1) {
-                $db->assignments[$params[':id']] = ['pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'], 'valid_from' => $params[':valid_from'], 'valid_until' => $params[':valid_until']];
+                $db->assignments[$params[':id']] = ['pa_number' => $params[':pa_number'], 'employee_id' => $params[':employee_id'], 'valid_from' => $params[':valid_from'], 'valid_until' => $params[':valid_until'], 'notes' => $params[':notes']];
                 $db->written[] = $params;
+            }
+            return true;
+        }
+        // [9.12.1] Gravado da edicao, com trava: o que a chave ausente mantem.
+        if ($sql === 'SELECT valid_from, valid_until, notes FROM portal_pa_assignments WHERE id = :id AND active = 1 LIMIT 1 FOR UPDATE') {
+            $row = $db->assignments[$params[':id']] ?? null;
+            if ($row !== null && ($row['active'] ?? 1) === 1) {
+                $this->rows[] = ['valid_from' => $row['valid_from'], 'valid_until' => $row['valid_until'], 'notes' => $row['notes'] ?? null];
             }
             return true;
         }
@@ -647,6 +655,65 @@ assert_same([
 assert_same([[[], [], 0], 20], [$summary($result), count($pdo->assignments)], 'save: edicao sem conflito com o proprio vinculo, sem inserir');
 assert_same('11-18 3+4+15', $summary($save(['id' => 14, 'pa_number' => '1731', 'employee_id' => 15])[0])[1][0], 'save: edicao para outro PA confere o PA novo');
 assert_same([[], [], 0], $summary($save(['id' => 14, 'pa_number' => '1726', 'employee_id' => 16])[0]), 'save: edicao que troca o colaborador nao conta o vinculo antigo (o proprio registro) como ocupante');
+// [9.12.1] Edicao: chave ausente mantem o gravado (valid_from, valid_until e
+// notes), lido com trava. O formulario (PaMapPage.jsx, formFromAssignment) nao
+// manda valid_until: antes, editar pela tela apagava o fim da validade (o
+// vinculo voltava a valer sem fim). Presente, vale o enviado; nulo e vazio limpam.
+$editDb = static function () use ($saveDb): QaPaPdo {
+    $pdo = $saveDb();
+    $pdo->assignments[40] = ['pa_number' => '1722', 'employee_id' => 27, 'valid_from' => '2026-11-02', 'valid_until' => '2026-12-31', 'notes' => 'nota gravada'];
+    return $pdo;
+};
+$edit = static function (array $data) use ($editDb, $today): array {
+    $pdo = $editDb();
+    try {
+        $result = (new PaMapService($pdo, $today))->save($data, 'qa.lider');
+    } catch (Throwable $error) {
+        $result = ['erro' => get_class($error) . ': ' . $error->getMessage()];
+    }
+    return [$result, $pdo];
+};
+$storedLink = static fn (QaPaPdo $pdo): array => array_intersect_key($pdo->assignments[40], array_flip(['valid_from', 'valid_until', 'notes']));
+$keptLink = ['valid_from' => '2026-11-02', 'valid_until' => '2026-12-31', 'notes' => 'nota gravada'];
+// Corpo da tela: id, pa_number, employee_id, valid_from e notes, sem valid_until.
+$screenEdit = ['id' => 40, 'pa_number' => '1722', 'employee_id' => 27, 'valid_from' => '2026-11-02', 'notes' => 'nota editada', 'action' => 'save'];
+[$result, $pdo] = $edit($screenEdit);
+assert_same([false, array_merge($keptLink, ['notes' => 'nota editada'])], [isset($result['erro']), $storedLink($pdo)], 'edicao pela tela (sem valid_until): mantem o fim da validade gravado, grava inicio e observacao');
+[$result, $pdo] = $edit(['id' => 40, 'pa_number' => '1722', 'employee_id' => 27]);
+assert_same([false, $keptLink], [isset($result['erro']), $storedLink($pdo)], 'edicao sem inicio, fim e observacao: mantem os tres gravados');
+[$result, $pdo] = $edit(['valid_until' => null, 'notes' => ''] + $screenEdit);
+assert_same([false, ['valid_from' => '2026-11-02', 'valid_until' => null, 'notes' => null]], [isset($result['erro']), $storedLink($pdo)], 'edicao com fim nulo e observacao vazia presentes: limpa os dois (escolha explicita)');
+[$result, $pdo] = $edit(['valid_from' => '2026-11-09', 'valid_until' => '2026-11-30'] + $screenEdit);
+assert_same([false, ['valid_from' => '2026-11-09', 'valid_until' => '2026-11-30', 'notes' => 'nota editada']], [isset($result['erro']), $storedLink($pdo)], 'edicao com inicio e fim presentes: grava os enviados');
+// Inicio depois do fim gravado (a tela nao tem o fim): 400, nada gravado.
+[$result, $pdo] = $edit(['valid_from' => '2027-01-04'] + $screenEdit);
+assert_same([[InvalidArgumentException::class . ': Fim da validade não pode ser anterior ao início.'], $keptLink, ['begin', 'rollback'], []], [$summary($result), $storedLink($pdo), $pdo->transactions, $pdo->written], 'edicao com inicio depois do fim gravado: 400, nada gravado');
+// Vinculo inexistente ou ja desocupado: a recusa da gravacao, agora antes de calcular o conflito.
+foreach (['inexistente' => 999, 'desocupado' => 40] as $label => $linkId) {
+    $pdo = $editDb();
+    if ($label === 'desocupado') {
+        $pdo->assignments[40]['active'] = 0;
+    }
+    try {
+        (new PaMapService($pdo, $today))->save(['id' => $linkId] + $screenEdit, 'qa.lider');
+        $outcome = 'ok';
+    } catch (DomainException $error) {
+        $outcome = $error->getMessage();
+    }
+    assert_same(['Vínculo de PA não encontrado.', ['begin', 'rollback'], []], [$outcome, $pdo->transactions, $pdo->written], "edicao de vinculo {$label}: 409, sem gravar");
+}
+// O gravado e lido com FOR UPDATE, depois de travar o colaborador (a ordem do save); a criacao nao le.
+$storedSql = 'SELECT valid_from, valid_until, notes FROM portal_pa_assignments WHERE id = :id AND active = 1 LIMIT 1 FOR UPDATE';
+[, $pdo] = $edit($screenEdit);
+$lockEmployee = array_search('SELECT id, nome AS name, equipe AS team, ad_login, fora_mapa_escala FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1 FOR UPDATE', $pdo->log, true);
+$lockStored = array_search($storedSql, $pdo->log, true);
+assert_same(true, $lockEmployee !== false && $lockStored !== false && $lockEmployee < $lockStored, 'edicao: le o gravado com FOR UPDATE, depois de travar o colaborador');
+[$result, $pdo] = $edit(['pa_number' => '1721', 'employee_id' => 24]);
+assert_same([false, '2026-11-18', null, null, false], [isset($result['erro']), end($pdo->written)[':valid_from'], end($pdo->written)[':valid_until'], end($pdo->written)[':notes'], in_array($storedSql, $pdo->log, true)], 'criacao sem inicio, fim e observacao: hoje, sem fim e sem observacao, como antes, sem ler gravado');
+// A tela nao manda o fim da validade: por isso o ausente tem de manter o gravado.
+$paPage = (string)file_get_contents($root . '/frontend/src/pages/PaMapPage.jsx');
+$formBuilder = preg_match('/function formFromAssignment\(assignment, date\) \{\n(.*?)\n\}/s', $paPage, $formMatch) === 1 ? $formMatch[1] : '';
+assert_same([true, false], [strpos($formBuilder, 'valid_from: assignment.valid_from') !== false && strpos($formBuilder, "notes: assignment.notes || ''") !== false, strpos($formBuilder, 'valid_until') !== false], 'formulario do Mapa PA: manda inicio e observacao, sem o fim da validade');
 // Tabela antiga no conflito do save; os IDs da auditoria juntam todos os dias.
 [$result] = $save(['pa_number' => '1725', 'employee_id' => 24]);
 assert_same(['11-19 16+17+24', '11-24 17+24', '11-26 17+24'], array_slice($summary($result)[1], 0, 3), 'save: vinculo da tabela antiga (P em 19/11) entra no conflito do dia');

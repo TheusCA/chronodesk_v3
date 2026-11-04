@@ -113,6 +113,9 @@ RewriteRule ^(?:(?:admin|admin_login|admin_logout|index|login|metricas)\.php)?$ 
 # Com PATH_INFO (/admin.php/x), o PHP executaria a pagina sem passar pelo
 # redirecionamento abaixo: 410 em qualquer metodo.
 RewriteRule ^(?:admin|admin_login|admin_logout|index|login|metricas)\.php/ - [G,L]
+# [HH5] logout.php da raiz: o logout das Metricas legadas (so POST; a tela
+# nova usa o api/logout.php). 410 em qualquer metodo, com ou sem PATH_INFO.
+RewriteRule ^logout\.php(?:/|$) - [G,L]
 RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$
 RewriteRule ^admin_logout\.php$ app/admin [R=302,L]
 RewriteCond %{REQUEST_METHOD} ^(?:GET|HEAD)$

@@ -505,8 +505,39 @@ function salvar_configuracao($config) {
     if (function_exists('opcache_invalidate')) {
         opcache_invalidate(CONFIG_JSON, true);
     }
-    
+
     return $result !== false;
+}
+
+/**
+ * [9.12.1] Configuracao de pausas que o salvar_configuracao.php grava. Campo
+ * ausente no corpo mantem o valor atual ($atual, de carregar_configuracao());
+ * antes voltava ao padrao (2, 20 e os dois alertas ligados) e sobrescrevia a
+ * configuracao. Presente, validado como antes; nulo presente e invalido. Os
+ * limites valem para o valor final, gravado ou enviado.
+ * Devolve [configuracao, null] ou [null, mensagem do 400].
+ */
+function configuracao_pausas_atualizada(array $atual, array $data): array {
+    $valor = static fn (string $campo) => array_key_exists($campo, $data) ? $data[$campo] : ($atual[$campo] ?? null);
+    $limite = intval($valor('limite_pausa_por_equipe'));
+    if ($limite < 1 || $limite > 10) {
+        return [null, 'Limite de pausa deve estar entre 1 e 10'];
+    }
+    $duracao = intval($valor('duracao_pausa_minutos'));
+    if ($duracao < 5 || $duracao > 60) {
+        return [null, 'Duração da pausa deve estar entre 5 e 60 minutos'];
+    }
+    foreach (['alerta_15minutos' => 'Alerta aos 15 minutos', 'alerta_20minutos' => 'Alerta aos 20 minutos'] as $campo => $rotulo) {
+        if ($valor($campo) === null) {
+            return [null, "Valor inválido para \"{$rotulo}\"."];
+        }
+    }
+    return [array_merge($atual, [
+        'limite_pausa_por_equipe' => $limite,
+        'duracao_pausa_minutos' => $duracao,
+        'alerta_15minutos' => (bool)$valor('alerta_15minutos'),
+        'alerta_20minutos' => (bool)$valor('alerta_20minutos'),
+    ]), null];
 }
 
 function normalizar_samaccountname($login) {

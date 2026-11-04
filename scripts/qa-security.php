@@ -1152,7 +1152,7 @@ function qa_start_endpoint(string $qaDir, array $spec): array {
         fwrite(STDERR, "FAIL: nao iniciou o processo filho\n");
         exit(1);
     }
-    return ['process' => $process, 'pipes' => $pipes, 'log' => $log, 'endpoint' => $spec['endpoint']];
+    return ['process' => $process, 'pipes' => $pipes, 'log' => $log, 'endpoint' => $spec['endpoint'], 'state_dir' => $spec['state_dir'] ?? null];
 }
 
 function qa_finish_endpoint(array $handle): array {
@@ -1169,6 +1169,8 @@ function qa_finish_endpoint(array $handle): array {
     $result = json_decode($match[1], true);
     $result['log'] = (string)file_get_contents($handle['log']);
     $result['stderr'] = $stderr;
+    // [9.12.1] Caso com 'state': o diretorio proprio, para ler o que o endpoint gravou.
+    $result['state_dir'] = $handle['state_dir'];
     return $result;
 }
 
@@ -1812,6 +1814,11 @@ $keepBody = static function (int $id, string $login, array $omit, array $overrid
     return (string)json_encode(array_diff_key($body, array_flip($omit)));
 };
 $timeFields = ['jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim'];
+// [9.12, GG5] Horario gravado fora da faixa valida (o TIME aceita ate
+// 838:59:59): ausente no corpo da 400 pedindo o campo (antes caia no padrao
+// 08:00 e gravava a saida 08:00); enviado, vale o enviado.
+$badTimeDb = $keepDb;
+$badTimeDb['funcionarios']['1']['jornada_saida'] = '24:30:00';
 $keepCases = qa_run_endpoints($qaDir, [
     'sem_perfil_lideranca' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(2, 'qa.lider', ['access_role'], ['equipe' => 'lideranca']), $keepDb),
     'sem_perfil_admin' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(5, 'qa.lider.legado', ['access_role'], ['equipe' => 'lideranca']), $keepDb),
@@ -1832,6 +1839,8 @@ $keepCases = qa_run_endpoints($qaDir, [
     'hora_lista' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', [], ['almoco_inicio' => ['12:00']]), $keepDb),
     'lid_sem_perfil_lider' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $keepBody(2, 'qa.lider', ['access_role'], ['equipe' => 'lideranca']), $keepDb),
     'lid_sem_perfil_admin' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $keepBody(5, 'qa.lider.legado', ['access_role'], ['equipe' => 'lideranca']), $keepDb),
+    'gravado_invalido_ausente' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', ['jornada_saida']), $badTimeDb),
+    'gravado_invalido_enviado' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', []), $badTimeDb),
 ]);
 foreach ([
     'sem_perfil_lideranca' => 'id=2 perfil=lideranca login=qa.lider fora_mapa=0 ' . $keepStored,
@@ -1843,6 +1852,7 @@ foreach ([
     'sem_login' => 'id=1 perfil=tecnico login=joao.silva fora_mapa=0 ' . $keepStored,
     'so_fim_almoco' => 'id=1 perfil=tecnico login=joao.silva fora_mapa=0 horarios=07:30:00-16:30:00/11:15:00-13:00:00',
     'login_nulo' => 'id=1 perfil=tecnico login=- fora_mapa=0 ' . $keepStored,
+    'gravado_invalido_enviado' => 'id=1 perfil=tecnico login=joao.silva fora_mapa=0 ' . $keepStored,
 ] as $case => $write) {
     $result = $keepCases[$case];
     assert_same(200, $result['status'], "campo ausente {$case}: HTTP 200");
@@ -1866,6 +1876,7 @@ foreach ([
     'hora_lista' => [400, 'Horário de início do almoço inválido (formato: HH:MM)'],
     'lid_sem_perfil_lider' => [403, 'não altera cadastros de Liderança'],
     'lid_sem_perfil_admin' => [403, 'não altera cadastros de Liderança'],
+    'gravado_invalido_ausente' => [400, 'Horário de saída gravado inválido: envie o horário de saída (HH:MM).'],
 ] as $case => [$status, $message]) {
     $result = $keepCases[$case];
     assert_same($status, $result['status'], "campo ausente {$case}: HTTP {$status}");
@@ -1878,6 +1889,86 @@ foreach ([
 // Estrutural: o ausente nao volta a cair em padrao fixo.
 $keepSource = (string)preg_replace('#//[^\n]*#', '', (string)file_get_contents($root . '/api/atualizar_funcionario.php'));
 assert_same(0, preg_match('/\$data\[\'(access_role|ad_login|jornada_entrada|jornada_saida|almoco_inicio|almoco_fim)\'\] \?\?|isset\(\$data\[\'(jornada|almoco)_/', $keepSource), 'atualizar: perfil, login AD e horarios sem padrao para o ausente (?? ou isset)');
+
+// [9.12.1] Pendencias de prioridade media do levantamento, pelo endpoint real.
+// Ausencias: edicao sem uma chave opcional da criacao (ou com ends_on e
+// period_type nulos) da 400 antes do banco: o simulado so responde a sessao,
+// e sem a recusa a consulta seguinte daria banco fora (503). Configuracoes:
+// nulo presente, gravado fora dos limites e corpo que nao e objeto dao 400,
+// sem gravar. O caminho de sucesso (ausente mantem o valor atual) e testado em
+// configuracao_pausas_atualizada(), logo abaixo: o salvar_configuracao() so
+// grava dentro da pasta da aplicacao (safe_file_path), e o QA nao grava la.
+$partialMessage = static fn (array $result): string => (string)(json_decode($result['body'], true)['mensagem'] ?? '');
+$absenceBody = ['action' => 'update', 'id' => 6, 'employee_id' => 2, 'starts_on' => '2026-11-03', 'ends_on' => '2026-11-04', 'period_type' => 'full_day', 'category' => 'compromisso', 'note' => 'nota'];
+$absenceSpec = static fn (array $omit, array $override = []): array => [
+    'endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => 'application/json', 'session' => $manager,
+    'body' => (string)json_encode(array_diff_key($override + $absenceBody, array_flip($omit))),
+];
+$storedConfig = ['limite_pausa_por_equipe' => 4, 'duracao_pausa_minutos' => 30, 'alerta_15minutos' => false, 'alerta_20minutos' => false, 'admin_username' => 'admin'];
+$configSpec = static fn (string $body, array $stored = []): array => [
+    'endpoint' => 'api/salvar_configuracao.php', 'method' => 'POST', 'content_type' => 'application/json', 'session' => QA_ADMIN_SESSION,
+    'body' => $body, 'state' => ['config_sistema.json' => (string)json_encode($stored + $storedConfig)],
+];
+$partialCases = qa_run_endpoints($qaDir, [
+    'ausencia_sem_ends_on' => $absenceSpec(['ends_on']),
+    'ausencia_sem_period_type' => $absenceSpec(['period_type']),
+    'ausencia_sem_note' => $absenceSpec(['note']),
+    'ausencia_ends_on_nulo' => $absenceSpec([], ['ends_on' => null]),
+    'config_alerta_nulo' => $configSpec((string)json_encode(['alerta_15minutos' => null])),
+    'config_limite_nulo' => $configSpec((string)json_encode(['limite_pausa_por_equipe' => null])),
+    'config_gravado_fora_ausente' => $configSpec((string)json_encode(['alerta_15minutos' => true]), ['duracao_pausa_minutos' => 90]),
+    'config_nao_objeto' => $configSpec('"texto"'),
+]);
+foreach (['ausencia_sem_ends_on' => 'ends_on', 'ausencia_sem_period_type' => 'period_type', 'ausencia_sem_note' => 'note', 'ausencia_ends_on_nulo' => 'ends_on'] as $case => $missing) {
+    $result = $partialCases[$case];
+    assert_same([400, "Na edição, envie todos os campos da ausência; faltando: {$missing}.", ''], [$result['status'], $partialMessage($result), $result['stderr']], "ausencia pelo endpoint, {$case}: 400 com a chave que falta");
+    assert_same([false, false], [strpos($result['log'], '[QA_WRITE]') !== false, strpos($result['log'], 'ABSENCE_UPDATED') !== false], "ausencia pelo endpoint, {$case}: nada gravado nem auditado");
+}
+$configAfter = static function (array $result): array {
+    $path = (string)$result['state_dir'] . '/config_sistema.json';
+    return is_file($path) ? (array)json_decode((string)file_get_contents($path), true) : [];
+};
+foreach ([
+    'config_alerta_nulo' => ['Valor inválido para "Alerta aos 15 minutos".', []],
+    'config_limite_nulo' => ['Limite de pausa deve estar entre 1 e 10', []],
+    'config_gravado_fora_ausente' => ['Duração da pausa deve estar entre 5 e 60 minutos', ['duracao_pausa_minutos' => 90]],
+    'config_nao_objeto' => ['Dados inválidos', []],
+] as $case => [$message, $stored]) {
+    $result = $partialCases[$case];
+    assert_same([400, $message, ''], [$result['status'], $partialMessage($result), $result['stderr']], "configuracao {$case}: 400");
+    assert_same($stored + $storedConfig, $configAfter($result), "configuracao {$case}: nada gravado");
+    assert_same(false, strpos($result['log'], 'CONFIGURACAO_ATUALIZADA') !== false, "configuracao {$case}: sem auditoria de alteracao");
+}
+// Caminho de sucesso na regra do endpoint: ausente mantem o valor atual
+// (antes: 2, 20 e os alertas ligados); enviado grava o enviado; so os quatro
+// campos mudam (o corpo da tela traz campos a mais do GET).
+$screenConfig = ['limite_pausa_por_equipe' => 5, 'duracao_pausa_minutos' => 25, 'alerta_15minutos' => true, 'alerta_20minutos' => false, 'local_admin_enabled' => false, 'local_password_change_allowed' => false];
+foreach ([
+    'so o limite' => [['limite_pausa_por_equipe' => 5], [5, 30, false, false]],
+    'so um alerta' => [['alerta_20minutos' => true], [4, 30, false, true]],
+    'corpo da tela (AdminPage.jsx, SettingsTab)' => [$screenConfig, [5, 25, true, false]],
+    'limite em texto, como antes' => [['limite_pausa_por_equipe' => '6'], [6, 30, false, false]],
+] as $label => [$body, [$limit, $duration, $alert15, $alert20]]) {
+    [$updated, $error] = configuracao_pausas_atualizada($storedConfig, $body);
+    assert_same([null, ['limite_pausa_por_equipe' => $limit, 'duracao_pausa_minutos' => $duration, 'alerta_15minutos' => $alert15, 'alerta_20minutos' => $alert20, 'admin_username' => 'admin']], [$error, $updated], "configuracao, {$label}: ausente mantem o atual, enviado grava o enviado, so os quatro campos");
+}
+foreach ([
+    'alerta nulo' => [['alerta_20minutos' => null], [], 'Valor inválido para "Alerta aos 20 minutos".'],
+    'duracao gravada fora dos limites, ausente' => [['limite_pausa_por_equipe' => 3], ['duracao_pausa_minutos' => 90], 'Duração da pausa deve estar entre 5 e 60 minutos'],
+    'limite gravado fora dos limites, enviado valido' => [['limite_pausa_por_equipe' => 3], ['limite_pausa_por_equipe' => 50], null],
+] as $label => [$body, $stored, $message]) {
+    [$updated, $error] = configuracao_pausas_atualizada($stored + $storedConfig, $body);
+    assert_same([$message, $message === null ? 3 : null], [$error, $updated['limite_pausa_por_equipe'] ?? null], "configuracao, {$label}: " . ($message === null ? 'vale o enviado' : '400'));
+}
+$configEndpoint = (string)preg_replace('#//[^\n]*#', '', (string)file_get_contents($root . '/api/salvar_configuracao.php'));
+assert_same([true, true, 0], [
+    strpos($configEndpoint, '[$config, $erro_configuracao] = configuracao_pausas_atualizada(carregar_configuracao(), $data);') !== false,
+    strpos($configEndpoint, 'if (salvar_configuracao($config)) {') !== false,
+    preg_match('/isset\(\$data\[|\$data\[[^\]]+\] \?\?/', $configEndpoint),
+], 'salvar_configuracao.php: grava o resultado da regra, sem padrao para o ausente (?? ou isset)');
+// A tela manda os quatro campos e o roteiro de navegador confere o corpo com a mesma lista.
+$browserRoteiro = (string)file_get_contents($root . '/frontend/scripts/browser/qa-unsaved-changes-browser.mjs');
+assert_same(true, strpos($browserRoteiro, "const SETTINGS_KEYS = ['limite_pausa_por_equipe', 'duracao_pausa_minutos', 'alerta_15minutos', 'alerta_20minutos']") !== false, 'roteiro de navegador: confere os quatro campos do salvar de configuracoes');
 
 // F4 (desenho 9.6): arquivar e restaurar pelos endpoints reais. O banco
 // simulado devolve o cadastro travado e linhas vazias de escala, excecao,
@@ -2914,13 +3005,22 @@ foreach (['static/js/admin.js', 'static/js/admin_users.js'] as $legacyJs) {
         assert_same('403', $simulateRewrite($method, $legacyJs), "JS legado {$method} /{$legacyJs}: 403");
     }
 }
+// [HH5] logout.php da raiz (Metricas legadas): 410 em qualquer metodo, com ou
+// sem PATH_INFO; o api/logout.php da tela nova continua servido (abaixo).
+foreach (['GET', 'HEAD', 'POST', 'PUT', 'DELETE', 'PATCH'] as $method) {
+    assert_same('410', $simulateRewrite($method, 'logout.php'), "logout legado {$method} /logout.php: 410");
+}
+foreach (['GET', 'POST'] as $method) {
+    assert_same('410', $simulateRewrite($method, 'logout.php/x'), "logout legado {$method} /logout.php/x (PATH_INFO): 410");
+}
 // Fora da retirada: as APIs, o portal e os demais estaticos nao mudam.
 foreach ([
     ['POST', 'api/login_ci.php', 'servido'], ['POST', 'api/login_admin.php', 'servido'], ['POST', 'api/logout.php', 'servido'],
     ['POST', 'api/logout_ci.php', 'servido'], ['POST', 'api/atualizar_funcionario.php', 'servido'], ['GET', 'api/status.php', 'servido'],
     ['GET', 'static/js/admin.js.map', 'servido'], ['GET', 'static/js/metricas.js', 'servido'], ['GET', 'static/css/admin.css', 'servido'],
-    ['POST', 'logout.php', 'servido'], ['GET', 'app/admin', 'reescrito app/index.html'],
+    ['GET', 'app/admin', 'reescrito app/index.html'],
     ['GET', 'xadmin.php', 'servido'], ['GET', 'admin.phpx', 'servido'], ['POST', 'api/admin.php', 'servido'],
+    ['POST', 'xlogout.php', 'servido'], ['GET', 'logout.phpx', 'servido'], ['POST', 'static/logout.php', 'servido'],
     ['GET', 'scripts/test-local.ps1', '403'], ['GET', '.env', '403'],
 ] as [$method, $path, $expected]) {
     assert_same($expected, $simulateRewrite($method, $path), ".htaccess fora da retirada: {$method} /{$path} -> {$expected}");
@@ -2928,8 +3028,11 @@ foreach ([
 // Os runners conferem contra o Apache: 302 do GET, 410 do POST e 403 do JS.
 $testLocal = (string)file_get_contents($root . '/scripts/test-local.ps1');
 $testLinux = (string)file_get_contents($root . '/scripts/test-linux.sh');
-assert_same(true, strpos($testLocal, '$legacyPostPaths = @("/", "/index.php", "/login.php", "/admin_login.php", "/admin_logout.php", "/admin.php", "/metricas.php")') !== false && strpos($testLocal, 'if ($legacyPostStatus -eq 410) {') !== false, 'test-local.ps1: POST das paginas legadas com 410');
-assert_same(true, strpos($testLinux, 'for legacy_path in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php; do') !== false && strpos($testLinux, 'if [ "$legacy_post_status" != 410 ]; then') !== false, 'test-linux.sh: POST das paginas legadas com 410');
+assert_same(true, strpos($testLocal, '$legacyPostPaths = @("/", "/index.php", "/login.php", "/admin_login.php", "/admin_logout.php", "/admin.php", "/metricas.php", "/logout.php")') !== false && strpos($testLocal, 'if ($legacyPostStatus -eq 410) {') !== false, 'test-local.ps1: POST das paginas legadas (e do logout.php da raiz) com 410');
+assert_same(true, strpos($testLinux, 'for legacy_path in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do') !== false && strpos($testLinux, 'if [ "$legacy_post_status" != 410 ]; then') !== false, 'test-linux.sh: POST das paginas legadas (e do logout.php da raiz) com 410');
+// [HH5] GET do logout.php da raiz: 410 nos dois runners (no test-linux.sh, a expectativa "gone" so aceita 410).
+assert_same(true, strpos($testLocal, '@{ Url = "$BaseUrl/logout.php"; Expect = @(410) }') !== false, 'test-local.ps1: GET /logout.php com 410');
+assert_same(true, strpos($testLinux, 'check_status "/logout.php" gone') !== false && preg_match('/\n\s*gone\)\n\s*case "\$status" in\n\s*410\) return 0 ;;\n/', $testLinux) === 1, 'test-linux.sh: GET /logout.php com 410 (expectativa "gone")');
 foreach (['admin.js', 'admin_users.js'] as $legacyJs) {
     assert_same(true, strpos($testLocal, "@{ Url = \"\$BaseUrl/static/js/{$legacyJs}\"; Expect = @(403) }") !== false, "test-local.ps1: {$legacyJs} com 403");
     assert_same(true, strpos($testLinux, "check_status \"/static/js/{$legacyJs}\" blocked") !== false, "test-linux.sh: {$legacyJs} bloqueado");

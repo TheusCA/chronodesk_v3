@@ -12,32 +12,20 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $data = json_decode(file_get_contents('php://input'), true);
 
-if (!$data) {
+// [9.12.1] Corpo que nao e objeto JSON (texto, numero) e invalido: antes caia
+// nos padroes e era gravado.
+if (!is_array($data) || !$data) {
     json_response(['sucesso' => false, 'mensagem' => 'Dados inválidos'], 400);
 }
 
-// Validar dados
-$limite_pausa = isset($data['limite_pausa_por_equipe']) ? intval($data['limite_pausa_por_equipe']) : 2;
-$duracao_minutos = isset($data['duracao_pausa_minutos']) ? intval($data['duracao_pausa_minutos']) : 20;
-$alerta_15min = isset($data['alerta_15minutos']) ? (bool)$data['alerta_15minutos'] : true;
-$alerta_20min = isset($data['alerta_20minutos']) ? (bool)$data['alerta_20minutos'] : true;
-
-if ($limite_pausa < 1 || $limite_pausa > 10) {
-    json_response(['sucesso' => false, 'mensagem' => 'Limite de pausa deve estar entre 1 e 10'], 400);
+// [9.12.1] Campo ausente no corpo mantem o valor atual (antes voltava ao
+// padrao e sobrescrevia a configuracao): configuracao_pausas_atualizada().
+[$config, $erro_configuracao] = configuracao_pausas_atualizada(carregar_configuracao(), $data);
+if ($erro_configuracao !== null) {
+    json_response(['sucesso' => false, 'mensagem' => $erro_configuracao], 400);
 }
-
-if ($duracao_minutos < 5 || $duracao_minutos > 60) {
-    json_response(['sucesso' => false, 'mensagem' => 'Duração da pausa deve estar entre 5 e 60 minutos'], 400);
-}
-
-// Carregar configuração atual
-$config = carregar_configuracao();
-
-// Atualizar configurações
-$config['limite_pausa_por_equipe'] = $limite_pausa;
-$config['duracao_pausa_minutos'] = $duracao_minutos;
-$config['alerta_15minutos'] = $alerta_15min;
-$config['alerta_20minutos'] = $alerta_20min;
+$limite_pausa = $config['limite_pausa_por_equipe'];
+$duracao_minutos = $config['duracao_pausa_minutos'];
 
 // Salvar configuração
 if (salvar_configuracao($config)) {

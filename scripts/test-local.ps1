@@ -232,6 +232,7 @@ if ($SkipHttp) {
         @{ Url = "$BaseUrl/admin.php"; Expect = @(302) },
         @{ Url = "$BaseUrl/metricas.php"; Expect = @(302) },
         @{ Url = "$BaseUrl/admin_logout.php"; Expect = @(302) },
+        @{ Url = "$BaseUrl/logout.php"; Expect = @(410) },
         @{ Url = "$BaseUrl/static/js/admin.js"; Expect = @(403) },
         @{ Url = "$BaseUrl/static/js/admin_users.js"; Expect = @(403) },
         @{ Url = "$BaseUrl/api/status.php"; Expect = @(200) },
@@ -316,7 +317,8 @@ if ($SkipHttp) {
 
     # [9.12] Paginas legadas retiradas: POST (formularios de login e logout, e
     # as paginas) responde 410 pelo .htaccess, sem redirecionar nem chegar ao PHP.
-    $legacyPostPaths = @("/", "/index.php", "/login.php", "/admin_login.php", "/admin_logout.php", "/admin.php", "/metricas.php")
+    # [HH5] O logout.php da raiz (Metricas legadas) responde 410 tambem no GET (acima).
+    $legacyPostPaths = @("/", "/index.php", "/login.php", "/admin_login.php", "/admin_logout.php", "/admin.php", "/metricas.php", "/logout.php")
     foreach ($legacyPath in $legacyPostPaths) {
         try {
             $legacyPost = Invoke-WebRequest `

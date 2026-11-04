@@ -117,6 +117,12 @@ check_status() {
                 *) echo "Sensitive path is not blocked: $path returned $status"; return 1 ;;
             esac
             ;;
+        gone)
+            case "$status" in
+                410) return 0 ;;
+                *) echo "Retired legacy path must return 410: $path returned $status"; return 1 ;;
+            esac
+            ;;
         *)
             echo "Invalid expectation: $expected"
             return 1
@@ -132,6 +138,8 @@ check_status "/admin_login.php" public
 check_status "/metricas.php" public
 check_status "/admin.php" public
 check_status "/admin_logout.php" public
+# [HH5] logout.php da raiz (Metricas legadas): 410 em qualquer metodo.
+check_status "/logout.php" gone
 check_status "/static/js/admin.js" blocked
 check_status "/static/js/admin_users.js" blocked
 check_status "/api/status.php" public
@@ -171,7 +179,7 @@ check_status "/deploy/systemd/chronodesk-backup.service" blocked
 
 # [9.12] Paginas legadas retiradas: POST responde 410 pelo .htaccess (sem
 # redirecionar nem chegar ao PHP); o GET das paginas segue com 302 (acima).
-for legacy_path in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php; do
+for legacy_path in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do
     legacy_post_status="$(curl -k -s -o /dev/null -w '%{http_code}' -X POST "${BASE_URL}${legacy_path}")"
     echo "$legacy_post_status POST $legacy_path"
     if [ "$legacy_post_status" != 410 ]; then

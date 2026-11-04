@@ -118,9 +118,13 @@ final class AbsenceService {
         });
     }
 
-    /** POST update: mesmos campos e id; o colaborador nao muda. */
+    /**
+     * POST update: mesmos campos e id; o colaborador nao muda. [9.12.1] Corpo
+     * completo: chave opcional da criacao ausente da 400, antes de tocar no banco.
+     */
     public function update(array $data, array $actor): array {
         $id = $this->requiredId($data['id'] ?? null);
+        AbsenceRules::assertCompleteUpdate($data);
         $absence = AbsenceRules::normalize($data);
         $startsBeforeToday = AbsenceRules::startsBeforeToday($absence, $this->today());
         $this->assertRetroactiveAllowed($startsBeforeToday, $actor);

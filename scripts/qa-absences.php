@@ -562,7 +562,8 @@ assert_same('409: Já existe ausência aprovada do colaborador em 21/10/2026, 10
 // Update.
 $pdo = qa_db();
 $service = qa_service($pdo);
-$update = ['id' => 4, 'employee_id' => 1, 'starts_on' => '2026-10-15', 'ends_on' => '2026-10-16', 'category' => 'compromisso', 'note' => 'texto sensivel Y'];
+// [9.12.1] Edicao com o corpo completo (as chaves que o formulario manda sempre).
+$update = ['id' => 4, 'employee_id' => 1, 'starts_on' => '2026-10-15', 'ends_on' => '2026-10-16', 'period_type' => 'full_day', 'category' => 'compromisso', 'note' => 'texto sensivel Y'];
 assert_same(['id' => 4, 'retroactive' => false], $service->update($update, $actor('gestor')), 'update: gestor altera ausencia futura');
 assert_same(['2026-10-16', 'compromisso', 'qa.gestor', 'texto sensivel Y', 'qa'], [$pdo->absences[4]['ends_on'], $pdo->absences[4]['category'], $pdo->absences[4]['updated_by'], $pdo->absences[4]['reason'], $pdo->absences[4]['created_by']], 'update: campos e autoria');
 $audit = end($pdo->audits);
@@ -570,13 +571,72 @@ assert_same(['ABSENCE_UPDATED', 'WARNING', true, false], [$audit['action'], $aud
 assert_same('ok', qa_outcome(fn () => $service->update($update, $actor('gestor'))), 'update: a propria ausencia nao conflita');
 assert_same('400: Não é possível trocar o colaborador da ausência: cancele e lance de novo.', qa_outcome(fn () => $service->update(['employee_id' => 2] + $update, $actor('gestor'))), 'update: nao troca colaborador');
 assert_same('409: Ausência não encontrada.', qa_outcome(fn () => $service->update(['id' => 999] + $update, $actor('gestor'))), 'update: inexistente 409');
-assert_same('409: Ausência cancelada não pode ser alterada.', qa_outcome(fn () => $service->update(['id' => 3, 'employee_id' => 3, 'starts_on' => '2026-10-20', 'ends_on' => '2026-10-20', 'category' => 'folga'], $actor('admin'))), 'update: cancelada 409');
+assert_same('409: Ausência cancelada não pode ser alterada.', qa_outcome(fn () => $service->update(['id' => 3, 'employee_id' => 3, 'starts_on' => '2026-10-20', 'ends_on' => '2026-10-20', 'period_type' => 'full_day', 'category' => 'folga', 'note' => null], $actor('admin'))), 'update: cancelada 409');
 assert_same('409: Já existe ausência aprovada do colaborador de 05/10/2026 a 09/10/2026 (dia todo).', qa_outcome(fn () => $service->update(['starts_on' => '2026-10-09'] + $update, $actor('lideranca'))), 'update: sobreposicao com outra');
-$started = ['id' => 1, 'employee_id' => 1, 'starts_on' => '2026-10-05', 'ends_on' => '2026-10-08', 'category' => 'ferias'];
+$started = ['id' => 1, 'employee_id' => 1, 'starts_on' => '2026-10-05', 'ends_on' => '2026-10-08', 'period_type' => 'full_day', 'category' => 'ferias', 'note' => 'texto livre A'];
 assert_same('403: Somente administradores e Liderança lançam, editam ou cancelam ausência com início anterior a hoje ou já iniciada.', qa_outcome(fn () => $service->update(['starts_on' => '2026-10-07'] + $started, $actor('gestor'))), 'update: ausencia ja iniciada, gestor 403 (mesmo movendo o inicio para hoje)');
 assert_same(['id' => 1, 'retroactive' => true], $service->update($started, $actor('lideranca')), 'update: Lideranca edita ausencia ja iniciada');
 assert_same(1, $pdo->absences[1]['retroactive'], 'update: marcada retroativa');
-assert_same('403: Somente administradores lançam ausência da Liderança.', qa_outcome(fn () => qa_service(qa_db())->update(['id' => 3, 'employee_id' => 3, 'starts_on' => '2026-10-20', 'ends_on' => '2026-10-20', 'category' => 'folga'], $actor('lideranca'))), 'update: A4 vale na edicao (antes de olhar o status)');
+assert_same('403: Somente administradores lançam ausência da Liderança.', qa_outcome(fn () => qa_service(qa_db())->update(['id' => 3, 'employee_id' => 3, 'starts_on' => '2026-10-20', 'ends_on' => '2026-10-20', 'period_type' => 'full_day', 'category' => 'folga', 'note' => null], $actor('lideranca'))), 'update: A4 vale na edicao (antes de olhar o status)');
+
+// [9.12.1] Edicao com o corpo completo: chave opcional da criacao ausente (ou
+// ends_on e period_type nulos) da 400, antes de tocar no banco, em vez de
+// virar o padrao e sobrescrever o gravado. Antes: sem ends_on a ausencia de
+// dois dias virava de um; sem period_type o intervalo virava dia inteiro; sem
+// note a observacao sumia. O registro de ausencia conta como dado de pessoa
+// (decisao de 2026-11-04).
+$pdo = qa_db();
+$pdo->absences[6] = qa_absence(6, 2, 'compromisso', '2026-11-03', '2026-11-04', 'approved', ['reason' => 'nota gravada']);
+$pdo->absences[7] = qa_absence(7, 2, 'compromisso', '2026-11-05', '2026-11-05', 'approved', ['period_type' => 'interval', 'start_time' => '10:00', 'end_time' => '12:00', 'reason' => 'nota do intervalo']);
+$service = qa_service($pdo);
+// O mesmo corpo do formulario (AbsencesPage.jsx, buildAbsencePayload): sem
+// horario no dia inteiro e sem o fim no "a partir de".
+$formBody = static function (int $id, array $form): array {
+    $body = ['action' => 'update', 'employee_id' => 2, 'starts_on' => $form['starts_on'], 'ends_on' => $form['ends_on'], 'period_type' => $form['period_type'], 'category' => 'compromisso', 'note' => $form['note'], 'id' => $id];
+    if ($form['period_type'] !== 'full_day') {
+        $body['start_time'] = $form['start_time'];
+    }
+    if ($form['period_type'] === 'interval') {
+        $body['end_time'] = $form['end_time'];
+    }
+    return $body;
+};
+$multiDay = $formBody(6, ['starts_on' => '2026-11-03', 'ends_on' => '2026-11-04', 'period_type' => 'full_day', 'note' => 'nota gravada']);
+$interval = $formBody(7, ['starts_on' => '2026-11-05', 'ends_on' => '2026-11-05', 'period_type' => 'interval', 'start_time' => '10:00', 'end_time' => '12:00', 'note' => 'nota do intervalo']);
+$storedBefore = $pdo->absences;
+foreach ([
+    'sem ends_on (a de dois dias viraria de um)' => [array_diff_key($multiDay, ['ends_on' => 1]), 'ends_on'],
+    'sem period_type (o intervalo viraria dia inteiro)' => [array_diff_key($interval, ['period_type' => 1]), 'period_type'],
+    'sem note (a observacao sumiria)' => [array_diff_key($multiDay, ['note' => 1]), 'note'],
+    'ends_on nulo (tambem viraria o inicio)' => [['ends_on' => null] + $multiDay, 'ends_on'],
+    'period_type nulo (tambem viraria dia inteiro)' => [['period_type' => null] + $interval, 'period_type'],
+    'sem as tres' => [array_diff_key($interval, array_flip(AbsenceRules::UPDATE_REQUIRED_KEYS)), 'ends_on, period_type, note'],
+] as $label => [$body, $missing]) {
+    foreach (['gestor', 'admin'] as $role) {
+        assert_same("400: Na edição, envie todos os campos da ausência; faltando: {$missing}.", qa_outcome(fn () => $service->update($body, $actor($role))), "update incompleto, {$label}, {$role}: 400 com as chaves que faltam");
+    }
+}
+assert_same([$storedBefore, [], []], [$pdo->absences, $pdo->audits, $pdo->queries], 'update incompleto: nada gravado nem auditado, sem tocar no banco');
+// O corpo do formulario passa nos tres periodos e grava o que veio.
+assert_same(['id' => 6, 'retroactive' => false], $service->update(['note' => 'nota editada'] + $multiDay, $actor('gestor')), 'update pelo formulario, dia inteiro de dois dias (sem horarios no corpo): ok');
+assert_same(['2026-11-03', '2026-11-04', 'full_day', 'nota editada'], [$pdo->absences[6]['starts_on'], $pdo->absences[6]['ends_on'], $pdo->absences[6]['period_type'], $pdo->absences[6]['reason']], 'update pelo formulario, dia inteiro: grava o fim, o periodo e a observacao do corpo');
+$fromTime = $formBody(7, ['starts_on' => '2026-11-05', 'ends_on' => '2026-11-05', 'period_type' => 'from_time', 'start_time' => '14:00', 'note' => '']);
+assert_same(['id' => 7, 'retroactive' => false], $service->update($fromTime, $actor('gestor')), 'update pelo formulario, "a partir de" (sem o fim no corpo): ok');
+assert_same(['from_time', '14:00', null, null], [$pdo->absences[7]['period_type'], $pdo->absences[7]['start_time'], $pdo->absences[7]['end_time'], $pdo->absences[7]['reason']], 'update pelo formulario, "a partir de": horario do corpo, sem fim, observacao vazia apagada');
+assert_same(['id' => 7, 'retroactive' => false], $service->update($interval, $actor('gestor')), 'update pelo formulario, intervalo: ok');
+assert_same(['interval', '10:00', '12:00', 'nota do intervalo'], [$pdo->absences[7]['period_type'], $pdo->absences[7]['start_time'], $pdo->absences[7]['end_time'], $pdo->absences[7]['reason']], 'update pelo formulario, intervalo: grava os dois horarios');
+// Nota nula presente continua apagando a observacao (escolha explicita).
+assert_same(['ok', null], [qa_outcome(fn () => $service->update(['note' => null] + $multiDay, $actor('gestor'))), $pdo->absences[6]['reason']], 'update com note nula presente: apaga a observacao');
+// Criacao sem mudanca: as opcionais continuam opcionais.
+assert_same('ok', qa_outcome(fn () => qa_service(qa_db())->create(['employee_id' => 2, 'starts_on' => '2026-11-10', 'category' => 'folga'], $actor('gestor'))), 'create sem ends_on, period_type e note: ok (dia inteiro de um dia)');
+// A tela manda as tres sempre (AbsencesPage.jsx) e o roteiro de navegador confere o corpo com a mesma lista.
+$absencesPage = (string)file_get_contents($root . '/frontend/src/pages/AbsencesPage.jsx');
+$payloadBuilder = preg_match('/function buildAbsencePayload\(data, editingId\) \{\n(.*?)\n\}/s', $absencesPage, $builderMatch) === 1 ? $builderMatch[1] : '';
+foreach (AbsenceRules::UPDATE_REQUIRED_KEYS as $key) {
+    assert_same(true, strpos($payloadBuilder, "    {$key}: data.{$key},\n") !== false, "formulario de ausencias: manda {$key} sempre");
+}
+$browserScript = (string)file_get_contents($root . '/frontend/scripts/browser/qa-unsaved-changes-browser.mjs');
+assert_same(true, strpos($browserScript, "const ABSENCE_UPDATE_KEYS = ['" . implode("', '", AbsenceRules::UPDATE_REQUIRED_KEYS) . "']") !== false, 'roteiro de navegador: confere o corpo da edicao com as mesmas chaves');
 
 // Cancel.
 $pdo = qa_db();

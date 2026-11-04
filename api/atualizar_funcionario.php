@@ -110,10 +110,26 @@ try {
     if (!$ad_login_sent) {
         $ad_login = $currentAdLogin;
     }
-    // Horario ausente: o gravado (TIME NOT NULL, sempre valido).
+    // Horario ausente: o gravado. [9.12, GG5] Gravado fora da faixa valida
+    // (00:00 a 23:59; a coluna TIME aceita ate 838:59:59) da 400 pedindo o
+    // campo, em vez de cair no padrao de normalizar_hora_funcionario().
+    $mensagens_hora_gravada = [
+        'jornada_entrada' => 'Horário de entrada gravado inválido: envie o horário de entrada (HH:MM).',
+        'jornada_saida' => 'Horário de saída gravado inválido: envie o horário de saída (HH:MM).',
+        'almoco_inicio' => 'Horário de início do almoço gravado inválido: envie o horário de início do almoço (HH:MM).',
+        'almoco_fim' => 'Horário de fim do almoço gravado inválido: envie o horário de fim do almoço (HH:MM).',
+    ];
     $horarios = [];
     foreach (['jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim'] as $campo_hora) {
-        $horarios[$campo_hora] = $horarios_enviados[$campo_hora] ?? normalizar_hora_funcionario($current[$campo_hora] ?? '');
+        if (array_key_exists($campo_hora, $horarios_enviados)) {
+            $horarios[$campo_hora] = $horarios_enviados[$campo_hora];
+            continue;
+        }
+        $hora_gravada = normalizar_hora_funcionario($current[$campo_hora] ?? '', null);
+        if ($hora_gravada === null) {
+            json_response(['sucesso' => false, 'mensagem' => $mensagens_hora_gravada[$campo_hora]], 400);
+        }
+        $horarios[$campo_hora] = $hora_gravada;
     }
     $jornada_entrada = $horarios['jornada_entrada'];
     $jornada_saida = $horarios['jornada_saida'];
