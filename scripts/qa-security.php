@@ -350,6 +350,12 @@ final class QaChildStatement extends PDOStatement {
                 $this->rows = $found === null ? [] : [['id' => (int)$params[':id'], 'pa_number' => $found[1], 'employee_id' => $found[0]]];
                 return true;
             }
+            // [II3] Gravado da edicao (PaMapService::lockedAssignment): vinculos de db['pa_map'], sem fim.
+            if ($this->sql === 'SELECT valid_from, valid_until, notes FROM portal_pa_assignments WHERE id = :id AND active = 1 LIMIT 1 FOR UPDATE') {
+                $found = $map[(string)$params[':id']] ?? null;
+                $this->rows = $found === null ? [] : [['valid_from' => $found[2], 'valid_until' => null, 'notes' => 'nota do vinculo ' . $params[':id']]];
+                return true;
+            }
         }
         if (preg_match('/^(UPDATE funcionarios SET ativo = [01],|UPDATE portal_(pa_assignments|schedule_rules|absences) SET|DELETE FROM portal_(schedule_rules|schedule_exceptions)|INSERT INTO (pausas|portal_sync_queue) )/', $this->sql) === 1) {
             error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? $params[':id_funcionario'] ?? $params[':record_id'] ?? '?'));
@@ -2180,6 +2186,31 @@ assert_same([200, true, true], [
     strpos($paWriteCases['remover']['log'], '[QA_AUDIT] PA_MAP_REMOVED [INFO]: Alocacao de PA removida. ID 3, PA 1730, colaborador ID 5') !== false,
     strpos($paWriteCases['remover']['log'], '[QA_WRITE] UPDATE portal_pa_assignments SET') !== false,
 ], 'F6: remover audita o vinculo, o PA e o colaborador (DF11)');
+// [II3] Fim da validade de ponta a ponta: o fim antes do inicio e recusado
+// pelo endpoint real com a mensagem que a tela tambem mostra (criar e editar,
+// nada gravado nem auditado); a edicao com o corpo da tela (o fim carregado) grava.
+$paValidityCases = qa_run_endpoints($qaDir, [
+    'fim_antes_novo' => $paWriteSpec(['action' => 'save', 'pa_number' => '1729', 'employee_id' => 2, 'valid_from' => date('Y-m-d'), 'valid_until' => date('Y-m-d', strtotime('-1 day')), 'notes' => '']),
+    'fim_antes_edicao' => $paWriteSpec(['action' => 'save', 'id' => 3, 'pa_number' => '1730', 'employee_id' => 5, 'valid_from' => '2026-09-01', 'valid_until' => '2026-08-31', 'notes' => 'nota do vinculo 3']),
+    'edicao_com_fim' => $paWriteSpec(['action' => 'save', 'id' => 3, 'pa_number' => '1730', 'employee_id' => 5, 'valid_from' => '2026-09-01', 'valid_until' => date('Y-m-d', strtotime('+30 days')), 'notes' => 'nota do vinculo 3']),
+]);
+foreach (['fim_antes_novo', 'fim_antes_edicao'] as $case) {
+    $result = $paValidityCases[$case];
+    assert_same([400, 'Fim da validade não pode ser anterior ao início.', false, false, ''], [
+        $result['status'],
+        json_decode($result['body'], true)['mensagem'] ?? null,
+        strpos($result['log'], '[QA_WRITE]') !== false,
+        strpos($result['log'], 'PA_MAP_SAVED') !== false,
+        $result['stderr'],
+    ], "II3 {$case}: fim antes do inicio recusado pelo endpoint real com a mensagem da tela, sem gravar nem auditar");
+}
+$editedWithEnd = $paValidityCases['edicao_com_fim'];
+assert_same([200, true, true, ''], [
+    $editedWithEnd['status'],
+    strpos($editedWithEnd['log'], '[QA_WRITE] UPDATE portal_pa_assignments SET') !== false,
+    strpos($editedWithEnd['log'], '[QA_AUDIT] PA_MAP_SAVED [INFO]: Alocacao de PA salva. ID 3, PA 1730, colaborador ID 5') !== false,
+    $editedWithEnd['stderr'],
+], 'II3: edicao com o corpo da tela (fim carregado) grava pelo endpoint real e audita');
 
 // F7 (secao 9.9), ponta a ponta: contadores do dashboard.php e situacao de
 // agora do technicians.php pelo motor, por perfil. Sem mudanca de acesso (a

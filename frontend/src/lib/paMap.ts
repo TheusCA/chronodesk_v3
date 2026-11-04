@@ -124,3 +124,14 @@ export function saveFeedback(result: SaveResult | null | undefined, employeeId: 
   const title = conflicts.length > 0 ? 'Vínculo salvo com conflito' : warnings.length > 0 ? 'Vínculo salvo com aviso' : 'Vínculo salvo'
   return { tone: lines.length > 0 ? 'warning' : 'success', title, lines }
 }
+
+// [II3] Fim da validade do vínculo (opcional; vazio = sem fim): não pode ser
+// anterior ao início. A mesma regra e a mesma mensagem do servidor
+// (PaMapService::save), conferidas na tela antes de mandar; fim igual ao início
+// vale (vínculo de um dia). Data fora do formato fica para o servidor.
+export const VALIDITY_END_BEFORE_START = 'Fim da validade não pode ser anterior ao início.'
+
+export function validityEndError(validFrom: unknown, validUntil: unknown): string | null {
+  if (!isIsoDate(validFrom) || !isIsoDate(validUntil)) return null
+  return validUntil < validFrom ? VALIDITY_END_BEFORE_START : null
+}

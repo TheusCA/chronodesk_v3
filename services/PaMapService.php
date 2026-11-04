@@ -174,10 +174,11 @@ final class PaMapService {
                 throw new DomainException('Cadastro marcado como fora do Mapa PA e da escala: não recebe vínculo de PA.');
             }
             // [9.12.1] Na edicao (com id), chave ausente mantem o gravado, lido
-            // com trava: o formulario nao manda valid_until, e antes editar
-            // pela tela apagava o fim da validade (e a observacao, se faltasse).
-            // Presente, validada como antes: valid_until e notes nulos ou
-            // vazios continuam limpando. O gravado passa pelos mesmos validadores.
+            // com trava: antes, editar pela tela (sem o campo do fim) apagava o
+            // fim da validade. Desde a II3 o formulario manda valid_until
+            // sempre (data ou vazio); o ausente continua valendo para os outros
+            // corpos. Presente, validada como antes: valid_until e notes nulos
+            // ou vazios continuam limpando. O gravado passa pelos mesmos validadores.
             $stored = $id === null ? null : $this->lockedAssignment($id);
             $validFrom = $this->date($data['valid_from'] ?? $data['work_date'] ?? ($stored === null ? $this->today() : $stored['valid_from']), 'Início da validade');
             $validUntil = $this->nullableDate(

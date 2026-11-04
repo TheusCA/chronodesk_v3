@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
 import { Dialog } from '../components/ui/Dialog'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
@@ -18,6 +18,7 @@ import {
   presenceReasonLabel,
   saveFeedback,
   showsCategory,
+  validityEndError,
   weekDays,
 } from '../lib/paMap'
 import { presenceLegendItem, situationLabel } from '../lib/presenceLegend'
@@ -56,16 +57,19 @@ function emptyForm(paNumber, date) {
     pa_number: paNumber,
     employee_id: '',
     valid_from: date,
+    valid_until: '',
     notes: '',
   }
 }
 
+// [II3] O fim da validade vem do vínculo e vai sempre no corpo (vazio = sem fim).
 function formFromAssignment(assignment, date) {
   return {
     id: assignment.id,
     pa_number: assignment.pa_number,
     employee_id: assignment.employee_id,
     valid_from: assignment.valid_from || date,
+    valid_until: assignment.valid_until || '',
     notes: assignment.notes || '',
   }
 }
@@ -209,10 +213,22 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }))
   const assignments = pa.assignments || []
   const employeeRef = useRef(null)
+  // [II3] Aviso do fim antes do início: no campo, pela descrição.
+  const [endError, setEndError] = useState(null)
+  const endRef = useRef(null)
+  const endHintId = useId()
+  const endErrorId = useId()
 
   function load(next) {
     setOpenedWith(next)
     setForm(next)
+    setEndError(null)
+  }
+
+  // Mudar uma das datas tira o aviso; salvar confere de novo.
+  const updateDate = (key, value) => {
+    setEndError(null)
+    update(key, value)
   }
 
   // Volta a "Adicionar" sem perguntar (quem chega aqui já passou pela proteção).
@@ -224,6 +240,20 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
   }
 
   const startNew = () => reset(true)
+
+  // [II3] A regra e a mensagem do servidor (PaMapService::save), antes de
+  // mandar. Recusado, nada vai ao servidor e o foco vai ao campo do fim.
+  function submit(event) {
+    event.preventDefault()
+    const error = validityEndError(form.valid_from, form.valid_until)
+    if (error !== null) {
+      setEndError(error)
+      endRef.current?.focus()
+      return
+    }
+    onSave(form, startNew)
+  }
+
   const edit = (item) => guard.requestLeave(() => load(formFromAssignment(item, date)))
   const requestReset = () => guard.requestLeave(() => reset())
   const requestNew = () => guard.requestLeave(startNew)
@@ -242,7 +272,7 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
       title={`PA ${pa.pa_number}`}
       titleClassName="text-xl"
     >
-      <form onSubmit={(event) => { event.preventDefault(); onSave(form, startNew) }}>
+      <form onSubmit={submit}>
         {pa.has_conflict && (
           <InlineAlert className="mt-4" title="Conflito na semana" tone="danger">
             Dois ou mais técnicos presenciais neste PA em: {conflictDaysLabel(pa.conflict_days)}.
@@ -263,7 +293,12 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="label sm:col-span-2">Colaborador<select className="field mt-2" ref={employeeRef} required value={form.employee_id} onChange={(event) => update('employee_id', event.target.value)}><option value="">Selecione</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} - {teamLabel(employee.team)} ({employee.schedule_rule_label})</option>)}</select></label>
-              <label className="label">Início da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => update('valid_from', event.target.value)} /></label>
+              <label className="label">Início da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => updateDate('valid_from', event.target.value)} /></label>
+              <div>
+                <label className="label">Fim da validade<input aria-describedby={endError ? `${endHintId} ${endErrorId}` : endHintId} aria-invalid={Boolean(endError)} className="field mt-2" ref={endRef} type="date" value={form.valid_until} onChange={(event) => updateDate('valid_until', event.target.value)} /></label>
+                <p className="mt-1 text-xs text-slate-500" id={endHintId}>Opcional: vazio, o vínculo fica sem fim.</p>
+                {endError && <p className="mt-1 text-xs text-red-300" id={endErrorId}>{endError}</p>}
+              </div>
               <label className="label sm:col-span-2">Observação<textarea className="field mt-2 min-h-24" maxLength="1000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             </div>
             <p className="mt-3 text-xs text-slate-500">Conflito, remoto, ausência e falta de escala não impedem o vínculo: o mapa salva e mostra o aviso.</p>

@@ -5,6 +5,7 @@
 // [9.12.1] Tambem o corpo que Ausencias, Mapa PA e Configuracoes mandam ao
 // salvar uma edicao (blocos 5, 14 e 15): as chaves que o servidor exige.
 // [17f] Bloco 16: o Mapa PA no Dialog e com a protecao (o fundo, no bloco 7).
+// [II3] Bloco 17: o campo "Fim da validade" do Mapa PA.
 // Fora dos qa:* (precisa de navegador). Saida so com contagens: cada
 // conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram).
 //
@@ -19,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChrome, openPage, sleep } from './lib/chrome.mjs'
-import { ALREADY_DECIDED, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, FAILING_PA_NOTE, NOT_PAUSED, PA_ASSIGNMENT, PA_OTHER_ASSIGNMENT, startMockServer } from './lib/mock-server.mjs'
+import { ALREADY_DECIDED, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, FAILING_PA_NOTE, NOT_PAUSED, PA_ASSIGNMENT, PA_END_BEFORE_START, PA_OTHER_ASSIGNMENT, startMockServer } from './lib/mock-server.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const appArg = process.argv.indexOf('--app')
@@ -1862,9 +1863,9 @@ async function waitForRequest(mock, predicate, before, timeoutMs = 8000) {
   return null
 }
 
-// 14. [9.12.1] Mapa PA: editar um vinculo manda o corpo que o servidor espera.
-// O formulario nao tem o fim da validade: o corpo vai sem valid_until e o
-// servidor mantem o gravado (PaMapService::save, chave ausente na edicao).
+// 14. [9.12.1, II3] Mapa PA: editar um vinculo manda o corpo que o servidor
+// espera. Desde a II3 o formulario tem o fim da validade: o corpo leva o
+// valid_until carregado do vinculo (editar sem mexer no fim mantem o fim).
 // [17f] O modal do Mapa PA e um Dialog: o titulo fica no cabecalho do painel.
 const PA_MODAL = `[...document.querySelectorAll('[role="dialog"]')].find((el) => /^PA /.test(el.querySelector('h2')?.textContent || ''))`
 async function paMapEdit(page, port, mock) {
@@ -1875,8 +1876,8 @@ async function paMapEdit(page, port, mock) {
   await page.waitFor(`!!${PA_MODAL}`)
   await page.evaluate(`[...${PA_MODAL}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Editar').click()`)
   await sleep(200)
-  const filled = await page.evaluate(`(() => { const form = ${PA_MODAL}; return { editar: [...form.querySelectorAll('h3')].some((h) => h.textContent === 'Editar vínculo'), colaborador: form.querySelector('select').value, inicio: form.querySelector('input[type="date"]').value, nota: form.querySelector('textarea').value } })()`)
-  report('Mapa PA, Editar: o formulario traz o vinculo gravado', filled.editar && filled.colaborador === String(PA_ASSIGNMENT.employee_id) && filled.inicio === PA_ASSIGNMENT.valid_from && filled.nota === PA_ASSIGNMENT.notes)
+  const filled = await page.evaluate(`(() => { const form = ${PA_MODAL}; return { editar: [...form.querySelectorAll('h3')].some((h) => h.textContent === 'Editar vínculo'), colaborador: form.querySelector('select').value, inicio: ${PA_FIELD('Início da validade')}.value, fim: ${PA_FIELD('Fim da validade')}.value, nota: form.querySelector('textarea').value } })()`)
+  report('Mapa PA, Editar: o formulario traz o vinculo gravado, com o fim', filled.editar && filled.colaborador === String(PA_ASSIGNMENT.employee_id) && filled.inicio === PA_ASSIGNMENT.valid_from && filled.fim === PA_ASSIGNMENT.valid_until && filled.nota === PA_ASSIGNMENT.notes)
   await page.evaluate(`${PA_MODAL}.querySelector('textarea').focus()`)
   await page.send('Input.insertText', { text: ' editada' }); await sleep(150)
   const before = mock.requests.length
@@ -1884,7 +1885,7 @@ async function paMapEdit(page, port, mock) {
   const body = (await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'portal/pa_map.php', before))?.body || {}
   report('Mapa PA, salvar a edicao: um POST de save com o vinculo', body.action === 'save' && body.id === PA_ASSIGNMENT.id && body.pa_number === PA_ASSIGNMENT.pa_number && String(body.employee_id) === String(PA_ASSIGNMENT.employee_id))
   report('Mapa PA, salvar a edicao: inicio e observacao do formulario no corpo', body.valid_from === PA_ASSIGNMENT.valid_from && body.notes === `${PA_ASSIGNMENT.notes} editada`)
-  report('Mapa PA, salvar a edicao: sem valid_until no corpo (o servidor mantem o fim gravado)', !('valid_until' in body))
+  report('Mapa PA, salvar a edicao: o fim carregado vai no corpo (editar sem mexer no fim mantem o fim)', body.valid_until === PA_ASSIGNMENT.valid_until)
   await page.waitFor(`![...${PA_MODAL}?.querySelectorAll('h3') || []].some((h) => h.textContent === 'Editar vínculo')`)
   report('Mapa PA, salvar a edicao: o formulario volta para "Adicionar colaborador"', await page.evaluate(`[...${PA_MODAL}.querySelectorAll('h3')].some((h) => h.textContent === 'Adicionar colaborador')`))
 }
@@ -1923,6 +1924,7 @@ const PA_STATE = `(() => {
     modo: form ? ([...form.querySelectorAll('h3')].map((h) => h.textContent).find((t) => t === 'Editar vínculo' || t === 'Adicionar colaborador') ?? null) : null,
     colaborador: field('Colaborador')?.value ?? null,
     inicio: field('Início da validade')?.value ?? null,
+    fim: field('Fim da validade')?.value ?? null,
     nota: field('Observação')?.value ?? null,
     descartar: !!document.querySelector('[role="alertdialog"]'),
     papel: form?.getAttribute('role') ?? null,
@@ -1948,6 +1950,12 @@ async function openPaModal(page) {
 async function typePaNote(page, text, replace = false) {
   await page.evaluate(`${PA_FIELD('Observação')}.${replace ? 'select' : 'focus'}()`)
   await page.typeText(text)
+}
+// [II3] Data (ou colaborador) pelo setter nativo e o evento que o React ouve:
+// digitar num campo de data depende do formato do navegador.
+async function setPaField(page, label, value) {
+  await page.evaluate(`(() => { const field = ${PA_FIELD(label)}; const select = field instanceof HTMLSelectElement; Object.getOwnPropertyDescriptor(select ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(field, ${JSON.stringify(value)}); field.dispatchEvent(new Event(select ? 'change' : 'input', { bubbles: true })) })()`)
+  await sleep(150)
 }
 async function paMapGuard(page, port, mock) {
   // Entrada pelo menu: o "voltar" fica dentro do app.
@@ -2074,12 +2082,128 @@ async function paMapGuard(page, port, mock) {
   await page.click(PA_BUTTON('Fechar'))
   await expectState(page, 'Mapa PA, depois de salvar, Fechar: fecha sem perguntar, foco volta ao PA', { modal: false, descartar: false, foco: cartao }, PA_STATE)
 
+  // [II3] O fim da validade conta como alteracao: mudar so o fim pergunta;
+  // voltar ao gravado limpa de novo; no adicionar, so o fim preenchido tambem conta.
+  await openPaModal(page)
+  await page.click(PA_BUTTON('Editar'))
+  await setPaField(page, 'Fim da validade', '2027-01-31')
+  await expectState(page, 'Mapa PA, Editar, mudar so o fim: sujo', { fim: '2027-01-31', beforeunload: 1 }, PA_STATE)
+  await page.click(PA_BUTTON('Fechar'))
+  await expectState(page, 'Mapa PA, mudar so o fim, Fechar: pergunta', { descartar: true }, PA_STATE)
+  await page.click(button('Continuar editando', ALERT))
+  await setPaField(page, 'Fim da validade', PA_ASSIGNMENT.valid_until)
+  await expectState(page, 'Mapa PA, fim de volta ao gravado: limpo de novo', { fim: PA_ASSIGNMENT.valid_until, beforeunload: 0 }, PA_STATE)
+  await page.click(PA_BUTTON('Fechar'))
+  await expectState(page, 'Mapa PA, fim de volta ao gravado, Fechar: fecha sem perguntar, foco volta ao PA', { modal: false, descartar: false, foco: cartao }, PA_STATE)
+  await openPaModal(page)
+  await setPaField(page, 'Fim da validade', '2026-11-30')
+  await page.press('Escape')
+  await expectState(page, 'Mapa PA, adicionar, so o fim preenchido, Esc: pergunta', { descartar: true }, PA_STATE)
+  await page.click(button('Descartar alterações', ALERT))
+  await expectState(page, 'Mapa PA, adicionar, so o fim, Descartar: fecha, foco volta ao PA, sem listener', { modal: false, foco: cartao, beforeunload: 0 }, PA_STATE)
+
   // Celular (390 px): o modal cabe sem rolagem horizontal da pagina; Esc fecha e devolve o foco.
   await goto(page, port, '/mapa-pa', 390)
   await openPaModal(page)
   report('390 px, Mapa PA: sem rolagem horizontal da pagina', await page.evaluate(`document.documentElement.scrollWidth <= innerWidth`))
   await page.press('Escape')
   await expectState(page, '390 px, Mapa PA, Esc: fecha, foco volta ao PA', { modal: false, foco: cartao, dialogos: 0 }, PA_STATE)
+}
+
+// 17. [II3] Mapa PA: o campo "Fim da validade" (opcional; vazio = sem fim),
+// carregado do vinculo na edicao, com a regra e a mensagem do servidor (fim
+// nao anterior ao inicio) conferidas na tela antes de mandar. A recusa do
+// servidor real e provada no PHP (qa-pa-conflicts e qa-security, pelo
+// endpoint); o servidor simulado recusa como ele, mas a tela nao chega a mandar.
+const PA_ADD_MODE = `[...(${PA_MODAL}?.querySelectorAll('h3') || [])].some((h) => h.textContent === 'Adicionar colaborador')`
+const END_STATE = `(() => {
+  const input = ${PA_FIELD('Fim da validade')}
+  const ids = (input?.getAttribute('aria-describedby') || '').split(' ').filter(Boolean)
+  return {
+    valor: input?.value ?? null,
+    invalido: input?.getAttribute('aria-invalid') ?? null,
+    mensagem: ids.map((id) => document.getElementById(id)?.textContent ?? ''),
+    foco: !!input && document.activeElement === input,
+    editar: [...(${PA_MODAL}?.querySelectorAll('h3') || [])].some((h) => h.textContent === 'Editar vínculo'),
+  }
+})()`
+const paSaveRequests = (mock, before) => mock.requests.slice(before).filter((r) => r.method === 'POST' && r.key === 'portal/pa_map.php')
+// Salva e espera o POST e a volta a "Adicionar" com o formulario vazio (o reset depois da resposta).
+async function savePa(page, mock) {
+  const before = mock.requests.length
+  await page.click(`${PA_MODAL}.querySelector('button[type="submit"]')`)
+  const request = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'portal/pa_map.php', before)
+  await page.waitFor(`${PA_ADD_MODE} && ${PA_FIELD('Colaborador')}.value === ''`)
+  return request?.body ?? null
+}
+async function paMapValidity(page, port, mock) {
+  await goto(page, port, '/mapa-pa')
+  await openPaModal(page)
+  let end = await page.evaluate(END_STATE)
+  report('Mapa PA, adicionar: "Fim da validade" vazio, com a ajuda ligada e sem aviso', end.valor === '' && end.invalido === 'false' && end.mensagem.length === 1 && end.mensagem[0] === 'Opcional: vazio, o vínculo fica sem fim.')
+
+  // Editar mudando so o fim.
+  await page.click(PA_BUTTON('Editar'))
+  end = await page.evaluate(END_STATE)
+  report('Mapa PA, Editar: o fim gravado carregado no campo', end.editar && end.valor === PA_ASSIGNMENT.valid_until)
+  await setPaField(page, 'Fim da validade', '2027-01-31')
+  let body = await savePa(page, mock)
+  report('Mapa PA, mudar so o fim: o corpo leva o fim novo', body?.valid_until === '2027-01-31')
+  report('Mapa PA, mudar so o fim: o resto do corpo como estava', body?.action === 'save' && body?.id === PA_ASSIGNMENT.id && body?.pa_number === PA_ASSIGNMENT.pa_number && String(body?.employee_id) === String(PA_ASSIGNMENT.employee_id) && body?.valid_from === PA_ASSIGNMENT.valid_from && body?.notes === PA_ASSIGNMENT.notes)
+
+  // Limpar o fim: vazio vai no corpo (sem fim); a chave nao some, senao o servidor manteria o gravado.
+  await page.click(PA_BUTTON('Editar'))
+  await setPaField(page, 'Fim da validade', '')
+  body = await savePa(page, mock)
+  report('Mapa PA, limpar o fim: o corpo leva valid_until vazio (sem fim), com a chave', body !== null && Object.hasOwn(body, 'valid_until') && body.valid_until === '')
+
+  // Editar sem mexer: o fim gravado volta no corpo.
+  await page.click(PA_BUTTON('Editar'))
+  body = await savePa(page, mock)
+  report('Mapa PA, editar sem mexer: o corpo leva o fim gravado e o resto como estava', body?.valid_until === PA_ASSIGNMENT.valid_until && body?.valid_from === PA_ASSIGNMENT.valid_from && body?.notes === PA_ASSIGNMENT.notes)
+
+  // Fim antes do inicio: recusado na tela, com a mensagem do servidor, sem POST.
+  await page.click(PA_BUTTON('Editar'))
+  await setPaField(page, 'Fim da validade', '2026-09-30')
+  let before = mock.requests.length
+  await page.click(`${PA_MODAL}.querySelector('button[type="submit"]')`)
+  await sleep(600)
+  const refused = await page.evaluate(END_STATE)
+  report('Mapa PA, fim antes do inicio: a tela nao manda (nenhum POST)', paSaveRequests(mock, before).length === 0)
+  report('Mapa PA, fim antes do inicio: a mensagem do servidor no campo, aria-invalid e foco no campo', refused.invalido === 'true' && refused.mensagem.includes(PA_END_BEFORE_START) && refused.foco)
+  report('Mapa PA, fim antes do inicio: a edicao continua aberta, com o fim digitado', refused.editar && refused.valor === '2026-09-30')
+  // Mudar a data tira o aviso; fim igual ao inicio vale, como no servidor.
+  await setPaField(page, 'Fim da validade', PA_ASSIGNMENT.valid_from)
+  end = await page.evaluate(END_STATE)
+  report('Mapa PA, corrigir o fim: o aviso sai', end.invalido === 'false' && !end.mensagem.includes(PA_END_BEFORE_START))
+  body = await savePa(page, mock)
+  report('Mapa PA, fim igual ao inicio: aceito, o corpo leva o fim', body?.valid_until === PA_ASSIGNMENT.valid_from && body?.valid_from === PA_ASSIGNMENT.valid_from)
+
+  // Inicio depois do fim carregado: tambem recusado na tela; o inicio de volta tira o aviso.
+  await page.click(PA_BUTTON('Editar'))
+  await setPaField(page, 'Início da validade', '2027-01-04')
+  before = mock.requests.length
+  await page.click(`${PA_MODAL}.querySelector('button[type="submit"]')`)
+  await sleep(600)
+  end = await page.evaluate(END_STATE)
+  report('Mapa PA, inicio depois do fim: recusado na tela, sem POST, aviso no fim', paSaveRequests(mock, before).length === 0 && end.invalido === 'true' && end.mensagem.includes(PA_END_BEFORE_START))
+  await setPaField(page, 'Início da validade', PA_ASSIGNMENT.valid_from)
+  end = await page.evaluate(END_STATE)
+  report('Mapa PA, inicio de volta: o aviso sai', end.invalido === 'false' && !end.mensagem.includes(PA_END_BEFORE_START))
+  await page.click(PA_BUTTON('Fechar'))
+  await expectState(page, 'Mapa PA, inicio de volta ao gravado, Fechar: fecha sem perguntar', { modal: false, descartar: false }, PA_STATE)
+
+  // Adicionar com fim e sem fim.
+  await openPaModal(page)
+  await setPaField(page, 'Colaborador', String(PA_OTHER_ASSIGNMENT.employee_id))
+  await setPaField(page, 'Fim da validade', '2026-11-30')
+  body = await savePa(page, mock)
+  report('Mapa PA, adicionar com fim: o corpo leva o fim, sem id', body?.id === null && body?.valid_until === '2026-11-30' && String(body?.employee_id) === String(PA_OTHER_ASSIGNMENT.employee_id))
+  await setPaField(page, 'Colaborador', String(PA_OTHER_ASSIGNMENT.employee_id))
+  body = await savePa(page, mock)
+  report('Mapa PA, adicionar sem fim: o corpo leva valid_until vazio (sem fim)', body !== null && body.id === null && Object.hasOwn(body, 'valid_until') && body.valid_until === '')
+  await page.click(PA_BUTTON('Fechar'))
+  await expectState(page, 'Mapa PA, depois de adicionar, Fechar: fecha sem perguntar', { modal: false, descartar: false }, PA_STATE)
 }
 
 let chrome = null
@@ -2109,9 +2233,10 @@ try {
     [11, 'Aprovar e Rejeitar (17g)', () => decisionConfirm(page, mock.port, mock)],
     [12, 'Avisos: tempo e leitor de tela (DD2)', () => feedbackTimingAndAnnouncement(page, mock.port, mock)],
     [13, 'Derrubar pausa e remover documento (DD3)', () => confirmActionScreens(page, mock.port, mock)],
-    [14, 'Mapa PA: corpo da edicao (9.12.1)', () => paMapEdit(page, mock.port, mock)],
+    [14, 'Mapa PA: corpo da edicao (9.12.1, II3)', () => paMapEdit(page, mock.port, mock)],
     [15, 'Configuracoes: corpo do salvar (9.12.1)', () => settingsSave(page, mock.port, mock)],
     [16, 'Mapa PA no Dialog e com a protecao (17f)', () => paMapGuard(page, mock.port, mock)],
+    [17, 'Mapa PA: fim da validade (II3)', () => paMapValidity(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

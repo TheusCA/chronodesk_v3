@@ -716,7 +716,7 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   const modalSource = paSource.slice(paSource.indexOf('export function PaModal('), paSource.indexOf('// Aba "Ausências da semana"'))
   assert.match(modalSource, /const \[openedWith, setOpenedWith\] = useState\(\(\) => emptyForm\(pa\.pa_number, date\)\)\s*const \[form, setForm\] = useState\(openedWith\)\s*const guard = useUnsavedChangesGuard\(formValuesChanged\(openedWith, form\)\)/, 'Mapa PA: sujo = diferente do que o formulario abriu')
   assert.match(modalSource, /const editing = openedWith\.id !== null/, 'Mapa PA: editar ou adicionar pelo que abriu')
-  assert.match(modalSource, /function load\(next\) \{\s*setOpenedWith\(next\)\s*setForm\(next\)\s*\}/, 'Mapa PA: abrir o formulario troca o valor de abertura junto (abrir sem mexer nao e sujo)')
+  assert.match(modalSource, /function load\(next\) \{\s*setOpenedWith\(next\)\s*setForm\(next\)\s*(?:setEndError\(null\)\s*)?\}/, 'Mapa PA: abrir o formulario troca o valor de abertura junto (abrir sem mexer nao e sujo)')
   assert.match(modalSource, /function reset\(focusEmployee = false\) \{\s*load\(emptyForm\(pa\.pa_number, date\)\)\s*if \(focusEmployee\) employeeRef\.current\?\.focus\(\)\s*\}/, 'Mapa PA: reset volta a "Adicionar" limpo; com o pedido, o foco vai ao Colaborador')
   assert.match(modalSource, /const startNew = \(\) => reset\(true\)/, 'Mapa PA: Novo vinculo e salvar com sucesso levam o foco ao Colaborador')
   assert.match(modalSource, /const edit = \(item\) => guard\.requestLeave\(\(\) => load\(formFromAssignment\(item, date\)\)\)/, 'Mapa PA: "Editar outro vinculo" pela protecao')

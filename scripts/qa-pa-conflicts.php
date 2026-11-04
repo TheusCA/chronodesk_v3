@@ -656,9 +656,10 @@ assert_same([[[], [], 0], 20], [$summary($result), count($pdo->assignments)], 's
 assert_same('11-18 3+4+15', $summary($save(['id' => 14, 'pa_number' => '1731', 'employee_id' => 15])[0])[1][0], 'save: edicao para outro PA confere o PA novo');
 assert_same([[], [], 0], $summary($save(['id' => 14, 'pa_number' => '1726', 'employee_id' => 16])[0]), 'save: edicao que troca o colaborador nao conta o vinculo antigo (o proprio registro) como ocupante');
 // [9.12.1] Edicao: chave ausente mantem o gravado (valid_from, valid_until e
-// notes), lido com trava. O formulario (PaMapPage.jsx, formFromAssignment) nao
-// manda valid_until: antes, editar pela tela apagava o fim da validade (o
-// vinculo voltava a valer sem fim). Presente, vale o enviado; nulo e vazio limpam.
+// notes), lido com trava. Antes da II3, o formulario (PaMapPage.jsx,
+// formFromAssignment) nao mandava valid_until e editar pela tela apagava o fim
+// da validade (o vinculo voltava a valer sem fim); desde a II3 ele manda o fim
+// sempre (data ou vazio). Presente, vale o enviado; nulo e vazio limpam.
 $editDb = static function () use ($saveDb): QaPaPdo {
     $pdo = $saveDb();
     $pdo->assignments[40] = ['pa_number' => '1722', 'employee_id' => 27, 'valid_from' => '2026-11-02', 'valid_until' => '2026-12-31', 'notes' => 'nota gravada'];
@@ -675,10 +676,11 @@ $edit = static function (array $data) use ($editDb, $today): array {
 };
 $storedLink = static fn (QaPaPdo $pdo): array => array_intersect_key($pdo->assignments[40], array_flip(['valid_from', 'valid_until', 'notes']));
 $keptLink = ['valid_from' => '2026-11-02', 'valid_until' => '2026-12-31', 'notes' => 'nota gravada'];
-// Corpo da tela: id, pa_number, employee_id, valid_from e notes, sem valid_until.
+// Corpo da tela antes da II3 (id, pa_number, employee_id, valid_from e notes,
+// sem valid_until): continua valendo para quem manda o corpo sem o fim.
 $screenEdit = ['id' => 40, 'pa_number' => '1722', 'employee_id' => 27, 'valid_from' => '2026-11-02', 'notes' => 'nota editada', 'action' => 'save'];
 [$result, $pdo] = $edit($screenEdit);
-assert_same([false, array_merge($keptLink, ['notes' => 'nota editada'])], [isset($result['erro']), $storedLink($pdo)], 'edicao pela tela (sem valid_until): mantem o fim da validade gravado, grava inicio e observacao');
+assert_same([false, array_merge($keptLink, ['notes' => 'nota editada'])], [isset($result['erro']), $storedLink($pdo)], 'edicao sem valid_until (o corpo da tela antes da II3): mantem o fim da validade gravado, grava inicio e observacao');
 [$result, $pdo] = $edit(['id' => 40, 'pa_number' => '1722', 'employee_id' => 27]);
 assert_same([false, $keptLink], [isset($result['erro']), $storedLink($pdo)], 'edicao sem inicio, fim e observacao: mantem os tres gravados');
 [$result, $pdo] = $edit(['valid_until' => null, 'notes' => ''] + $screenEdit);
@@ -688,6 +690,21 @@ assert_same([false, ['valid_from' => '2026-11-09', 'valid_until' => '2026-11-30'
 // Inicio depois do fim gravado (a tela nao tem o fim): 400, nada gravado.
 [$result, $pdo] = $edit(['valid_from' => '2027-01-04'] + $screenEdit);
 assert_same([[InvalidArgumentException::class . ': Fim da validade não pode ser anterior ao início.'], $keptLink, ['begin', 'rollback'], []], [$summary($result), $storedLink($pdo), $pdo->transactions, $pdo->written], 'edicao com inicio depois do fim gravado: 400, nada gravado');
+// [II3] Corpo da tela desde a II3: o formulario carrega o fim gravado e manda
+// valid_until sempre (data ou vazio = sem fim). A regra do fim nao anterior ao
+// inicio e a que a tela confere antes de mandar (lib/paMap.ts).
+[$result, $pdo] = $edit(['valid_until' => '2026-12-31', 'notes' => 'nota gravada'] + $screenEdit);
+assert_same([false, $keptLink], [isset($result['erro']), $storedLink($pdo)], 'II3: edicao pela tela sem mexer em nada: o fim carregado volta igual');
+[$result, $pdo] = $edit(['valid_until' => '2027-01-31', 'notes' => 'nota gravada'] + $screenEdit);
+assert_same([false, ['valid_from' => '2026-11-02', 'valid_until' => '2027-01-31', 'notes' => 'nota gravada']], [isset($result['erro']), $storedLink($pdo)], 'II3: edicao pela tela mudando so o fim: grava o fim novo, o resto como estava');
+[$result, $pdo] = $edit(['valid_until' => ''] + $screenEdit);
+assert_same([false, null], [isset($result['erro']), $storedLink($pdo)['valid_until']], 'II3: fim vazio vindo da tela: sem fim (null)');
+[$result, $pdo] = $edit(['valid_until' => '2026-11-02'] + $screenEdit);
+assert_same([false, '2026-11-02'], [isset($result['erro']), $storedLink($pdo)['valid_until']], 'II3: fim igual ao inicio vale (vinculo de um dia), como na tela');
+[$result, $pdo] = $edit(['valid_until' => '2026-11-01'] + $screenEdit);
+assert_same([[InvalidArgumentException::class . ': Fim da validade não pode ser anterior ao início.'], $keptLink, ['begin', 'rollback'], []], [$summary($result), $storedLink($pdo), $pdo->transactions, $pdo->written], 'II3: fim antes do inicio no corpo da edicao: 400 com a mensagem da tela, nada gravado');
+[$result, $pdo] = $save(['pa_number' => '1721', 'employee_id' => 24, 'valid_from' => '2026-11-20', 'valid_until' => '2026-11-20']);
+assert_same([false, '2026-11-20', '2026-11-20'], [isset($result['erro']), end($pdo->written)[':valid_from'] ?? null, end($pdo->written)[':valid_until'] ?? null], 'II3: criacao com fim igual ao inicio vale');
 // Vinculo inexistente ou ja desocupado: a recusa da gravacao, agora antes de calcular o conflito.
 foreach (['inexistente' => 999, 'desocupado' => 40] as $label => $linkId) {
     $pdo = $editDb();
@@ -710,10 +727,26 @@ $lockStored = array_search($storedSql, $pdo->log, true);
 assert_same(true, $lockEmployee !== false && $lockStored !== false && $lockEmployee < $lockStored, 'edicao: le o gravado com FOR UPDATE, depois de travar o colaborador');
 [$result, $pdo] = $edit(['pa_number' => '1721', 'employee_id' => 24]);
 assert_same([false, '2026-11-18', null, null, false], [isset($result['erro']), end($pdo->written)[':valid_from'], end($pdo->written)[':valid_until'], end($pdo->written)[':notes'], in_array($storedSql, $pdo->log, true)], 'criacao sem inicio, fim e observacao: hoje, sem fim e sem observacao, como antes, sem ler gravado');
-// A tela nao manda o fim da validade: por isso o ausente tem de manter o gravado.
+// [II3] O formulario carrega o fim gravado e manda valid_until sempre; a
+// mensagem do fim antes do inicio e uma so (servidor, tela, servidor simulado
+// e roteiro de navegador), e a tela a pega da lib, sem copia no JSX.
 $paPage = (string)file_get_contents($root . '/frontend/src/pages/PaMapPage.jsx');
 $formBuilder = preg_match('/function formFromAssignment\(assignment, date\) \{\n(.*?)\n\}/s', $paPage, $formMatch) === 1 ? $formMatch[1] : '';
-assert_same([true, false], [strpos($formBuilder, 'valid_from: assignment.valid_from') !== false && strpos($formBuilder, "notes: assignment.notes || ''") !== false, strpos($formBuilder, 'valid_until') !== false], 'formulario do Mapa PA: manda inicio e observacao, sem o fim da validade');
+$emptyBuilder = preg_match('/function emptyForm\(paNumber, date\) \{\n(.*?)\n\}/s', $paPage, $emptyMatch) === 1 ? $emptyMatch[1] : '';
+assert_same([true, true, true], [
+    strpos($formBuilder, 'valid_from: assignment.valid_from') !== false && strpos($formBuilder, "notes: assignment.notes || ''") !== false,
+    strpos($formBuilder, "valid_until: assignment.valid_until || ''") !== false,
+    strpos($emptyBuilder, "valid_until: ''") !== false,
+], 'II3: formulario do Mapa PA carrega inicio, fim e observacao do vinculo; adicionar abre com o fim vazio');
+$endMessage = 'Fim da validade não pode ser anterior ao início.';
+assert_same([true, true, true, true, true, false], [
+    strpos((string)file_get_contents($root . '/services/PaMapService.php'), "throw new InvalidArgumentException('{$endMessage}');") !== false,
+    strpos((string)file_get_contents($root . '/frontend/src/lib/paMap.ts'), "export const VALIDITY_END_BEFORE_START = '{$endMessage}'") !== false,
+    strpos((string)file_get_contents($root . '/frontend/scripts/browser/lib/mock-server.mjs'), "export const PA_END_BEFORE_START = '{$endMessage}'") !== false,
+    strpos((string)file_get_contents($root . '/frontend/scripts/browser/qa-unsaved-changes-browser.mjs'), 'refused.mensagem.includes(PA_END_BEFORE_START)') !== false,
+    strpos($paPage, 'const error = validityEndError(form.valid_from, form.valid_until)') !== false,
+    strpos($paPage, $endMessage) !== false,
+], 'II3: a mensagem do fim antes do inicio e a do servidor na tela (pela lib), no servidor simulado e no roteiro');
 // Tabela antiga no conflito do save; os IDs da auditoria juntam todos os dias.
 [$result] = $save(['pa_number' => '1725', 'employee_id' => 24]);
 assert_same(['11-19 16+17+24', '11-24 17+24', '11-26 17+24'], array_slice($summary($result)[1], 0, 3), 'save: vinculo da tabela antiga (P em 19/11) entra no conflito do dia');

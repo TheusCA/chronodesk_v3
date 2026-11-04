@@ -80,6 +80,18 @@ assert.deepEqual(paMap.saveFeedback(conflictResult, '5', new Map([['5', 'Técnic
 }, 'save com conflito: dias, quantos a mais e os outros técnicos pelo nome que a tela já tem')
 assert.deepEqual(paMap.saveFeedback({ conflicts: [{ pa_number: '1730', date: '2026-10-19', employee_ids: [5, 7] }] }, 5).lines, ['Conflito no PA 1730 em 1 dia: 19/10.'], 'conflito de um dia, sem nome desconhecido')
 
+// [II3] Fim da validade: a regra e a mensagem do servidor (PaMapService::save).
+assert.equal(paMap.VALIDITY_END_BEFORE_START, 'Fim da validade não pode ser anterior ao início.', 'mensagem do servidor, com acento')
+assert.deepEqual([
+  paMap.validityEndError('2026-10-01', ''),
+  paMap.validityEndError('2026-10-01', null),
+  paMap.validityEndError('2026-10-01', '2026-10-01'),
+  paMap.validityEndError('2026-10-01', '2026-12-31'),
+  paMap.validityEndError('2026-10-01', '2026-09-30'),
+  paMap.validityEndError('2026-10-01', '2025-12-31'),
+  paMap.validityEndError('', '2026-09-30'),
+], [null, null, null, null, paMap.VALIDITY_END_BEFORE_START, paMap.VALIDITY_END_BEFORE_START, null], 'fim vazio vale (sem fim); igual ao início vale (um dia); antes do início, a mensagem do servidor; sem início, fica para o campo obrigatório')
+
 // L-03: data local, não UTC (21:00 em São Paulo ainda é o mesmo dia).
 {
   const late = new Date(2026, 9, 15, 23, 30)
@@ -147,6 +159,18 @@ assert.match(managerModal, /Técnico C - N2 \(Dias pares\)/)
 assert.match(managerModal, /nota do vínculo/, 'quem edita vê a observação')
 assert.doesNotMatch(managerModal, /qa\.login/, 'login do vínculo não aparece nem para quem edita')
 assert.match(managerModal, /não impedem o vínculo/, 'formulário explica que nada bloqueia (P13)')
+// [II3] Campo "Fim da validade": data opcional, vazio ao adicionar, com a ajuda
+// fora do label (ligada por aria-describedby) e sem aviso antes de salvar.
+{
+  const endField = managerModal.match(/<label class="label">Fim da validade<input ([^>]*)\/><\/label><p class="mt-1 text-xs text-slate-500" id="([^"]+)">Opcional: vazio, o vínculo fica sem fim\.<\/p>/)
+  assert.ok(endField, 'campo do fim com a ajuda logo abaixo, fora do label')
+  assert.match(endField[1], /type="date"/, 'fim: campo de data')
+  assert.match(endField[1], /value=""/, 'fim: vazio ao adicionar (sem fim)')
+  assert.match(endField[1], new RegExp(`aria-describedby="${endField[2]}"`), 'fim: a ajuda ligada por aria-describedby')
+  assert.match(endField[1], /aria-invalid="false"/, 'fim: sem aviso antes de salvar')
+  assert.doesNotMatch(endField[1], /required|min=/, 'fim: opcional e sem min (o navegador recusaria com a mensagem dele, não a do servidor)')
+  assert.doesNotMatch(managerModal, /anterior ao início/, 'sem o aviso do fim antes de salvar')
+}
 const feedbackModal = render(page.PaModal, { ...modalProps, canManage: true, feedback: paMap.saveFeedback(conflictResult, 5, new Map([['7', 'Técnico B']])) })
 assert.match(feedbackModal, /Vínculo salvo com conflito/, 'aviso do save no modal')
 assert.match(feedbackModal, /Conflito no PA 1730 em 14 dias: 19\/10, 21\/10 e mais 12\./, 'aviso com os dias e quantos a mais')
@@ -201,6 +225,18 @@ assert.match(source, /<MapTabs absences=\{absences\.length\} onSelect=\{setTab\}
 assert.match(source, /Ausências da semana/)
 assert.match(source, /saveFeedback\(result, form\.employee_id, names\)/, 'aviso do save pelo conflicts e pelos warnings do servidor')
 assert.match(source, /pas\.find\(\(pa\) => pa\.pa_number === selectedPa\)/, 'modal lê o PA da última resposta (lista e conflito atualizados na recarga)')
+// [II3] O fim no formulário: carregado do vínculo, mandado sempre (o corpo é o
+// formulário), conferido com a regra da lib antes de mandar; mudar uma das
+// datas tira o aviso, e abrir outro formulário também.
+assert.match(source, /function emptyForm\(paNumber, date\) \{[^}]*valid_from: date,\s*valid_until: '',/, 'adicionar abre com o fim vazio')
+assert.match(source, /function formFromAssignment\(assignment, date\) \{[^}]*valid_until: assignment\.valid_until \|\| '',/, 'editar carrega o fim gravado')
+assert.match(source, /function submit\(event\) \{\s*event\.preventDefault\(\)\s*const error = validityEndError\(form\.valid_from, form\.valid_until\)\s*if \(error !== null\) \{\s*setEndError\(error\)\s*endRef\.current\?\.focus\(\)\s*return\s*\}\s*onSave\(form, startNew\)\s*\}/, 'salvar confere o fim antes de mandar; recusado, o foco vai ao campo e nada é mandado')
+assert.match(source, /<form [^>]*onSubmit=\{submit\}>/, 'o formulário salva pelo submit que confere o fim')
+assert.match(source, /onChange=\{\(event\) => updateDate\('valid_from', event\.target\.value\)\}/, 'mudar o início tira o aviso')
+assert.match(source, /onChange=\{\(event\) => updateDate\('valid_until', event\.target\.value\)\}/, 'mudar o fim tira o aviso')
+assert.match(source, /function load\(next\) \{\s*setOpenedWith\(next\)\s*setForm\(next\)\s*setEndError\(null\)\s*\}/, 'abrir outro formulário (editar, limpar, salvar) tira o aviso')
+assert.match(source, /aria-describedby=\{endError \? `\$\{endHintId\} \$\{endErrorId\}` : endHintId\}/, 'o aviso entra na descrição do campo')
+assert.doesNotMatch(source, /anterior ao início/, 'a mensagem vem da lib (uma só, a do servidor), sem cópia no JSX')
 
 // ---------------------------------------------------------------------------
 // 4. CSS gerado: as classes da tela existem (Tailwind descarta o que não vê).
