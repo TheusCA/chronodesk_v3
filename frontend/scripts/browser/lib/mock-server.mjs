@@ -18,6 +18,8 @@ export const FAILING_INCIDENT = 'FALHA-QA'
 export const FAILING_EMPLOYEE = 'FALHA-QA'
 // Observacao de ausencia que faz o salvar falhar (erro do servidor simulado).
 export const FAILING_ABSENCE_NOTE = 'FALHA-QA'
+// Observacao de vinculo de PA que faz o salvar falhar (erro do servidor simulado).
+export const FAILING_PA_NOTE = 'FALHA-QA'
 // Colaborador cuja regra de escala falha ao salvar e ao remover (erro do servidor simulado).
 export const FAILING_RULE_EMPLOYEE = 4
 // Mensagem real do servidor para decidir o que nao esta mais pendente (OperationalService).
@@ -76,6 +78,8 @@ let documentRefusal = null
 const pausedStatus = () => ({ ...GET['status.php'], n1: pausedEmployee ? [{ id: 1, nome: NAMES[0], equipe: 'n1', ativo: true, em_pausa: true, motivo_pausa: 'Café', inicio_pausa: `${DAY}T09:55:00-03:00`, elapsed_seconds: 300, jornada_entrada: '08:00', jornada_saida: '17:00' }] : [] })
 // [9.12.1] Um vinculo de PA com fim da validade: o formulario de edicao nao tem esse campo.
 export const PA_ASSIGNMENT = { id: 7, pa_number: '1726', employee_id: 1, employee_name: NAMES[0], team: TEAMS[0], schedule_rule_label: 'Sempre presencial', source: 'assignment', valid_from: '2026-10-01', valid_until: '2026-12-31', notes: 'Observacao do vinculo', presence: { status: 'onsite', situacao: 'presencial', categoria: null, detalhe: null, parcial: null } }
+// [17f] Outro vinculo no mesmo PA (remoto no dia, sem fim e sem observacao): "Editar outro vinculo" com o formulario sujo.
+export const PA_OTHER_ASSIGNMENT = { id: 8, pa_number: '1726', employee_id: 3, employee_name: NAMES[2], team: TEAMS[2], schedule_rule_label: 'Ciclo 2 e 1', source: 'assignment', valid_from: '2026-09-01', valid_until: null, notes: null, presence: { status: 'remote', situacao: 'remoto', categoria: null, detalhe: null, parcial: null } }
 const summaryValue = { overtime_approved_minutes: 120, overtime_pending_minutes: 60, adjustments: 2, oncall: 1, onsite_days: 10, remote_days: 8 }
 
 const GET = {
@@ -88,7 +92,7 @@ const GET = {
   'portal/critical_incidents.php': { sucesso: true, limit: 200, truncated: false, summary: {}, items: incidents },
   'portal/sdk_responsibles.php': { sucesso: true, items: [] },
   'portal/technicians.php': { sucesso: true, server_now: `${DAY}T10:00:00-03:00`, presence_meta: { disponivel: true, pausas_disponiveis: true }, items: [] },
-  'portal/pa_map.php': { sucesso: true, server_now: `${DAY}T10:00:00-03:00`, week: { from: '2026-10-26', to: '2026-10-30' }, can_manage: true, employees: [{ id: 1, name: NAMES[0], team: TEAMS[0], schedule_rule_label: 'Sempre presencial' }], pas: [{ pa_number: PA_ASSIGNMENT.pa_number, display_order: 1, row_number: 1, column_number: 1, has_conflict: false, conflict_days: [], assignments: [PA_ASSIGNMENT] }], absences_week: [] },
+  'portal/pa_map.php': { sucesso: true, server_now: `${DAY}T10:00:00-03:00`, week: { from: '2026-10-26', to: '2026-10-30' }, can_manage: true, employees: [{ id: 1, name: NAMES[0], team: TEAMS[0], schedule_rule_label: 'Sempre presencial' }, { id: 3, name: NAMES[2], team: TEAMS[2], schedule_rule_label: 'Ciclo 2 e 1' }], pas: [{ pa_number: PA_ASSIGNMENT.pa_number, display_order: 1, row_number: 1, column_number: 1, has_conflict: false, conflict_days: [], assignments: [PA_ASSIGNMENT, PA_OTHER_ASSIGNMENT] }], absences_week: [] },
   'status.php': { n1: [], n2: [], server_now: `${DAY}T10:00:00-03:00`, presenca_disponivel: true },
   'portal/notifications.php': { sucesso: true, items: [], unread: 0 },
   // Os campos do api/configuracoes.php real: a tela de Configuracoes manda o objeto carregado.
@@ -152,7 +156,10 @@ function apiResponse(method, key, search, body) {
     if (['rule', 'remove_rule'].includes(body?.action) && body?.employee_id === FAILING_RULE_EMPLOYEE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
     if (body?.action === 'remove_rule') removedRules.add(body.employee_id)
   }
-  if (key === 'portal/pa_map.php' && method === 'POST' && body?.action === 'save') return [200, { sucesso: true, id: body.id || 99, warnings: [], conflicts: [], conflicts_more: 0 }]
+  if (key === 'portal/pa_map.php' && method === 'POST' && body?.action === 'save') {
+    if (body.notes === FAILING_PA_NOTE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
+    return [200, { sucesso: true, id: body.id || 99, warnings: [], conflicts: [], conflicts_more: 0 }]
+  }
   if (key === 'logout.php') return [200, { sucesso: true, csrf_token: 'teste' }]
   if (method === 'POST') return [200, { sucesso: true, mensagem: 'ok' }]
   return [200, GET[key] ?? { sucesso: true, items: [] }]

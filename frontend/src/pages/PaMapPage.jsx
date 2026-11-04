@@ -1,10 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
+import { Dialog } from '../components/ui/Dialog'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { PartialMarker, PresenceLegend } from '../components/ui/Presence'
 import { useResource } from '../hooks/useResource'
+import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { post } from '../lib/api'
 import { ACTION_FEEDBACK } from '../lib/actionFeedback'
+import { formValuesChanged } from '../lib/formDirty'
 import { localDate, queryString } from '../lib/operational'
 import {
   absenceOriginLabel,
@@ -116,7 +120,7 @@ export function PaCard({ pa, canManage, onOpen }) {
       aria-label={`PA ${pa.pa_number}${pa.has_conflict ? `, conflito: ${conflictDays}` : ''}`}
       className={`pa-cell ${outline}`}
       data-conflict={pa.has_conflict ? 'true' : 'false'}
-      onClick={() => onOpen(pa)}
+      onClick={(event) => onOpen(pa, event.currentTarget)}
       type="button"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -191,35 +195,54 @@ export function SaveFeedbackAlert({ feedback }) {
   )
 }
 
-export function PaModal({ pa, date, employees, canManage, feedback, onClose, onSave, onRemove, saving }) {
-  const [form, setForm] = useState(emptyForm(pa.pa_number, date))
-  const [editing, setEditing] = useState(false)
+export function PaModal({ pa, date, employees, canManage, feedback, onClose, onSave, onRemove, saving, returnFocusRef = null }) {
+  // [17f] No Dialog (role="dialog", Esc, foco preso, foco de volta ao PA que
+  // abriu, fundo no body cobrindo a janela inteira). Sujo = algum campo
+  // diferente do valor com que o formulário abriu (adicionar ou o vínculo em
+  // edição). Fechar, Esc, clique fora, Limpar, Novo vínculo e Editar outro
+  // vínculo perguntam antes de descartar; trocar de tela, "Sair" e
+  // recarregar, pela peça do 17f.
+  const [openedWith, setOpenedWith] = useState(() => emptyForm(pa.pa_number, date))
+  const [form, setForm] = useState(openedWith)
+  const guard = useUnsavedChangesGuard(formValuesChanged(openedWith, form))
+  const editing = openedWith.id !== null
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }))
   const assignments = pa.assignments || []
+  const employeeRef = useRef(null)
 
-  function edit(item) {
-    setForm(formFromAssignment(item, date))
-    setEditing(true)
+  function load(next) {
+    setOpenedWith(next)
+    setForm(next)
   }
 
-  function reset() {
-    setForm(emptyForm(pa.pa_number, date))
-    setEditing(false)
+  // Volta a "Adicionar" sem perguntar (quem chega aqui já passou pela proteção).
+  // Depois de salvar com sucesso e no "Novo vínculo", o botão que pediu fica
+  // desabilitado ou some: o foco vai ao Colaborador, e não ao body.
+  function reset(focusEmployee = false) {
+    load(emptyForm(pa.pa_number, date))
+    if (focusEmployee) employeeRef.current?.focus()
   }
+
+  const startNew = () => reset(true)
+  const edit = (item) => guard.requestLeave(() => load(formFromAssignment(item, date)))
+  const requestReset = () => guard.requestLeave(() => reset())
+  const requestNew = () => guard.requestLeave(startNew)
+  const close = () => guard.requestLeave(onClose)
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
-      <button aria-label="Fechar mapa" className="fixed inset-0" onClick={onClose} type="button" />
-      <form className="card relative mx-auto my-6 max-w-3xl border-blue-500/20" onSubmit={(event) => { event.preventDefault(); onSave(form, reset) }}>
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="section-eyebrow">Mapa de PA</p>
-            <h2 className="mt-2 text-xl font-bold text-white">PA {pa.pa_number}</h2>
-            <p className="mt-1 text-sm text-slate-500">Situação de cada técnico em {brDate(date)}, pela escala e pelas ausências.</p>
-          </div>
-          <button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>
-        </div>
-
+    <>
+    <Dialog
+      description={`Situação de cada técnico em ${brDate(date)}, pela escala e pelas ausências.`}
+      eyebrow="Mapa de PA"
+      headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={close} type="button">Fechar</button>}
+      onClose={close}
+      panelClassName="border-blue-500/20"
+      returnFocusRef={returnFocusRef}
+      size="max-w-3xl"
+      title={`PA ${pa.pa_number}`}
+      titleClassName="text-xl"
+    >
+      <form onSubmit={(event) => { event.preventDefault(); onSave(form, startNew) }}>
         {pa.has_conflict && (
           <InlineAlert className="mt-4" title="Conflito na semana" tone="danger">
             Dois ou mais técnicos presenciais neste PA em: {conflictDaysLabel(pa.conflict_days)}.
@@ -236,16 +259,16 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
           <div className="mt-6 rounded-card border border-white/5 bg-slate-950/25 p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">{editing ? 'Editar vínculo' : 'Adicionar colaborador'}</h3>
-              {editing && <button className="table-action" onClick={reset} type="button">Novo vínculo</button>}
+              {editing && <button className="table-action" onClick={requestNew} type="button">Novo vínculo</button>}
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="label sm:col-span-2">Colaborador<select className="field mt-2" required value={form.employee_id} onChange={(event) => update('employee_id', event.target.value)}><option value="">Selecione</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} - {teamLabel(employee.team)} ({employee.schedule_rule_label})</option>)}</select></label>
+              <label className="label sm:col-span-2">Colaborador<select className="field mt-2" ref={employeeRef} required value={form.employee_id} onChange={(event) => update('employee_id', event.target.value)}><option value="">Selecione</option>{employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name} - {teamLabel(employee.team)} ({employee.schedule_rule_label})</option>)}</select></label>
               <label className="label">Início da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => update('valid_from', event.target.value)} /></label>
               <label className="label sm:col-span-2">Observação<textarea className="field mt-2 min-h-24" maxLength="1000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             </div>
             <p className="mt-3 text-xs text-slate-500">Conflito, remoto, ausência e falta de escala não impedem o vínculo: o mapa salva e mostra o aviso.</p>
             <div className="mt-5 flex justify-end gap-3">
-              <button className="btn-secondary" disabled={saving} onClick={reset} type="button">Limpar</button>
+              <button className="btn-secondary" disabled={saving} onClick={requestReset} type="button">Limpar</button>
               <button className="btn-primary" disabled={saving || !form.employee_id} type="submit">{saving ? 'Salvando...' : 'Salvar vínculo'}</button>
             </div>
           </div>
@@ -253,7 +276,9 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
           <p className="mt-6 rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-400">Seu perfil permite apenas visualizar o mapa.</p>
         )}
       </form>
-    </div>
+    </Dialog>
+    <ConfirmDiscardDialog {...guard.dialogProps} />
+    </>
   )
 }
 
@@ -321,6 +346,8 @@ export function PaMapPage({ notify }) {
   const [filters, setFilters] = useState({ date: localDate(), team: '' })
   const resource = useResource(`portal/pa_map.php${queryString(filters)}`)
   const [selectedPa, setSelectedPa] = useState(null)
+  // [17f] O PA que abriu o diálogo recebe o foco de volta ao fechar.
+  const modalTriggerRef = useRef(null)
   const [tab, setTab] = useState('map')
   const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState(null)
@@ -339,7 +366,8 @@ export function PaMapPage({ notify }) {
     ...assignments.map((item) => [String(item.employee_id), item.employee_name]),
   ]), [employees, assignments])
 
-  function open(pa) {
+  function open(pa, trigger = null) {
+    modalTriggerRef.current = trigger
     setFeedback(null)
     setSelectedPa(pa.pa_number)
   }
@@ -432,6 +460,7 @@ export function PaMapPage({ notify }) {
           onRemove={remove}
           onSave={save}
           pa={selected}
+          returnFocusRef={modalTriggerRef}
           saving={saving}
         />
       )}

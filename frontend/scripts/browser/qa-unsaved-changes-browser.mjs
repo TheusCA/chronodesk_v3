@@ -4,6 +4,7 @@
 // nas TELAS REAIS que usam a peca, com servidor simulado e dados ficticios.
 // [9.12.1] Tambem o corpo que Ausencias, Mapa PA e Configuracoes mandam ao
 // salvar uma edicao (blocos 5, 14 e 15): as chaves que o servidor exige.
+// [17f] Bloco 16: o Mapa PA no Dialog e com a protecao (o fundo, no bloco 7).
 // Fora dos qa:* (precisa de navegador). Saida so com contagens: cada
 // conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram).
 //
@@ -18,7 +19,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChrome, openPage, sleep } from './lib/chrome.mjs'
-import { ALREADY_DECIDED, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, NOT_PAUSED, PA_ASSIGNMENT, startMockServer } from './lib/mock-server.mjs'
+import { ALREADY_DECIDED, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, FAILING_PA_NOTE, NOT_PAUSED, PA_ASSIGNMENT, PA_OTHER_ASSIGNMENT, startMockServer } from './lib/mock-server.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const appArg = process.argv.indexOf('--app')
@@ -72,7 +73,22 @@ const NAV_BUTTON = (label) => `[...document.querySelectorAll('nav[aria-label="M�
 
 async function goto(page, port, path, width = 1366) {
   await page.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width < 500 })
-  await page.send('Page.navigate', { url: `http://127.0.0.1:${port}/app${path}` })
+  // Formulario sujo esquecido por um bloco (so com defeito): o aviso do
+  // navegador seguraria a troca de pagina e o roteiro inteiro. Aceita o
+  // aviso, registra a falha e segue.
+  const seen = page.events.length
+  const navigation = page.send('Page.navigate', { url: `http://127.0.0.1:${port}/app${path}` })
+  for (let waited = 0; waited < 10000; waited += 50) {
+    const fresh = page.events.slice(seen)
+    if (fresh.some((e) => e.method === 'Page.javascriptDialogOpening')) {
+      report(`abrir ${path}: a tela anterior nao deixou formulario sujo (sem aviso do navegador)`, false)
+      await page.send('Page.handleJavaScriptDialog', { accept: true })
+      break
+    }
+    if (fresh.some((e) => e.method === 'Page.frameNavigated')) break
+    await sleep(50)
+  }
+  await navigation
   await page.waitFor(`!!document.querySelector('main') && !document.querySelector('.skeleton')`)
   await sleep(500)
 }
@@ -1119,6 +1135,23 @@ async function dialogCoverage(page, port) {
     await discard()
   }
 
+  // [17f] Mapa PA no Dialog: o fundo e o aviso de descarte por cima.
+  const paCard = `[...document.querySelectorAll('main button')].find((b) => b.textContent.includes(${JSON.stringify(PA_ASSIGNMENT.pa_number)}))`
+  for (const width of [390, 1366]) {
+    await goto(page, port, '/mapa-pa', width)
+    await page.waitFor(`!!${paCard}`)
+    await page.click(paCard)
+    await page.waitFor(anyDialog)
+    await sleep(150)
+    await expectCoverage(page, `${width} px, Mapa PA`)
+    await page.evaluate(`document.querySelector('[role="dialog"] textarea').focus()`)
+    await page.typeText('x')
+    await page.press('Escape')
+    await page.waitFor(`!!${ALERT}`)
+    await expectCoverage(page, `${width} px, Mapa PA, descarte`)
+    await discard()
+  }
+
   // Clique de verdade na faixa do topo: fecha, em vez de alcancar a pagina.
   await goto(page, port, '/chamados-criticos')
   await page.click(button('Visualizar'))
@@ -1832,7 +1865,8 @@ async function waitForRequest(mock, predicate, before, timeoutMs = 8000) {
 // 14. [9.12.1] Mapa PA: editar um vinculo manda o corpo que o servidor espera.
 // O formulario nao tem o fim da validade: o corpo vai sem valid_until e o
 // servidor mantem o gravado (PaMapService::save, chave ausente na edicao).
-const PA_MODAL = `[...document.querySelectorAll('form')].find((form) => /^PA /.test(form.querySelector('h2')?.textContent || ''))`
+// [17f] O modal do Mapa PA e um Dialog: o titulo fica no cabecalho do painel.
+const PA_MODAL = `[...document.querySelectorAll('[role="dialog"]')].find((el) => /^PA /.test(el.querySelector('h2')?.textContent || ''))`
 async function paMapEdit(page, port, mock) {
   await goto(page, port, '/mapa-pa')
   const card = `[...document.querySelectorAll('main button')].find((b) => b.textContent.includes(${JSON.stringify(PA_ASSIGNMENT.pa_number)}))`
@@ -1872,6 +1906,182 @@ async function settingsSave(page, port, mock) {
   report('Configuracoes, salvar: o campo alterado e os outros com o valor carregado', body.limite_pausa_por_equipe === 3 && body.duracao_pausa_minutos === 20 && body.alerta_15minutos === true && body.alerta_20minutos === true)
 }
 
+// 16. [17f] Mapa PA no Dialog e com a protecao contra perda de alteracoes.
+// Dialog: role="dialog", Esc, foco preso, foco de volta ao PA que abriu e a
+// janela travada (o fundo e conferido no bloco 7, como no Z2). Sujo =
+// diferente do que o formulario abriu (adicionar ou o vinculo em edicao); so
+// sujo pergunta.
+const PA_FIELD = (label) => `[...${PA_MODAL}.querySelectorAll('label')].find((l) => l.childNodes[0]?.textContent.trim() === ${JSON.stringify(label)})?.querySelector('input, select, textarea')`
+const PA_BUTTON = (text, index = 0) => `[...${PA_MODAL}.querySelectorAll('button')].filter((b) => b.textContent.trim() === ${JSON.stringify(text)})[${index}]`
+const PA_STATE = `(() => {
+  const form = ${PA_MODAL}
+  const field = (label) => form ? [...form.querySelectorAll('label')].find((l) => l.childNodes[0]?.textContent.trim() === label)?.querySelector('input, select, textarea') : null
+  const active = document.activeElement
+  return {
+    rota: location.pathname,
+    modal: !!form,
+    modo: form ? ([...form.querySelectorAll('h3')].map((h) => h.textContent).find((t) => t === 'Editar vínculo' || t === 'Adicionar colaborador') ?? null) : null,
+    colaborador: field('Colaborador')?.value ?? null,
+    inicio: field('Início da validade')?.value ?? null,
+    nota: field('Observação')?.value ?? null,
+    descartar: !!document.querySelector('[role="alertdialog"]'),
+    papel: form?.getAttribute('role') ?? null,
+    aria_modal: form?.getAttribute('aria-modal') ?? null,
+    foco: !active || active === document.body ? 'body'
+      : active.hasAttribute('data-page-title') ? 'titulo'
+      : active.classList.contains('pa-cell') ? 'cartao ' + (active.querySelector('strong')?.textContent ?? '')
+      : ['INPUT', 'SELECT', 'TEXTAREA'].includes(active.tagName) ? 'campo:' + (active.closest('label')?.childNodes[0]?.textContent.trim() || '')
+      : (active.getAttribute('aria-label') || active.textContent || '').trim(),
+    beforeunload: (getEventListeners(window).beforeunload || []).length,
+    keydown: (getEventListeners(document).keydown || []).length,
+    janela: document.body.style.overflow,
+    dialogos: document.querySelectorAll('[data-dialog-backdrop]').length,
+    aviso_erro: [...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada')),
+  }
+})()`
+async function openPaModal(page) {
+  const card = `[...document.querySelectorAll('main button')].find((b) => b.textContent.includes(${JSON.stringify(PA_ASSIGNMENT.pa_number)}))`
+  await page.waitFor(`!!${card}`)
+  await page.evaluate(`${card}.click()`)
+  await page.waitFor(`!!${PA_MODAL}`)
+}
+async function typePaNote(page, text, replace = false) {
+  await page.evaluate(`${PA_FIELD('Observação')}.${replace ? 'select' : 'focus'}()`)
+  await page.typeText(text)
+}
+async function paMapGuard(page, port, mock) {
+  // Entrada pelo menu: o "voltar" fica dentro do app.
+  await goto(page, port, '/dashboard')
+  await page.evaluate(`${NAV_BUTTON('Mapa de PA')}.click()`)
+  await openPaModal(page)
+  const cartao = `cartao ${PA_ASSIGNMENT.pa_number}`
+  await expectState(page, 'Mapa PA, abrir: Dialog (role="dialog", aria-modal), foco no Fechar, um keydown, janela travada, sem beforeunload', { modal: true, papel: 'dialog', aria_modal: 'true', modo: 'Adicionar colaborador', foco: 'Fechar', keydown: 1, janela: 'hidden', beforeunload: 0, descartar: false, dialogos: 1 }, PA_STATE)
+  const exits = [
+    ['Esc', () => page.press('Escape')],
+    ['Fechar', () => page.click(PA_BUTTON('Fechar'))],
+    ['clique fora', () => page.clickAt(5, 450)],
+  ]
+  for (const [how, exit] of exits) {
+    await exit()
+    await expectState(page, `Mapa PA, limpo, ${how}: fecha sem perguntar, foco volta ao PA, sem listener, janela destravada`, { modal: false, descartar: false, foco: cartao, keydown: 0, janela: '', beforeunload: 0, dialogos: 0 }, PA_STATE)
+    await openPaModal(page)
+  }
+  // Foco preso: o primeiro e o Fechar; o ultimo, o Limpar (o salvar fica desabilitado sem colaborador).
+  await page.evaluate(`${PA_BUTTON('Fechar')}.focus()`)
+  await page.press('Tab', true)
+  await expectState(page, 'Mapa PA: Shift+Tab no primeiro (Fechar) vai ao ultimo (Limpar)', { foco: 'Limpar' }, PA_STATE)
+  await page.press('Tab')
+  await expectState(page, 'Mapa PA: Tab no ultimo volta ao primeiro', { foco: 'Fechar' }, PA_STATE)
+  for (const [how, exit] of exits) {
+    await typePaNote(page, 'rascunho')
+    await expectState(page, `Mapa PA, sujo (${how}): beforeunload registrado`, { beforeunload: 1 }, PA_STATE)
+    await exit()
+    await expectState(page, `Mapa PA, sujo, ${how}: pergunta, foco em "Continuar editando"`, { modal: true, descartar: true, foco: 'Continuar editando', dialogos: 2, keydown: 2 }, PA_STATE)
+    await page.press('Escape')
+    await expectState(page, `Mapa PA, sujo, ${how}, Esc no aviso: continua, dados mantidos`, { modal: true, descartar: false, nota: 'rascunho', dialogos: 1 }, PA_STATE)
+    await exit()
+    await page.clickAt(5, 450)
+    await expectState(page, `Mapa PA, sujo, ${how}, clique fora do aviso: continua`, { modal: true, descartar: false, nota: 'rascunho', dialogos: 1 }, PA_STATE)
+    await exit()
+    await page.click(button('Continuar editando', ALERT))
+    await expectState(page, `Mapa PA, sujo, ${how}, "Continuar editando": dados mantidos`, { modal: true, descartar: false, nota: 'rascunho' }, PA_STATE)
+    await exit()
+    await page.click(button('Descartar alterações', ALERT))
+    await expectState(page, `Mapa PA, sujo, ${how}, "Descartar": fecha, foco volta ao PA, sem listener, janela destravada`, { modal: false, descartar: false, foco: cartao, keydown: 0, janela: '', beforeunload: 0, dialogos: 0 }, PA_STATE)
+    await openPaModal(page)
+  }
+
+  // Limpar: so sujo pergunta; Descartar esvazia e o modal continua aberto.
+  await typePaNote(page, 'rascunho')
+  await page.click(PA_BUTTON('Limpar'))
+  await expectState(page, 'Mapa PA, sujo, Limpar: pergunta', { descartar: true }, PA_STATE)
+  await page.click(button('Continuar editando', ALERT))
+  await expectState(page, 'Mapa PA, sujo, Limpar, Continuar: dados mantidos, foco volta ao Limpar', { descartar: false, nota: 'rascunho', foco: 'Limpar' }, PA_STATE)
+  await page.click(PA_BUTTON('Limpar'))
+  await page.click(button('Descartar alterações', ALERT))
+  await expectState(page, 'Mapa PA, sujo, Limpar, Descartar: vazio, modal aberto, limpo, foco volta ao Limpar', { modal: true, descartar: false, modo: 'Adicionar colaborador', nota: '', beforeunload: 0, foco: 'Limpar', dialogos: 1 }, PA_STATE)
+  await page.click(PA_BUTTON('Limpar'))
+  await expectState(page, 'Mapa PA, limpo, Limpar: sem perguntar', { modal: true, descartar: false }, PA_STATE)
+
+  // Editar sem mexer nao e sujo; editado, Novo vinculo pergunta. O "Novo
+  // vinculo" some com a edicao: o foco vai ao Colaborador, e nao ao body.
+  await page.click(PA_BUTTON('Editar'))
+  await expectState(page, 'Mapa PA, Editar: vinculo carregado, sem beforeunload', { modo: 'Editar vínculo', colaborador: String(PA_ASSIGNMENT.employee_id), inicio: PA_ASSIGNMENT.valid_from, nota: PA_ASSIGNMENT.notes, beforeunload: 0 }, PA_STATE)
+  await page.click(PA_BUTTON('Novo vínculo'))
+  await expectState(page, 'Mapa PA, Editar sem mexer, Novo vinculo: sem perguntar, "Adicionar colaborador", foco no Colaborador', { modo: 'Adicionar colaborador', descartar: false, foco: 'campo:Colaborador' }, PA_STATE)
+  await page.click(PA_BUTTON('Editar'))
+  await page.click(PA_BUTTON('Fechar'))
+  await expectState(page, 'Mapa PA, Editar sem mexer, Fechar: fecha sem perguntar, foco volta ao PA', { modal: false, descartar: false, foco: cartao }, PA_STATE)
+  await openPaModal(page)
+  await page.click(PA_BUTTON('Editar'))
+  await typePaNote(page, ' editada')
+  await page.click(PA_BUTTON('Novo vínculo'))
+  await expectState(page, 'Mapa PA, Editar sujo, Novo vinculo: pergunta', { descartar: true }, PA_STATE)
+  await page.click(button('Descartar alterações', ALERT))
+  await expectState(page, 'Mapa PA, Editar sujo, Novo vinculo, Descartar: "Adicionar colaborador", limpo, foco no Colaborador', { modo: 'Adicionar colaborador', nota: '', beforeunload: 0, descartar: false, foco: 'campo:Colaborador', dialogos: 1 }, PA_STATE)
+
+  // Editar outro vinculo com o formulario sujo.
+  await page.click(PA_BUTTON('Editar'))
+  await typePaNote(page, ' editada')
+  await page.click(PA_BUTTON('Editar', 1))
+  await expectState(page, 'Mapa PA, Editar sujo, Editar outro vinculo: pergunta', { descartar: true }, PA_STATE)
+  await page.click(button('Continuar editando', ALERT))
+  await expectState(page, 'Mapa PA, Editar outro, Continuar: o primeiro vinculo, com a edicao', { modo: 'Editar vínculo', colaborador: String(PA_ASSIGNMENT.employee_id), nota: `${PA_ASSIGNMENT.notes} editada`, foco: 'Editar' }, PA_STATE)
+  await page.click(PA_BUTTON('Editar', 1))
+  await page.click(button('Descartar alterações', ALERT))
+  await expectState(page, 'Mapa PA, Editar outro, Descartar: o outro vinculo carregado, limpo', { modo: 'Editar vínculo', colaborador: String(PA_OTHER_ASSIGNMENT.employee_id), inicio: PA_OTHER_ASSIGNMENT.valid_from, nota: '', beforeunload: 0, descartar: false }, PA_STATE)
+
+  // Troca de tela, voltar, "Sair" e recarregar com o formulario sujo.
+  await typePaNote(page, 'rascunho')
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await expectState(page, 'Mapa PA, sujo, menu: pergunta e nao troca de tela', { descartar: true, rota: '/app/mapa-pa' }, PA_STATE)
+  await page.click(button('Continuar editando', ALERT))
+  await expectState(page, 'Mapa PA, sujo, menu, Continuar: fica, dados mantidos', { rota: '/app/mapa-pa', modal: true, nota: 'rascunho' }, PA_STATE)
+  await page.evaluate('history.back()'); await sleep(400)
+  await expectState(page, 'Mapa PA, sujo, voltar: pergunta, endereco devolvido, modal igual', { descartar: true, rota: '/app/mapa-pa', modal: true }, PA_STATE)
+  await page.click(button('Continuar editando', ALERT))
+  const logouts = mock.requests.filter((r) => r.key === 'logout.php').length
+  await page.evaluate(`document.querySelector('[aria-label="Sair"]').click()`); await sleep(300)
+  await expectState(page, 'Mapa PA, sujo, Sair: pergunta', { descartar: true }, PA_STATE)
+  await page.click(button('Continuar editando', ALERT))
+  report('Mapa PA, sujo, Sair, Continuar: nao sai (sem logout)', mock.requests.filter((r) => r.key === 'logout.php').length === logouts)
+  page.events.length = 0
+  await page.send('Page.reload').catch(() => {})
+  await sleep(800)
+  const prompt = page.events.find((e) => e.method === 'Page.javascriptDialogOpening')
+  report('Mapa PA, sujo, recarregar: aviso do navegador (beforeunload)', prompt?.params.type === 'beforeunload')
+  if (prompt) { await page.send('Page.handleJavaScriptDialog', { accept: false }); await sleep(300) }
+  await expectState(page, 'Mapa PA, sujo, recarregar, ficar: dados mantidos', { modal: true, nota: 'rascunho' }, PA_STATE)
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await page.click(button('Descartar alterações', ALERT))
+  await expectState(page, 'Mapa PA, sujo, menu, Descartar: troca de tela, sem listener, janela destravada', { rota: '/app/calendario', modal: false, beforeunload: 0, keydown: 0, janela: '', dialogos: 0 }, PA_STATE)
+
+  // Erro do servidor mantem a edicao; salvar com sucesso volta a "Adicionar" sem perguntar.
+  await page.evaluate(`${NAV_BUTTON('Mapa de PA')}.click()`)
+  await openPaModal(page)
+  await page.click(PA_BUTTON('Editar'))
+  await typePaNote(page, FAILING_PA_NOTE, true)
+  await page.click(`${PA_MODAL}.querySelector('button[type="submit"]')`)
+  await page.waitFor(`[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada'))`)
+  await expectState(page, 'Mapa PA, erro do servidor: aviso de erro, edicao aberta, dados mantidos, ainda sujo', { aviso_erro: true, modal: true, modo: 'Editar vínculo', nota: FAILING_PA_NOTE, beforeunload: 1, dialogos: 1 }, PA_STATE)
+  await typePaNote(page, 'Observacao corrigida', true)
+  const before = mock.requests.length
+  await page.click(`${PA_MODAL}.querySelector('button[type="submit"]')`)
+  const saved = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'portal/pa_map.php', before)
+  await page.waitFor(`[...(${PA_MODAL}?.querySelectorAll('h3') || [])].some((h) => h.textContent === 'Adicionar colaborador')`)
+  await expectState(page, 'Mapa PA, salvar com sucesso: volta a "Adicionar" sem perguntar, o modal continua aberto, foco no Colaborador, sem listener', { modal: true, modo: 'Adicionar colaborador', descartar: false, beforeunload: 0, foco: 'campo:Colaborador', dialogos: 1 }, PA_STATE)
+  report('Mapa PA, salvar com sucesso: um POST com a observacao corrigida', saved?.body?.notes === 'Observacao corrigida')
+  await page.click(PA_BUTTON('Fechar'))
+  await expectState(page, 'Mapa PA, depois de salvar, Fechar: fecha sem perguntar, foco volta ao PA', { modal: false, descartar: false, foco: cartao }, PA_STATE)
+
+  // Celular (390 px): o modal cabe sem rolagem horizontal da pagina; Esc fecha e devolve o foco.
+  await goto(page, port, '/mapa-pa', 390)
+  await openPaModal(page)
+  report('390 px, Mapa PA: sem rolagem horizontal da pagina', await page.evaluate(`document.documentElement.scrollWidth <= innerWidth`))
+  await page.press('Escape')
+  await expectState(page, '390 px, Mapa PA, Esc: fecha, foco volta ao PA', { modal: false, foco: cartao, dialogos: 0 }, PA_STATE)
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -1901,6 +2111,7 @@ try {
     [13, 'Derrubar pausa e remover documento (DD3)', () => confirmActionScreens(page, mock.port, mock)],
     [14, 'Mapa PA: corpo da edicao (9.12.1)', () => paMapEdit(page, mock.port, mock)],
     [15, 'Configuracoes: corpo do salvar (9.12.1)', () => settingsSave(page, mock.port, mock)],
+    [16, 'Mapa PA no Dialog e com a protecao (17f)', () => paMapGuard(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

@@ -706,4 +706,49 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   }
 }
 
+// ---------------------------------------------------------------------------
+// 14. [17f] Mapa PA: o modal no Dialog (role="dialog", Esc, foco preso, foco de
+// volta ao PA que abriu, fundo no body) e o formulario do vinculo com a
+// protecao. Sujo = diferente do que abriu; as saidas locais pela protecao.
+// ---------------------------------------------------------------------------
+{
+  const paSource = read('src/pages/PaMapPage.jsx')
+  const modalSource = paSource.slice(paSource.indexOf('export function PaModal('), paSource.indexOf('// Aba "Ausências da semana"'))
+  assert.match(modalSource, /const \[openedWith, setOpenedWith\] = useState\(\(\) => emptyForm\(pa\.pa_number, date\)\)\s*const \[form, setForm\] = useState\(openedWith\)\s*const guard = useUnsavedChangesGuard\(formValuesChanged\(openedWith, form\)\)/, 'Mapa PA: sujo = diferente do que o formulario abriu')
+  assert.match(modalSource, /const editing = openedWith\.id !== null/, 'Mapa PA: editar ou adicionar pelo que abriu')
+  assert.match(modalSource, /function load\(next\) \{\s*setOpenedWith\(next\)\s*setForm\(next\)\s*\}/, 'Mapa PA: abrir o formulario troca o valor de abertura junto (abrir sem mexer nao e sujo)')
+  assert.match(modalSource, /function reset\(focusEmployee = false\) \{\s*load\(emptyForm\(pa\.pa_number, date\)\)\s*if \(focusEmployee\) employeeRef\.current\?\.focus\(\)\s*\}/, 'Mapa PA: reset volta a "Adicionar" limpo; com o pedido, o foco vai ao Colaborador')
+  assert.match(modalSource, /const startNew = \(\) => reset\(true\)/, 'Mapa PA: Novo vinculo e salvar com sucesso levam o foco ao Colaborador')
+  assert.match(modalSource, /const edit = \(item\) => guard\.requestLeave\(\(\) => load\(formFromAssignment\(item, date\)\)\)/, 'Mapa PA: "Editar outro vinculo" pela protecao')
+  assert.match(modalSource, /const requestReset = \(\) => guard\.requestLeave\(\(\) => reset\(\)\)/, 'Mapa PA: Limpar pela protecao')
+  assert.match(modalSource, /const requestNew = \(\) => guard\.requestLeave\(startNew\)/, 'Mapa PA: Novo vinculo pela protecao')
+  assert.match(modalSource, /const close = \(\) => guard\.requestLeave\(onClose\)/, 'Mapa PA: fechar pela protecao')
+  assert.match(modalSource, /headerAction=\{<button className="text-sm text-slate-400 hover:text-white" onClick=\{close\} type="button">Fechar<\/button>\}\s*onClose=\{close\}/, 'Mapa PA: Fechar, Esc e clique fora pelo close (pergunta)')
+  assert.match(modalSource, /returnFocusRef=\{returnFocusRef\}/, 'Mapa PA: foco de volta a quem abriu')
+  assert.match(modalSource, /onClick=\{requestNew\} type="button">Novo vínculo<\/button>/, 'Mapa PA: Novo vinculo pela protecao')
+  assert.match(modalSource, /onClick=\{requestReset\} type="button">Limpar<\/button>/, 'Mapa PA: Limpar pela protecao')
+  assert.match(modalSource, /<select className="field mt-2" ref=\{employeeRef\} required/, 'Mapa PA: o Colaborador recebe o ref do foco')
+  assert.doesNotMatch(modalSource, /onClick=\{(onClose|reset|startNew)\}|onClose=\{onClose\}/, 'Mapa PA: nenhum botao fecha ou limpa direto, sem perguntar')
+  assert.doesNotMatch(modalSource, /aria-label="Fechar mapa"|fixed inset-0 z-50/, 'Mapa PA: sem o fundo antigo (botao que fechava no clique, sem Esc nem foco preso)')
+  assert.match(modalSource, /onSave\(form, startNew\)/, 'Mapa PA: salvar com sucesso volta a "Adicionar" direto, sem perguntar; erro mantem o formulario')
+  assert.match(paSource, /resetForm\?\.\(\)\n\s*await resource\.refresh\(\)\n\s*\} catch \(error\) \{\n\s*notify\(error\.message, 'error'\)/, 'Mapa PA: o reset so depois do POST com sucesso')
+  assert.match(modalSource, /<\/form>\n\s*<\/Dialog>\n\s*<ConfirmDiscardDialog \{\.\.\.guard\.dialogProps\} \/>/, 'Mapa PA: aviso de descarte ligado, fora do formulario e do Dialog')
+  assert.match(paSource, /onClick=\{\(event\) => onOpen\(pa, event\.currentTarget\)\}/, 'Mapa PA: o cartao do PA passa quem abriu')
+  assert.match(paSource, /function open\(pa, trigger = null\) \{\s*modalTriggerRef\.current = trigger/, 'Mapa PA: guarda quem abriu')
+  assert.match(paSource, /<PaModal\n(?:\s+[a-zA-Z]+=\{[^\n]*\}\n)*\s+returnFocusRef=\{modalTriggerRef\}\n/, 'Mapa PA: o modal recebe quem abriu')
+  const { PaModal } = await importSrc('pages/PaMapPage.jsx')
+  const modalProps = { pa: { pa_number: '1726', assignments: [] }, date: '2026-10-28', employees: [], feedback: null, onClose: () => {}, onSave: () => {}, onRemove: () => {}, saving: false }
+  for (const [label, canManage] of [['quem edita', true], ['quem le', false]]) {
+    const modal = renderToStaticMarkup(h(PaModal, { ...modalProps, canManage }))
+    const panel = modal.slice(modal.indexOf('data-dialog-backdrop'))
+    assert.match(modal, /^<div class="fixed inset-0 z-\[60\][^"]*" data-dialog-backdrop="">/, `Mapa PA (${label}): modal no Dialog, acima dos modais`)
+    assert.match(panel, /aria-modal="true" class="card relative my-auto w-full max-w-3xl border-blue-500\/20" role="dialog" tabindex="-1">/, `Mapa PA (${label}): role="dialog", aria-modal, largura e borda de antes`)
+    assert.ok(panel.includes('<p class="section-eyebrow">Mapa de PA</p>') && panel.includes('>PA 1726</h2>'), `Mapa PA (${label}): eyebrow e titulo`)
+    assert.match(panel, /Situação de cada técnico em 28\/10\/2026, pela escala e pelas ausências\./u, `Mapa PA (${label}): descricao`)
+    assert.match(panel, />Fechar<\/button>/, `Mapa PA (${label}): Fechar no cabecalho`)
+    assert.doesNotMatch(modal, /role="alertdialog"/, `Mapa PA (${label}): o aviso de descarte so abre ao sair com o formulario sujo`)
+    assert.ok(canManage ? panel.includes('Adicionar colaborador') : panel.includes('Seu perfil permite apenas visualizar o mapa.'), `Mapa PA (${label}): formulario so para quem edita`)
+  }
+}
+
 console.log('Unsaved changes QA OK')
