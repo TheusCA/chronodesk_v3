@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { launchChrome, openPage, sleep } from './lib/chrome.mjs'
-import { ALREADY_DECIDED, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, FAILING_PA_NOTE, NOT_PAUSED, PA_ASSIGNMENT, PA_END_BEFORE_START, PA_OTHER_ASSIGNMENT, startMockServer } from './lib/mock-server.mjs'
+import { ALREADY_DECIDED, DAY as DAY_OF_INCIDENTS, DOCUMENT_NOT_FOUND, FAILING_ABSENCE_NOTE, FAILING_EMPLOYEE, FAILING_INCIDENT, FAILING_PA_NOTE, NOT_PAUSED, PA_ASSIGNMENT, PA_END_BEFORE_START, PA_OTHER_ASSIGNMENT, startMockServer } from './lib/mock-server.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const appArg = process.argv.indexOf('--app')
@@ -2206,6 +2206,27 @@ async function paMapValidity(page, port, mock) {
   await expectState(page, 'Mapa PA, depois de adicionar, Fechar: fecha sem perguntar', { modal: false, descartar: false }, PA_STATE)
 }
 
+// 18. [9.12.1] Chamados criticos: editar sem mexer manda o formulario
+// inteiro. O servidor mantem o gravado so no campo com todas as chaves
+// ausentes (CriticalIncidentService::UPDATE_FIELD_KEYS, amarrado no
+// qa-security): a tela manda a chave de cada campo, com o valor carregado.
+const CRITICAL_UPDATE_KEYS = ['incident_number', 'room_date', 'incident_opened_at', 'operation_reported_at', 'room_opened_at', 'normalized_at', 'room_description', 'room_finalization_description', 'room_opening_duration_minutes', 'room_duration_minutes', 'sector', 'sdk_activity', 'source', 'title', 'summary', 'severity', 'status', 'resolved_at', 'impact', 'affected_users', 'affected_services', 'responsible_area', 'sdk_responsible_employee_id', 'owner_name', 'owner_login', 'involved_teams', 'root_cause', 'resolution', 'workaround', 'actions_taken', 'next_steps', 'meeting_url', 'participants', 'notes']
+async function criticalIncidentEditBody(page, port, mock) {
+  await goto(page, port, '/chamados-criticos')
+  await page.waitFor(`!!${button('Editar')}`)
+  await page.evaluate(`[...document.querySelectorAll('main button')].find((b) => b.textContent.trim() === 'Editar').click()`)
+  await page.waitFor(`!!${FORM_PANEL} && ${INCIDENT_FIELD}.value !== ''`)
+  const before = mock.requests.length
+  await page.click(SUBMIT)
+  const body = (await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'portal/critical_incidents.php', before))?.body || {}
+  const missing = CRITICAL_UPDATE_KEYS.filter((key) => !Object.hasOwn(body, key))
+  report('Chamados criticos, editar sem mexer: o corpo leva a chave de todos os campos', missing.length === 0, missing.length ? `faltando: ${missing.join(', ')}` : '')
+  report('Chamados criticos, editar sem mexer: update do registro aberto', body.action === 'update' && body.id === 1)
+  report('Chamados criticos, editar sem mexer: valores carregados (data da sala, horario, descricao, status, carteira)', body.room_date === DAY_OF_INCIDENTS && body.incident_opened_at === `${DAY_OF_INCIDENTS}T07:50` && body.room_description === 'Sala de teste' && body.summary === 'Sala de teste' && body.status === 'open' && body.severity === 'critical' && body.sector === 'Carteira A')
+  report('Chamados criticos, editar sem mexer: opcionais vazios vao vazios ou nulos (limpam), nao somem', ['operation_reported_at', 'normalized_at', 'room_finalization_description', 'notes'].every((key) => Object.hasOwn(body, key) && (body[key] === '' || body[key] === null)))
+  await page.waitFor(`!${FORM_PANEL}`)
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2237,6 +2258,7 @@ try {
     [15, 'Configuracoes: corpo do salvar (9.12.1)', () => settingsSave(page, mock.port, mock)],
     [16, 'Mapa PA no Dialog e com a protecao (17f)', () => paMapGuard(page, mock.port, mock)],
     [17, 'Mapa PA: fim da validade (II3)', () => paMapValidity(page, mock.port, mock)],
+    [18, 'Chamados criticos: corpo da edicao (9.12.1)', () => criticalIncidentEditBody(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

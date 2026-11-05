@@ -88,6 +88,48 @@ final class CriticalIncidentService {
         'open', 'in_progress', 'war_room', 'mitigated', 'resolved', 'cancelled',
     ];
 
+    // [9.12.1] Campos gravaveis na edicao e as chaves do corpo que alimentam
+    // cada um (a propria e os sinonimos que o normalizeRecord ja aceitava, na
+    // mesma ordem). Na edicao, se nenhuma delas vier, vale o gravado.
+    // Derivados de outros campos (ticket_number, opened_at,
+    // war_room_started_at, mitigated_at) seguem o campo de origem.
+    public const UPDATE_FIELD_KEYS = [
+        'incident_number' => ['incident_number', 'ticket_number'],
+        'room_date' => ['room_date', 'opened_at'],
+        'incident_opened_at' => ['incident_opened_at', 'opened_at'],
+        'operation_reported_at' => ['operation_reported_at'],
+        'room_opened_at' => ['room_opened_at', 'war_room_started_at'],
+        'normalized_at' => ['normalized_at', 'mitigated_at', 'resolved_at'],
+        'room_description' => ['room_description', 'summary', 'title'],
+        'room_finalization_description' => ['room_finalization_description', 'resolution'],
+        'room_opening_duration_minutes' => ['room_opening_duration_minutes'],
+        'room_duration_minutes' => ['room_duration_minutes'],
+        'sector' => ['sector'],
+        'sdk_activity' => ['sdk_activity', 'actions_taken'],
+        'source' => ['source'],
+        'title' => ['title'],
+        'summary' => ['summary'],
+        'severity' => ['severity'],
+        'status' => ['status'],
+        'resolved_at' => ['resolved_at'],
+        'impact' => ['impact'],
+        'affected_users' => ['affected_users'],
+        'affected_services' => ['affected_services'],
+        'responsible_area' => ['responsible_area'],
+        'sdk_responsible_employee_id' => ['sdk_responsible_employee_id'],
+        'owner_name' => ['owner_name'],
+        'owner_login' => ['owner_login'],
+        'involved_teams' => ['involved_teams'],
+        'root_cause' => ['root_cause'],
+        'resolution' => ['resolution'],
+        'workaround' => ['workaround'],
+        'actions_taken' => ['actions_taken', 'sdk_activity'],
+        'next_steps' => ['next_steps'],
+        'meeting_url' => ['meeting_url'],
+        'participants' => ['participants'],
+        'notes' => ['notes', 'observation'],
+    ];
+
     private const LIST_COLUMNS = '
         id, incident_number, room_date, incident_opened_at,
         operation_reported_at, room_opened_at, normalized_at,
@@ -168,9 +210,36 @@ final class CriticalIncidentService {
         return $stmt->fetchAll();
     }
 
+    // [9.12.1] Na edicao, campo ausente mantem o gravado: o registro e lido
+    // com FOR UPDATE e, para cada campo cujas chaves (UPDATE_FIELD_KEYS)
+    // faltam todas no corpo, vale o gravado. Presente, vale o corpo, como na
+    // criacao: vazio ou nulo limpa o opcional. As regras de ordem (mitigacao
+    // depois da abertura, etc.) e os tempos calculados usam os valores finais.
     public function update(int $id, array $data, string $actor): void {
-        $record = $this->normalizeRecord($data);
         $id = $this->positiveInt($id);
+        $this->atomic(function () use ($id, $data, $actor): void {
+            $this->updateUnsafe($id, $data, $actor);
+        });
+    }
+
+    private function lockedRecord(int $id): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT ' . self::DETAIL_COLUMNS . '
+             FROM portal_critical_incidents
+             WHERE id = :id
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $stmt->execute([':id' => $id]);
+        $item = $stmt->fetch();
+        if (!$item) {
+            throw new DomainException('Chamado critico nao encontrado.');
+        }
+        return $item;
+    }
+
+    private function updateUnsafe(int $id, array $data, string $actor): void {
+        $record = $this->normalizeRecord($data, $this->lockedRecord($id));
         try {
             $stmt = $this->pdo->prepare(
                 'UPDATE portal_critical_incidents
@@ -224,9 +293,6 @@ final class CriticalIncidentService {
         } catch (PDOException $error) {
             $this->translateDuplicate($error);
             throw $error;
-        }
-        if ($stmt->rowCount() === 0) {
-            $this->get($id);
         }
     }
 
@@ -512,6 +578,15 @@ final class CriticalIncidentService {
         return strtolower($key);
     }
 
+    private static function anyKeyPresent(array $data, array $keys): bool {
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $data)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static function isList(array $items): bool {
         $expected = 0;
         foreach ($items as $key => $_value) {
@@ -523,63 +598,83 @@ final class CriticalIncidentService {
         return true;
     }
 
-    private function normalizeRecord(array $data): array {
-        $incidentNumber = $this->requiredText(
-            $data['incident_number'] ?? $data['ticket_number'] ?? null,
-            100,
-            'INCIDENTE'
-        );
-        $roomDate = $this->date(
-            $data['room_date']
+    // Na criacao ($stored nulo), cada campo e o primeiro nao nulo entre as
+    // chaves dele (o `??` de antes). Na edicao, campo com todas as chaves
+    // ausentes vale o gravado (UPDATE_FIELD_KEYS); o gravado passa pelos
+    // mesmos validadores e, invalido, falha como o enviado, sem padrao.
+    private function normalizeRecord(array $data, ?array $stored = null): array {
+        $in = static function (string $field) use ($data, $stored) {
+            $keys = self::UPDATE_FIELD_KEYS[$field];
+            if ($stored !== null && !self::anyKeyPresent($data, $keys)) {
+                return $stored[$field] ?? null;
+            }
+            foreach ($keys as $key) {
+                if (isset($data[$key])) {
+                    return $data[$key];
+                }
+            }
+            return null;
+        };
+        $incidentNumber = $this->requiredText($in('incident_number'), 100, 'INCIDENTE');
+        if ($stored !== null && !self::anyKeyPresent($data, self::UPDATE_FIELD_KEYS['room_date'])) {
+            // Gravado sem data da sala (anterior a coluna): a data da abertura, como a tela mostra.
+            $roomDateInput = $stored['room_date'] ?? substr((string)($stored['opened_at'] ?? ''), 0, 10);
+        } else {
+            $roomDateInput = $data['room_date']
                 ?? (is_string($data['opened_at'] ?? null) ? substr($data['opened_at'], 0, 10) : null)
-                ?? date('Y-m-d'),
-            'Data da sala'
-        );
+                ?? date('Y-m-d');
+        }
+        $roomDate = $this->date($roomDateInput, 'Data da sala');
         $incidentOpenedAt = $this->dateTime(
-            $data['incident_opened_at'] ?? $data['opened_at'] ?? null,
+            $in('incident_opened_at'),
             'Hora de abertura do incidente',
             true,
             $roomDate
         );
         $operationReportedAt = $this->dateTime(
-            $data['operation_reported_at'] ?? null,
+            $in('operation_reported_at'),
             'Hora do report da operacao',
             true,
             $roomDate
         );
         $roomOpenedAt = $this->dateTime(
-            $data['room_opened_at'] ?? $data['war_room_started_at'] ?? null,
+            $in('room_opened_at'),
             'Hora de abertura da sala',
             true,
             $roomDate
         );
         $normalizedAt = $this->dateTime(
-            $data['normalized_at'] ?? $data['mitigated_at'] ?? $data['resolved_at'] ?? null,
+            $in('normalized_at'),
             'Hora de normalizacao',
             true,
             $roomDate
         );
-        $roomDescription = $this->nullableText(
-            $data['room_description'] ?? $data['summary'] ?? $data['title'] ?? null,
-            4000
-        );
-        $roomFinalization = $this->nullableText(
-            $data['room_finalization_description'] ?? $data['resolution'] ?? null,
-            4000
-        );
+        $roomDescription = $this->nullableText($in('room_description'), 4000);
+        $roomFinalization = $this->nullableText($in('room_finalization_description'), 4000);
         $openingDuration = $this->durationMinutes(
-            $data['room_opening_duration_minutes'] ?? null,
+            $in('room_opening_duration_minutes'),
             $incidentOpenedAt,
             $roomOpenedAt,
             'Tempo de abertura da sala'
         );
         $roomDuration = $this->durationMinutes(
-            $data['room_duration_minutes'] ?? null,
+            $in('room_duration_minutes'),
             $roomOpenedAt,
             $normalizedAt,
             'Tempo de sala'
         );
-        $sdkResponsible = $this->sdkResponsible($data['sdk_responsible_employee_id'] ?? null);
+        if ($stored !== null && !self::anyKeyPresent($data, self::UPDATE_FIELD_KEYS['sdk_responsible_employee_id'])) {
+            // Ausente mantem o responsavel gravado como esta (nome e login da
+            // epoca), sem conferir de novo se ainda e ativo do N2.
+            $sdkResponsible = [
+                'id' => $stored['sdk_responsible_employee_id'] === null ? null : (int)$stored['sdk_responsible_employee_id'],
+                'name' => $stored['sdk_responsible_name'],
+                'ad_login' => $stored['sdk_responsible_login'],
+            ];
+        } else {
+            $sdkResponsible = $this->sdkResponsible($data['sdk_responsible_employee_id'] ?? null);
+        }
+        $statusInput = $in('status') ?? 'open';
         $record = [
             ':incident_number' => $incidentNumber,
             ':room_date' => $roomDate,
@@ -591,42 +686,42 @@ final class CriticalIncidentService {
             ':room_finalization_description' => $roomFinalization,
             ':room_opening_duration_minutes' => $openingDuration,
             ':room_duration_minutes' => $roomDuration,
-            ':sector' => $this->nullableText($data['sector'] ?? null, 160),
-            ':sdk_activity' => $this->nullableText($data['sdk_activity'] ?? $data['actions_taken'] ?? null, 12000),
+            ':sector' => $this->nullableText($in('sector'), 160),
+            ':sdk_activity' => $this->nullableText($in('sdk_activity'), 12000),
             ':ticket_number' => $incidentNumber,
-            ':source' => $this->source($data['source'] ?? 'other'),
-            ':title' => $this->nullableText($data['title'] ?? null, 180) ?? $roomDescription ?? $incidentNumber,
-            ':summary' => $this->nullableText($data['summary'] ?? null, 4000) ?? $roomDescription ?? $incidentNumber,
-            ':severity' => $this->enum($data['severity'] ?? 'high', self::SEVERITIES, 'Criticidade'),
-            ':status' => $this->enum($data['status'] ?? 'open', self::STATUSES, 'Status'),
+            ':source' => $this->source($in('source') ?? 'other'),
+            ':title' => $this->nullableText($in('title'), 180) ?? $roomDescription ?? $incidentNumber,
+            ':summary' => $this->nullableText($in('summary'), 4000) ?? $roomDescription ?? $incidentNumber,
+            ':severity' => $this->enum($in('severity') ?? 'high', self::SEVERITIES, 'Criticidade'),
+            ':status' => $this->enum($statusInput, self::STATUSES, 'Status'),
             ':opened_at' => $incidentOpenedAt ?? ($roomDate . ' 00:00:00'),
             ':war_room_started_at' => $roomOpenedAt,
             ':mitigated_at' => $normalizedAt,
             ':resolved_at' => $this->dateTime(
-                $data['resolved_at']
-                    ?? (($data['status'] ?? 'open') === 'resolved' ? $normalizedAt : null),
+                $in('resolved_at')
+                    ?? ($statusInput === 'resolved' ? $normalizedAt : null),
                 'Resolucao',
                 true,
                 $roomDate
             ),
-            ':impact' => $this->nullableText($data['impact'] ?? null, 4000),
-            ':affected_users' => $this->nullableNonNegativeInt($data['affected_users'] ?? null),
-            ':affected_services' => $this->nullableText($data['affected_services'] ?? null, 2000),
-            ':responsible_area' => $this->nullableText($data['responsible_area'] ?? null, 120),
+            ':impact' => $this->nullableText($in('impact'), 4000),
+            ':affected_users' => $this->nullableNonNegativeInt($in('affected_users')),
+            ':affected_services' => $this->nullableText($in('affected_services'), 2000),
+            ':responsible_area' => $this->nullableText($in('responsible_area'), 120),
             ':sdk_responsible_employee_id' => $sdkResponsible['id'],
             ':sdk_responsible_name' => $sdkResponsible['name'],
             ':sdk_responsible_login' => $sdkResponsible['ad_login'],
-            ':owner_name' => $this->nullableText($data['owner_name'] ?? null, 160),
-            ':owner_login' => $this->ownerLogin($data['owner_login'] ?? null),
-            ':involved_teams' => $this->nullableText($data['involved_teams'] ?? null, 500),
-            ':root_cause' => $this->nullableText($data['root_cause'] ?? null, 4000),
-            ':resolution' => $this->nullableText($data['resolution'] ?? $roomFinalization, 4000),
-            ':workaround' => $this->nullableText($data['workaround'] ?? null, 4000),
-            ':actions_taken' => $this->nullableText($data['actions_taken'] ?? $data['sdk_activity'] ?? null, 12000),
-            ':next_steps' => $this->nullableText($data['next_steps'] ?? null, 4000),
-            ':meeting_url' => $this->meetingUrl($data['meeting_url'] ?? null),
-            ':participants' => $this->nullableText($data['participants'] ?? null, 4000),
-            ':notes' => $this->nullableText($data['notes'] ?? $data['observation'] ?? null, 12000),
+            ':owner_name' => $this->nullableText($in('owner_name'), 160),
+            ':owner_login' => $this->ownerLogin($in('owner_login')),
+            ':involved_teams' => $this->nullableText($in('involved_teams'), 500),
+            ':root_cause' => $this->nullableText($in('root_cause'), 4000),
+            ':resolution' => $this->nullableText($in('resolution') ?? $roomFinalization, 4000),
+            ':workaround' => $this->nullableText($in('workaround'), 4000),
+            ':actions_taken' => $this->nullableText($in('actions_taken'), 12000),
+            ':next_steps' => $this->nullableText($in('next_steps'), 4000),
+            ':meeting_url' => $this->meetingUrl($in('meeting_url')),
+            ':participants' => $this->nullableText($in('participants'), 4000),
+            ':notes' => $this->nullableText($in('notes'), 12000),
         ];
 
         $opened = new DateTimeImmutable($record[':opened_at']);

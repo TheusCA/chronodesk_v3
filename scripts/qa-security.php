@@ -357,6 +357,29 @@ final class QaChildStatement extends PDOStatement {
                 return true;
             }
         }
+        // [9.12.1] Edicao de chamado critico: o gravado vem de
+        // db['chamados'][id] (a leitura do get e a travada do update, que
+        // registra se estava na transacao); o UPDATE vai para o log com os
+        // parametros em JSON, para conferir o que seria gravado.
+        if (isset($this->pdo->db['chamados'])) {
+            if (preg_match('/^SELECT id, incident_number, .* FROM portal_critical_incidents WHERE id = :id LIMIT 1( FOR UPDATE)?$/', $this->sql, $match) === 1) {
+                $row = $this->pdo->db['chamados'][(string)($params[':id'] ?? 0)] ?? null;
+                $this->rows = $row === null ? [] : [['id' => (int)$params[':id']] + $row];
+                if (($match[1] ?? '') !== '') {
+                    error_log('[QA_LOCK] portal_critical_incidents id=' . $params[':id'] . ' transacao=' . ($this->pdo->transaction ? 1 : 0));
+                }
+                return true;
+            }
+            if (strpos($this->sql, 'UPDATE portal_critical_incidents SET ') === 0) {
+                error_log('[QA_WRITE] UPDATE portal_critical_incidents ' . json_encode($params, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                return true;
+            }
+            if ($this->sql === 'SELECT id, nome AS name, ad_login, LOWER(equipe) AS team, ativo FROM funcionarios WHERE id = :id LIMIT 1') {
+                $row = $byId($this->pdo, $params[':id'] ?? 0);
+                $this->rows = $row ? [['id' => (int)$params[':id'], 'name' => 'QA ' . $params[':id'], 'ad_login' => $row['ad_login'], 'team' => $row['equipe'], 'ativo' => (int)$row['ativo']]] : [];
+                return true;
+            }
+        }
         if (preg_match('/^(UPDATE funcionarios SET ativo = [01],|UPDATE portal_(pa_assignments|schedule_rules|absences) SET|DELETE FROM portal_(schedule_rules|schedule_exceptions)|INSERT INTO (pausas|portal_sync_queue) )/', $this->sql) === 1) {
             error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? $params[':id_funcionario'] ?? $params[':record_id'] ?? '?'));
             return true;
@@ -2211,6 +2234,123 @@ assert_same([200, true, true, ''], [
     strpos($editedWithEnd['log'], '[QA_AUDIT] PA_MAP_SAVED [INFO]: Alocacao de PA salva. ID 3, PA 1730, colaborador ID 5') !== false,
     $editedWithEnd['stderr'],
 ], 'II3: edicao com o corpo da tela (fim carregado) grava pelo endpoint real e audita');
+
+// [9.12.1] Chamados criticos: na edicao, campo ausente mantem o gravado
+// (CriticalIncidentService::update, UPDATE_FIELD_KEYS). De ponta a ponta,
+// pelo endpoint real: o gravado e lido com FOR UPDATE dentro da transacao, o
+// UPDATE leva o gravado nos ausentes e o enviado nos presentes (vazio ou nulo
+// limpa), e as regras de ordem usam os valores finais. O responsavel SDK
+// gravado (ID 9, fora do banco simulado) so passa sem nova consulta.
+require_once __DIR__ . '/../services/CriticalIncidentService.php';
+$storedIncident = [
+    'incident_number' => 'INC-QA-1', 'room_date' => '2026-10-20', 'incident_opened_at' => '2026-10-20 08:00:00',
+    'operation_reported_at' => '2026-10-20 08:05:00', 'room_opened_at' => '2026-10-20 08:15:00', 'normalized_at' => '2026-10-20 09:45:00',
+    'room_description' => 'Descricao gravada', 'room_finalization_description' => 'Finalizacao gravada',
+    'room_opening_duration_minutes' => 15, 'room_duration_minutes' => 90, 'sector' => 'Carteira gravada', 'sdk_activity' => 'Atividade gravada',
+    'ticket_number' => 'INC-QA-1', 'source' => 'teams', 'title' => 'Titulo gravado', 'summary' => 'Resumo gravado', 'severity' => 'critical',
+    'status' => 'resolved', 'opened_at' => '2026-10-20 08:00:00', 'war_room_started_at' => '2026-10-20 08:15:00',
+    'mitigated_at' => '2026-10-20 09:45:00', 'resolved_at' => '2026-10-20 10:00:00', 'impact' => 'Impacto gravado', 'affected_users' => 25,
+    'affected_services' => 'Servicos gravados', 'responsible_area' => 'Area gravada', 'owner_name' => 'Dono gravado', 'owner_login' => 'dono.gravado',
+    'involved_teams' => 'Times gravados', 'sdk_responsible_employee_id' => 9, 'sdk_responsible_name' => 'Tecnico da epoca',
+    'sdk_responsible_login' => 'tecnico.epoca', 'root_cause' => 'Causa gravada', 'resolution' => 'Resolucao gravada', 'workaround' => 'Contorno gravado',
+    'actions_taken' => 'Acoes gravadas', 'next_steps' => 'Proximos gravados', 'meeting_url' => 'https://sala.invalid/gravada',
+    'participants' => 'Participantes gravados', 'notes' => 'Observacao gravada', 'created_by' => 'qa.criou', 'created_at' => '2026-10-20 08:01:00',
+    'updated_by' => 'qa.alterou', 'updated_at' => '2026-10-20 10:01:00',
+];
+// O que o UPDATE gravaria se nada mudasse: cada coluna do SET com o gravado.
+$incidentWriteColumns = ['incident_number', 'room_date', 'incident_opened_at', 'operation_reported_at', 'room_opened_at', 'normalized_at',
+    'room_description', 'room_finalization_description', 'room_opening_duration_minutes', 'room_duration_minutes', 'sector', 'sdk_activity',
+    'ticket_number', 'source', 'title', 'summary', 'severity', 'status', 'opened_at', 'war_room_started_at', 'mitigated_at', 'resolved_at',
+    'impact', 'affected_users', 'affected_services', 'responsible_area', 'sdk_responsible_employee_id', 'sdk_responsible_name',
+    'sdk_responsible_login', 'owner_name', 'owner_login', 'involved_teams', 'root_cause', 'resolution', 'workaround', 'actions_taken',
+    'next_steps', 'meeting_url', 'participants', 'notes'];
+$incidentUnchanged = [];
+foreach ($incidentWriteColumns as $column) {
+    $incidentUnchanged[':' . $column] = $storedIncident[$column];
+}
+$incidentSpec = static fn (array $body): array => ['endpoint' => 'api/portal/critical_incidents.php', 'method' => 'POST', 'content_type' => 'application/json',
+    'body' => (string)json_encode(['action' => 'update', 'id' => 1] + $body), 'session' => QA_ADMIN_SESSION, 'db' => QA_DB + ['chamados' => ['1' => $storedIncident]]];
+// O corpo que a tela manda (CriticalIncidentsPage, submit): o formulario
+// inteiro carregado do GET, com os sinonimos espelhados, e o que mudou.
+$incidentScreenBody = $storedIncident;
+foreach (['created_by', 'created_at', 'updated_by', 'updated_at', 'sdk_responsible_name', 'sdk_responsible_login'] as $readOnly) {
+    unset($incidentScreenBody[$readOnly]);
+}
+$incidentScreenBody = array_merge($incidentScreenBody, [
+    'room_description' => 'Descricao da tela', 'summary' => 'Descricao da tela', 'notes' => 'Observacao da tela',
+    'room_finalization_description' => '', 'resolution' => '', 'sdk_responsible_employee_id' => 3,
+]);
+$incidentCases = qa_run_endpoints($qaDir, [
+    'sem_campos' => $incidentSpec([]),
+    'so_descricao' => $incidentSpec(['room_description' => 'Descricao nova']),
+    'hora_sem_data' => $incidentSpec(['normalized_at' => '09:50']),
+    'presentes_vazios' => $incidentSpec(['room_finalization_description' => '', 'resolution' => '', 'notes' => null, 'operation_reported_at' => '']),
+    'corpo_da_tela' => $incidentSpec($incidentScreenBody),
+    'abertura_depois_da_sala' => $incidentSpec(['incident_opened_at' => '2026-10-20 09:00']),
+    'data_vazia' => $incidentSpec(['room_date' => '']),
+]);
+$incidentWrite = static function (array $result): ?array {
+    return preg_match('/\[QA_WRITE\] UPDATE portal_critical_incidents (\{[^\n]*\})/', $result['log'], $match) === 1
+        ? (array)json_decode($match[1], true) : null;
+};
+// Os parametros do UPDATE que diferem do gravado (sem updated_by e id).
+$incidentChanges = static function (?array $written) use ($incidentUnchanged): ?array {
+    if ($written === null) {
+        return null;
+    }
+    $changes = [];
+    foreach ($incidentUnchanged as $key => $value) {
+        $actual = array_key_exists($key, $written) ? $written[$key] : 'AUSENTE';
+        if ($actual !== $value) {
+            $changes[$key] = $actual;
+        }
+    }
+    return $changes;
+};
+foreach (['sem_campos', 'so_descricao', 'hora_sem_data', 'presentes_vazios', 'corpo_da_tela'] as $case) {
+    $result = $incidentCases[$case];
+    assert_same([200, '', true, true], [
+        $result['status'],
+        $result['stderr'],
+        strpos($result['log'], '[QA_LOCK] portal_critical_incidents id=1 transacao=1') !== false,
+        strpos($result['log'], '[QA_AUDIT] CRITICAL_INCIDENT_UPDATED [WARNING]: Chamado critico atualizado. ID 1') !== false,
+    ], "9.12.1 chamado {$case}: 200, gravado lido com FOR UPDATE na transacao, auditado");
+}
+assert_same([], $incidentChanges($incidentWrite($incidentCases['sem_campos'])), '9.12.1 chamado sem campos: o UPDATE leva o gravado em todas as colunas (descricoes, horarios, room_date, status, responsavel SDK)');
+assert_same([':room_description' => 'Descricao nova'], $incidentChanges($incidentWrite($incidentCases['so_descricao'])), '9.12.1 chamado so a descricao: so ela muda; titulo e resumo gravados ficam');
+assert_same([':normalized_at' => '2026-10-20 09:50:00', ':room_duration_minutes' => 95, ':mitigated_at' => '2026-10-20 09:50:00'], $incidentChanges($incidentWrite($incidentCases['hora_sem_data'])), '9.12.1 chamado so a normalizacao em HH:MM: a data da sala gravada e a base, e o tempo de sala e recalculado');
+assert_same([':operation_reported_at' => null, ':room_finalization_description' => null, ':resolution' => null, ':notes' => null], $incidentChanges($incidentWrite($incidentCases['presentes_vazios'])), '9.12.1 chamado presentes vazios ou nulos: limpam so esses campos');
+assert_same([
+    ':room_description' => 'Descricao da tela', ':room_finalization_description' => null, ':summary' => 'Descricao da tela',
+    ':sdk_responsible_employee_id' => 3, ':sdk_responsible_name' => 'QA 3', ':sdk_responsible_login' => 'qa.gestor', ':resolution' => null, ':notes' => 'Observacao da tela',
+], $incidentChanges($incidentWrite($incidentCases['corpo_da_tela'])), '9.12.1 chamado com o corpo da tela: vale o enviado, e o responsavel SDK e conferido de novo');
+foreach ([
+    'abertura_depois_da_sala' => 'Tempo de abertura da sala nao pode ser negativo.',
+    'data_vazia' => 'Data da sala invalida.',
+] as $case => $message) {
+    $result = $incidentCases[$case];
+    assert_same([400, $message, false, false, ''], [
+        $result['status'],
+        json_decode($result['body'], true)['mensagem'] ?? null,
+        strpos($result['log'], '[QA_WRITE] UPDATE portal_critical_incidents') !== false,
+        strpos($result['log'], 'CRITICAL_INCIDENT_UPDATED') !== false,
+        $result['stderr'],
+    ], "9.12.1 chamado {$case}: 400 com a mensagem, sem gravar nem auditar");
+}
+// Amarras: cada coluna do UPDATE e um campo de UPDATE_FIELD_KEYS ou um
+// derivado (assim, coluna nova sem entrada no mapa reprova aqui), e o
+// roteiro de navegador confere o corpo da tela com as mesmas chaves.
+$incidentSource = (string)file_get_contents($root . '/services/CriticalIncidentService.php');
+preg_match('/UPDATE portal_critical_incidents\s+SET incident_number = :incident_number,(.*?)WHERE id = :id/s', $incidentSource, $incidentSet);
+preg_match_all('/(\w+) = :\1/', 'incident_number = :incident_number,' . ($incidentSet[1] ?? ''), $incidentSetColumns);
+$incidentDerived = ['ticket_number', 'opened_at', 'war_room_started_at', 'mitigated_at', 'sdk_responsible_name', 'sdk_responsible_login', 'updated_by'];
+$incidentFields = array_keys(CriticalIncidentService::UPDATE_FIELD_KEYS);
+$incidentFromSet = array_values(array_diff($incidentSetColumns[1], $incidentDerived));
+sort($incidentFields);
+sort($incidentFromSet);
+assert_same($incidentFromSet, $incidentFields, '9.12.1 chamado: UPDATE_FIELD_KEYS cobre toda coluna gravavel do UPDATE');
+assert_same($incidentWriteColumns, array_values(array_diff($incidentSetColumns[1], ['updated_by'])), '9.12.1 chamado: a lista do teste e a do SET, na ordem');
+assert_same(true, strpos($browserRoteiro, "const CRITICAL_UPDATE_KEYS = ['" . implode("', '", array_keys(CriticalIncidentService::UPDATE_FIELD_KEYS)) . "']") !== false, 'roteiro de navegador: confere o corpo da edicao de chamado com as chaves de UPDATE_FIELD_KEYS');
 
 // F7 (secao 9.9), ponta a ponta: contadores do dashboard.php e situacao de
 // agora do technicians.php pelo motor, por perfil. Sem mudanca de acesso (a

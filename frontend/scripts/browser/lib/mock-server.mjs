@@ -9,7 +9,7 @@ import { extname, join, normalize } from 'node:path'
 const ADMIN_PERMISSIONS = ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end', 'escalas.retroativa', 'ausencias.retroativa', 'admin.manage', 'configuracoes.manage', 'integracoes.manage', 'usuarios_locais.manage', 'perfis.promote', 'escalas.lideranca', 'funcionarios.fora_mapa', 'funcionarios.restaurar']
 const NAMES = ['Tecnico 01 Sobrenome', 'Tecnico 02 Com Um Nome Bem Comprido', 'Tecnico 03 Sobrenome', 'Tecnico 04 Sobrenome']
 const TEAMS = ['n1', 'n2', 'n1', 'n2']
-const DAY = '2026-10-28'
+export const DAY = '2026-10-28'
 const each = (fn) => NAMES.map((name, index) => fn(name, index + 1, TEAMS[index]))
 
 // Numero de incidente que faz o salvar falhar (erro do servidor simulado).
