@@ -254,6 +254,21 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
     onSave(form, startNew)
   }
 
+  // [9.12.1] Remover o vínculo que está em edição: limpo, remove e volta a
+  // "Adicionar" (como a Escala com a regra, 17f item 4); sujo, a proteção
+  // pergunta antes, e "Continuar editando" não remove. Volta a "Adicionar" só
+  // depois de o servidor confirmar; com erro, a edição fica. Remover outro
+  // vínculo não mexe no formulário (JJ3).
+  function remove(id) {
+    if (!editing || String(openedWith.id) !== String(id)) {
+      onRemove(id)
+      return
+    }
+    guard.requestLeave(async () => {
+      if (await onRemove(id)) reset(true)
+    })
+  }
+
   const edit = (item) => guard.requestLeave(() => load(formFromAssignment(item, date)))
   const requestReset = () => guard.requestLeave(() => reset())
   const requestNew = () => guard.requestLeave(startNew)
@@ -282,7 +297,7 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
 
         <div className="mt-6">
           <SectionHeader title="Colaboradores vinculados" />
-          <AssignmentList assignments={assignments} canManage={canManage} onEdit={edit} onRemove={onRemove} saving={saving} />
+          <AssignmentList assignments={assignments} canManage={canManage} onEdit={edit} onRemove={remove} saving={saving} />
         </div>
 
         {canManage ? (
@@ -424,6 +439,7 @@ export function PaMapPage({ notify }) {
     }
   }
 
+  // Devolve se removeu (o modal volta a "Adicionar" quando era o vínculo em edição).
   async function remove(id) {
     setSaving(true)
     try {
@@ -431,8 +447,10 @@ export function PaMapPage({ notify }) {
       setFeedback(null)
       notify(ACTION_FEEDBACK.paUnlinked)
       await resource.refresh()
+      return true
     } catch (error) {
       notify(error.message, 'error')
+      return false
     } finally {
       setSaving(false)
     }

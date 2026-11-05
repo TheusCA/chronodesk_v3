@@ -8,6 +8,7 @@
 // [II3] Bloco 17: o campo "Fim da validade" do Mapa PA.
 // [9.12.1] Blocos 18 e 19: o corpo da edicao de Chamados criticos e o da
 // "Exceção por data" da Escala (o servidor mantem o gravado so no ausente).
+// [9.12.1] Bloco 20: remover o vinculo de PA que esta em edicao.
 // Fora dos qa:* (precisa de navegador). Saida so com contagens: cada
 // conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram).
 //
@@ -2256,6 +2257,82 @@ async function scheduleExceptionBody(page, port, mock) {
   report('Excecao por data, salvar com observacao: o corpo leva o texto digitado', body?.note === 'Observacao da tela')
 }
 
+// 20. [9.12.1] Mapa PA: remover o vinculo que esta em edicao. Limpo: remove
+// sem perguntar e volta a "Adicionar" (foco no Colaborador). Sujo: a protecao
+// pergunta antes; "Continuar editando" nao remove. Remover outro vinculo nao
+// mexe no formulario (JJ3). Erro do servidor: a edicao fica.
+const paRemoveRequests = (mock, before) => mock.requests.slice(before).filter((r) => r.method === 'POST' && r.key === 'portal/pa_map.php' && r.body?.action === 'remove')
+const PA_REMOVE_COUNT = `[...${PA_MODAL}.querySelectorAll('button')].filter((b) => b.textContent.trim() === 'Remover').length`
+async function reopenPaMap(page, port, mock) {
+  mock.restorePaAssignments()
+  await goto(page, port, '/mapa-pa')
+  await openPaModal(page)
+  await page.waitFor(`${PA_REMOVE_COUNT} === 2`)
+}
+async function paMapRemoveEditing(page, port, mock) {
+  // Limpo: remover o vinculo em edicao.
+  await reopenPaMap(page, port, mock)
+  await page.click(PA_BUTTON('Editar'))
+  let before = mock.requests.length
+  await page.click(PA_BUTTON('Remover'))
+  await page.waitFor(`${PA_ADD_MODE} && ${PA_REMOVE_COUNT} === 1`)
+  await expectState(page, 'Mapa PA, editar limpo, Remover o vinculo em edicao: sem perguntar, volta a "Adicionar" vazio, foco no Colaborador, limpo', { modal: true, descartar: false, modo: 'Adicionar colaborador', colaborador: '', nota: '', fim: '', foco: 'campo:Colaborador', beforeunload: 0, dialogos: 1 }, PA_STATE)
+  let removes = paRemoveRequests(mock, before)
+  report('Mapa PA, editar limpo, Remover o vinculo em edicao: um POST de remove com o id dele', removes.length === 1 && removes[0].body.id === PA_ASSIGNMENT.id)
+
+  // Sujo: pergunta antes; Continuar nao remove; Descartar remove e volta a "Adicionar".
+  await reopenPaMap(page, port, mock)
+  await page.click(PA_BUTTON('Editar'))
+  await typePaNote(page, ' editada')
+  before = mock.requests.length
+  await page.click(PA_BUTTON('Remover'))
+  await expectState(page, 'Mapa PA, editar sujo, Remover o vinculo em edicao: pergunta antes', { descartar: true, foco: 'Continuar editando' }, PA_STATE)
+  await page.click(button('Continuar editando', ALERT))
+  await sleep(400)
+  await expectState(page, 'Mapa PA, editar sujo, Remover, Continuar: nada removido, edicao mantida, foco volta ao Remover', { descartar: false, modo: 'Editar vínculo', nota: `${PA_ASSIGNMENT.notes} editada`, beforeunload: 1, foco: 'Remover' }, PA_STATE)
+  report('Mapa PA, editar sujo, Remover, Continuar: nenhum POST de remove, o vinculo continua na lista', paRemoveRequests(mock, before).length === 0 && (await page.evaluate(PA_REMOVE_COUNT)) === 2)
+  await page.click(PA_BUTTON('Remover'))
+  await page.click(button('Descartar alterações', ALERT))
+  await page.waitFor(`${PA_ADD_MODE} && ${PA_REMOVE_COUNT} === 1`)
+  await expectState(page, 'Mapa PA, editar sujo, Remover, Descartar: removido, "Adicionar" vazio, foco no Colaborador, limpo', { modal: true, descartar: false, modo: 'Adicionar colaborador', colaborador: '', nota: '', foco: 'campo:Colaborador', beforeunload: 0, dialogos: 1 }, PA_STATE)
+  removes = paRemoveRequests(mock, before)
+  report('Mapa PA, editar sujo, Remover, Descartar: um POST de remove com o id dele', removes.length === 1 && removes[0].body.id === PA_ASSIGNMENT.id)
+
+  // Remover outro vinculo: sem perguntar e o formulario fica (limpo e sujo).
+  for (const dirty of [false, true]) {
+    await reopenPaMap(page, port, mock)
+    await page.click(PA_BUTTON('Editar'))
+    if (dirty) await typePaNote(page, ' editada')
+    before = mock.requests.length
+    await page.click(PA_BUTTON('Remover', 1))
+    await page.waitFor(`${PA_REMOVE_COUNT} === 1`)
+    const label = `Mapa PA, editar ${dirty ? 'sujo' : 'limpo'}, Remover outro vinculo`
+    await expectState(page, `${label}: sem perguntar, a edicao fica como estava`, { descartar: false, modo: 'Editar vínculo', colaborador: String(PA_ASSIGNMENT.employee_id), nota: dirty ? `${PA_ASSIGNMENT.notes} editada` : PA_ASSIGNMENT.notes, beforeunload: dirty ? 1 : 0 }, PA_STATE)
+    removes = paRemoveRequests(mock, before)
+    report(`${label}: um POST de remove com o id do outro`, removes.length === 1 && removes[0].body.id === PA_OTHER_ASSIGNMENT.id)
+  }
+  await page.click(PA_BUTTON('Fechar'))
+  await page.click(button('Descartar alterações', ALERT))
+
+  // Erro do servidor ao remover o vinculo em edicao: a edicao fica (limpo e sujo).
+  for (const dirty of [false, true]) {
+    await reopenPaMap(page, port, mock)
+    mock.refusePaRemove(409, 'Falha simulada do servidor.')
+    await page.click(PA_BUTTON('Editar'))
+    if (dirty) await typePaNote(page, ' editada')
+    await page.click(PA_BUTTON('Remover'))
+    if (dirty) await page.click(button('Descartar alterações', ALERT))
+    await page.waitFor(`[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada'))`)
+    await sleep(300)
+    await expectState(page, `Mapa PA, editar ${dirty ? 'sujo' : 'limpo'}, Remover com erro do servidor: aviso de erro, a edicao fica, o vinculo continua`, { aviso_erro: true, modal: true, modo: 'Editar vínculo', colaborador: String(PA_ASSIGNMENT.employee_id), nota: dirty ? `${PA_ASSIGNMENT.notes} editada` : PA_ASSIGNMENT.notes, beforeunload: dirty ? 1 : 0 }, PA_STATE)
+    report(`Mapa PA, editar ${dirty ? 'sujo' : 'limpo'}, Remover com erro: o vinculo continua na lista`, (await page.evaluate(PA_REMOVE_COUNT)) === 2)
+  }
+  mock.restorePaAssignments()
+  await page.click(PA_BUTTON('Fechar'))
+  await page.click(button('Descartar alterações', ALERT))
+  await expectState(page, 'Mapa PA, fim do bloco 20: modal fechado, sem listener', { modal: false, beforeunload: 0 }, PA_STATE)
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2289,6 +2366,7 @@ try {
     [17, 'Mapa PA: fim da validade (II3)', () => paMapValidity(page, mock.port, mock)],
     [18, 'Chamados criticos: corpo da edicao (9.12.1)', () => criticalIncidentEditBody(page, mock.port, mock)],
     [19, 'Escala: corpo da excecao por data (9.12.1)', () => scheduleExceptionBody(page, mock.port, mock)],
+    [20, 'Mapa PA: remover o vinculo em edicao (9.12.1)', () => paMapRemoveEditing(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue
