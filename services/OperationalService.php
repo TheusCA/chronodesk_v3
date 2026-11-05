@@ -624,14 +624,19 @@ final class OperationalService {
             throw new DomainException(self::LEADERSHIP_REMOTE_MESSAGE);
         }
         $this->lockScheduleEmployee($employee, true);
+        // [9.12.1] Na data ja gravada, note ausente mantem a observacao
+        // gravada (a coluna sai do ON DUPLICATE KEY UPDATE); presente, vazia
+        // ou nula, limpa. Data nova sem note fica sem observacao, como antes.
+        $noteSent = array_key_exists('note', $data);
         $stmt = $this->pdo->prepare(
             'INSERT INTO portal_schedule_exceptions
                 (employee_id, employee_name, team, exception_date, exception_type, note, created_by)
              VALUES
                 (:employee_id, :employee_name, :team, :exception_date, :exception_type, :note, :created_by)
              ON DUPLICATE KEY UPDATE
-                exception_type = VALUES(exception_type),
-                note = VALUES(note),
+                exception_type = VALUES(exception_type),'
+                . ($noteSent ? '
+                note = VALUES(note),' : '') . '
                 created_by = VALUES(created_by)'
         );
         $stmt->execute([
@@ -640,7 +645,7 @@ final class OperationalService {
             ':team' => $employee['team'],
             ':exception_date' => $date->format('Y-m-d'),
             ':exception_type' => $type,
-            ':note' => $this->text($data['note'] ?? '', 1000, true) ?: null,
+            ':note' => $noteSent ? ($this->text($data['note'], 1000, true) ?: null) : null,
             ':created_by' => $actor,
         ]);
         $stmt = $this->pdo->prepare(

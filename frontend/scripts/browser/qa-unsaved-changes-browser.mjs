@@ -6,6 +6,8 @@
 // salvar uma edicao (blocos 5, 14 e 15): as chaves que o servidor exige.
 // [17f] Bloco 16: o Mapa PA no Dialog e com a protecao (o fundo, no bloco 7).
 // [II3] Bloco 17: o campo "Fim da validade" do Mapa PA.
+// [9.12.1] Blocos 18 e 19: o corpo da edicao de Chamados criticos e o da
+// "Exceção por data" da Escala (o servidor mantem o gravado so no ausente).
 // Fora dos qa:* (precisa de navegador). Saida so com contagens: cada
 // conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram).
 //
@@ -2227,6 +2229,33 @@ async function criticalIncidentEditBody(page, port, mock) {
   await page.waitFor(`!${FORM_PANEL}`)
 }
 
+// 19. [9.12.1] Escala, "Exceção por data": o corpo leva a chave note
+// sempre. O servidor mantem a observacao gravada so com note ausente; vazia
+// limpa. A tela abre vazia (nao carrega a observacao da data): salvar sem
+// digitar manda note vazia, e a observacao gravada na data e limpa, como antes.
+const EXCEPTION_FORM = `[...document.querySelectorAll('main form')].find((form) => form.textContent.includes('Exceção por data'))`
+async function scheduleExceptionBody(page, port, mock) {
+  await openFromMenu(page, port, 'Escala presencial', 1366)
+  await page.waitFor(`!!${EXCEPTION_FORM}`)
+  const setEmployee = `(() => { const select = ${EXCEPTION_FORM}.querySelector('select'); const value = [...select.options].map((o) => o.value).find((v) => v !== ''); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, value); select.dispatchEvent(new Event('change', { bubbles: true })); return value })()`
+  const employee = await page.evaluate(setEmployee)
+  await sleep(150)
+  let before = mock.requests.length
+  await page.click(`${EXCEPTION_FORM}.querySelector('button[type="submit"]')`)
+  let body = (await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'portal/schedules.php' && r.body?.action === 'exception', before))?.body || null
+  report('Excecao por data, salvar sem observacao: um POST de excecao com o colaborador', body !== null && String(body.employee_id) === String(employee))
+  report('Excecao por data, salvar sem observacao: o corpo leva note vazia (com a chave)', body !== null && Object.hasOwn(body, 'note') && body.note === '')
+  await page.waitFor(`!!${EXCEPTION_FORM} && ${EXCEPTION_FORM}.querySelector("select").value === ""`)
+  await page.evaluate(setEmployee)
+  await sleep(150)
+  await page.evaluate(`[...${EXCEPTION_FORM}.querySelectorAll('label')].find((l) => l.childNodes[0]?.textContent.trim() === 'Observação').querySelector('input').focus()`)
+  await page.typeText('Observacao da tela')
+  before = mock.requests.length
+  await page.click(`${EXCEPTION_FORM}.querySelector('button[type="submit"]')`)
+  body = (await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'portal/schedules.php' && r.body?.action === 'exception', before))?.body || null
+  report('Excecao por data, salvar com observacao: o corpo leva o texto digitado', body?.note === 'Observacao da tela')
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2259,6 +2288,7 @@ try {
     [16, 'Mapa PA no Dialog e com a protecao (17f)', () => paMapGuard(page, mock.port, mock)],
     [17, 'Mapa PA: fim da validade (II3)', () => paMapValidity(page, mock.port, mock)],
     [18, 'Chamados criticos: corpo da edicao (9.12.1)', () => criticalIncidentEditBody(page, mock.port, mock)],
+    [19, 'Escala: corpo da excecao por data (9.12.1)', () => scheduleExceptionBody(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

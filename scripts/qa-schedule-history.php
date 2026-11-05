@@ -269,11 +269,29 @@ final class QaScheduleStatement extends PDOStatement {
                 throw new PDOException('SQLSTATE[01000]: Data truncated for column team');
             }
             $key = $params[':employee_id'] . ':' . $params[':exception_date'];
-            $db->exceptions[$key] = [
-                'id' => $db->exceptions[$key]['id'] ?? $db->nextId++, 'employee_id' => (int)$params[':employee_id'],
+            $inserted = [
+                'employee_id' => (int)$params[':employee_id'],
                 'employee_name' => $params[':employee_name'], 'team' => $params[':team'], 'exception_date' => $params[':exception_date'],
                 'exception_type' => $params[':exception_type'], 'note' => $params[':note'],
             ];
+            if (!isset($db->exceptions[$key])) {
+                $db->exceptions[$key] = ['id' => $db->nextId++] + $inserted;
+                return true;
+            }
+            // [9.12.1] Data repetida: como o MySQL, so as colunas da clausula
+            // ON DUPLICATE KEY UPDATE do SQL mudam (col = VALUES(col)).
+            if (preg_match('/ ON DUPLICATE KEY UPDATE (.+)$/', $sql, $clause) !== 1
+                || preg_match_all('/(\w+) = VALUES\((\w+)\)/', $clause[1], $sets, PREG_SET_ORDER) !== count(explode(',', $clause[1]))) {
+                throw new PDOException('SQLSTATE[HY000]: banco simulado: ON DUPLICATE KEY UPDATE nao previsto');
+            }
+            foreach ($sets as [, $column, $source]) {
+                if ($column !== $source) {
+                    throw new PDOException('SQLSTATE[HY000]: banco simulado: VALUES de outra coluna');
+                }
+                if (array_key_exists($column, $inserted)) {
+                    $db->exceptions[$key][$column] = $inserted[$column];
+                }
+            }
             return true;
         }
         if ($sql === 'SELECT id FROM portal_schedule_exceptions WHERE employee_id = :employee_id AND exception_date = :exception_date') {
@@ -1127,5 +1145,37 @@ assert_same(['Regra invalida.'], $preview['rows'][0]['errors'], 'importacao: reg
 $pdo = qa_schedule_db([qa_rule(10, 'cycle', '2026-10-05', null, '{"pattern":["onsite"],"anchor_date":"2026-10-05"}')]);
 $view = (new OperationalService($pdo, $today))->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-05', 'employee_id' => '1']);
 assert_same(['Ciclo com configuração inválida', 'no_schedule', 'Ciclo com configuração inválida'], [$view['rules'][0]['rule_label'], $view['generated'][0]['presence_type'], $view['generated'][0]['rule_label']], 'ciclo invalido: rotulo explicito e sem escala');
+
+// [9.12.1] Observacao da excecao na data ja gravada (INSERT ... ON DUPLICATE
+// KEY UPDATE): note ausente mantem a gravada; presente vazia ou nula limpa;
+// presente com texto troca. O banco simulado so atualiza, na data repetida, as
+// colunas da clausula ON DUPLICATE KEY UPDATE do SQL do servico.
+$notePdo = qa_schedule_db();
+$noteService = new OperationalService($notePdo, $today);
+$saveNote = static fn (array $extra): string => qa_outcome(fn () => $noteService->saveScheduleException(['employee_id' => 1, 'exception_date' => '2026-10-07'] + $extra, 'qa', 'gestor'));
+$noteRow = static fn (): array => isset($notePdo->exceptions['1:2026-10-07']) ? [$notePdo->exceptions['1:2026-10-07']['exception_type'], $notePdo->exceptions['1:2026-10-07']['note']] : ['SEM LINHA'];
+assert_same('ok', $saveNote(['exception_type' => 'training']), 'excecao nova sem note: grava');
+assert_same(['training', null], $noteRow(), 'excecao nova sem note: sem observacao');
+assert_same('ok', $saveNote(['exception_type' => 'onsite', 'note' => 'Observacao gravada']), 'excecao com note: grava');
+assert_same(['onsite', 'Observacao gravada'], $noteRow(), 'excecao com note: observacao gravada');
+assert_same('ok', $saveNote(['exception_type' => 'oncall']), 'mesma data sem note: grava');
+assert_same(['oncall', 'Observacao gravada'], $noteRow(), 'mesma data sem note: o tipo muda e a observacao gravada fica');
+assert_same('ok', $saveNote(['exception_type' => 'oncall', 'note' => 'Observacao nova']), 'mesma data com note: grava');
+assert_same(['oncall', 'Observacao nova'], $noteRow(), 'mesma data com note: a observacao troca');
+assert_same('ok', $saveNote(['exception_type' => 'oncall', 'note' => '']), 'mesma data com note vazia: grava');
+assert_same(['oncall', null], $noteRow(), 'mesma data com note vazia: limpa');
+$saveNote(['exception_type' => 'oncall', 'note' => 'Outra observacao']);
+assert_same('ok', $saveNote(['exception_type' => 'remote', 'note' => null]), 'mesma data com note nula: grava');
+assert_same(['remote', null], $noteRow(), 'mesma data com note nula: limpa');
+$saveNote(['exception_type' => 'remote', 'note' => 'Depois so espacos']);
+assert_same('ok', $saveNote(['exception_type' => 'remote', 'note' => '   ']), 'mesma data com note so de espacos: grava');
+assert_same(['remote', null], $noteRow(), 'mesma data com note so de espacos: limpa (como antes)');
+$saveNote(['exception_type' => 'remote', 'note' => 'Fica depois da recusa']);
+assert_same('400: Texto invalido.', $saveNote(['exception_type' => 'training', 'note' => ['lista']]), 'note presente que nao e texto: 400, como antes');
+assert_same(['remote', 'Fica depois da recusa'], $noteRow(), 'note que nao e texto: nada gravado (rollback)');
+assert_same(1, count($notePdo->exceptions), 'uma linha so por colaborador e data');
+// Data nova, outro colaborador: o ausente nao herda observacao de ninguem.
+assert_same('ok', qa_outcome(fn () => $noteService->saveScheduleException(['employee_id' => 2, 'exception_date' => '2026-10-07', 'exception_type' => 'onsite'], 'qa', 'gestor')), 'outro colaborador na mesma data sem note: grava');
+assert_same(['onsite', null], array_values(array_intersect_key($notePdo->exceptions['2:2026-10-07'] ?? [], ['exception_type' => 0, 'note' => 0])), 'outro colaborador na mesma data sem note: sem observacao');
 
 echo "QA schedule history OK\n";
