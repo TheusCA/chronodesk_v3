@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { hasPermission, isManagerRole } from '../lib/roles'
 import { useQuery } from '@tanstack/react-query'
 import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
@@ -20,6 +20,8 @@ import { formatDate, formatDateTime } from '../lib/format'
 import { reportFiltersSchema, scheduleRuleSchema } from '../lib/formSchemas'
 import { presenceCutoffNotice, presenceCutoffTitle, presenceLegendItem, rowPartialTime } from '../lib/presenceLegend'
 import { queryKeys } from '../lib/queryKeys'
+import { formValuesChanged } from '../lib/formDirty'
+import { exceptionFormValues, exceptionKey, exceptionLoadCovers, storedExceptionFor } from '../lib/scheduleException'
 import {
   DetailPill,
   FilterBar,
@@ -331,8 +333,13 @@ export function SchedulePage({ session, notify }) {
   const [removing, setRemoving] = useState(false)
   const removeReturnRef = useRef(null)
   const rulesTitleRef = useRef(null)
-  const [exception, setException] = useState({ employee_id: '', exception_date: today, exception_type: 'remote', note: '' })
+  // [9.12.4] "Exceção por data": colaborador e data escolhem a exceção; tipo e
+  // observação abrem com os gravados (ou os padrões) e guardam só o que foi
+  // mudado, por colaborador e data. Sujo = diferente do que abriu (17f).
+  const [exceptionSelection, setExceptionSelection] = useState({ employee_id: '', exception_date: today })
+  const [exceptionEdits, setExceptionEdits] = useState({ key: '', values: {} })
   const [exceptionError, setExceptionError] = useState('')
+  const exceptionStatusId = useId()
   // [F5, D13] Filtro só da tela, desligado por padrão; não muda o schedules.php.
   const [hideNoSchedule, setHideNoSchedule] = useState(false)
   const generatedRows = (resource.data?.generated || []).filter((item) => !hideNoSchedule || item.presence_type !== 'no_schedule')
@@ -341,7 +348,53 @@ export function SchedulePage({ session, notify }) {
   // Regra: só N1 e N2. Exceção de líder: só admin (L9), nunca remota.
   const ruleEmployees = allEmployees.filter((employee) => !isLeadershipTeam(employee.equipe))
   const exceptionEmployees = hasPermission(session, 'escalas.lideranca') ? allEmployees : ruleEmployees
-  const exceptionIsLeadership = isLeadershipTeam(allEmployees.find((employee) => String(employee.id) === String(exception.employee_id))?.equipe)
+  const exceptionIsLeadership = isLeadershipTeam(allEmployees.find((employee) => String(employee.id) === String(exceptionSelection.employee_id))?.equipe)
+  // A exceção gravada vem do GET da tela quando ele cobre a escolha (período e
+  // filtros); senão, de uma consulta ao mesmo endpoint só daquele colaborador e dia.
+  const exceptionEmployeeId = String(exceptionSelection.employee_id)
+  const exceptionDate = exceptionSelection.exception_date
+  const exceptionKeyValue = exceptionKey(exceptionEmployeeId, exceptionDate)
+  const exceptionCovered = exceptionKeyValue !== '' && exceptionLoadCovers(resource.data?.period, filters, exceptionEmployeeId, exceptionDate)
+  const exceptionLookup = useResource(
+    `portal/schedules.php${queryString({ from: exceptionDate, to: exceptionDate, employee_id: exceptionEmployeeId })}`,
+    { enabled: exceptionKeyValue !== '' && !exceptionCovered },
+  )
+  let exceptionStatus = 'none'
+  let storedException = null
+  if (exceptionKeyValue !== '') {
+    // A resposta da consulta só vale se for da data escolhida (a anterior fica até a nova chegar).
+    const lookupFresh = exceptionLookup.data?.period?.from === exceptionDate && exceptionLookup.data?.period?.to === exceptionDate
+    if (exceptionCovered) {
+      exceptionStatus = 'ready'
+      storedException = storedExceptionFor(resource.data?.exceptions, exceptionEmployeeId, exceptionDate)
+    } else if (exceptionLookup.error) {
+      exceptionStatus = 'error'
+    } else if (exceptionLookup.loading || !lookupFresh) {
+      exceptionStatus = 'loading'
+    } else {
+      exceptionStatus = 'ready'
+      storedException = storedExceptionFor(exceptionLookup.data?.exceptions, exceptionEmployeeId, exceptionDate)
+    }
+  }
+  const exceptionOpenedWith = exceptionFormValues(storedException, exceptionIsLeadership)
+  const exception = {
+    ...exceptionSelection,
+    ...exceptionOpenedWith,
+    ...(exceptionEdits.key === exceptionKeyValue ? exceptionEdits.values : {}),
+  }
+  const exceptionDirty = exceptionStatus === 'ready'
+    && formValuesChanged(exceptionOpenedWith, { exception_type: exception.exception_type, note: exception.note })
+  const exceptionGuard = useUnsavedChangesGuard(exceptionDirty)
+  const updateException = (key, value) => setExceptionEdits((current) => ({
+    key: exceptionKeyValue,
+    values: { ...(current.key === exceptionKeyValue ? current.values : {}), [key]: value },
+  }))
+  // Trocar de colaborador ou de data e Limpar descartam o que foi mudado: perguntam se sujo.
+  const selectException = (next) => exceptionGuard.requestLeave(() => {
+    setExceptionError('')
+    setExceptionSelection(next)
+    setExceptionEdits({ key: '', values: {} })
+  })
   const [importRows, setImportRows] = useState([])
   const [preview, setPreview] = useState(null)
   const [importLoading, setImportLoading] = useState(false)
@@ -502,7 +555,11 @@ export function SchedulePage({ session, notify }) {
       resource.refresh,
       notify,
       ACTION_FEEDBACK.scheduleExceptionSaved,
-      () => setException({ employee_id: '', exception_date: exception.exception_date || today, exception_type: 'remote', note: '' }),
+      // Salvo: volta ao formulário vazio, na mesma data, sem perguntar.
+      () => {
+        setExceptionSelection({ employee_id: '', exception_date: exception.exception_date || today })
+        setExceptionEdits({ key: '', values: {} })
+      },
       // P7: a recusa do servidor (por exemplo, o 400 de tipo de ausência) fica junto do formulário.
       (error) => setExceptionError(error instanceof Error ? error.message : ''),
     )
@@ -699,18 +756,27 @@ export function SchedulePage({ session, notify }) {
               eyebrow="Ajuste pontual"
               title="Exceção por data"
             />
-            <label className="label">Colaborador<EmployeeSelect employees={exceptionEmployees} value={exception.employee_id} onChange={(event) => {
-              const leader = isLeadershipTeam(allEmployees.find((employee) => String(employee.id) === event.target.value)?.equipe)
-              setException({ ...exception, employee_id: event.target.value, exception_type: leader && exception.exception_type === 'remote' ? 'onsite' : exception.exception_type })
-            }} /></label>
+            <label className="label">Colaborador<EmployeeSelect employees={exceptionEmployees} value={exceptionSelection.employee_id} onChange={(event) => selectException({ ...exceptionSelection, employee_id: event.target.value })} /></label>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="label">Data<input className="field mt-2" required type="date" value={exception.exception_date} onChange={(event) => setException({ ...exception, exception_date: event.target.value })} /></label>
-              <label className="label">Tipo<select className="field mt-2" value={exception.exception_type} onChange={(event) => setException({ ...exception, exception_type: event.target.value })}>{EXCEPTION_TYPE_OPTIONS.filter((option) => !(exceptionIsLeadership && option.value === 'remote')).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+              <label className="label">Data<input className="field mt-2" required type="date" value={exceptionSelection.exception_date} onChange={(event) => selectException({ ...exceptionSelection, exception_date: event.target.value })} /></label>
+              <label className="label">Tipo<select aria-describedby={exceptionStatusId} className="field mt-2" disabled={exceptionStatus !== 'ready'} value={exception.exception_type} onChange={(event) => updateException('exception_type', event.target.value)}>{EXCEPTION_TYPE_OPTIONS.filter((option) => !(exceptionIsLeadership && option.value === 'remote')).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             </div>
+            {/* [9.12.4] Situação da escolha: nova, edição da gravada, conferindo ou falha. */}
+            <p aria-live="polite" className={`text-xs ${storedException ? 'text-cyan-300' : 'text-slate-500'}`} data-exception-status={exceptionStatus === 'ready' ? (storedException ? 'editar' : 'nova') : exceptionStatus} id={exceptionStatusId}>
+              {exceptionStatus === 'none' && 'Escolha o colaborador e a data. Se já houver exceção nesse dia, o formulário traz o tipo e a observação gravados.'}
+              {exceptionStatus === 'loading' && 'Conferindo se já há exceção nesse dia...'}
+              {exceptionStatus === 'ready' && storedException && 'Editando a exceção gravada nesse dia: salvar troca o tipo e a observação. Observação vazia apaga a gravada.'}
+              {exceptionStatus === 'ready' && !storedException && 'Nova exceção: não há exceção gravada nesse dia.'}
+              {exceptionStatus === 'error' && 'Não foi possível conferir se já há exceção nesse dia.'}
+            </p>
+            {exceptionStatus === 'error' && <button className="table-action" onClick={() => exceptionLookup.refresh()} type="button">Tentar de novo</button>}
             <p className="text-xs text-slate-500">Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências.</p>
-            <label className="label">Observação<input className="field mt-2" maxLength="1000" value={exception.note} onChange={(event) => setException({ ...exception, note: event.target.value })} /></label>
+            <label className="label">Observação<input aria-describedby={exceptionStatusId} className="field mt-2" disabled={exceptionStatus !== 'ready'} maxLength="1000" value={exception.note} onChange={(event) => updateException('note', event.target.value)} /></label>
             {exceptionError && <InlineAlert tone="danger" title="Exceção não salva">{exceptionError}</InlineAlert>}
-            <button className="btn-primary" type="submit">Salvar exceção</button>
+            <div className="flex flex-wrap gap-3">
+              <button className="btn-primary" disabled={exceptionStatus !== 'ready'} type="submit">{storedException ? 'Salvar alterações' : 'Salvar exceção'}</button>
+              <button className="btn-secondary" onClick={() => selectException({ employee_id: '', exception_date: exceptionDate })} type="button">Limpar</button>
+            </div>
           </form>
           <section className="card space-y-4 xl:col-span-2">
             <SectionHeader
@@ -830,6 +896,7 @@ export function SchedulePage({ session, notify }) {
         />
       )}
       <ConfirmDiscardDialog {...ruleGuard.dialogProps} />
+      <ConfirmDiscardDialog {...exceptionGuard.dialogProps} />
     </div>
   )
 }

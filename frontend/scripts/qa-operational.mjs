@@ -286,4 +286,49 @@ for (const [Page, overtimeKind, label] of [[OvertimePage, true, 'Horas extras'],
   assert.doesNotMatch(noPending, /data-request/, `${label}: sem pendentes, sem cartoes`)
 }
 
+// [9.12.4] "Exceção por data": de onde vem a exceção gravada e com que valores
+// o formulário abre (src/lib/scheduleException.ts), e a fiação na tela.
+{
+  const {
+    exceptionDefaults,
+    exceptionFormValues,
+    exceptionKey,
+    exceptionLoadCovers,
+    storedExceptionFor,
+  } = await importTypeScriptModule(new URL('../src/lib/scheduleException.ts', import.meta.url))
+  assert.deepEqual(exceptionDefaults(false), { exception_type: 'remote', note: '' }, '9.12.4: sem exceção gravada, remoto e sem observação')
+  assert.deepEqual(exceptionDefaults(true), { exception_type: 'onsite', note: '' }, '9.12.4: Liderança sem exceção gravada, presencial (sem remoto, P12)')
+  const period = { from: '2026-11-01', to: '2026-11-30' }
+  assert.equal(exceptionLoadCovers(period, { team: '', employee_id: '' }, '1', '2026-11-01'), true, '9.12.4: primeiro dia do período carregado cobre')
+  assert.equal(exceptionLoadCovers(period, { team: '', employee_id: '' }, '1', '2026-11-30'), true, '9.12.4: último dia do período carregado cobre')
+  assert.equal(exceptionLoadCovers(period, { team: '', employee_id: '' }, '1', '2026-10-31'), false, '9.12.4: véspera do período não cobre')
+  assert.equal(exceptionLoadCovers(period, { team: '', employee_id: '' }, '1', '2026-12-01'), false, '9.12.4: dia seguinte ao período não cobre')
+  assert.equal(exceptionLoadCovers(period, { team: 'n1', employee_id: '' }, '1', '2026-11-10'), false, '9.12.4: com filtro de equipe, não cobre (a exceção pode ter ficado de fora)')
+  assert.equal(exceptionLoadCovers(period, { team: '', employee_id: '1' }, '1', '2026-11-10'), true, '9.12.4: filtro do próprio colaborador cobre')
+  assert.equal(exceptionLoadCovers(period, { team: '', employee_id: 2 }, '1', '2026-11-10'), false, '9.12.4: filtro de outro colaborador não cobre')
+  assert.equal(exceptionLoadCovers(null, { team: '', employee_id: '' }, '1', '2026-11-10'), false, '9.12.4: sem período devolvido, não cobre')
+  assert.equal(exceptionLoadCovers(period, { team: '', employee_id: '' }, '', '2026-11-10'), false, '9.12.4: sem colaborador, não cobre')
+  const exceptions = [
+    { id: 1, employee_id: 1, exception_date: '2026-11-10', exception_type: 'oncall', note: 'Gravada' },
+    { id: 2, employee_id: '2', exception_date: '2026-11-10', exception_type: 'training', note: null },
+  ]
+  assert.equal(storedExceptionFor(exceptions, '1', '2026-11-10')?.id, 1, '9.12.4: acha pelo colaborador (número ou texto) e pela data')
+  assert.equal(storedExceptionFor(exceptions, '2', '2026-11-10')?.id, 2, '9.12.4: colaborador em texto no servidor')
+  assert.equal(storedExceptionFor(exceptions, '1', '2026-11-11'), null, '9.12.4: outra data, sem exceção')
+  assert.equal(storedExceptionFor(undefined, '1', '2026-11-10'), null, '9.12.4: sem lista, sem exceção')
+  assert.deepEqual(exceptionFormValues(exceptions[0], false), { exception_type: 'oncall', note: 'Gravada' }, '9.12.4: abre com o tipo e a observação gravados')
+  assert.deepEqual(exceptionFormValues(exceptions[1], false), { exception_type: 'training', note: '' }, '9.12.4: observação gravada nula abre vazia')
+  assert.deepEqual(exceptionFormValues(null, true), { exception_type: 'onsite', note: '' }, '9.12.4: sem gravada, os padrões')
+  assert.equal(exceptionKey('1', '2026-11-10'), '1:2026-11-10', '9.12.4: chave colaborador e data')
+  assert.equal(exceptionKey('', '2026-11-10'), '', '9.12.4: sem colaborador, sem chave')
+
+  const pageSource = readFileSync(new URL('../src/pages/OperationalPages.jsx', import.meta.url), 'utf8')
+  assert.match(pageSource, /const exceptionGuard = useUnsavedChangesGuard\(exceptionDirty\)/u, '9.12.4: a proteção do 17f no formulário de exceção')
+  assert.match(pageSource, /<ConfirmDiscardDialog \{\.\.\.exceptionGuard\.dialogProps\} \/>/u, '9.12.4: o aviso de descarte do formulário de exceção')
+  assert.match(pageSource, /const selectException = \(next\) => exceptionGuard\.requestLeave\(/u, '9.12.4: trocar de colaborador ou data e Limpar passam pela proteção')
+  assert.equal((pageSource.match(/onChange=\{\(event\) => selectException\(/gu) || []).length, 2, '9.12.4: colaborador e data trocam pela proteção')
+  assert.match(pageSource, /onClick=\{\(\) => selectException\(\{ employee_id: '', exception_date: exceptionDate \}\)\}[^>]*>Limpar</u, '9.12.4: Limpar pela proteção')
+  assert.doesNotMatch(pageSource, /setException\(/u, '9.12.4: nenhuma troca de estado da exceção fora da proteção')
+}
+
 console.log('Operational frontend QA OK')

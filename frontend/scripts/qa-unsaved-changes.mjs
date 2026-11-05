@@ -498,8 +498,10 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.match(scheduleSource, /<h2 className="scroll-mt-28 font-bold text-white" ref=\{historyTitleRef\} tabIndex=\{-1\}>Histórico de/, 'Historico: titulo focavel, com folga do topo ao rolar')
   assert.match(scheduleSource, /if \(historyTriggerRef\.current\?\.isConnected\) historyTriggerRef\.current\.focus\(\)/, 'Historico: Fechar devolve o foco a quem abriu')
   assert.match(scheduleSource, /onClick=\{closeHistory\} type="button">Fechar<\/button>/, 'Historico: Fechar ligado')
-  // Formulario de excecao e importacao ficam fora da protecao (pedido do item 4).
-  assert.equal((scheduleSource.match(/useUnsavedChangesGuard\(/g) || []).length, 1, 'Escala: uma protecao so, a da regra')
+  // Importacao fica fora da protecao (pedido do item 4; AA8). [9.12.4] O
+  // formulario de excecao ganhou a dele (saiu da AA8): agora sao duas.
+  assert.equal((scheduleSource.match(/useUnsavedChangesGuard\(/g) || []).length, 2, 'Escala: duas protecoes, a da regra e a da excecao')
+  assert.match(scheduleSource, /useUnsavedChangesGuard\(ruleDirty\)[\s\S]*useUnsavedChangesGuard\(exceptionDirty\)/, 'Escala: a da regra e a da excecao (a importacao continua fora)')
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@
 // [9.12.1] Blocos 18 e 19: o corpo da edicao de Chamados criticos e o da
 // "Exceção por data" da Escala (o servidor mantem o gravado so no ausente).
 // [9.12.1] Bloco 20: remover o vinculo de PA que esta em edicao.
+// [9.12.4] Bloco 21: a "Exceção por data" carrega a gravada e tem a protecao.
 // Fora dos qa:* (precisa de navegador). Saida so com contagens: cada
 // conferencia "ok" ou "FALHOU" (com os nomes dos campos que divergiram).
 //
@@ -2232,8 +2233,8 @@ async function criticalIncidentEditBody(page, port, mock) {
 
 // 19. [9.12.1] Escala, "Exceção por data": o corpo leva a chave note
 // sempre. O servidor mantem a observacao gravada so com note ausente; vazia
-// limpa. A tela abre vazia (nao carrega a observacao da data): salvar sem
-// digitar manda note vazia, e a observacao gravada na data e limpa, como antes.
+// limpa. Aqui, colaborador e data sem exceção gravada (o carregamento da
+// gravada e a protecao do formulario ficam no bloco 21, 9.12.4).
 const EXCEPTION_FORM = `[...document.querySelectorAll('main form')].find((form) => form.textContent.includes('Exceção por data'))`
 async function scheduleExceptionBody(page, port, mock) {
   await openFromMenu(page, port, 'Escala presencial', 1366)
@@ -2333,6 +2334,165 @@ async function paMapRemoveEditing(page, port, mock) {
   await expectState(page, 'Mapa PA, fim do bloco 20: modal fechado, sem listener', { modal: false, beforeunload: 0 }, PA_STATE)
 }
 
+// 21. [9.12.4] Escala, "Exceção por data": colaborador e data com exceção
+// gravada carregam o tipo e a observação (dos dados da tela, ou de uma
+// consulta ao mesmo GET para data fora do período carregado) e indicam a
+// edição; trocar só o tipo mantém a observação; esvaziar a observação limpa;
+// data sem exceção abre vazia. Protecao do 17f: trocar de colaborador ou de
+// data, Limpar, trocar de tela e recarregar com o formulario sujo perguntam.
+const EXCEPTION_FIELD = (label) => `[...${EXCEPTION_FORM}.querySelectorAll('label')].find((l) => l.childNodes[0]?.textContent.trim() === ${JSON.stringify(label)})?.querySelector('input, select')`
+const EXCEPTION_STATE = `(() => {
+  const form = ${EXCEPTION_FORM}
+  const field = (label) => form ? [...form.querySelectorAll('label')].find((l) => l.childNodes[0]?.textContent.trim() === label)?.querySelector('input, select') : null
+  const submit = form?.querySelector('button[type="submit"]')
+  return {
+    rota: location.pathname,
+    colaborador: field('Colaborador')?.value ?? null,
+    data: field('Data')?.value ?? null,
+    tipo: field('Tipo')?.value ?? null,
+    nota: field('Observação')?.value ?? null,
+    tipo_desabilitado: field('Tipo')?.disabled ?? null,
+    nota_desabilitada: field('Observação')?.disabled ?? null,
+    situacao: form?.querySelector('[data-exception-status]')?.getAttribute('data-exception-status') ?? null,
+    nota_descrita: (field('Observação')?.getAttribute('aria-describedby') || '') === (form?.querySelector('[data-exception-status]')?.id ?? '-'),
+    botao: submit?.textContent.trim() ?? null,
+    salvar_desabilitado: submit?.disabled ?? null,
+    descartar: !!document.querySelector('[role="alertdialog"]'),
+    beforeunload: (getEventListeners(window).beforeunload || []).length,
+  }
+})()`
+async function setExceptionField(page, label, value) {
+  await page.evaluate(`(() => { const field = ${EXCEPTION_FIELD(label)}; const select = field instanceof HTMLSelectElement; Object.getOwnPropertyDescriptor(select ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(field, ${JSON.stringify(value)}); field.dispatchEvent(new Event(select ? 'change' : 'input', { bubbles: true })) })()`)
+  await sleep(250)
+}
+const scheduleGets = (mock, before) => mock.requests.slice(before).filter((r) => r.method === 'GET' && r.key === 'portal/schedules.php')
+const exceptionPosts = (mock, before) => mock.requests.slice(before).filter((r) => r.method === 'POST' && r.key === 'portal/schedules.php' && r.body?.action === 'exception')
+async function saveExceptionForm(page, mock) {
+  const before = mock.requests.length
+  await page.click(`${EXCEPTION_FORM}.querySelector('button[type="submit"]')`)
+  const request = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'portal/schedules.php' && r.body?.action === 'exception', before)
+  await page.waitFor(`${EXCEPTION_FIELD('Colaborador')}.value === ''`)
+  await sleep(300)
+  return request?.body ?? null
+}
+async function scheduleExceptionLoad(page, port, mock) {
+  const expectException = (label, expected) => expectState(page, `Excecao por data, ${label}`, expected, EXCEPTION_STATE)
+  const blockStart = mock.requests.length
+  // O periodo carregado pela tela (o GET da tela, de varios dias).
+  mock.setScheduleExceptions([])
+  await openFromMenu(page, port, 'Escala presencial', 1366)
+  await page.waitFor(`!!${EXCEPTION_FORM}`)
+  const load = scheduleGets(mock, 0).filter((r) => r.query?.from && r.query.from !== r.query.to).at(-1)?.query || {}
+  const inside = load.from
+  const insideNext = new Date(new Date(`${inside}T12:00:00Z`).getTime() + 86400000).toISOString().slice(0, 10)
+  const outside = '2099-01-15'
+  report('Excecao por data: a tela carregou um periodo (para os casos dentro e fora dele)', Boolean(inside) && insideNext <= load.to)
+  mock.setScheduleExceptions([
+    { id: 901, employee_id: 1, exception_date: inside, exception_type: 'oncall', note: 'Observacao gravada' },
+    { id: 902, employee_id: 1, exception_date: outside, exception_type: 'training', note: 'Gravada fora do periodo' },
+  ])
+  await openFromMenu(page, port, 'Escala presencial', 1366)
+  await page.waitFor(`!!${EXCEPTION_FORM}`)
+  await expectException('abrir: sem colaborador, tipo e observacao desabilitados, salvar desabilitado', { colaborador: '', situacao: 'none', tipo_desabilitado: true, nota_desabilitada: true, salvar_desabilitado: true, botao: 'Salvar exceção', beforeunload: 0 })
+
+  // Dentro do periodo: carrega dos dados da tela, sem consulta nova.
+  let before = mock.requests.length
+  await setExceptionField(page, 'Data', inside)
+  await setExceptionField(page, 'Colaborador', '1')
+  await expectException('data com excecao no periodo: carrega o tipo e a observacao gravados e indica a edicao, limpo', { situacao: 'editar', tipo: 'oncall', nota: 'Observacao gravada', botao: 'Salvar alterações', tipo_desabilitado: false, salvar_desabilitado: false, nota_descrita: true, beforeunload: 0, descartar: false })
+  report('Excecao por data, dentro do periodo: sem consulta nova (usa os dados da tela)', scheduleGets(mock, before).every((r) => r.query?.from !== inside || r.query?.to !== inside))
+
+  // Trocar so o tipo: a observacao gravada vai no corpo.
+  await setExceptionField(page, 'Tipo', 'training')
+  await expectException('trocar so o tipo: sujo', { tipo: 'training', nota: 'Observacao gravada', beforeunload: 1 })
+  let body = await saveExceptionForm(page, mock)
+  report('Excecao por data, trocar so o tipo e salvar: o corpo leva o tipo novo e a observacao gravada', body?.exception_type === 'training' && body?.note === 'Observacao gravada' && body?.exception_date === inside && String(body?.employee_id) === '1')
+  await expectException('depois de salvar: formulario vazio, limpo, sem perguntar', { colaborador: '', situacao: 'none', beforeunload: 0, descartar: false })
+  await setExceptionField(page, 'Colaborador', '1')
+  await expectException('escolher de novo: o tipo salvo e a observacao mantida', { situacao: 'editar', tipo: 'training', nota: 'Observacao gravada', beforeunload: 0 })
+
+  // Esvaziar a observacao: o corpo leva vazia, e a gravada e limpa.
+  await setExceptionField(page, 'Observação', '')
+  await expectException('esvaziar a observacao: sujo', { nota: '', beforeunload: 1 })
+  body = await saveExceptionForm(page, mock)
+  report('Excecao por data, esvaziar a observacao e salvar: o corpo leva note vazia', body !== null && Object.hasOwn(body, 'note') && body.note === '' && body.exception_type === 'training')
+  await setExceptionField(page, 'Colaborador', '1')
+  await expectException('escolher de novo: a excecao continua, sem observacao', { situacao: 'editar', tipo: 'training', nota: '', beforeunload: 0 })
+
+  // Data sem excecao: abre vazia (padroes), como nova.
+  await setExceptionField(page, 'Data', insideNext)
+  await expectException('data sem excecao: abre vazia, como nova, limpo', { situacao: 'nova', tipo: 'remote', nota: '', botao: 'Salvar exceção', beforeunload: 0, descartar: false })
+
+  // Fora do periodo carregado: consulta o mesmo GET so daquele colaborador e dia.
+  before = mock.requests.length
+  await setExceptionField(page, 'Data', outside)
+  await page.waitFor(`${EXCEPTION_FORM}.querySelector('[data-exception-status]').getAttribute('data-exception-status') === 'editar'`)
+  const lookups = scheduleGets(mock, before).filter((r) => r.query?.from === outside && r.query?.to === outside)
+  report('Excecao por data, fora do periodo: uma consulta ao GET da Escala so do colaborador e do dia', lookups.length === 1 && lookups[0].query.employee_id === '1')
+  await expectException('fora do periodo: carrega o tipo e a observacao gravados', { situacao: 'editar', tipo: 'training', nota: 'Gravada fora do periodo', botao: 'Salvar alterações', beforeunload: 0 })
+
+  // Protecao: trocar de colaborador, de data e Limpar com o formulario sujo.
+  await setExceptionField(page, 'Observação', 'Rascunho')
+  await setExceptionField(page, 'Colaborador', '3')
+  await expectException('sujo, trocar de colaborador: pergunta', { descartar: true })
+  await page.click(button('Continuar editando', ALERT))
+  await expectException('sujo, trocar de colaborador, Continuar: o mesmo colaborador e o rascunho', { descartar: false, colaborador: '1', data: outside, nota: 'Rascunho', beforeunload: 1 })
+  await setExceptionField(page, 'Data', insideNext)
+  await expectException('sujo, trocar de data: pergunta', { descartar: true })
+  await page.click(button('Descartar alterações', ALERT))
+  await expectException('sujo, trocar de data, Descartar: a outra data, sem excecao, limpo', { descartar: false, data: insideNext, situacao: 'nova', nota: '', beforeunload: 0 })
+  await setExceptionField(page, 'Data', outside)
+  await page.waitFor(`${EXCEPTION_FORM}.querySelector('[data-exception-status]').getAttribute('data-exception-status') === 'editar'`)
+  await expectException('voltar a data descartada: a gravada, sem o rascunho descartado, limpo', { data: outside, nota: 'Gravada fora do periodo', beforeunload: 0, descartar: false })
+  await setExceptionField(page, 'Data', insideNext)
+  await setExceptionField(page, 'Observação', 'Rascunho')
+  await page.click(button('Limpar', EXCEPTION_FORM))
+  await expectException('sujo, Limpar: pergunta', { descartar: true })
+  await page.click(button('Continuar editando', ALERT))
+  await expectException('sujo, Limpar, Continuar: dados mantidos', { colaborador: '1', nota: 'Rascunho', beforeunload: 1 })
+  await page.click(button('Limpar', EXCEPTION_FORM))
+  await page.click(button('Descartar alterações', ALERT))
+  await expectException('sujo, Limpar, Descartar: sem colaborador, limpo', { colaborador: '', situacao: 'none', beforeunload: 0, descartar: false })
+  await setExceptionField(page, 'Colaborador', '1')
+  await page.click(button('Limpar', EXCEPTION_FORM))
+  await expectException('limpo, Limpar: sem perguntar', { colaborador: '', descartar: false })
+  await setExceptionField(page, 'Colaborador', '1')
+  await setExceptionField(page, 'Data', inside)
+  await setExceptionField(page, 'Colaborador', '3')
+  await expectException('limpo, trocar de colaborador: sem perguntar', { colaborador: '3', descartar: false, situacao: 'nova' })
+
+  // Troca de tela e recarregar com o formulario sujo.
+  await setExceptionField(page, 'Observação', 'Rascunho')
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await expectException('sujo, menu: pergunta e nao troca de tela', { descartar: true, rota: '/app/escala-presencial' })
+  await page.click(button('Continuar editando', ALERT))
+  await expectException('sujo, menu, Continuar: fica, dados mantidos', { rota: '/app/escala-presencial', nota: 'Rascunho' })
+  page.events.length = 0
+  await page.send('Page.reload').catch(() => {})
+  await sleep(800)
+  const prompt = page.events.find((e) => e.method === 'Page.javascriptDialogOpening')
+  report('Excecao por data, sujo, recarregar: aviso do navegador (beforeunload)', prompt?.params.type === 'beforeunload')
+  if (prompt) { await page.send('Page.handleJavaScriptDialog', { accept: false }); await sleep(300) }
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await page.click(button('Descartar alterações', ALERT))
+  await expectException('sujo, menu, Descartar: troca de tela, sem listener', { rota: '/app/calendario', beforeunload: 0 })
+
+  // Consulta com erro: sem salvar ate conferir; "Tentar de novo" confere.
+  mock.refuseScheduleLookup(500, 'Falha simulada do servidor.')
+  await openFromMenu(page, port, 'Escala presencial', 1366)
+  await page.waitFor(`!!${EXCEPTION_FORM}`)
+  await setExceptionField(page, 'Colaborador', '1')
+  await setExceptionField(page, 'Data', '2099-01-16')
+  await page.waitFor(`${EXCEPTION_FORM}.querySelector('[data-exception-status]').getAttribute('data-exception-status') === 'error'`)
+  await expectException('consulta com erro: avisa, tipo, observacao e salvar desabilitados', { situacao: 'error', tipo_desabilitado: true, nota_desabilitada: true, salvar_desabilitado: true })
+  mock.refuseScheduleLookup(null)
+  await page.click(button('Tentar de novo', EXCEPTION_FORM))
+  await page.waitFor(`${EXCEPTION_FORM}.querySelector('[data-exception-status]').getAttribute('data-exception-status') === 'nova'`)
+  await expectException('consulta com erro, Tentar de novo: confere e abre como nova', { situacao: 'nova', tipo_desabilitado: false, salvar_desabilitado: false })
+  report('Excecao por data: so os dois POST de excecao dos salvamentos (descartar, limpar e o erro nao gravam)', exceptionPosts(mock, blockStart).length === 2)
+  mock.setScheduleExceptions([])
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2367,6 +2527,7 @@ try {
     [18, 'Chamados criticos: corpo da edicao (9.12.1)', () => criticalIncidentEditBody(page, mock.port, mock)],
     [19, 'Escala: corpo da excecao por data (9.12.1)', () => scheduleExceptionBody(page, mock.port, mock)],
     [20, 'Mapa PA: remover o vinculo em edicao (9.12.1)', () => paMapRemoveEditing(page, mock.port, mock)],
+    [21, 'Escala: excecao por data carrega a gravada (9.12.4)', () => scheduleExceptionLoad(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

@@ -108,7 +108,7 @@ for (const [source, pattern, label] of [
   // F2B: a previa passa pelo runAction sem mensagem de sucesso (so guarda o resultado).
   [operationalSource, /async function previewRule\(\) \{[\s\S]*submit\(\s*\(\) => post\('portal\/schedules\.php', buildRulePayload\(data, 'rule_preview'\)\),\s*null,\s*notify,\s*null,/, 'Previa da regra deve passar pelo runAction sem feedback de sucesso'],
   [operationalSource, /ACTION_FEEDBACK\.scheduleRuleRemoved[\s\S]*resetRule\(emptyScheduleRule\(\)\)/, 'Remocao de escala deve limpar rule e weekdays quando aplicavel'],
-  [operationalSource, /ACTION_FEEDBACK\.scheduleExceptionSaved[\s\S]*setException\(\{ employee_id: '', exception_date: exception\.exception_date \|\| today, exception_type: 'remote', note: '' \}\)/, 'Excecao deve limpar campos transacionais'],
+  [operationalSource, /ACTION_FEEDBACK\.scheduleExceptionSaved[\s\S]*setExceptionSelection\(\{ employee_id: '', exception_date: exception\.exception_date \|\| today \}\)\s*setExceptionEdits\(\{ key: '', values: \{\} \}\)/, 'Excecao deve limpar campos transacionais (9.12.4: escolha e edicoes)'],
   [operationalSource, /successMessage[\s\S]*null[\s\S]*notify\(importFeedback\(result\)\)/, 'Importacao deve preservar feedback resumido sem notificacao duplicada'],
   [operationalSource, /ACTION_FEEDBACK\.oncallCreated[\s\S]*setForm\(\{ \.\.\.form, employee_id: '', note: '' \}\)/, 'Plantao deve limpar campos transacionais'],
   [criticalSource, /ACTION_FEEDBACK\.criticalCreated/, 'Criacao de chamado critico deve preservar mensagem da Fase 17'],

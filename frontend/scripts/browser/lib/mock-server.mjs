@@ -80,6 +80,10 @@ let documentRefusal = null
 // [9.12.1] Vinculos de PA removidos (somem do GET) e a recusa do remover.
 const removedPaAssignments = new Set()
 let paRemoveRefusal = null
+// [9.12.4] Excecoes de escala gravadas (o GET filtra pelo periodo e pelo
+// colaborador da consulta, como o servidor) e a recusa da consulta.
+let scheduleExceptions = []
+let scheduleLookupRefusal = null
 const pausedStatus = () => ({ ...GET['status.php'], n1: pausedEmployee ? [{ id: 1, nome: NAMES[0], equipe: 'n1', ativo: true, em_pausa: true, motivo_pausa: 'Café', inicio_pausa: `${DAY}T09:55:00-03:00`, elapsed_seconds: 300, jornada_entrada: '08:00', jornada_saida: '17:00' }] : [] })
 // [9.12.1, II3] Um vinculo de PA com fim da validade: o formulario carrega o fim na edicao.
 export const PA_ASSIGNMENT = { id: 7, pa_number: '1726', employee_id: 1, employee_name: NAMES[0], team: TEAMS[0], schedule_rule_label: 'Sempre presencial', source: 'assignment', valid_from: '2026-10-01', valid_until: '2026-12-31', notes: 'Observacao do vinculo', presence: { status: 'onsite', situacao: 'presencial', categoria: null, detalhe: null, parcial: null } }
@@ -156,7 +160,24 @@ function apiResponse(method, key, search, body) {
   if ((key === 'adicionar_funcionario.php' || key === 'atualizar_funcionario.php') && method === 'POST' && body?.nome === FAILING_EMPLOYEE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
   if (key === 'portal/absences.php' && method === 'POST' && body?.note === FAILING_ABSENCE_NOTE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
   if (key === 'portal/schedules.php') {
-    if (method === 'GET') return [200, { sucesso: true, rules: scheduleRules.filter((rule) => !removedRules.has(rule.employee_id)), generated: generatedDays }]
+    if (method === 'GET') {
+      const from = search.get('from') || ''
+      const to = search.get('to') || ''
+      const employeeId = search.get('employee_id') || ''
+      if (scheduleLookupRefusal && from && from === to && employeeId) return scheduleLookupRefusal
+      const exceptions = scheduleExceptions.filter((item) => (!from || item.exception_date >= from) && (!to || item.exception_date <= to) && (!employeeId || String(item.employee_id) === employeeId))
+      return [200, { sucesso: true, period: { from, to }, rules: scheduleRules.filter((rule) => !removedRules.has(rule.employee_id)), exceptions, generated: generatedDays }]
+    }
+    // Como o servidor (9.12.4, KK6): na data ja gravada, note ausente mantem a observacao.
+    if (body?.action === 'exception') {
+      const index = scheduleExceptions.findIndex((item) => String(item.employee_id) === String(body.employee_id) && item.exception_date === body.exception_date)
+      const previous = index >= 0 ? scheduleExceptions[index] : null
+      const note = Object.hasOwn(body, 'note') ? (String(body.note ?? '').trim() || null) : (previous?.note ?? null)
+      const saved = { id: previous?.id ?? 900 + scheduleExceptions.length, employee_id: Number(body.employee_id), exception_date: body.exception_date, exception_type: body.exception_type, note }
+      if (index >= 0) scheduleExceptions[index] = saved
+      else scheduleExceptions.push(saved)
+      return [200, { sucesso: true, id: saved.id, mensagem: 'Excecao de escala salva.' }]
+    }
     if (body?.action === 'rule_preview') return [200, { sucesso: true, rule_label: 'Previa de teste', preview: [] }]
     if (['rule', 'remove_rule'].includes(body?.action) && body?.employee_id === FAILING_RULE_EMPLOYEE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
     if (body?.action === 'remove_rule') removedRules.add(body.employee_id)
@@ -188,7 +209,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
 const LEADERSHIP_SESSION = { sucesso: true, csrf_token: 'teste', role: 'lideranca', permissions: ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage'], ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' }, gestor: { autenticado: true, admin: false, username: 'lider.qa', role: 'lideranca' } }
 const ADMIN_SESSION = GET['session.php']
 
-// Sobe o servidor numa porta livre; devolve { port, requests, useLeadershipSession, useAdminSession, restoreRules, keepOnlyRule, decideElsewhere, refuseDecision, restoreDecisions, setDecisionDelay, setPausedEmployee, refuseForceEnd, restoreDocuments, removeDocumentElsewhere, refuseDocument, restorePaAssignments, refusePaRemove, close }.
+// Sobe o servidor numa porta livre; devolve { port, requests, useLeadershipSession, useAdminSession, restoreRules, keepOnlyRule, decideElsewhere, refuseDecision, restoreDecisions, setDecisionDelay, setPausedEmployee, refuseForceEnd, restoreDocuments, removeDocumentElsewhere, refuseDocument, restorePaAssignments, refusePaRemove, setScheduleExceptions, scheduleExceptions, refuseScheduleLookup, close }.
 // setDecisionDelay tambem atrasa derrubar pausa e remover documento (DD3).
 export function startMockServer(appDir) {
   const requests = []
@@ -202,7 +223,7 @@ export function startMockServer(appDir) {
         const key = url.pathname.slice(5)
         let body = null
         try { body = raw ? JSON.parse(raw) : null } catch { body = null }
-        requests.push({ method: req.method, key, body })
+        requests.push({ method: req.method, key, body, query: Object.fromEntries(url.searchParams) })
         const [status, payload] = apiResponse(req.method, key, url.searchParams, body)
         setTimeout(() => {
           res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' })
@@ -219,7 +240,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

@@ -100,7 +100,8 @@ for (const [source, pattern, label] of [
   [operationalSource, /function emptyScheduleRule\(effectiveFrom = today\)[\s\S]*weekdays: \[\]/, 'Helper de reset de escala deve limpar weekdays'],
   [operationalSource, /setRulePreview\(null\)\s*resetRule\(emptyScheduleRule\(data\.effective_from \|\| today\)\)/, 'Salvar escala deve limpar colaborador, weekdays e a previa'],
   [operationalSource, /resetRule\(emptyScheduleRule\(\)\)/, 'Remover escala deve limpar weekdays quando aplicavel'],
-  [operationalSource, /setException\(\{ employee_id: '', exception_date: exception\.exception_date \|\| today, exception_type: 'remote', note: '' \}\)/, 'Excecao deve limpar campos transacionais'],
+  // [9.12.4] Tipo e observacao voltam aos padroes ao limpar a escolha (sem colaborador) e as edicoes.
+  [operationalSource, /setExceptionSelection\(\{ employee_id: '', exception_date: exception\.exception_date \|\| today \}\)\s*setExceptionEdits\(\{ key: '', values: \{\} \}\)/, 'Excecao deve limpar campos transacionais'],
   [operationalSource, /if \(importInputRef\.current\) importInputRef\.current\.value = ''/, 'Importacao de escala deve limpar input de arquivo'],
   [paMapSource, /resetForm\?\.\(\)/, 'PA Map deve limpar formulario apos salvar vinculo'],
   [criticalSource, /setFormItem\(null\)/, 'Chamado critico deve sair do modo edicao'],
