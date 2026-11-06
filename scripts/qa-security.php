@@ -1933,11 +1933,35 @@ $absenceSpec = static fn (array $omit, array $override = []): array => [
     'endpoint' => 'api/portal/absences.php', 'method' => 'POST', 'content_type' => 'application/json', 'session' => $manager,
     'body' => (string)json_encode(array_diff_key($override + $absenceBody, array_flip($omit))),
 ];
+// [9.12.5] Valores presentes que nao sao do tipo do campo: 400 com a mensagem
+// do campo, sem gravar nem auditar. Antes, texto num alerta virava "ligado" e
+// o limite em texto ou fracao passava por intval. O ultimo caso tem campos
+// validos junto: nada e gravado.
+$strictConfigCases = [
+    'config_alerta_texto' => ['{"alerta_15minutos":"sim"}', 'Valor inválido para "Alerta aos 15 minutos".'],
+    'config_alerta_texto_false' => ['{"alerta_20minutos":"false"}', 'Valor inválido para "Alerta aos 20 minutos".'],
+    'config_alerta_numero' => ['{"alerta_15minutos":1}', 'Valor inválido para "Alerta aos 15 minutos".'],
+    'config_alerta_zero' => ['{"alerta_20minutos":0}', 'Valor inválido para "Alerta aos 20 minutos".'],
+    'config_alerta_lista' => ['{"alerta_20minutos":[]}', 'Valor inválido para "Alerta aos 20 minutos".'],
+    'config_limite_texto' => ['{"limite_pausa_por_equipe":"6"}', 'Limite de pausa deve ser um número inteiro entre 1 e 10'],
+    'config_limite_fracao' => ['{"limite_pausa_por_equipe":5.5}', 'Limite de pausa deve ser um número inteiro entre 1 e 10'],
+    'config_limite_fracao_inteira' => ['{"limite_pausa_por_equipe":5.0}', 'Limite de pausa deve ser um número inteiro entre 1 e 10'],
+    'config_limite_booleano' => ['{"limite_pausa_por_equipe":true}', 'Limite de pausa deve ser um número inteiro entre 1 e 10'],
+    'config_limite_acima' => ['{"limite_pausa_por_equipe":11}', 'Limite de pausa deve ser um número inteiro entre 1 e 10'],
+    'config_duracao_texto' => ['{"duracao_pausa_minutos":"abc"}', 'Duração da pausa deve ser um número inteiro entre 5 e 60 minutos'],
+    'config_duracao_lista' => ['{"duracao_pausa_minutos":[20]}', 'Duração da pausa deve ser um número inteiro entre 5 e 60 minutos'],
+    'config_duracao_abaixo' => ['{"duracao_pausa_minutos":4}', 'Duração da pausa deve ser um número inteiro entre 5 e 60 minutos'],
+    'config_validos_e_alerta_texto' => ['{"limite_pausa_por_equipe":5,"duracao_pausa_minutos":25,"alerta_15minutos":true,"alerta_20minutos":"nao"}', 'Valor inválido para "Alerta aos 20 minutos".'],
+];
 $storedConfig = ['limite_pausa_por_equipe' => 4, 'duracao_pausa_minutos' => 30, 'alerta_15minutos' => false, 'alerta_20minutos' => false, 'admin_username' => 'admin'];
 $configSpec = static fn (string $body, array $stored = []): array => [
     'endpoint' => 'api/salvar_configuracao.php', 'method' => 'POST', 'content_type' => 'application/json', 'session' => QA_ADMIN_SESSION,
     'body' => $body, 'state' => ['config_sistema.json' => (string)json_encode($stored + $storedConfig)],
 ];
+$strictConfigSpecs = [];
+foreach ($strictConfigCases as $case => [$body]) {
+    $strictConfigSpecs[$case] = $configSpec($body);
+}
 $partialCases = qa_run_endpoints($qaDir, [
     'ausencia_sem_ends_on' => $absenceSpec(['ends_on']),
     'ausencia_sem_period_type' => $absenceSpec(['period_type']),
@@ -1947,7 +1971,7 @@ $partialCases = qa_run_endpoints($qaDir, [
     'config_limite_nulo' => $configSpec((string)json_encode(['limite_pausa_por_equipe' => null])),
     'config_gravado_fora_ausente' => $configSpec((string)json_encode(['alerta_15minutos' => true]), ['duracao_pausa_minutos' => 90]),
     'config_nao_objeto' => $configSpec('"texto"'),
-]);
+] + $strictConfigSpecs);
 foreach (['ausencia_sem_ends_on' => 'ends_on', 'ausencia_sem_period_type' => 'period_type', 'ausencia_sem_note' => 'note', 'ausencia_ends_on_nulo' => 'ends_on'] as $case => $missing) {
     $result = $partialCases[$case];
     assert_same([400, "Na edição, envie todos os campos da ausência; faltando: {$missing}.", ''], [$result['status'], $partialMessage($result), $result['stderr']], "ausencia pelo endpoint, {$case}: 400 com a chave que falta");
@@ -1959,10 +1983,10 @@ $configAfter = static function (array $result): array {
 };
 foreach ([
     'config_alerta_nulo' => ['Valor inválido para "Alerta aos 15 minutos".', []],
-    'config_limite_nulo' => ['Limite de pausa deve estar entre 1 e 10', []],
-    'config_gravado_fora_ausente' => ['Duração da pausa deve estar entre 5 e 60 minutos', ['duracao_pausa_minutos' => 90]],
+    'config_limite_nulo' => ['Limite de pausa deve ser um número inteiro entre 1 e 10', []],
+    'config_gravado_fora_ausente' => ['Duração da pausa deve ser um número inteiro entre 5 e 60 minutos', ['duracao_pausa_minutos' => 90]],
     'config_nao_objeto' => ['Dados inválidos', []],
-] as $case => [$message, $stored]) {
+] + array_map(static fn (array $case): array => [$case[1], []], $strictConfigCases) as $case => [$message, $stored]) {
     $result = $partialCases[$case];
     assert_same([400, $message, ''], [$result['status'], $partialMessage($result), $result['stderr']], "configuracao {$case}: 400");
     assert_same($stored + $storedConfig, $configAfter($result), "configuracao {$case}: nada gravado");
@@ -1976,19 +2000,30 @@ foreach ([
     'so o limite' => [['limite_pausa_por_equipe' => 5], [5, 30, false, false]],
     'so um alerta' => [['alerta_20minutos' => true], [4, 30, false, true]],
     'corpo da tela (AdminPage.jsx, SettingsTab)' => [$screenConfig, [5, 25, true, false]],
-    'limite em texto, como antes' => [['limite_pausa_por_equipe' => '6'], [6, 30, false, false]],
+    'os dois alertas desligados' => [['alerta_15minutos' => false, 'alerta_20minutos' => false], [4, 30, false, false]],
+    'limites minimos' => [['limite_pausa_por_equipe' => 1, 'duracao_pausa_minutos' => 5], [1, 5, false, false]],
+    'limites maximos' => [['limite_pausa_por_equipe' => 10, 'duracao_pausa_minutos' => 60, 'alerta_15minutos' => true], [10, 60, true, false]],
 ] as $label => [$body, [$limit, $duration, $alert15, $alert20]]) {
     [$updated, $error] = configuracao_pausas_atualizada($storedConfig, $body);
     assert_same([null, ['limite_pausa_por_equipe' => $limit, 'duracao_pausa_minutos' => $duration, 'alerta_15minutos' => $alert15, 'alerta_20minutos' => $alert20, 'admin_username' => 'admin']], [$error, $updated], "configuracao, {$label}: ausente mantem o atual, enviado grava o enviado, so os quatro campos");
 }
 foreach ([
     'alerta nulo' => [['alerta_20minutos' => null], [], 'Valor inválido para "Alerta aos 20 minutos".'],
-    'duracao gravada fora dos limites, ausente' => [['limite_pausa_por_equipe' => 3], ['duracao_pausa_minutos' => 90], 'Duração da pausa deve estar entre 5 e 60 minutos'],
+    'duracao gravada fora dos limites, ausente' => [['limite_pausa_por_equipe' => 3], ['duracao_pausa_minutos' => 90], 'Duração da pausa deve ser um número inteiro entre 5 e 60 minutos'],
+    'limite em texto (antes aceito por intval)' => [['limite_pausa_por_equipe' => '3'], [], 'Limite de pausa deve ser um número inteiro entre 1 e 10'],
+    'limite abaixo do minimo' => [['limite_pausa_por_equipe' => 0], [], 'Limite de pausa deve ser um número inteiro entre 1 e 10'],
+    'duracao acima do maximo' => [['limite_pausa_por_equipe' => 3, 'duracao_pausa_minutos' => 61], [], 'Duração da pausa deve ser um número inteiro entre 5 e 60 minutos'],
+    'alerta em texto (antes virava ligado)' => [['limite_pausa_por_equipe' => 3, 'alerta_15minutos' => 'sim'], [], 'Valor inválido para "Alerta aos 15 minutos".'],
+    'alerta gravado nulo, ausente (como antes)' => [['limite_pausa_por_equipe' => 3], ['alerta_20minutos' => null], 'Valor inválido para "Alerta aos 20 minutos".'],
+    'alerta "1" em texto' =>[['limite_pausa_por_equipe' => 3, 'alerta_20minutos' => '1'], [], 'Valor inválido para "Alerta aos 20 minutos".'],
+    'gravado em texto ou numero, ausente: segue como antes (so o presente e estrito)' => [['limite_pausa_por_equipe' => 3], ['duracao_pausa_minutos' => '30', 'alerta_15minutos' => 1], null],
     'limite gravado fora dos limites, enviado valido' => [['limite_pausa_por_equipe' => 3], ['limite_pausa_por_equipe' => 50], null],
 ] as $label => [$body, $stored, $message]) {
     [$updated, $error] = configuracao_pausas_atualizada($stored + $storedConfig, $body);
     assert_same([$message, $message === null ? 3 : null], [$error, $updated['limite_pausa_por_equipe'] ?? null], "configuracao, {$label}: " . ($message === null ? 'vale o enviado' : '400'));
 }
+[$updated] = configuracao_pausas_atualizada(['duracao_pausa_minutos' => '30', 'alerta_15minutos' => 1] + $storedConfig, ['limite_pausa_por_equipe' => 3]);
+assert_same([30, true], [$updated['duracao_pausa_minutos'] ?? null, $updated['alerta_15minutos'] ?? null], 'configuracao, gravado em texto ou numero e ausente: inteiro e booleano, como antes');
 $configEndpoint = (string)preg_replace('#//[^\n]*#', '', (string)file_get_contents($root . '/api/salvar_configuracao.php'));
 assert_same([true, true, 0], [
     strpos($configEndpoint, '[$config, $erro_configuracao] = configuracao_pausas_atualizada(carregar_configuracao(), $data);') !== false,

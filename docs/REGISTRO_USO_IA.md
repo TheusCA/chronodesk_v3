@@ -1110,6 +1110,18 @@ Base da afirmação:
 | **Limitacoes declaradas** | O roteiro usa servidor simulado; o GET real com um dia e um colaborador nao foi exercido pela tela contra o PHP. Sem leitor de tela real. Campo de data no formato do navegador; Safari e iPhone nao testados. `gitleaks` ausente; varredura manual de segredos no diff sem achado. |
 | **Validacao humana** | Responsavel, 2026-11-06: **`169a833` aprovado, com LL1 a LL10**. LL7: a conferencia do `period` da consulta fica como defesa; o mutante Q05 fica registrado como equivalente. Pedida e feita na mesma revisao, num commit so de docs: a correcao da formatacao do "1026/1026" na 9.12.4 (asteriscos duplicados). |
 
+### Configuracoes: validacao estrita dos valores presentes (achado da 9.12.3) — 2026-11-06
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Item opcional da revisao de 2026-11-06, num commit proprio: o achado da 9.12.3 (valor presente que nao e booleano, como texto num alerta, vira "ligado"). Validar estritamente os quatro campos presentes (inteiros nos limites e booleanos de verdade), com 400 e a mensagem do campo, teste negativo de ponta a ponta e mutacao. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: o commit deste registro (codigo, testes e docs juntos, como pedido: um commit proprio). Antes dele, `c012ee3` (docs da aprovacao da "Excecao por data"). Sem push; origin em `8fff1c4`. |
+| **O que a IA alterou** | `config.php` (`configuracao_pausas_atualizada()`); `scripts/qa-security.php` (14 recusas novas de ponta a ponta, casos novos na regra, mensagens novas nas recusas antigas, o caso "limite em texto, como antes" virou recusa de proposito). Documentacao: desenho 9.12.3 (achado), 9.12.5 e secao 10; `API_CONTRACTS_FRONTEND.md`; este registro. Endpoint e tela sem mudanca. |
+| **Decisoes de implementacao** | MM1 a MM5, a aprovar (desenho 9.12.5): inteiro so como inteiro JSON (`"6"`, `5.5`, `5.0` e `true` recusados); booleano so `true`/`false` (mais estrito que o `fora_mapa_escala`, que aceita 0 e 1); mensagens dos numeros "deve ser um numero inteiro entre ..."; o gravado ausente segue como antes; a primeira recusa responde e nada e gravado. |
+| **Validacao executada pela IA** | `qa-security.php` com saida 0 (14 recusas novas pelo endpoint real, cada uma com 400, a mensagem do campo, o arquivo igual ao gravado e sem auditoria; casos novos na regra). Mutacao 13/13 em copias da arvore, com a copia limpa conferida antes; os dois mutantes que reproduzem o comportamento antigo morrem. `git diff --check` com saida 0. `test-local.ps1 -SkipHttp -Browser` com saida 0 no commit, em worktree separado: smoke e 14 QAs PHP, roteiro 1026/1026. |
+| **Limitacoes declaradas** | O caminho de sucesso e testado na regra, nao pelo endpoint (II5). PHPStan, Psalm e `gitleaks` ausentes; varredura manual de segredos no diff sem achado. |
+| **Validacao humana** | Pendente: revisao do commit (MM1 a MM5). |
+
 ---
 
 ## 5. Responsabilidade

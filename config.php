@@ -513,31 +513,40 @@ function salvar_configuracao($config) {
  * [9.12.1] Configuracao de pausas que o salvar_configuracao.php grava. Campo
  * ausente no corpo mantem o valor atual ($atual, de carregar_configuracao());
  * antes voltava ao padrao (2, 20 e os dois alertas ligados) e sobrescrevia a
- * configuracao. Presente, validado como antes; nulo presente e invalido. Os
- * limites valem para o valor final, gravado ou enviado.
- * Devolve [configuracao, null] ou [null, mensagem do 400].
+ * configuracao. [9.12.5] Presente, validado estritamente: os dois numeros so
+ * como inteiro JSON (texto, fracao, booleano e nulo dao 400) e os dois alertas
+ * so como true ou false (texto, numero e nulo dao 400; antes, texto virava
+ * "ligado"). O gravado ausente segue como antes (inteiro por intval, alerta
+ * por (bool), nulo invalido). Os limites valem para o valor final, gravado ou
+ * enviado. Devolve [configuracao, null] ou [null, mensagem do 400].
  */
 function configuracao_pausas_atualizada(array $atual, array $data): array {
-    $valor = static fn (string $campo) => array_key_exists($campo, $data) ? $data[$campo] : ($atual[$campo] ?? null);
-    $limite = intval($valor('limite_pausa_por_equipe'));
-    if ($limite < 1 || $limite > 10) {
-        return [null, 'Limite de pausa deve estar entre 1 e 10'];
-    }
-    $duracao = intval($valor('duracao_pausa_minutos'));
-    if ($duracao < 5 || $duracao > 60) {
-        return [null, 'Duração da pausa deve estar entre 5 e 60 minutos'];
+    $config = $atual;
+    foreach ([
+        'limite_pausa_por_equipe' => [1, 10, 'Limite de pausa deve ser um número inteiro entre 1 e 10'],
+        'duracao_pausa_minutos' => [5, 60, 'Duração da pausa deve ser um número inteiro entre 5 e 60 minutos'],
+    ] as $campo => [$minimo, $maximo, $mensagem]) {
+        if (array_key_exists($campo, $data)) {
+            if (!is_int($data[$campo])) {
+                return [null, $mensagem];
+            }
+            $numero = $data[$campo];
+        } else {
+            $numero = intval($atual[$campo] ?? null);
+        }
+        if ($numero < $minimo || $numero > $maximo) {
+            return [null, $mensagem];
+        }
+        $config[$campo] = $numero;
     }
     foreach (['alerta_15minutos' => 'Alerta aos 15 minutos', 'alerta_20minutos' => 'Alerta aos 20 minutos'] as $campo => $rotulo) {
-        if ($valor($campo) === null) {
+        $alerta = array_key_exists($campo, $data) ? $data[$campo] : ($atual[$campo] ?? null);
+        if ($alerta === null || (array_key_exists($campo, $data) && !is_bool($alerta))) {
             return [null, "Valor inválido para \"{$rotulo}\"."];
         }
+        $config[$campo] = (bool)$alerta;
     }
-    return [array_merge($atual, [
-        'limite_pausa_por_equipe' => $limite,
-        'duracao_pausa_minutos' => $duracao,
-        'alerta_15minutos' => (bool)$valor('alerta_15minutos'),
-        'alerta_20minutos' => (bool)$valor('alerta_20minutos'),
-    ]), null];
+    return [$config, null];
 }
 
 function normalizar_samaccountname($login) {
