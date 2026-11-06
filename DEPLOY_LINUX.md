@@ -1068,6 +1068,12 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   sao apagados depois de um ciclo estavel, em lote proprio, pelo responsavel
   (passo 5 da 9.12). Entra no roteiro consolidado da Parte B (deploy unico
   depois do F9).
+- **Deploy 1 da Parte B (decisao de 2026-11-06: F1 a F7, acabamento,
+  retirada das paginas legadas e 9.12.1 a 9.12.5; F8 e F9 no deploy 2):**
+  siga o roteiro "Deploy 1 da Parte B (roteiro unico ...)", abaixo, e nao os
+  itens por lote desta lista nem o `git pull` deste item. As mencoes a
+  "deploy unico depois do F9" nos itens e roteiros por lote valem, desde
+  2026-11-06, para o deploy 1.
 - Deploy que traz o Lote 5c: o preflight passa a reprovar `ENABLE_LOCAL_ADMIN`
   ligado fora de `development` e avisa se `AUTH_SOURCE` ainda estiver no
   `.env` (a variavel foi removida do codigo; pode ser apagada do `.env`). Depois
@@ -1792,12 +1798,13 @@ cd /var/www/chronodesk; sudo env VERIFICA="$V" bash scripts/ensaio-migration.sh 
    (global, por banco e por tabela), sem senha:
 
 ```bash
-U=$(sudo grep -E '^DB_USER=' /var/www/chronodesk/.env | cut -d= -f2- | tr -d "\"'"); read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT '$U' <> '' AS usuario_lido, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'DROP') AS concessoes_drop, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'TRIGGER') AS concessoes_trigger;"; unset P U
+U=$(sudo grep -E '^DB_USER=' /var/www/.env | cut -d= -f2- | tr -d "\"'"); read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT '$U' <> '' AS usuario_lido, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'DROP') AS concessoes_drop, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'TRIGGER') AS concessoes_trigger;"; unset P U
 ```
 
    Esperado: `usuario_lido = 1`, `concessoes_drop = 0` e
    `concessoes_trigger = 0`. Com `usuario_lido = 0`, confira o nome da
-   variavel no `.env`. Com `DROP` ou `TRIGGER` maior que `0`: **nao bloqueia
+   variavel no `.env`. (Corrigido em 2026-11-06: a linha lia o `DB_USER`
+   de `/var/www/chronodesk/.env`; o `.env` em uso e o `/var/www/.env`.) Com `DROP` ou `TRIGGER` maior que `0`: **nao bloqueia
    este deploy por si** (a verificacao da 019 acusa o `TRUNCATE` com
    `inconsistente = 1`), mas anote e avise o responsavel; a correcao (tirar
    os dois privilegios do usuario da aplicacao) e decisao dele, ligada a
@@ -2559,6 +2566,861 @@ uma vez, logo antes do `git merge` unico; build e recarga uma vez; a
 verificacao do F7 vem depois da do F6. O rollback e o do consolidado (volta
 toda a Parte B ao `pre-deploy-commit`); o F7 nao acrescenta passo de banco a
 ele, e o desligamento rapido continua valendo sem rollback.
+
+### Deploy 1 da Parte B (roteiro unico: F1 a F7, acabamento, retirada das paginas legadas e 9.12)
+
+**Decisao do responsavel (2026-11-06):** o deploy da Parte B passa a ser em
+**duas etapas**, porque o F8 e o F9 dependem da Lideranca, sem prazo. O
+**deploy 1** (este roteiro) leva tudo o que ja esta aprovado no branch: F1,
+F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d,
+17e, 17f, 17g e DD), a retirada das paginas legadas (9.12.2) e as correcoes
+das 9.12.1 a 9.12.5. O **deploy 2** (depois, com roteiro proprio, quando a
+Lideranca responder) leva o F8 e o F9. Desenho:
+`docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secoes 9.13 e 10.
+
+Este roteiro substitui, para o deploy 1, os roteiros por lote acima ("Deploy
+11 - Parte B, F3", "Deploy que traz o F4" a "o F7", os itens do F1, do F2, do
+F2B, do SEC-07b e da retirada das paginas legadas em "Atualizacao de
+Versao"). Eles continuam como referencia do detalhe de cada lote (o que cada
+numero esperado quer dizer); **a ordem e os comandos que valem sao os
+daqui**. O que vai no deploy 1 e nao tem efeito: o commit 1 do F8
+(`services/EmployeeLunchPolicy.php`, regra pura) so e chamado pelo
+`scripts/qa-employee-lunch.php`; nenhum endpoint, tela ou carregador o usa
+(conferido em 2026-11-06). As migrations 018 (F8) e 020 (F9) nao existem no
+commit; a 013 foi dispensada (Q3 e Q4 de 2026-10-07 em 0).
+
+**A DEFINIR (o responsavel responde na revisao):**
+- **Data e janela do deploy**, fora do horario de operacao: A DEFINIR.
+- **Quem acompanha** (alem de quem executa): A DEFINIR.
+
+Todas as consultas devolvem **so contagens, estrutura e a data do corte**,
+nunca nome, login nem texto; a unica excecao e a consulta da D5 (passo 7f),
+que devolve so o ID interno do cadastro a regularizar. A senha do root do
+MySQL e sempre lida sem eco (`read -rsp`) e apagada no fim do comando
+(`unset P`); nunca a escreva no comando nem neste documento. O valor do
+cookie da medicao (passos 0b, 6a e 7j) vale como senha: nunca em chat,
+chamado ou documento. Onde aparece `<URL>`, use a URL base do vhost; onde
+aparece `<ServerName do vhost>`, o `ServerName` do VirtualHost do portal;
+onde aparece `<login do operador>`, o login AD de quem registra o corte;
+onde aparece `<commit validado na estacao>`, o hash completo anotado no
+passo 0k. Cada comando Linux esta em **uma linha**.
+
+**Branches.** O clone do servidor fica no `codex/modernizacao-ui-backend`
+(branch local, nao muda de nome); o commit do deploy vem do
+`feat/employee-form-rhf-zod` do `origin`, publicado pelo responsavel antes
+do passo 0k. O `git merge --ff-only` leva o branch local do servidor ate
+esse commit, sem commit de merge.
+
+**Regras de parada em todo o roteiro.**
+- Qualquer linha com `PARE`, ou `FALHOU` num ensaio onde nao era esperado:
+  pare e envie so a contagem ou a mensagem.
+- Verificacao da 019 com **`inconsistente = 1`** (pendencia 16a): pare, nao
+  rode o registro do corte, nao apague nem altere linha e avise o
+  responsavel.
+- Nada de `git pull`, e nenhum `git fetch` depois do passo 2: os passos 3 a
+  7 usam so o commit gravado em `/var/backups/chronodesk/deploy1-commit`.
+
+**Janela (o que o usuario ve).** As migrations 011, 014 e 019 (passo 4) nao
+mudam o que o codigo anterior faz. A 012 e o `git merge` rodam no mesmo
+comando (passo 6b): a tela de Ausencias do codigo anterior responde 503 so
+entre os dois (segundos). Entre o `git merge` e o build (passo 6c), o
+navegador ainda carrega as telas anteriores com a API nova (detalhes nas
+"Janela" dos roteiros do F3 ao F7). As paginas legadas passam a 302/410/403
+no `git merge` (o `.htaccess` e lido a cada requisicao). Avise quem cuida dos
+cadastros, da escala e do Mapa PA para nao gravar durante a janela.
+
+**0. Antes do dia do deploy, com o responsavel.** Cada item tem o comando e
+o esperado, so com contagens. Anote os numeros: os passos seguintes comparam.
+
+0a. **Codigo e banco do servidor: deploys 1 a 7 da fila no ar, Parte B
+   ausente.**
+
+```bash
+cd /var/www/chronodesk; echo "branch: $(sudo git rev-parse --abbrev-ref HEAD)"; sudo git merge-base --is-ancestor 5d5c7c93db383c163b5e753f44375d7e5c34a117 HEAD && echo "deploys 1 a 7 no codigo: OK" || echo "PARE: o codigo no ar nao tem o deploy 7 da fila (5d5c7c9)"; echo "alteracoes locais: $(sudo git status --short | wc -l)"
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT VERSION() AS mysql, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle') AS migration_015, (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND INDEX_NAME = 'uq_funcionarios_ad_login') AS migration_016, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_shift_attachments' AND COLUMN_NAME = 'team') AS migration_017, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME IN ('fora_mapa_escala', 'arquivado_em', 'arquivado_por')) AS colunas_011_014, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_absences' AND COLUMN_NAME IN ('category', 'period_type', 'cancelled_by')) AS colunas_012, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_presence_cutoff') AS tabela_019;"; unset P
+```
+
+   Esperado: `branch: codex/modernizacao-ui-backend`, `deploys 1 a 7 no
+   codigo: OK`, `alteracoes locais: 0`; `mysql` 8.0.29 ou mais novo (os
+   gatilhos da 019 usam `CREATE TRIGGER IF NOT EXISTS`),
+   `migration_015 = 1`, `migration_016 = 1`, `migration_017 = 1`,
+   `colunas_011_014 = 0`, `colunas_012 = 0` e `tabela_019 = 0`. Qualquer
+   diferenca: **pare** e traga os numeros (o roteiro supoe os deploys 1 a 7
+   da fila no ar e nada da Parte B aplicado).
+
+0b. **Referencia do `status.php` e do `dashboard.php` (0b do F7, DV15)**, com
+   o codigo atual no ar, o script lido do branch remoto sem gravar arquivo
+   (condicoes da "Medicao do Polling": conta do responsavel, sem
+   `CONSULTAS`, `N=200`, aba fechada, **a mesma conta** em todas as
+   medicoes). Anote p50 e p95 de cada endpoint, duas ou tres rodadas:
+
+```bash
+cd /var/www/chronodesk; sudo git fetch origin feat/employee-form-rhf-zod && sudo git cat-file -e origin/feat/employee-form-rhf-zod:scripts/medir-polling.sh && bash <(sudo git show origin/feat/employee-form-rhf-zod:scripts/medir-polling.sh)
+sudo git cat-file -e origin/feat/employee-form-rhf-zod:scripts/medir-polling.sh && URL=http://127.0.0.1/api/portal/dashboard.php bash <(sudo git show origin/feat/employee-form-rhf-zod:scripts/medir-polling.sh)
+```
+
+   Esperado: p50 e p95 de cada um (referencia do F2: p95 26,8 ms no
+   `status.php`, 2026-10-06). Registre na secao 9.9 do desenho. Erro
+   `unknown revision` ou `Not a valid object name` no
+   `origin/feat/employee-form-rhf-zod`: o clone so busca o branch do
+   servidor (refspec do `origin`); avise o responsavel antes do dia (o
+   passo 2 depende desse `fetch`).
+
+0c. **Q-F6, variante sem a 011** (marcador `[N_PAS]` do aviso; so
+   contagens), as duas consultas:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM portal_pa_inventory WHERE active = 1) AS pas_inventario, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1) AS vinculos_ativos, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_vigentes_ou_futuros, (SELECT COUNT(*) FROM (SELECT pa_number FROM portal_pa_assignments WHERE active = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE()) GROUP BY pa_number HAVING COUNT(*) > 1) t) AS pas_compartilhados_hoje, (SELECT COUNT(*) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND f.ativo = 0) AS vinculos_de_inativos, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND team = 'lideranca' AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_lideranca;"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM portal_pa_assignments a JOIN portal_pa_assignments b ON b.employee_id = a.employee_id AND b.id > a.id AND b.active = 1 AND b.valid_from <= COALESCE(a.valid_until, '9999-12-31') AND COALESCE(b.valid_until, '9999-12-31') >= a.valid_from WHERE a.active = 1) AS sobreposicoes_mesmo_colaborador, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND valid_until < valid_from) AS periodo_invertido, (SELECT COUNT(*) FROM portal_pa_assignments a WHERE a.active = 1 AND NOT EXISTS (SELECT 1 FROM portal_pa_inventory i WHERE i.active = 1 AND i.pa_number = a.pa_number)) AS vinculos_fora_do_inventario, (SELECT COUNT(*) FROM portal_pa_assignments a LEFT JOIN portal_schedule_rules r ON r.employee_id = a.employee_id AND r.effective_from <= CURDATE() AND (r.effective_until IS NULL OR r.effective_until >= CURDATE()) WHERE a.active = 1 AND a.valid_from <= CURDATE() AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND a.team <> 'lideranca' AND a.schedule_rule_type <> COALESCE(IF(r.rule_type = 'cycle', 'undefined', r.rule_type), 'undefined')) AS copia_tipo_divergente_hoje, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND notes IS NOT NULL AND notes <> '') AS vinculos_com_observacao, (SELECT COUNT(*) FROM portal_pa_map WHERE record_status = 'active') AS legado_total, (SELECT COUNT(*) FROM portal_pa_map WHERE record_status = 'active' AND work_date >= CURDATE()) AS legado_futuro;"; unset P
+```
+
+   Referencia (2026-10-15): `pas_compartilhados_hoje = 6`,
+   `vinculos_de_inativos = 1` (o caso da D5), `vinculos_lideranca = 2`,
+   `sobreposicoes_mesmo_colaborador = 0`, `periodo_invertido = 0`,
+   `vinculos_fora_do_inventario = 0`. Os tres ultimos maiores que `0`: dado
+   antigo, decidir antes do dia (roteiro do F6, passo 3).
+
+0d. **Q-F7, variante sem a 011, e rotulo de equipe** (marcador
+   `[N_SEM_REGRA]`; num dia util, em horario de expediente):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) = 'n1') AS ativos_n1, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) = 'n2') AS ativos_n2, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) IN ('lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe')) AS ativos_lideranca, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe')) AS ativos_outras_equipes, (SELECT COUNT(*) FROM funcionarios f WHERE f.ativo = 1 AND LOWER(TRIM(f.equipe)) IN ('n1', 'n2') AND NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= CURDATE() AND (r.effective_until IS NULL OR r.effective_until >= CURDATE()))) AS n1_n2_sem_regra_hoje, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND jornada_entrada >= jornada_saida) AS jornada_invertida, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND NOT (jornada_entrada <= almoco_inicio AND almoco_inicio < almoco_fim AND almoco_fim <= jornada_saida)) AS almoco_fora_da_jornada, (SELECT COUNT(*) FROM portal_absences WHERE status = 'approved' AND starts_on <= CURDATE() AND ends_on >= CURDATE()) AS ausencias_aprovadas_hoje, (SELECT COUNT(*) FROM portal_schedule_exceptions WHERE exception_date = CURDATE() AND exception_type IN ('day_off', 'absence', 'vacation', 'leave')) AS excecoes_de_ausencia_hoje;"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT COUNT(*) AS rotulo_que_o_php_nao_reconhece FROM funcionarios WHERE ativo = 1 AND (CAST(LOWER(TRIM(equipe)) AS BINARY) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe') OR LOCATE(CAST('Ç' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0 OR LOCATE(CAST('Ã' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0);"; unset P
+```
+
+   Referencia (2026-10-26): `ativos_n1 = 13`, `ativos_n2 = 9`,
+   `ativos_lideranca = 3`, `n1_n2_sem_regra_hoje = 6`; esperado `0` em
+   `ativos_outras_equipes`, `jornada_invertida`, `almoco_fora_da_jornada` e
+   `rotulo_que_o_php_nao_reconhece` (maior que `0`: corrigir o cadastro pela
+   tela antes do dia; regras de leitura no roteiro do F7, passo 4).
+
+0e. **Pendencia 16a: verificacao da 019 antes de tudo** (arquivo lido do
+   branch remoto, sem gravar):
+
+```bash
+cd /var/www/chronodesk; read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e origin/feat/employee-form-rhf-zod:migrations/verificacao/20261013_019_presence_cutoff_check.sql && bash -o pipefail -c 'sudo git show origin/feat/employee-form-rhf-zod:migrations/verificacao/20261013_019_presence_cutoff_check.sql | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P
+```
+
+   Esperado: `tabela_019 = 0`, `gatilhos_019 = 0`, `copia_rollback = 0`,
+   `eventos_registro = 0`, `eventos_remocao = 0` e **`inconsistente = 0`**
+   (o aviso de tabela ausente no lugar do corte). Lembrete da regra: a
+   partir daqui, `inconsistente = 1` em qualquer verificacao da 019 manda
+   parar.
+
+0f. **Pendencia 16b: privilegios do usuario do banco da aplicacao** (sem
+   `DROP` nem `TRIGGER`; VULN-002). O `DB_USER` e lido do `/var/www/.env`, o
+   arquivo que a aplicacao e o preflight usam; a consulta devolve so
+   contagens, sem senha:
+
+```bash
+U=$(sudo grep -E '^DB_USER=' /var/www/.env | cut -d= -f2- | tr -d "\"'"); read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT '$U' <> '' AS usuario_lido, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'DROP') AS concessoes_drop, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'TRIGGER') AS concessoes_trigger;"; unset P U
+```
+
+   Esperado: `usuario_lido = 1`, `concessoes_drop = 0` e
+   `concessoes_trigger = 0`. Maior que `0`: nao bloqueia por si (a
+   verificacao da 019 acusa o `TRUNCATE`), mas a correcao (tirar os dois
+   privilegios) e decisao do responsavel, ligada a VULN-002, de preferencia
+   antes do dia. Para conferir a mao, `SHOW GRANTS FOR` o usuario e o host
+   (mostra os privilegios, nunca a senha).
+
+0g. **Pendencia 16c: tecnicos de N1 e N2 sem regra na primeira competencia
+   do motor**, na data do corte planejada (D2: o 1o dia da competencia
+   seguinte ao deploy, dia 16). Antes da 011, a variante e sem o filtro
+   `fora_mapa_escala` (conta tambem quem vier a ser marcado fora do Mapa):
+
+```bash
+D='<AAAA-MM-DD do deploy>'; if [ "$(date -d "$D" +%d)" -ge 16 ]; then C=$(date -d "$(date -d "$D" +%Y-%m-01) +1 month" +%Y-%m-16); else C=$(date -d "$D" +%Y-%m-16); fi; [[ "$C" =~ ^[0-9]{4}-[0-9]{2}-16$ ]] && echo "corte planejado: $C" || echo "PARE: data do corte invalida ($C)"
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET @corte := '$C'; WITH RECURSIVE dias (d) AS (SELECT CAST(@corte AS DATE) UNION ALL SELECT d + INTERVAL 1 DAY FROM dias WHERE d < @corte + INTERVAL 1 MONTH - INTERVAL 1 DAY) SELECT COUNT(*) AS ativos_n1_n2, COALESCE(SUM(NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= @corte AND (r.effective_until IS NULL OR r.effective_until >= @corte))), 0) AS sem_regra_no_corte, COALESCE(SUM(EXISTS (SELECT 1 FROM dias WHERE NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= dias.d AND (r.effective_until IS NULL OR r.effective_until >= dias.d)))), 0) AS sem_regra_na_competencia FROM funcionarios f WHERE f.ativo = 1 AND LOWER(f.equipe) IN ('n1', 'n2');"; unset P
+```
+
+   Referencia (2026-10-14): `ativos_n1_n2 = 22`, `sem_regra_no_corte = 6`;
+   `sem_regra_na_competencia` a anotar. O ideal e a gestao cadastrar a regra
+   de todos antes do dia: **com qualquer das duas colunas maior que 0 no dia,
+   o registro do corte nao roda** (passo 7l); o deploy fica no ar sem corte.
+
+0h. **0a2: `APP_ENV` do servidor.** A decisao de 2026-10-02 e trocar
+   `staging` por `production` na janela de deploy final; neste roteiro a
+   troca entra no deploy 1 (passo 3b, decisao NN7, a aprovar). Em
+   `production`, a aplicacao **deixa de subir** com `SECRET_KEY` ausente,
+   com menos de 32 caracteres ou com texto de exemplo, e o preflight nao
+   confere a chave. A linha mostra o ambiente e so o tamanho da chave e se
+   ela tem texto de exemplo (`1`) ou nao (`0`), nunca o valor:
+
+```bash
+sudo awk -F= '/^APP_ENV=/{print "app_env=" $2} /^SECRET_KEY=/{v=substr($0, 12); gsub(/["\047]/, "", v); print "secret_key_caracteres=" length(v); print "secret_key_texto_de_exemplo=" (tolower(v) ~ /gere_uma_chave|troque|changeme|change_me/)}' /var/www/.env
+```
+
+   Esperado: `app_env=staging`, `secret_key_caracteres` 32 ou mais e
+   `secret_key_texto_de_exemplo=0`. Diferente: **nao troque o `APP_ENV`**
+   no dia (pule o passo 3b) ate a chave ser gerada de novo pelo responsavel.
+
+0i. **`gitleaks` instalado na estacao** (verificacao de segredos dos commits
+   do deploy; instalar e decisao do responsavel, dependencia nova da
+   estacao). Na estacao (PowerShell 5.1), no clone do repositorio, depois de
+   publicar o branch:
+
+```powershell
+git fetch origin; gitleaks version; gitleaks git --redact --log-opts="5d5c7c93db383c163b5e753f44375d7e5c34a117..origin/feat/employee-form-rhf-zod" .
+```
+
+   Esperado: a versao (8.19 ou mais nova, que tem o subcomando `git`; nas
+   anteriores, `gitleaks detect --redact --log-opts=...`: conferir na
+   versao instalada) e `no leaks found`. Achado: **nao siga**; segredo
+   exposto segue a regra de sempre (revogar, gerar outro, tirar do
+   historico).
+
+0j. **Logs e `curl` das paginas legadas** (9.12; so contagens, sem IP nem
+   usuario), com o codigo atual no ar: quantos usaram as paginas nos ultimos
+   dias e o que elas respondem hoje.
+
+```bash
+sudo sh -c 'cat /var/log/apache2/chronodesk_access.log /var/log/apache2/chronodesk_access.log.1 2>/dev/null; zcat /var/log/apache2/chronodesk_access.log.*.gz 2>/dev/null' | awk '{print $6, $7, $9}' | sed -E 's/\?[^ ]*//' | grep -E '^"(GET|POST) /(admin|admin_login|admin_logout|login|logout|metricas|index)\.php |^"GET /static/js/admin(_users)?\.js ' | sort | uniq -c
+for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "<URL>$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>/static/js/$j")"; done
+```
+
+   Esperado hoje: so contagens por metodo, caminho e codigo (anote; uso
+   maior que `0` nas paginas `POST` e alguem que precisa ser avisado no
+   aviso a gestao); no `curl`, `GET 302` nas paginas que ja redirecionam
+   (as demais respostas sao as de hoje, antes da retirada). Registre os
+   numeros na secao 9.12 do desenho. O passo 7c repete o `curl` com o
+   esperado novo.
+
+0k. **Roteiro de navegador `-Browser`, OBRIGATORIO, na estacao, sobre o
+   commit que vai ser gravado** (decisao de 2026-10-30). O responsavel
+   publica o `feat/employee-form-rhf-zod` e roda a validacao completa numa
+   copia limpa desse commit (worktree), na estacao (PowerShell 5.1, uma
+   linha):
+
+```powershell
+git fetch origin; git worktree add --detach ..\chronodesk-deploy1 origin/feat/employee-form-rhf-zod; Set-Location ..\chronodesk-deploy1\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD
+```
+
+   Esperado: `Validacao local concluida com sucesso`, a linha do roteiro de
+   navegador com `falharam: 0` e o hash completo do `git rev-parse HEAD`:
+   anote-o como `<commit validado na estacao>` (o passo 2 so grava esse
+   commit). Qualquer falha: nao ha deploy com esse commit. Depois do deploy,
+   o worktree sai com `git worktree remove ..\chronodesk-deploy1` (feito pelo
+   responsavel).
+
+0l. **Aviso a gestao, UM so para o deploy 1, em prosa, para o Teams** (a
+   Lideranca e aos gestores), enviado antes do dia. Os marcadores sao
+   preenchidos **no dia do envio**, com as consultas rodadas nesse dia
+   (nunca com os numeros de uma medicao antiga): `[N_PAS]` e o
+   `pas_compartilhados_hoje` da Q-F6 (passo 0c); `[N_SEM_REGRA]` e o
+   `n1_n2_sem_regra_hoje` da Q-F7 (passo 0d); `[DATA_CORTE]` e o `corte
+   planejado` do passo 0g, em DD/MM; e DD/MM e a data do deploy. Nao envie
+   o texto com marcador. Nada do F8 nem do F9 entra no aviso.
+
+> Pessoal, em DD/MM, fora do horario de operacao, o ChronoDesk recebe uma
+> atualizacao grande; quando voltarem, recarreguem a pagina. O que muda para
+> voces. Na Escala presencial, cada troca de regra passa a guardar o
+> historico: a regra anterior termina na vespera e a nova vale a partir da
+> data escolhida. Entra o ciclo presencial e remoto, com previa obrigatoria
+> antes de salvar, e a Lideranca passa a aparecer como presencial por regra
+> fixa. Datas passadas so podem ser alteradas pela Lideranca e pelo admin.
+> Hoje, [N_SEM_REGRA] tecnicos de N1 e N2 ainda nao tem regra de escala
+> vigente: eles aparecem como "Sem escala" ate a regra ser cadastrada. Ferias,
+> folgas, licencas e ausencias passam a ser lancadas so na tela Ausencias,
+> tambem por parte do dia; a excecao de escala fica so para trabalho remoto,
+> presencial, treinamento e plantao. Nao registrem informacao de saude na
+> observacao. No Mapa PA, a situacao de cada tecnico passa a seguir a escala
+> do dia, e o PA em que duas ou mais pessoas estao presenciais no mesmo dia
+> aparece com contorno vermelho e os dias do conflito. E um aviso, nao um
+> bloqueio: a alocacao continua podendo ser salva, e o conflito aceito fica
+> registrado. Pelos numeros de hoje, ate [N_PAS] PAs podem aparecer assim ja
+> no primeiro dia, e so admin e Lideranca editam o mapa. Na Visao
+> Operacional, "CIs disponiveis" passa a contar pela escala do dia: conta
+> quem esta escalado, dentro do expediente e sem pausa, almoco ou ausencia
+> lancada, entao o numero pode ficar menor que o de hoje sem que isso seja
+> falha. A Lideranca aparece numa linha a parte, fora dos totais, e a tela
+> Tecnicos mostra a situacao de agora de cada um. O Calendario e os
+> relatorios passam a usar a mesma escala a partir da competencia que comeca
+> em [DATA_CORTE]; as competencias anteriores ficam como estao. No cadastro,
+> o "Desativar" vira "Arquivar": o tecnico arquivado sai da escala, do Mapa
+> PA e das ausencias futuras e o historico fica; restaurar e so com o admin,
+> e o PA e a escala de quem volta sao cadastrados de novo. Tecnicos e perfis
+> de leitura deixam de ver as observacoes e os textos livres dos colegas
+> (ausencias, reunioes, horas extras, ajustes e plantoes) e, no Mapa PA, os
+> logins e as observacoes dos vinculos; a gestao continua vendo. As telas
+> antigas de administracao e de metricas foram retiradas, e os enderecos
+> antigos levam as telas novas. Duvidas, falem comigo.
+
+**1. No dia, antes de comecar.** Confirme: A DEFINIR acima respondidos;
+itens 0a a 0l feitos, com os numeros anotados; aviso enviado; o `<commit
+validado na estacao>` em maos; ninguem gravando cadastro, escala, ausencia
+ou Mapa PA durante a janela. Para os passos seguintes, o shell e um so, na
+ordem (as variaveis `E`, `Q` e `C` passam de um comando ao outro).
+
+**2. Branch, commit gravado e fast-forward.** Um `git fetch` so do branch do
+deploy, a conferencia de que ele aponta para o commit validado na estacao e
+a gravacao desse commit: os passos 3 a 7 usam exatamente ele, sem novo
+`fetch`. Em seguida, o commit e conferido e a conferencia de fast-forward:
+o commit no ar (`HEAD`) tem de ser ancestral do commit gravado.
+
+```bash
+cd /var/www/chronodesk; B=$(sudo git rev-parse --abbrev-ref HEAD); [ "$B" = "codex/modernizacao-ui-backend" ] && echo "branch OK: $B" || echo "PARE: o clone esta em $B, nao em codex/modernizacao-ui-backend"
+cd /var/www/chronodesk; sudo git fetch origin feat/employee-form-rhf-zod && K=$(sudo git rev-parse origin/feat/employee-form-rhf-zod) && if [ "$K" = "<commit validado na estacao>" ]; then echo "$K" | sudo tee /var/backups/chronodesk/deploy1-commit; else echo "PARE: origin/feat/employee-form-rhf-zod ($K) nao e o commit validado na estacao"; fi; unset K
+cd /var/www/chronodesk; D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); sudo git cat-file -e "$D1^{commit}" && sudo git cat-file -e "$D1:scripts/ensaio-migration.sh" && sudo git cat-file -e "$D1:migrations/20261013_019_registrar_corte.sql" && echo "deploy1-commit OK" || echo "PARE: deploy1-commit ausente ou incompleto"; unset D1
+cd /var/www/chronodesk; D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); sudo git merge-base --is-ancestor HEAD "$D1" && echo "fast-forward OK: $(sudo git rev-list --count HEAD.."$D1") commits a aplicar" || echo "PARE: o HEAD nao e ancestral do deploy1-commit (o merge --ff-only recusaria)"; echo "migrations 013, 018 ou 020 no commit: $(sudo git ls-tree -r --name-only "$D1" migrations/ | grep -cE '_(013|018|020)_')"; unset D1
+```
+
+   Esperado: `branch OK: codex/modernizacao-ui-backend`, o hash gravado (o
+   mesmo do passo 0k), `deploy1-commit OK`, `fast-forward OK: N commits a
+   aplicar` e `migrations 013, 018 ou 020 no commit: 0`.
+
+   **Se o `HEAD` nao for ancestral do commit gravado: PARE** (nada foi
+   alterado). Quer dizer que o branch do servidor tem commits que o
+   `feat/employee-form-rhf-zod` nao tem (feitos ou mesclados direto no
+   servidor, ou um commit da fila que nao veio para o branch de trabalho).
+   Conte-os, sem mostrar conteudo:
+   `cd /var/www/chronodesk; D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); echo "commits so no servidor: $(sudo git rev-list --count "$D1"..HEAD)"; unset D1`.
+   Opcoes, decididas pelo responsavel: (a) os commits ja estao no branch de
+   trabalho com outro hash (o mesmo conteudo trazido por `cherry-pick`):
+   confirmar com `git cherry`, na estacao, e, se for so isso, levar o
+   servidor ao commit gravado com aprovacao explicita (o que estiver so no
+   servidor se perde do branch local dele); (b) o conteudo falta no branch
+   de trabalho: trazer os commits para o `feat/employee-form-rhf-zod` na
+   estacao (merge ou `cherry-pick`, sem reescrever commit ja enviado),
+   repetir a validacao do passo 0k e o deploy com o commit novo; (c) adiar o
+   deploy. Nunca `merge` sem `--ff-only` no servidor: o commit no ar seria um
+   que ninguem validou.
+
+   **Depois do deploy, o branch `codex/modernizacao-ui-backend` no GitHub**
+   (decisao do responsavel; a IA nao faz push): o branch local do servidor
+   passa a apontar para o commit gravado, e o `origin` continua em
+   `072ed16`. Opcoes: (1) **atualizar o `origin`** com um push sem `--force`
+   do commit gravado para esse branch, da estacao
+   (`git push origin <commit validado na estacao>:codex/modernizacao-ui-backend`;
+   so funciona se for fast-forward), para o GitHub mostrar o que esta no ar;
+   (2) **nao atualizar** e registrar que o branch do servidor anda sozinho; o
+   `git status` do servidor passa a dizer "a frente do origin", sem efeito
+   no deploy. Recomendacao: (1), depois de um ciclo estavel, porque o
+   `origin` passa a ser a copia do que esta no ar; a decisao e do
+   responsavel.
+
+**3. Ponto de rollback, `APP_ENV`, preflight e backup do banco.**
+
+3a. Ponto de rollback e arvore limpa:
+
+```bash
+cd /var/www/chronodesk; sudo git rev-parse HEAD | sudo tee /var/backups/chronodesk/pre-deploy-commit; echo "alteracoes locais: $(sudo git status --short | wc -l)"
+```
+
+   Esperado: o hash do codigo no ar e `alteracoes locais: 0` (diferente:
+   trate antes, item 1 de "Atualizacao de Versao").
+
+3b. **0a2: `APP_ENV` para `production`** (so com o passo 0h como esperado e
+   a decisao NN7 aprovada; senao, pule). Copia do `.env` antes, modo `600`,
+   em `/var/backups/chronodesk`; sem a copia, nada muda:
+
+```bash
+K=/var/backups/chronodesk/env-antes-app-env-$(date +%Y%m%d-%H%M%S); if sudo install -m 600 /var/www/.env "$K"; then echo "copia do .env: $K ($(sudo stat -c '%a %U' "$K"))"; sudo sed -i 's/^APP_ENV=staging$/APP_ENV=production/' /var/www/.env; echo "app_env_production: $(sudo grep -c '^APP_ENV=production$' /var/www/.env)"; else echo "PARE: copia do .env falhou, nada alterado"; fi; unset K
+```
+
+   Esperado: `copia do .env: ... (600 root)` e `app_env_production: 1`. Com
+   `app_env_production: 0`, a linha tem outro formato (aspas, espaco) e nada
+   mudou: pare e avise. O valor vale para o PHP-FPM na recarga do passo 6c.
+
+3c. **Preflight da versao nova**, lido do commit gravado:
+
+```bash
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); sudo git cat-file -e "$D1:scripts/preflight-deploy.sh" && bash -o pipefail -c 'sudo git show "$D1:scripts/preflight-deploy.sh" | sudo sh -s -- /var/www/.env'; unset D1
+```
+
+   Esperado: `RESULTADO=0` e `STATUS_PRESENCE_ENABLED: OK (ligado)`.
+   Qualquer `FALHA`: **pare**; se o passo 3b trocou o `APP_ENV`, volte com
+   `sudo sed -i 's/^APP_ENV=production$/APP_ENV=staging/' /var/www/.env`
+   (nada foi recarregado).
+
+3d. **Backup do banco, imediatamente antes das migrations**:
+
+```bash
+sudo systemctl start chronodesk-backup.service; journalctl -u chronodesk-backup -n 5 --no-pager
+```
+
+   Esperado: `backup concluido`. Anote o diretorio: e o ponto de
+   restauracao do banco (so como ultimo recurso).
+
+**4. Migrations, em ordem, cada uma com ensaio, verificacao so com contagens
+e regra de parada.** So as do deploy 1: **011, 014, 019 e 012** (a 013
+dispensada; 018 e 020 FORA, conferido no passo 2). A 012 e a ultima porque
+roda junto com o `git merge` (passo 6b, decisao 3 do F3: sem pausa entre a
+012 e o codigo que a le); o ensaio dela fica aqui. A 011, a 014 e a 019 nao
+mudam o que o codigo anterior faz (F1, F4 e F5). Os arquivos, inclusive o
+script de ensaio, saem do commit gravado: o `scripts/ensaio-migration.sh` do
+servidor e anterior ao F1 (sem `DADOS` nem `VERIFICA`).
+
+4a. Extracao do commit gravado para um diretorio do root:
+
+```bash
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); E=$(sudo mktemp -d /root/ensaio-deploy1.XXXXXX); export E; bash -o pipefail -c 'sudo git archive "$D1" migrations scripts/ensaio-migration.sh | sudo tar -x -C "$E"' && echo "extraido em $E" || echo "PARE: falha ao extrair o deploy1-commit"
+```
+
+   Esperado: `extraido em /root/ensaio-deploy1.<sufixo>`. O diretorio fica
+   ate o passo 7 (os ensaios e o rollback leem dele); apague-o no 7m.
+
+4b. **011 (F1: historico de escala, Lideranca, `fora_mapa_escala`)**:
+   ensaio, aplicacao e verificacao.
+
+```bash
+sudo env DADOS=portal_schedule_rules,portal_schedule_exceptions VERIFICA="$E/migrations/verificacao/20261005_011_schedule_history_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_011 "$E/migrations/20261005_011_schedule_history.sql" "$E/migrations/rollback/20261005_011_schedule_history_down.sql"
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261005_011_schedule_history.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261005_011_schedule_history.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "011 aplicada" || echo "PARE: a 011 nao foi aplicada"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(sudo cat "$E/migrations/verificacao/20261005_011_schedule_history_check.sql"); unset P
+```
+
+   Ensaio: o que conferir esta em "Ensaio de Migration" (011): as duas
+   execucoes iguais, `colaboradores_com_mais_de_uma_aberta`, `sobreposicoes`
+   e `inicio_repetido` em 0, contagens e assinatura das colunas originais
+   iguais as do estado inicial, o 1o rollback de volta e o **2o rollback
+   parando** de proposito. Aplicacao: `011 aplicada`. Verificacao: as tres
+   primeiras contagens em `0`. Diferente: **pare** (o codigo anterior
+   funciona sobre a 011; desfazer, so com o rollback dela, passo 8c).
+
+4c. **Q-F4 imediatamente antes da 014** (D5; so contagens):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 0) AS inativos, (SELECT COUNT(DISTINCT a.employee_id) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 0 WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE())) AS inativos_com_pa, (SELECT COUNT(DISTINCT r.employee_id) FROM portal_schedule_rules r JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 0 WHERE (r.effective_until IS NULL OR r.effective_until >= CURDATE()) AND (r.effective_until IS NULL OR r.effective_until >= r.effective_from)) AS inativos_com_regra, (SELECT COUNT(*) FROM portal_schedule_exceptions e JOIN funcionarios f ON f.id = e.employee_id AND f.ativo = 0 WHERE e.exception_date >= CURDATE()) AS excecoes_de_inativos;"; unset P
+```
+
+   Referencia (2026-10-13): `inativos = 5`, `inativos_com_pa = 1`,
+   `inativos_com_regra = 0`, `excecoes_de_inativos = 0`. Outros numeros nao
+   bloqueiam a 014, mas mudam o passo 7f (D5): envie as contagens ao
+   responsavel antes dele.
+
+4d. **014 (F4: arquivamento)**: ensaio nas tres variantes, aplicacao e
+   verificacao.
+
+```bash
+sudo env VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014 "$E/migrations/20261013_014_employee_archive.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
+sudo env DADOS=portal_pa_assignments,portal_schedule_rules,portal_schedule_exceptions,portal_absences VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014_dados "$E/migrations/20261013_014_employee_archive.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
+sudo env PREPARO="$E/migrations/20261013_014_employee_archive.sql" VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014_rollback "$E/migrations/rollback/20261013_014_ensaio_linhas_f4.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261013_014_employee_archive.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261013_014_employee_archive.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "014 aplicada" || echo "PARE: a 014 nao foi aplicada"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(sudo cat "$E/migrations/verificacao/20261013_014_employee_archive_check.sql"); unset P
+```
+
+   Ensaios: os tres do roteiro do F4, passo 3, com os mesmos esperados (a
+   014 nao depende da 011 nem da 012; a verificacao trata tabela ausente).
+   Aplicacao: `014 aplicada`. Verificacao: `colunas_014 = 2`,
+   `check_014 = 1`, `copia_rollback = 0`, `arquivados_f4 = 0`,
+   `inativos_sem_data` igual a `inativos` do passo 4c,
+   `ativos_com_data = 0`, `arquivados_sem_autor = 0` e os efeitos
+   pendentes iguais aos do 4c. Diferente: **pare**.
+
+4e. **019 (F5: data de corte)**: verificacao antes, ensaio nas tres
+   variantes, aplicacao e verificacao. O registro do corte so roda no passo
+   7l.
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(sudo cat "$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql"); unset P
+sudo env VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019 "$E/migrations/20261013_019_presence_cutoff.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
+{ printf "SET @corte := '2099-12-16'; SET @autor := 'qa.ensaio';\n"; sudo cat "$E/migrations/20261013_019_registrar_corte.sql"; } | sudo tee "$E/registro_d1.sql" > /dev/null; sudo env PREPARO="$E/migrations/20261013_019_presence_cutoff.sql" VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019_registro "$E/registro_d1.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
+{ printf "SET @corte := '2020-01-16'; SET @autor := 'qa.ensaio';\n"; sudo cat "$E/migrations/20261013_019_registrar_corte.sql"; } | sudo tee "$E/registro_d1_passado.sql" > /dev/null; sudo env PREPARO="$E/migrations/20261013_019_presence_cutoff.sql" VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019_passado "$E/registro_d1_passado.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261013_019_presence_cutoff.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261013_019_presence_cutoff.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "019 aplicada" || echo "PARE: a 019 nao foi aplicada"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(sudo cat "$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql"); unset P
+```
+
+   Antes: como no passo 0e (`inconsistente = 0`). Ensaios: os tres do
+   roteiro do F5, passo 4, com os mesmos esperados (o registro de 2099
+   grava e o 2o para; a data passada para nas duas). Aplicacao:
+   `019 aplicada`. Verificacao: `tabela_019 = 1`, `checks_019 = 2`,
+   `gatilhos_019 = 2`, `copia_rollback = 0`, `procedimentos_soltos = 0`,
+   `cortes = 0`, `sem_autor = 0`, `eventos_registro = 0`,
+   `eventos_remocao = 0` e **`inconsistente = 0`**. Diferente: **pare**.
+
+4f. **Ensaio da 012 (F3: ausencias) e Q4.** A aplicacao fica para o passo
+   6b, no mesmo comando do `git merge`.
+
+```bash
+sudo env DADOS=portal_absences VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012 "$E/migrations/20261007_012_absences.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
+sudo env DADOS=portal_absences PREPARO="$E/migrations/rollback/20261007_012_ensaio_linha_antiga.sql" VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012_parada "$E/migrations/20261007_012_absences.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
+sudo env DADOS=portal_absences PREPARO="$E/migrations/20261007_012_absences.sql" VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012_rollback "$E/migrations/rollback/20261007_012_ensaio_linhas_f3.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT exception_type, COUNT(*) AS n, SUM(exception_date >= CURDATE()) AS futuras FROM portal_schedule_exceptions GROUP BY exception_type; SELECT COUNT(*) AS ausencias FROM portal_absences;"; unset P
+```
+
+   Ensaios: os tres do roteiro do F3, passo 3, com os mesmos esperados (a
+   tabela vazia migra; a linha antiga faz a 012 parar sem alterar nada; o
+   rollback com linhas do F3 volta e o 2o para). Q4: anote as contagens por
+   tipo (se repetem no passo 7a); **`ausencias` tem de ser `0`** (maior que
+   `0`: a 012 vai parar sem alterar nada; pare aqui e envie a contagem).
+
+**5. Ensaio do codigo do commit gravado, fora da aplicacao no ar.** O commit
+inteiro e extraido com `git archive` e `pipefail` num diretorio do `/tmp`,
+passado so ele ao `www-data`, e todos os QAs PHP rodam ali com o PHP do
+servidor, como `www-data`, sem banco, sem rede e sem tocar em
+`/var/www/chronodesk`. O `/tmp` da VM tem `noexec`: o ensaio so chama
+`php arquivo.php`. **Observacao 1 da pendencia 16:** o `config.php` procura o
+`.env` um nivel acima do diretorio do ensaio, que e o proprio `/tmp`; por
+isso o ensaio confere `[ ! -e /tmp/.env ]` antes dos QAs, para nao ler um
+`.env` de fora.
+
+```bash
+[ ! -e /tmp/.env ] && echo "/tmp/.env ausente: OK" || echo "PARE: existe /tmp/.env; o ensaio leria esse arquivo"
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); Q=$(sudo mktemp -d /tmp/ensaio-deploy1-qa.XXXXXX); export Q; bash -o pipefail -c 'sudo git archive "$D1" | sudo tar -x -C "$Q"' && sudo chown -R www-data: "$Q" && echo "extraido em $Q" || echo "PARE: falha ao extrair o deploy1-commit"
+sudo find "$Q" -name '*.php' -not -path '*/node_modules/*' -exec sudo -u www-data php -l {} \; | grep -v '^No syntax errors' ; echo "fim do php -l"
+[ ! -e /tmp/.env ] && for q in qa-smoke qa-auth qa-timezone qa-overtime qa-schedule-history qa-schedule-legacy-output qa-presence-engine qa-absences qa-calendar-text qa-archive qa-presence-cutoff qa-pa-conflicts qa-operational-view qa-employee-lunch qa-security qa-deploy-runbook; do printf '%s: ' "$q"; sudo -u www-data php "$Q/scripts/$q.php" >/dev/null 2>&1 && echo OK || echo FALHOU; done
+case "$Q" in /tmp/ensaio-deploy1-qa.*) sudo rm -r "$Q" && echo "ensaio removido";; *) echo "PARE: $Q fora do padrao, nada apagado";; esac; unset Q
+```
+
+   Esperado: `/tmp/.env ausente: OK`, `extraido em
+   /tmp/ensaio-deploy1-qa.<sufixo>`, nenhuma linha entre o `php -l` e `fim
+   do php -l`, os 16 QAs com `OK` e `ensaio removido`. Qualquer `PARE` ou
+   `FALHOU`: **pare** (o codigo no ar nao mudou; as migrations 011, 014 e
+   019 ja aplicadas nao mudam o que ele faz) e envie so o nome do QA e a
+   ultima linha da saida dele (`sudo -u www-data php "$Q/scripts/<qa>.php" |
+   tail -n 1`, antes de remover o ensaio). O `qa-auth` e o `qa-security`
+   precisam do `php-ldap` (`php -m | grep -x ldap`).
+
+**6. Q-F6 e Q-F7 completas, base do criterio, 012 com o `git merge`, build e
+recarga.**
+
+6a. **Imediatamente antes do `git merge`**, com a 011 e a 014 aplicadas: a
+   Q-F6 completa (as duas consultas), a Q-F7 completa e o rotulo, e a base do
+   criterio (medicao do `status.php` e do `dashboard.php` com o script do
+   commit gravado, nas condicoes do 0b).
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM portal_pa_inventory WHERE active = 1) AS pas_inventario, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1) AS vinculos_ativos, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_vigentes_ou_futuros, (SELECT COUNT(*) FROM (SELECT pa_number FROM portal_pa_assignments WHERE active = 1 AND valid_from <= CURDATE() AND (valid_until IS NULL OR valid_until >= CURDATE()) GROUP BY pa_number HAVING COUNT(*) > 1) t) AS pas_compartilhados_hoje, (SELECT COUNT(*) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND f.ativo = 0) AS vinculos_de_inativos, (SELECT COUNT(*) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND f.fora_mapa_escala = 1) AS vinculos_fora_do_mapa, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND team = 'lideranca' AND (valid_until IS NULL OR valid_until >= CURDATE())) AS vinculos_lideranca;"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM portal_pa_assignments a JOIN portal_pa_assignments b ON b.employee_id = a.employee_id AND b.id > a.id AND b.active = 1 AND b.valid_from <= COALESCE(a.valid_until, '9999-12-31') AND COALESCE(b.valid_until, '9999-12-31') >= a.valid_from WHERE a.active = 1) AS sobreposicoes_mesmo_colaborador, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND valid_until < valid_from) AS periodo_invertido, (SELECT COUNT(*) FROM portal_pa_assignments a WHERE a.active = 1 AND NOT EXISTS (SELECT 1 FROM portal_pa_inventory i WHERE i.active = 1 AND i.pa_number = a.pa_number)) AS vinculos_fora_do_inventario, (SELECT COUNT(*) FROM portal_pa_assignments a LEFT JOIN portal_schedule_rules r ON r.employee_id = a.employee_id AND r.effective_from <= CURDATE() AND (r.effective_until IS NULL OR r.effective_until >= CURDATE()) WHERE a.active = 1 AND a.valid_from <= CURDATE() AND (a.valid_until IS NULL OR a.valid_until >= CURDATE()) AND a.team <> 'lideranca' AND a.schedule_rule_type <> COALESCE(IF(r.rule_type = 'cycle', 'undefined', r.rule_type), 'undefined')) AS copia_tipo_divergente_hoje, (SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND notes IS NOT NULL AND notes <> '') AS vinculos_com_observacao, (SELECT COUNT(*) FROM portal_pa_map WHERE record_status = 'active') AS legado_total, (SELECT COUNT(*) FROM portal_pa_map WHERE record_status = 'active' AND work_date >= CURDATE()) AS legado_futuro;"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) = 'n1') AS ativos_n1, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) = 'n2') AS ativos_n2, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) IN ('lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe')) AS ativos_lideranca, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND LOWER(TRIM(equipe)) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe')) AS ativos_outras_equipes, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 1) AS fora_do_mapa, (SELECT COUNT(*) FROM funcionarios f WHERE f.ativo = 1 AND f.fora_mapa_escala = 0 AND LOWER(TRIM(f.equipe)) IN ('n1', 'n2') AND NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= CURDATE() AND (r.effective_until IS NULL OR r.effective_until >= CURDATE()))) AS n1_n2_sem_regra_hoje, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND jornada_entrada >= jornada_saida) AS jornada_invertida, (SELECT COUNT(*) FROM funcionarios WHERE ativo = 1 AND NOT (jornada_entrada <= almoco_inicio AND almoco_inicio < almoco_fim AND almoco_fim <= jornada_saida)) AS almoco_fora_da_jornada, (SELECT COUNT(*) FROM portal_absences WHERE status = 'approved' AND starts_on <= CURDATE() AND ends_on >= CURDATE()) AS ausencias_aprovadas_hoje, (SELECT COUNT(*) FROM portal_schedule_exceptions WHERE exception_date = CURDATE() AND exception_type IN ('day_off', 'absence', 'vacation', 'leave')) AS excecoes_de_ausencia_hoje;"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT COUNT(*) AS rotulo_que_o_php_nao_reconhece FROM funcionarios WHERE ativo = 1 AND (CAST(LOWER(TRIM(equipe)) AS BINARY) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe') OR LOCATE(CAST('Ç' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0 OR LOCATE(CAST('Ã' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0);"; unset P
+cd /var/www/chronodesk; D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); sudo git cat-file -e "$D1:scripts/medir-polling.sh" && bash <(sudo git show "$D1:scripts/medir-polling.sh")
+sudo git cat-file -e "$D1:scripts/medir-polling.sh" && URL=http://127.0.0.1/api/portal/dashboard.php bash <(sudo git show "$D1:scripts/medir-polling.sh"); unset D1
+```
+
+   Q-F6: **`vinculos_de_inativos = 1`** (o caso da D5, que o passo 7f
+   regulariza) e **`vinculos_fora_do_mapa = 0`**; os demais, como no 0c;
+   diferente disso, **pare e avise** (nada do codigo mudou). Q-F7 e rotulo:
+   `ativos_outras_equipes`, `jornada_invertida`, `almoco_fora_da_jornada` e
+   `rotulo_que_o_php_nao_reconhece` em `0` (maior: **pare**);
+   `n1_n2_sem_regra_hoje` e `pas_compartilhados_hoje` maiores que os do
+   aviso: avise a gestao com o numero novo (nao bloqueia). Base: anote p50 e
+   p95 dos dois endpoints (o passo 7j compara).
+
+6b. **012 e `git merge --ff-only` do commit gravado, no mesmo comando**
+   (sem `pull` e sem `fetch`). O `git cat-file -e` confere o arquivo antes;
+   a 012 roda com `pipefail` (sem ele, um `git show` com falha mandaria
+   entrada vazia ao `mysql`, que sairia com `0`, e o `merge` rodaria sem a
+   012); o `merge` so roda se a 012 der certo. Depois, a conferencia do
+   `HEAD`, o que mudou em pontos sensiveis e a verificacao da 012 (agora da
+   arvore):
+
+```bash
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261007_012_absences.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261007_012_absences.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && sudo git merge --ff-only "$D1"; unset P
+[ "$(sudo git rev-parse HEAD)" = "$(sudo cat /var/backups/chronodesk/deploy1-commit)" ] && echo "HEAD = deploy1-commit" || echo "PARE: HEAD diferente do deploy1-commit"
+sudo git diff --stat "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" HEAD -- migrations/ scripts/backup-chronodesk.sh .htaccess
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261007_012_absences_check.sql; unset P
+```
+
+   Esperado: `HEAD = deploy1-commit`; o `diff --stat` com o `.htaccess`
+   (retirada das paginas legadas) e, em `migrations/`, so os arquivos da
+   011, da 012, do ciclo do F2B (rollback e verificacao), da 014 e da 019;
+   nada em `scripts/backup-chronodesk.sh`. Verificacao da 012:
+   `colunas_012 = 10`, `absence_type = 0`,
+   `status_tipo = enum('approved','cancelled')`, `fk = 1`, `indice = 1`,
+   `checks = 2`, `copia_rollback = 0`, `linhas = 0`; na segunda consulta,
+   tudo `0`.
+
+6c. **Build do frontend e recarga do PHP-FPM** (limpa o OPcache; `reload` e
+   gracioso). Nenhum lote muda o vhost; o `.htaccess` e lido a cada
+   requisicao: a recarga do Apache nao e necessaria.
+
+```bash
+cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+**7. Verificacao pos-deploy, so com contagens.**
+
+7a. Health, as verificacoes das quatro migrations e a Q4 de novo:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: <ServerName do vhost>' http://127.0.0.1/api/health.php
+cd /var/www/chronodesk; for v in 20261005_011_schedule_history_check 20261007_012_absences_check 20261013_014_employee_archive_check 20261013_019_presence_cutoff_check; do echo "== $v"; read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < "migrations/verificacao/$v.sql"; unset P; done
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT exception_type, COUNT(*) AS n, SUM(exception_date >= CURDATE()) AS futuras FROM portal_schedule_exceptions GROUP BY exception_type; SELECT action, COUNT(*) AS n FROM audit_log WHERE timestamp >= CURDATE() AND (action LIKE 'ABSENCE\_%' OR action LIKE 'FUNCIONARIO\_%' OR action LIKE 'PA\_MAP\_%' OR action LIKE 'PRESENCE\_CUTOFF\_%') GROUP BY action;"; unset P
+```
+
+   Esperado: health `200`; as quatro verificacoes como nos passos 4b, 4d,
+   4e e 6b (019 com **`inconsistente = 0`**); a Q4 com as **mesmas**
+   contagens do 4f; no `audit_log`, so os eventos das acoes feitas hoje
+   (nenhum, se ninguem gravou).
+
+7b. **Checagem HTTP** de `scripts/test-linux.sh` (item 6 de "Atualizacao de
+   Versao"), que confere tambem as paginas legadas.
+
+7c. **`curl` das paginas legadas** (9.12.2; so o codigo HTTP):
+
+```bash
+for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "<URL>$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>/static/js/$j")"; done
+```
+
+   Esperado: `GET 302` e `POST 410` em todas as paginas, menos o
+   `/logout.php` (`GET 410` e `POST 410`, HH5); `403` nos dois JS. `GET 200`
+   numa pagina legada: o `.htaccess` nao vale no vhost (`AllowOverride`):
+   **pare e avise** (o rollback e o `.htaccess` anterior).
+
+7d. **Q-F6 completa de novo** (as duas consultas do 6a): os mesmos numeros
+   (se alguem gravou no mapa durante a janela, as diferencas batem com os
+   `PA_MAP_*` do 7a).
+
+7e. **Q-F7 completa e rotulo de novo** (as duas consultas do 6a): os mesmos
+   numeros.
+
+7f. **D5 do F4: regularizar o inativo com PA aberto**, so com os numeros do
+   4c iguais a referencia (`inativos_com_pa = 1`, `inativos_com_regra = 0`,
+   `excecoes_de_inativos = 0`; com outros, pare e avise antes de arquivar).
+   A consulta devolve so o ID interno; como admin, em Funcionarios > filtro
+   "Arquivados", "Arquivar (regularizar)" na linha com esse ID; depois, a
+   verificacao da 014 de novo:
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT DISTINCT a.employee_id AS id_cadastro FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 0 WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE());"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < /var/www/chronodesk/migrations/verificacao/20261013_014_employee_archive_check.sql; unset P
+```
+
+   Esperado: a tela com "Cadastro inativo regularizado e arquivado. 1
+   vinculo de PA encerrado." (ou "removido"); na verificacao,
+   `inativos_com_pa = 0`, `arquivados_f4 = 1`, `inativos_sem_data = 4`,
+   `ativos_com_data = 0`, `arquivados_sem_autor = 0`.
+
+7g. **Q-F6 completa depois da D5** (a 1a consulta do 6a): esperado
+   **`vinculos_de_inativos = 0` e `vinculos_fora_do_mapa = 0`**; diferente,
+   **pare e avise**.
+
+7h. **F1: cadastros fora do Mapa.** O responsavel marca pela tela os
+   cadastros que ficam fora do Mapa PA e da escala (so admin; nenhum nome no
+   roteiro) e roda a Q-F7 completa de novo (`fora_do_mapa` cresce na mesma
+   conta; `n1_n2_sem_regra_hoje` pode cair).
+
+7i. **Pelo navegador, por perfil**, sem gravar (salvo onde dito) e sem anotar
+   nomes. O detalhe de cada item esta nos roteiros por lote.
+   - **Admin:** Funcionarios abre em "Ativos", sem o checkbox "Funcionario
+     ativo"; "Arquivados" com "Inativo sem data", "Arquivar (regularizar)" e
+     "Restaurar"; "Arquivar" num ativo mostra os efeitos ("Voltar", sem
+     confirmar). Configuracoes de pausa abrem com os valores gravados. Mapa
+     PA editavel, com o `Dialog`, a protecao contra perda de alteracoes e o
+     "Fim da validade". `technicians.php` (DevTools) com `role`.
+   - **Lideranca:** Escala presencial com a Lideranca "Presencial (regra
+     fixa)", sem editar; nova regra "Ciclo presencial/remoto" com "Ver
+     previa" obrigatoria (sem salvar); "Historico" na linha da regra. Mapa
+     PA na data de hoje, cartoes na cor da legenda, PA em conflito com
+     contorno vermelho e os dias; anote **so o numero** do cartao
+     "Conflitos" (ate o `[N_PAS]` do aviso).
+   - **Gestor:** Visao Operacional com "Situacao da equipe agora" (N1, N2,
+     Total e a Lideranca a parte); `escalados = disponiveis + em pausa +
+     almoco + ausentes + fora do expediente`; "CIs disponiveis" igual ao
+     Disponiveis do Total; anote so os numeros do Total. Tela Tecnicos com
+     "Situacao agora" e, no DevTools, sem `role`. Ausencias com filtros,
+     "Nova ausencia" e o aviso de nao registrar saude; a excecao de escala
+     so com os quatro tipos de trabalho e, ao escolher colaborador e data
+     com excecao, o tipo e a observacao gravados. Mapa PA so leitura, sem
+     logins, observacoes e autores no `pa_map.php`. Chamados criticos: abrir
+     e fechar um registro em edicao sem salvar. Calendario e relatorio da
+     competencia atual **iguais aos de antes** (sem corte registrado).
+   - **Tecnico** (a propria conta): Calendario sem o texto dos eventos dos
+     colegas (hora extra, ajuste, plantao; pausa fora da lista como
+     "Pausa"); `oncall.php` sem `note`, `created_by` e `updated_by` dos
+     colegas; Visao Operacional sem a observacao de reuniao dos colegas;
+     Ausencias so com as proprias, sem formulario; `status.php` e
+     `dashboard.php` sem `observacao_reuniao` dos colegas.
+   - Em 1280 px ou mais, as tabelas sem rolagem dentro do cartao; em 390 px,
+     a tabela rola dentro do cartao e a pagina nao.
+
+7j. **Medicao depois do deploy**, nas condicoes do 6a, com o script do
+   proprio clone:
+
+```bash
+cd /var/www/chronodesk; bash scripts/medir-polling.sh
+cd /var/www/chronodesk; URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh
+```
+
+   **Criterio do F2, para os dois endpoints:** ha piora quando o p95 sobe
+   **mais de 50 ms e mais de 20%** sobre a base do 6a, as duas condicoes ao
+   mesmo tempo. Com piora: desligamento rapido (passo 8a), medir de novo e
+   trazer os numeros. Anote p50 e p95 na secao 9.9 do desenho.
+
+7k. **Pendencia 16c, agora com a 011** (a versao completa, com o filtro
+   `fora_mapa_escala`; `C` calculado no dia):
+
+```bash
+read -rsp 'Senha root do MySQL: ' P; echo; C=$(docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -N sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT IF(DAYOFMONTH(CURDATE()) >= 16, DATE_FORMAT(CURDATE() + INTERVAL 1 MONTH, '%Y-%m-16'), DATE_FORMAT(CURDATE(), '%Y-%m-16'));"); unset P; [[ "$C" =~ ^[0-9]{4}-[0-9]{2}-16$ ]] && echo "corte planejado: $C" || echo "PARE: data do corte invalida ($C)"
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET @corte := '$C'; WITH RECURSIVE dias (d) AS (SELECT CAST(@corte AS DATE) UNION ALL SELECT d + INTERVAL 1 DAY FROM dias WHERE d < @corte + INTERVAL 1 MONTH - INTERVAL 1 DAY) SELECT COUNT(*) AS ativos_n1_n2, COALESCE(SUM(NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= @corte AND (r.effective_until IS NULL OR r.effective_until >= @corte))), 0) AS sem_regra_no_corte, COALESCE(SUM(EXISTS (SELECT 1 FROM dias WHERE NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= dias.d AND (r.effective_until IS NULL OR r.effective_until >= dias.d)))), 0) AS sem_regra_na_competencia FROM funcionarios f WHERE f.ativo = 1 AND f.fora_mapa_escala = 0 AND LOWER(f.equipe) IN ('n1', 'n2');"; unset P
+```
+
+   Esperado: `corte planejado` igual ao do 0g (diferente: o deploy passou
+   do dia 16; a data nova vale, avise a gestao). **As duas colunas tem de
+   dar `0`.** Com qualquer uma maior que `0`, o registro do corte **nao
+   roda** (decisao do responsavel): a gestao cadastra a regra ou marca
+   "fora do Mapa", e a consulta roda de novo, no mesmo dia ou noutro antes
+   da data (o deploy fica no ar sem corte, tudo no calculo antigo).
+
+7l. **Registro do corte**, so com as duas colunas do 7k em `0`, a
+   verificacao da 019 com `inconsistente = 0` e o `C` do 7k na mesma
+   sessao:
+
+```bash
+cd /var/www/chronodesk; echo "corte a registrar: $C"; read -rsp 'Senha root do MySQL: ' P; echo; { printf "SET @corte := '%s'; SET @autor := '%s';\n" "$C" '<login do operador>'; cat migrations/20261013_019_registrar_corte.sql; } | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_019_presence_cutoff_check.sql; unset P
+```
+
+   Esperado: `cortes = 1`, `corte` = o `C`, `corte_dia_16 = 1`,
+   `corte_no_futuro = 1`, `sem_autor = 0`, `eventos_registro = 1`,
+   `eventos_remocao = 0`, `procedimentos_soltos = 0` e **`inconsistente =
+   0`**. Com `registro_019 abortado: ...`, nada foi gravado: confira o `C`,
+   `DROP PROCEDURE IF EXISTS registrar_corte_019` e envie a mensagem. Pelo
+   navegador: a competencia anterior ao corte igual a de antes; a partir do
+   corte, o Calendario com o resumo do dia e o relatorio com o aviso
+   "Escala pelas regras novas (corte em DD/MM/AAAA)."
+
+7m. **Limpeza.** O diretorio do ensaio das migrations (passo 4a), so se o
+   caminho for o esperado:
+
+```bash
+case "$E" in /root/ensaio-deploy1.*) sudo rm -r "$E" && echo "ensaio das migrations removido";; *) echo "PARE: $E fora do padrao, nada apagado";; esac; unset E D1
+```
+
+**8. Desligamentos rapidos e rollback em degraus.** Sempre do degrau mais
+baixo para o mais alto; os degraus 2 e 3 so com **aprovacao previa do
+responsavel**.
+
+8a. **Degrau 1: desligamento rapido (`STATUS_PRESENCE_ENABLED=false`)**, sem
+   voltar o codigo, para piora de desempenho ou falha no calculo da
+   presenca. A variavel fica no `/var/www/.env` e so a recarga do PHP-FPM
+   aplica a mudanca (a variavel no pool do PHP-FPM venceria o `.env`; o
+   `grep` confere). A copia do `.env` vem antes, modo `600`, e a linha so
+   troca se a copia der certo:
+
+```bash
+sudo grep -rn 'STATUS_PRESENCE_ENABLED' /etc/php/*/fpm/ ; echo "fim (esperado: nada acima)"
+K=/var/backups/chronodesk/env-antes-interruptor-$(date +%Y%m%d-%H%M%S); if sudo install -m 600 /var/www/.env "$K"; then echo "copia do .env: $K ($(sudo stat -c '%a %U' "$K"))"; if sudo grep -q '^STATUS_PRESENCE_ENABLED=' /var/www/.env; then sudo sed -i 's/^STATUS_PRESENCE_ENABLED=.*/STATUS_PRESENCE_ENABLED=false/' /var/www/.env; else echo 'STATUS_PRESENCE_ENABLED=false' | sudo tee -a /var/www/.env >/dev/null; fi; else echo "PARE: copia do .env falhou, nada alterado"; fi; unset K
+cd /var/www/chronodesk && sudo sh scripts/preflight-deploy.sh /var/www/.env | grep STATUS_PRESENCE_ENABLED
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+   Esperado: nada no `grep` do pool, `copia do .env: ... (600 root)` e
+   `STATUS_PRESENCE_ENABLED: OK (desligado)`. Efeito: o `status.php` deixa
+   de calcular a presenca, a Visao Operacional e a tela Tecnicos mostram
+   "—" com aviso (nunca o numero antigo), os cartoes de Pausas voltam ao
+   calculo antigo. **A DV9, a DV10, a DV11, a DF7, o SEC-07b e o F3
+   continuam valendo** (nao dependem do interruptor). Para religar: o mesmo
+   comando com `STATUS_PRESENCE_ENABLED=true`, preflight com `OK (ligado)` e
+   a recarga.
+
+   **Observacao 2 da pendencia 16: limpeza das copias do `.env`.** Cada
+   desligamento (e o passo 3b) deixa uma copia com os segredos do `.env` em
+   `/var/backups/chronodesk`. Depois de conferidas e **com aprovacao do
+   responsavel**, liste (so nome, modo e dono, nunca o conteudo) e apague:
+
+```bash
+sudo find /var/backups/chronodesk -maxdepth 1 -type f \( -name 'env-antes-interruptor-*' -o -name 'env-antes-app-env-*' \) -printf '%f %m %u\n'
+sudo find /var/backups/chronodesk -maxdepth 1 -type f \( -name 'env-antes-interruptor-*' -o -name 'env-antes-app-env-*' \) -print -delete
+```
+
+   Esperado: a 1a linha lista as copias (modo `600`, dono `root`); a 2a
+   lista as mesmas ao apagar; rodar a 1a de novo nao mostra nada.
+
+8b. **Degrau 2: codigo (so com aprovacao previa do responsavel).** Antes,
+   so contagens: `linhas` na verificacao da 012, `regras_cycle` na
+   verificacao do ciclo do F2B e `arquivados_f4` na da 014. Com
+   `regras_cycle` maior que `0`, primeiro, **com o codigo do deploy 1 ainda
+   no ar**, o `f2b_cycle_down` (lido do commit gravado), depois o codigo:
+
+```bash
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/verificacao/20261007_f2b_cycle_check.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/verificacao/20261007_f2b_cycle_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/rollback/20261007_f2b_cycle_down.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/rollback/20261007_f2b_cycle_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "ciclo trocado por undefined"; unset P
+cd /var/www/chronodesk; sudo git checkout --detach "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)" && echo "codigo anterior no ar: $(sudo git rev-parse --short HEAD)"
+cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
+sudo systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+   O codigo anterior funciona sobre a 011 (enquanto nao houver `cycle`), a
+   014 (editar um arquivado do F4 da 500; o CHECK recusa) e a 019 (nao le a
+   tabela); com a 012, a lista de Ausencias responde 503. O `APP_ENV` nao
+   precisa voltar (a chave foi conferida no 0h). **Risco LGPD de voltar o
+   codigo** (`docs/DOCUMENTACAO_TECNICA.md`, 5.3), por isso so com
+   aprovacao e, sempre que der, corrigir para frente:
+   - **F3:** o Calendario do codigo anterior mostra a observacao de cada
+     ausencia a qualquer perfil (com `linhas = 0` nao ha o que expor).
+   - **SEC-07b:** o texto livre de horas extras, ajustes e plantoes dos
+     colegas volta a ir a todos, e o `oncall.php` volta a mandar `note`,
+     `created_by` e `updated_by`.
+   - **DF7 (F6):** o `pa_map.php` volta a enviar logins, observacoes e
+     autores dos vinculos e a lista de elegiveis a qualquer perfil.
+   - **DV9 a DV11 (F7):** o `technicians.php` volta a enviar o perfil de
+     acesso, e o `status.php` e o `dashboard.php`, o motivo de pausa e a
+     observacao de reuniao de todos, a qualquer perfil.
+   - **9.12:** as paginas legadas voltam a responder (o `.htaccess` anterior)
+     e as correcoes da 9.12.1 a 9.12.5 saem (campo ausente volta a
+     sobrescrever o gravado).
+   O clone fica em *detached HEAD*; antes de um novo deploy,
+   `sudo git checkout codex/modernizacao-ui-backend`.
+
+8c. **Degrau 3: migrations (so com aprovacao, so com as tabelas vazias ou
+   com a copia de seguranca que o proprio rollback faz)**, depois do degrau
+   2 e na ordem inversa: 019, 014, 012, 011. Cada uma lida do commit
+   gravado (depois do `checkout`, os arquivos nao estao na arvore), com
+   `cat-file` e `pipefail`; sem a mensagem "rollback da ... aplicado", o
+   rollback nao rodou. Cada rollback para antes de alterar se a copia
+   `*_bkp_0NN` ja existir (renomear e repetir; roteiros por lote).
+
+```bash
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/rollback/20261013_019_presence_cutoff_down.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/rollback/20261013_019_presence_cutoff_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 019 aplicado"; unset P
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/rollback/20261013_014_employee_archive_down.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/rollback/20261013_014_employee_archive_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 014 aplicado"; unset P
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/rollback/20261007_012_absences_down.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/rollback/20261007_012_absences_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 012 aplicado"; unset P
+cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/rollback/20261005_011_schedule_history_down.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/rollback/20261005_011_schedule_history_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 011 aplicado"; unset P
+```
+
+   - **019:** guarda a data e o autor do corte em
+     `portal_presence_cutoff_bkp_019` (LGPD: apagar a mao depois de
+     conferir, com aprovacao); audita `PRESENCE_CUTOFF_REMOVED`.
+   - **014:** nenhuma linha volta (arquivado continua `ativo = 0`; PA,
+     escala e ausencias encerrados nao voltam); data e autor ficam em
+     `funcionarios_bkp_014` (LGPD: apagar a mao, com aprovacao).
+   - **012:** so com `linhas = 0`; com ausencias gravadas, o responsavel
+     decide antes (o rollback expoe as observacoes tambem pela lista do
+     codigo anterior; ausencia parcial vira dia inteiro).
+   - **011:** o historico gravado pelo deploy 1 so fica nas copias
+     `*_bkp_011`; uma regra por colaborador volta; as marcacoes "fora do
+     Mapa" se perdem.
+   - **Backup do passo 3d:** so como ultimo recurso ("Restauracao em
+     Incidente"); perde o que foi gravado depois dele.
+
+**Se a verificacao falhar (resumo):**
+- **Passos 0 a 5:** nada do codigo mudou. Ate o 3d, nada mudou no banco (o 3b so troca o `APP_ENV`); do 4b ao
+  4e, as migrations ja aplicadas nao mudam o que o codigo anterior faz (pare
+  e envie as contagens; desfazer, so com o degrau 3 e aprovacao).
+- **6b, a 012 parou (`migration_012 abortada`) ou o `cat-file`/`git show`
+  falharam:** o `merge` nao rodou (o `pipefail` e o `&&` impedem); o codigo
+  anterior continua no ar. Envie a contagem de `portal_absences`.
+- **6b, a 012 terminou e o `merge` falhou** (alteracao local, branch
+  divergente): a tela de Ausencias do codigo anterior fica em 503 ate o
+  `merge`. Resolva a causa **sem `fetch` e sem `pull`**, repita so
+  `sudo git merge --ff-only "$(sudo cat /var/backups/chronodesk/deploy1-commit)"`
+  e siga da conferencia do `HEAD`. Se o `HEAD` foi para outro commit:
+  degrau 2 e avise o responsavel.
+- **Erro 500 ou 503 nas telas, health diferente de `200`, falha no build:**
+  degrau 2 (com aprovacao).
+- **"—" na Visao Operacional ou piora na medicao:** degrau 1; nao e
+  rollback.
+- **Mais PAs em conflito que o aviso, numeros do Total diferentes da
+  Q-F7:** nao reverta; anote e avise o responsavel.
+- **`orfas`, `periodo_invalido`, `sobreposicoes_aprovadas` (012),
+  `ativos_com_data`, `arquivados_sem_autor` (014) maiores que `0`, ou
+  `inconsistente = 1` (019):** nao apague nem altere linha; mantenha o
+  codigo no ar e trate como incidente.
+
+**9. Depois do deploy, com o responsavel: passo 5 da 9.12 (apagar as
+paginas legadas)**, depois de **um ciclo estavel** (uma competencia inteira
+sem rollback, sugestao). Primeiro, a contagem dos logs do passo 0j de novo:
+esperado so `302`/`410`/`403` desde o deploy. A remocao e feita pelo
+responsavel **no repositorio, num commit proprio** (nunca apagando no
+servidor, para a arvore continuar igual ao git), e vai ao ar num deploy so
+de codigo: `admin.php`, `admin_login.php`, `admin_logout.php`, `login.php`,
+`metricas.php`, `index.php`, `logout.php` (da raiz), `static/js/admin.js`,
+`static/js/admin_users.js`, `static/css/admin.css` e o resto de `static/`
+que so as paginas legadas usam (como `static/js/metricas.js`; a levantar
+nesse lote). As regras do `.htaccess` continuam (302 e 410 nao dependem do
+arquivo existir). Antes do commit, o `test-local.ps1` e o `qa-security`
+(lista de quem chama o AD) sao ajustados de proposito.
 
 ## HTTPS Interno
 

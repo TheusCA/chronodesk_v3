@@ -166,6 +166,14 @@ if (!$phpExecutable) {
         Pass "QA do almoco por contrato concluido"
     }
 
+    # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do roteiro do deploy 1 falhou"
+    } else {
+        Pass "QA do roteiro do deploy 1 concluido"
+    }
+
     # Sem banco: motor de presenca, presence.php e presenca no status.php (F2).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-presence-engine.php")
     if ($LASTEXITCODE -ne 0) {

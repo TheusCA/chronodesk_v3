@@ -66,6 +66,10 @@ echo "== PHP legacy schedule output QA =="
 # Relatorio, CSV e Calendario iguais a referencia anterior ao F2B; sem banco.
 php scripts/qa-schedule-legacy-output.php
 
+echo "== PHP deploy runbook QA =="
+# Travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md); sem banco.
+php scripts/qa-deploy-runbook.php
+
 if command -v node >/dev/null 2>&1; then
     echo "== JavaScript syntax =="
     find . -type f -name '*.js' \
