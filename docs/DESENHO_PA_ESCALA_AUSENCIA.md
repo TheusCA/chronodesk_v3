@@ -4206,9 +4206,60 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 
 **Revisão do responsável (2026-11-06): a validação estrita das configurações (`3be925b`) e o registro da aprovação da "Exceção por data" (`c012ee3`) APROVADOS, com MM1 a MM5.**
 
+### 9.13 Deploy da Parte B em duas etapas e roteiro único do deploy 1 (2026-11-06, aguardando revisão)
+
+**Decisão do responsável (2026-11-06):** o deploy da Parte B passa a ser em **duas etapas**, porque o F8 e o F9 dependem da Liderança, sem prazo.
+- **Deploy 1 (agora):** tudo o que já está aprovado no branch: F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5.
+- **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder.
+
+**Entrega:** o roteiro único do deploy 1 no `DEPLOY_LINUX.md` ("Deploy 1 da Parte B (roteiro unico ...)", depois do roteiro do F7), juntando os roteiros "Deploy que traz o F2" até o F7 e a 9.12.2, no padrão deles, e a trava `scripts/qa-deploy-runbook.php` (no `test-local.ps1` e no `test-linux.sh`). **Nenhum código de aplicação mudou.** Passos, na ordem pedida: 0 (pré-requisitos com o responsável: 0a a 0l, cada um com o comando numa linha e o esperado só com contagens), 1 (no dia), 2 (branch, commit gravado em `/var/backups/chronodesk/deploy1-commit` e fast-forward), 3 (ponto de rollback, `APP_ENV`, preflight e backup), 4 (migrations), 5 (ensaio do código), 6 (Q-F6, Q-F7, base do critério, 012 com o `merge --ff-only`, build e recarga), 7 (verificação), 8 (desligamento e rollback em degraus) e 9 (passo 5 da 9.12).
+
+**Conferências feitas antes de escrever:**
+- **Commit 1 do F8 sem efeito no deploy 1:** `EmployeeLunchPolicy` só é usado por `scripts/qa-employee-lunch.php`; nenhum endpoint, tela, serviço ou carregador o chama (não há `spl_autoload` nem `glob` de serviços). Vai junto sem efeito. A trava nova reprova se ele aparecer em outro arquivo.
+- **Fast-forward, na estação:** o `codex/modernizacao-ui-backend` local (`0db826d`) e o do `origin` (`072ed16`) são ancestrais do `feat/employee-form-rhf-zod`. O que vale é o commit do servidor: o passo 2 confere com `git merge-base --is-ancestor HEAD <commit gravado>` e, se não for, **para** e expõe as opções.
+- **Migrations do deploy 1:** 011, 012, 014 e 019 (mais o registro do corte, que não é migration de esquema). A 013 foi dispensada; a 018 e a 020 não existem no repositório.
+- **Estado do servidor que o roteiro supõe:** deploys 1 a 7 da fila no ar (código com o `5d5c7c9`; 015, 016 e 017 aplicadas) e nada da Parte B (a Q-F6 de 2026-10-15 rodou sem a 011). O passo 0a confere as duas coisas e **para** se não for assim.
+- **Script de ensaio do servidor:** o `scripts/ensaio-migration.sh` do servidor é anterior ao F1 (`f91c850` trouxe `DADOS` e `VERIFICA`); por isso os ensaios usam o script extraído do commit gravado.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| NN1 | **Ordem das migrations: 011, 014, 019 e, por último, a 012 no mesmo comando do `git merge`** (não 011, 012, 014, 019) | A decisão 3 do F3 pede a 012 sem pausa antes do código que a lê (no meio, a tela de Ausências do código anterior dá 503). A 011, a 014 e a 019 não mudam o que o código anterior faz e não dependem da 012 (a 014 não usa `AFTER`; as verificações tratam tabela ausente) |
+| NN2 | Cada migration com ensaio, aplicação (`cat-file` + `pipefail`, lida do commit gravado) e verificação logo depois; os esperados são os dos roteiros por lote, citados | Mantém o que foi aprovado em cada lote; o roteiro único não repete as tabelas de esperados, aponta para elas |
+| NN3 | **Os ensaios usam o `scripts/ensaio-migration.sh` extraído do commit gravado** (`/root/ensaio-deploy1.*`), não o do servidor | O do servidor não tem `DADOS` nem `VERIFICA` (são do F1) |
+| NN4 | **O ensaio do código roda os 16 QAs PHP do repositório**, não só os do F2 ao F7 e da 9.12; a trava amarra a lista ao `scripts/qa-*.php` (QA novo reprova até entrar no roteiro) | O commit leva todos os lotes; rodar todos custa segundos e pega diferença de PHP do servidor em qualquer um. Inclui o `qa-employee-lunch` (commit 1 do F8, sem efeito) e a trava nova |
+| NN5 | **O commit gravado tem de ser o validado na estação pelo `-Browser`** (o passo 2 compara o `origin/feat/employee-form-rhf-zod` com o hash anotado no 0k; diferente, para) | Fecha a ligação entre o roteiro de navegador obrigatório e o commit que vai ao ar |
+| NN6 | Pré-requisito explícito: deploys 1 a 7 da fila no código e no banco, nada da Parte B no banco (passo 0a) | O roteiro supõe esse estado; se o servidor estiver atrás, o deploy 1 levaria também o A4 e as 015 a 017, com passos próprios |
+| NN7 | **A troca do `APP_ENV` para `production` (0a2) entra no deploy 1**, com cópia do `.env` (600) antes e o preflight depois; só se a `SECRET_KEY` tiver 32 caracteres ou mais e não for texto de exemplo (0h) | A decisão de 2026-10-02 é trocar na "janela de deploy final"; com o deploy em duas etapas, a troca não depende do F8 nem do F9. Se preferir no deploy 2, o 3b é pulado |
+| NN8 | **Correção no roteiro do F5:** a linha da 16b lia o `DB_USER` de `/var/www/chronodesk/.env`; o `.env` em uso é o `/var/www/.env` (o do preflight e o primeiro que o `config.php` procura). No roteiro único e no do F5 | Com o arquivo errado, `usuario_lido = 0` e a 16b não conferiria nada |
+| NN9 | **Passo 5 da 9.12 no repositório, num commit próprio**, e não apagando no servidor | A árvore do servidor continua igual ao git (`git status` vazio é condição de todo deploy) |
+| NN10 | **Branch `codex/modernizacao-ui-backend` no GitHub depois do deploy: proposta, decisão do responsável.** (1) atualizar o `origin` com push sem `--force` do commit gravado, depois de um ciclo estável (recomendado); (2) não atualizar | Com (1), o `origin` passa a ser a cópia do que está no ar. A IA não faz push |
+| NN11 | Aviso único com três marcadores: `[N_PAS]` (Q-F6), `[N_SEM_REGRA]` (Q-F7) e `[DATA_CORTE]` (data do corte planejada, 0g) | O pedido cita só números; a data do corte entra porque o Calendário e os relatórios mudam a partir dela, e o número de 6 técnicos sem regra da 16c a afeta |
+| NN12 | A trava nova também vale fora do roteiro: migration nova da Parte B no repositório (data a partir de 2026-10-05) reprova até o roteiro decidir | Uma 018 escrita sem querer entraria no deploy 1 sem ensaio |
+
+**A DEFINIR (o responsável responde na revisão):** data e janela do deploy (fora do horário de operação); quem acompanha.
+
+**Validação executada pela IA:**
+- `qa-deploy-runbook.php` (novo) com saída 0, 159 verificações: uma linha por comando (Linux e estação); sem `pull`; todo `fetch` antes de gravar; ordem gravar, `cat-file`, fast-forward, `APP_ENV`, preflight, backup, `archive` com `pipefail`, ensaios, aplicação e verificação de cada migration, ensaio do código, Q-F6/Q-F7, base, 012 + `merge --ff-only` do commit gravado, `HEAD` conferido; as migrations 011, 014, 019 e 012, nessa ordem, e as do repositório iguais a elas; nenhuma 013, 018 ou 020; `[ ! -e /tmp/.env ]` antes dos QAs; os 16 QAs; remoções só por `case`; só contagens; senha sem eco, com `unset` e nunca em `-p`; a `SECRET_KEY` só por tamanho; cópia do `.env` antes de cada troca; limpeza das cópias `env-antes-*`; 16c com o texto aprovado e antes do registro; rollback em degraus com a ordem inversa e o risco LGPD; aviso com os marcadores, sem número e sem nada do F8/F9; o commit 1 do F8 sem chamada fora do QA dele.
+- `qa-presence-cutoff.php` e `qa-operational-view.php` (travas do F5 e do F7) seguem com saída 0.
+- **Mutação 36/36 nas travas**, em cópias da árvore, com a cópia limpa conferida antes, cada mutante morto pela trava esperada (conferido no log): `pull`; `fetch` depois de gravar; `merge` do `origin`; `merge` sem `--ff-only`; `archive` sem `pipefail` (código e migrations); 012 separada do `merge`; 012 sem `pipefail`; QAs sem conferir o `/tmp/.env`; sem a conferência prévia; QA fora do ensaio; migration do F8 no roteiro; migration nova no repositório; QA novo no repositório; ensaio com o script do servidor; variante de ensaio faltando; senha sem `unset`; senha em `-p`; aviso com número (dois); aviso com o F8; 16c sem a 011 no dia; sem fast-forward; gravar sem o commit validado; rollback da 014 sem a conferência; apagar as cópias sem listar; `APP_ENV` sem cópia; backup fora do lugar; sem A DEFINIR; F8 ligado num endpoint; remoção sem `case`; permissão a mais; sem o risco LGPD; branch do servidor sem conferir; registro sem o `C` da 16c; comando em duas linhas.
+- `test-local.ps1 -SkipHttp -Browser` com saída 0 no `022ed65` mais esta documentação (worktree separado): smoke e 15 QAs PHP (a trava nova entre eles) e roteiro de navegador **1026/1026** (nenhuma tela mudou).
+
+**Achados fora do pedido (sem mudança):**
+- O `test-linux.sh` não roda o `qa-schedule-history.php` (o `test-local.ps1` roda). O ensaio do deploy 1 roda os 16 QAs, então o deploy não perde a cobertura; incluí-lo no `test-linux.sh` fica para quando o responsável quiser.
+
+**Limitações declaradas:**
+- Nenhum comando do roteiro foi executado no servidor nem num MySQL: a trava confere o texto (ordem, forma e conteúdo das linhas), não o resultado. Os ensaios e os esperados de cada migration são os aprovados nos lotes (MySQL 8.0.46 do responsável).
+- O `gitleaks` (0i) não está instalado na estação; o subcomando depende da versão (`git` a partir da 8.19, `detect` antes): conferir na versão instalada.
+- `date -d` (0g) é do GNU coreutils, o do Ubuntu do servidor.
+- O `fetch` de um branch só atualiza o `origin/feat/...` se o `origin` do clone tiver o refspec padrão; o 0b acusa antes do dia.
+
 ---
 
 ## 10. Riscos e pendências
+
+**Decisão do responsável (2026-11-06): deploy da Parte B em duas etapas.** O F8 e o F9 dependem da Liderança, sem prazo. **Deploy 1 (agora):** F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5, pelo roteiro único do `DEPLOY_LINUX.md` (seção 9.13; data, janela e quem acompanha A DEFINIR). **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. O commit 1 do F8 (`EmployeeLunchPolicy`) vai no deploy 1 sem efeito (só o QA dele o chama). Onde este desenho diz "deploy único depois do F9", vale, desde 2026-11-06, o deploy 1 para o que já está aprovado e o deploy 2 para o F8 e o F9.
 
 | Risco | Mitigação |
 |---|---|

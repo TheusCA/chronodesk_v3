@@ -1122,6 +1122,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | O caminho de sucesso e testado na regra, nao pelo endpoint (II5). PHPStan, Psalm e `gitleaks` ausentes; varredura manual de segredos no diff sem achado. |
 | **Validacao humana** | Responsavel, 2026-11-06: **`3be925b` aprovado, com MM1 a MM5**; aprovado tambem o registro `c012ee3` (aprovacao da "Excecao por data" e formatacao do "1026/1026"). |
 
+### Deploy da Parte B em duas etapas e roteiro unico do deploy 1 (pendencia 16) — 2026-11-06
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Decisao do responsavel (2026-11-06): deploy da Parte B em duas etapas, porque o F8 e o F9 dependem da Lideranca, sem prazo. Deploy 1 agora (F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, lote de acabamento, retirada das paginas legadas, 9.12.1 a 9.12.5); deploy 2 depois (F8 e F9). Tarefa: escrever o roteiro unico do deploy 1 no `DEPLOY_LINUX.md`, juntando os roteiros do F2 ao F7 e a 9.12.2, no padrao deles, com travas no QA e mutacao; so documentacao, scripts de conferencia e travas. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `022ed65` (roteiro e trava) e o commit deste registro. Sem push pela IA; o origin estava em `98c00d8` ao fim desta entrega. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md`: secao "Deploy 1 da Parte B (roteiro unico ...)", item novo em "Atualizacao de Versao" e a linha da 16b do F5 (`/var/www/.env`, NN8). Novo: `scripts/qa-deploy-runbook.php` (travas). `scripts/test-local.ps1` e `scripts/test-linux.sh`: rodam a trava. Documentacao: desenho 9.13 e secao 10, este registro. **Nenhum codigo de aplicacao mudou.** |
+| **Decisoes de implementacao** | NN1 a NN12, a aprovar (desenho 9.13): 012 por ultimo, junto com o `merge` (decisao 3 do F3); ensaio com o script do commit gravado (o do servidor e anterior ao F1); os 16 QAs PHP no ensaio do codigo; commit gravado = o validado pelo `-Browser`; pre-requisito dos deploys 1 a 7; `APP_ENV` no deploy 1 se a chave estiver boa; correcao da 16b do F5; passo 5 da 9.12 no repositorio; branch `codex` no GitHub (proposta: atualizar sem `--force` depois de um ciclo estavel; decisao do responsavel); `[DATA_CORTE]` no aviso; migration nova reprova a trava. A DEFINIR: data e janela, quem acompanha. |
+| **Conferencias** | O commit 1 do F8 (`EmployeeLunchPolicy`) so e chamado pelo `qa-employee-lunch.php` (nenhum endpoint, tela ou carregador): vai sem efeito. Na estacao, o `codex` local (`0db826d`) e o do `origin` (`072ed16`) sao ancestrais do branch de trabalho; no servidor, o passo 2 confere e para se nao for. |
+| **Validacao executada pela IA** | `qa-deploy-runbook.php` com saida 0 (159 verificacoes); travas do F5 e do F7 com saida 0. Mutacao 36/36 nas travas, em copias da arvore, com a copia limpa conferida antes, cada mutante morto pela trava esperada (conferido no log). `test-local.ps1 -SkipHttp -Browser` com saida 0 (worktree separado): smoke e 15 QAs PHP, com a trava nova, e roteiro 1026/1026. |
+| **Limitacoes declaradas** | Nenhum comando do roteiro foi executado no servidor nem num MySQL: a trava confere o texto, nao o resultado. `gitleaks` nao instalado na estacao; subcomando depende da versao. `date -d` e do GNU coreutils. |
+| **Validacao humana** | Pendente: revisao do roteiro (NN1 a NN12) e respostas dos A DEFINIR. |
+
 ---
 
 ## 5. Responsabilidade
