@@ -6,12 +6,20 @@ declare(strict_types=1);
 // 9.13; decisao de 2026-11-06). Le so o documento e a arvore do repositorio:
 // sem banco, sem rede, sem executar comando do roteiro.
 //
+// Desde 2026-11-09 (9.13.4) o roteiro e o consolidado de tudo desde o
+// 596db67, o codigo que esta no ar.
+//
 // O que fica travado: um comando por linha; sem pull; um fetch so, antes de
 // gravar o commit; ordem gravar -> cat-file -> conferencia de fast-forward ->
-// archive com pipefail -> ensaio -> merge --ff-only do commit gravado; so
-// contagens; senha sem eco e com unset; as migrations do deploy 1 (011, 014,
-// 019 e 012, esta junto com o merge), cada uma com ensaio e verificacao, e
-// nenhuma do F8 nem do F9; o ensaio de codigo com todos os QAs PHP e a
+// regras locais do .htaccess no commit -> archive com pipefail -> ensaio ->
+// merge --ff-only do commit gravado; so contagens; senha sem eco e com
+// unset; o 0a com o 596db67 e a 015, a 019 e as manutencao_* ausentes; as
+// migrations desde o 596db67 (015, 016, 017, 011, 014, 019, a 012 junto com
+// o merge e a 016b depois), cada uma com ensaio e verificacao, e nenhuma do
+// F8 nem do F9; o ensaio do BIZ-02 numa copia apagada no fim; a manutencao
+// antes do merge, o corte do BIZ-02 logo depois e so entao a 016b, a
+// recarga e a reabertura; a copia do .htaccess local antes, o descarte no
+// comando do merge e a volta dela no rollback; o ensaio de codigo com todos os QAs PHP e a
 // conferencia do /tmp/.env; o aviso a gestao com marcadores; o commit 1 do F8
 // sem chamada fora do QA dele; o push do branch codex so no passo 9a, sem
 // --force (NN10); o .env.production.example sem HTTPS forcado e com o
@@ -60,10 +68,11 @@ $all = static function (string $needle) use ($commands): array {
 // ----------------------------------------------------------------------------
 assert_same(true, $runbook !== '' && count($commands) >= 50 && count($psCommands) >= 2, 'roteiro unico: secao, comandos Linux e da estacao presentes');
 assert_same([], array_values(array_filter(array_merge($commands, $psCommands), static fn (string $line): bool => substr(rtrim($line), -1) === '\\' || substr(rtrim($line), -1) === '`')), 'roteiro unico: cada comando em uma linha (sem continuacao)');
-// Data e janela informadas pelo responsavel em 2026-11-09 (9.13.3), com o corte
-// do F5 pela D2 (a mesma regra do 0g e do 7k: dia 16 ou depois vai para o mes
-// seguinte). Quem acompanha: so o papel, sem nome. A folha do dia repete as
-// duas linhas iguais (conferido na secao 13).
+// Data e janela: preenchidas, com o corte do F5 pela D2 (a mesma regra do 0i
+// e do 7k: dia 16 ou depois vai para o mes seguinte), ou A DEFINIR com o
+// motivo entre parenteses (a de 11/11/2026 foi cancelada em 2026-11-09,
+// 9.13.4); com A DEFINIR, o passo 1 manda nao comecar. Quem acompanha: so o
+// papel, sem nome. A folha do dia repete as duas linhas iguais (secao 13).
 preg_match_all('/^- \*\*Data e janela do deploy\*\*, fora do horario de operacao: (.+)$/m', $runbook, $dateLines);
 preg_match_all('/^- \*\*Quem acompanha\*\* \(alem de quem executa\): (.+)$/m', $runbook, $companionLines);
 $dateLine = count($dateLines[0]) === 1 ? $dateLines[0][0] : '';
@@ -80,9 +89,12 @@ if ($dateLine !== '' && preg_match('#^(\d{2})/(\d{2})/(\d{4}), das ([01]\d|2[0-3
     $plannedCutoff = $d2->format('Y-m-16');
     $statedCutoff = sprintf('%s-%s-%s', $d[10], $d[9], $d[8]);
 }
-assert_same(true, $deployDate !== null && $windowOk, 'roteiro unico: data do deploy (DD/MM/AAAA) e janela (inicio antes do fim) preenchidas, numa linha so');
-assert_same($plannedCutoff, $statedCutoff,'roteiro unico: corte do F5 coerente com a data pela D2');assert_same([true, 0], [$companionLine !== '' && substr($companion, -1) === '.', preg_match('/A DEFINIR|[\[\]<>]/', $companion)], 'roteiro unico: quem acompanha preenchido (uma linha so, sem marcador)');
-$stepOrder = array_map(static fn (string $step): int => (int)strpos($runbook, $step), ["\n0a. ", "\n0l. ", "\n**1. ", "\n**2. ", "\n**3. ", "\n**4. ", "\n**5. ", "\n**6. ", "\n**7. ", "\n**8. ", "\n**9. "]);
+$datePending = $dateLine !== '' && preg_match('/^A DEFINIR \([^()]+\)\.$/', $dateLines[1][0]) === 1;
+assert_same(true, $datePending || ($deployDate !== null && $windowOk), 'roteiro unico: data do deploy (DD/MM/AAAA) e janela (inicio antes do fim) preenchidas, ou A DEFINIR com o motivo, numa linha so');
+assert_same($plannedCutoff, $statedCutoff, 'roteiro unico: corte do F5 coerente com a data pela D2');
+assert_same(true, strpos($prose, '(com a data **A DEFINIR, nao comece**)') !== false, 'roteiro unico: o passo 1 nao comeca com a data A DEFINIR');
+assert_same([true, 0], [$companionLine !== '' && substr($companion, -1) === '.', preg_match('/A DEFINIR|[\[\]<>]/', $companion)], 'roteiro unico: quem acompanha preenchido (uma linha so, sem marcador)');
+$stepOrder = array_map(static fn (string $step): int => (int)strpos($runbook, $step), ["\n0a. ", "\n0n. ", "\n0p. ", "\n**1. ", "\n**2. ", "\n**3. ", "\n**4. ", "\n**5. ", "\n**6. ", "\n**7. ", "\n**8. ", "\n**9. "]);
 $sortedSteps = $stepOrder;
 sort($sortedSteps);
 assert_same([true, $sortedSteps], [!in_array(0, $stepOrder, true), $stepOrder], 'roteiro unico: passos 0 a 9 presentes e na ordem pedida');
@@ -104,7 +116,22 @@ $branchLine = $first('[ "$B" = "codex/modernizacao-ui-backend" ]');
 assert_same(true, $branchLine >= 0 && $branchLine < $recordLine, 'roteiro unico: confere o branch do servidor antes de gravar');
 assert_same(true, $recordLine < $catFileLine && $catFileLine < $ancestorLine, 'roteiro unico: gravar, cat-file, conferencia de fast-forward');
 assert_same(1, preg_match('/sudo git merge-base --is-ancestor HEAD "\$D1" && echo "fast-forward OK: .*" \|\| echo "PARE: [^"]+"/', $commands[$ancestorLine] ?? ''), 'roteiro unico: HEAD nao ancestral do commit gravado = PARE');
-assert_same(true, $first('sudo git merge-base --is-ancestor 5d5c7c93db383c163b5e753f44375d7e5c34a117 HEAD') >= 0 && $first('sudo git merge-base --is-ancestor 5d5c7c93db383c163b5e753f44375d7e5c34a117 HEAD') < $recordLine, 'roteiro unico: pre-requisito dos deploys 1 a 7 no codigo, antes do dia');
+// 0a (9.13.4): o codigo no ar e o 596db67 (ou ancestral do branch do deploy);
+// a pre-condicao de banco e 015, 019 e manutencao_* ausentes, so contagens.
+$base596 = '596db67c67a9cd84e53b28aaef4c3316191fe87c';
+$headLine = $first('if [ "$H" = "' . $base596 . '" ]; then echo "HEAD no ar: 596db67 (OK)"; elif sudo git merge-base --is-ancestor "$H" origin/feat/employee-form-rhf-zod; then');
+$dbBeforeLine = $first("AS migration_015, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_presence_cutoff') AS tabela_019, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'manutencao\\_%') AS tabelas_manutencao");
+assert_same(true, $headLine >= 0 && $headLine < $recordLine && strpos($commands[$headLine], 'else echo "PARE: ') !== false && $dbBeforeLine === $headLine + 1, 'roteiro unico: 0a confere o 596db67 (ou ancestral) e, logo depois, 015, 019 e manutencao_* ausentes');
+assert_same(0, preg_match('/5d5c7c9/', $text . "\n" . implode("\n", $psCommands)), 'roteiro unico: nada mais supoe a fila antiga no ar (5d5c7c9)');
+assert_same(true, strpos($prose, '`migration_015 = 0`, `tabela_019 = 0`, `tabelas_manutencao = 0`') !== false, 'roteiro unico: esperado do 0a com as tres ausencias');
+assert_same(1, preg_match('/gitleaks git --redact --log-opts="' . $base596 . '\.\.origin\/feat\/employee-form-rhf-zod"/', implode("\n", $psCommands)), 'roteiro unico: gitleaks sobre tudo desde o 596db67');
+// .htaccess alterado no servidor: regras conferidas no commit gravado (passo
+// 2), copia antes (3a), descarte so no comando do merge (6b) e volta da copia
+// no rollback de codigo (8b).
+$htRulesLine = $first("grep -cxF -e 'RewriteBase /' -e 'RewriteRule ^var/www/chronodesk(/.*)?\$ /app/ [R=302,L]' -e 'RewriteRule ^chronodesk(/.*)?\$ /app/ [R=302,L]'");
+$htCopyLine = $first('H=/var/backups/chronodesk/htaccess-local-antes-deploy1;');
+assert_same(true, $htRulesLine > $ancestorLine && strpos($commands[$htRulesLine], 'grep -vxF --file=<(sudo git show "$D1:.htaccess"') !== false, 'roteiro unico: regras locais do .htaccess conferidas no commit gravado, depois do fast-forward');
+assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; H=\S+; if sudo test -e "\$H"; then sudo cmp -s \.htaccess "\$H" && echo "[^"]+" \|\| echo "PARE: [^"]+"; else sudo cp -p \.htaccess "\$H" && sudo cmp -s \.htaccess "\$H" && echo .* \|\| echo "PARE: [^"]+"; fi; unset H$/', $commands[$htCopyLine] ?? ''), 'roteiro unico: copia do .htaccess local conferida com cmp, sem sobrescrever outra');
 // NN10 (aprovada em 2026-11-09, opcao 1): push do commit gravado para o branch
 // codex no GitHub, pelo responsavel, no passo 9a; nunca --force.
 $step9 = (int)strpos($runbook, "\n**9. ");
@@ -121,9 +148,13 @@ assert_same(true, $mergeLine > $ancestorLine && $first('[ "$(sudo git rev-parse 
 $preDeployLine = $first('sudo git rev-parse HEAD | sudo tee /var/backups/chronodesk/pre-deploy-commit');
 $appEnvLine = $first("sudo sed -i 's/^APP_ENV=staging$/APP_ENV=production/' /var/www/.env");
 $preflightLine = $first('bash -o pipefail -c \'sudo git show "$D1:scripts/preflight-deploy.sh" | sudo sh -s -- /var/www/.env\'');
-$backupLine = $first('sudo systemctl start chronodesk-backup.service');
+$backupLine = $first('mysqldump -uroot --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | gzip | sudo tee "$B/database.sql.gz"');
 $firstMigrationArchive = $first('sudo git archive "$D1" migrations scripts/ensaio-migration.sh');
-assert_same(true, $ancestorLine < $preDeployLine && $preDeployLine < $appEnvLine && $appEnvLine < $preflightLine && $preflightLine < $backupLine && $backupLine < $firstMigrationArchive, 'roteiro unico: ponto de rollback, APP_ENV, preflight do commit gravado e backup, antes das migrations');
+assert_same(true, $htRulesLine < $preDeployLine && $preDeployLine < $htCopyLine && $htCopyLine < $appEnvLine && $appEnvLine < $preflightLine && $preflightLine < $backupLine && $backupLine < $firstMigrationArchive, 'roteiro unico: ponto de rollback, copia do .htaccess, APP_ENV, preflight do commit gravado e backup, antes das migrations');
+// Backup do dia: a rotina do 072ed16 nao esta no servidor; dump do root com
+// pipefail, gzip -t, estado e SHA256SUMS, ou PARE.
+assert_same(true, strpos($commands[$backupLine] ?? '', "read -rsp 'Senha root do MySQL: ' P;") !== false && strpos($commands[$backupLine], 'sudo install -d -o root -g root -m 700 "$B" && bash -o pipefail -c') !== false && strpos($commands[$backupLine], '&& sudo gzip -t "$B/database.sql.gz" && ') !== false && strpos($commands[$backupLine], 'sha256sum database.sql.gz estado.tar.gz > SHA256SUMS') !== false && strpos($commands[$backupLine], '|| echo "PARE: backup falhou') !== false, 'roteiro unico: backup do dia com pipefail, gzip -t e SHA256SUMS, ou PARE');
+assert_same(0, preg_match('/systemctl start chronodesk-backup/', $text), 'roteiro unico: o dia nao depende da rotina de backup (nao instalada no 596db67)');
 assert_same(1, preg_match('/^K=\/var\/backups\/chronodesk\/env-antes-app-env-[^;]+; if sudo install -m 600 \/var\/www\/\.env "\$K"; then [^;]*; sudo sed -i .*; else echo "PARE: copia do \.env falhou, nada alterado"; fi; unset K$/', $commands[$appEnvLine] ?? ''), 'roteiro unico: copia do .env (600) antes de trocar o APP_ENV');
 assert_same(true, strpos($commands[$preflightLine] ?? '', 'sudo git cat-file -e "$D1:scripts/preflight-deploy.sh" && ') !== false, 'roteiro unico: preflight com cat-file antes');
 
@@ -136,17 +167,25 @@ foreach ($commands as $i => $line) {
         $applyLines[$m[1]] = $i;
     }
 }
-$deploy1Migrations = ['20261005_011_schedule_history.sql', '20261013_014_employee_archive.sql', '20261013_019_presence_cutoff.sql', '20261007_012_absences.sql'];
-assert_same($deploy1Migrations, array_keys($applyLines), 'roteiro unico: migrations aplicadas 011, 014, 019 e 012, nesta ordem');
-assert_same(true, $applyLines['20261005_011_schedule_history.sql'] < $applyLines['20261013_014_employee_archive.sql'] && $applyLines['20261013_014_employee_archive.sql'] < $applyLines['20261013_019_presence_cutoff.sql'] && $applyLines['20261013_019_presence_cutoff.sql'] < $applyLines['20261007_012_absences.sql'], 'roteiro unico: ordem das linhas de aplicacao');
+// Ordem da fila antiga (9.13.4): 015, 016, 017, 011, 014 e 019 antes do
+// codigo; 012 com o merge; 016b depois (o codigo anterior leria lideranca
+// como tecnico).
+$deploy1Migrations = ['20261001_015_login_user_throttle.sql', '20261002_016_lideranca_profile.sql', '20261002_017_shift_attachment_team.sql', '20261005_011_schedule_history.sql', '20261013_014_employee_archive.sql', '20261013_019_presence_cutoff.sql', '20261007_012_absences.sql', '20261002_016b_lideranca_profile_data.sql'];
+assert_same($deploy1Migrations, array_keys($applyLines), 'roteiro unico: migrations aplicadas 015, 016, 017, 011, 014, 019, 012 e 016b, nesta ordem');
+$applyIndexes = array_values($applyLines);
+$sortedApplyIndexes = $applyIndexes;
+sort($sortedApplyIndexes);
+assert_same($sortedApplyIndexes, $applyIndexes, 'roteiro unico: ordem das linhas de aplicacao');
 assert_same($mergeLine, $applyLines['20261007_012_absences.sql'], 'roteiro unico: a 012 e o merge no mesmo comando (decisao 3 do F3)');
+assert_same(true, $applyLines['20261002_016b_lideranca_profile_data.sql'] > $mergeLine, 'roteiro unico: a 016b so depois do merge');
 foreach ($applyLines as $file => $i) {
     assert_same(true, strpos($commands[$i], "sudo git cat-file -e \"\$D1:migrations/{$file}\" && bash -o pipefail -c") !== false && strpos($commands[$i], "read -rsp 'Senha root do MySQL: ' P;") !== false, "roteiro unico: {$file} com cat-file e pipefail");
 }
-// Toda migration do repositorio posterior ao deploy 7 da fila (data a partir
-// de 2026-10-05, o F1) esta no roteiro; migration nova (018, 020) reprova ate
-// o roteiro decidir. O registro do corte nao e migration de esquema.
-$repoMigrations = array_values(array_filter(array_map('basename', glob($root . '/migrations/2026*.sql') ?: []), static fn (string $name): bool => substr($name, 0, 8) >= '20261005' && strpos($name, '_registrar_corte') === false));
+// Toda migration do repositorio posterior ao 596db67 (a 010 e a ultima dele;
+// datas a partir de 2026-10-01) esta no roteiro; migration nova (018, 020)
+// reprova ate o roteiro decidir. O registro do corte nao e migration de
+// esquema.
+$repoMigrations = array_values(array_filter(array_map('basename', glob($root . '/migrations/2026*.sql') ?: []), static fn (string $name): bool => substr($name, 0, 8) >= '20261001' && strpos($name, '_registrar_corte') === false));
 sort($repoMigrations);
 $expectedSorted = $deploy1Migrations;
 sort($expectedSorted);
@@ -155,7 +194,7 @@ assert_same(0, preg_match('/_(013|018|020)_/', str_replace("grep -cE '_(013|018|
 assert_same(true, $first("grep -cE '_(013|018|020)_'") > $catFileLine && $first("grep -cE '_(013|018|020)_'") < $firstMigrationArchive, 'roteiro unico: conferencia de que o commit nao traz 013, 018 nem 020');
 assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; export D1=\$\(sudo cat \/var\/backups\/chronodesk\/deploy1-commit\); E=\$\(sudo mktemp -d \/root\/ensaio-deploy1\.XXXXXX\); export E; bash -o pipefail -c \'sudo git archive "\$D1" migrations scripts\/ensaio-migration\.sh \| sudo tar -x -C "\$E"\' && echo "extraido em \$E" \|\| echo "PARE: [^"]+"$/', $commands[$firstMigrationArchive] ?? ''), 'roteiro unico: migrations e script de ensaio extraidos do commit gravado, com pipefail');
 assert_same(0, preg_match('/(^|[\s;])bash scripts\/ensaio-migration\.sh/m', $text), 'roteiro unico: ensaio so com o script do commit gravado (o do servidor e anterior ao F1)');
-$ensaios = ['20261005_011_schedule_history.sql' => ['d1_011 '], '20261013_014_employee_archive.sql' => ['d1_014 ', 'd1_014_dados ', 'd1_014_rollback '], '20261013_019_presence_cutoff.sql' => ['d1_019 ', 'd1_019_registro ', 'd1_019_passado '], '20261007_012_absences.sql' => ['d1_012 ', 'd1_012_parada ', 'd1_012_rollback ']];
+$ensaios = ['20261001_015_login_user_throttle.sql' => ['d1_015 '], '20261002_016_lideranca_profile.sql' => ['d1_016 ', 'd1_016b '], '20261002_016b_lideranca_profile_data.sql' => ['d1_016b '], '20261002_017_shift_attachment_team.sql' => ['d1_017 '], '20261005_011_schedule_history.sql' => ['d1_011 '], '20261013_014_employee_archive.sql' => ['d1_014 ', 'd1_014_dados ', 'd1_014_rollback '], '20261013_019_presence_cutoff.sql' => ['d1_019 ', 'd1_019_registro ', 'd1_019_passado '], '20261007_012_absences.sql' => ['d1_012 ', 'd1_012_parada ', 'd1_012_rollback ']];
 foreach ($ensaios as $file => $variants) {
     foreach ($variants as $variant) {
         $line = $first('bash "$E/scripts/ensaio-migration.sh" ' . $variant);
@@ -166,7 +205,12 @@ $checkFiles = ['20261005_011_schedule_history.sql' => '20261005_011_schedule_his
 foreach ($checkFiles as $file => $check) {
     assert_same(true, strpos($commands[$applyLines[$file] + 1] ?? '', "< <(sudo cat \"\$E/migrations/verificacao/{$check}\"); unset P") !== false, "roteiro unico: verificacao logo depois de {$file}");
 }
-assert_same(true, strpos($commands[$mergeLine + 3] ?? '', '< migrations/verificacao/20261007_012_absences_check.sql; unset P') !== false, 'roteiro unico: verificacao da 012 depois do merge');
+$inlineChecks = ['20261001_015_login_user_throttle.sql' => "TABLE_NAME = 'login_user_throttle') AS migration_015", '20261002_016_lideranca_profile.sql' => "INDEX_NAME = 'uq_funcionarios_ad_login') AS uq_ad_login", '20261002_017_shift_attachment_team.sql' => "COLUMN_NAME = 'team') AS migration_017", '20261002_016b_lideranca_profile_data.sql' => 'FROM funcionarios_perfil_016b GROUP BY passo'];
+foreach ($inlineChecks as $file => $needle) {
+    assert_same(true, strpos($commands[$applyLines[$file] + 1] ?? '', $needle) !== false, "roteiro unico: verificacao logo depois de {$file}");
+}
+$check012Line = $first('< migrations/verificacao/20261007_012_absences_check.sql; unset P');
+assert_same(true, $check012Line > $mergeLine && $check012Line < $applyLines['20261002_016b_lideranca_profile_data.sql'], 'roteiro unico: verificacao da 012 depois do merge');
 $q4Line = $first('SELECT COUNT(*) AS ausencias FROM portal_absences;');
 $qf4Line = $first('AS excecoes_de_inativos;');
 $check019Before = $first('< <(sudo cat "$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql"); unset P');
@@ -194,7 +238,8 @@ sort($sortedRunbookQas);
 sort($repoQas);
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');
 assert_same(1, preg_match('/^case "\$E" in \/root\/ensaio-deploy1\.\*\) sudo rm -r "\$E" && echo "[^"]+";; \*\) echo "PARE: [^"]+";; esac; unset E D1$/', $commands[$first('case "$E" in /root/ensaio-deploy1.*)')] ?? ''), 'roteiro unico: limpeza do ensaio das migrations so do proprio diretorio');
-assert_same(2, count(array_filter($commands, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'roteiro unico: so as duas remocoes guardadas por case (os dois ensaios)');
+$maintenanceOffLine = $first('[ -e /var/www/chronodesk.maintenance ] && sudo rm -- /var/www/chronodesk.maintenance;');
+assert_same([$qaCleanupLine, $maintenanceOffLine, $first('case "$E" in /root/ensaio-deploy1.*)')], array_keys(array_filter($commands, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'roteiro unico: so tres remocoes: os dois ensaios (guardadas por case) e o arquivo-sinal da manutencao (so ele, conferido depois)');
 
 // ----------------------------------------------------------------------------
 // 6. Q-F6, Q-F7, base do criterio, build e recarga
@@ -212,6 +257,29 @@ foreach (array_merge($referenceLines, $baseLines) as $i) {
 $buildLine = $first('cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build');
 $reloadLine = $first('sudo systemctl reload "php$(php -r');
 assert_same(true, $buildLine > $mergeLine && $reloadLine === $buildLine + 1, 'roteiro unico: build e recarga do PHP-FPM depois do merge');
+// BIZ-02 (9.13.4): manutencao ligada antes do merge (a regra entra com o
+// .htaccess novo), descarte do .htaccess local so no comando do merge, depois
+// dele o corte (biz02_01) antes de qualquer gravacao do codigo novo: antes da
+// 016b, da recarga, da validacao, da reabertura e do registro do corte da 019.
+$maintenanceOnLine = $first('sudo touch /var/www/chronodesk.maintenance;');
+$maintenanceSeenLine = $first("'portal visto de fora (manutencao): %{http_code}");
+$biz02Line = $first('< migrations/correcao_dados/biz02_01_registrar_corte.sql; unset P');
+$healthInMaintenance = $first("curl -s -o /dev/null -w 'health: %{http_code}");
+$timezoneDbLine = $first('sudo -u www-data php scripts/qa-timezone.php --db');
+assert_same($mergeLine - 1, $maintenanceOnLine, 'roteiro unico: arquivo-sinal da manutencao criado logo antes do comando do merge');
+assert_same(1, preg_match('/ && bash -o pipefail -c \'sudo git show "\$D1:migrations\/20261007_012_absences\.sql" \| [^\']+\' && sudo git checkout -- \.htaccess && sudo git merge --ff-only "\$D1"; unset P$/', $commands[$mergeLine] ?? ''), 'roteiro unico: 012, descarte do .htaccess local e merge, cada um so se o anterior der certo');
+assert_same([1, 1], [count($all('git checkout -- .htaccess')), count(array_filter($all('git checkout -- .htaccess'), static fn (int $i): bool => $i === $mergeLine))], 'roteiro unico: o .htaccess local so e descartado no comando do merge');
+assert_same(true, $maintenanceSeenLine === $mergeLine + 2 && $biz02Line === $mergeLine + 3, 'roteiro unico: manutencao vista de fora e o corte do BIZ-02 logo depois do merge');
+assert_same(true, $biz02Line < $applyLines['20261002_016b_lideranca_profile_data.sql'] && $applyLines['20261002_016b_lideranca_profile_data.sql'] < $buildLine && $reloadLine < $healthInMaintenance && $healthInMaintenance < $timezoneDbLine && $timezoneDbLine < $maintenanceOffLine && $maintenanceOffLine < $first('for v in 20261005_011_schedule_history_check'), 'roteiro unico: corte do BIZ-02, 016b, build, recarga, validacao em manutencao e so entao a reabertura');
+assert_same([1, 0, 0], [count($all('migrations/correcao_dados/biz02_01_registrar_corte.sql; unset P')), count(array_filter($commands, static fn (string $line, int $i): bool => $i > $recordLine && preg_match('/biz02_0[234]/', $line) === 1, ARRAY_FILTER_USE_BOTH)), preg_match('/\bSET @ignorar_guardas\b/', $text)], 'roteiro unico: no dia, so o script 1 do BIZ-02, sem ignorar guardas por comando');
+assert_same(true, strpos($prose, 'Corte do BIZ-02 com **`ABORTADO PELAS GUARDAS`** (passo 6c): pare') !== false, 'roteiro unico: regra de parada das guardas do BIZ-02');
+// Ensaio do BIZ-02 antes do dia (0n): copia do banco num banco proprio, os
+// seis scripts na ordem da secao 7.3 e a copia apagada no fim (LGPD).
+$biz02CopyLine = $first('mysql -uroot -e "CREATE DATABASE ensaio_biz02 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" && bash -o pipefail -c');
+$biz02LoopLine = $first('for S in biz02_01_registrar_corte biz02_02_verificar biz02_03_corrigir biz02_02_verificar biz02_04_rollback biz02_02_verificar; do');
+$biz02DropLine = $first('DROP DATABASE IF EXISTS ensaio_biz02; SELECT COUNT(*) AS copia_restante');
+assert_same(true, $biz02CopyLine >= 0 && $biz02CopyLine < $biz02LoopLine && $biz02LoopLine < $biz02DropLine && $biz02DropLine < $recordLine && strpos($commands[$biz02LoopLine], 'mysql -uroot --table ensaio_biz02') !== false && strpos($commands[$biz02LoopLine], 'sistema_pausas') === false, 'roteiro unico: ensaio do BIZ-02 antes do dia, so na copia, e a copia apagada no fim');
+assert_same(true, strpos($commands[$biz02CopyLine], 'mysqldump -uroot --single-transaction --skip-triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot ensaio_biz02') !== false, 'roteiro unico: copia do BIZ-02 direto para o banco de ensaio, sem arquivo');
 
 // ----------------------------------------------------------------------------
 // 7. Verificacao: legado, D5, 16c antes do registro do corte
@@ -248,8 +316,11 @@ foreach ($commands as $i => $line) {
 }
 $checkoutLine = $first('sudo git checkout --detach "$(sudo cat /var/backups/chronodesk/pre-deploy-commit)"');
 $cycleDownLine = $first('sudo git show "$D1:migrations/rollback/20261007_f2b_cycle_down.sql"');
-assert_same(['019', '014', '012', '011'], $rollbackOrder, 'roteiro unico: rollback das migrations na ordem inversa, lido do commit gravado');
-assert_same(true, $cycleDownLine > $switchLine && $cycleDownLine < $checkoutLine && $checkoutLine < $first('rollback da 019 aplicado'), 'roteiro unico: ciclo do F2B antes do codigo, codigo antes das migrations');
+assert_same(['019', '014', '012', '011', '017', '016', '015'], $rollbackOrder, 'roteiro unico: rollback das migrations na ordem inversa, lido do commit gravado');
+$down016bLine = $first('sudo git show "$D1:migrations/rollback/20261002_016b_lideranca_profile_data_down.sql"');
+$biz02UndoLine = $first("DROP TABLE IF EXISTS manutencao_biz02_datetime; DELETE FROM manutencao_marcadores WHERE chave LIKE 'biz02%';");
+assert_same(true, $cycleDownLine > $switchLine && $cycleDownLine < $down016bLine && $down016bLine < $checkoutLine && $checkoutLine < $biz02UndoLine && $biz02UndoLine < $first('rollback da 019 aplicado'), 'roteiro unico: ciclo do F2B e 016b com o codigo novo no ar, depois o codigo, o corte do BIZ-02 e so entao as migrations');
+assert_same(true, strpos($commands[$checkoutLine] ?? '', '&& sudo cp -p /var/backups/chronodesk/htaccess-local-antes-deploy1 .htaccess && ') !== false, 'roteiro unico: o rollback de codigo devolve o .htaccess local (sem ele, o 596db67 fica sem o RewriteBase)');
 foreach (['**Risco LGPD de voltar o codigo**', '**F3:**', '**SEC-07b:**', '**DF7 (F6):**', '**DV9 a DV11 (F7):**', '**Degrau 2: codigo (so com aprovacao previa do responsavel).**', '**Degrau 3: migrations (so com aprovacao, so com as tabelas vazias ou com a copia de seguranca que o proprio rollback faz)**'] as $needle) {
     assert_same(true, strpos($prose, $needle) !== false, "roteiro unico: rollback em degraus com {$needle}");
 }
@@ -257,7 +328,10 @@ foreach (['**Risco LGPD de voltar o codigo**', '**F3:**', '**SEC-07b:**', '**DF7
 // ----------------------------------------------------------------------------
 // 9. So contagens; senha sem eco e apagada
 // ----------------------------------------------------------------------------
-assert_same(0, preg_match('/\b(f\.nome|nome AS|SELECT nome|ad_login|registered_by|employee_name|employee_login)\b/', $text), 'roteiro unico: nenhuma consulta devolve nome, login ou autor');
+// Unica mencao a ad_login: a contagem de repetidos do 0b (pre-condicao da 016).
+$adLoginCount = '(SELECT COUNT(*) FROM (SELECT ad_login FROM funcionarios WHERE ad_login IS NOT NULL GROUP BY ad_login HAVING COUNT(*) > 1) d) AS ad_login_repetidos';
+assert_same(1, substr_count($text, $adLoginCount), 'roteiro unico: contagem de login AD repetido (0b), so contagem');
+assert_same(0, preg_match('/\b(f\.nome|nome AS|SELECT nome|ad_login|registered_by|employee_name|employee_login|linha_chave)\b/', str_replace($adLoginCount, '', $text)), 'roteiro unico: nenhuma consulta devolve nome, login ou autor');
 assert_same(0, preg_match('/\s-p(?!rint|ath)\S/', $text), 'roteiro unico: nenhuma senha em -p na linha de comando');
 $passwordLines = $all('MYSQL_PWD="$P"');
 assert_same(true, count($passwordLines) >= 30, 'roteiro unico: consultas ao MySQL presentes');
@@ -272,7 +346,7 @@ assert_same([1, $secretLine], [count($secretLines), $commands[$secretLines[0] ??
 // ----------------------------------------------------------------------------
 // 10. Pre-requisitos, -Browser na estacao, aviso a gestao
 // ----------------------------------------------------------------------------
-foreach (['0a. ', '0b. ', '0c. ', '0d. ', '0e. ', '0f. ', '0g. ', '0h. ', '0i. ', '0j. ', '0k. ', '0l. '] as $item) {
+foreach (['0a. ', '0b. ', '0c. ', '0d. ', '0e. ', '0f. ', '0g. ', '0h. ', '0i. ', '0j. ', '0k. ', '0l. ', '0m. ', '0n. ', '0o. ', '0p. '] as $item) {
     assert_same(true, strpos($runbook, "\n{$item}") !== false, "roteiro unico: pre-requisito {$item}presente");
 }
 foreach (['Pendencia 16a', 'Pendencia 16b', 'Pendencia 16c', '0a2: `APP_ENV`', '`gitleaks` instalado', 'Logs e `curl` das paginas legadas', 'OBRIGATORIO, na estacao, sobre o commit que vai ser gravado', 'Q-F6, variante', 'Q-F7, variante', 'Referencia do `status.php` e do `dashboard.php`'] as $needle) {
@@ -281,7 +355,7 @@ foreach (['Pendencia 16a', 'Pendencia 16b', 'Pendencia 16c', '0a2: `APP_ENV`', '
 $browserLine = array_values(array_filter($psCommands, static fn (string $line): bool => strpos($line, 'test-local.ps1 -SkipHttp -Browser') !== false));
 assert_same(1, count($browserLine), 'roteiro unico: -Browser na estacao, numa linha');
 assert_same(true, strpos($browserLine[0] ?? '', 'git worktree add --detach ..\\chronodesk-deploy1 origin/feat/employee-form-rhf-zod') !== false && substr(rtrim($browserLine[0] ?? ''), -18) === 'git rev-parse HEAD', 'roteiro unico: -Browser sobre o commit do branch do deploy, com o hash no fim');
-assert_same(true, strpos($runbook, '0k. **Roteiro de navegador') < strpos($runbook, '**2. Branch'), 'roteiro unico: -Browser antes de gravar o commit');
+assert_same(true, strpos($runbook, '0o. **Roteiro de navegador') < strpos($runbook, '**2. Branch'), 'roteiro unico: -Browser antes de gravar o commit');
 preg_match_all('/^> .*$/m', $runbook, $noticeLines);
 $notice = implode("\n", $noticeLines[0]);
 assert_same([true, true, true], [strpos($notice, 'ate [N_PAS] PAs') !== false, strpos($notice, '[N_SEM_REGRA] tecnicos') !== false, strpos($notice, '[DATA_CORTE]') !== false], 'aviso a gestao: marcadores [N_PAS], [N_SEM_REGRA] e [DATA_CORTE]');
@@ -290,7 +364,10 @@ assert_same(0, preg_match('/contrato|cr[ií]tico|F8|F9|almo[cç]o por/i', $notic
 foreach (['escala do dia', 'contorno vermelho', 'E um aviso, nao um bloqueio', '"CIs disponiveis"', 'A Lideranca aparece numa linha a parte', 'tela Ausencias', '"Arquivar"', 'telas antigas'] as $needle) {
     assert_same(true, strpos((string)preg_replace('/\s+/', ' ', str_replace("\n> ", ' ', $notice)), $needle) !== false, "aviso a gestao: fala de {$needle}");
 }
-assert_same([true, true, true], [strpos($prose, '`[N_PAS]` e o `pas_compartilhados_hoje` da Q-F6') !== false, strpos($prose, '`[N_SEM_REGRA]` e o `n1_n2_sem_regra_hoje` da Q-F7') !== false, strpos($prose, '`[DATA_CORTE]` e o `corte planejado` do passo 0g') !== false], 'aviso a gestao: a consulta de cada marcador');
+assert_same([true, true, true], [strpos($prose, '`[N_PAS]` e o `pas_compartilhados_hoje` da Q-F6') !== false, strpos($prose, '`[N_SEM_REGRA]` e o `n1_n2_sem_regra_hoje` da Q-F7') !== false, strpos($prose, '`[DATA_CORTE]` e o `corte planejado` do passo 0i') !== false], 'aviso a gestao: a consulta de cada marcador');
+foreach (['fica fora do ar, inclusive o registro de pausas', 'entrem de novo', 'tres horas mais cedo', 'CSV de horas extras'] as $needle) {
+    assert_same(true, strpos((string)preg_replace('/\s+/', ' ', str_replace("\n> ", ' ', $notice)), $needle) !== false, "aviso a gestao: fala de {$needle} (fila antiga)");
+}
 
 // ----------------------------------------------------------------------------
 // 11. Commit 1 do F8 vai junto sem efeito: EmployeeLunchPolicy so no QA dele
@@ -386,7 +463,11 @@ assert_same([], $unmarked, 'folha do dia: cada comando com caixa [ ], numero, Es
 preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* /m', $sheet, $sheetNumbers);
 assert_same(range(1, count($sheetAll)), array_map('intval', $sheetNumbers[1]), 'folha do dia: comandos numerados de 1 em diante, na ordem');
 assert_same([1, 1], [substr_count($sheet, "\n" . $dateLine . "\n"), substr_count($sheet, "\n" . $companionLine . "\n")], 'folha do dia: data e janela e quem acompanha iguais as do roteiro');
-assert_same(1, preg_match('/^- \[ \] \*\*11\.\*\* \(0g\) .*`corte planejado: ' . preg_quote($plannedCutoff, '/') . '`/m', $sheet), 'folha do dia: o esperado do 0g (comando 11) e o corte da linha da data');
+// O esperado do 0i (data do corte): com a data preenchida, o corte da linha
+// da data; com A DEFINIR, o formato e a regra da D2.
+$cutoffExpected = $plannedCutoff !== '' ? '`corte planejado: ' . $plannedCutoff . '`' : '`corte planejado: AAAA-MM-16` pela D2';
+assert_same(1, preg_match('/^- \[ \] \*\*\d+\.\*\* \(0i\) .*' . preg_quote($cutoffExpected, '/') . '/m', $sheet), 'folha do dia: o esperado do 0i e o corte da linha da data (ou a regra, com a data A DEFINIR)');
+assert_same(true, strpos($sheet, 'com a data **A DEFINIR, nao comece**') !== false, 'folha do dia: o passo 1 nao comeca com a data A DEFINIR');
 $sheetWithoutLoopback = str_replace('127.0.0.1', '', $sheet);
 assert_same([0, 0, 0, 0], [
     preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheetWithoutLoopback),
