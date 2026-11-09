@@ -60,16 +60,28 @@ $all = static function (string $needle) use ($commands): array {
 // ----------------------------------------------------------------------------
 assert_same(true, $runbook !== '' && count($commands) >= 50 && count($psCommands) >= 2, 'roteiro unico: secao, comandos Linux e da estacao presentes');
 assert_same([], array_values(array_filter(array_merge($commands, $psCommands), static fn (string $line): bool => substr(rtrim($line), -1) === '\\' || substr(rtrim($line), -1) === '`')), 'roteiro unico: cada comando em uma linha (sem continuacao)');
-// Data e janela: A DEFINIR ate o responsavel informar (9.13.1, OO2). Quem
-// acompanha: so o papel, sem nome (2026-11-09). A folha do dia repete as duas
-// linhas iguais (conferido na secao 13).
+// Data e janela informadas pelo responsavel em 2026-11-09 (9.13.3), com o corte
+// do F5 pela D2 (a mesma regra do 0g e do 7k: dia 16 ou depois vai para o mes
+// seguinte). Quem acompanha: so o papel, sem nome. A folha do dia repete as
+// duas linhas iguais (conferido na secao 13).
 preg_match_all('/^- \*\*Data e janela do deploy\*\*, fora do horario de operacao: (.+)$/m', $runbook, $dateLines);
 preg_match_all('/^- \*\*Quem acompanha\*\* \(alem de quem executa\): (.+)$/m', $runbook, $companionLines);
 $dateLine = count($dateLines[0]) === 1 ? $dateLines[0][0] : '';
 $companionLine = count($companionLines[0]) === 1 ? $companionLines[0][0] : '';
 $companion = $companionLines[1][0] ?? '';
-assert_same(['A DEFINIR.'], $dateLines[1], 'roteiro unico: data e janela ainda A DEFINIR (uma linha so)');
-assert_same([true, 0], [$companionLine !== '' && substr($companion, -1) === '.', preg_match('/A DEFINIR|[\[\]<>]/', $companion)], 'roteiro unico: quem acompanha preenchido (uma linha so, sem marcador)');
+$deployDate = null;
+$plannedCutoff = '';
+$statedCutoff = '';
+$windowOk = false;
+if ($dateLine !== '' && preg_match('#^(\d{2})/(\d{2})/(\d{4}), das ([01]\d|2[0-3]):([0-5]\d) as ([01]\d|2[0-3]):([0-5]\d) \(horario de Brasilia\); corte do F5 pela D2: (\d{2})/(\d{2})/(\d{4})\.$#', $dateLines[1][0], $d) === 1 && checkdate((int)$d[2], (int)$d[1], (int)$d[3]) && checkdate((int)$d[9], (int)$d[8], (int)$d[10])) {
+    $deployDate = new DateTimeImmutable(sprintf('%s-%s-%s', $d[3], $d[2], $d[1]));
+    $windowOk = (int)$d[4] * 60 + (int)$d[5] < (int)$d[6] * 60 + (int)$d[7];
+    $d2 = (int)$deployDate->format('d') >= 16 ? $deployDate->modify('first day of next month') : $deployDate;
+    $plannedCutoff = $d2->format('Y-m-16');
+    $statedCutoff = sprintf('%s-%s-%s', $d[10], $d[9], $d[8]);
+}
+assert_same(true, $deployDate !== null && $windowOk, 'roteiro unico: data do deploy (DD/MM/AAAA) e janela (inicio antes do fim) preenchidas, numa linha so');
+assert_same($plannedCutoff, $statedCutoff,'roteiro unico: corte do F5 coerente com a data pela D2');assert_same([true, 0], [$companionLine !== '' && substr($companion, -1) === '.', preg_match('/A DEFINIR|[\[\]<>]/', $companion)], 'roteiro unico: quem acompanha preenchido (uma linha so, sem marcador)');
 $stepOrder = array_map(static fn (string $step): int => (int)strpos($runbook, $step), ["\n0a. ", "\n0l. ", "\n**1. ", "\n**2. ", "\n**3. ", "\n**4. ", "\n**5. ", "\n**6. ", "\n**7. ", "\n**8. ", "\n**9. "]);
 $sortedSteps = $stepOrder;
 sort($sortedSteps);
@@ -374,6 +386,7 @@ assert_same([], $unmarked, 'folha do dia: cada comando com caixa [ ], numero, Es
 preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* /m', $sheet, $sheetNumbers);
 assert_same(range(1, count($sheetAll)), array_map('intval', $sheetNumbers[1]), 'folha do dia: comandos numerados de 1 em diante, na ordem');
 assert_same([1, 1], [substr_count($sheet, "\n" . $dateLine . "\n"), substr_count($sheet, "\n" . $companionLine . "\n")], 'folha do dia: data e janela e quem acompanha iguais as do roteiro');
+assert_same(1, preg_match('/^- \[ \] \*\*11\.\*\* \(0g\) .*`corte planejado: ' . preg_quote($plannedCutoff, '/') . '`/m', $sheet), 'folha do dia: o esperado do 0g (comando 11) e o corte da linha da data');
 $sheetWithoutLoopback = str_replace('127.0.0.1', '', $sheet);
 assert_same([0, 0, 0, 0], [
     preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheetWithoutLoopback),

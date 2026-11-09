@@ -5,7 +5,7 @@ Gerada do roteiro "Deploy 1 da Parte B (roteiro unico ...)" do `DEPLOY_LINUX.md`
 **Sem valor real nesta folha**, nem impressa nem anotada nela: nada de senha, IP, hostname, nome ou login. Os marcadores `<...>` sao trocados so no terminal, na hora; os numeros vao para o desenho (9.9, 9.12 e 9.13), nunca para chat ou chamado. A senha do root do MySQL e sempre digitada no `read -rsp` (sem eco).
 
 Data, janela e quem acompanha (iguais as do roteiro; a trava confere):
-- **Data e janela do deploy**, fora do horario de operacao: A DEFINIR.
+- **Data e janela do deploy**, fora do horario de operacao: 11/11/2026, das 19:00 as 22:00 (horario de Brasilia); corte do F5 pela D2: 16/11/2026.
 - **Quem acompanha** (alem de quem executa): o responsavel pela infraestrutura da VM.
 
 **Regras de parada em toda a folha:** qualquer linha com `PARE`, ou `FALHOU` num ensaio onde nao era esperado: pare e envie so a contagem ou a mensagem. Verificacao da 019 com `inconsistente = 1`: pare, nao registre o corte, nao apague nem altere linha e avise o responsavel. Nada de `git pull`, e nenhum `git fetch` depois do comando 19. Onde o "PARE se" diz "saida diferente do esperado", pare e confira o roteiro antes de seguir.
@@ -74,7 +74,7 @@ cd /var/www/chronodesk; read -rsp 'Senha root do MySQL: ' P; echo; export P; sud
 U=$(sudo grep -E '^DB_USER=' /var/www/.env | cut -d= -f2- | tr -d "\"'"); read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT '$U' <> '' AS usuario_lido, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'DROP') AS concessoes_drop, (SELECT COUNT(*) FROM (SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.USER_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.SCHEMA_PRIVILEGES UNION ALL SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.TABLE_PRIVILEGES) g WHERE g.GRANTEE LIKE CONCAT('''', '$U', '''@%') AND g.PRIVILEGE_TYPE = 'TRIGGER') AS concessoes_trigger;"; unset P U
 ```
 
-- [ ] **11.** (0g) Esperado: antes, troque `<AAAA-MM-DD do deploy>`. `corte planejado: AAAA-MM-16` (anote; e o `[DATA_CORTE]`). **PARE se:** `PARE: data do corte invalida`.
+- [ ] **11.** (0g) Esperado: antes, troque `<AAAA-MM-DD do deploy>` pela data do deploy (acima, em AAAA-MM-DD). `corte planejado: 2026-11-16`, o corte da linha da data acima (anote; e o `[DATA_CORTE]`). **PARE se:** `PARE: data do corte invalida`.
 
 ```bash
 D='<AAAA-MM-DD do deploy>'; if [ "$(date -d "$D" +%d)" -ge 16 ]; then C=$(date -d "$(date -d "$D" +%Y-%m-01) +1 month" +%Y-%m-16); else C=$(date -d "$D" +%Y-%m-16); fi; [[ "$C" =~ ^[0-9]{4}-[0-9]{2}-16$ ]] && echo "corte planejado: $C" || echo "PARE: data do corte invalida ($C)"
@@ -120,7 +120,7 @@ git fetch origin; git worktree add --detach ..\chronodesk-deploy1 origin/feat/em
 
 ## 1. No dia, antes de comecar
 
-- [ ] **Passo 1.** Data e janela preenchidas acima (sem A DEFINIR) e quem acompanha presente; 0a a 0l feitos, com os numeros anotados; aviso enviado; `<commit validado na estacao>` em maos; ninguem gravando cadastro, escala, ausencia ou Mapa PA. Daqui em diante, um shell so, na ordem (as variaveis `E`, `Q` e `C` passam de um comando ao outro).
+- [ ] **Passo 1.** Hoje e a data acima e o horario esta dentro da janela; quem acompanha presente; 0a a 0l feitos, com os numeros anotados; aviso enviado; `<commit validado na estacao>` em maos; ninguem gravando cadastro, escala, ausencia ou Mapa PA. Daqui em diante, um shell so, na ordem (as variaveis `E`, `Q` e `C` passam de um comando ao outro).
 
 ## 2. Branch, commit gravado e fast-forward
 

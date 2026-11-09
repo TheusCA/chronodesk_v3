@@ -2589,10 +2589,10 @@ daqui**. O que vai no deploy 1 e nao tem efeito: o commit 1 do F8
 (conferido em 2026-11-06). As migrations 018 (F8) e 020 (F9) nao existem no
 commit; a 013 foi dispensada (Q3 e Q4 de 2026-10-07 em 0).
 
-**Data, janela e quem acompanha** (respostas do responsavel; o que falta
-segue A DEFINIR; a folha do dia `docs/DEPLOY1_FOLHA_DO_DIA.md` repete estas
-duas linhas, e a trava confere):
-- **Data e janela do deploy**, fora do horario de operacao: A DEFINIR.
+**Data, janela e quem acompanha** (respostas do responsavel, 2026-11-09; a
+folha do dia `docs/DEPLOY1_FOLHA_DO_DIA.md` repete estas duas linhas, e a
+trava confere a data, a janela e o corte pela D2):
+- **Data e janela do deploy**, fora do horario de operacao: 11/11/2026, das 19:00 as 22:00 (horario de Brasilia); corte do F5 pela D2: 16/11/2026.
 - **Quem acompanha** (alem de quem executa): o responsavel pela infraestrutura da VM.
 
 Todas as consultas devolvem **so contagens, estrutura e a data do corte**,
