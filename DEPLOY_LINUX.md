@@ -2740,7 +2740,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 0h. **0a2: `APP_ENV` do servidor.** A decisao de 2026-10-02 e trocar
    `staging` por `production` na janela de deploy final; neste roteiro a
-   troca entra no deploy 1 (passo 3b, decisao NN7, a aprovar). Em
+   troca entra no deploy 1 (passo 3b, decisao NN7, aprovada em 2026-11-09). Em
    `production`, a aplicacao **deixa de subir** com `SECRET_KEY` ausente,
    com menos de 32 caracteres ou com texto de exemplo, e o preflight nao
    confere a chave. A linha mostra o ambiente e so o tamanho da chave e se
@@ -2886,17 +2886,13 @@ cd /var/www/chronodesk; D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); s
    que ninguem validou.
 
    **Depois do deploy, o branch `codex/modernizacao-ui-backend` no GitHub**
-   (decisao do responsavel; a IA nao faz push): o branch local do servidor
-   passa a apontar para o commit gravado, e o `origin` continua em
-   `072ed16`. Opcoes: (1) **atualizar o `origin`** com um push sem `--force`
-   do commit gravado para esse branch, da estacao
-   (`git push origin <commit validado na estacao>:codex/modernizacao-ui-backend`;
-   so funciona se for fast-forward), para o GitHub mostrar o que esta no ar;
-   (2) **nao atualizar** e registrar que o branch do servidor anda sozinho; o
-   `git status` do servidor passa a dizer "a frente do origin", sem efeito
-   no deploy. Recomendacao: (1), depois de um ciclo estavel, porque o
-   `origin` passa a ser a copia do que esta no ar; a decisao e do
-   responsavel.
+   (decisao NN10 do responsavel, 2026-11-09; a IA nao faz push): o branch
+   local do servidor passa a apontar para o commit gravado, e o `origin`
+   continua em `072ed16` ate o passo 9a. Decidido: opcao (1), **atualizar o
+   `origin`** com um push sem `--force` do commit gravado para esse branch,
+   da estacao, depois de um ciclo estavel, para o GitHub mostrar o que esta
+   no ar; o push e do responsavel (passo 9a). Ate la, o `git status` do
+   servidor diz "a frente do origin", sem efeito no deploy.
 
 **3. Ponto de rollback, `APP_ENV`, preflight e backup do banco.**
 
@@ -2909,8 +2905,8 @@ cd /var/www/chronodesk; sudo git rev-parse HEAD | sudo tee /var/backups/chronode
    Esperado: o hash do codigo no ar e `alteracoes locais: 0` (diferente:
    trate antes, item 1 de "Atualizacao de Versao").
 
-3b. **0a2: `APP_ENV` para `production`** (so com o passo 0h como esperado e
-   a decisao NN7 aprovada; senao, pule). Copia do `.env` antes, modo `600`,
+3b. **0a2: `APP_ENV` para `production`** (decisao NN7, aprovada em
+   2026-11-09; so com o passo 0h como esperado; senao, pule). Copia do `.env` antes, modo `600`,
    em `/var/backups/chronodesk`; sem a copia, nada muda:
 
 ```bash
@@ -3408,9 +3404,26 @@ cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-com
   `inconsistente = 1` (019):** nao apague nem altere linha; mantenha o
   codigo no ar e trate como incidente.
 
-**9. Depois do deploy, com o responsavel: passo 5 da 9.12 (apagar as
-paginas legadas)**, depois de **um ciclo estavel** (uma competencia inteira
-sem rollback, sugestao). Primeiro, a contagem dos logs do passo 0j de novo:
+**9. Depois do deploy, com o responsavel, depois de um ciclo estavel** (uma
+competencia inteira sem rollback, sugestao): o branch `codex` no GitHub
+(NN10) e o passo 5 da 9.12 (apagar as paginas legadas).
+
+9a. **Branch `codex/modernizacao-ui-backend` no GitHub (NN10, opcao 1; o
+   push e do responsavel, na estacao, PowerShell 5.1).** Push **sem
+   `--force`** do commit gravado: so funciona se for fast-forward do que
+   esta no `origin`.
+
+```powershell
+git push origin <commit validado na estacao>:codex/modernizacao-ui-backend
+```
+
+   Esperado: a linha `<antigo>..<novo>` com
+   `-> codex/modernizacao-ui-backend`. Recusa (`rejected`,
+   `non-fast-forward`): **pare**; o `origin` tem commit que o deploy nao
+   tem. Nunca `--force`; o responsavel decide (como as opcoes do passo 2).
+
+9b. **Passo 5 da 9.12 (apagar as paginas legadas).** Primeiro, a contagem
+   dos logs do passo 0j de novo:
 esperado so `302`/`410`/`403` desde o deploy. A remocao e feita pelo
 responsavel **no repositorio, num commit proprio** (nunca apagando no
 servidor, para a arvore continuar igual ao git), e vai ao ar num deploy so

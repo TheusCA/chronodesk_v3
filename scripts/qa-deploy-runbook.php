@@ -13,7 +13,9 @@ declare(strict_types=1);
 // 019 e 012, esta junto com o merge), cada uma com ensaio e verificacao, e
 // nenhuma do F8 nem do F9; o ensaio de codigo com todos os QAs PHP e a
 // conferencia do /tmp/.env; o aviso a gestao com marcadores; o commit 1 do F8
-// sem chamada fora do QA dele.
+// sem chamada fora do QA dele; o push do branch codex so no passo 9a, sem
+// --force (NN10); o .env.production.example sem HTTPS forcado; a folha do dia
+// (docs/DEPLOY1_FOLHA_DO_DIA.md) com os mesmos comandos, na mesma ordem.
 // ============================================================================
 
 $root = dirname(__DIR__);
@@ -80,7 +82,14 @@ assert_same(true, $branchLine >= 0 && $branchLine < $recordLine, 'roteiro unico:
 assert_same(true, $recordLine < $catFileLine && $catFileLine < $ancestorLine, 'roteiro unico: gravar, cat-file, conferencia de fast-forward');
 assert_same(1, preg_match('/sudo git merge-base --is-ancestor HEAD "\$D1" && echo "fast-forward OK: .*" \|\| echo "PARE: [^"]+"/', $commands[$ancestorLine] ?? ''), 'roteiro unico: HEAD nao ancestral do commit gravado = PARE');
 assert_same(true, $first('sudo git merge-base --is-ancestor 5d5c7c93db383c163b5e753f44375d7e5c34a117 HEAD') >= 0 && $first('sudo git merge-base --is-ancestor 5d5c7c93db383c163b5e753f44375d7e5c34a117 HEAD') < $recordLine, 'roteiro unico: pre-requisito dos deploys 1 a 7 no codigo, antes do dia');
-assert_same(true, strpos($prose, 'Nunca `merge` sem `--ff-only` no servidor') !== false && strpos($prose, '`git push origin <commit validado na estacao>:codex/modernizacao-ui-backend`') !== false && strpos($prose, 'a decisao e do responsavel') !== false, 'roteiro unico: opcoes sem fast-forward e proposta do branch codex no GitHub, decisao do responsavel');
+// NN10 (aprovada em 2026-11-09, opcao 1): push do commit gravado para o branch
+// codex no GitHub, pelo responsavel, no passo 9a; nunca --force.
+$step9 = (int)strpos($runbook, "\n**9. ");
+$pushLines = array_values(array_filter($psCommands, static fn (string $line): bool => preg_match('/\bgit push\b/', $line) === 1));
+assert_same(true, strpos($prose, 'Nunca `merge` sem `--ff-only` no servidor') !== false && strpos($prose, 'decisao NN10 do responsavel, 2026-11-09') !== false && strpos($prose, 'o push e do responsavel (passo 9a)') !== false, 'roteiro unico: opcoes sem fast-forward e decisao NN10 registrada no passo 2');
+assert_same(['git push origin <commit validado na estacao>:codex/modernizacao-ui-backend'], $pushLines, 'roteiro unico: um push so, do commit gravado para o branch codex (NN10)');
+assert_same(true, $step9 > 0 && strpos($runbook, '9a. **Branch `codex/modernizacao-ui-backend` no GitHub (NN10') > $step9 && strpos($runbook, '```powershell' . "\n" . $pushLines[0]) > $step9, 'roteiro unico: o push fica no passo 9a, depois de um ciclo estavel');
+assert_same(0, preg_match('/(^|\s)(--force|-f)(\s|$)/m', $text . "\n" . implode("\n", $psCommands)), 'roteiro unico: nenhum comando com --force');
 assert_same(true, $mergeLine > $ancestorLine && $first('[ "$(sudo git rev-parse HEAD)" = "$(sudo cat /var/backups/chronodesk/deploy1-commit)" ] && echo "HEAD = deploy1-commit"') === $mergeLine + 1, 'roteiro unico: HEAD conferido logo depois do merge');
 
 // ----------------------------------------------------------------------------
@@ -281,5 +290,67 @@ foreach ($iterator as $file) {
 }
 assert_same([], $callers, 'commit 1 do F8: EmployeeLunchPolicy so no QA dele (vai no deploy 1 sem efeito)');
 assert_same(true, strpos($prose, 'so e chamado pelo `scripts/qa-employee-lunch.php`') !== false, 'roteiro unico: registra que o commit 1 do F8 vai sem efeito');
+
+// ----------------------------------------------------------------------------
+// 12. .env.production.example sem HTTPS forcado (o portal nao tem HTTPS proprio)
+// ----------------------------------------------------------------------------
+// FORCE_HTTPS=true derruba o portal (301 para um https:// que nao atende; o
+// preflight reprova) e SESSION_COOKIE_SECURE=true faz o navegador descartar o
+// cookie de sessao recebido por HTTP. O exemplo tem de vir desligado.
+$readOptional = static fn (string $path): string => is_file($path) ? str_replace("\r\n", "\n", (string)file_get_contents($path)) : '';
+$prodExample = $readOptional($root . '/.env.production.example');
+preg_match_all('/^(FORCE_HTTPS|SESSION_COOKIE_SECURE)=(.*)$/m', $prodExample, $httpsSettings, PREG_SET_ORDER);
+$httpsValues = [];
+foreach ($httpsSettings as $setting) {
+    $httpsValues[] = $setting[1] . '=' . trim($setting[2]);
+}
+sort($httpsValues);
+assert_same(['FORCE_HTTPS=false', 'SESSION_COOKIE_SECURE=false'], $httpsValues, '.env.production.example: FORCE_HTTPS e SESSION_COOKIE_SECURE desligados, uma vez cada');
+
+// ----------------------------------------------------------------------------
+// 13. Folha de execucao do dia: os mesmos comandos do roteiro, na mesma ordem
+// ----------------------------------------------------------------------------
+$sheet = $readOptional($root . '/docs/DEPLOY1_FOLHA_DO_DIA.md');
+$fencedCommands = static function (string $doc): array {
+    preg_match_all('/```(bash|powershell)\n(.*?)```/s', $doc, $blocks, PREG_SET_ORDER);
+    $lines = [];
+    foreach ($blocks as $block) {
+        foreach (explode("\n", $block[2]) as $line) {
+            if (trim($line) !== '') {
+                $lines[] = $block[1] . ': ' . $line;
+            }
+        }
+    }
+    return [$lines, count($blocks)];
+};
+[$runbookAll] = $fencedCommands($runbook);
+[$sheetAll, $sheetBlocks] = $fencedCommands($sheet);
+assert_same(true, $sheet !== '' && count($runbookAll) === count($commands) + count($psCommands), 'folha do dia: presente; comandos do roteiro lidos');
+assert_same($runbookAll, $sheetAll, 'folha do dia: os mesmos comandos do roteiro, na mesma ordem, com a mesma linguagem');
+assert_same(count($sheetAll), $sheetBlocks, 'folha do dia: um comando por bloco');
+$sheetLines = explode("\n", $sheet);
+$unmarked = [];
+foreach ($sheetLines as $i => $line) {
+    if (preg_match('/^```(bash|powershell)$/', $line) !== 1) {
+        continue;
+    }
+    $previous = '';
+    for ($j = $i - 1; $j >= 0 && $previous === ''; $j--) {
+        $previous = trim($sheetLines[$j]);
+    }
+    if (preg_match('/^- \[ \] \*\*\d+\.\*\* .*Esperado: .+ \*\*PARE se:\*\* .+/', $previous) !== 1) {
+        $unmarked[] = $i + 1;
+    }
+}
+assert_same([], $unmarked, 'folha do dia: cada comando com caixa [ ], numero, Esperado e PARE se logo acima');
+preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* /m', $sheet, $sheetNumbers);
+assert_same(range(1, count($sheetAll)), array_map('intval', $sheetNumbers[1]), 'folha do dia: comandos numerados de 1 em diante, na ordem');
+$sheetWithoutLoopback = str_replace('127.0.0.1', '', $sheet);
+assert_same([0, 0, 0, 0], [
+    preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheetWithoutLoopback),
+    preg_match('/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\./', $sheet),
+    preg_match('/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(local|lan|corp|intra|internal|com|br|net|org)\b/i', $sheet),
+    preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet),
+], 'folha do dia: sem IP (alem do 127.0.0.1), e-mail, hostname ou senha');
 
 echo "QA deploy runbook OK ({$checks} verificacoes)\n";
