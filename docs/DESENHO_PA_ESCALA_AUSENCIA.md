@@ -4402,6 +4402,85 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 - As 48 mutações da 9.13.3 visavam o texto anterior (data de 11/11) e não foram repetidas; as travas delas que continuam (comandos, folha, push, HTTPS, QAs) foram exercitadas pelas 45 novas só em parte.
 - `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo.
 
+**Ajustado em 2026-11-09 pela 9.13.5:** o ensaio do BIZ-02 e os das migrations passam à cópia `sistema_pausas_ensaio`; o RR4 e o RR7 ficam como lá; a estimativa é de cerca de 4 h.
+
+#### 9.13.5 Dados do servidor: cópia de ensaio, backup pré-dia e espaço livre (`9416cb8`, 2026-11-09; aguardando revisão)
+
+**Informado pelo responsável (2026-11-09, só contagens e tamanhos):**
+- banco `sistema_pausas` com 1,8 MB;
+- backup completo pré-dia em `/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz` (`mysqldump --single-transaction --routines --triggers --events`, modo `600`, com "Dump completed");
+- cópia `sistema_pausas_ensaio` **já criada** no mesmo contêiner, restaurada desse backup, com 33 tabelas;
+- `/var` com 88% de uso (1,2 GB livres; código e Docker nele) e `/` com 599 MB livres.
+
+**Pedido:**
+- usar a cópia no ensaio das migrations e do BIZ-02;
+- apagá-la no fim, com confirmação;
+- dizer o espaço que o `npm ci` e o build pedem;
+- conferir no passo 0 o espaço livre com limite mínimo.
+
+**Entrega:** um commit (`9416cb8`): roteiro, inventário, folha e trava. **Nenhum código de aplicação mudou; nada foi executado no servidor.**
+- **0n:** o ensaio do BIZ-02 roda na cópia existente. O roteiro não cria banco (a trava proíbe `CREATE DATABASE`).
+  - **Antes:** 33 e 33 tabelas, nenhuma `manutencao_*` e nenhum gatilho, rotina ou evento (o backup leva `--events`, e um evento na cópia rodaria sozinho); `funcionarios`, `pausas` e `audit_log` iguais ou menores que na produção.
+  - **Depois:** 2 tabelas `manutencao_*` e o corte na cópia, e 0 na produção.
+  - **A cópia fica** para o passo 4. Repetir o 0n pede uma cópia nova, porque o script 1 não fotografa duas vezes.
+- **Passo 4:** os 14 ensaios leem da cópia (`ORIGEM=sistema_pausas_ensaio`), nunca da produção.
+- **7m:** `DROP DATABASE sistema_pausas_ensaio` uma vez só, e só se quem executa digitar o nome da cópia. A saída confirma `copia_restante = 0` e `producao = 1`. Roda também se o deploy parar, for revertido ou for cancelado.
+- **0m e 3d:** espaço livre com limite mínimo, num comando só, repetido no 3d antes do backup e, portanto, antes do `npm ci` do 6e.
+  - **Medido na estação** (`package-lock.json` do commit, cache vazio): `node_modules` com 114 MB (até uns 150 MB se o npm do servidor instalar as variantes `gnu` e `musl`; TO CONFIRM), cache do npm com 27 MB e `app/` com 0,9 MB.
+  - **Pior caso:** uns 175 MB em `/var` e 50 MB na `/`.
+  - **Limites, perto de três vezes isso:** código 500 MB, cache do npm 200, `/var/backups` 100, raiz do Docker 200, `/tmp` 50, `/root` 50. Com os números de hoje, passa.
+- **6e:** falha do build por falta de espaço (`ENOSPC`) deixa o portal em manutenção. O degrau 2 não resolve, porque o `app/` não é versionado e o build anterior pede o mesmo espaço.
+- **9e e inventário (seções 1, 5, 8 e 9):** o backup pré-dia entra na limpeza com aprovação. O inventário registra a retenção das duas cópias novas e a estimativa revista.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| SS1 | **Os 14 ensaios das migrations leem da cópia de 09/11** (`ORIGEM`), não da produção. O `funcionarios` do ensaio fica no estado do `596db67` mesmo depois da 016 e da 011 entrarem na produção | Pedido do responsável. Conferido nos arquivos: a 011, a 012, a 014 e a 019 só mexem nas próprias tabelas, a 014 declara não depender da 011, o `lideranca` da 011 e da 012 é o ENUM de `team` delas, e a 016b tem a 016 como `PREPARO`. Os esperados dos roteiros por lote valem; muda só a lista de colunas de `funcionarios` no ensaio. O "antes" da produção de hoje continua no 0b e nas verificações do passo 4 |
+| SS2 | **O 0n roda na mesma cópia e não a apaga**: ela fica até o 7m | O passo 4 lê dela. O script 4 devolve os dados ao "antes", e as `manutencao_*` que sobram não são copiadas pelos ensaios |
+| SS3 | **`DROP` só no 7m, com o nome digitado**, também se o deploy parar, for revertido ou for cancelado. Se a data passar de 16/11, apagar no mesmo dia e criar outra perto da nova data | LGPD (dados pessoais, inclusive as cópias de junho). Um nome fixo no comando, nunca `sistema_pausas`. A trava exige um `DROP DATABASE` só, depois de todos os ensaios |
+| SS4 | **Conferência da cópia antes do 0n**, com gatilhos, rotinas e eventos em 0 | O backup foi feito com `--events`. O `596db67` não tem nenhum, e um que aparecesse rodaria na cópia sem ninguém ver |
+| SS5 | **Limites mínimos de espaço**: código 500 MB, cache do npm 200, `/var/backups` 100, raiz do Docker 200, `/tmp` 50, `/root` 50; no 0m e de novo no 3d | Perto de três vezes o pior caso medido. O `/var` está em 88%. O cache do npm é o do `sudo` (em geral `/root/.npm`, na `/`), por isso conferido pelo caminho que o `npm config` devolve |
+| SS6 | **O backup pré-dia não substitui o do 3d** e sai com aprovação no 9e, com a mesma regra do backup do dia | O banco muda até o dia. O backup tem dados pessoais e fica na `/`, que tem menos espaço |
+| SS7 | **`ENOSPC` no build: fica em manutenção e chama a infraestrutura**, sem degrau 2 | O `app/` não é versionado: o rollback de código também roda o build e pede o mesmo espaço |
+| SS8 | **O 0m deixa de consultar o tamanho do banco** | O responsável já o informou (1,8 MB). Sai uma senha digitada e um acesso ao banco |
+
+**Tempo do dia (inventário, seção 9):**
+- passo 3 com mais 2 min (espaço livre);
+- total de cerca de 4 h sem incidente, mais 20 min de reserva;
+- o 0n leva de 20 a 30 min, porque a cópia já existe.
+
+O 1,8 MB confirma a premissa: o tempo é o de ler as saídas. A conclusão sobre 13/11 não muda.
+
+**Validação executada pela IA:**
+- `qa-deploy-runbook.php` com saída 0: **251 verificações** (240 → 251). `git diff --check` com saída 0.
+- **`bash -n` dos 123 comandos Linux do roteiro**: todos com saída 0.
+- **Mutação 60/60**, em cópias mínimas da árvore, com a cópia limpa conferida antes. Eram os 45 mutantes da 9.13.4, com os pontos de ancoragem atualizados; saíram os três do `ensaio_biz02` (sem apagar a cópia, na produção, cópia por arquivo) e entraram 18 novos:
+  - BIZ-02 na produção (refeito para a cópia nova);
+  - 0n sem a conferência antes ou depois;
+  - cópia sem conferir eventos;
+  - roteiro criando a cópia;
+  - ensaio da 014 sem `ORIGEM`, ou um ensaio a mais sem ela;
+  - cópia não apagada no 7m;
+  - `DROP` antes do dia, da produção ou sem confirmação;
+  - segundo `DROP DATABASE`;
+  - passo 1 com a "cópia apagada";
+  - 9e sem o backup pré-dia;
+  - 3d sem o espaço livre, ou com o mínimo menor;
+  - espaço sem `PARE`;
+  - 0m sem o tamanho do `npm ci`.
+
+  Um mutante novo sobreviveu na primeira rodada (9e sem o backup pré-dia: a trava achava o caminho no bloco de dados): a trava ganhou a conferência no 9e.
+- **Referências da folha conferidas por script**: cada "comando N" aponta para o item certo depois da renumeração (0m de 2 para 1 comando, 0n de 4 para 3, um a mais no 3d e outro no 7m; total igual, 126).
+- **Medida do `npm ci` e do build** na estação: cache novo no scratchpad, com o `package-lock.json` do commit e `--ignore-scripts`.
+
+**Limitações declaradas:**
+- Nada foi executado no servidor nem em MySQL. A cópia `sistema_pausas_ensaio` não foi vista pela IA: a conferência do 0n é a primeira leitura dela pelo roteiro.
+- O tamanho do `node_modules` foi medido no Windows. Os binários nativos do Linux têm tamanho parecido, mas a instalação de `gnu` e `musl` juntas depende da versão do npm do servidor (TO CONFIRM).
+- O comando de espaço supõe `docker info` sem `sudo` (o roteiro já usa `docker` assim) e o cache do npm do `sudo` (TO CONFIRM no 0m).
+- O `test-local.ps1` não rodou nesta entrega: a execução foi negada pela política de permissão da sessão. Nenhum arquivo da aplicação nem do roteiro de navegador mudou; a trava, que é um dos QAs dele, rodou direto com o `php`.
+- `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo nem dado pessoal (só caminhos e tamanhos informados pelo responsável).
+
 ---
 
 ## 10. Riscos e pendências
@@ -4419,6 +4498,8 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 | `qa:schedule-rules` fixa a lista de tipos de regra e dias | Atualização deliberada em F1 e F2B, descrita na entrega |
 | **Servidor no `596db67` (2026-11-09):** a fila antiga nunca foi aplicada; o deploy 1 leva lotes 1 a 7, BIZ-02 e Parte B juntos | Roteiro consolidado (9.13.4) com ensaio de cada migration e do BIZ-02, manutenção no trecho do código, backup por `mysqldump`, rollback em degraus; inventário em `docs/DEPLOY1_INVENTARIO.md` |
 | **Pendência LGPD (2026-11-09, sem mudança):** quatro cópias de junho no banco de produção (`funcionarios_backup_*`, `funcionarios_cleanup_backup_*`, `funcionarios_pre_horario_*`, `pausas_cleanup_backup_*`), com dados pessoais e sem retenção definida; entram em todo dump | Depois do deploy, com aprovação: conferir uso só com contagens; sem motivo para manter, exportar uma vez para o diretório de backup (root, 700, `SHA256SUMS`), registrar a decisão e remover do banco em janela própria; com motivo, definir retenção e responsável e restringir o acesso (inventário, seção 8; roteiro, 9d) |
+| **Cópias de 2026-11-09 com dados pessoais:** o banco `sistema_pausas_ensaio` e o backup pré-dia em `/root/backups_chronodesk/` | Cópia apagada no 7m, com o nome digitado, também se o deploy parar ou for cancelado; data depois de 16/11: apagar no mesmo dia e criar outra perto da nova data. Backup pré-dia apagado com aprovação no 9e (9.13.5) |
+| **Disco do servidor (2026-11-09):** `/var` com 88% de uso (código e Docker), `/` com 599 MB livres; `npm ci` com uns 114 MB (até 150) | Espaço livre com limite mínimo no 0m e no 3d; `ENOSPC` no build deixa o portal em manutenção, e o degrau 2 não resolve (o `app/` não é versionado). Liberar espaço é da infraestrutura (9.13.5) |
 | `AdminPage.jsx` denso, alterado de novo em F4 | Mudança restrita à aba Funcionários; sem refatoração junto |
 | Carga extra no polling de 15 s (P14) | Referência de 2026-10-06 (p95 26,8 ms; seção 9.2). Base do critério: medição repetida logo antes do deploy do F2 (decisão de 2026-10-06); medir de novo depois, nas mesmas condições; piora (p95 + 50 ms **e** + 20% sobre essa base) desliga `STATUS_PRESENCE_ENABLED` |
 

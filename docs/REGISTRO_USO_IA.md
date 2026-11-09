@@ -1186,6 +1186,19 @@ Base da afirmação:
 | **Limitacoes declaradas** | Nada executado no servidor nem em MySQL; os scripts do BIZ-02 seguem sem execucao real (o 0n e a primeira). O "antes" de colunas e ENUMs vem do repositorio e das consultas antigas; o 0b confirma. Estimativa de tempo nao medida. `df` no conteiner (0m) TO CONFIRM. As 48 mutacoes da 9.13.3 nao foram repetidas (visavam o texto anterior). `gitleaks`, PHPStan e Psalm ausentes; varredura manual do diff sem segredo. |
 | **Validacao humana** | Pendente: revisao (RR1 a RR12) e a data. |
 
+### Copia de ensaio, backup pre-dia e espaco livre no roteiro do deploy 1 — 2026-11-09
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | O responsavel informou dados do servidor (so contagens e tamanhos): banco de 1,8 MB; backup pre-dia em `/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz`; copia `sistema_pausas_ensaio` ja criada desse backup (33 tabelas); `/var` com 88% de uso e `/` com 599 MB livres. Pedido: usar a copia no ensaio das migrations e do BIZ-02, apaga-la no fim com confirmacao, dizer o espaco do `npm ci` e do build e conferir no passo 0 o espaco livre com limite minimo. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `9416cb8` (roteiro, inventario, folha e trava) e o commit deste registro. Sem push pela IA. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md` (deploy 1): dados do servidor; 0m com espaco livre e limites; 0n na copia existente, conferida antes e depois, sem criar nem apagar; passo 1 com a copia presente; 3d com o espaco de novo; passo 4 com `ORIGEM=sistema_pausas_ensaio` nos 14 ensaios; 6e com o espaco e o `ENOSPC`; 7m com o `DROP` da copia com o nome digitado; 9e com o backup pre-dia. `docs/DEPLOY1_INVENTARIO.md` (secoes 1, 5, 8 e 9). `docs/DEPLOY1_FOLHA_DO_DIA.md` regenerada (126 comandos). `scripts/qa-deploy-runbook.php` (251 verificacoes). Desenho 9.13.5 e secao 10; este registro. **Nenhum codigo de aplicacao mudou; nada foi executado no servidor.** |
+| **Decisoes de implementacao** | SS1 a SS8, a aprovar (desenho 9.13.5): ensaios das migrations lidos da copia de 09/11 (sem dependencia entre as migrations ensaiadas, conferido nos arquivos); 0n na mesma copia, que fica ate o 7m; `DROP` so no 7m, com o nome digitado, tambem se o deploy parar ou for cancelado; copia conferida sem gatilho, rotina nem evento; limites de espaco (codigo 500 MB, cache do npm 200, `/var/backups` 100, raiz do Docker 200, `/tmp` 50, `/root` 50) no 0m e no 3d; backup pre-dia sem substituir o do dia, removido com aprovacao no 9e; `ENOSPC` no build fica em manutencao; 0m sem consulta ao banco. |
+| **Pendente com o responsavel** | Revisao (SS1 a SS8, alem de RR1 a RR12) e a data. Versao do npm do servidor (variantes `gnu` e `musl`). |
+| **Validacao executada pela IA** | `qa-deploy-runbook.php` com saida 0 (251 verificacoes). `bash -n` dos 123 comandos Linux com saida 0. Mutacao 60/60 (45 anteriores atualizados, 3 substituidos, 18 novos), com a copia limpa conferida antes; um mutante novo sobreviveu na 1a rodada e a trava ganhou a conferencia que faltava. Referencias "comando N" da folha conferidas por script depois da renumeracao. Medida do `npm ci` (114 MB) e do cache (27 MB) num cache novo, e do build (0,9 MB). `git diff --check` com saida 0. |
+| **Limitacoes declaradas** | Nada executado no servidor nem em MySQL; a copia nao foi vista pela IA. Tamanho do `node_modules` medido no Windows (`gnu`/`musl` TO CONFIRM). `docker info` sem `sudo` e cache do npm do `sudo` TO CONFIRM no 0m. `test-local.ps1` nao rodou (negado pela politica de permissao da sessao); nenhum arquivo da aplicacao mudou e a trava rodou direto. `gitleaks`, PHPStan e Psalm ausentes; varredura manual do diff sem segredo. |
+| **Validacao humana** | Pendente: revisao (SS1 a SS8) e a data. |
+
 ---
 
 ## 5. Responsabilidade
