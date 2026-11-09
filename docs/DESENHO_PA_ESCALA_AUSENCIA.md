@@ -4354,9 +4354,9 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 - A trava confere o texto e a coerência data/corte, não o calendário de operação nem se o dia é útil.
 - `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo.
 
-**Data cancelada em 2026-11-09 (9.13.4):** o pré-requisito 0a deu PARE no servidor; a linha da data voltou a A DEFINIR.
+**Data cancelada em 2026-11-09 (9.13.4):** o pré-requisito 0a deu PARE no servidor; a linha da data voltou a A DEFINIR. **Nova data, aprovada no mesmo dia (9.13.6):** 11/11/2026, das 19:00 às 23:00, com a véspera em 10/11; a trava volta a exigir a data.
 
-#### 9.13.4 Servidor no `596db67`: roteiro do deploy 1 consolidado desde ele (`3d17ac9`, 2026-11-09; aguardando revisão)
+#### 9.13.4 Servidor no `596db67`: roteiro do deploy 1 consolidado desde ele (`3d17ac9`, 2026-11-09; aprovado em 2026-11-09, RR1 a RR12, com o RR7 revisto na 9.13.6)
 
 **Informado pelo responsável (2026-11-09, só leitura no servidor):** a data de 11/11 está **cancelada**; o 0a deu PARE. O código no ar é o `596db67` (2026-06-26), no `codex/modernizacao-ui-backend`, ancestral do `5d5c7c9`; o `origin/codex` do servidor está no `072ed16`, nunca aplicado. Alteração local só no `.htaccess` (+6 linhas: `RewriteBase /` e os redirecionamentos de `^$`, `^var/www/chronodesk` e `^chronodesk` para `/app/`), regras que já estão no branch. MySQL 8.0.46, sem `login_user_throttle` (015), sem `manutencao_*` (BIZ-02) e sem `portal_presence_cutoff` (019). **Conclusão:** a fila antiga (deploys 1 a 12) nunca foi aplicada, e o roteiro do deploy 1 partia de premissa errada. Pedido: inventário, roteiro consolidado de tudo desde o `596db67` (com ensaio de cada migration e do BIZ-02, regras de parada, backup, rollback em degraus e o `.htaccess`), 0a novo, folha e trava, pendência LGPD das cópias de junho, estimativa do dia e viabilidade em 13/11 às 19:00.
 
@@ -4404,7 +4404,7 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 
 **Ajustado em 2026-11-09 pela 9.13.5:** o ensaio do BIZ-02 e os das migrations passam à cópia `sistema_pausas_ensaio`; o RR4 e o RR7 ficam como lá; a estimativa é de cerca de 4 h.
 
-#### 9.13.5 Dados do servidor: cópia de ensaio, backup pré-dia e espaço livre (`9416cb8`, 2026-11-09; aguardando revisão)
+#### 9.13.5 Dados do servidor: cópia de ensaio, backup pré-dia e espaço livre (`9416cb8`, 2026-11-09; aprovado em 2026-11-09, SS1 a SS8; o `DROP` da cópia foi para a véspera na 9.13.6)
 
 **Informado pelo responsável (2026-11-09, só contagens e tamanhos):**
 - banco `sistema_pausas` com 1,8 MB;
@@ -4481,11 +4481,126 @@ O 1,8 MB confirma a premissa: o tempo é o de ler as saídas. A conclusão sobre
 - O `test-local.ps1` não rodou nesta entrega: a execução foi negada pela política de permissão da sessão. Nenhum arquivo da aplicação nem do roteiro de navegador mudou; a trava, que é um dos QAs dele, rodou direto com o `php`.
 - `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo nem dado pessoal (só caminhos e tamanhos informados pelo responsável).
 
+#### 9.13.6 Aprovação, ensaios na véspera, data de 11/11 e aviso com o horário (2026-11-09; aguardando revisão)
+
+**Decisão do responsável (2026-11-09):**
+- **Aprovado** o roteiro consolidado do deploy 1 (`9416cb8` e os anteriores desta rodada), com RR1 a RR12 (9.13.4) e SS1 a SS8 (9.13.5).
+- **RR7, mudança:** os 14 ensaios das migrations passam para a **véspera**, lendo só da cópia `sistema_pausas_ensaio`. No dia fica só a aplicação de cada migration, com a conferência do "antes" e a verificação.
+- **Data:** **11/11/2026, das 19:00 às 23:00**; corte do F5 pela D2 em **16/11/2026**; véspera (ensaios e pré-requisitos) em **10/11/2026**. A trava passa a exigir a data, com o corte pela D2.
+- **Aviso à gestão:** o horário previsto da indisponibilidade (cerca de 30 minutos, com o turno da noite em operação) e o que o usuário percebe (entrar de novo, datas três horas mais cedo).
+
+**Entrega:** um commit só (roteiro, folha, inventário, trava, este registro). **Nenhum código de aplicação mudou; nada foi executado no servidor.**
+- **Linhas do início do roteiro** (a folha repete as quatro):
+  - a data e a janela preenchidas;
+  - a véspera (10/11/2026);
+  - a **indisponibilidade prevista**: cerca de 30 minutos, entre 20:00 e 21:00, com o turno da noite em operação;
+  - quem acompanha.
+- **0q, novo (véspera):**
+  - extração do `<commit validado na estacao>` por hash, com `cat-file` e `pipefail`, para `/root/ensaio-vespera.*`;
+  - os 14 ensaios com `ORIGEM=sistema_pausas_ensaio`, com os esperados que estavam no passo 4;
+  - a limpeza do diretório;
+  - o `DROP` da cópia, com o nome digitado.
+
+  Roda depois do 0n e do 0o.
+- **Passo 4 (dia):**
+  - sem ensaio;
+  - o 4a extrai só `migrations/` e repete o 0b (o mesmo comando) logo antes da 1ª migration;
+  - o resto como estava: Q-F4 antes da 014, verificação da 019 antes dela, Q4 antes da 012, aplicação e verificação de cada uma.
+- **6d:** as contagens da 016b comparam com o ensaio da véspera (0q).
+- **7m:** remove a extração do 4a e só confere `copia_restante = 0`.
+- **Passo 1:** confere a data e a janela, os itens 0a a 0q, o 0n e o 0q como esperado e a cópia apagada.
+- **0i:** a data do deploy já no comando (`2026-11-11`); o esperado é `corte planejado: 2026-11-16`.
+- **Aviso (0p):**
+  - abre com "na quarta-feira, 11/11, das 19:00 as 23:00", "cerca de 30 minutos, previstos entre 20:00 e 21:00, com o turno da noite em operacao, inclusive o registro de pausas";
+  - diz o que o usuário percebe logo na volta: recarregar e entrar de novo; datas três horas mais cedo, "e a hora certa, nao um erro";
+  - sem o marcador DD/MM da data;
+  - `[N_PAS]`, `[N_SEM_REGRA]` e `[DATA_CORTE]` continuam.
+- **Folha:** regenerada, com 130 comandos (eram 126):
+  - mais 17 do 0q;
+  - menos os 14 ensaios do dia;
+  - mais o 0b de novo no 4a.
+
+  Ela repete as quatro linhas, não tem "A DEFINIR" e traz as referências "comando N" conferidas por script.
+- **Inventário, seção 9:** a estimativa por passo com o relógio do dia e a da véspera.
+- **Trava:** 251 → 263 verificações. Exige:
+  - a data, sem "A DEFINIR", com o corte pela D2;
+  - a véspera como o dia anterior;
+  - a indisponibilidade dentro da janela;
+  - no aviso, a data, a janela e o horário iguais aos das linhas do início, e nenhum outro número fixo;
+  - na folha, as quatro linhas, o passo 1 com a data e o 0i com o corte concreto;
+  - os 14 ensaios no 0q, depois do 0n, sobre o commit validado (com `cat-file` e `pipefail`), e nenhum ensaio no dia;
+  - o 0b de novo no 4a, igual;
+  - o 4a sem o script de ensaio;
+  - o `DROP` uma vez, no fim do 0q;
+  - o 7m só com a conferência;
+  - quatro remoções, cada uma guardada.
+
+**Tempo (inventário, seção 9):** cerca de **3 h** no dia sem incidente (eram cerca de 4 h; o 0q tira uns 55 min), mais 20 min de reserva. Cabe em 19:00 às 23:00 com uns 38 min de folga.
+
+| Trecho | Relógio previsto |
+|---|---|
+| Passos 1 a 5 e 6a | 19:00 a 20:12 |
+| **Manutenção (6b a 6g)** | **20:12 a 20:42** |
+| Passo 7 | até 22:02 |
+| Reserva | até 22:22 |
+
+**Véspera:** cerca de 3 a 3,5 h ao todo:
+- publicação do branch e `-Browser`;
+- 0a a 0m (o 0f no expediente);
+- 0n;
+- 0q;
+- aviso.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| TT1 | **O `DROP` da cópia sai do 7m para o fim do 0q**, na véspera, com o mesmo comando (nome digitado). O 7m só confere `copia_restante = 0` e, com `1`, manda usar o comando do 0q | Ajusta a SS3 aprovada: o motivo de manter a cópia até o 7m era o passo 4 ler dela, e com os ensaios na véspera ela não serve ao dia. LGPD: a cópia com dados pessoais vive só a véspera |
+| TT2 | **Ensaios sobre o `<commit validado na estacao>`, extraído pelo hash**, sem `fetch` novo (o do 0a traz o commit); o passo 2 do dia grava o mesmo commit ou para | Os ensaios valem para o commit que vai ao ar. A trava mantém "nenhum `fetch` depois de gravar o commit" |
+| TT3 | **O "antes" do dia é o 0b de novo no 4a** (o mesmo comando), mais as conferências que já existiam (Q-F4, verificação da 019 antes, Q4) | O 0b cobre o "antes" de todas as migrations, e o banco muda entre a véspera e o dia. Um login AD repetido gravado nesse intervalo é pego antes da 016 |
+| TT4 | **O 4a extrai só `migrations/`** | O script de ensaio não roda no dia |
+| TT5 | **A indisponibilidade prevista numa linha própria** (cerca de 30 minutos, entre 20:00 e 21:00), que a trava confere dentro da janela e igual no aviso | Pedido do responsável; o horário sai da estimativa (manutenção de 20:12 a 20:42) com margem. O aviso deixa de ter a data como marcador: os únicos números fixos são a data, a janela e o horário das linhas do início |
+| TT6 | **A véspera numa linha própria**, conferida como o dia anterior à data | Pedido do responsável; a folha a repete |
+| TT7 | **O 0i com a data no comando** (`2026-11-11`), em vez do marcador | A data está decidida; um marcador a menos para trocar no terminal. A trava confere o corte pela D2 contra a linha da data |
+| TT8 | **O aviso é enviado na véspera** (0p), com os números do dia do envio | A véspera é o último dia antes do deploy |
+| TT9 | **Véspera com `PARE` cancela o deploy de 11/11** (guarda do BIZ-02 ou ensaio fora do esperado); nova data até 15/11 para manter o corte em 16/11 | Não há tempo de análise entre a véspera e o dia; risco registrado na seção 10 |
+
+**Validação executada pela IA:**
+- `qa-deploy-runbook.php` com saída 0: **263 verificações**. `git diff --check` com saída 0.
+- **`bash -n` dos 127 comandos Linux do roteiro**: todos com saída 0.
+- **Mutação 72/72**, em cópias mínimas da árvore, com a cópia limpa conferida antes.
+  - Dos 60 da 9.13.5, saíram 5 (data A DEFINIR sem motivo, passo 1 e folha sem a regra do A DEFINIR, 0i genérico, data preenchida com o 0i genérico).
+  - 8 foram reescritos para o texto novo (âncoras do 0q, do 7m, do passo 1 e do aviso; `DROP` antes dos ensaios; quinta remoção).
+  - Entraram 17:
+    - data de volta a A DEFINIR;
+    - corte fora da D2;
+    - véspera que não é o dia anterior;
+    - indisponibilidade fora da janela;
+    - aviso com outro horário ou com número fixo;
+    - passo 1 sem a data;
+    - folha com A DEFINIR, sem o corte concreto ou sem a véspera;
+    - ensaio da 017 no dia;
+    - dia sem o 0b de novo;
+    - 4a com o script de ensaio;
+    - véspera sem `cat-file` ou com o commit do branch;
+    - sem limpeza da véspera;
+    - 7m apagando a cópia de novo.
+
+  Dois mutantes morreram na 1ª rodada com a mensagem nova, e o esperado do harness foi ajustado.
+- **Referências "comando N" da folha conferidas por script** depois da renumeração (126 → 130).
+- **`test-local.ps1 -SkipHttp -Browser` com saída 0 no `58e3594`** (worktree separado, `npm ci` limpo): lint PHP, smoke e os QAs PHP (a trava com 263 verificações entre eles) e o roteiro de navegador **1026/1026**. O commit final difere do `58e3594` só nesta linha e na do registro (emenda local do mesmo commit, sem push); nenhum QA lê esses dois arquivos.
+
+**Limitações declaradas:**
+- Nada foi executado no servidor nem em MySQL. A cópia `sistema_pausas_ensaio` e os 14 ensaios sobre ela rodam pela primeira vez na véspera.
+- O relógio do dia e o da véspera são estimativa, não medida (o banco de 1,8 MB confirma que o tempo é o de ler as saídas).
+- Com o `DROP` na véspera, repetir um ensaio no dia exige uma cópia nova (TT1).
+- `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo nem dado pessoal.
+
 ---
 
 ## 10. Riscos e pendências
 
-**Decisão do responsável (2026-11-06): deploy da Parte B em duas etapas.** O F8 e o F9 dependem da Liderança, sem prazo. **Deploy 1 (agora):** F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5, pelo roteiro único do `DEPLOY_LINUX.md` (seção 9.13; aprovado em 2026-11-09; quem acompanha: o responsável pela infraestrutura da VM). **Em 2026-11-09, a data de 11/11 foi cancelada:** o servidor está no `596db67` e a fila antiga nunca foi aplicada; o roteiro passou a levar tudo desde o `596db67` (9.13.4, `docs/DEPLOY1_INVENTARIO.md`), e a **data e a janela estão A DEFINIR** (a estimativa é de cerca de 4 h; 19:00 às 22:00 não basta). **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. O commit 1 do F8 (`EmployeeLunchPolicy`) vai no deploy 1 sem efeito (só o QA dele o chama). Onde este desenho diz "deploy único depois do F9", vale, desde 2026-11-06, o deploy 1 para o que já está aprovado e o deploy 2 para o F8 e o F9.
+**Decisão do responsável (2026-11-06): deploy da Parte B em duas etapas.** O F8 e o F9 dependem da Liderança, sem prazo. **Deploy 1 (agora):** F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5, pelo roteiro único do `DEPLOY_LINUX.md` (seção 9.13; aprovado em 2026-11-09; quem acompanha: o responsável pela infraestrutura da VM). **Em 2026-11-09, a data de 11/11 (19:00 às 22:00) foi cancelada:** o servidor está no `596db67` e a fila antiga nunca foi aplicada; o roteiro passou a levar tudo desde o `596db67` (9.13.4, `docs/DEPLOY1_INVENTARIO.md`). **No mesmo dia, o roteiro consolidado foi aprovado e a data voltou:** **11/11/2026, das 19:00 às 23:00**, com a véspera em 10/11 (pré-requisitos, BIZ-02 e os 14 ensaios das migrations), a indisponibilidade prevista entre 20:00 e 21:00 e o corte do F5 em 16/11 (9.13.6; cerca de 3 h no dia). **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. O commit 1 do F8 (`EmployeeLunchPolicy`) vai no deploy 1 sem efeito (só o QA dele o chama). Onde este desenho diz "deploy único depois do F9", vale, desde 2026-11-06, o deploy 1 para o que já está aprovado e o deploy 2 para o F8 e o F9.
 
 | Risco | Mitigação |
 |---|---|
@@ -4498,7 +4613,8 @@ O 1,8 MB confirma a premissa: o tempo é o de ler as saídas. A conclusão sobre
 | `qa:schedule-rules` fixa a lista de tipos de regra e dias | Atualização deliberada em F1 e F2B, descrita na entrega |
 | **Servidor no `596db67` (2026-11-09):** a fila antiga nunca foi aplicada; o deploy 1 leva lotes 1 a 7, BIZ-02 e Parte B juntos | Roteiro consolidado (9.13.4) com ensaio de cada migration e do BIZ-02, manutenção no trecho do código, backup por `mysqldump`, rollback em degraus; inventário em `docs/DEPLOY1_INVENTARIO.md` |
 | **Pendência LGPD (2026-11-09, sem mudança):** quatro cópias de junho no banco de produção (`funcionarios_backup_*`, `funcionarios_cleanup_backup_*`, `funcionarios_pre_horario_*`, `pausas_cleanup_backup_*`), com dados pessoais e sem retenção definida; entram em todo dump | Depois do deploy, com aprovação: conferir uso só com contagens; sem motivo para manter, exportar uma vez para o diretório de backup (root, 700, `SHA256SUMS`), registrar a decisão e remover do banco em janela própria; com motivo, definir retenção e responsável e restringir o acesso (inventário, seção 8; roteiro, 9d) |
-| **Cópias de 2026-11-09 com dados pessoais:** o banco `sistema_pausas_ensaio` e o backup pré-dia em `/root/backups_chronodesk/` | Cópia apagada no 7m, com o nome digitado, também se o deploy parar ou for cancelado; data depois de 16/11: apagar no mesmo dia e criar outra perto da nova data. Backup pré-dia apagado com aprovação no 9e (9.13.5) |
+| **Cópias de 2026-11-09 com dados pessoais:** o banco `sistema_pausas_ensaio` e o backup pré-dia em `/root/backups_chronodesk/` | Cópia apagada no fim do 0q, na véspera, com o nome digitado, também se um ensaio parar; o 7m confere que ela não existe (9.13.6). Backup pré-dia apagado com aprovação no 9e (9.13.5) |
+| **Véspera curta (2026-11-09):** os pré-requisitos, o BIZ-02 e os 14 ensaios ficam todos em 10/11, e o deploy é em 11/11 | Uma guarda do BIZ-02 ou um ensaio fora do esperado cancela o deploy de 11/11 (sem tempo para análise); nova data até 15/11 para manter o corte em 16/11 (9.13.6) |
 | **Disco do servidor (2026-11-09):** `/var` com 88% de uso (código e Docker), `/` com 599 MB livres; `npm ci` com uns 114 MB (até 150) | Espaço livre com limite mínimo no 0m e no 3d; `ENOSPC` no build deixa o portal em manutenção, e o degrau 2 não resolve (o `app/` não é versionado). Liberar espaço é da infraestrutura (9.13.5) |
 | `AdminPage.jsx` denso, alterado de novo em F4 | Mudança restrita à aba Funcionários; sem refatoração junto |
 | Carga extra no polling de 15 s (P14) | Referência de 2026-10-06 (p95 26,8 ms; seção 9.2). Base do critério: medição repetida logo antes do deploy do F2 (decisão de 2026-10-06); medir de novo depois, nas mesmas condições; piora (p95 + 50 ms **e** + 20% sobre essa base) desliga `STATUS_PRESENCE_ENABLED` |

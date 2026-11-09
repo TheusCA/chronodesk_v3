@@ -17,7 +17,7 @@ Este inventário só lê o repositório. Nada foi executado no servidor. Onde di
 | MySQL | 8.0.46 (a 019 exige 8.0.29 ou mais novo) |
 | Tamanho do banco | `sistema_pausas` com 1,8 MB (2026-11-09) |
 | Backup pré-dia | `/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz` (`mysqldump --single-transaction --routines --triggers --events`, modo `600`, "Dump completed"). Não substitui o backup do dia (passo 3d) |
-| Cópia de ensaio | `sistema_pausas_ensaio`, no mesmo contêiner, restaurada do backup pré-dia, 33 tabelas. Origem do ensaio do BIZ-02 (0n) e dos 14 ensaios das migrations (passo 4, `ORIGEM`); apagada no 7m, com confirmação |
+| Cópia de ensaio | `sistema_pausas_ensaio`, no mesmo contêiner, restaurada do backup pré-dia, 33 tabelas. Origem do ensaio do BIZ-02 (0n) e dos 14 ensaios das migrations (0q, `ORIGEM`), os dois na véspera; apagada no fim do 0q, com confirmação; o 7m confere |
 | Disco | `/var` com 88% de uso e 1,2 GB livres (código e Docker); `/` com 599 MB livres. Limites mínimos na seção 5 |
 | Tabelas | As 29 das migrations 001 a 009 e do `database_SECURED.sql`, mais 4 cópias de junho (seção 8). Ausentes: `login_user_throttle` (015), `manutencao_*` (BIZ-02), `portal_presence_cutoff` (019), `funcionarios_perfil_016b` e qualquer `*_bkp_0NN` |
 
@@ -47,7 +47,7 @@ Conferência das tabelas: as migrations 001 a 009 criam `pause_approval_requests
 
 ## 3. Migrations e scripts de dados
 
-Ordem de aplicação no roteiro consolidado: **015, 016, 017, 011, 014, 019** (antes do código, cada uma com ensaio), **012 com o `git merge`**, **`biz02_01` logo depois do `merge`** (em manutenção, antes da recarga), **016b** (código novo no ar, em manutenção). A ordem segue a da fila antiga (015, 016 e 017 dos deploys 5 a 7; 011 do 8; 014 e 019 do F4 e do F5); nenhuma depende de outra fora dessa ordem, salvo a 016b, que exige a 016.
+Ordem de aplicação no roteiro consolidado: **015, 016, 017, 011, 014, 019** (antes do código; os 14 ensaios, inclusive os da 016b e da 012, na véspera, no 0q), **012 com o `git merge`**, **`biz02_01` logo depois do `merge`** (em manutenção, antes da recarga), **016b** (código novo no ar, em manutenção). A ordem segue a da fila antiga (015, 016 e 017 dos deploys 5 a 7; 011 do 8; 014 e 019 do F4 e do F5); nenhuma depende de outra fora dessa ordem, salvo a 016b, que exige a 016.
 
 ### 3.1 Migrations de esquema
 
@@ -153,24 +153,38 @@ O banco de produção tem quatro cópias de junho: `funcionarios_backup_20260616
 **Recomendação, depois do deploy e com aprovação do responsável:** (1) conferir, só com contagens, se alguma ainda tem uso (comparar `COUNT(*)` e o intervalo de datas com a tabela viva; nenhum código as lê); (2) se não houver motivo legal ou de auditoria para mantê-las, exportá-las uma vez para o diretório de backup (root, modo 700, com `SHA256SUMS`), registrar a decisão e a retenção, e removê-las do banco com `DROP TABLE` em janela própria; (3) se houver motivo, definir a retenção e o responsável e restringir o acesso (o usuário da aplicação não precisa de `SELECT` nelas). O deploy 1 não toca nelas; o 0b só as conta.
 
 **Cópias de 2026-11-09, também com dados pessoais (inclusive as quatro de junho):**
-- **Banco `sistema_pausas_ensaio`.** Retenção: até o fim do dia do deploy. O 7m o apaga com confirmação, também se o deploy parar, for revertido ou for cancelado. Se a data passar de 16/11, ele é apagado no mesmo dia e recriado perto da nova data.
+- **Banco `sistema_pausas_ensaio`.** Retenção: só a véspera. O último comando do 0q o apaga com confirmação, também se um ensaio parar; o 7m confere que ele não existe mais. Repetir os ensaios pede uma cópia nova.
 - **Backup pré-dia** (`/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz`, modo `600`, na `/`). O deploy não depende dele. Recomendação: mantê-lo com a mesma regra do backup do dia (até um ciclo estável depois do deploy) e apagá-lo com aprovação no 9e. Se a data for adiada sem previsão, apagá-lo antes.
 
-## 9. Tempo do dia e viabilidade em 13/11, às 19:00
+## 9. Tempo do dia (11/11/2026, das 19:00 às 23:00) e da véspera (10/11)
 
-Estimativa por passo, com o banco pequeno (2026-10-02: 81 pausas, 3 horas extras, 3 chamados críticos; `funcionarios` na casa das dezenas) e o operador lendo cada saída:
+Data, janela e véspera do responsável (2026-11-09): deploy em **11/11/2026, das 19:00 às 23:00**; corte do F5 pela D2 em **16/11/2026**; véspera (ensaios e pré-requisitos) em **10/11/2026**. Os 14 ensaios das migrations passaram para a véspera (decisão RR7 revista; roteiro, 0q).
 
-| Passo | Minutos |
-|---|---|
-| 1 e 2 (conferência, commit gravado, regras do `.htaccess`) | 10 |
-| 3 (rollback, cópia do `.htaccess`, `APP_ENV`, preflight, espaço livre, backup do banco de 1,8 MB) | 17 |
-| 4 (ensaio e aplicação de 015, 016 com 016b, 017, 011, 014 com Q-F4, 019; ensaio da 012 e Q4): 14 ensaios de 3 a 5 min cada, lidos da cópia `sistema_pausas_ensaio` | 80 |
-| 5 (ensaio do código: `php -l` e 16 QAs) | 10 |
-| 6 (Q-F6, Q-F7 e base; manutenção, 012 e `merge`; `biz02_01`; 016b; build; recarga; validação em manutenção; reabertura) | 45 |
-| 7 (verificações, D5, fora do Mapa, navegador por perfil com os itens dos lotes 4 a 7, medição, 16c e corte) | 75 |
-| **Total sem incidente** | **~237 (cerca de 4 h)** |
-| Reserva para um degrau 2 (código), se preciso | 20 |
+Estimativa por passo, com o banco de 1,8 MB (medido em 2026-11-09). O tempo é o de o operador ler cada saída, não o de executar:
 
-**Conclusão:** a janela de 3 h (19:00 às 22:00) **não basta**. Em 13/11, às 19:00, é viável com uma janela até 00:00 (5 h: cerca de 4 h mais reserva), com duas ressalvas: (a) a manutenção (passos 6b a 6g, uns 25 a 30 min, por volta de 21:15) cai no turno de 15:30 a 23:59 e tira o registro de pausas do ar nesse intervalo, o que precisa ir no aviso; (b) o corte do F5 fica em 16/11 (deploy até o dia 15), e a 16c precisa dar 0 no dia. Alternativas: um sábado sem operação (14/11, mesmo corte 16/11), ou mover os 14 ensaios para a véspera (leem da cópia e não alteram o banco de produção; tiram uns 60 min do dia, que cabe em 19:00 às 22:00 sem folga). O tamanho medido do banco (1,8 MB, 2026-11-09) confirma a premissa: o tempo é o de ler as saídas, não o de executar.
+| Passo do dia | Minutos | Relógio (início 19:00) |
+|---|---|---|
+| 1 e 2 (conferência, commit gravado, regras do `.htaccess`) | 10 | 19:00 a 19:10 |
+| 3 (rollback, cópia do `.htaccess`, `APP_ENV`, preflight, espaço livre, backup) | 17 | 19:10 a 19:27 |
+| 4 (o 0b de novo; aplicação e verificação de 015, 016, 017, 011, 014 com a Q-F4, 019 com a verificação antes; Q4) | 25 | 19:27 a 19:52 |
+| 5 (ensaio do código: `php -l` e 16 QAs) | 10 | 19:52 a 20:02 |
+| 6a (Q-F6, Q-F7 e base da medição) | 10 | 20:02 a 20:12 |
+| 6b a 6g (**manutenção**: 012 e `merge`, `biz02_01`, 016b, build, recarga, validação, reabertura) | 30 | **20:12 a 20:42** |
+| Folga do passo 6 | 5 | 20:42 a 20:47 |
+| 7 (verificações, D5, fora do Mapa, navegador por perfil, medição, 16c e corte) | 75 | 20:47 a 22:02 |
+| **Total sem incidente** | **~182 (cerca de 3 h)** | |
+| Reserva para um degrau 2 (código), se preciso | 20 | até 22:22 |
 
-**O ensaio do BIZ-02 não pede mais tempo no dia:** ele é antes do dia (0n) e, com a cópia já criada pelo responsável (2026-11-09), a conferência, os seis scripts e a conferência depois levam de 20 a 30 min. O risco de prazo é outro: se uma guarda disparar na cópia (G2, por exemplo), a correção exige análise antes do deploy, e ela não cabe entre 12/11 e 13/11. Para manter 13/11, os itens antes do dia precisam começar já: publicar o branch e o 0o (`-Browser`) até 10/11; 0a a 0n em 10 e 11/11 (a Q-F7 do 0f num dia útil, no expediente); o aviso (0p) em 12/11.
+**Conclusão:** cabe na janela de 19:00 às 23:00, com uns 38 min de folga além da reserva. A **indisponibilidade prevista** é de cerca de 30 minutos, entre 20:00 e 21:00. Ela cai no turno de 15:30 a 23:59, que está em operação, e tira o registro de pausas do ar nesse intervalo; o aviso à gestão diz isso, com o horário. Se o passo 4 ou o 5 atrasar, a manutenção começa mais tarde. Se passar das 21:00, avise a Liderança, que está no turno, antes de ligar a manutenção. O corte do F5 em 16/11 exige a 16c em 0 no dia (7k).
+
+**Véspera (10/11), na ordem:**
+
+| Item | Minutos | Observação |
+|---|---|---|
+| Publicação do branch e 0o (`-Browser` na estação) | 30 a 40 | O commit validado é o dos ensaios e o do dia |
+| 0a a 0m (0f no expediente) | 60 | Só contagens; 0d e 0e com o código atual |
+| 0n (BIZ-02 na cópia) | 20 a 30 | A cópia já existe |
+| 0q (extração, 14 ensaios de 3 a 5 min, limpeza e `DROP` da cópia) | 60 | Depois do 0n e do 0o |
+| 0p (aviso à gestão) | 10 | Com os números do dia do envio |
+
+O 0q tira uns 55 min do dia, que cairia de cerca de 4 h para cerca de 3 h. **O risco de prazo é a véspera**: uma guarda do BIZ-02 que dispare na cópia (0n) ou um ensaio fora do esperado (0q) pedem análise antes do deploy, e entre a véspera e o dia não há tempo para isso. Nesse caso, o deploy de 11/11 não acontece. Uma nova data tem de ser até 15/11 para manter o corte em 16/11.
