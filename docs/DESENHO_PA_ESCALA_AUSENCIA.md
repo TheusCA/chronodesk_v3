@@ -4261,7 +4261,7 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 - **A DEFINIR:** a resposta veio como modelo, sem os valores (data e janela "[DIA/MÊS], às [HORA]", corte do F5 "[16/11 se o deploy for até 13/11; senão 16/12]", quem acompanha "[NOME/PAPEL]"). Perguntado na mesma data: **ainda sem data**; quem acompanha entra **só pelo papel** (sem nome no git). Os dois seguem A DEFINIR no roteiro (9.13.1, OO2).
 - Ajustes pedidos, num commit só (docs e scripts, nada de aplicação): `FORCE_HTTPS=false` no `.env.production.example`, conferindo o `SESSION_COOKIE_SECURE` pela mesma regra; o `test-linux.sh` rodando o `qa-schedule-history.php`; os A DEFINIR preenchidos, com a trava exigindo data e janela; e a folha de execução do dia, com trava.
 
-#### 9.13.1 Ajustes da revisão de 2026-11-09 (`0565100`, 2026-11-09; aguardando revisão)
+#### 9.13.1 Ajustes da revisão de 2026-11-09 (`0565100`, 2026-11-09; aprovado em 2026-11-09)
 
 **Entrega:** um commit (`0565100`), só documentação, exemplo de configuração e scripts de conferência. **Nenhum código de aplicação mudou.**
 - **`.env.production.example`:** `FORCE_HTTPS=false` e `SESSION_COOKIE_SECURE=false` (os dois estavam `true`, contra o comentário logo acima). O comentário passa a explicar os dois efeitos: `FORCE_HTTPS=true` sem HTTPS próprio derruba o portal (301 para um `https://` que não atende; o preflight reprova) e `SESSION_COOKIE_SECURE=true` faz o navegador não guardar nem devolver o cookie de sessão recebido por HTTP (o login não se mantém; `secure_session_start()` usa a variável quando ela existe).
@@ -4270,7 +4270,7 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 - **Folha do dia (`docs/DEPLOY1_FOLHA_DO_DIA.md`, nova):** os 91 comandos do roteiro (88 do servidor e 3 da estação: o 0i, o 0k e o push do 9a), na ordem, um por bloco, numerados, cada um com a caixa `[ ]`, o passo do roteiro, o "Esperado" e o "PARE se" na linha de cima. Os itens sem comando (0l, passo 1, 7b, 7d, 7e, 7g, 7h, 7i e 9b) entram como caixas sem número. Nenhum valor real: os marcadores `<...>` ficam como no roteiro.
 - **Trava (`scripts/qa-deploy-runbook.php`, 159 → 169 verificações):** a NN10 no passo 2, um `git push` só (o do commit gravado para o `codex`), dentro do passo 9a, e nenhum comando com `--force` ou `-f`; o `.env.production.example` com `FORCE_HTTPS=false` e `SESSION_COOKIE_SECURE=false`, uma vez cada; a folha com os mesmos comandos do roteiro (texto e linguagem), na mesma ordem, um por bloco, cada um com caixa, número, "Esperado" e "PARE se", numeração de 1 em diante, e sem IP (além do `127.0.0.1`), e-mail, hostname ou senha.
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-11-09):**
 
 | # | Decisão | Motivo |
 |---|---|---|
@@ -4296,11 +4296,69 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 - O efeito do `SESSION_COOKIE_SECURE=true` em HTTP é o comportamento dos navegadores atuais (cookie `Secure` recusado vindo de origem sem HTTPS), não testado aqui.
 - `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo.
 
+**Revisão do responsável (2026-11-09): os ajustes (`0565100`, docs `958da88`) APROVADOS, com OO1 a OO6.** OO2: vale a fórmula da D2 do roteiro (deploy até 15/11 = corte em 16/11/2026; depois, 16/12/2026); a regra de 13/11 da revisão anterior estava imprecisa. Pedidos, num commit só: preencher data, janela, corte e quem acompanha no roteiro e na folha, com a trava exigindo data e janela preenchidas e o corte coerente com a data pela D2; `APP_BASE_URL` do exemplo em `http://`, com o porquê; o `qa-smoke.php` no `test-linux.sh`. A resposta trouxe a data, a janela e o papel de novo como modelo (`[DIA]/11/2026`, `[HORA] às [HORA+3h]`, `[PAPEL]`). Perguntado na mesma data: **ainda sem data**; quem acompanha: **o responsável pela infraestrutura da VM**.
+
+#### 9.13.2 Quem acompanha, `APP_BASE_URL` e todos os QAs no `test-linux.sh` (`147aebc`, 2026-11-09; aguardando revisão)
+
+**Entrega:** um commit (`147aebc`), só documentação, exemplo de configuração e scripts de conferência. **Nenhum código de aplicação mudou.**
+- **Quem acompanha:** "o responsável pela infraestrutura da VM" (só o papel), no roteiro e na folha do dia, com a mesma linha. A **data e a janela seguem A DEFINIR** nos dois.
+- **`.env.production.example`:** `APP_BASE_URL=http://...`, com o comentário do porquê (os links dos e-mails do `NotificationService` apontariam para um `https://` que não atende; trocar para `https://` junto com o `FORCE_HTTPS` e o `SESSION_COOKIE_SECURE`).
+- **`scripts/test-linux.sh`:** roda o `qa-smoke.php`, antes do de autenticação, como o `test-local.ps1`. Com isso, os dois scripts rodam os 16 QAs PHP do repositório.
+- **Trava (`qa-deploy-runbook.php`, 169 → 173 verificações):** quem acompanha preenchido, numa linha só e sem marcador (`A DEFINIR`, `[ ]`, `< >`); data e janela **ainda A DEFINIR**, numa linha só; a folha com as duas linhas iguais às do roteiro; o `APP_BASE_URL` do exemplo com `http://`, uma vez; o `test-linux.sh` e o `test-local.ps1` rodando todos os `scripts/qa-*.php` (QA novo reprova até entrar nos dois; linha comentada não conta).
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| PP1 | **Preenchido só o que veio: quem acompanha.** A trava exige, por ora, a data e a janela **ainda A DEFINIR**; quando a data vier, a mesma linha muda para exigir data (DD/MM/AAAA, em novembro de 2026), janela (início e fim) e o corte pela D2 (até 15/11: 16/11/2026; depois: 16/12/2026), no roteiro e na folha, num commit | A resposta trouxe os valores como modelo; inventar a data ou deixar a trava aceitar marcador abriria o deploy sem a janela combinada. Exigir "A DEFINIR" agora faz a trava acusar quem preencher a data sem trocar a regra |
+| PP2 | **O corte do F5 ainda não entra no roteiro nem na folha** | Depende da data; a fórmula do 0g e do 7k já o calcula no dia, e o aviso usa o `[DATA_CORTE]` do 0g |
+| PP3 | **A trava passa a exigir todos os QAs PHP no `test-linux.sh` e no `test-local.ps1`**, não só o `qa-smoke` | Os dois achados (o `qa-schedule-history` e o `qa-smoke` fora do `test-linux.sh`) eram a mesma falha: QA novo esquecido num dos scripts. A lista do ensaio do deploy (passo 5) já tinha a mesma regra |
+| PP4 | O `ALLOWED_ORIGINS` do exemplo continua com `https://` | Só afeta CORS de outra origem; o portal chama a própria origem. Fora do pedido |
+
+**Validação executada pela IA:**
+- `qa-deploy-runbook.php` com saída 0, **173 verificações**; `bash -n scripts/test-linux.sh`, `php scripts/qa-smoke.php` e `git diff --check` com saída 0.
+- **Mutação 38/38** (as 26 da 9.13.1, com a âncora nova, e 12 novas), em cópias mínimas da árvore, com a cópia limpa conferida antes, cada mutante morto pela trava esperada: `APP_BASE_URL` com `https://`, repetido e ausente; `test-linux.sh` sem o `qa-smoke` e com o `qa-schedule-history` comentado; `test-local.ps1` com um QA comentado; quem acompanha A DEFINIR, com marcador e repetido; data com o marcador do modelo; folha com outro quem acompanha e sem a linha da data. **Um sobrevivente na 1a rodada, corrigido:** a leitura do `test-local.ps1` aceitava linha comentada; a regex passou a exigir a chamada no início da linha.
+- `test-local.ps1 -SkipHttp -Browser` com saída 0 no `147aebc` (worktree separado): smoke e 15 QAs PHP e roteiro de navegador **1026/1026** (nenhuma tela mudou).
+
+**Limitações declaradas:**
+- Nenhum comando foi executado no servidor: a trava confere o texto.
+- A trava da data definitiva (formato, janela, corte pela D2) não existe ainda; entra com a data (PP1). **Feito na 9.13.3, no mesmo dia.**
+- `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo.
+
+#### 9.13.3 Data e janela do deploy 1 e trava da data (`3459d41`, 2026-11-09; aguardando revisão)
+
+**Informado pelo responsável (2026-11-09):** deploy 1 em **11/11/2026, das 19:00 às 22:00**. Pela D2 (a fórmula do 0g e do 7k: deploy até o dia 15 = corte no dia 16 do mesmo mês), **corte do F5 em 16/11/2026**. Pedido: preencher no roteiro e na folha, a trava exigindo a data com o corte pela D2, e parar para revisão.
+
+**Entrega:** um commit (`3459d41`), só documentação e a trava. **Nenhum código de aplicação mudou.**
+- **Roteiro e folha do dia**, a mesma linha: "**Data e janela do deploy**, fora do horario de operacao: 11/11/2026, das 19:00 as 22:00 (horario de Brasilia); corte do F5 pela D2: 16/11/2026."
+- **Folha do dia:** o esperado do 0g (comando 11) passa a dizer `corte planejado: 2026-11-16`; o "Passo 1" confere que hoje é a data e o horário está na janela.
+- **Trava (`qa-deploy-runbook.php`, 173 → 175 verificações), cumprindo a PP1:** a linha da data, uma só, no formato `DD/MM/AAAA, das HH:MM as HH:MM (horario de Brasilia); corte do F5 pela D2: DD/MM/AAAA.`, com data existente e início antes do fim; o corte igual ao da D2 calculada da data (dia 16 ou depois vai para o mês seguinte; dezembro vira janeiro); a folha com a mesma linha e com o mesmo corte no esperado do comando 11. A exigência de "A DEFINIR" saiu.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| QQ1 | **O corte entra na mesma linha da data**, e a trava o confere pela D2 | Data e corte mudam juntos; numa linha só, trocar a data sem o corte reprova |
+| QQ2 | **"(horario de Brasilia)" na janela**, exigido pela trava | As consultas do roteiro usam `America/Sao_Paulo` (`CURDATE()` decide o corte do 7k); deixa explícito para quem acompanha |
+| QQ3 | **A trava não confere "fora do horário de operação" nem data no futuro** | O horário de operação não está no repositório; e uma trava de "data futura" reprovaria o QA depois do dia 11 (o roteiro continua no repositório como registro) |
+| QQ4 | **Os comandos não mudam:** o `<AAAA-MM-DD do deploy>` do 0g continua marcador; a folha diz para trocá-lo pela data da linha acima | A trava amarra a folha aos comandos do roteiro; um valor fixo no comando duplicaria a data em dois lugares |
+
+**Prazo (atenção):** com o deploy em 11/11, os itens do passo 0 (0a a 0l) precisam estar feitos **até 11/11**: o push do branch pelo responsável antes do 0b e do 0k; o `-Browser` do 0k sobre o commit publicado; o `gitleaks` na estação (0i, ainda não instalado); a Q-F7 do 0d num dia útil, no expediente; e o aviso à gestão (0l) enviado antes do dia, com os marcadores do dia do envio.
+
+**Validação executada pela IA:**
+- `qa-deploy-runbook.php` com saída 0, **175 verificações**; `git diff --check` com saída 0.
+- **Mutação 48/48** (as 38 da 9.13.2, com as âncoras da data atualizadas, e as novas), em cópias mínimas da árvore, com a cópia limpa conferida antes, cada mutante morto pela trava esperada: data A DEFINIR; data com o marcador do modelo; 31/11/2026; janela invertida; janela sem o fuso; corte de outra competência (16/12); deploy no dia 16 com o corte no mesmo mês; corte fora do dia 16; linha da data repetida; folha com outra janela; folha sem a linha da data; folha com outro corte no 0g.
+- `test-local.ps1 -SkipHttp -Browser` com saída 0 no `3459d41` (worktree separado; a validação rodou antes deste registro, que só mexe na documentação): smoke e 15 QAs PHP (a trava com 175 verificações entre eles) e roteiro de navegador **1026/1026** (nenhuma tela mudou).
+
+**Limitações declaradas:**
+- A trava confere o texto e a coerência data/corte, não o calendário de operação nem se o dia é útil.
+- `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo.
+
 ---
 
 ## 10. Riscos e pendências
 
-**Decisão do responsável (2026-11-06): deploy da Parte B em duas etapas.** O F8 e o F9 dependem da Liderança, sem prazo. **Deploy 1 (agora):** F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5, pelo roteiro único do `DEPLOY_LINUX.md` (seção 9.13; data, janela e quem acompanha A DEFINIR). **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. O commit 1 do F8 (`EmployeeLunchPolicy`) vai no deploy 1 sem efeito (só o QA dele o chama). Onde este desenho diz "deploy único depois do F9", vale, desde 2026-11-06, o deploy 1 para o que já está aprovado e o deploy 2 para o F8 e o F9.
+**Decisão do responsável (2026-11-06): deploy da Parte B em duas etapas.** O F8 e o F9 dependem da Liderança, sem prazo. **Deploy 1 (agora):** F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5, pelo roteiro único do `DEPLOY_LINUX.md` (seção 9.13; aprovado em 2026-11-09; **11/11/2026, das 19:00 às 22:00, corte do F5 em 16/11/2026**; quem acompanha: o responsável pela infraestrutura da VM). **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. O commit 1 do F8 (`EmployeeLunchPolicy`) vai no deploy 1 sem efeito (só o QA dele o chama). Onde este desenho diz "deploy único depois do F9", vale, desde 2026-11-06, o deploy 1 para o que já está aprovado e o deploy 2 para o F8 e o F9.
 
 | Risco | Mitigação |
 |---|---|

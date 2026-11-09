@@ -1146,7 +1146,32 @@ Base da afirmação:
 | **Pendente com o responsavel** | Data e janela do deploy 1 e o papel de quem acompanha (item 3). |
 | **Validacao executada pela IA** | `qa-deploy-runbook.php` com saida 0 (169 verificacoes). Mutacao 26/26 nas travas novas, em copias minimas da arvore, com a copia limpa conferida antes, cada mutante morto pela trava esperada. `bash -n` do `test-linux.sh`, `php -l` da trava e `git diff --check` com saida 0. `test-local.ps1 -SkipHttp -Browser` com saida 0 no `0565100` (worktree separado): smoke e 15 QAs PHP e roteiro 1026/1026. |
 | **Limitacoes declaradas** | Nenhum comando executado no servidor: a trava confere o texto. O efeito do cookie `Secure` em HTTP e o comportamento dos navegadores atuais, nao testado aqui. `gitleaks`, PHPStan e Psalm ausentes; varredura manual do diff sem segredo. Fora do pedido, sem mudanca: o `test-linux.sh` tambem nao roda o `qa-smoke.php`; o `APP_BASE_URL` do exemplo esta com `https://`. |
-| **Validacao humana** | Pendente: revisao dos ajustes (OO1 a OO6) e a data do deploy 1. |
+| **Validacao humana** | Responsavel, 2026-11-09: **ajustes (`0565100`, docs `958da88`) aprovados, com OO1 a OO6**. OO2: vale a formula da D2 (deploy ate 15/11 = corte em 16/11); a regra de 13/11 estava imprecisa. |
+
+### Quem acompanha o deploy 1, APP_BASE_URL em http e todos os QAs no test-linux — 2026-11-09
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Pedido na aprovacao dos ajustes, num commit so: preencher data, janela, corte e quem acompanha no roteiro e na folha, com a trava exigindo data e janela preenchidas e o corte coerente pela D2; `APP_BASE_URL` do exemplo em `http://`, com o porque; `qa-smoke.php` no `test-linux.sh`; mutacao e `-Browser` no commit. A resposta trouxe data, janela e papel como modelo; perguntado: ainda sem data, quem acompanha = o responsavel pela infraestrutura da VM. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `147aebc` (ajustes) e o commit deste registro. Sem push pela IA. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md` e `docs/DEPLOY1_FOLHA_DO_DIA.md`: quem acompanha preenchido (so o papel), data e janela ainda A DEFINIR, linhas iguais nos dois. `.env.production.example`: `APP_BASE_URL=http://...` com comentario. `scripts/test-linux.sh`: roda o `qa-smoke.php`. `scripts/qa-deploy-runbook.php`: travas de quem acompanha, da data ainda A DEFINIR, das linhas iguais na folha, do `APP_BASE_URL` e de todos os QAs no `test-linux.sh` e no `test-local.ps1` (173 verificacoes). Documentacao: desenho 9.13.1 (aprovacao) e 9.13.2, este registro. **Nenhum codigo de aplicacao mudou.** |
+| **Decisoes de implementacao** | PP1 a PP4, a aprovar (desenho 9.13.2): so o que veio foi preenchido, e a trava exige a data ainda A DEFINIR ate a data vir (ai muda para data, janela e corte pela D2); o corte nao entra antes da data; todos os QAs nos dois scripts de teste; `ALLOWED_ORIGINS` fica como esta. |
+| **Pendente com o responsavel** | Data e janela do deploy 1 (o corte sai delas pela D2). |
+| **Validacao executada pela IA** | `qa-deploy-runbook.php` com saida 0 (173 verificacoes); `bash -n` do `test-linux.sh`, `qa-smoke.php` e `git diff --check` com saida 0. Mutacao 38/38 nas travas, em copias minimas da arvore, com a copia limpa conferida antes; um sobrevivente na 1a rodada (linha comentada no `test-local.ps1` contava), corrigido na regex. `test-local.ps1 -SkipHttp -Browser` com saida 0 no `147aebc` (worktree separado): smoke e 15 QAs PHP e roteiro 1026/1026. |
+| **Limitacoes declaradas** | Nenhum comando executado no servidor: a trava confere o texto. A trava da data definitiva entra com a data. `gitleaks`, PHPStan e Psalm ausentes; varredura manual do diff sem segredo. |
+| **Validacao humana** | Pendente: revisao (PP1 a PP4). A data veio no mesmo dia (entrada seguinte). |
+
+### Data e janela do deploy 1 e trava da data — 2026-11-09
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | O responsavel informou a data e a janela do deploy 1: 11/11/2026, das 19:00 as 22:00. Pedido: preencher no roteiro e na folha do dia, trocar a trava para exigir a data com o corte pela D2 e parar para revisao. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `3459d41` (data e trava) e o commit deste registro. Sem push pela IA. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md` e `docs/DEPLOY1_FOLHA_DO_DIA.md`: a linha da data e janela (11/11/2026, 19:00 as 22:00, horario de Brasilia; corte do F5 pela D2: 16/11/2026); na folha, o corte esperado no 0g e o "Passo 1" conferindo data e janela. `scripts/qa-deploy-runbook.php`: data valida, janela com inicio antes do fim, corte coerente pela D2, a folha igual e com o mesmo corte no 0g (175 verificacoes). Documentacao: desenho 9.13.3, este registro. **Nenhum codigo de aplicacao mudou.** |
+| **Decisoes de implementacao** | QQ1 a QQ4, a aprovar (desenho 9.13.3): corte na mesma linha da data; "(horario de Brasilia)" exigido; a trava nao confere horario de operacao nem data futura; os comandos nao mudam (o marcador do 0g fica). |
+| **Validacao executada pela IA** | `qa-deploy-runbook.php` com saida 0 (175 verificacoes). Mutacao 48/48 nas travas, em copias minimas da arvore, com a copia limpa conferida antes. `test-local.ps1 -SkipHttp -Browser` com saida 0 no `3459d41` (worktree separado): smoke e 15 QAs PHP e roteiro 1026/1026. |
+| **Limitacoes declaradas** | A trava confere texto e coerencia data/corte, nao o calendario de operacao. Prazo: os itens 0a a 0l precisam estar feitos ate 11/11 (push do branch, `-Browser` do 0k, `gitleaks`, aviso a gestao). `gitleaks`, PHPStan e Psalm ausentes; varredura manual do diff sem segredo. |
+| **Validacao humana** | Pendente: revisao (QQ1 a QQ4), junto com a da entrada anterior. |
 
 ---
 
