@@ -4206,7 +4206,7 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 
 **Revisão do responsável (2026-11-06): a validação estrita das configurações (`3be925b`) e o registro da aprovação da "Exceção por data" (`c012ee3`) APROVADOS, com MM1 a MM5.**
 
-### 9.13 Deploy da Parte B em duas etapas e roteiro único do deploy 1 (2026-11-06, aguardando revisão)
+### 9.13 Deploy da Parte B em duas etapas e roteiro único do deploy 1 (2026-11-06; aprovado em 2026-11-09)
 
 **Decisão do responsável (2026-11-06):** o deploy da Parte B passa a ser em **duas etapas**, porque o F8 e o F9 dependem da Liderança, sem prazo.
 - **Deploy 1 (agora):** tudo o que já está aprovado no branch: F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5.
@@ -4221,7 +4221,7 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 - **Estado do servidor que o roteiro supõe:** deploys 1 a 7 da fila no ar (código com o `5d5c7c9`; 015, 016 e 017 aplicadas) e nada da Parte B (a Q-F6 de 2026-10-15 rodou sem a 011). O passo 0a confere as duas coisas e **para** se não for assim.
 - **Script de ensaio do servidor:** o `scripts/ensaio-migration.sh` do servidor é anterior ao F1 (`f91c850` trouxe `DADOS` e `VERIFICA`); por isso os ensaios usam o script extraído do commit gravado.
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-11-09):**
 
 | # | Decisão | Motivo |
 |---|---|---|
@@ -4254,6 +4254,47 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 - O `gitleaks` (0i) não está instalado na estação; o subcomando depende da versão (`git` a partir da 8.19, `detect` antes): conferir na versão instalada.
 - `date -d` (0g) é do GNU coreutils, o do Ubuntu do servidor.
 - O `fetch` de um branch só atualiza o `origin/feat/...` se o `origin` do clone tiver o refspec padrão; o 0b acusa antes do dia.
+
+**Revisão do responsável (2026-11-09): o roteiro único do deploy 1 (`022ed65`, docs `708bf93`) APROVADO, com NN1 a NN12.**
+- **NN7 aprovada:** o responsável conferiu que o `APP_ENV=production` só exige a `SECRET_KEY` válida (0h) e só redireciona para HTTPS com `FORCE_HTTPS` ligado, que o preflight (3c) reprova.
+- **NN10: opção (1).** Atualizar o `codex/modernizacao-ui-backend` no GitHub com push sem `--force` do commit gravado, depois de um ciclo estável. O push é do responsável; registrado no passo 9a do roteiro.
+- **A DEFINIR:** a resposta veio como modelo, sem os valores (data e janela "[DIA/MÊS], às [HORA]", corte do F5 "[16/11 se o deploy for até 13/11; senão 16/12]", quem acompanha "[NOME/PAPEL]"). Perguntado na mesma data: **ainda sem data**; quem acompanha entra **só pelo papel** (sem nome no git). Os dois seguem A DEFINIR no roteiro (9.13.1, OO2).
+- Ajustes pedidos, num commit só (docs e scripts, nada de aplicação): `FORCE_HTTPS=false` no `.env.production.example`, conferindo o `SESSION_COOKIE_SECURE` pela mesma regra; o `test-linux.sh` rodando o `qa-schedule-history.php`; os A DEFINIR preenchidos, com a trava exigindo data e janela; e a folha de execução do dia, com trava.
+
+#### 9.13.1 Ajustes da revisão de 2026-11-09 (`0565100`, 2026-11-09; aguardando revisão)
+
+**Entrega:** um commit (`0565100`), só documentação, exemplo de configuração e scripts de conferência. **Nenhum código de aplicação mudou.**
+- **`.env.production.example`:** `FORCE_HTTPS=false` e `SESSION_COOKIE_SECURE=false` (os dois estavam `true`, contra o comentário logo acima). O comentário passa a explicar os dois efeitos: `FORCE_HTTPS=true` sem HTTPS próprio derruba o portal (301 para um `https://` que não atende; o preflight reprova) e `SESSION_COOKIE_SECURE=true` faz o navegador não guardar nem devolver o cookie de sessão recebido por HTTP (o login não se mantém; `secure_session_start()` usa a variável quando ela existe).
+- **`scripts/test-linux.sh`:** roda o `qa-schedule-history.php`, na mesma posição do `test-local.ps1` (depois do de horas extras).
+- **Roteiro (`DEPLOY_LINUX.md`):** NN7 marcada como aprovada (0h e 3b); NN10 registrada no passo 2 como decidida, e o passo 9 passa a ter o **9a** (push do responsável, na estação, sem `--force`, com o esperado e a regra de parada para `rejected`/`non-fast-forward`) e o **9b** (o passo 5 da 9.12, como antes).
+- **Folha do dia (`docs/DEPLOY1_FOLHA_DO_DIA.md`, nova):** os 91 comandos do roteiro (88 do servidor e 3 da estação: o 0i, o 0k e o push do 9a), na ordem, um por bloco, numerados, cada um com a caixa `[ ]`, o passo do roteiro, o "Esperado" e o "PARE se" na linha de cima. Os itens sem comando (0l, passo 1, 7b, 7d, 7e, 7g, 7h, 7i e 9b) entram como caixas sem número. Nenhum valor real: os marcadores `<...>` ficam como no roteiro.
+- **Trava (`scripts/qa-deploy-runbook.php`, 159 → 169 verificações):** a NN10 no passo 2, um `git push` só (o do commit gravado para o `codex`), dentro do passo 9a, e nenhum comando com `--force` ou `-f`; o `.env.production.example` com `FORCE_HTTPS=false` e `SESSION_COOKIE_SECURE=false`, uma vez cada; a folha com os mesmos comandos do roteiro (texto e linguagem), na mesma ordem, um por bloco, cada um com caixa, número, "Esperado" e "PARE se", numeração de 1 em diante, e sem IP (além do `127.0.0.1`), e-mail, hostname ou senha.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| OO1 | **`SESSION_COOKIE_SECURE=false` também**, pela mesma regra, e a trava cobre os dois | O comentário já mandava os dois em `false`; com `true` e o portal só em HTTP, o login não se mantém. O preflight não confere o `SESSION_COOKIE_SECURE` (fora do pedido) |
+| OO2 | **Item 3 (preencher os A DEFINIR e trocar a trava) adiado** até a data vir; a trava continua exigindo o marcador A DEFINIR. Quando vier: data, janela e o papel de quem acompanha no roteiro, e a trava passa a exigir data e janela preenchidas, no mesmo commit | A resposta veio como modelo; a trava nova reprovaria o QA (e o `-Browser` do 0k) sem a data. **Atenção à D2:** com o deploy em 14/11 ou 15/11, a fórmula do 0g e do 7k (dia 16 ou depois vai para o mês seguinte) dá o corte em 16/11, e a regra da resposta dá 16/12; em qualquer outra data as duas concordam. Se a data cair nesses dias, decidir qual vale antes de preencher |
+| OO3 | **O push do 9a é um bloco `powershell`**, e por isso entra na folha (comando 91) | É um comando da estação, como o 0i e o 0k; a trava passa a comparar também os comandos da estação |
+| OO4 | **"PARE se" onde o roteiro só dá o esperado:** "saída diferente do esperado" (parar e conferir o roteiro). Um caso a mais que o roteiro não dizia: o backup do 3d (comando 25) sem `backup concluido` manda parar, porque sem ele não há ponto de restauração antes das migrations | A folha não pode deixar o "PARE se" vazio; as medições e as consultas de referência ficam "nada (só anotar)" |
+| OO5 | **A folha foi gerada uma vez por script** (fora do repositório) e é mantida à mão: mudou o roteiro, muda a folha no mesmo commit; a trava acusa qualquer diferença de comando ou de ordem | Um gerador versionado seria uma ferramenta para um caso só (YAGNI); a trava já garante a igualdade |
+| OO6 | **Data, janela e quem acompanha não entram na folha** (ela diz "no roteiro"); os números de referência das consultas (6 PAs, 22 técnicos etc.) entram, como no roteiro | O pedido proíbe nomes e valores reais na folha; contagens não são dado pessoal nem segredo |
+
+**Validação executada pela IA:**
+- `qa-deploy-runbook.php` com saída 0, **169 verificações**.
+- **Mutação 26/26 nas travas novas**, em cópias mínimas da árvore no scratchpad (roteiro, folha, exemplo, `scripts/`, `migrations/`), com a cópia limpa conferida antes (saída 0), cada mutante morto pela trava esperada (conferido na mensagem): `FORCE_HTTPS=true`; `SESSION_COOKIE_SECURE=true`; `FORCE_HTTPS` repetido; `SESSION_COOKIE_SECURE` ausente; folha sem o comando do `merge`; dois comandos trocados de ordem; `merge` sem `--ff-only` na folha; linguagem trocada; dois comandos num bloco; sem "PARE se"; sem "Esperado"; caixa já marcada; numeração fora da ordem; IP; e-mail; hostname; senha no `MYSQL_PWD`; senha em `-p`; roteiro mudado sem mudar a folha; push com `--force`; push no passo 2; sem o 9a; NN10 sem a decisão; dois pushes; comando com `-f`; folha ausente.
+- `bash -n scripts/test-linux.sh`, `php -l` da trava e `git diff --check` com saída 0.
+- `test-local.ps1 -SkipHttp -Browser` com saída 0 no `0565100` (worktree separado; a validação rodou antes deste registro, que só mexe na documentação): smoke e 15 QAs PHP (a trava com 169 verificações entre eles) e roteiro de navegador **1026/1026** (nenhuma tela mudou).
+
+**Achados fora do pedido (sem mudança):**
+- O `test-linux.sh` também não roda o `qa-smoke.php` (o `test-local.ps1` roda). O ensaio do deploy 1 (passo 5) roda os 16 QAs, então o deploy não perde a cobertura.
+- No `.env.production.example`, o `APP_BASE_URL` está com `https://`: com o portal só em HTTP, os links dos e-mails (`NotificationService`, com `MAIL_ENABLED=true`) apontariam para um endereço que não atende. O `ALLOWED_ORIGINS` com `https://` só afeta CORS de outra origem.
+
+**Limitações declaradas:**
+- Nenhum comando foi executado no servidor: a trava confere o texto da folha e do roteiro, não o resultado.
+- O efeito do `SESSION_COOKIE_SECURE=true` em HTTP é o comportamento dos navegadores atuais (cookie `Secure` recusado vindo de origem sem HTTPS), não testado aqui.
+- `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo.
 
 ---
 
