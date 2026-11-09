@@ -15,6 +15,10 @@ sh -n scripts/preflight-deploy.sh
 bash -n scripts/medir-polling.sh
 echo "OK scripts/backup-chronodesk.sh scripts/preflight-deploy.sh scripts/medir-polling.sh"
 
+echo "== PHP smoke QA =="
+# Login AD normalizado, origem confiavel, sessao, perfis e leitura das fontes; sem banco e sem AD.
+php scripts/qa-smoke.php
+
 echo "== PHP auth QA =="
 # Exige php-ldap; o script falha se a extensao estiver ausente.
 php scripts/qa-auth.php

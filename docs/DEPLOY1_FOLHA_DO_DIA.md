@@ -2,7 +2,11 @@
 
 Gerada do roteiro "Deploy 1 da Parte B (roteiro unico ...)" do `DEPLOY_LINUX.md`: os mesmos comandos, na mesma ordem (a trava `scripts/qa-deploy-runbook.php` confere). O roteiro e a referencia: o detalhe de cada esperado, as opcoes e os riscos estao la. Mudou o roteiro, muda esta folha no mesmo commit.
 
-**Sem valor real nesta folha**, nem impressa nem anotada nela: nada de senha, IP, hostname, nome ou login. Os marcadores `<...>` sao trocados so no terminal, na hora; os numeros vao para o desenho (9.9, 9.12 e 9.13), nunca para chat ou chamado. A senha do root do MySQL e sempre digitada no `read -rsp` (sem eco). Data, janela e quem acompanha: no roteiro.
+**Sem valor real nesta folha**, nem impressa nem anotada nela: nada de senha, IP, hostname, nome ou login. Os marcadores `<...>` sao trocados so no terminal, na hora; os numeros vao para o desenho (9.9, 9.12 e 9.13), nunca para chat ou chamado. A senha do root do MySQL e sempre digitada no `read -rsp` (sem eco).
+
+Data, janela e quem acompanha (iguais as do roteiro; a trava confere):
+- **Data e janela do deploy**, fora do horario de operacao: A DEFINIR.
+- **Quem acompanha** (alem de quem executa): o responsavel pela infraestrutura da VM.
 
 **Regras de parada em toda a folha:** qualquer linha com `PARE`, ou `FALHOU` num ensaio onde nao era esperado: pare e envie so a contagem ou a mensagem. Verificacao da 019 com `inconsistente = 1`: pare, nao registre o corte, nao apague nem altere linha e avise o responsavel. Nada de `git pull`, e nenhum `git fetch` depois do comando 19. Onde o "PARE se" diz "saida diferente do esperado", pare e confira o roteiro antes de seguir.
 
@@ -116,7 +120,7 @@ git fetch origin; git worktree add --detach ..\chronodesk-deploy1 origin/feat/em
 
 ## 1. No dia, antes de comecar
 
-- [ ] **Passo 1.** Data, janela e quem acompanha definidos no roteiro; 0a a 0l feitos, com os numeros anotados; aviso enviado; `<commit validado na estacao>` em maos; ninguem gravando cadastro, escala, ausencia ou Mapa PA. Daqui em diante, um shell so, na ordem (as variaveis `E`, `Q` e `C` passam de um comando ao outro).
+- [ ] **Passo 1.** Data e janela preenchidas acima (sem A DEFINIR) e quem acompanha presente; 0a a 0l feitos, com os numeros anotados; aviso enviado; `<commit validado na estacao>` em maos; ninguem gravando cadastro, escala, ausencia ou Mapa PA. Daqui em diante, um shell so, na ordem (as variaveis `E`, `Q` e `C` passam de um comando ao outro).
 
 ## 2. Branch, commit gravado e fast-forward
 

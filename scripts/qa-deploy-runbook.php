@@ -14,8 +14,10 @@ declare(strict_types=1);
 // nenhuma do F8 nem do F9; o ensaio de codigo com todos os QAs PHP e a
 // conferencia do /tmp/.env; o aviso a gestao com marcadores; o commit 1 do F8
 // sem chamada fora do QA dele; o push do branch codex so no passo 9a, sem
-// --force (NN10); o .env.production.example sem HTTPS forcado; a folha do dia
-// (docs/DEPLOY1_FOLHA_DO_DIA.md) com os mesmos comandos, na mesma ordem.
+// --force (NN10); o .env.production.example sem HTTPS forcado e com o
+// APP_BASE_URL em http://; o test-linux.sh e o test-local.ps1 com todos os QAs
+// PHP; a folha do dia (docs/DEPLOY1_FOLHA_DO_DIA.md) com os mesmos comandos, na
+// mesma ordem, e as mesmas linhas de data e janela e de quem acompanha.
 // ============================================================================
 
 $root = dirname(__DIR__);
@@ -58,7 +60,16 @@ $all = static function (string $needle) use ($commands): array {
 // ----------------------------------------------------------------------------
 assert_same(true, $runbook !== '' && count($commands) >= 50 && count($psCommands) >= 2, 'roteiro unico: secao, comandos Linux e da estacao presentes');
 assert_same([], array_values(array_filter(array_merge($commands, $psCommands), static fn (string $line): bool => substr(rtrim($line), -1) === '\\' || substr(rtrim($line), -1) === '`')), 'roteiro unico: cada comando em uma linha (sem continuacao)');
-assert_same([true, true], [strpos($prose, '**Data e janela do deploy**, fora do horario de operacao: A DEFINIR.') !== false, strpos($prose, '**Quem acompanha** (alem de quem executa): A DEFINIR.') !== false], 'roteiro unico: data e janela e quem acompanha marcados A DEFINIR');
+// Data e janela: A DEFINIR ate o responsavel informar (9.13.1, OO2). Quem
+// acompanha: so o papel, sem nome (2026-11-09). A folha do dia repete as duas
+// linhas iguais (conferido na secao 13).
+preg_match_all('/^- \*\*Data e janela do deploy\*\*, fora do horario de operacao: (.+)$/m', $runbook, $dateLines);
+preg_match_all('/^- \*\*Quem acompanha\*\* \(alem de quem executa\): (.+)$/m', $runbook, $companionLines);
+$dateLine = count($dateLines[0]) === 1 ? $dateLines[0][0] : '';
+$companionLine = count($companionLines[0]) === 1 ? $companionLines[0][0] : '';
+$companion = $companionLines[1][0] ?? '';
+assert_same(['A DEFINIR.'], $dateLines[1], 'roteiro unico: data e janela ainda A DEFINIR (uma linha so)');
+assert_same([true, 0], [$companionLine !== '' && substr($companion, -1) === '.', preg_match('/A DEFINIR|[\[\]<>]/', $companion)], 'roteiro unico: quem acompanha preenchido (uma linha so, sem marcador)');
 $stepOrder = array_map(static fn (string $step): int => (int)strpos($runbook, $step), ["\n0a. ", "\n0l. ", "\n**1. ", "\n**2. ", "\n**3. ", "\n**4. ", "\n**5. ", "\n**6. ", "\n**7. ", "\n**8. ", "\n**9. "]);
 $sortedSteps = $stepOrder;
 sort($sortedSteps);
@@ -306,6 +317,23 @@ foreach ($httpsSettings as $setting) {
 }
 sort($httpsValues);
 assert_same(['FORCE_HTTPS=false', 'SESSION_COOKIE_SECURE=false'], $httpsValues, '.env.production.example: FORCE_HTTPS e SESSION_COOKIE_SECURE desligados, uma vez cada');
+// APP_BASE_URL monta os links dos e-mails: com https:// e o portal so em HTTP,
+// os links apontariam para um endereco que nao atende.
+preg_match_all('/^APP_BASE_URL=(.*)$/m', $prodExample, $baseUrls);
+assert_same([1, 1], [count($baseUrls[1]), preg_match('#^http://[^\s/]+#', trim($baseUrls[1][0] ?? ''))], '.env.production.example: APP_BASE_URL com http://, uma vez');
+
+// ----------------------------------------------------------------------------
+// 12b. test-linux.sh e test-local.ps1 rodam todos os QAs PHP do repositorio
+// ----------------------------------------------------------------------------
+$repoQaNames = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
+sort($repoQaNames);
+preg_match_all('/^php scripts\/(qa-[a-z0-9-]+)\.php\b/m', $readOptional($root . '/scripts/test-linux.sh'), $linuxQas);
+preg_match_all('/^\s*& \$phpExecutable \(Join-Path \$repoRoot "scripts\\\\(qa-[a-z0-9-]+)\.php"\)/m',$readOptional($root . '/scripts/test-local.ps1'), $localQas);
+$linuxQaNames = array_values(array_unique($linuxQas[1]));
+$localQaNames = array_values(array_unique($localQas[1]));
+sort($linuxQaNames);
+sort($localQaNames);
+assert_same([$repoQaNames, $repoQaNames], [$linuxQaNames, $localQaNames], 'test-linux.sh e test-local.ps1: rodam todos os QAs PHP do repositorio (QA novo entra nos dois)');
 
 // ----------------------------------------------------------------------------
 // 13. Folha de execucao do dia: os mesmos comandos do roteiro, na mesma ordem
@@ -345,6 +373,7 @@ foreach ($sheetLines as $i => $line) {
 assert_same([], $unmarked, 'folha do dia: cada comando com caixa [ ], numero, Esperado e PARE se logo acima');
 preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* /m', $sheet, $sheetNumbers);
 assert_same(range(1, count($sheetAll)), array_map('intval', $sheetNumbers[1]), 'folha do dia: comandos numerados de 1 em diante, na ordem');
+assert_same([1, 1], [substr_count($sheet, "\n" . $dateLine . "\n"), substr_count($sheet, "\n" . $companionLine . "\n")], 'folha do dia: data e janela e quem acompanha iguais as do roteiro');
 $sheetWithoutLoopback = str_replace('127.0.0.1', '', $sheet);
 assert_same([0, 0, 0, 0], [
     preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheetWithoutLoopback),
