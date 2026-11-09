@@ -16,7 +16,11 @@ declare(strict_types=1);
 // unset; o 0a com o 596db67 e a 015, a 019 e as manutencao_* ausentes; as
 // migrations desde o 596db67 (015, 016, 017, 011, 014, 019, a 012 junto com
 // o merge e a 016b depois), cada uma com ensaio e verificacao, e nenhuma do
-// F8 nem do F9; o ensaio do BIZ-02 numa copia apagada no fim; a manutencao
+// F8 nem do F9; o ensaio do BIZ-02 e os 14 ensaios das migrations na copia
+// sistema_pausas_ensaio (ORIGEM), conferida antes e depois, nunca criada pelo
+// roteiro e apagada uma vez so, no 7m, com o nome digitado (dados de
+// 2026-11-09); o espaco livre com minimo no 0m e no 3d (antes do backup e do
+// npm ci); o backup pre-dia na limpeza do 9e; a manutencao
 // antes do merge, o corte do BIZ-02 logo depois e so entao a 016b, a
 // recarga e a reabertura; a copia do .htaccess local antes, o descarte no
 // comando do merge e a volta dela no rollback; o ensaio de codigo com todos os QAs PHP e a
@@ -273,13 +277,38 @@ assert_same(true, $maintenanceSeenLine === $mergeLine + 2 && $biz02Line === $mer
 assert_same(true, $biz02Line < $applyLines['20261002_016b_lideranca_profile_data.sql'] && $applyLines['20261002_016b_lideranca_profile_data.sql'] < $buildLine && $reloadLine < $healthInMaintenance && $healthInMaintenance < $timezoneDbLine && $timezoneDbLine < $maintenanceOffLine && $maintenanceOffLine < $first('for v in 20261005_011_schedule_history_check'), 'roteiro unico: corte do BIZ-02, 016b, build, recarga, validacao em manutencao e so entao a reabertura');
 assert_same([1, 0, 0], [count($all('migrations/correcao_dados/biz02_01_registrar_corte.sql; unset P')), count(array_filter($commands, static fn (string $line, int $i): bool => $i > $recordLine && preg_match('/biz02_0[234]/', $line) === 1, ARRAY_FILTER_USE_BOTH)), preg_match('/\bSET @ignorar_guardas\b/', $text)], 'roteiro unico: no dia, so o script 1 do BIZ-02, sem ignorar guardas por comando');
 assert_same(true, strpos($prose, 'Corte do BIZ-02 com **`ABORTADO PELAS GUARDAS`** (passo 6c): pare') !== false, 'roteiro unico: regra de parada das guardas do BIZ-02');
-// Ensaio do BIZ-02 antes do dia (0n): copia do banco num banco proprio, os
-// seis scripts na ordem da secao 7.3 e a copia apagada no fim (LGPD).
-$biz02CopyLine = $first('mysql -uroot -e "CREATE DATABASE ensaio_biz02 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" && bash -o pipefail -c');
+// Ensaio do BIZ-02 antes do dia (0n), na copia sistema_pausas_ensaio que o
+// responsavel criou em 2026-11-09 do backup pre-dia: conferencia da copia
+// (33 tabelas, sem manutencao_*, sem gatilho, rotina ou evento), os seis
+// scripts na ordem da secao 7.3 so nela, e a conferencia depois. A copia nao
+// e criada nem apagada no 0n: o passo 4 le dela e o 7m a apaga (LGPD).
+$copyName = 'sistema_pausas_ensaio';
+$biz02CopyCheckLine = $first("TABLE_SCHEMA = '{$copyName}') AS copia UNION ALL SELECT 'manutencao_*'");
 $biz02LoopLine = $first('for S in biz02_01_registrar_corte biz02_02_verificar biz02_03_corrigir biz02_02_verificar biz02_04_rollback biz02_02_verificar; do');
-$biz02DropLine = $first('DROP DATABASE IF EXISTS ensaio_biz02; SELECT COUNT(*) AS copia_restante');
-assert_same(true, $biz02CopyLine >= 0 && $biz02CopyLine < $biz02LoopLine && $biz02LoopLine < $biz02DropLine && $biz02DropLine < $recordLine && strpos($commands[$biz02LoopLine], 'mysql -uroot --table ensaio_biz02') !== false && strpos($commands[$biz02LoopLine], 'sistema_pausas') === false, 'roteiro unico: ensaio do BIZ-02 antes do dia, so na copia, e a copia apagada no fim');
-assert_same(true, strpos($commands[$biz02CopyLine], 'mysqldump -uroot --single-transaction --skip-triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot ensaio_biz02') !== false, 'roteiro unico: copia do BIZ-02 direto para o banco de ensaio, sem arquivo');
+$biz02AfterLine = $first('AS manutencao_na_copia, (SELECT COUNT(*) FROM sistema_pausas_ensaio.manutencao_marcadores');
+assert_same(true, $biz02CopyCheckLine >= 0 && $biz02CopyCheckLine < $biz02LoopLine && $biz02AfterLine === $biz02LoopLine + 1 && $biz02AfterLine < $recordLine, 'roteiro unico: ensaio do BIZ-02 antes do dia, com a copia conferida antes e depois');
+assert_same(true, strpos($commands[$biz02CopyCheckLine] ?? '', "information_schema.EVENTS WHERE EVENT_SCHEMA = '{$copyName}'") !== false && strpos($commands[$biz02CopyCheckLine], "information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '{$copyName}'") !== false && strpos($commands[$biz02CopyCheckLine], "information_schema.ROUTINES WHERE ROUTINE_SCHEMA = '{$copyName}'") !== false, 'roteiro unico: a copia conferida sem gatilho, rotina nem evento (o backup leva --events)');
+assert_same(true, strpos($commands[$biz02LoopLine] ?? '', "mysql -uroot --table {$copyName}'") !== false && preg_match('/--table sistema_pausas\'/', $commands[$biz02LoopLine]) === 0, 'roteiro unico: scripts do BIZ-02 do ensaio so na copia, nunca na producao');
+assert_same(0, preg_match('/ensaio_biz02|CREATE DATABASE/', $text), 'roteiro unico: o roteiro nao cria banco (a copia do ensaio ja existe)');
+// Ensaios das migrations (passo 4) com ORIGEM na copia, nunca na producao.
+$ensaioLines = $all('bash "$E/scripts/ensaio-migration.sh" d1_');
+assert_same([14, 14], [count($ensaioLines), count(array_filter($ensaioLines, static fn (int $i): bool => strpos($commands[$i], "sudo env ORIGEM={$copyName} ") !== false))], 'roteiro unico: os 14 ensaios do passo 4 leem da copia (ORIGEM)');
+assert_same(count($all('scripts/ensaio-migration.sh"')) - 1, count($ensaioLines), 'roteiro unico: nenhum ensaio fora da lista (o outro e a extracao do 4a)');
+// Copia apagada uma vez, no 7m, com confirmacao pelo nome, depois de todos os
+// ensaios; nenhum outro DROP DATABASE no roteiro.
+$copyDropLines = $all("DROP DATABASE IF EXISTS {$copyName};");
+$migrationsCleanupLine = $first('case "$E" in /root/ensaio-deploy1.*)');
+assert_same(true, count($copyDropLines) === 1 && $copyDropLines[0] === $migrationsCleanupLine + 1 && $copyDropLines[0] > max($ensaioLines) && $copyDropLines[0] > $mergeLine, 'roteiro unico: copia do ensaio apagada no 7m, depois de todos os ensaios');
+assert_same(1, preg_match('/^read -rp \'[^\']+\' NC; if \[ "\$NC" = "sistema_pausas_ensaio" \]; then read -rsp \'Senha root do MySQL: \' P; echo; docker exec [^;]+ -e "DROP DATABASE IF EXISTS sistema_pausas_ensaio; SELECT [^"]+"; unset P; else echo "nada apagado[^"]*"; fi; unset NC$/', $commands[$copyDropLines[0] ?? -1] ?? ''), 'roteiro unico: DROP da copia so com o nome digitado');
+assert_same(1, preg_match_all('/DROP DATABASE/', $text), 'roteiro unico: um DROP DATABASE so (o da copia)');
+assert_same(true, strpos($prose, 'disparada, com a copia `sistema_pausas_ensaio` ainda no MySQL') !== false && strpos($prose, '`/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz`') !== false && strpos($prose, 'banco `sistema_pausas` com **1,8 MB**') !== false, 'roteiro unico: dados do servidor de 2026-11-09 e passo 1 com a copia presente');
+assert_same(true, strpos($prose, 'o backup pre-dia (`/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz`, com dados pessoais') > strpos($prose, '9e. **Limpeza do que o deploy deixou, com aprovacao:**'), 'roteiro unico: o backup pre-dia (dados pessoais) entra na limpeza do 9e');
+// Espaco livre com limite minimo: no 0m (antes do dia) e no 3d, logo antes do
+// backup e antes do npm ci; o mesmo comando.
+$spaceLines = $all('for LIM in "/var/www/chronodesk:500" "$NPMC:200" "/var/backups:100" "$DROOT:200" "/tmp:50" "/root:50"; do');
+assert_same(true, count($spaceLines) === 2 && $spaceLines[0] < $recordLine && $spaceLines[1] === $backupLine - 1 && $spaceLines[1] > $preflightLine && $commands[$spaceLines[0]] === $commands[$spaceLines[1]], 'roteiro unico: espaco livre no 0m e no 3d, o mesmo comando, logo antes do backup');
+assert_same(true, strpos($commands[$spaceLines[0]] ?? '', '|| echo "PARE: espaco livre abaixo do minimo"') !== false && strpos($commands[$spaceLines[0]], 'NPMC=$(sudo npm config get cache)') !== false, 'roteiro unico: espaco abaixo do minimo da PARE; o cache do npm e o do sudo');
+assert_same(true, strpos($prose, 'O `npm ci` apaga o `node_modules` antigo antes de instalar, mas o minimo nao conta com isso.') !== false && strpos($prose, '`node_modules` com **114 MB**') !== false, 'roteiro unico: espaco do npm ci e do build dito no 0m');
 
 // ----------------------------------------------------------------------------
 // 7. Verificacao: legado, D5, 16c antes do registro do corte

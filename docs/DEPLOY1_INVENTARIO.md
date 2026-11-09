@@ -15,6 +15,10 @@ Este inventário só lê o repositório. Nada foi executado no servidor. Onde di
 | `origin/codex` no servidor | `072ed16` (15 commits à frente do `HEAD` do servidor, buscados e nunca aplicados) |
 | Alteração local | Só o `.htaccess`, +6 linhas: `RewriteBase /` e os redirecionamentos de `^$`, `^var/www/chronodesk` e `^chronodesk` para `/app/` |
 | MySQL | 8.0.46 (a 019 exige 8.0.29 ou mais novo) |
+| Tamanho do banco | `sistema_pausas` com 1,8 MB (2026-11-09) |
+| Backup pré-dia | `/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz` (`mysqldump --single-transaction --routines --triggers --events`, modo `600`, "Dump completed"). Não substitui o backup do dia (passo 3d) |
+| Cópia de ensaio | `sistema_pausas_ensaio`, no mesmo contêiner, restaurada do backup pré-dia, 33 tabelas. Origem do ensaio do BIZ-02 (0n) e dos 14 ensaios das migrations (passo 4, `ORIGEM`); apagada no 7m, com confirmação |
+| Disco | `/var` com 88% de uso e 1,2 GB livres (código e Docker); `/` com 599 MB livres. Limites mínimos na seção 5 |
 | Tabelas | As 29 das migrations 001 a 009 e do `database_SECURED.sql`, mais 4 cópias de junho (seção 8). Ausentes: `login_user_throttle` (015), `manutencao_*` (BIZ-02), `portal_presence_cutoff` (019), `funcionarios_perfil_016b` e qualquer `*_bkp_0NN` |
 
 Conferência das tabelas: as migrations 001 a 009 criam `pause_approval_requests` e 11 `portal_*` (001), `portal_notification_reads` (002), 7 `portal_*` (003), `portal_document_files` (005), `portal_critical_incidents` (006), `portal_shift_attachments` (007), `portal_pa_map` (008), `portal_pa_inventory` e `portal_pa_assignments` (009); o `database_SECURED.sql` cria `audit_log`, `funcionarios`, `pausas` e `usuarios`. São as 29 do `SHOW TABLES`, sem falta nem sobra além das 4 cópias. A 004 e a 010 só alteram colunas: o `SHOW TABLES` não as confirma (confere no 0b). As consultas Q3, Q4, Q-F4, Q-F6 e Q-F7, que o responsável rodou no banco de produção entre 2026-10-07 e 2026-10-26, leram as colunas de `funcionarios`, de escala, de PA e de ausência que elas usam: o esquema do `596db67` está no banco.
@@ -100,6 +104,25 @@ Nada é trocado no `.env` pelo roteiro, além do `APP_ENV` (NN7, passo 3b) e do 
 - **npm:** nenhuma dependência direta nova (`frontend/package.json` só ganhou scripts de QA). O `package-lock.json` mudou num commit só (`4a7678c`, `npm audit fix` sem `--force`): 10 pacotes transitivos de build (`baseline-browser-mapping`, `brace-expansion`, `browserslist`, `caniuse-lite`, `electron-to-chromium`, `js-yaml`, `nanoid`, `node-releases`, `postcss`, `update-browserslist-db`). O `npm ci` do servidor baixa do registro, como nos builds anteriores.
 - **PHP:** nenhuma extensão nova. Usadas: `pdo_mysql` e `ldap` (já usadas pelo `596db67`); o `qa-auth` e o `qa-security` do ensaio de código precisam do `php-ldap`.
 - **MySQL:** 8.0.29 ou mais novo (019); tabelas de fuso carregadas (`mysql.time_zone_name`; BIZ-02, conferido em 2026-09-30 com 1795 linhas; de novo no 0b). Sem isso, o `db.php` cai para `-03:00` e registra aviso a cada conexão.
+- **Espaço do `npm ci` e do build** (medido em 2026-11-09 na estação, com o `package-lock.json` do commit e um cache vazio; roteiro, 0m):
+
+  | Item | Tamanho |
+  |---|---|
+  | `node_modules` | 114 MB; até uns 150 MB se o npm do servidor instalar as variantes `gnu` e `musl` dos binários nativos (`@rolldown/binding-linux-x64-*`, `lightningcss-linux-x64-*`; TO CONFIRM pela versão do npm) |
+  | Cache do npm | 27 MB com o cache vazio. Com `sudo`, é o do root (em geral `/root/.npm`, na `/`) |
+  | Build (`app/`) | 0,9 MB. Não é versionado: o rollback de código também roda o build |
+
+  O `npm ci` apaga o `node_modules` antigo antes de instalar, mas os limites não contam com isso. No pior caso, o deploy pede uns 175 MB em `/var` (com o backup do dia, menos de 2 MB, e os bancos de ensaio, de poucos MB e um de cada vez) e uns 50 MB na `/` (com as extrações do commit: 7 MB em `/tmp` e 1 MB em `/root`).
+
+  **Limites mínimos**, perto de três vezes o pior caso, conferidos no 0m e de novo no 3d, antes do backup e do `npm ci`:
+  - código: 500 MB;
+  - cache do npm: 200 MB;
+  - `/var/backups`: 100 MB;
+  - raiz do Docker: 200 MB;
+  - `/tmp`: 50 MB;
+  - `/root`: 50 MB.
+
+  Com os números de 2026-11-09 (1,2 GB e 599 MB livres), passa.
 - **Ferramentas do servidor usadas pelo roteiro:** `git`, `docker`, `mysqldump` (no contêiner), `gzip`, `sha256sum`, `curl`, `npm`. A rotina de backup (`072ed16`) **não** está instalada: o backup do dia é um `mysqldump` do root (passo 3d); a instalação da rotina fica para depois do deploy (passo 9c).
 
 ## 6. vhost e `.htaccess`
@@ -129,6 +152,10 @@ O banco de produção tem quatro cópias de junho: `funcionarios_backup_20260616
 
 **Recomendação, depois do deploy e com aprovação do responsável:** (1) conferir, só com contagens, se alguma ainda tem uso (comparar `COUNT(*)` e o intervalo de datas com a tabela viva; nenhum código as lê); (2) se não houver motivo legal ou de auditoria para mantê-las, exportá-las uma vez para o diretório de backup (root, modo 700, com `SHA256SUMS`), registrar a decisão e a retenção, e removê-las do banco com `DROP TABLE` em janela própria; (3) se houver motivo, definir a retenção e o responsável e restringir o acesso (o usuário da aplicação não precisa de `SELECT` nelas). O deploy 1 não toca nelas; o 0b só as conta.
 
+**Cópias de 2026-11-09, também com dados pessoais (inclusive as quatro de junho):**
+- **Banco `sistema_pausas_ensaio`.** Retenção: até o fim do dia do deploy. O 7m o apaga com confirmação, também se o deploy parar, for revertido ou for cancelado. Se a data passar de 16/11, ele é apagado no mesmo dia e recriado perto da nova data.
+- **Backup pré-dia** (`/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz`, modo `600`, na `/`). O deploy não depende dele. Recomendação: mantê-lo com a mesma regra do backup do dia (até um ciclo estável depois do deploy) e apagá-lo com aprovação no 9e. Se a data for adiada sem previsão, apagá-lo antes.
+
 ## 9. Tempo do dia e viabilidade em 13/11, às 19:00
 
 Estimativa por passo, com o banco pequeno (2026-10-02: 81 pausas, 3 horas extras, 3 chamados críticos; `funcionarios` na casa das dezenas) e o operador lendo cada saída:
@@ -136,14 +163,14 @@ Estimativa por passo, com o banco pequeno (2026-10-02: 81 pausas, 3 horas extras
 | Passo | Minutos |
 |---|---|
 | 1 e 2 (conferência, commit gravado, regras do `.htaccess`) | 10 |
-| 3 (rollback, cópia do `.htaccess`, `APP_ENV`, preflight, backup do banco) | 15 |
-| 4 (ensaio e aplicação de 015, 016 com 016b, 017, 011, 014 com Q-F4, 019; ensaio da 012 e Q4): 15 ensaios de 3 a 5 min cada | 80 |
+| 3 (rollback, cópia do `.htaccess`, `APP_ENV`, preflight, espaço livre, backup do banco de 1,8 MB) | 17 |
+| 4 (ensaio e aplicação de 015, 016 com 016b, 017, 011, 014 com Q-F4, 019; ensaio da 012 e Q4): 14 ensaios de 3 a 5 min cada, lidos da cópia `sistema_pausas_ensaio` | 80 |
 | 5 (ensaio do código: `php -l` e 16 QAs) | 10 |
 | 6 (Q-F6, Q-F7 e base; manutenção, 012 e `merge`; `biz02_01`; 016b; build; recarga; validação em manutenção; reabertura) | 45 |
 | 7 (verificações, D5, fora do Mapa, navegador por perfil com os itens dos lotes 4 a 7, medição, 16c e corte) | 75 |
-| **Total sem incidente** | **~235 (3 h 55)** |
+| **Total sem incidente** | **~237 (cerca de 4 h)** |
 | Reserva para um degrau 2 (código), se preciso | 20 |
 
-**Conclusão:** a janela de 3 h (19:00 às 22:00) **não basta**. Em 13/11, às 19:00, é viável com uma janela até 00:00 (5 h: 3 h 55 mais reserva), com duas ressalvas: (a) a manutenção (passos 6b a 6g, uns 25 a 30 min, por volta de 21:15) cai no turno de 15:30 a 23:59 e tira o registro de pausas do ar nesse intervalo, o que precisa ir no aviso; (b) o corte do F5 fica em 16/11 (deploy até o dia 15), e a 16c precisa dar 0 no dia. Alternativas: um sábado sem operação (14/11, mesmo corte 16/11), ou mover os 15 ensaios para a véspera (não alteram o banco de produção; tiram uns 60 min do dia, que cabe em 19:00 às 22:00 sem folga).
+**Conclusão:** a janela de 3 h (19:00 às 22:00) **não basta**. Em 13/11, às 19:00, é viável com uma janela até 00:00 (5 h: cerca de 4 h mais reserva), com duas ressalvas: (a) a manutenção (passos 6b a 6g, uns 25 a 30 min, por volta de 21:15) cai no turno de 15:30 a 23:59 e tira o registro de pausas do ar nesse intervalo, o que precisa ir no aviso; (b) o corte do F5 fica em 16/11 (deploy até o dia 15), e a 16c precisa dar 0 no dia. Alternativas: um sábado sem operação (14/11, mesmo corte 16/11), ou mover os 14 ensaios para a véspera (leem da cópia e não alteram o banco de produção; tiram uns 60 min do dia, que cabe em 19:00 às 22:00 sem folga). O tamanho medido do banco (1,8 MB, 2026-11-09) confirma a premissa: o tempo é o de ler as saídas, não o de executar.
 
-**O ensaio do BIZ-02 não pede mais tempo no dia:** ele é antes do dia (0n) e, com o banco deste tamanho, a cópia, os seis scripts e a remoção levam de 30 a 45 min. O risco de prazo é outro: se uma guarda disparar na cópia (G2, por exemplo), a correção exige análise antes do deploy, e ela não cabe entre 12/11 e 13/11. Para manter 13/11, os itens antes do dia precisam começar já: publicar o branch e o 0o (`-Browser`) até 10/11; 0a a 0n em 10 e 11/11 (a Q-F7 do 0f num dia útil, no expediente); o aviso (0p) em 12/11.
+**O ensaio do BIZ-02 não pede mais tempo no dia:** ele é antes do dia (0n) e, com a cópia já criada pelo responsável (2026-11-09), a conferência, os seis scripts e a conferência depois levam de 20 a 30 min. O risco de prazo é outro: se uma guarda disparar na cópia (G2, por exemplo), a correção exige análise antes do deploy, e ela não cabe entre 12/11 e 13/11. Para manter 13/11, os itens antes do dia precisam começar já: publicar o branch e o 0o (`-Browser`) até 10/11; 0a a 0n em 10 e 11/11 (a Q-F7 do 0f num dia útil, no expediente); o aviso (0p) em 12/11.

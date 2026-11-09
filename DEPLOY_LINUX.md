@@ -2608,6 +2608,24 @@ preenchida):
 - **Data e janela do deploy**, fora do horario de operacao: A DEFINIR (a de 11/11/2026, das 19:00 as 22:00, foi cancelada em 2026-11-09: o pre-requisito 0a deu PARE no servidor; tempo estimado e viabilidade de 13/11 no inventario, secao 9).
 - **Quem acompanha** (alem de quem executa): o responsavel pela infraestrutura da VM.
 
+**Dados do servidor** (lidos pelo responsavel em 2026-11-09, so contagens e
+tamanhos):
+- banco `sistema_pausas` com **1,8 MB**;
+- **backup pre-dia** completo em
+  `/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz`
+  (`mysqldump --single-transaction --routines --triggers --events`, modo
+  `600`, com "Dump completed"). Ele **nao substitui** o backup do passo 3d,
+  porque o banco muda ate o dia. Tem dados pessoais e sai com aprovacao no
+  passo 9e;
+- **copia de ensaio `sistema_pausas_ensaio`** no mesmo container,
+  restaurada desse backup, com 33 tabelas (igual a producao). E a origem do
+  ensaio do BIZ-02 (0n) e dos ensaios das migrations (passo 4). Tem dados
+  pessoais: o passo 7m a apaga, com confirmacao, no fim do dia, tambem se o
+  deploy parar;
+- disco: `/var` com 88% de uso (1,2 GB livres; o codigo e o Docker estao
+  nele) e `/` com 599 MB livres. O espaco que o `npm ci` e o build pedem e
+  os limites minimos estao no passo 0m.
+
 Todas as consultas devolvem **so contagens, estrutura e datas de controle**
 (corte do F5, fotografia do BIZ-02), nunca nome, login nem texto; a unica
 excecao e a consulta da D5 (passo 7f), que devolve so o ID interno do
@@ -2860,46 +2878,97 @@ for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /
    numeros na secao 9.12 do desenho. O passo 7c repete o `curl` com o
    esperado novo.
 
-0m. **Espaco para o backup do dia e para a copia do ensaio do BIZ-02** (so
-   tamanhos):
+0m. **Espaco livre, com o limite minimo** (so tamanhos). O passo 3d repete
+   o mesmo comando no dia, antes do backup.
+
+   **O que o deploy ocupa.** Medido em 2026-11-09 com o
+   `frontend/package-lock.json` do commit, num cache vazio. Os pacotes
+   nativos do Linux (`@rolldown/binding-linux-x64-*` e
+   `lightningcss-linux-x64-*`) tem o tamanho dos do Windows.
+   - `npm ci`: `node_modules` com **114 MB**. Se a versao do npm do servidor
+     instalar as variantes `gnu` e `musl` juntas, chega a uns **150 MB**
+     (TO CONFIRM pela versao).
+   - Cache do npm: **27 MB** com o cache vazio. Com o cache que o build do
+     `596db67` deixou, cresce menos. Com `sudo`, o cache e o do root (em
+     geral `/root/.npm`, na `/`); o comando confere o caminho.
+   - Build (`app/`): **0,9 MB**.
+   - Backup do dia (passo 3d): menos de **2 MB** (banco de 1,8 MB, com
+     `gzip`).
+   - Ensaios do passo 4: poucos MB no datadir do MySQL, um banco de cada
+     vez, apagado no fim de cada ensaio.
+   - Extracoes do commit: **7 MB** em `/tmp` (passo 5) e **1 MB** em `/root`
+     (passo 4a).
+
+   O `npm ci` apaga o `node_modules` antigo antes de instalar, mas o minimo
+   nao conta com isso. Somando tudo no pior caso, o deploy pede uns
+   **175 MB em `/var`** (codigo, Docker e `/var/backups`) e uns **50 MB em
+   `/`** (cache do npm, `/root` e, se estiver nela, `/tmp`).
+
+   **Limites minimos** (perto de tres vezes o pior caso):
+   - codigo (`/var/www/chronodesk`): **500 MB**;
+   - cache do npm: **200 MB**;
+   - `/var/backups`: **100 MB**;
+   - raiz do Docker: **200 MB**;
+   - `/tmp`: **50 MB**;
+   - `/root`: **50 MB**.
+
+   Caminhos no mesmo disco aparecem com o mesmo numero livre. Os 500 MB de
+   `/var` cobrem a soma dos tres caminhos que estao nele.
 
 ```bash
-read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT ROUND(SUM(DATA_LENGTH + INDEX_LENGTH) / 1048576, 1) AS banco_mb FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas';"; unset P
-echo "livre em /var/backups (MB): $(df -BM --output=avail /var/backups | tail -n 1 | tr -d ' M')"; echo "livre no datadir do MySQL (MB): $(docker exec Chrono_Desk_DB df -BM --output=avail /var/lib/mysql | tail -n 1 | tr -d ' M')"
+cd /var/www/chronodesk/frontend; NPMC=$(sudo npm config get cache); sudo test -e "$NPMC" || NPMC=$(dirname "$NPMC"); DROOT=$(docker info --format '{{.DockerRootDir}}'); ESP=OK; for LIM in "/var/www/chronodesk:500" "$NPMC:200" "/var/backups:100" "$DROOT:200" "/tmp:50" "/root:50"; do DIR=${LIM%:*}; MIN=${LIM##*:}; LIVRE=$(sudo df -BM --output=avail "$DIR" | tail -n 1 | tr -dc '0-9'); if [ "${LIVRE:-0}" -ge "$MIN" ]; then echo "OK $DIR (disco $(sudo df --output=target "$DIR" | tail -n 1)): $LIVRE MB livres, minimo $MIN"; else echo "BAIXO $DIR: ${LIVRE:-?} MB livres, minimo $MIN"; ESP=PARE; fi; done; [ "$ESP" = OK ] && echo "espaco livre: OK" || echo "PARE: espaco livre abaixo do minimo"; unset NPMC DROOT ESP LIM DIR MIN LIVRE
 ```
 
-   Esperado: os dois espacos livres com pelo menos **tres vezes** o
-   `banco_mb` (a copia do 0n fica no datadir; o dump do passo 3d, em
-   `/var/backups`). Menos: **pare** e avise (liberar espaco e decisao da
-   infraestrutura). Se o `df` nao existir no conteiner, confira o volume do
-   MySQL pelo host (TO CONFIRM com quem administra o Docker).
+   Esperado: seis linhas `OK` e `espaco livre: OK`. Com os numeros de
+   2026-11-09 (1,2 GB livres em `/var`, 599 MB em `/`), passa. Qualquer
+   `BAIXO`, ou `PARE: espaco livre abaixo do minimo`: **pare** e avise. Quem
+   libera espaco e a infraestrutura; nada se apaga de improviso (logs,
+   imagens do Docker, backups). Se o `docker info` pedir permissao, rode-o
+   com `sudo`.
 
-0n. **Ensaio do BIZ-02 numa copia do banco, na propria VM** (so contagens).
-   A correcao do fuso (`migrations/correcao_dados/`) nunca rodou em MySQL; o
-   ensaio roda os quatro scripts, na ordem da secao 7.3 de
-   `docs/FUSO_HORARIO_BIZ02.md`, sobre uma copia do banco de producao no
-   mesmo MySQL, num banco proprio (`ensaio_biz02`), e apaga a copia no fim.
-   A copia vai do `mysqldump` direto para o banco de ensaio, sem arquivo em
-   disco; o `mysqldump` grava os `TIMESTAMP` em UTC e os restaura
-   convertendo, e os `DATETIME` vao literais (copia fiel com qualquer fuso
-   de sessao). O banco de producao so e lido. LGPD: a copia tem dados
-   pessoais; ela existe so durante o ensaio e o ultimo comando a apaga,
-   inclusive se um anterior parar.
+0n. **Ensaio do BIZ-02 na copia `sistema_pausas_ensaio`, na propria VM** (so
+   contagens).
+   - **A copia.** O responsavel a criou em 2026-11-09, no mesmo container,
+     restaurando o backup pre-dia das 15:49 (33 tabelas). O `mysqldump`
+     padrao grava os `TIMESTAMP` em UTC e os restaura convertendo, e os
+     `DATETIME` vao literais: a copia e fiel com qualquer fuso de sessao.
+   - **O ensaio.** A correcao do fuso (`migrations/correcao_dados/`) nunca
+     rodou em MySQL. O ensaio roda os quatro scripts na copia, na ordem da
+     secao 7.3 de `docs/FUSO_HORARIO_BIZ02.md`. O banco de producao so e
+     lido.
+   - **Depois do ensaio, a copia fica.** Ela e a origem dos ensaios das
+     migrations no dia (passo 4, `ORIGEM=sistema_pausas_ensaio`). O
+     script 4 devolve os dados ao "antes"; ficam nela so as duas tabelas
+     `manutencao_*`, que os ensaios do passo 4 nao copiam.
+   - **Para repetir o 0n**, e preciso uma copia nova: o script 1 nao
+     fotografa duas vezes.
+   - **LGPD.** A copia tem dados pessoais. O passo 7m a apaga, com
+     confirmacao, no fim do dia do deploy. Se o deploy for cancelado, ou a
+     data passar de 16/11 (corte do F5), apague-a no mesmo dia com o comando
+     do 7m e crie outra perto da nova data.
 
 ```bash
-read -rsp 'Senha root do MySQL: ' P; echo; export P; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -e "CREATE DATABASE ensaio_biz02 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" && bash -o pipefail -c 'docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysqldump -uroot --single-transaction --skip-triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot ensaio_biz02' && echo "copia em ensaio_biz02: OK" || echo "PARE: copia falhou (rode o ultimo comando deste passo)"; unset P
-read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT 'tabelas' AS item, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas') AS producao, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'ensaio_biz02') AS copia UNION ALL SELECT 'funcionarios', (SELECT COUNT(*) FROM sistema_pausas.funcionarios), (SELECT COUNT(*) FROM ensaio_biz02.funcionarios) UNION ALL SELECT 'pausas', (SELECT COUNT(*) FROM sistema_pausas.pausas), (SELECT COUNT(*) FROM ensaio_biz02.pausas) UNION ALL SELECT 'audit_log', (SELECT COUNT(*) FROM sistema_pausas.audit_log), (SELECT COUNT(*) FROM ensaio_biz02.audit_log);"; unset P
-cd /var/www/chronodesk; read -rsp 'Senha root do MySQL: ' P; echo; export P; for S in biz02_01_registrar_corte biz02_02_verificar biz02_03_corrigir biz02_02_verificar biz02_04_rollback biz02_02_verificar; do export S; echo "=== $S"; sudo git cat-file -e "origin/feat/employee-form-rhf-zod:migrations/correcao_dados/$S.sql" && bash -o pipefail -c 'sudo git show "origin/feat/employee-form-rhf-zod:migrations/correcao_dados/$S.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table ensaio_biz02' || { echo "PARE: $S falhou"; break; }; done; unset P; unset S
-read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "DROP DATABASE IF EXISTS ensaio_biz02; SELECT COUNT(*) AS copia_restante FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'ensaio_biz02';"; unset P
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT 'tabelas' AS item, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas') AS producao, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas_ensaio') AS copia UNION ALL SELECT 'manutencao_*', (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas' AND TABLE_NAME LIKE 'manutencao%'), (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas_ensaio' AND TABLE_NAME LIKE 'manutencao%') UNION ALL SELECT 'gatilhos, rotinas e eventos', (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'sistema_pausas') + (SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = 'sistema_pausas') + (SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = 'sistema_pausas'), (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'sistema_pausas_ensaio') + (SELECT COUNT(*) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = 'sistema_pausas_ensaio') + (SELECT COUNT(*) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = 'sistema_pausas_ensaio') UNION ALL SELECT 'funcionarios', (SELECT COUNT(*) FROM sistema_pausas.funcionarios), (SELECT COUNT(*) FROM sistema_pausas_ensaio.funcionarios) UNION ALL SELECT 'pausas', (SELECT COUNT(*) FROM sistema_pausas.pausas), (SELECT COUNT(*) FROM sistema_pausas_ensaio.pausas) UNION ALL SELECT 'audit_log', (SELECT COUNT(*) FROM sistema_pausas.audit_log), (SELECT COUNT(*) FROM sistema_pausas_ensaio.audit_log);"; unset P
+cd /var/www/chronodesk; read -rsp 'Senha root do MySQL: ' P; echo; export P; for S in biz02_01_registrar_corte biz02_02_verificar biz02_03_corrigir biz02_02_verificar biz02_04_rollback biz02_02_verificar; do export S; echo "=== $S"; sudo git cat-file -e "origin/feat/employee-form-rhf-zod:migrations/correcao_dados/$S.sql" && bash -o pipefail -c 'sudo git show "origin/feat/employee-form-rhf-zod:migrations/correcao_dados/$S.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas_ensaio' || { echo "PARE: $S falhou"; break; }; done; unset P; unset S
+read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas_ensaio' AND TABLE_NAME LIKE 'manutencao%') AS manutencao_na_copia, (SELECT COUNT(*) FROM sistema_pausas_ensaio.manutencao_marcadores WHERE chave = 'biz02_corte') AS corte_na_copia, (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas' AND TABLE_NAME LIKE 'manutencao%') AS manutencao_na_producao;"; unset P
 ```
 
    O que conferir (tabela da secao 7.4 do BIZ-02; anote **so contagens**: o
    V8 e o V9 listam IDs internos de chamado critico, sem dado pessoal, e
    deles se anota so quantas linhas vieram):
 
-   - **Copia:** `copia OK`; `tabelas`, `funcionarios`, `pausas` e
-     `audit_log` iguais na producao e na copia (o `audit_log` pode ter uma
-     linha a mais na producao, se alguem gravou no meio).
+   - **Copia, antes:**
+     - `tabelas` 33 e 33;
+     - `manutencao_*` 0 e 0;
+     - `gatilhos, rotinas e eventos` 0 e 0 (o backup leva gatilhos,
+       rotinas e eventos, e o `596db67` nao tem nenhum: um evento na copia
+       rodaria sozinho);
+     - `funcionarios`, `pausas` e `audit_log` na copia iguais ou menores que
+       na producao (a copia e das 15:49 de 09/11, e a producao continua
+       gravando).
+
+     Copia ausente (`copia = 0`), `manutencao_*` na copia maior que 0 (o 0n
+     ja rodou nela) ou gatilho, rotina ou evento maior que 0: **pare**.
    - **Script 1 (`biz02_01`):** `CORTE REGISTRADO` com
      `g1_linhas_formato_novo = 0`, `g2_saltos_auditoria = 0` e
      `g3_minutos_fora_de_utc = 0`, e a contagem por coluna (anote: e a
@@ -2918,8 +2987,11 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
      pare); V6 `utc_3h_adiante = 0`; V4 com o volume entre 08h e 23h.
    - **Script 4:** `ROLLBACK EXECUTADO`. **Script 2, por fim:** igual ao
      "antes".
-   - **Limpeza:** `copia_restante = 0`. Rode o ultimo comando **sempre**,
-     tambem depois de um `PARE`.
+   - **Copia, depois:** `manutencao_na_copia = 2`, `corte_na_copia = 1` e
+     `manutencao_na_producao = 0` (nada foi para a producao). A copia **nao**
+     e apagada aqui: o passo 4 le dela, e o 7m a apaga. Se o 0n parar, a
+     copia fica marcada e o deploy nao segue: apague-a com o comando do 7m e
+     trate a causa.
 
    E o primeiro uso real desses scripts: erro de sintaxe ou de collation
    aparece aqui, sem risco para a producao. Na producao, so o script 1 roda
@@ -3000,7 +3072,8 @@ git fetch origin; git worktree add --detach ..\chronodesk-deploy1 origin/feat/em
 **1. No dia, antes de comecar.** Confirme: a data e a janela definidas acima
 (com a data **A DEFINIR, nao comece**) e quem acompanha presente; itens 0a a
 0p feitos, com os numeros anotados; o ensaio do BIZ-02 (0n) sem guarda
-disparada e com a copia apagada; aviso enviado; o `<commit validado na
+disparada, com a copia `sistema_pausas_ensaio` ainda no MySQL (origem dos
+ensaios do passo 4); aviso enviado; o `<commit validado na
 estacao>` em maos; ninguem gravando cadastro, escala, ausencia ou Mapa PA
 durante a janela. Para os passos seguintes, o shell e um so, na ordem (as
 variaveis `E`, `Q`, `B` e `C` passam de um comando ao outro).
@@ -3105,13 +3178,19 @@ cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-com
    migrations.** A rotina de backup (`072ed16`) nao esta instalada (0a): o
    backup do dia e um `mysqldump` do root, com `pipefail`, conferido com
    `gzip -t` e `SHA256SUMS`, num diretorio do root (modo `700`), no mesmo
-   formato que a "Restauracao em Incidente" le (`database.sql.gz`):
+   formato que a "Restauracao em Incidente" le (`database.sql.gz`). Antes
+   dele, o espaco livre de novo (o mesmo comando e os mesmos limites do 0m;
+   o `npm ci` do passo 6e depende dele). O backup pre-dia de 09/11 nao
+   substitui este: o banco mudou desde entao.
 
 ```bash
+cd /var/www/chronodesk/frontend; NPMC=$(sudo npm config get cache); sudo test -e "$NPMC" || NPMC=$(dirname "$NPMC"); DROOT=$(docker info --format '{{.DockerRootDir}}'); ESP=OK; for LIM in "/var/www/chronodesk:500" "$NPMC:200" "/var/backups:100" "$DROOT:200" "/tmp:50" "/root:50"; do DIR=${LIM%:*}; MIN=${LIM##*:}; LIVRE=$(sudo df -BM --output=avail "$DIR" | tail -n 1 | tr -dc '0-9'); if [ "${LIVRE:-0}" -ge "$MIN" ]; then echo "OK $DIR (disco $(sudo df --output=target "$DIR" | tail -n 1)): $LIVRE MB livres, minimo $MIN"; else echo "BAIXO $DIR: ${LIVRE:-?} MB livres, minimo $MIN"; ESP=PARE; fi; done; [ "$ESP" = OK ] && echo "espaco livre: OK" || echo "PARE: espaco livre abaixo do minimo"; unset NPMC DROOT ESP LIM DIR MIN LIVRE
 B=/var/backups/chronodesk/deploy1-$(date +%Y%m%d-%H%M%S); export B; read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo install -d -o root -g root -m 700 "$B" && bash -o pipefail -c 'docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysqldump -uroot --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | gzip | sudo tee "$B/database.sql.gz" > /dev/null' && sudo gzip -t "$B/database.sql.gz" && sudo tar -czf "$B/estado.tar.gz" -C /var/www/chronodesk --ignore-failed-read estado.json pausas.csv config_sistema.json funcionarios.json && sudo sh -c 'cd "$1" && sha256sum database.sql.gz estado.tar.gz > SHA256SUMS' _ "$B" && echo "backup concluido: $B ($(sudo du -sh "$B" | cut -f1))" || echo "PARE: backup falhou (sem ponto de restauracao, as migrations nao rodam)"; unset P
 ```
 
-   Esperado: `backup concluido: /var/backups/chronodesk/deploy1-<data>
+   Esperado: seis linhas `OK` e `espaco livre: OK` (qualquer `BAIXO` ou
+   `PARE`: **pare** antes do backup, nada foi alterado) e
+   `backup concluido: /var/backups/chronodesk/deploy1-<data>
    (<tamanho>)`. Anote o diretorio: e o ponto de restauracao do banco (so
    como ultimo recurso). O dump tem dados pessoais (inclusive as copias de
    junho): fica so em `/var/backups/chronodesk`, root, `700`, e sai depois
@@ -3127,6 +3206,26 @@ no passo 2). Nenhuma destas muda o que o codigo anterior faz (ressalva da
 016 na "Janela"). Os arquivos, inclusive o script de ensaio, saem do commit
 gravado: o servidor nao tem `scripts/ensaio-migration.sh`.
 
+**Origem dos ensaios.** Todo ensaio deste passo le da copia
+`sistema_pausas_ensaio` (`ORIGEM`, passo 0n), nao da producao.
+
+- **O que muda.** O `funcionarios` do ensaio fica no estado do `596db67`,
+  sem o indice e o ENUM da 016 nem a coluna da 011, mesmo depois de elas
+  entrarem na producao.
+- **Por que isso nao afeta os ensaios** (conferido nos arquivos):
+  - a 011, a 012, a 014 e a 019 so mexem nas proprias tabelas, e a 014
+    declara que nao depende da 011;
+  - o `lideranca` da 011 e da 012 e o ENUM de `team` nas tabelas delas;
+  - a 016b tem a 016 como `PREPARO`.
+- **O que muda nos esperados.** Os dos roteiros por lote valem. Muda so a
+  lista de colunas de `funcionarios` no ensaio, e as contagens podem diferir
+  das de hoje pelo que a producao gravou desde 09/11.
+- **O que pega a producao de hoje.** O "antes" de cada migration na
+  producao continua no 0b e nas verificacoes deste passo. Exemplo: um login
+  AD repetido gravado depois de 09/11 faz a 016 parar sem alterar nada.
+- **Sem a copia**, o ensaio para no `CREATE TABLE ... LIKE` e apaga o banco
+  de ensaio que acabou de criar.
+
 4a. Extracao do commit gravado para um diretorio do root:
 
 ```bash
@@ -3140,7 +3239,7 @@ cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-com
    e verificacao. Sem a tabela, o codigo novo recusa **todo** login com 503.
 
 ```bash
-sudo bash "$E/scripts/ensaio-migration.sh" d1_015 "$E/migrations/20261001_015_login_user_throttle.sql" "$E/migrations/rollback/20261001_015_login_user_throttle_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio bash "$E/scripts/ensaio-migration.sh" d1_015 "$E/migrations/20261001_015_login_user_throttle.sql" "$E/migrations/rollback/20261001_015_login_user_throttle_down.sql"
 cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261001_015_login_user_throttle.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261001_015_login_user_throttle.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "015 aplicada" || echo "PARE: a 015 nao foi aplicada"; unset P
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle') AS migration_015, (SELECT COUNT(*) FROM login_user_throttle) AS linhas_015;"; unset P
 ```
@@ -3156,8 +3255,8 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
    016b so e aplicada no passo 6d; o ensaio dela fica aqui.
 
 ```bash
-sudo bash "$E/scripts/ensaio-migration.sh" d1_016 "$E/migrations/20261002_016_lideranca_profile.sql" "$E/migrations/rollback/20261002_016_lideranca_profile_down.sql"
-sudo env PREPARO="$E/migrations/20261002_016_lideranca_profile.sql" bash "$E/scripts/ensaio-migration.sh" d1_016b "$E/migrations/20261002_016b_lideranca_profile_data.sql" "$E/migrations/rollback/20261002_016b_lideranca_profile_data_down.sql" audit_log
+sudo env ORIGEM=sistema_pausas_ensaio bash "$E/scripts/ensaio-migration.sh" d1_016 "$E/migrations/20261002_016_lideranca_profile.sql" "$E/migrations/rollback/20261002_016_lideranca_profile_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio PREPARO="$E/migrations/20261002_016_lideranca_profile.sql" bash "$E/scripts/ensaio-migration.sh" d1_016b "$E/migrations/20261002_016b_lideranca_profile_data.sql" "$E/migrations/rollback/20261002_016b_lideranca_profile_data_down.sql" audit_log
 cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261002_016_lideranca_profile.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261002_016_lideranca_profile.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "016 aplicada" || echo "PARE: a 016 nao foi aplicada"; unset P
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND INDEX_NAME = 'uq_funcionarios_ad_login') AS uq_ad_login, (SELECT LOCATE('''lideranca''', COLUMN_TYPE) > 0 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'access_role') AS access_role_com_lideranca, (SELECT COUNT(*) FROM funcionarios WHERE access_role = 'lideranca') AS cadastros_lideranca;"; unset P
 ```
@@ -3181,7 +3280,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
    `portal_shift_attachments` como tabela extra), aplicacao e verificacao.
 
 ```bash
-sudo bash "$E/scripts/ensaio-migration.sh" d1_017 "$E/migrations/20261002_017_shift_attachment_team.sql" "$E/migrations/rollback/20261002_017_shift_attachment_team_down.sql" portal_shift_attachments
+sudo env ORIGEM=sistema_pausas_ensaio bash "$E/scripts/ensaio-migration.sh" d1_017 "$E/migrations/20261002_017_shift_attachment_team.sql" "$E/migrations/rollback/20261002_017_shift_attachment_team_down.sql" portal_shift_attachments
 cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261002_017_shift_attachment_team.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261002_017_shift_attachment_team.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "017 aplicada" || echo "PARE: a 017 nao foi aplicada"; unset P
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_shift_attachments' AND COLUMN_NAME = 'team') AS migration_017, (SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_shift_attachments' AND INDEX_NAME = 'idx_shift_attachment_team') AS indice_017, (SELECT COUNT(*) FROM portal_shift_attachments WHERE team IS NOT NULL) AS anexos_com_equipe;"; unset P
 ```
@@ -3197,7 +3296,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
    ensaio, aplicacao e verificacao.
 
 ```bash
-sudo env DADOS=portal_schedule_rules,portal_schedule_exceptions VERIFICA="$E/migrations/verificacao/20261005_011_schedule_history_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_011 "$E/migrations/20261005_011_schedule_history.sql" "$E/migrations/rollback/20261005_011_schedule_history_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio DADOS=portal_schedule_rules,portal_schedule_exceptions VERIFICA="$E/migrations/verificacao/20261005_011_schedule_history_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_011 "$E/migrations/20261005_011_schedule_history.sql" "$E/migrations/rollback/20261005_011_schedule_history_down.sql"
 cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261005_011_schedule_history.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261005_011_schedule_history.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "011 aplicada" || echo "PARE: a 011 nao foi aplicada"; unset P
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(sudo cat "$E/migrations/verificacao/20261005_011_schedule_history_check.sql"); unset P
 ```
@@ -3225,9 +3324,9 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
    verificacao.
 
 ```bash
-sudo env VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014 "$E/migrations/20261013_014_employee_archive.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
-sudo env DADOS=portal_pa_assignments,portal_schedule_rules,portal_schedule_exceptions,portal_absences VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014_dados "$E/migrations/20261013_014_employee_archive.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
-sudo env PREPARO="$E/migrations/20261013_014_employee_archive.sql" VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014_rollback "$E/migrations/rollback/20261013_014_ensaio_linhas_f4.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014 "$E/migrations/20261013_014_employee_archive.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio DADOS=portal_pa_assignments,portal_schedule_rules,portal_schedule_exceptions,portal_absences VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014_dados "$E/migrations/20261013_014_employee_archive.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio PREPARO="$E/migrations/20261013_014_employee_archive.sql" VERIFICA="$E/migrations/verificacao/20261013_014_employee_archive_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_014_rollback "$E/migrations/rollback/20261013_014_ensaio_linhas_f4.sql" "$E/migrations/rollback/20261013_014_employee_archive_down.sql"
 cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261013_014_employee_archive.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261013_014_employee_archive.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "014 aplicada" || echo "PARE: a 014 nao foi aplicada"; unset P
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(sudo cat "$E/migrations/verificacao/20261013_014_employee_archive_check.sql"); unset P
 ```
@@ -3246,9 +3345,9 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(sudo cat "$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql"); unset P
-sudo env VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019 "$E/migrations/20261013_019_presence_cutoff.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
-{ printf "SET @corte := '2099-12-16'; SET @autor := 'qa.ensaio';\n"; sudo cat "$E/migrations/20261013_019_registrar_corte.sql"; } | sudo tee "$E/registro_d1.sql" > /dev/null; sudo env PREPARO="$E/migrations/20261013_019_presence_cutoff.sql" VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019_registro "$E/registro_d1.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
-{ printf "SET @corte := '2020-01-16'; SET @autor := 'qa.ensaio';\n"; sudo cat "$E/migrations/20261013_019_registrar_corte.sql"; } | sudo tee "$E/registro_d1_passado.sql" > /dev/null; sudo env PREPARO="$E/migrations/20261013_019_presence_cutoff.sql" VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019_passado "$E/registro_d1_passado.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
+sudo env ORIGEM=sistema_pausas_ensaio VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019 "$E/migrations/20261013_019_presence_cutoff.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
+{ printf "SET @corte := '2099-12-16'; SET @autor := 'qa.ensaio';\n"; sudo cat "$E/migrations/20261013_019_registrar_corte.sql"; } | sudo tee "$E/registro_d1.sql" > /dev/null; sudo env ORIGEM=sistema_pausas_ensaio PREPARO="$E/migrations/20261013_019_presence_cutoff.sql" VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019_registro "$E/registro_d1.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
+{ printf "SET @corte := '2020-01-16'; SET @autor := 'qa.ensaio';\n"; sudo cat "$E/migrations/20261013_019_registrar_corte.sql"; } | sudo tee "$E/registro_d1_passado.sql" > /dev/null; sudo env ORIGEM=sistema_pausas_ensaio PREPARO="$E/migrations/20261013_019_presence_cutoff.sql" VERIFICA="$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_019_passado "$E/registro_d1_passado.sql" "$E/migrations/rollback/20261013_019_presence_cutoff_down.sql" audit_log
 cd /var/www/chronodesk; export D1=$(sudo cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; sudo git cat-file -e "$D1:migrations/20261013_019_presence_cutoff.sql" && bash -o pipefail -c 'sudo git show "$D1:migrations/20261013_019_presence_cutoff.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "019 aplicada" || echo "PARE: a 019 nao foi aplicada"; unset P
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(sudo cat "$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql"); unset P
 ```
@@ -3265,9 +3364,9 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
    6b, no mesmo comando do `git merge`.
 
 ```bash
-sudo env DADOS=portal_absences VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012 "$E/migrations/20261007_012_absences.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
-sudo env DADOS=portal_absences PREPARO="$E/migrations/rollback/20261007_012_ensaio_linha_antiga.sql" VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012_parada "$E/migrations/20261007_012_absences.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
-sudo env DADOS=portal_absences PREPARO="$E/migrations/20261007_012_absences.sql" VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012_rollback "$E/migrations/rollback/20261007_012_ensaio_linhas_f3.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio DADOS=portal_absences VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012 "$E/migrations/20261007_012_absences.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio DADOS=portal_absences PREPARO="$E/migrations/rollback/20261007_012_ensaio_linha_antiga.sql" VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012_parada "$E/migrations/20261007_012_absences.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
+sudo env ORIGEM=sistema_pausas_ensaio DADOS=portal_absences PREPARO="$E/migrations/20261007_012_absences.sql" VERIFICA="$E/migrations/verificacao/20261007_012_absences_check.sql" bash "$E/scripts/ensaio-migration.sh" d1_012_rollback "$E/migrations/rollback/20261007_012_ensaio_linhas_f3.sql" "$E/migrations/rollback/20261007_012_absences_down.sql"
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT exception_type, COUNT(*) AS n, SUM(exception_date >= CURDATE()) AS futuras FROM portal_schedule_exceptions GROUP BY exception_type; SELECT COUNT(*) AS ausencias FROM portal_absences;"; unset P
 ```
 
@@ -3402,7 +3501,17 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 6e. **Build do frontend e recarga do PHP-FPM** (limpa o OPcache; `reload` e
    gracioso). Nenhum lote muda o vhost; o `.htaccess` e lido a cada
-   requisicao: a recarga do Apache nao e necessaria.
+   requisicao: a recarga do Apache nao e necessaria. Espaco: o `npm ci`
+   ocupa uns 114 MB (ate 150) em `/var` e ate 27 MB de cache na `/`; o
+   build, 0,9 MB. O minimo foi conferido no passo 3d.
+   - **Se o `npm ci` ou o build falhar por falta de espaco** (`ENOSPC`): o
+     `node_modules` fica incompleto e o `app/` pode ficar antigo. Fique em
+     manutencao, nao recarregue o PHP-FPM e avise a infraestrutura.
+   - **Com o espaco liberado**, repita a linha.
+   - **Sem como liberar**, o degrau 2 tambem nao resolve: o `app/` nao e
+     versionado, e o build do commit anterior pede o mesmo espaco. Fique em
+     manutencao e decida com o responsavel. Por isso os limites do 0m e do
+     3d.
 
 ```bash
 cd /var/www/chronodesk/frontend && sudo npm ci && sudo npm run build
@@ -3597,12 +3706,27 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
    corte, o Calendario com o resumo do dia e o relatorio com o aviso
    "Escala pelas regras novas (corte em DD/MM/AAAA)."
 
-7m. **Limpeza.** O diretorio do ensaio das migrations (passo 4a), so se o
-   caminho for o esperado:
+7m. **Limpeza.** Duas remocoes:
+   - o diretorio do ensaio das migrations (passo 4a), so se o caminho for o
+     esperado;
+   - a copia `sistema_pausas_ensaio` (passo 0n). Ela tem dados pessoais. O
+     `DROP` so roda se quem executa digitar o nome da copia; qualquer outra
+     resposta nao apaga nada. O comando apaga so esse nome fixo, nunca o
+     `sistema_pausas`.
+
+   A copia sai tambem se o deploy parar em qualquer passo, for revertido
+   (degraus 2 ou 3) ou for cancelado: ela ja tem o corte do 0n e nao serve a
+   outro deploy. O backup pre-dia de 09/11 fica (passo 9e). Fora do dia, ou
+   se o deploy parou antes do passo 4a, rode so a segunda linha.
 
 ```bash
 case "$E" in /root/ensaio-deploy1.*) sudo rm -r "$E" && echo "ensaio das migrations removido";; *) echo "PARE: $E fora do padrao, nada apagado";; esac; unset E D1
+read -rp 'Apagar a copia de ensaio? Digite o nome dela (sistema_pausas_ensaio): ' NC; if [ "$NC" = "sistema_pausas_ensaio" ]; then read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "DROP DATABASE IF EXISTS sistema_pausas_ensaio; SELECT (SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'sistema_pausas_ensaio') AS copia_restante, (SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'sistema_pausas') AS producao;"; unset P; else echo "nada apagado: nome diferente de sistema_pausas_ensaio"; fi; unset NC
 ```
+
+   Esperado: `ensaio das migrations removido` e, depois de digitar o nome,
+   `copia_restante = 0` e `producao = 1`. `nada apagado`: repita o comando
+   e digite o nome certo. A copia nao pode ficar no MySQL depois do dia.
 
 **8. Desligamentos rapidos e rollback em degraus.** Sempre do degrau mais
 baixo para o mais alto; os degraus 2 e 3 so com **aprovacao previa do
@@ -3826,7 +3950,9 @@ arquivo existir). Antes do commit, o `test-local.ps1` e o `qa-security`
    e criterio no inventario, secao 8.
 
 9e. **Limpeza do que o deploy deixou, com aprovacao:** o diretorio do backup
-   do dia (`/var/backups/chronodesk/deploy1-<data>`, com dados pessoais), a
+   do dia (`/var/backups/chronodesk/deploy1-<data>`, com dados pessoais), o
+   backup pre-dia (`/root/backups_chronodesk/pre_deploy1_20261109_1549.sql.gz`,
+   com dados pessoais, na `/`; o deploy nao depende dele), a
    copia do `.htaccess` local (`htaccess-local-antes-deploy1`), as copias
    do `.env` (8a) e a `funcionarios_perfil_016b` (base do `016b_down`; sem
    ela, a reversao da 016b deixa de existir). Listar antes, so nome, modo,
