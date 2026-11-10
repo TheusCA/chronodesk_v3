@@ -1229,6 +1229,21 @@ Base da afirmação:
 
 ---
 
+### Pos-deploy 1, commit A: qa-security com corpo binario, fputcsv explicito, gitleaksignore e npm audit — 2026-11-10
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Correcoes vistas no deploy 1 (executado em 10/11/2026 no `2e27926`): (A1) o `qa-security` reprovava no servidor com "nao devolveu resultado" porque o `json_encode` do filho falhava com o ZIP binario do `api/download_relatorio.php` (a CLI do servidor tem `ZipArchive`; a estacao nao); (A2) `fputcsv` sem `$escape`, depreciado no PHP 8.4; (A3) falso positivo do `gitleaks` no `QA_PASSWORD` de teste; (A4) 4 vulnerabilidades do `npm audit` no `npm ci` do servidor. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`, a partir do `2e27926` (em producao). Commit A. Sem push pela IA. |
+| **O que a IA alterou** | `scripts/qa-security.php`: resultado do filho com `body_b64` quando o corpo nao e UTF-8 (o pai decodifica; erro de JSON vira mensagem, nunca linha vazia); o mesmo caso pelo servidor embutido (`php -S` no loopback, para ver status e `Content-Type`, que a CLI descarta); banco simulado com as pausas do relatorio; caso novo do download como admin (com `ZipArchive`: 200, `application/zip`, corpo "PK"; sem: 503 com a mensagem JSON), nos dois caminhos; caso do CSV com `\"` e `;` contra a saida de antes e varredura das 9 chamadas. As 9 chamadas de `fputcsv` fora de `scripts/` (`api/download_relatorio.php`, `api/portal/critical_incidents_export.php` x2, `classes/GerenciadorPausas.php`, `config.php`, `services/OperationalService.php` x4) com separador, aspas e escape `'\\'` explicitos. `.gitleaksignore` novo (dois fingerprints do mesmo falso positivo: historico e arvore). `frontend/package-lock.json` pelo `npm audit fix` sem `--force`. |
+| **Decisoes de implementacao** | Escape `'\\'` (o padrao de hoje), nao `''`: o QA prova a saida igual byte a byte e que `''` mudaria a celula com barra invertida. O `Content-Type` so existe numa resposta HTTP de verdade: o caso roda tambem pelo `php -S` (parte do PHP CLI; nenhuma dependencia nova). O banco simulado ganhou as pausas so quando o caso as fornece. Lockfile: so versoes dentro das faixas do `package.json` (nenhum major). |
+| **Pendente com o responsavel** | Revisao. Fora do pedido: `fgetcsv` sem `$escape` em `classes/GerenciadorPausas.php:666` e `:668` e em `migrar_csv_para_mysql.php` (a confirmar na documentacao do PHP 8.4 se a depreciacao tambem os alcanca). O lockfile tem uma entrada nova opcional de plataforma (`@rolldown/binding-android-arm-eabi`, nao instalada em x64). |
+| **Validacao executada pela IA** | Ver o fim do commit A (resumo da entrega): `qa-security` com e sem `ZipArchive` (extensao da estacao carregada so no teste, por `PHP_INI_SCAN_DIR` temporario), mutacao, `gitleaks` nos modos `git` e `dir`, `npm audit` com 0, build e `qa:bundle`, `test-local.ps1 -SkipHttp -Browser`. |
+| **Limitacoes declaradas** | O caso com `ZipArchive` rodou na estacao com a extensao carregada de proposito; no servidor (PHP 8.4) roda no proximo ensaio de codigo. O fingerprint da arvore e por linha: se o `QA_PASSWORD` mudar de linha, o `gitleaks dir` volta a acusar. |
+| **Validacao humana** | Pendente. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

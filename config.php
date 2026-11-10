@@ -189,7 +189,7 @@ function inicializar_csv() {
         $headers = ['id_funcionario', 'nome_funcionario', 'equipe', 'inicio_pausa', 'fim_pausa', 
                      'duracao_segundos', 'motivo_pausa', 'alerta_15min', 'alerta_20min', 
                      'status_aprovacao', 'observacao_reuniao'];
-        fputcsv($file, $headers);
+        fputcsv($file, $headers, ',', '"', '\\');
         fclose($file);
     }
 }

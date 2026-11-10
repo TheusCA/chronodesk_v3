@@ -23,7 +23,7 @@ try {
         throw new RuntimeException('Nao foi possivel gerar o CSV.');
     }
     $columns = CriticalIncidentService::EXPORT_COLUMNS;
-    fputcsv($output, array_keys($columns), ';');
+    fputcsv($output, array_keys($columns), ';', '"', '\\');
     foreach ($rows as $row) {
         $values = [];
         foreach ($columns as $field) {
@@ -41,7 +41,7 @@ try {
             $text = (string)$value;
             $values[] = csv_neutralize_cell($text);
         }
-        fputcsv($output, $values, ';');
+        fputcsv($output, $values, ';', '"', '\\');
     }
     fclose($output);
     exit;

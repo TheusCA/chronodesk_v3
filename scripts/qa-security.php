@@ -134,6 +134,12 @@ final class QaChildStatement extends PDOStatement {
             }
             return true;
         }
+        // [pos-deploy A1] Pausas do relatorio completo (download_relatorio):
+        // so com db['pausas'] no caso; 1a pagina com as linhas, a seguinte vazia.
+        if (isset($this->pdo->db['pausas']) && strpos($this->sql, 'SELECT id, id_funcionario, nome_funcionario, equipe, inicio_pausa, fim_pausa, duracao_segundos,') === 0) {
+            $this->rows = strpos($this->sql, ':cursor_id') === false ? array_values($this->pdo->db['pausas']) : [];
+            return true;
+        }
         if ($this->sql === 'SELECT ativo, access_role, equipe, ad_login FROM funcionarios WHERE id = ?') {
             $row = $this->pdo->db['funcionarios'][(string)$params[0]] ?? null;
             $this->rows = is_array($row) ? [$row] : [];
@@ -464,10 +470,29 @@ function qa_isolated_environment(string $errorLog): void {
 // ----------------------------------------------------------------------------
 // Processo filho: executa um endpoint real e devolve status e corpo.
 // ----------------------------------------------------------------------------
-if (($argv[1] ?? '') === QA_RUNNER_FLAG) {
-    $spec = json_decode((string)base64_decode((string)($argv[2] ?? ''), true), true);
+/**
+ * [pos-deploy A1] Linha QA_RESULT do filho. Corpo que nao e UTF-8 valido (o
+ * ZIP do download_relatorio) vai em base64 no campo body_b64: com ele em
+ * 'body', o json_encode devolvia false e a linha saia vazia ("nao devolveu
+ * resultado" no servidor, onde a CLI tem ZipArchive). Se ainda assim o JSON
+ * falhar, a linha diz por que, em vez de sair vazia.
+ */
+function qa_encode_child_result(int $status, string $body): string {
+    $payload = preg_match('//u', $body) === 1
+        ? ['status' => $status, 'body' => $body]
+        : ['status' => $status, 'body_b64' => base64_encode($body)];
+    $encoded = json_encode($payload);
+    return $encoded !== false ? $encoded : (string)json_encode(['status' => $status, 'encode_error' => json_last_error_msg()]);
+}
+
+// [pos-deploy A1] O filho roda pela CLI (QA_RESULT na saida) ou como roteador
+// do servidor embutido (`php -S`, caso lido de QA_SERVER_SPEC), que responde
+// com o status e os cabecalhos de verdade.
+$qaServerMode = PHP_SAPI === 'cli-server' && getenv('QA_SERVER_SPEC') !== false;
+if ($qaServerMode || ($argv[1] ?? '') === QA_RUNNER_FLAG) {
+    $spec = json_decode((string)base64_decode((string)($qaServerMode ? getenv('QA_SERVER_SPEC') : ($argv[2] ?? '')), true), true);
     if (!is_array($spec)) {
-        fwrite(STDERR, "spec invalida\n");
+        error_log('qa-security: spec invalida');
         exit(2);
     }
     qa_isolated_environment($spec['error_log']);
@@ -570,15 +595,14 @@ if (($argv[1] ?? '') === QA_RUNNER_FLAG) {
         $_SERVER['HTTP_X_CSRF_TOKEN'] = $csrf;
     }
 
-    ob_start();
-    register_shutdown_function(static function (): void {
-        $body = (string)ob_get_clean();
-        $status = http_response_code();
-        fwrite(STDOUT, "\nQA_RESULT " . json_encode([
-            'status' => $status === false ? 200 : $status,
-            'body' => $body,
-        ]) . "\n");
-    });
+    if (!$qaServerMode) {
+        ob_start();
+        register_shutdown_function(static function (): void {
+            $body = (string)ob_get_clean();
+            $status = http_response_code();
+            fwrite(STDOUT, "\nQA_RESULT " . qa_encode_child_result($status === false ? 200 : $status, $body) . "\n");
+        });
+    }
     // Banco simulado (Lote 5a): responde so as consultas da revalidacao da
     // sessao (A1); qualquer outra falha como banco fora. Sem 'db', o banco
     // real aponta para 127.0.0.1:1 e nada responde.
@@ -1091,6 +1115,48 @@ rewind($memory);
 assert_same("\"'=cmd|\"\"/c calc\"\"!A1\";Normal;'-5\n", stream_get_contents($memory), 'exportacao operacional grava a celula neutralizada');
 fclose($memory);
 
+// [pos-deploy A2] O PHP 8.4 depreca o fputcsv sem o $escape. Toda chamada fora
+// de scripts/ passa separador, aspas e escape '\\' explicitos, o padrao
+// implicito de hoje: a saida fica byte a byte igual. Escape '' mudaria a
+// celula com barra invertida (exige aprovacao). Referencia gravada com o
+// padrao implicito do PHP 8.2, antes da mudanca.
+$csvCells = ['a\"b', 'c;d', 'e\\', 'f"g', 'x'];
+$memory = fopen('php://memory', 'w+b');
+$csvRow->invoke($service, $memory, $csvCells);
+rewind($memory);
+assert_same('"a\\"b";"c;d";"e\\";"f""g";x' . "\n", stream_get_contents($memory), 'exportacao operacional: celula com \\" e ; igual a saida de antes');
+fclose($memory);
+$memory = fopen('php://memory', 'w+b');
+fputcsv($memory, $csvCells, ',', '"', '\\');
+rewind($memory);
+assert_same('"a\\"b",c;d,"e\\","f""g",x' . "\n", stream_get_contents($memory), 'fputcsv com virgula e escape explicito: igual a saida de antes');
+fclose($memory);
+$csvCallsWithoutEscape = [];
+$csvCallCount = 0;
+$csvIterator = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), static function (SplFileInfo $file): bool {
+    return !in_array($file->getFilename(), ['.git', 'node_modules', 'vendor', 'frontend', 'scripts', '_referencias', 'app'], true);
+}));
+foreach ($csvIterator as $csvFile) {
+    if ($csvFile->getExtension() !== 'php') {
+        continue;
+    }
+    $source = (string)file_get_contents($csvFile->getPathname());
+    $offset = 0;
+    while (preg_match('/\bfputcsv\s*\(/', $source, $match, PREG_OFFSET_CAPTURE, $offset) === 1) {
+        $start = $match[0][1] + strlen($match[0][0]);
+        $depth = 1;
+        for ($i = $start; $i < strlen($source) && $depth > 0; $i++) {
+            $depth += $source[$i] === '(' ? 1 : ($source[$i] === ')' ? -1 : 0);
+        }
+        $csvCallCount++;
+        if (preg_match('/,\s*\'\\\\\\\\\'\s*\)$/', substr($source, $start, $i - $start)) !== 1) {
+            $csvCallsWithoutEscape[] = str_replace('\\', '/', substr($csvFile->getPathname(), strlen($root) + 1)) . ':' . (substr_count(substr($source, 0, $start), "\n") + 1);
+        }
+        $offset = $i;
+    }
+}
+assert_same([9, []], [$csvCallCount, $csvCallsWithoutEscape], 'fputcsv fora de scripts/: as 9 chamadas com o escape \'\\\\\' explicito (PHP 8.4)');
+
 foreach ([
     'services/OperationalService.php',
     'api/download_relatorio.php',
@@ -1147,7 +1213,8 @@ const QA_ADMIN_SESSION = [
     'portal_role' => 'admin', 'username' => 'qa.admin', 'login_time' => '__now__', 'last_activity' => '__now__',
 ];
 
-function qa_start_endpoint(string $qaDir, array $spec): array {
+/** Completa o caso (padroes, log e estado proprios) para o processo filho. */
+function qa_prepare_spec(string $qaDir, array $spec): array {
     static $run = 0;
     $run++;
     $log = $qaDir . "/endpoint-{$run}.log";
@@ -1165,17 +1232,28 @@ function qa_start_endpoint(string $qaDir, array $spec): array {
         }
         unset($spec['state']);
     }
-    $command = [
-        PHP_BINARY,
+    return $spec;
+}
+
+/** Diretivas do PHP do processo filho (CLI ou servidor embutido). */
+function qa_child_ini(string $qaDir, string $log): array {
+    return [
         '-d', 'display_errors=stderr',
         '-d', 'log_errors=1',
         '-d', 'error_log="' . $log . '"',
         '-d', 'sys_temp_dir="' . $qaDir . '"',
         '-d', 'session.save_path="' . $qaDir . '"',
+    ];
+}
+
+function qa_start_endpoint(string $qaDir, array $spec): array {
+    $spec = qa_prepare_spec($qaDir, $spec);
+    $log = $spec['error_log'];
+    $command = array_merge([PHP_BINARY], qa_child_ini($qaDir, $log), [
         __FILE__,
         QA_RUNNER_FLAG,
         base64_encode((string)json_encode($spec)),
-    ];
+    ]);
     $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
     if (!is_resource($process)) {
         fwrite(STDERR, "FAIL: nao iniciou o processo filho\n");
@@ -1196,6 +1274,21 @@ function qa_finish_endpoint(array $handle): array {
         exit(1);
     }
     $result = json_decode($match[1], true);
+    if (!is_array($result) || isset($result['encode_error'])) {
+        fwrite(STDERR, "FAIL: {$handle['endpoint']} devolveu resultado ilegivel: " . ($result['encode_error'] ?? 'JSON invalido') . "\n");
+        exit(1);
+    }
+    // [pos-deploy A1] Corpo que nao e UTF-8 (ZIP do download_relatorio) vem
+    // em base64; aqui volta aos bytes originais, sem perder informacao.
+    if (array_key_exists('body_b64', $result)) {
+        $decoded = base64_decode((string)$result['body_b64'], true);
+        if ($decoded === false) {
+            fwrite(STDERR, "FAIL: {$handle['endpoint']} devolveu body_b64 invalido\n");
+            exit(1);
+        }
+        $result['body'] = $decoded;
+        unset($result['body_b64']);
+    }
     $result['log'] = (string)file_get_contents($handle['log']);
     $result['stderr'] = $stderr;
     // [9.12.1] Caso com 'state': o diretorio proprio, para ler o que o endpoint gravou.
@@ -1205,6 +1298,61 @@ function qa_finish_endpoint(array $handle): array {
 
 function qa_run_endpoint(string $qaDir, array $spec): array {
     return qa_finish_endpoint(qa_start_endpoint($qaDir, $spec));
+}
+
+/**
+ * [pos-deploy A1] O mesmo caso pelo servidor embutido do PHP (`php -S`, so
+ * 127.0.0.1), para ver o que a CLI descarta: os cabecalhos da resposta
+ * (`header()` nao tem efeito na CLI). Devolve status, Content-Type, corpo
+ * (bytes) e o log do filho. Sem rede externa e sem dependencia nova.
+ */
+function qa_run_endpoint_http(string $qaDir, array $spec): array {
+    $spec = qa_prepare_spec($qaDir, $spec);
+    $log = $spec['error_log'];
+    $probe = stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
+    if ($probe === false) {
+        fwrite(STDERR, "FAIL: sem porta livre no loopback ({$errstr})\n");
+        exit(1);
+    }
+    $port = (int)substr((string)strrchr((string)stream_socket_get_name($probe, false), ':'), 1);
+    fclose($probe);
+    $env = getenv();
+    $env['QA_SERVER_SPEC'] = base64_encode((string)json_encode($spec));
+    $command = array_merge([PHP_BINARY], qa_child_ini($qaDir, $log), ['-S', "127.0.0.1:{$port}", __FILE__]);
+    $serverLog = $qaDir . "/servidor-{$port}.log";
+    $process = proc_open($command, [0 => ['pipe', 'r'], 1 => ['file', $serverLog, 'a'], 2 => ['file', $serverLog, 'a']], $pipes, $qaDir, $env);
+    if (!is_resource($process)) {
+        fwrite(STDERR, "FAIL: nao iniciou o servidor embutido\n");
+        exit(1);
+    }
+    $socket = false;
+    for ($try = 0; $try < 100 && $socket === false; $try++) {
+        $socket = @fsockopen('127.0.0.1', $port, $errno, $errstr, 0.2);
+        if ($socket === false) {
+            usleep(100000);
+        }
+    }
+    $raw = '';
+    if ($socket !== false) {
+        stream_set_timeout($socket, 30);
+        $path = '/' . $spec['endpoint'] . (isset($spec['query']) ? '?' . http_build_query($spec['query']) : '');
+        fwrite($socket, "{$spec['method']} {$path} HTTP/1.0\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+        $raw = (string)stream_get_contents($socket);
+        fclose($socket);
+    }
+    fclose($pipes[0]);
+    proc_terminate($process);
+    proc_close($process);
+    [$head, $body] = array_pad(explode("\r\n\r\n", $raw, 2), 2, '');
+    $lines = explode("\r\n", $head);
+    $status = preg_match('#^HTTP/\d\.\d (\d{3})#', $lines[0] ?? '', $m) === 1 ? (int)$m[1] : 0;
+    $contentType = '';
+    foreach ($lines as $line) {
+        if (stripos($line, 'Content-Type:') === 0) {
+            $contentType = trim(substr($line, 13));
+        }
+    }
+    return ['status' => $status, 'content_type' => $contentType, 'body' => $body, 'log' => (string)file_get_contents($log)];
 }
 
 /** Varios endpoints em paralelo; devolve os resultados nas mesmas chaves. */
@@ -1660,6 +1808,32 @@ foreach ($matrix as $row => [$extra, $expected]) {
     }
 }
 assert_same([], $matrixFailures, 'matriz de perfis por endpoint (5a, 5b e 5c)');
+
+// [pos-deploy A1] Download do relatorio como admin, pela CLI (QA_RESULT) e
+// pelo servidor embutido (cabecalhos). Com ZipArchive (o servidor), o corpo e
+// um ZIP binario: antes do body_b64 a linha QA_RESULT saia vazia. Sem
+// ZipArchive (a estacao), 503 com a mensagem JSON. O caso vale nos dois.
+$downloadSpec = ['endpoint' => 'api/download_relatorio.php', 'method' => 'GET', 'session' => QA_ADMIN_SESSION, 'db' => QA_DB + ['pausas' => [[
+    'id' => 1, 'id_funcionario' => 1, 'nome_funcionario' => 'QA Pausa', 'equipe' => 'n1', 'inicio_pausa' => '2026-11-10 10:00:00',
+    'fim_pausa' => '2026-11-10 10:10:00', 'duracao_segundos' => 600, 'motivo_pausa' => 'Pausa', 'alerta_15min' => 0, 'alerta_20min' => 0,
+    'status_aprovacao' => 'aprovado', 'observacao_reuniao' => null,
+]]]];
+$downloadVia = ['CLI' => qa_run_endpoint($qaDir, $downloadSpec), 'HTTP' => qa_run_endpoint_http($qaDir, $downloadSpec)];
+$zipAvailable = class_exists('ZipArchive');
+foreach ($downloadVia as $via => $download) {
+    if ($zipAvailable) {
+        assert_same([200, 'PK'], [$download['status'], substr($download['body'], 0, 2)], "download_relatorio como admin com ZipArchive ({$via}): 200 e corpo ZIP");
+    } else {
+        $message = json_decode($download['body'], true)['mensagem'] ?? null;
+        assert_same([503, 'Exportação indisponível no servidor.'], [$download['status'], $message], "download_relatorio como admin sem ZipArchive ({$via}): 503 com a mensagem JSON");
+    }
+}
+assert_same($zipAvailable ? 'application/zip' : 'application/json', strtok($downloadVia['HTTP']['content_type'], ';'), 'download_relatorio como admin: Content-Type ' . ($zipAvailable ? 'application/zip' : 'application/json'));
+assert_same(['body' => 'PK' . "\x03\x04\xff\xfe"], (static function (): array {
+    $line = qa_encode_child_result(200, 'PK' . "\x03\x04\xff\xfe");
+    $decoded = json_decode($line, true);
+    return ['body' => base64_decode((string)($decoded['body_b64'] ?? ''), true)];
+})(), 'resultado do filho: corpo binario volta byte a byte (body_b64)');
 
 // Estrutural: o login CI precisa de AD e nao roda aqui. Confere que o perfil
 // vem de session_role_for() com a allowlist (a revalidacao da requisicao

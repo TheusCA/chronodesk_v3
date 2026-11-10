@@ -1,0 +1,10 @@
+# Falsos positivos aceitos (gitleaks). Cada linha e um fingerprint exato:
+# um segredo novo, outra linha ou outro arquivo continua sendo acusado.
+#
+# QA_PASSWORD de scripts/qa-security.php:25: senha ficticia do teste de
+# seguranca (nunca foi credencial real; o proprio QA confere que ela nao
+# aparece em resposta nem em log). Aceito no deploy 1 (2026-11-10).
+# Historico (gitleaks git), commit que a introduziu:
+5f5a5c1ea14d144c36a7a5993f8b8ec0d816b648:scripts/qa-security.php:generic-api-key:25
+# Arvore de trabalho (gitleaks dir):
+scripts/qa-security.php:generic-api-key:25

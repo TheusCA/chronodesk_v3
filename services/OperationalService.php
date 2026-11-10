@@ -1197,7 +1197,7 @@ final class OperationalService {
         header('X-Content-Type-Options: nosniff');
         $handle = fopen('php://output', 'wb');
         fwrite($handle, "\xEF\xBB\xBF");
-        fputcsv($handle, ['tipo', 'colaborador', 'equipe', 'data', 'detalhe', 'status'], ';');
+        fputcsv($handle, ['tipo', 'colaborador', 'equipe', 'data', 'detalhe', 'status'], ';', '"', '\\');
         // [F5, D4] Periodo que cruza o corte: aviso logo depois do cabecalho.
         if (($report['cutoff']['split'] ?? false) === true) {
             $this->csvRow($handle, ['aviso', '', '', $report['cutoff']['date'], PresenceCutoff::splitNotice($report['cutoff']['date']), '']);
@@ -1234,7 +1234,7 @@ final class OperationalService {
         header('X-Content-Type-Options: nosniff');
         $handle = fopen('php://output', 'wb');
         fwrite($handle, "\xEF\xBB\xBF");
-        fputcsv($handle, self::OVERTIME_CSV_HEADER, ';');
+        fputcsv($handle, self::OVERTIME_CSV_HEADER, ';', '"', '\\');
         foreach ($rows as $row) {
             $this->csvRow($handle, self::overtimeCsvRow($row, $totalsByEmployee));
         }
@@ -1296,7 +1296,7 @@ final class OperationalService {
             'Status',
             'Aprovador',
             'Data de aprovacao/rejeicao',
-        ], ';');
+        ], ';', '"', '\\');
         foreach ($rows as $row) {
             $this->csvRow($handle, [
                 '',
@@ -2796,6 +2796,6 @@ final class OperationalService {
     private function csvRow($handle, array $row): void {
         fputcsv($handle, array_map(static function ($value) {
             return csv_neutralize_cell((string)$value);
-        }, $row), ';');
+        }, $row), ';', '"', '\\');
     }
 }

@@ -341,7 +341,7 @@ class GerenciadorPausas {
             'observacao_reuniao' => $this->observacao_historico_pausa($funcionario, $contexto)
         ];
         try {
-            $written = fputcsv($file, $row);
+            $written = fputcsv($file, $row, ',', '"', '\\');
             return $written !== false && fflush($file);
         } finally {
             flock($file, LOCK_UN);

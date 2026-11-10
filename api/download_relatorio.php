@@ -18,7 +18,7 @@ function csv_safe_value($value) {
 }
 
 function csv_safe_row($handle, array $row): void {
-    fputcsv($handle, array_map('csv_safe_value', $row));
+    fputcsv($handle, array_map('csv_safe_value', $row), ',', '"', '\\');
 }
 
 // Criar arquivo temporário para métricas
