@@ -4820,6 +4820,43 @@ O escape `'\\'` é o padrão implícito de hoje. O QA compara a saída com a de 
   - opção fantasma com a lista vazia.
 - `test-local.ps1 -SkipHttp -Browser` no `044c37b`: no resumo da entrega (rodado depois do commit).
 
+**Revisão (2026-11-10):** aprovados o `24dd59b` (A2b), o `c765a15` (docs do A2b), o `044c37b` (B) e o `3e038c8` (docs do B). O achado do `fgetcsv` (a célula que termina em barra invertida) fica como proposta, sem prazo. Dois ajustes antes do D: o frontend no `test-local.ps1` (9.14.4) e a trava dos scripts de mutação (registro de uso de IA).
+
+#### 9.14.4 Commit E: frontend na bateria completa do `test-local.ps1` (`c8b6a87`, 2026-11-10; aguardando revisão)
+
+**O que faltava.** O `test-local.ps1 -SkipHttp -Browser` rodava os QAs PHP, o `node --check` e o roteiro de navegador. Não rodava o frontend: `lint`, `typecheck`, build e os `npm run qa:*`.
+
+**O que mudou.**
+- **Seção "Frontend" nova**, depois do `node --check` e antes do navegador, fora do `-SkipHttp`. Ela lê os scripts do `frontend/package.json` e roda `lint`, `typecheck`, `build` e todos os `qa:*`, lidos do arquivo e não de uma lista fixa. Hoje são 22 no total, 19 deles `qa:*`.
+- **Falha.** Reprova se qualquer um falhar, mostrando as últimas linhas da saída dele. Reprova também se faltar Node, npm, `node_modules` ou um dos três scripts de base.
+- **Resumo.** Imprime a linha `frontend: 22 scripts npm rodados (lint, typecheck, build e 19 qa:*): 22 OK, 0 com falha`, que é a prova de que rodaram.
+- **PowerShell 5.1.** Dentro da seção, o `ErrorActionPreference` cai para `Continue` e volta no fim. Com `Stop`, um aviso do npm ou do Vite no stderr derrubaria o script.
+
+A partir daqui, **bateria completa = `test-local.ps1 -SkipHttp -Browser`**. A trava (`qa-deploy-runbook.php`) exige a seção, a leitura do `package.json`, a falha por script, a linha de resumo e a seção antes do navegador.
+
+**Validação do frontend nas entregas anteriores, feita à parte (conferido no registro de uso de IA e no `git show --stat` de cada commit):**
+- **Entregas que mexeram no frontend**, de 2026-11-03 a 2026-11-06: o registro de cada uma traz o frontend validado à parte.
+  - `typecheck`, `lint` e os 19 `qa:*`: no `50f7674`; no Mapa PA no `Dialog` (`da14490`, `dfb7630`, `c50f808`, `1ee4e25`, `25c2ef1`); no `5457a86`, `aae250b` e `ebc4cc5`; e na "Exceção por data" (`169a833`).
+  - `lint`, `typecheck` e build, com os `qa:*` do item: no F8 commit 1 (`ddb64e2`, `38c98da`, `5719cd6`) e na retirada das páginas legadas (`94a532d`, `caaab63`).
+- **Entregas que não mexeram no frontend:** nenhum arquivo de `frontend/`, pelo `git show --stat`. São o `3be925b` e os commits do roteiro do deploy 1 (`022ed65`, `0565100`, `147aebc`, `3459d41`, `3d17ac9`, `9416cb8`, `783ddc4`, `2e27926`). O frontend não foi rodado nelas; a validação registrada é a do `test-local`, que até aqui não o incluía.
+- **Pós-deploy 1:**
+  - `28fb746` (A, lockfile novo): build e `qa:bundle` antes do commit; os 22 scripts num worktree do `28fb746`, depois da entrega do B;
+  - `24dd59b` e `c765a15`: frontend igual ao do `28fb746`, sem rodar;
+  - `044c37b` (B): `lint`, `typecheck` e `qa:employee-form` antes do commit; os 22 no `3e038c8`, com o mesmo código do frontend;
+  - `3e038c8`: os 22.
+
+**Validação executada pela IA:**
+- **O `test-local.ps1` analisado pelo PowerShell 5.1** (`Parser::ParseFile`), sem erro. A trava passa a ter 293 verificações.
+- **Mutação 4/4, no worktree de validação, já com a trava dos scripts de mutação:**
+  - os `qa:*` fora da lista;
+  - a falha de script virando só aviso;
+  - sem a linha de resumo;
+  - um mutante de comportamento: o `qa-table.mjs` quebrado de propósito. O `test-local.ps1 -SkipHttp` termina com saída 1, `[FAIL] npm run qa:table falhou` e `frontend: 22 scripts npm rodados (lint, typecheck, build e 19 qa:*): 21 OK, 1 com falha`.
+- **`test-local.ps1 -SkipHttp -Browser` no `c8b6a87`, duas rodadas** (worktree separado):
+  - **1ª rodada: saída 1.** O frontend passou (`frontend: 22 scripts npm rodados (lint, typecheck, build e 19 qa:*): 22 OK, 0 com falha`), mas o navegador ficou em 1025/1026. Falhou "390 px, Documentação, remover documento, enviando, Esc e clique fora: não fecha". É uma conferência que depende de tempo (o estado "enviando"), e a bateria rodou ao mesmo tempo que o `qa-security` e o roteiro de navegador do D, na árvore principal.
+  - **2ª rodada, sozinha: saída 0.** Frontend 22/22, navegador 1026/1026.
+  - **Risco registrado:** essa conferência pode falhar sob carga. Daqui em diante, a bateria completa roda sem nada pesado em paralelo.
+
 ---
 
 ## 10. Riscos e pendências

@@ -1253,9 +1253,9 @@ Base da afirmação:
 | **O que a IA alterou** | `classes/GerenciadorPausas.php:666` e `:668` e `migrar_csv_para_mysql.php:29` e `:54`: `fgetcsv` com `null, ',', '"', '\\'` (os padroes de hoje). `scripts/qa-security.php`: leitura da linha do A2 por `fgetcsv` e `str_getcsv` contra a leitura de antes; a trava conta `fputcsv` 9, `fgetcsv` 5, `str_getcsv` 0 e `setCsvControl` 0, todas com o escape explicito. |
 | **Decisoes de implementacao** | Escape `'\\'`, leitura identica a de hoje. O `migrar_csv_para_mysql.php` e CRLF no repositorio: a mudanca preserva o fim de linha (diff so nas duas linhas). |
 | **Pendente com o responsavel** | Revisao. Achado preservado: com o escape `'\\'`, a celula que termina em barra invertida e lida grudada na seguinte; o escape `''` leria certo, mas muda a leitura dos CSVs ja gravados (proposta, sem prazo). |
-| **Validacao executada pela IA** | `qa-security OK`. Mutacao 3/3 (`GerenciadorPausas.php:668` sem escape; escape vazio no `migrar_csv_para_mysql.php:29`; `str_getcsv` novo sem escape). `test-local.ps1 -SkipHttp -Browser`: no resumo da entrega. |
+| **Validacao executada pela IA** | `qa-security OK`. Mutacao 3/3 (`GerenciadorPausas.php:668` sem escape; escape vazio no `migrar_csv_para_mysql.php:29`; `str_getcsv` novo sem escape). `test-local.ps1 -SkipHttp -Browser` com saida 0 (navegador 1026/1026, `qa-security OK`). Frontend sem mudanca: igual ao do `28fb746`, onde os 22 scripts npm rodaram a parte (9.14.4). |
 | **Limitacoes declaradas** | A leitura do CSV de pausas so roda quando o banco falta; o QA prova a funcao com a mesma linha, nao esse caminho de ponta a ponta. |
-| **Validacao humana** | Pendente. |
+| **Validacao humana** | Aprovado em 2026-11-10 (o achado da celula terminada em barra invertida fica como proposta, sem prazo). |
 
 ---
 
@@ -1268,8 +1268,35 @@ Base da afirmação:
 | **O que a IA alterou** | `frontend/src/lib/employeeLunch.ts` novo (regras puras). `frontend/src/pages/AdminPage.jsx`: select "Almoco" na barra de filtros (opcoes da situacao escolhida, com contagem, ordenadas pelo inicio), filtro combinado, reset ao trocar a situacao, "Filtros aplicados" com o almoco e texto novo, coluna "Almoco" entre Jornada e Status, almoco no cartao. `frontend/scripts/qa-employee-form.mjs`: casos do almoco. Sem API nem banco. |
 | **Decisoes de implementacao** | Regras num modulo puro, testavel sem a tela. O valor conferido (`keepLunchSelection`) e usado no proprio render, alem do efeito que ajusta o estado: o reset vale na primeira pintura e o QA estatico o enxerga. Horario `HH:MM:SS` mostrado como `HH:MM`; cadastro sem horario valido fica fora das opcoes e mostra "—". |
 | **Pendente com o responsavel** | Revisao. Quando o F8 entrar, o filtro ganha contrato e excecao (nota na 9.10). |
-| **Validacao executada pela IA** | `lint`, `typecheck` e `qa:employee-form` OK. Mutacao 8/8 (filtro ignorado; contagem +2; contagem de todas as situacoes; sem reset; ordem invertida; sem coluna; almoco fora de "Filtros aplicados"; opcao fantasma na lista vazia). `test-local.ps1 -SkipHttp -Browser`: no resumo da entrega. |
+| **Validacao executada pela IA** | `lint`, `typecheck` e `qa:employee-form` OK. Mutacao 8/8 (filtro ignorado; contagem +2; contagem de todas as situacoes; sem reset; ordem invertida; sem coluna; almoco fora de "Filtros aplicados"; opcao fantasma na lista vazia). `test-local.ps1 -SkipHttp -Browser` com saida 0 (navegador 1026/1026, `qa-security OK`); os 22 scripts npm do frontend rodados a parte no `3e038c8` (o `test-local` ainda nao os incluia; 9.14.4). |
 | **Limitacoes declaradas** | O QA renderiza a tela no servidor (estado inicial injetado); a troca de situacao pelo clique e coberta pela regra e pelo efeito, nao por um clique real no navegador. |
+| **Validacao humana** | Aprovado em 2026-11-10. |
+
+---
+
+### Pos-deploy 1, commit E: frontend na bateria completa do test-local.ps1 — 2026-11-10
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Ajuste pedido na revisao do A2b e do B: o `test-local.ps1` nao rodava o frontend (`lint`, `typecheck`, build e os `npm run qa:*`), que as entregas validavam a parte. A partir dele, "bateria completa" = `test-local.ps1 -SkipHttp -Browser`, que prova que rodou os 22. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `c8b6a87` (codigo) e o commit de docs dele (desenho 9.14.4 e estas entradas). Sem push pela IA. |
+| **O que a IA alterou** | `scripts/test-local.ps1`: secao "Frontend" que le os scripts do `frontend/package.json` e roda `lint`, `typecheck`, `build` e todos os `qa:*` (22 hoje), reprova em qualquer falha ou sem Node, npm ou `node_modules`, e imprime a linha de resumo com a contagem. `scripts/qa-deploy-runbook.php`: trava da secao (293 verificacoes). |
+| **Decisoes de implementacao** | Lista lida do `package.json` (QA novo entra sozinho). `ErrorActionPreference` em `Continue` so dentro da secao (no PowerShell 5.1, stderr de comando nativo com `Stop` vira excecao). Secao fora do `-SkipHttp`. |
+| **Pendente com o responsavel** | Revisao. |
+| **Validacao executada pela IA** | `test-local.ps1` analisado pelo PowerShell 5.1 sem erro. Mutacao 4/4 no worktree, com a trava dos scripts de mutacao: `qa:*` fora da lista, falha de script so como aviso e sem a linha de resumo (a trava reprova); `qa-table.mjs` quebrado de proposito (o `test-local` sai com 1 e o resumo diz "21 OK, 1 com falha"). `test-local.ps1 -SkipHttp -Browser` no `c8b6a87`: 1a rodada com saida 1 (frontend 22/22; navegador 1025/1026, a conferencia "remover documento, enviando" em 390 px, sensivel a tempo, com o `qa-security` e o navegador do D rodando em paralelo); 2a rodada sozinha com saida 0 (frontend 22/22, navegador 1026/1026). |
+| **Limitacoes declaradas** | O desenho 9.14.4 lista em quais entregas o frontend foi validado a parte; nas entregas que nao mexeram no frontend, ele nao foi rodado. |
+| **Validacao humana** | Pendente. |
+
+---
+
+### Incidente sem dano: script de mutacao sem o diretorio alvo, e a trava — 2026-11-10
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar o incidente e a trava pedida pelo responsavel. |
+| **O que aconteceu** | Na mutacao do commit B, o `Write` de um script novo (`mutB.php`, no scratchpad, fora do repositorio) falhou porque ja existia um arquivo com esse nome (a bateria do `sudo`, que recebia o diretorio como argumento). O comando seguinte rodou o script antigo **sem o argumento**: o diretorio virou vazio e ele tentou gravar em `/DEPLOY_LINUX.md` e `/docs/DEPLOY1_FOLHA_DO_DIA.md` na raiz do disco. As gravacoes falharam (permissao negada e diretorio inexistente); nada foi criado. Conferido depois: `/DEPLOY_LINUX.md`, `/docs` e `C:/dev/fora.txt` inexistentes; a arvore do repositorio sem alteracao alem das do trabalho em curso. |
+| **Causa** | Script que grava em arquivo aceitando o diretorio alvo como opcional, sem conferir que era uma copia do repositorio; e a falha do `Write` nao foi lida antes de rodar o script. |
+| **Trava (fora do repositorio)** | `mut_guard.php` no scratchpad. Todo script de mutacao que grava recebe o diretorio alvo como **1o argumento obrigatorio** e para com erro se ele faltar, nao existir, for a raiz de um disco, for a copia principal (`C:/dev/chronodesk`) ou nao for uma copia de trabalho do repositorio: um worktree do mesmo `.git` ou uma copia temporaria no scratchpad com o marcador `.copia-temporaria-chronodesk`. Toda gravacao passa por `mut_write()`, que recusa caminho absoluto, `..` e destino fora do diretorio alvo. Conferido em 9 casos (sem argumento, inexistente, raiz, copia principal, diretorio qualquer, worktree aceito; escrita absoluta, subindo e na raiz recusadas). Os seis scripts antigos sem trava tiveram o conteudo trocado por um aviso que sai com erro (o hook de seguranca nao permite apagar). |
 | **Validacao humana** | Pendente. |
 
 ---
