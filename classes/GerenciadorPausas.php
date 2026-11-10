@@ -663,9 +663,9 @@ class GerenciadorPausas {
 
     private function obter_metricas_csv(&$metricas, ?callable $ao_detalhar = null) {
         $file = fopen(PAUSAS_CSV, 'r');
-        $headers = fgetcsv($file); // Pular cabeçalho
+        $headers = fgetcsv($file, null, ',', '"', '\\'); // Pular cabeçalho
 
-        while (($row = fgetcsv($file)) !== false) {
+        while (($row = fgetcsv($file, null, ',', '"', '\\')) !== false) {
             $data = array_combine($headers, $row);
             $this->processar_linha_metrica($metricas, $data, $ao_detalhar);
         }

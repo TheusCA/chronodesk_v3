@@ -26,7 +26,7 @@ if (!$file) {
 }
 
 // Ler cabeçalho
-$headers = fgetcsv($file);
+$headers = fgetcsv($file, null, ',', '"', '\\');
 if (!$headers) {
     die("Arquivo CSV vazio ou inválido.\n");
 }
@@ -51,7 +51,7 @@ try {
     
     $stmt = $pdo->prepare($sql);
 
-    while (($row = fgetcsv($file)) !== false) {
+    while (($row = fgetcsv($file, null, ',', '"', '\\')) !== false) {
         // Combinar headers com valores
         if (count($headers) !== count($row)) {
             echo "Aviso: Linha com número de colunas incorreto. Pulando.\n";

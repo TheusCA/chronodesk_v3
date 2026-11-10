@@ -1131,8 +1131,26 @@ fputcsv($memory, $csvCells, ',', '"', '\\');
 rewind($memory);
 assert_same('"a\\"b",c;d,"e\\","f""g",x' . "\n", stream_get_contents($memory), 'fputcsv com virgula e escape explicito: igual a saida de antes');
 fclose($memory);
+// [pos-deploy A2b] Leitura: fgetcsv e str_getcsv tambem exigem o $escape no
+// PHP 8.4 (manual, migracao 8.4, "Deprecated Features", Standard e SPL). A
+// mesma linha do A2, lida com escape '\\' explicito, da o mesmo que a leitura
+// de hoje (referencia gravada com o padrao implicito do PHP 8.2). Inclusive a
+// peculiaridade de hoje: a celula que termina em barra invertida ("e\") e
+// lida grudada na seguinte. Escape '' mudaria a leitura (exige aprovacao).
+$csvReadExpected = ['a\"b', 'c;d', 'e\\"' . ',' . 'f""g"', 'x'];
+foreach ([';' => '"a\\"b";"c;d";"e\\";"f""g";x', ',' => '"a\\"b",c;d,"e\\","f""g",x'] as $separator => $csvLine) {
+    $expectedRow = $csvReadExpected;
+    $expectedRow[2] = 'e\\"' . $separator . 'f""g"';
+    $memory = fopen('php://memory', 'w+b');
+    fwrite($memory, $csvLine . "\n");
+    rewind($memory);
+    assert_same($expectedRow, fgetcsv($memory, null, $separator, '"', '\\'), "fgetcsv com '{$separator}' e escape explicito: igual a leitura de antes");
+    fclose($memory);
+    assert_same($expectedRow, str_getcsv($csvLine, $separator, '"', '\\'), "str_getcsv com '{$separator}' e escape explicito: igual a leitura de antes");
+}
 $csvCallsWithoutEscape = [];
 $csvCallCount = 0;
+$csvCallsByFunction = ['fputcsv' => 0, 'fgetcsv' => 0, 'str_getcsv' => 0, 'setCsvControl' => 0];
 $csvIterator = new RecursiveIteratorIterator(new RecursiveCallbackFilterIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS), static function (SplFileInfo $file): bool {
     return !in_array($file->getFilename(), ['.git', 'node_modules', 'vendor', 'frontend', 'scripts', '_referencias', 'app'], true);
 }));
@@ -1142,20 +1160,21 @@ foreach ($csvIterator as $csvFile) {
     }
     $source = (string)file_get_contents($csvFile->getPathname());
     $offset = 0;
-    while (preg_match('/\bfputcsv\s*\(/', $source, $match, PREG_OFFSET_CAPTURE, $offset) === 1) {
+    while (preg_match('/\b(fputcsv|fgetcsv|str_getcsv|setCsvControl)\s*\(/', $source, $match, PREG_OFFSET_CAPTURE, $offset) === 1) {
         $start = $match[0][1] + strlen($match[0][0]);
         $depth = 1;
         for ($i = $start; $i < strlen($source) && $depth > 0; $i++) {
             $depth += $source[$i] === '(' ? 1 : ($source[$i] === ')' ? -1 : 0);
         }
         $csvCallCount++;
+        $csvCallsByFunction[$match[1][0]]++;
         if (preg_match('/,\s*\'\\\\\\\\\'\s*\)$/', substr($source, $start, $i - $start)) !== 1) {
             $csvCallsWithoutEscape[] = str_replace('\\', '/', substr($csvFile->getPathname(), strlen($root) + 1)) . ':' . (substr_count(substr($source, 0, $start), "\n") + 1);
         }
         $offset = $i;
     }
 }
-assert_same([9, []], [$csvCallCount, $csvCallsWithoutEscape], 'fputcsv fora de scripts/: as 9 chamadas com o escape \'\\\\\' explicito (PHP 8.4)');
+assert_same([['fputcsv' => 9, 'fgetcsv' => 5, 'str_getcsv' => 0, 'setCsvControl' => 0], 14, []], [$csvCallsByFunction, $csvCallCount, $csvCallsWithoutEscape], 'CSV fora de scripts/: 9 fputcsv e 5 fgetcsv, todas com o escape \'\\\\\' explicito (PHP 8.4); nenhum str_getcsv nem setCsvControl');
 
 foreach ([
     'services/OperationalService.php',
