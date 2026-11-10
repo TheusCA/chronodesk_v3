@@ -1301,6 +1301,21 @@ Base da afirmação:
 
 ---
 
+### Pos-deploy 1, commit D: ID do funcionario gerado pelo banco — 2026-11-10
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Pedido da gestao: o ID do funcionario passa a ser gerado pelo banco (`AUTO_INCREMENT`, ja existente; servidor em 10/11/2026: proximo 334, maior 333, 30 cadastros), sem o campo na tela. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `a7912a4` (codigo, QAs e contrato da API) e o commit de docs dele (desenho 9.14.5 e esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `api/adicionar_funcionario.php`: INSERT sem a coluna `id`, em transacao; ID do `lastInsertId()` validado, na resposta (`funcionario.id`), na mensagem e na auditoria; `id` recebido ignorado (`FUNCIONARIO_ID_IGNORADO`, sem o valor); sem a checagem "ID ja existe"; ID acima de 999 desfaz e da 409 (`FUNCIONARIO_ID_FORA_DA_FAIXA`); `lastInsertId` invalido desfaz e da 500. `frontend/src/lib/formSchemas.ts` (`employeeCreateSchema` sem `id`), `frontend/src/lib/actionFeedback.ts` (`employeeCreatedFeedback`), `frontend/src/pages/AdminPage.jsx` (sem campo ID na criacao; ID so leitura na edicao; mensagem com o ID). QAs: `qa-security` (banco simulado com `lastInsertId` do caso, `commit`/`rollback` e coluna `id` do INSERT; 5 casos novos), `qa:employee-form`, roteiro de navegador e servidor simulado, e os 4 QAs que liam o texto antigo da criacao. `docs/API_CONTRACTS_FRONTEND.md`. |
+| **Decisoes de implementacao** | `id` recebido ignorado, nao recusado (cliente antigo nao quebra). 409 com rollback para ID acima de 999, porque o `config.php:825` levaria o cadastro para a memoria com ID 0. Mensagem de sucesso montada no cliente a partir de `funcionario.id`. Proposta de subir a faixa ate 2147483647 so com aprovacao (9.14.5, opcao (a) recomendada, sem urgencia). |
+| **Pendente com o responsavel** | Revisao. Decisao da faixa (a ou b). |
+| **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`) no `a7912a4` com saida 0: frontend 22/22, navegador 1029/1029, `qa-security OK`; e no `ea7e679` (docs do E) com saida 0. Mutacao 8/8 no worktree, com a trava dos scripts; um mutante que morreu por erro de sintaxe proprio foi refeito valido e morreu pela assercao certa. |
+| **Limitacoes declaradas** | INSERT, transacao e `lastInsertId` exercitados contra o banco simulado; o `AUTO_INCREMENT` real roda no deploy 2 (cadastro pela tela, roteiro do C). No InnoDB, cada 409 ou 500 consome um ID. |
+| **Validacao humana** | Pendente. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

@@ -4857,6 +4857,83 @@ A partir daqui, **bateria completa = `test-local.ps1 -SkipHttp -Browser`**. A tr
   - **2ª rodada, sozinha: saída 0.** Frontend 22/22, navegador 1026/1026.
   - **Risco registrado:** essa conferência pode falhar sob carga. Daqui em diante, a bateria completa roda sem nada pesado em paralelo.
 
+#### 9.14.5 Commit D: ID do funcionário gerado pelo banco (`a7912a4`, 2026-11-10; aguardando revisão)
+
+**Pedido da gestão.** O cadastro pedia o ID na tela, e o `api/adicionar_funcionario.php` gravava o ID recebido (faixa 1-999). A tabela `funcionarios` já tem `id INT AUTO_INCREMENT`. O servidor foi conferido em 10/11/2026, só contagens: `auto_increment`, próximo ID 334, maior ID 333, 30 cadastros, nenhum acima de 900.
+
+**D1. Criação no servidor.**
+- **INSERT sem a coluna `id`, numa transação.** O ID é o `lastInsertId()`, validado como inteiro maior que 0. Ele vai na resposta (`funcionario.id`), na `mensagem` ("Funcionário '...' adicionado com o ID N.") e na auditoria `FUNCIONARIO_ADICIONADO`.
+- **`id` recebido.** Vindo de um cliente antigo, é ignorado, não recusado. `FUNCIONARIO_ID_IGNORADO` registra só que o campo veio, sem o valor.
+- **Sai a checagem "ID já existe".** Ela só olhava a lista em memória e deixava o ID de um arquivado estourar como 500 na chave primária.
+- **Login AD de outro cadastro continua 400.**
+- **`lastInsertId` inválido** desfaz o INSERT e responde 500.
+- **Erro no meio** desfaz a transação, se ela estiver aberta.
+
+**D2. A faixa 1-999.**
+- **Proteção aplicada agora.** Um ID gerado acima de 999 desfaz o INSERT e responde **409** ("O banco gerou o ID N, acima da faixa aceita hoje (1 a 999). Nada foi gravado. Avise o administrador do sistema."). A auditoria registra `FUNCIONARIO_ID_FORA_DA_FAIXA`.
+- **Gasto de ID.** No InnoDB, o rollback não devolve o número do `AUTO_INCREMENT`: cada 409 ou 500 consome um ID.
+- **Proposta, para aprovação; nada aplicado.** Onde o limite vale hoje:
+
+| Onde | Efeito de um ID acima de 999 |
+|---|---|
+| `security.php:116`, `validate_funcionario_id` (`FILTER_VALIDATE_INT`, 1 a 999) | — |
+| `api/atualizar_funcionario.php:22`, `api/remover_funcionario.php:25`, `api/restaurar_funcionario.php:26` | O cadastro não pode ser editado, arquivado nem restaurado (400) |
+| `api/iniciar_pausa.php:23`, `api/finalizar_pausa.php:20`, `api/solicitar_pausa_com_aprovacao.php:22`, `api/aprovar_pausa.php:15`, `api/rejeitar_pausa.php:15` | O técnico não pausa, e a gestão não aprova nem rejeita a pausa dele |
+| **`config.php:825`** (`normalizar_funcionario_array`), chamada na carga do MySQL a cada requisição (`config.php:698`) e nos caminhos do `funcionarios.json` (`:719`, `:752`, `:860`) | **O cadastro entra na memória com ID 0:** pausas e status quebrados para ele. É o efeito mais grave e o motivo principal do 409 |
+| `frontend/src/lib/formSchemas.ts` (`employeeIdSchema`, `.max(999)`) | A edição pela tela recusa o ID |
+| `admin.php` e `static/js/admin.js` | Páginas legadas, já sem acesso (9.12); os arquivos saem no passo 5 da 9.12 |
+
+Já aceitam qualquer inteiro positivo, sem teto: o Mapa PA (`PaMapService::positiveInt`), escala, ausências e Visão Operacional. No banco, `funcionarios.id` é `INT` com sinal, até 2147483647.
+
+**Opções:**
+- **(a) Subir a faixa até 2147483647**, o máximo do `INT`, no `validate_funcionario_id` e no `employeeIdSchema`. É um commit pequeno, sem migration, com QA de borda (999, 1000, 2147483647, 2147483648). Faz o 409 do D2 virar só proteção contra um ID impossível.
+- **(b) Manter 999.** Restam 666 IDs a partir do 334, e o 409 protege.
+
+**Recomendação: (a)**, num commit próprio, quando for aprovada. Não há urgência; o 409 impede o dano até lá.
+
+**D3. Tela.**
+- Sem o campo ID em "Adicionar funcionário". A criação usa o `employeeCreateSchema`, o mesmo cadastro sem `id`; um `id` que chegue é descartado pelo Zod.
+- Na edição, o ID aparece só como texto (`data-employee-id-readonly`, não um input) e vai na requisição a partir do cadastro aberto.
+- A mensagem de sucesso traz o ID gerado (`employeeCreatedFeedback`: "Funcionário adicionado com o ID N."). Sem um ID válido na resposta, fica a mensagem de sempre.
+- Saem o `max="999"` da tela e a checagem local "Já existe um funcionário com este ID".
+- A tela legada não existe mais (retirada no deploy 1).
+
+**D4. Caminho em JSON.** A criação não grava no `funcionarios.json` nem no `estado.json` (o L-11 do F4 já tirava o `salvar_estado()`). O cadastro em memória recebe o ID do banco. O `salvar_funcionarios_sistema()` só roda na carga inicial, com o MySQL e o JSON vazios (`config.php:637`, a semeadura do M7), não na criação. Nada gera ID no JSON.
+
+**D5. QA.**
+- **`qa-security`:** o banco simulado passou a devolver o `lastInsertId` do caso, a registrar `commit` e `rollback` (só com `db['log_tx']`) e a marcar se o INSERT leva a coluna `id`. Casos:
+  - criação sem `id` (200, `funcionario.id` 334 na resposta e na mensagem, INSERT sem a coluna, auditoria com o ID, `commit`);
+  - `id` 77 ignorado (ID 335, `FUNCIONARIO_ID_IGNORADO` sem o 77);
+  - ID gerado 1000 (409, `rollback` sem `commit`, sem `FUNCIONARIO_ADICIONADO`, com `FUNCIONARIO_ID_FORA_DA_FAIXA`);
+  - `lastInsertId` 0 (500 e `rollback`);
+  - login AD de um cadastro ativo (400, nada gravado);
+  - o código sem a checagem "ID já existe".
+
+  As expectativas antigas, com o ID do corpo (901 a 903), passaram a esperar o ID do banco.
+- **`qa:employee-form`:** schema de criação sem ID, com um `id` estranho descartado; mensagem com o ID; tela de criação sem campo ID; edição com o ID só como texto; sem `register('id')`, `max="999"` nem a checagem de ID repetido.
+- **Roteiro de navegador:** criação sem campo ID, corpo enviado sem `id`, aviso com o ID devolvido pelo servidor simulado, edição sem input de ID. Passou de 1026 para 1029 conferências.
+- **Outros QAs:** os quatro que liam o texto antigo da criação (`qa:action-feedback`, `qa:action-runner`, `qa:unsaved-changes`, `qa:forms`) foram ajustados à forma nova. Quem pegou as falhas foi a bateria completa do E: o `test-local` sem o frontend não as teria visto.
+- **Contrato:** `docs/API_CONTRACTS_FRONTEND.md`, na linha do cadastro.
+
+**Validação executada pela IA:**
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, no worktree, sozinha):
+  - `a7912a4`: saída 0, `frontend: 22 scripts npm rodados (...): 22 OK, 0 com falha`, navegador 1029/1029, `qa-security OK`;
+  - `ea7e679` (docs do E): saída 0, frontend 22/22, navegador 1026/1026.
+- **Mutação 8/8, no worktree, com a trava dos scripts:**
+  - o INSERT voltando a usar o `id` recebido;
+  - sem o rollback no 409;
+  - sem a checagem da faixa;
+  - a auditoria com o valor do `id` recebido;
+  - a resposta sem `funcionario.id`;
+  - o campo ID de volta no formulário;
+  - a mensagem sem o ID gerado;
+  - a criação mandando `id` de novo.
+- **Mutante refeito.** Na 1ª rodada, "a auditoria com o valor do `id` recebido" morreu por erro de sintaxe que o próprio mutante criou (aspas desbalanceadas), não pela asserção do caso. Foi refeito com sintaxe válida (`php -l` sem erro) e morreu pela asserção "auditoria sem o valor recebido".
+
+**Limitações declaradas:**
+- O INSERT, a transação e o `lastInsertId` rodaram contra o banco simulado, não contra o MySQL.
+- O `AUTO_INCREMENT` real e o rollback do InnoDB não foram exercitados aqui. Eles rodam no deploy 2, pelo cadastro na tela (roteiro do C).
+
 ---
 
 ## 10. Riscos e pendências
