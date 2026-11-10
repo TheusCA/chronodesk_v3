@@ -4748,6 +4748,31 @@ O escape `'\\'` é o padrão implícito de hoje. O QA compara a saída com a de 
 
 **Limitações declaradas:** o caso com `ZipArchive` rodou na estação com a extensão carregada de propósito. No PHP 8.4 do servidor, ele roda no próximo ensaio de código.
 
+**Revisão (2026-11-10):** commit A aprovado. Decisões:
+1. Leitura de CSV com o mesmo tratamento, num commit A2b antes do B (9.14.2).
+2. A entrada opcional `@rolldown/binding-android-arm-eabi` no lockfile aceita.
+
+#### 9.14.2 Commit A2b: `fgetcsv` com escape explícito (`24dd59b`, 2026-11-10; aguardando revisão)
+
+**Documentação oficial.** O manual do PHP, na página de migração para o 8.4 ("Deprecated Features"), diz em **Standard** que usar o padrão do parâmetro `escape` em `fputcsv()`, `fgetcsv()` e `str_getcsv()` está depreciado e que ele deve ser passado explicitamente. Em **SPL**, diz o mesmo para `SplFileObject::setCsvControl()`, `::fputcsv()` e `::fgetcsv()`; esses dois últimos ficam fora quando o `setCsvControl()` definiu o padrão.
+
+**Levantamento fora de `scripts/`:**
+- 5 `fgetcsv`. Quatro estavam sem o `escape`: `classes/GerenciadorPausas.php:666` e `:668`, que leem o CSV de pausas quando o banco falta, e `migrar_csv_para_mysql.php:29` e `:54`. O `services/SpreadsheetImportService.php:72` já era explícito.
+- Nenhum `str_getcsv`, nenhum método de CSV do `SplFileObject`.
+
+**Correção.** As quatro chamadas passam `null, ',', '"', '\\'`, que são os padrões de hoje: comprimento sem limite, vírgula, aspas e escape barra invertida. O `migrar_csv_para_mysql.php` é guardado com CRLF no repositório. A mudança preserva o CRLF, e o diff tem só as duas linhas; o `git diff --check` acusa o CR do próprio arquivo e passa com `core.whitespace=cr-at-eol`.
+
+**QA (`qa-security`):**
+- A mesma linha do A2, nos separadores `;` e `,`, lida por `fgetcsv` e `str_getcsv` com escape explícito, dá o mesmo que a leitura de hoje. A referência foi gravada com o padrão implícito do PHP 8.2, antes da mudança.
+- A trava passa a contar `fputcsv` (9), `fgetcsv` (5), `str_getcsv` (0) e `setCsvControl` (0), todas com o escape `'\\'` explícito.
+
+**Achado registrado (comportamento de hoje, preservado).** Com o escape `'\\'`, uma célula que termina em barra invertida é lida grudada na seguinte. A linha do A2 grava `e\` como `"e\"`, e a leitura devolve `e\",f""g"` numa célula só; o escape `''` leria certo. Mudar isso muda a leitura dos CSVs já gravados (o de pausas, quando o banco falta) e exige aprovação. Fica como proposta, sem prazo.
+
+**Validação executada pela IA:**
+- `qa-security OK`.
+- **Mutação 3/3:** o `GerenciadorPausas.php:668` de volta ao padrão implícito; o escape vazio no `migrar_csv_para_mysql.php:29`; um `str_getcsv` novo sem escape. Os três reprovam na trava de contagem.
+- `test-local.ps1 -SkipHttp -Browser` no `24dd59b`: no resumo da entrega (rodado depois do commit).
+
 ---
 
 ## 10. Riscos e pendências

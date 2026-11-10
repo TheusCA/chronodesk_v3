@@ -1240,6 +1240,21 @@ Base da afirmação:
 | **Pendente com o responsavel** | Revisao. Fora do pedido: `fgetcsv` sem `$escape` em `classes/GerenciadorPausas.php:666` e `:668` e em `migrar_csv_para_mysql.php` (a confirmar na documentacao do PHP 8.4 se a depreciacao tambem os alcanca). O lockfile tem uma entrada nova opcional de plataforma (`@rolldown/binding-android-arm-eabi`, nao instalada em x64). |
 | **Validacao executada pela IA** | `test-local.ps1 -SkipHttp -Browser` com saida 0 no `28fb746` (worktree separado, `npm ci` limpo): lint, smoke, QAs PHP (`qa-security OK`, trava com 291) e navegador 1026/1026. `qa-security` com e sem `ZipArchive` (extensao da estacao carregada so no teste, por `PHP_INI_SCAN_DIR` temporario). Mutacao 8/8 (A1: `json_encode` puro, o obrigatorio, reprova com ZIP; pai sem decodificar; `Content-Type` errado; leitura HTTP sem `Content-Type`; mensagem do 503 trocada. A2: escape vazio no `csvRow`; chamada sem escape explicito; escape vazio no `config.php`). `gitleaks` nos modos `git` e `dir` sem achado. `npm audit` com 0; build e `qa:bundle` OK. Desenho 9.14.1 (commit de docs). |
 | **Limitacoes declaradas** | O caso com `ZipArchive` rodou na estacao com a extensao carregada de proposito; no servidor (PHP 8.4) roda no proximo ensaio de codigo. O fingerprint da arvore e por linha: se o `QA_PASSWORD` mudar de linha, o `gitleaks dir` volta a acusar. |
+| **Validacao humana** | Aprovado em 2026-11-10, com o A2b (leitura de CSV) antes do B e a entrada opcional do lockfile aceita. |
+
+---
+
+### Pos-deploy 1, commit A2b: fgetcsv com escape explicito — 2026-11-10
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Decisao da revisao do commit A: o mesmo tratamento do A2 na leitura de CSV, confirmado na documentacao oficial do PHP 8.4 (migracao, "Deprecated Features": `fputcsv`, `fgetcsv` e `str_getcsv` em Standard; os metodos de CSV do `SplFileObject` em SPL). |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `24dd59b` (codigo) e o commit de docs dele (desenho 9.14.2 e esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `classes/GerenciadorPausas.php:666` e `:668` e `migrar_csv_para_mysql.php:29` e `:54`: `fgetcsv` com `null, ',', '"', '\\'` (os padroes de hoje). `scripts/qa-security.php`: leitura da linha do A2 por `fgetcsv` e `str_getcsv` contra a leitura de antes; a trava conta `fputcsv` 9, `fgetcsv` 5, `str_getcsv` 0 e `setCsvControl` 0, todas com o escape explicito. |
+| **Decisoes de implementacao** | Escape `'\\'`, leitura identica a de hoje. O `migrar_csv_para_mysql.php` e CRLF no repositorio: a mudanca preserva o fim de linha (diff so nas duas linhas). |
+| **Pendente com o responsavel** | Revisao. Achado preservado: com o escape `'\\'`, a celula que termina em barra invertida e lida grudada na seguinte; o escape `''` leria certo, mas muda a leitura dos CSVs ja gravados (proposta, sem prazo). |
+| **Validacao executada pela IA** | `qa-security OK`. Mutacao 3/3 (`GerenciadorPausas.php:668` sem escape; escape vazio no `migrar_csv_para_mysql.php:29`; `str_getcsv` novo sem escape). `test-local.ps1 -SkipHttp -Browser`: no resumo da entrega. |
+| **Limitacoes declaradas** | A leitura do CSV de pausas so roda quando o banco falta; o QA prova a funcao com a mesma linha, nao esse caminho de ponta a ponta. |
 | **Validacao humana** | Pendente. |
 
 ---
