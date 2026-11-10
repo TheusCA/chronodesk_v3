@@ -206,6 +206,58 @@ if (!$node) {
     Pass "node --check concluido"
 }
 
+# [pos-deploy 1, 9.14.4] Frontend na bateria completa: lint, typecheck, build e
+# todos os qa:* do frontend/package.json (lidos do arquivo, nao de uma lista
+# fixa). Qualquer um com falha reprova; a linha de resumo diz quantos rodaram.
+Write-Section "Frontend (npm: lint, typecheck, build e qa:*)"
+$npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+if (!$npm) {
+    $npm = Get-Command npm -ErrorAction SilentlyContinue
+}
+$frontendRoot = Join-Path $repoRoot "frontend"
+if (!$node -or !$npm) {
+    Fail "Node.js ou npm nao encontrado; o frontend faz parte da bateria completa"
+} elseif (!(Test-Path (Join-Path $frontendRoot "node_modules"))) {
+    Fail "frontend\node_modules ausente; rode 'npm ci' em frontend antes da bateria"
+} else {
+    $packageJson = Get-Content -Raw -Encoding UTF8 (Join-Path $frontendRoot "package.json") | ConvertFrom-Json
+    $scriptNames = @($packageJson.scripts.PSObject.Properties.Name)
+    $qaScripts = @($scriptNames | Where-Object { $_ -like "qa:*" })
+    $baseScripts = @("lint", "typecheck", "build")
+    foreach ($name in $baseScripts) {
+        if ($scriptNames -notcontains $name) {
+            Fail "frontend\package.json sem o script '$name'"
+        }
+    }
+    $npmScripts = @($baseScripts | Where-Object { $scriptNames -contains $_ }) + $qaScripts
+    $npmPassed = 0
+    $npmFailed = @()
+    # No PowerShell 5.1, stderr de comando nativo com 'Stop' vira excecao; os
+    # avisos do npm e do Vite vao para o stderr sem ser falha.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    Push-Location $frontendRoot
+    try {
+        foreach ($name in $npmScripts) {
+            $output = & $npm.Source run -s $name 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $npmFailed += $name
+                Write-Host (($output | Select-Object -Last 20 | ForEach-Object { "$_" }) -join [Environment]::NewLine)
+                Fail "npm run $name falhou"
+            } else {
+                $npmPassed++
+            }
+        }
+    } finally {
+        Pop-Location
+        $ErrorActionPreference = $previousPreference
+    }
+    Write-Host "frontend: $($npmScripts.Count) scripts npm rodados (lint, typecheck, build e $($qaScripts.Count) qa:*): $npmPassed OK, $($npmFailed.Count) com falha"
+    if ($npmFailed.Count -eq 0 -and $npmPassed -eq $npmScripts.Count) {
+        Pass "Frontend: os $($npmScripts.Count) scripts npm passaram"
+    }
+}
+
 Write-Section "Whitespace diff"
 & git diff --check
 if ($LASTEXITCODE -ne 0) {

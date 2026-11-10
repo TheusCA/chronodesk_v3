@@ -560,6 +560,22 @@ $localQaNames = array_values(array_unique($localQas[1]));
 sort($linuxQaNames);
 sort($localQaNames);
 assert_same([$repoQaNames, $repoQaNames], [$linuxQaNames, $localQaNames], 'test-linux.sh e test-local.ps1: rodam todos os QAs PHP do repositorio (QA novo entra nos dois)');
+// [pos-deploy 1, 9.14.4] O test-local.ps1 e a bateria completa: roda tambem o
+// frontend (lint, typecheck, build e todos os qa:* lidos do package.json, nao
+// de uma lista fixa), reprova se qualquer um falhar e diz quantos rodaram. A
+// secao fica fora do -SkipHttp (no nivel de cima do script).
+$testLocal = str_replace("\r\n", "\n", $readOptional($root . '/scripts/test-local.ps1'));
+$frontendPackage = json_decode($readOptional($root . '/frontend/package.json'), true);
+$frontendQaCount = count(array_filter(array_keys($frontendPackage['scripts'] ?? []), static fn (string $name): bool => strpos($name, 'qa:') === 0));
+assert_same([true, true, true, true, true, true], [
+    strpos($testLocal, "\nWrite-Section \"Frontend (npm: lint, typecheck, build e qa:*)\"\n") !== false,
+    strpos($testLocal, '$packageJson = Get-Content -Raw -Encoding UTF8 (Join-Path $frontendRoot "package.json") | ConvertFrom-Json') !== false,
+    strpos($testLocal, '$qaScripts = @($scriptNames | Where-Object { $_ -like "qa:*" })') !== false && strpos($testLocal, '$baseScripts = @("lint", "typecheck", "build")') !== false,
+    strpos($testLocal, '$output = & $npm.Source run -s $name 2>&1') !== false && strpos($testLocal, 'Fail "npm run $name falhou"') !== false,
+    strpos($testLocal, 'Write-Host "frontend: $($npmScripts.Count) scripts npm rodados (lint, typecheck, build e $($qaScripts.Count) qa:*): $npmPassed OK, $($npmFailed.Count) com falha"') !== false,
+    strpos($testLocal, 'Fail "Node.js ou npm nao encontrado; o frontend faz parte da bateria completa"') !== false && strpos($testLocal, 'Fail "frontend\\node_modules ausente;') !== false,
+], 'test-local.ps1: frontend na bateria (lint, typecheck, build e os qa:* do package.json), falha em qualquer um, resumo com a contagem');
+assert_same(true, $frontendQaCount >= 19 && strpos($testLocal, 'Write-Section "Frontend') < strpos($testLocal, 'Write-Section "Navegador'), 'test-local.ps1: frontend antes do navegador, com os qa:* do package.json (19 hoje, 22 scripts no total)');
 
 // ----------------------------------------------------------------------------
 // 13. Folha de execucao do dia: os mesmos comandos do roteiro, na mesma ordem
