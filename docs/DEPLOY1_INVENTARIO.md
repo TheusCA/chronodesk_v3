@@ -82,7 +82,7 @@ Migrations **fora** do deploy 1: a 013 (dispensada; Q3 e Q4 de 2026-10-07 em 0),
 
 ## 4. `.env` e preflight
 
-Nada é trocado no `.env` pelo roteiro, além do `APP_ENV` (NN7, passo 3b) e do interruptor do degrau 1. O preflight (`scripts/preflight-deploy.sh`, novo desde o `596db67`; commits `11a9729`, `5f5a5c1`, `91a57a6`, `9ef9cd5`, `f204ca6`, `2c1d457`) é lido do commit gravado e reprova o que impediria a subida.
+Nada é trocado no `.env` pelo roteiro, além do `APP_ENV` (NN7, passo 3c, depois do preflight do 3b; C1 da auditoria pré-deploy) e do interruptor do degrau 1. O preflight (`scripts/preflight-deploy.sh`, novo desde o `596db67`; commits `11a9729`, `5f5a5c1`, `91a57a6`, `9ef9cd5`, `f204ca6`, `2c1d457`) é lido do commit gravado e reprova o que impediria a subida.
 
 | Variável | Commit | Efeito no código novo | Preflight |
 |---|---|---|---|
@@ -98,6 +98,21 @@ Nada é trocado no `.env` pelo roteiro, além do `APP_ENV` (NN7, passo 3b) e do 
 | `FORCE_HTTPS` | `55628bf` | Ligado sem vhost HTTPS: 301 em loop | `:135` FALHA se ligado |
 | `APP_ENV` (`staging` → `production`, NN7) | — | Em `production`, a aplicação não sobe sem `SECRET_KEY` válida (`config.php:94`) | Não confere a chave: 0j |
 | `SESSION_COOKIE_SECURE`, `APP_BASE_URL` | `0565100`, `147aebc` (só o exemplo) | Valem como hoje no servidor | — |
+
+### 4.1 `sudo` com `Defaults noexec` (achado do responsável em 2026-11-10)
+
+O `/etc/sudoers` da VM (linha 3) tem `Defaults noexec`: todo programa chamado por `sudo` fica impedido de executar outro programa. O responsável mediu: `awk` e `sudo awk` funcionam; `sudo sh -c 'awk ...'` dá `awk: Permission denied`; `sudo npm ping` dá `/usr/bin/env: node: Permission denied`; o preflight por `sudo sh -s` deu `FALHA` falsa em tudo. Como root, sem `sudo` (`sudo -i`), o preflight deu `RESULTADO=0` e o `npm ping`, `PONG` em 334 ms (`node` v22.23.4, `npm` 10.9.9). O sudoers **não muda** (endurecimento da VM).
+
+**Efeito no roteiro anterior** (o responsável apontou backup, migrations, ensaio de código e build; conferido comando a comando no texto do roteiro):
+- **Falhariam com certeza** (o programa chamado por `sudo` executa outro):
+  - o backup do dia: `sudo tar -czf` executa o `gzip`, e `sudo sh -c` executa o `sha256sum`;
+  - os 14 ensaios das migrations da véspera: `sudo env ... bash`;
+  - o ensaio de código: `sudo -u www-data php`, com o `qa-security` abrindo um PHP filho, e `find -exec sudo ...`;
+  - o preflight (`sudo sh -s`) e o build (`sudo npm ci`, que executa o `node`);
+  - o `sudo sh -c` do 0l.
+- **Provável:** a aplicação das migrations no dia (`bash -o pipefail -c 'sudo git show ... | docker exec ...'`). O `bash` não está sob `sudo`, mas o `git show` sob `noexec` não foi medido. O responsável a registrou como falha (`sudo bash -c`); com o shell root, a dúvida deixa de existir.
+
+**Como fica:** na véspera e no dia, um shell root aberto com `sudo -i`; nenhum comando do roteiro leva `sudo`; o que roda como `www-data` usa `runuser -u www-data --`. A conferência do ambiente (item 00 da véspera e passo 1 do dia) mostra `OK` ou `BLOQUEADO` para `id -u`, `bash -c`, `tar` com `gzip`, `find -exec`, `runuser ... php -v`, PHP filho por `proc_open` como `www-data`, `npm -v` e `git` no clone. A trava reprova `sudo` em qualquer comando do roteiro e da folha (desenho 9.13.7).
 
 ## 5. Dependências
 

@@ -4596,6 +4596,107 @@ O 1,8 MB confirma a premissa: o tempo é o de ler as saídas. A conclusão sobre
 - Com o `DROP` na véspera, repetir um ensaio no dia exige uma cópia nova (TT1).
 - `gitleaks`, PHPStan e Psalm ausentes na estação; varredura manual do diff sem segredo nem dado pessoal.
 
+#### 9.13.7 Auditoria independente pré-deploy: C1 a C3, A2, A3, M1 e risco 5 no roteiro; `sudo` com `noexec` no servidor (2026-11-10; aguardando revisão)
+
+**Auditoria.** `docs/AUDITORIA_PRE_DEPLOY1.md` (2026-11-09, sobre o `783ddc4`, só leitura do repositório). Veredito: o deploy de 11/11 pode seguir, com três correções de procedimento (C1, C2, C3) antes da véspera. Nenhum bloqueador de código no que foi lido. O responsável conferiu a C1 no código (`config.php:126` aplica as travas com qualquer `APP_ENV` diferente de `development`) e pediu, num commit só, as correções no roteiro, na folha e na trava.
+
+**O que mudou** (`DEPLOY_LINUX.md`, deploy 1; folha regenerada, 130 → 140 comandos com a conferência do ambiente; trava com 291 verificações):
+- **C1.** O preflight passa a ser o **3b**, antes da troca do `APP_ENV` (agora **3c**). A frase "vale na recarga do 6e" foi corrigida: o valor vale na hora, com o `596db67` no ar (`load_env()` a cada requisição). O 3c pede o comando de volta pronto e a conferência do portal de uma estação logo depois. Na véspera, o **0r** roda o preflight do commit validado contra o `/var/www/.env` real (só leitura).
+- **C2.** Cópia do `app/` no **3a** (`cp -a`, conferida com `diff -rq`, sem sobrescrever outra). No **degrau 2**, o `app/` volta dessa cópia, sem `npm`: o build retirado vai para `/var/backups`, nada é apagado. O 6e ganhou o `PARE` para falha de rede (não só `ENOSPC`). O 0r confere o `npm ping`.
+- **C3.** Teste de fumaça no **6f**, entre a validação e a reabertura, pelo loopback (passa pela manutenção). Ele faz login de admin, `GET` de `status.php`, `schedules.php`, `pa_map.php` e `absences.php`, lança e cancela uma folga de teste e confere o log de erros do PHP sem linha nova além da do login. Fica no script versionado `scripts/smoke-deploy1.sh`, que só imprime códigos e contagens. Sem `FUMACA OK`, não há reabertura (regra de parada nova).
+- **A2.** Segundo `mysqldump` logo depois do `merge` (6b), com o portal parado, antes do corte do BIZ-02 e da 016b. É o ponto de restauração preferido (8c).
+- **A3.** No degrau 2, o `DROP` da fotografia do BIZ-02 só roda com `biz02_correcao = 0`. Com `1`, para sem apagar nada: o script 4 do BIZ-02 vem antes.
+- **M1.** `/var/backups/chronodesk` criado no 1º comando do passo 2, antes de gravar o `deploy1-commit`.
+- **Risco 5.** Espera de 10 s antes do corte do BIZ-02, no mesmo comando do segundo dump.
+- **A1, no aviso.** O aviso já não diz que técnicos e leitura deixam de ver todos os textos livres. Diz que a observação das exceções da Escala presencial continua visível a todos os perfis e pede que não se escreva informação pessoal nela.
+- **0r na véspera, só contagens** (A CONFIRMAR da auditoria): M9 (admin com rótulo antigo de equipe), C3 (`ad_login_ativo`, que só existe no `database_SECURED.sql` e em nenhuma migration, e o tamanho de `audit_log.username`), risco 6 (cron e timers) e A1 (exceções com observação, por tipo). Ainda no 0r, o caminho do log de erros do PHP: o `PHP_ERROR_LOG` do `.env` vence (`config.php:64-66`); é o marcador `<log de erros do PHP>` do 6f.
+
+**Achado crítico no servidor (lido pelo responsável em 2026-11-10; no mesmo commit).** O `/etc/sudoers:3` tem `Defaults noexec`: todo programa chamado por `sudo` fica impedido de executar outro programa.
+- **Provas:**
+  - `awk` direto e `sudo awk` funcionam;
+  - `sudo sh -c 'awk ...'` dá `awk: Permission denied`;
+  - `sudo npm ping` dá `/usr/bin/env: node: Permission denied`;
+  - o preflight por `sudo sh -s` deu `FALHA` falsa em tudo.
+- **Como root, sem `sudo` (`sudo -i`):** preflight com `RESULTADO=0` e `npm ping` com `PONG` em 334 ms (`node` v22.23.4, `npm` 10.9.9).
+- O sudoers **não será alterado** (endurecimento da VM).
+
+**Efeito: com o roteiro anterior, teriam falhado:**
+- o backup do dia (`sudo tar -czf` executa o `gzip`; `sudo sh -c` executa o `sha256sum`);
+- os ensaios das migrations (`sudo env ... bash`);
+- o ensaio de código (`sudo -u www-data php`, com o `qa-security` abrindo um PHP filho por `proc_open`; `find -exec sudo ...`);
+- o preflight (`sudo sh -s`) e o build (`sudo npm ci`).
+
+A aplicação das migrations no dia (`bash -c` com `sudo git show` dentro) o responsável também registrou como falha; o `git show` sob `noexec` não foi medido, e o shell root elimina a dúvida. Detalhe no inventário, seção 4.1.
+
+**Correção:**
+- Na véspera e no dia, o operador abre um shell root com `sudo -i`, e todos os comandos rodam nele, **sem `sudo`**. Os 90 comandos que tinham `sudo` foram conferidos um a um, e saíram 242 ocorrências no trecho do deploy 1.
+- O que roda como `www-data` usa `runuser -u www-data --`, que não passa pelo sudoers: o QA do fuso no 6f, o `php -l` e os QAs do ensaio de código.
+- **Conferência do ambiente**, com saída só de `OK` ou `BLOQUEADO`, em dois lugares: no item **00**, primeiro comando da véspera, e de novo no **passo 1** do dia, com o mesmo comando. Confere:
+  - `id -u = 0`;
+  - `bash -c`, `tar` com `gzip` e `find -exec`;
+  - `runuser -u www-data -- php -v`;
+  - um PHP filho aberto por `proc_open([PHP_BINARY, ...])` como `www-data`, o mesmo mecanismo do `qa-security` (`scripts/qa-security.php:1168-1179`, sem shell);
+  - `npm -v`, que executa o `node`, e o `git` no clone.
+
+  Qualquer `BLOQUEADO` é PARE.
+- A trava reprova `sudo` em qualquer comando do roteiro e da folha, e exige a conferência como 1º comando da véspera e de novo no dia, idêntica.
+
+**Decisões de implementação (UU1 a UU9, a aprovar):**
+
+| # | Decisão | Motivo |
+|---|---|---|
+| UU1 | **Os passos trocam de letra**: 3b = preflight, 3c = `APP_ENV` | Manter "3c antes do 3b" confundiria o operador. As referências ao 3b do `APP_ENV` foram ajustadas no roteiro, na folha e no inventário (seção 4) |
+| UU2 | **O preflight da véspera e as contagens ficam num item novo, o 0r**, depois do 0q | O preflight precisa do `<commit validado na estacao>`, conhecido só no 0o. O 0r junta o que veio da auditoria, sem mexer nos itens já aprovados |
+| UU3 | **A cópia do `app/` fica no 3a**, junto da cópia do `.htaccess` e do ponto de rollback; a volta, no degrau 2, usa `mv` do build no ar para `/var/backups` e `cp -a` da cópia | É "antes do 6b", como pedido, e agrupa os pontos de volta. Sem `rm`: a trava continua com só quatro remoções no roteiro, e o build retirado fica para análise (limpeza no 9e) |
+| UU4 | **A espera de 10 s fica logo depois do `merge`, não antes**, no comando do segundo dump e antes do corte do BIZ-02 | **Diverge da letra do pedido** ("depois de ligar a manutenção, antes do merge"). O arquivo-sinal é criado antes do `merge`, mas a regra da manutenção só existe no `.htaccess` novo: antes do `merge`, nenhuma requisição é barrada, e uma espera ali não protege nada. O risco 5 da auditoria pede a espera antes do 6c, como no procedimento original do BIZ-02. Se o responsável preferir a letra, é uma linha |
+| UU5 | **O segundo dump leva também o `estado.tar.gz`** e o `SHA256SUMS`, no mesmo formato do 3d | A "Restauração em Incidente" lê esse formato, e o estado das pausas para de mudar com a manutenção |
+| UU6 | **O teste de fumaça é um script versionado**, não uma linha do roteiro, e roda como root no shell do `sudo -i` (`env PHPLOG=... bash`) | O fluxo tem sessão, token CSRF, quatro leituras e duas gravações. Numa linha de comando seria ilegível, e a fadiga do operador é o risco 9 da auditoria. No script, a senha não vai para o argv (JSON montado pelo `php` com variável de ambiente; corpo por `--data-binary @-`), e cookie e token ficam num `mktemp -d` apagado na saída. Como root, o script lê o log do PHP |
+| UU7 | **A folga de teste fica no cadastro do próprio admin, daqui a 30 dias, sem observação**; o registro fica como cancelado | Não mexe na escala de ninguém nem no dia de hoje. A verificação da 012 passa a dar `linhas = 1` no 7a, e o degrau 3 da 012 aceita essa linha (antes exigia `0`) |
+| UU8 | **O log do PHP conta as linhas novas fora a `[AUTH_AD] Login bem-sucedido`** | O `auth_ldap.php` grava uma linha por login (M11, que fica para depois). Sem a exceção, o teste nunca daria `0` |
+| UU9 | **A mensagem de `PARE` do A3 não cita o arquivo do script 4** ("script 4 do BIZ-02") | A trava proíbe `biz02_02` a `biz02_04` em comandos do dia (só o script 1 roda no dia). O texto em volta aponta a seção 9 do BIZ-02 |
+| UU10 | **A conferência do ambiente roda também no dia** (passo 1), igual à da véspera | O pedido citava a véspera. O dia é outro shell `sudo -i`, e um `BLOQUEADO` lá precisa aparecer antes do 1º comando que altera algo. A trava exige os dois iguais |
+| UU11 | **A conferência tem dois itens além dos pedidos**: o PHP filho por `proc_open` como `www-data` e o `git` no clone | O 1º prova, no servidor, o mecanismo que o `qa-security` usa ("confira que o qa-security consegue abrir o PHP filho"). O 2º pega a recusa do `git` por dono do clone, se houver: o roteiro inteiro usa o `git` como root |
+| UU12 | **Os testes da conferência não criam arquivo**: `tar` com `gzip` por pipe (`tar -czf - ... \| tar -tzf -`) e `find -exec echo` sobre `/etc/hostname` | Sem arquivo temporário não há `rm`, e a trava continua com só quatro remoções |
+| UU13 | **O `BLOQUEADO` do `id -u` não cita o `sudo -i`** | A trava reprova a palavra `sudo` em qualquer comando. A instrução do `sudo -i` fica na prosa do roteiro e no topo da folha |
+
+**O que NÃO entra agora: pendências priorizadas para depois do deploy:**
+
+| Prioridade | Achado | O que é | Esforço |
+|---|---|---|---|
+| 1 | **C4** | Senha do AD em HTTP e LDAP sem TLS. Antes do deploy: registrar o aceite de risco por quem responde por segurança, com prazo. Depois: vhost HTTPS, `SESSION_COOKIE_SECURE`, HSTS e LDAPS ou StartTLS | A |
+| 1 | **A1 (código)** | O `GET` da escala entrega `ad_login`, autores e a observação das exceções a qualquer perfil. Passar o ator a `scheduleData()`, como em `listOncall()`. O 0r mede quantas exceções têm observação | B |
+| 1 | **A4** | `PDOException` vira "banco indisponível" 503 e o log não grava a mensagem. Logar `getMessage()` sem dados de entrada e separar conexão de consulta | B |
+| 2 | **M7** e **M8** | Semeadura automática de 17 cadastros com nomes reais no código e no histórico do git | B |
+| 2 | **M11** | O login digitado vai para o log do PHP em todo login | B |
+| 2 | **M10** | `audit_log.username` com 50 caracteres; o login aceita 100 | B |
+| 2 | **M3** | Exceção de escala em data passada sem a permissão de retroativo: aplicar ou registrar a decisão | B |
+| 3 | **A5** | Testes de integração contra MySQL real (login, escala, ausência, Mapa PA) | A |
+| 3 | **M13** e **M12** | CI mínimo (`php -l`, QAs, `eslint`, `tsc`, `npm audit`, `gitleaks`); confirmar o suporte do MySQL 8.0 e planejar a 8.4 LTS | M / A |
+| 3 | **M4** | `portal_sync_queue` copia texto livre pessoal, sem consumidor nem retenção (ligada à 17h) | M |
+| 3 | **M5** e **M6** | Sem controle otimista; banco sem CHECK de período e jornada, `equipe` livre (a M9 é um caso dela) | M |
+
+Fora do pedido e sem decisão: M2 (quem valida cada perfil no 7i), M14 (senha do root no argv do `docker exec`), M15 (frase do aviso sobre datas de aprovação antes da correção histórica) e os baixos B1 a B14. Ficam para o responsável decidir.
+
+**Validação executada pela IA:**
+- `qa-deploy-runbook.php` com saída 0: **291 verificações** (eram 263).
+- **Mutação 16/16** nas travas da auditoria, numa cópia mínima da árvore:
+  - os mutantes: preflight depois do `APP_ENV`, frase antiga, sem preflight na véspera, sem `install -d`, sem cópia do `app/`, degrau 2 com `npm ci`, sem espera, sem dump em manutenção, `DROP` sem condição, sem fumaça, aviso antigo, sem `PARE` de rede, sem M9, sem cron, senha no argv do `curl` e fumaça sem cancelar;
+  - um mutante sobreviveu na 1ª rodada (senha na linha de continuação do `curl`), e a trava foi corrigida;
+  - depois da troca do `sudo`, os padrões dos mutantes perderam o `sudo`, e a bateria foi repetida: de novo 16/16.
+- **Mutação 8/8** nas travas do `sudo`: `sudo` de volta no backup, no build e no ensaio (`sudo -u www-data`), conferência ausente na véspera, conferência do dia diferente, sem o teste do `proc_open`, sem a regra do shell root, folha com `sudo`.
+- **`bash -n` dos 137 comandos Linux do roteiro**: todos com saída 0. `git diff --check` com saída 0.
+- **Conferência do ambiente executada na estação** (Git Bash, sem root): sintaxe válida e saída com `BLOQUEADO` e `PARE` onde o ambiente não atende, como esperado. O trecho do `proc_open` imprime `ok` com o PHP da estação.
+- **`scripts/smoke-deploy1.sh` contra um portal simulado** (`php -S` com roteador de teste, fora do repositório): caminho feliz com `FUMACA OK`, linha nova no log com `PARE`, senha com aspas e barra invertida transmitida certa, diretório temporário apagado nos dois casos.
+- Referências "comando N" da folha renumeradas por script (130 → 140) e conferidas nos pontos sensíveis (`fetch` só até o 50, "pule o comando 58" é o `APP_ENV`, "rode o 127 antes do 129").
+
+**Limitações declaradas:**
+- Nada foi executado no servidor nem em MySQL.
+- O teste de fumaça nunca rodou contra o PHP real nem contra o AD: o simulador reproduz o contrato lido no código (`session.php`, `login_ci.php`, `absences.php`, `logout_ci.php`), não o comportamento.
+- O caminho do log do PHP no servidor é desconhecido até o 0r.
+- A conferência do ambiente e o `runuser` nunca rodaram no Ubuntu do servidor: a estação não tem `runuser` nem root. O `noexec` do `sudo -i` não alcança o shell root pela medição do responsável (o preflight e o `npm ping` rodaram nele); a conferência prova isso de novo no início da véspera.
+- `gitleaks` 8.30.1 sobre o que entrou no commit: `no leaks found`. `shellcheck`, PHPStan e Psalm não estão instalados na estação.
+- **`test-local.ps1 -SkipHttp -Browser` com saída 0 no `d77858b`** (worktree separado, `npm ci` limpo): lint PHP, smoke, os QAs PHP (a trava com 291 verificações entre eles) e o roteiro de navegador **1026/1026**. O commit final difere do `d77858b` só nesta linha e na do registro (emenda local do mesmo commit, sem push); nenhum QA lê esses dois arquivos.
+
 ---
 
 ## 10. Riscos e pendências
