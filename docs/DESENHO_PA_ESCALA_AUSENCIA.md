@@ -2709,6 +2709,13 @@ Plano gravado aqui antes de qualquer código, pela ordem aprovada em 2026-10-28 
 | Na Q-F7 do servidor (2026-10-26, variante sem a 011): `almoco_fora_da_jornada` = 0 e `jornada_invertida` = 0 | Seção 9.9 |
 | `config.php` só regrava todos os cadastros (com almoço) quando o MySQL e o `funcionarios.json` estão vazios (carga inicial) | `config.php:586-598`, `salvar_funcionarios_mysql` |
 
+**Nota de 2026-11-10 (pós-deploy 1, 9.14.3): o filtro de almoço da aba Funcionários.** Ele já existe, só no frontend (`frontend/src/lib/employeeLunch.ts`), sobre o `almoco_inicio`-`almoco_fim` que o `listar_funcionarios.php` devolve. Quando o F8 entrar, o filtro acompanha:
+- ganha o **contrato**: filtrar por contrato e mostrar a duração;
+- ganha a **exceção**: marcar ou filtrar quem tem "jornada pré-acordada";
+- o horário segue sendo o das mesmas colunas (11.1).
+
+Até lá, nada muda na API nem no banco.
+
 **Escopo.** (1) Tabela de contratos com a duração do almoço, editada só pelo admin, numa aba nova da Administração. (2) No cadastro: contrato, início do almoço e, sem exceção, o fim calculado no servidor; com a exceção ("jornada pré-acordada"), o fim manual. (3) Validação do almoço dentro da jornada, para todos. (4) Mudar a duração de um contrato recalcula, na mesma transação, o fim dos cadastros daquele contrato sem exceção. (5) Permissão `funcionarios.almoco_excecao` e auditoria. **Fora do escopo:** o motor e o `status.php` (sem mudança: o fim calculado fica gravado nas mesmas colunas, 11.1); o almoço do Crítico (F9); carga em lote de quem é de qual contrato (DL15); almoço em dois intervalos.
 
 #### 9.10.1 A DEFINIR (Liderança) e o que muda conforme cada resposta
@@ -4772,6 +4779,46 @@ O escape `'\\'` é o padrão implícito de hoje. O QA compara a saída com a de 
 - `qa-security OK`.
 - **Mutação 3/3:** o `GerenciadorPausas.php:668` de volta ao padrão implícito; o escape vazio no `migrar_csv_para_mysql.php:29`; um `str_getcsv` novo sem escape. Os três reprovam na trava de contagem.
 - `test-local.ps1 -SkipHttp -Browser` no `24dd59b`: no resumo da entrega (rodado depois do commit).
+
+#### 9.14.3 Commit B: filtro de almoço em Administração > Funcionários (`044c37b`, 2026-11-10; aguardando revisão)
+
+**Pedido da gestão:** filtrar a lista de funcionários pelo horário de almoço.
+
+**O que mudou** (só frontend; nenhuma API nem banco; o `listar_funcionarios.php` já devolve `almoco_inicio` e `almoco_fim`):
+- **Barra de filtros:** um select "Almoço" com "Todos os almoços" e um item por horário cadastrado, no formato `HH:MM-HH:MM (N)`, ordenados pelo início e depois pelo fim.
+  - As opções e as contagens saem dos cadastros da **situação escolhida** (Ativos, Arquivados ou os dois).
+  - Ao trocar a situação, um horário que deixou de existir volta para "Todos os almoços". A troca vale já na primeira pintura: o filtro, o select e a contagem usam o valor conferido. O estado também é ajustado depois, para a escolha não voltar sozinha.
+- **Combinação:** o almoço combina com busca, equipe, perfil e situação.
+- **"Filtros aplicados":** o almoço entra na contagem, e o texto do cartão passa a ser "Filtragem por nome, login, equipe, perfil, situação e almoço".
+- **Tabela:** coluna "Almoço" entre Jornada e Status; a linha de confirmação passa a ocupar 7 colunas.
+- **Cartão (abaixo de 1280 px):** Jornada e Almoço lado a lado. Em 390 px a tabela continua escondida e a lista é de cartões (17); de 1280 px para cima, só a tabela rola dentro do cartão.
+- **Horário vindo como `HH:MM:SS`:** é mostrado como `HH:MM`. Cadastro sem os dois horários válidos fica fora das opções e mostra "—".
+
+**Regras puras** em `frontend/src/lib/employeeLunch.ts` (`lunchKey`, `lunchOptions`, `matchesLunchFilter`, `keepLunchSelection`), com a nota de que o F8 dá contrato e exceção ao filtro (9.10).
+
+**QA (`qa:employee-form`):**
+- Regras puras: opções distintas com a contagem; ordem pelo início; `12:00:00` contado como `12:00`; horário inválido fora; lista vazia sem opção; "Todos" passa tudo; horário que sumiu volta para "Todos".
+- Tela renderizada de verdade (`react-dom/server`, com os filtros iniciais injetados como o QA já fazia com a situação):
+  - opções dos ativos e dos arquivados, cada uma com a sua contagem;
+  - lista vazia só com "Todos os almoços";
+  - o horário escolhido filtra, fica marcado e entra em "Filtros aplicados";
+  - combinação com equipe, perfil, busca e situação;
+  - reset ao trocar a situação;
+  - a coluna entre Jornada e Status, e o cartão e a linha com o mesmo horário.
+- Os índices das colunas do teste 17 foram ajustados à coluna nova.
+
+**Validação executada pela IA:**
+- `lint`, `typecheck` e `qa:employee-form` OK.
+- **Mutação 8/8:**
+  - filtro ignorado;
+  - contagem errada (+2);
+  - contagem de todas as situações;
+  - sem reset (filtro, select, contagem e efeito);
+  - ordem invertida;
+  - sem a coluna;
+  - almoço fora da contagem de filtros;
+  - opção fantasma com a lista vazia.
+- `test-local.ps1 -SkipHttp -Browser` no `044c37b`: no resumo da entrega (rodado depois do commit).
 
 ---
 

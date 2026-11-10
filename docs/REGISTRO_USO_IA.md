@@ -1259,6 +1259,21 @@ Base da afirmação:
 
 ---
 
+### Pos-deploy 1, commit B: filtro de almoco em Administracao > Funcionarios — 2026-11-10
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Pedido da gestao: filtrar a aba Funcionarios pelo horario de almoco, com a contagem de cada horario, combinando com os outros filtros, e mostrar o almoco na tabela e no cartao. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `044c37b` (codigo) e o commit de docs dele (desenho 9.14.3, nota na 9.10 e esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `frontend/src/lib/employeeLunch.ts` novo (regras puras). `frontend/src/pages/AdminPage.jsx`: select "Almoco" na barra de filtros (opcoes da situacao escolhida, com contagem, ordenadas pelo inicio), filtro combinado, reset ao trocar a situacao, "Filtros aplicados" com o almoco e texto novo, coluna "Almoco" entre Jornada e Status, almoco no cartao. `frontend/scripts/qa-employee-form.mjs`: casos do almoco. Sem API nem banco. |
+| **Decisoes de implementacao** | Regras num modulo puro, testavel sem a tela. O valor conferido (`keepLunchSelection`) e usado no proprio render, alem do efeito que ajusta o estado: o reset vale na primeira pintura e o QA estatico o enxerga. Horario `HH:MM:SS` mostrado como `HH:MM`; cadastro sem horario valido fica fora das opcoes e mostra "—". |
+| **Pendente com o responsavel** | Revisao. Quando o F8 entrar, o filtro ganha contrato e excecao (nota na 9.10). |
+| **Validacao executada pela IA** | `lint`, `typecheck` e `qa:employee-form` OK. Mutacao 8/8 (filtro ignorado; contagem +2; contagem de todas as situacoes; sem reset; ordem invertida; sem coluna; almoco fora de "Filtros aplicados"; opcao fantasma na lista vazia). `test-local.ps1 -SkipHttp -Browser`: no resumo da entrega. |
+| **Limitacoes declaradas** | O QA renderiza a tela no servidor (estado inicial injetado); a troca de situacao pelo clique e coberta pela regra e pelo efeito, nao por um clique real no navegador. |
+| **Validacao humana** | Pendente. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
