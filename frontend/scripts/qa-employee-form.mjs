@@ -342,6 +342,11 @@ registerHooks({
         for (const [from, to] of [
           ['const [pendingAction, setPendingAction] = useState(null)', 'const [pendingAction, setPendingAction] = useState(globalThis.qaPendingAction ?? null)'],
           ["const [status, setStatus] = useState('ativos')", "const [status, setStatus] = useState(globalThis.qaInitialStatus ?? 'ativos')"],
+          // Pos-deploy 1 (9.14.3): filtros iniciais para o QA do almoco.
+          ["const [lunch, setLunch] = useState('')", "const [lunch, setLunch] = useState(globalThis.qaInitialLunch ?? '')"],
+          ["const [search, setSearch] = useState('')", "const [search, setSearch] = useState(globalThis.qaInitialSearch ?? '')"],
+          ["const [team, setTeam] = useState('')", "const [team, setTeam] = useState(globalThis.qaInitialTeam ?? '')"],
+          ["const [role, setRole] = useState('')", "const [role, setRole] = useState(globalThis.qaInitialRole ?? '')"],
         ]) {
           if (!source.includes(from)) throw new Error(`AdminPage sem o estado esperado pelo QA: ${from}`)
           source = source.replace(from, to)
@@ -372,16 +377,15 @@ const EMPLOYEES = [
 ]
 const ADMIN_SESSION = { role: 'admin', permissions: ['funcionarios.manage', 'perfis.promote', 'funcionarios.fora_mapa', 'funcionarios.restaurar', 'escalas.lideranca'], ci: { funcionario_id: 0, username: '' }, gestor: { username: 'admin.qa' } }
 const LEAD_SESSION = { role: 'lideranca', permissions: ['funcionarios.manage'], ci: { funcionario_id: 4, username: 'lider.qa' }, gestor: { username: '' } }
-function renderEmployees(session, { list = EMPLOYEES, pending = null, status } = {}) {
+function renderEmployees(session, { list = EMPLOYEES, pending = null, status, lunch, search, team, role } = {}) {
   globalThis.qaResources = { 'listar_funcionarios.php': { sucesso: true, funcionarios: list } }
   globalThis.qaPendingAction = pending
   globalThis.qaInitialStatus = status
+  Object.assign(globalThis, { qaInitialLunch: lunch, qaInitialSearch: search, qaInitialTeam: team, qaInitialRole: role })
   try {
     return renderToStaticMarkup(h(AdminPage, { session, search: '?tab=funcionarios', navigate: () => {}, notify: () => {}, refreshStatus: () => {} }))
   } finally {
-    delete globalThis.qaResources
-    delete globalThis.qaPendingAction
-    delete globalThis.qaInitialStatus
+    for (const key of ['qaResources', 'qaPendingAction', 'qaInitialStatus', 'qaInitialLunch', 'qaInitialSearch', 'qaInitialTeam', 'qaInitialRole']) delete globalThis[key]
   }
 }
 const cardOf = (markup, id) => {
@@ -416,7 +420,7 @@ for (const [label, session, status, ids] of [
     for (const expected of [item.nome, `ID ${id} · ${item.ad_login || 'Sem login AD'}`, item.access_role.replace('_', ' '), `${item.jornada_entrada} - ${item.jornada_saida}`]) {
       assert.ok(text.includes(expected), `17 (${label}): cartao ${id} com "${expected}"`)
     }
-    for (const [index, what] of [[2, 'equipe'], [5, 'situacao'], [6, 'acoes ou aviso']]) {
+    for (const [index, what] of [[2, 'equipe'], [5, 'almoco'], [6, 'situacao'], [7, 'acoes ou aviso']]) {
       const cell = cellOf(row, index)
       assert.ok(cell && text.includes(cell), `17 (${label}): cartao ${id} com a ${what} da linha ("${cell}")`)
     }
@@ -472,5 +476,69 @@ for (const [kind, id, title, button] of [['archive', 1, 'Arquivar QA Um?', 'Conf
 }
 assert.equal((adminSource.match(/\{rowActions\(item\)\}/gu) ?? []).length, 2, '17: tabela e cartoes pelo mesmo rowActions()')
 assert.equal((adminSource.match(/\{actionConfirmation\(item\)\}/gu) ?? []).length, 2, '17: tabela e cartoes pela mesma confirmacao')
+
+// ---------------------------------------------------------------------------
+// Pos-deploy 1 (9.14.3): filtro de almoco na aba Funcionarios. Regras puras
+// (src/lib/employeeLunch.ts) e a tela renderizada de verdade.
+// ---------------------------------------------------------------------------
+const { keepLunchSelection, lunchKey, lunchOptions, matchesLunchFilter } = await import(pathToFileURL(join(srcRoot, 'lib', 'employeeLunch.ts')).href)
+const LUNCH_EMPLOYEES = [
+  employee(11, 'QA Onze', 'n1', 'tecnico'),
+  employee(12, 'QA Doze', 'n1', 'gestor', { almoco_inicio: '11:00', almoco_fim: '12:00' }),
+  employee(13, 'QA Treze', 'n2', 'tecnico', { almoco_inicio: '12:00:00', almoco_fim: '13:00:00' }),
+  employee(14, 'QA Catorze', 'n2', 'tecnico', { almoco_inicio: '11:00', almoco_fim: '12:00' }),
+  employee(15, 'QA Quinze', 'n1', 'tecnico', { almoco_inicio: '11:00', almoco_fim: '11:30' }),
+  employee(16, 'QA Dezesseis', 'n2', 'tecnico', { ativo: false, arquivado_em: '2026-10-13', almoco_inicio: '13:00', almoco_fim: '14:00' }),
+  employee(17, 'QA Dezessete', 'n1', 'tecnico', { ativo: false, arquivado_em: null, almoco_inicio: '12:00', almoco_fim: '13:00' }),
+]
+const ACTIVE_LUNCH = LUNCH_EMPLOYEES.filter((item) => item.ativo !== false)
+// Regras puras: horarios distintos com a contagem, ordenados pelo inicio e depois pelo fim.
+assert.deepEqual(lunchOptions(ACTIVE_LUNCH), [
+  { value: '11:00-11:30', label: '11:00-11:30 (1)', count: 1 },
+  { value: '11:00-12:00', label: '11:00-12:00 (2)', count: 2 },
+  { value: '12:00-13:00', label: '12:00-13:00 (2)', count: 2 },
+], 'almoco: opcoes distintas, com a contagem, ordenadas pelo inicio (12:00:00 conta como 12:00)')
+assert.deepEqual(lunchOptions([]), [], 'almoco: lista vazia sem opcao')
+assert.deepEqual([lunchKey({ almoco_inicio: '12:00:00', almoco_fim: '13:00' }), lunchKey({ almoco_inicio: '', almoco_fim: '13:00' }), lunchKey({ almoco_inicio: '25:00', almoco_fim: '13:00' })], ['12:00-13:00', '', ''], 'almoco: horario normalizado; sem horario valido fica fora das opcoes')
+assert.deepEqual([matchesLunchFilter(LUNCH_EMPLOYEES[1], ''), matchesLunchFilter(LUNCH_EMPLOYEES[1], '11:00-12:00'), matchesLunchFilter(LUNCH_EMPLOYEES[0], '11:00-12:00')], [true, true, false], 'almoco: "Todos" passa tudo; um horario so passa o dele')
+assert.deepEqual([keepLunchSelection('11:00-12:00', lunchOptions(ACTIVE_LUNCH)), keepLunchSelection('11:00-12:00', [{ value: '13:00-14:00', label: '13:00-14:00 (1)', count: 1 }]), keepLunchSelection('', [])], ['11:00-12:00', '', ''], 'almoco: horario que deixou de existir volta para "Todos"')
+
+const lunchSelectOf = (markup) => markup.match(/<select aria-label="Almoço" class="field">([\s\S]*?)<\/select>/u)?.[1] ?? ''
+const optionsOf = (markup) => [...lunchSelectOf(markup).matchAll(/<option value="([^"]*)"( selected="")?>([^<]*)<\/option>/gu)].map((match) => ({ value: match[1], selected: Boolean(match[2]), label: match[3] }))
+const appliedFiltersOf = (markup) => Number(plain(markup).match(/Filtros aplicados (\d+)/u)?.[1])
+{
+  // Opcoes da situacao escolhida, com "Todos os almocos" primeiro.
+  const active = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES })
+  assert.deepEqual(optionsOf(active).map((option) => option.label), ['Todos os almoços', '11:00-11:30 (1)', '11:00-12:00 (2)', '12:00-13:00 (2)'], 'almoco: select com "Todos os almocos" e os horarios dos ativos, com a contagem, em ordem')
+  const archived = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, status: 'arquivados' })
+  assert.deepEqual(optionsOf(archived).map((option) => option.label), ['Todos os almoços', '12:00-13:00 (1)', '13:00-14:00 (1)'], 'almoco: nos arquivados, so os horarios dos arquivados')
+  assert.deepEqual(optionsOf(renderEmployees(ADMIN_SESSION, { list: [] })).map((option) => option.label), ['Todos os almoços'], 'almoco: lista vazia so com "Todos os almocos"')
+  assert.equal(plain(active).includes('Filtragem por nome, login, equipe, perfil, situação e almoço'), true, 'almoco: o cartao "Filtros aplicados" fala do almoco')
+
+  // Filtro aplicado: so os cadastros do horario, e a contagem do cartao sobe.
+  const picked = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '11:00-12:00' })
+  assert.deepEqual([cardIds(picked), optionsOf(picked).find((option) => option.selected)?.value, appliedFiltersOf(active), appliedFiltersOf(picked)], [[12, 14], '11:00-12:00', 0, 1], 'almoco: filtra pelo horario, marca o escolhido e entra em "Filtros aplicados"')
+  // Combina com equipe, perfil e busca.
+  assert.deepEqual(cardIds(renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '11:00-12:00', team: 'n2' })), [14], 'almoco + equipe')
+  assert.deepEqual(cardIds(renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '11:00-12:00', role: 'gestor' })), [12], 'almoco + perfil')
+  assert.deepEqual(cardIds(renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '12:00-13:00', search: 'treze' })), [13], 'almoco + busca')
+  assert.deepEqual([cardIds(renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '12:00-13:00', status: '' })), appliedFiltersOf(renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '12:00-13:00', status: '', team: 'n1' }))], [[11, 13, 17], 3], 'almoco + situacao (ativos e arquivados), com a contagem dos filtros')
+
+  // Reset: o horario escolhido nao existe nos arquivados; volta para "Todos".
+  const reset = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '11:00-12:00', status: 'arquivados' })
+  assert.deepEqual([cardIds(reset), optionsOf(reset).find((option) => option.selected)?.value ?? '', appliedFiltersOf(reset)], [[16, 17], '', 1], 'almoco: ao trocar a situacao, horario que sumiu volta para "Todos" (so a situacao conta como filtro)')
+  assert.match(adminSource, /useEffect\(\(\) => \{\s*setLunch\(\(current\) => keepLunchSelection\(current, lunchChoices\)\)\s*\}, \[lunchChoices\]\)/u, 'almoco: o estado volta para "Todos" quando as opcoes mudam')
+
+  // Coluna "Almoco" entre Jornada e Status; o cartao (abaixo de 1280 px) com o mesmo horario.
+  const head = active.slice(active.indexOf('<thead>'), active.indexOf('</thead>'))
+  assert.deepEqual([...head.matchAll(/<th>([^<]*)<\/th>/gu)].map((match) => match[1]), ['Funcionário', 'Equipe', 'Perfil', 'Jornada', 'Almoço', 'Status', 'Ações'], 'almoco: coluna entre Jornada e Status')
+  for (const item of ACTIVE_LUNCH) {
+    const lunchText = lunchKey(item)
+    assert.equal(cellOf(rowOf(active, item.id), 5), lunchText, `almoco: linha ${item.id} com ${lunchText}`)
+    assert.ok(cardOf(active, item.id).includes(`data-employee-lunch="">${lunchText}</dd>`), `almoco: cartao ${item.id} com ${lunchText}`)
+  }
+  assert.ok(active.includes('<td class="bg-slate-950/40" colSpan="7">') || !active.includes('bg-slate-950/40'), 'almoco: a confirmacao ocupa as 7 colunas')
+  assert.match(adminSource, /colSpan=\{7\}/u, 'almoco: confirmacao com colSpan 7')
+}
 
 console.log('Employee form RHF/Zod QA OK')

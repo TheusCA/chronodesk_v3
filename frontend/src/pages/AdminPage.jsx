@@ -12,6 +12,7 @@ import { adjustmentTypeLabel } from '../lib/decisionConfirm'
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { archiveEffectsSummary, employeeArchiveState, matchesArchiveFilter } from '../lib/employeeArchive'
+import { keepLunchSelection, lunchKey, lunchOptions, matchesLunchFilter } from '../lib/employeeLunch'
 import { employeeFormSchema } from '../lib/formSchemas'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
@@ -458,8 +459,18 @@ function EmployeesTab({
   const [role, setRole] = useState('')
   // F4: a lista abre nos ativos; arquivados (e inativos antigos) num filtro próprio.
   const [status, setStatus] = useState('ativos')
+  // Pós-deploy 1 (9.14.3): filtro de almoço; as opções saem dos cadastros da situação escolhida.
+  const [lunch, setLunch] = useState('')
   const [pendingAction, setPendingAction] = useState(null)
   const [acting, setActing] = useState(false)
+  const lunchChoices = useMemo(
+    () => lunchOptions((resource.data?.funcionarios || []).filter((item) => matchesArchiveFilter(item, status))),
+    [resource.data, status],
+  )
+  // Trocou a situação (ou a lista recarregou) e o horário escolhido sumiu: volta para "Todos os almoços".
+  useEffect(() => {
+    setLunch((current) => keepLunchSelection(current, lunchChoices))
+  }, [lunchChoices])
   const filtered = useMemo(() => {
     const items = resource.data?.funcionarios || []
     const term = search.toLowerCase()
@@ -468,8 +479,9 @@ function EmployeesTab({
       && (!team || normalizeTeam(item.equipe) === team)
       && (!role || item.access_role === role)
       && matchesArchiveFilter(item, status)
+      && matchesLunchFilter(item, keepLunchSelection(lunch, lunchChoices))
     ))
-  }, [resource.data, role, search, status, team])
+  }, [lunch, lunchChoices, resource.data, role, search, status, team])
   const allEmployees = resource.data?.funcionarios || []
 
   if (resource.loading) return <LoadingState />
@@ -656,7 +668,7 @@ function EmployeesTab({
         <MetricCard detail="Funcionários visíveis nesta consulta" icon="users" label="Listados" value={filtered.length} />
         <MetricCard detail="Ativos podem autenticar e operar" icon="shield" label="Ativos" tone="success" value={allEmployees.filter((item) => employeeArchiveState(item) === 'ativo').length} />
         <MetricCard detail="Perfil Liderança (admin vem da lista AD_ADMIN_USERS)" icon="settings" label="Liderança" tone="warning" value={filtered.filter((item) => item.access_role === 'lideranca').length} />
-        <MetricCard detail="Filtragem por nome, login, equipe e perfil" icon="chart" label="Filtros aplicados" value={[search, team, role, status !== 'ativos'].filter(Boolean).length} />
+        <MetricCard detail="Filtragem por nome, login, equipe, perfil, situação e almoço" icon="chart" label="Filtros aplicados" value={[search, team, role, status !== 'ativos', keepLunchSelection(lunch, lunchChoices)].filter(Boolean).length} />
       </section>
 
       <form onSubmit={handleCreateEmployeeSubmit(create)}>
@@ -678,6 +690,7 @@ function EmployeesTab({
           <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select>
           <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="lideranca">Liderança</option><option value="admin">Admin (legado)</option><option value="somente_leitura">Somente leitura</option></select>
           <select aria-label="Situação do cadastro" className="field" value={status} onChange={(event) => { setStatus(event.target.value); setPendingAction(null) }}><option value="ativos">Ativos</option><option value="arquivados">Arquivados</option><option value="">Ativos e arquivados</option></select>
+          <select aria-label="Almoço" className="field" value={keepLunchSelection(lunch, lunchChoices)} onChange={(event) => setLunch(event.target.value)}><option value="">Todos os almoços</option>{lunchChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
         </FilterBar>
         <section className="card">
           <SectionHeader
@@ -702,7 +715,8 @@ function EmployeesTab({
                 <dl className="grid grid-cols-2 gap-3 text-sm">
                   <div><dt className="text-xs text-slate-500">Equipe</dt><dd className="mt-1"><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></dd></div>
                   <div><dt className="text-xs text-slate-500">Perfil</dt><dd className="mt-1"><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></dd></div>
-                  <div className="col-span-2"><dt className="text-xs text-slate-500">Jornada</dt><dd className="text-slate-300">{item.jornada_entrada} - {item.jornada_saida}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Jornada</dt><dd className="text-slate-300">{item.jornada_entrada} - {item.jornada_saida}</dd></div>
+                  <div><dt className="text-xs text-slate-500">Almoço</dt><dd className="text-slate-300" data-employee-lunch="">{lunchKey(item) || '—'}</dd></div>
                 </dl>
                 <div className="border-t border-white/5 pt-3">{rowActions(item)}</div>
                 {actionConfirmation(item)}
@@ -711,7 +725,7 @@ function EmployeesTab({
           </div>
           <div className="table-wrap mt-5 hidden xl:block">
           <table className="data-table">
-            <thead><tr><th>Funcionário</th><th>Equipe</th><th>Perfil</th><th>Jornada</th><th>Status</th><th>Ações</th></tr></thead>
+            <thead><tr><th>Funcionário</th><th>Equipe</th><th>Perfil</th><th>Jornada</th><th>Almoço</th><th>Status</th><th>Ações</th></tr></thead>
             <tbody>
               {filtered.map((item) => (
                 <Fragment key={item.id}>
@@ -728,12 +742,13 @@ function EmployeesTab({
                   <td><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></td>
                   <td><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></td>
                   <td>{item.jornada_entrada} - {item.jornada_saida}</td>
+                  <td>{lunchKey(item) || '—'}</td>
                   <td><EmployeeStatusBadge item={item} /></td>
                   <td>{rowActions(item)}</td>
                 </tr>
                 {pendingAction?.id === item.id && (
                   <tr>
-                    <td className="bg-slate-950/40" colSpan={6}>
+                    <td className="bg-slate-950/40" colSpan={7}>
                       <div className="max-w-3xl">{actionConfirmation(item)}</div>
                     </td>
                   </tr>
