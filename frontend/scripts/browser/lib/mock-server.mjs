@@ -158,6 +158,8 @@ function apiResponse(method, key, search, body) {
     return [200, { sucesso: true, parsed_rows: [{ ticket_number: 'INC-QA-IMP' }], valid_count: 1, invalid_count: 0, rows: [{ line: 2, valid: true, ticket_number: 'INC-QA-IMP', title: 'Linha de teste', errors: [] }] }]
   }
   if ((key === 'adicionar_funcionario.php' || key === 'atualizar_funcionario.php') && method === 'POST' && body?.nome === FAILING_EMPLOYEE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
+  // [pos-deploy 1, D3] Criacao: o servidor gera o ID e o devolve em funcionario.id.
+  if (key === 'adicionar_funcionario.php' && method === 'POST') return [200, { sucesso: true, mensagem: 'Funcionário adicionado.', funcionario: { id: 334 } }]
   if (key === 'portal/absences.php' && method === 'POST' && body?.note === FAILING_ABSENCE_NOTE) return [409, { sucesso: false, mensagem: 'Falha simulada do servidor.' }]
   if (key === 'portal/schedules.php') {
     if (method === 'GET') {

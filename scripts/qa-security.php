@@ -57,11 +57,18 @@ final class QaChildPdo extends PDO {
 
     public function commit(): bool {
         $this->transaction = false;
+        // [pos-deploy 1, D5] So com db['log_tx']: o caso confere commit e rollback.
+        if ($this->db['log_tx'] ?? false) {
+            error_log('[QA_TX] commit');
+        }
         return true;
     }
 
     public function rollBack(): bool {
         $this->transaction = false;
+        if ($this->db['log_tx'] ?? false) {
+            error_log('[QA_TX] rollback');
+        }
         return true;
     }
 
@@ -69,8 +76,9 @@ final class QaChildPdo extends PDO {
         return $this->transaction;
     }
 
+    // [D5] O caso escolhe o ID gerado (db['last_insert_id']); padrao 30.
     public function lastInsertId(?string $name = null): string|false {
-        return '30';
+        return (string)($this->db['last_insert_id'] ?? '30');
     }
 }
 
@@ -239,7 +247,9 @@ final class QaChildStatement extends PDOStatement {
         if (strpos($this->sql, 'INSERT INTO funcionarios (') === 0
             || strpos($this->sql, 'UPDATE funcionarios SET nome = :nome') === 0
             || $this->sql === 'UPDATE funcionarios SET ativo = 0 WHERE id = :id') {
-            error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? '?') . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-') . ' fora_mapa=' . ($params[':fora_mapa_escala'] ?? '-')
+            // [D5] INSERT de funcionario: id=banco quando o ID nao vai no comando e coluna_id diz se a coluna id esta no INSERT.
+            $insertIdColumn = strpos($this->sql, 'INSERT INTO funcionarios (') === 0 ? ' coluna_id=' . (preg_match('/^INSERT INTO funcionarios \( ?id,/', $this->sql) === 1 ? 'sim' : 'nao') : '';
+            error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? 'banco') . $insertIdColumn . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-') . ' fora_mapa=' . ($params[':fora_mapa_escala'] ?? '-')
                 . ' horarios=' . ($params[':jornada_entrada'] ?? '-') . '-' . ($params[':jornada_saida'] ?? '-') . '/' . ($params[':almoco_inicio'] ?? '-') . '-' . ($params[':almoco_fim'] ?? '-'));
             return true;
         }
@@ -1993,18 +2003,19 @@ foreach ([
     assert_same(true, strpos($result['body'], $message) !== false, "funcionario {$case}: mensagem");
     // A carga de emergencia do init.php grava os cadastros padrao (ids 1 a 17)
     // sem banco; o caso nao pode gravar UPDATE nem INSERT dos ids de teste.
-    assert_same(0, preg_match('/\[QA_WRITE\] (UPDATE |INSERT INTO funcionarios id=90\d)/', $result['log']), "funcionario {$case}: nada gravado");
+    assert_same(0, preg_match('/\[QA_WRITE\] (UPDATE |INSERT INTO funcionarios id=banco)/', $result['log']), "funcionario {$case}: nada gravado");
     if ($status === 403) {
         assert_same(true, strpos($result['log'], '[QA_AUDIT] FUNCIONARIO_ALTERACAO_NEGADA [WARNING]') !== false, "funcionario {$case}: recusa auditada");
     }
 }
 foreach ([
     'lid_promove_gestor' => ['UPDATE funcionarios SET nome = :nome, equipe = :equipe, access_role = :access_role, ad_login = :ad_login, jornada_entrada = :jornada_entrada, jornada_saida = :jornada_saida, almoco_inicio = :almoco_inicio, almoco_fim = :almoco_fim, fora_mapa_escala = :fora_mapa_escala WHERE id = :id id=1 perfil=gestor', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Perfil do funcionario ID 1 alterado de tecnico para gestor por lideranca'],
-    'lid_cria_tecnico' => ['INSERT INTO funcionarios id=901 perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
+    // [D1] O ID vem do banco (lastInsertId simulado: 30); o 'id' do corpo e ignorado.
+    'lid_cria_tecnico' => ['INSERT INTO funcionarios id=banco coluna_id=nao perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
     // F4: desativar virou arquivar (FUNCIONARIO_ARQUIVADO, com data e autor).
     'lid_desativa_tecnico' => ['UPDATE funcionarios SET ativo = 0, arquivado_em = :arquivado_em, arquivado_por = :arquivado_por WHERE id = :id id=1', '[QA_AUDIT] FUNCIONARIO_ARQUIVADO [CRITICAL]: funcionario_id=1; perfil=tecnico; equipe=n1; ator=lideranca; regularizacao=nao'],
-    'admin_cria_lideranca' => ['INSERT INTO funcionarios id=902 perfil=lideranca', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Funcionario ID 902 criado com perfil lideranca por admin'],
-    'admin_lideranca_tecnico' => ['INSERT INTO funcionarios id=903 perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
+    'admin_cria_lideranca' => ['INSERT INTO funcionarios id=banco coluna_id=nao perfil=lideranca', '[QA_AUDIT] FUNCIONARIO_PERFIL_ALTERADO [CRITICAL]: Funcionario ID 30 criado com perfil lideranca por admin'],
+    'admin_lideranca_tecnico' => ['INSERT INTO funcionarios id=banco coluna_id=nao perfil=tecnico', '[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]'],
     'login_tecnico' => ['id=1 perfil=tecnico login=joao.novo', '[QA_AUDIT] FUNCIONARIO_AD_LOGIN_ALTERADO [WARNING]: Login AD do funcionario ID 1 alterado de joao.silva para joao.novo por admin'],
     'login_gestor' => ['id=3 perfil=gestor login=gestor.novo', '[QA_AUDIT] FUNCIONARIO_AD_LOGIN_ALTERADO [CRITICAL]: Login AD do funcionario ID 3 alterado de qa.gestor para gestor.novo por admin'],
 ] as $case => [$write, $audit]) {
@@ -2017,6 +2028,45 @@ foreach ([
 foreach (['lid_cria_tecnico', 'admin_lideranca_tecnico', 'login_tecnico'] as $case) {
     assert_same(false, strpos($employeeCases[$case]['log'], 'FUNCIONARIO_PERFIL_ALTERADO') !== false, "funcionario {$case}: sem evento de perfil");
 }
+
+// [pos-deploy 1, D5] ID gerado pelo banco na criacao. O banco simulado devolve
+// o lastInsertId do caso (db['last_insert_id']) e registra commit e rollback
+// (db['log_tx']); o INSERT registra se a coluna id foi no comando.
+$noIdBody = static fn (array $override = []): string => (string)json_encode(array_diff_key(json_decode($employeeBody($override), true), ['id' => true]));
+$txDb = static fn (array $extra = []): array => $extra + ['log_tx' => true] + QA_DB;
+$idCases = qa_run_endpoints($qaDir, [
+    'sem_id' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.sem.id']), $txDb(['last_insert_id' => '334'])),
+    'id_ignorado' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['id' => 77, 'ad_login' => 'novo.com.id']), $txDb(['last_insert_id' => '335'])),
+    'acima_da_faixa' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.acima']), $txDb(['last_insert_id' => '1000'])),
+    'last_insert_invalido' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.invalido']), $txDb(['last_insert_id' => '0'])),
+    'login_duplicado_ativo' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'joao.silva']), $txDb()),
+]);
+foreach (['sem_id' => 334, 'id_ignorado' => 335] as $case => $generated) {
+    $result = $idCases[$case];
+    $body = json_decode($result['body'], true);
+    assert_same([200, $generated, "Funcionário 'Fulano Teste' adicionado com o ID {$generated}."], [$result['status'], $body['funcionario']['id'] ?? null, $body['mensagem'] ?? null], "D5 {$case}: 200 com o ID do banco na resposta");
+    assert_same(true, strpos($result['log'], 'INSERT INTO funcionarios id=banco coluna_id=nao') !== false, "D5 {$case}: INSERT sem a coluna id");
+    assert_same(true, strpos($result['log'], "[QA_AUDIT] FUNCIONARIO_ADICIONADO [WARNING]: Funcionario 'Fulano Teste' adicionado (ID: {$generated},") !== false, "D5 {$case}: auditoria com o ID do banco");
+    assert_same([true, false], [strpos($result['log'], '[QA_TX] commit') !== false, strpos($result['log'], '[QA_TX] rollback') !== false], "D5 {$case}: commit, sem rollback");
+}
+assert_same(false, strpos($idCases['sem_id']['log'], 'FUNCIONARIO_ID_IGNORADO') !== false, 'D5 sem_id: sem evento de id ignorado');
+$ignored = $idCases['id_ignorado']['log'];
+assert_same(true, strpos($ignored, '[QA_AUDIT] FUNCIONARIO_ID_IGNORADO [INFO]: Criacao do funcionario ID 335: o campo id veio na requisicao e foi ignorado') !== false, 'D5 id_ignorado: auditoria de que o campo veio e foi ignorado');
+assert_same(0, preg_match('/FUNCIONARIO_ID_IGNORADO[^\n]*\b77\b/', $ignored), 'D5 id_ignorado: auditoria sem o valor recebido');
+$above = $idCases['acima_da_faixa'];
+assert_same([409, true], [$above['status'], strpos((string)(json_decode($above['body'], true)['mensagem'] ?? ''), 'O banco gerou o ID 1000, acima da faixa aceita hoje (1 a 999). Nada foi gravado.') === 0], 'D5 acima_da_faixa: 409 com mensagem clara');
+assert_same([true, false, false, true], [
+    strpos($above['log'], '[QA_TX] rollback') !== false,
+    strpos($above['log'], '[QA_TX] commit') !== false,
+    strpos($above['log'], 'FUNCIONARIO_ADICIONADO') !== false,
+    strpos($above['log'], '[QA_AUDIT] FUNCIONARIO_ID_FORA_DA_FAIXA [WARNING]') !== false,
+], 'D5 acima_da_faixa: INSERT desfeito (rollback, sem commit), sem cadastro auditado, com o evento da faixa');
+$invalid = $idCases['last_insert_invalido'];
+assert_same([500, true, false], [$invalid['status'], strpos($invalid['log'], '[QA_TX] rollback') !== false, strpos($invalid['log'], '[QA_TX] commit') !== false], 'D5 last_insert_invalido: 500 e rollback');
+$duplicate = $idCases['login_duplicado_ativo'];
+assert_same([400, true, false], [$duplicate['status'], strpos($duplicate['body'], 'Login AD já vinculado a outro funcionário') !== false, strpos($duplicate['log'], 'INSERT INTO funcionarios id=banco') !== false], 'D5 login AD duplicado: 400, nada gravado');
+$createSource = (string)file_get_contents($root . '/api/adicionar_funcionario.php');
+assert_same([false, false], [strpos($createSource, "isset(\$funcs[\$id])") !== false, strpos($createSource, 'ID já existe') !== false], 'D1: sem a checagem "ID ja existe" da lista em memoria');
 
 // [9.12, passo 6] Campo ausente no corpo mantem o gravado: perfil, login AD e
 // horarios. Antes, editar sem access_role (a tela legada nao manda) gravava
@@ -2314,7 +2364,7 @@ foreach ([
     assert_same($status, $result['status'], "F4 {$case}: HTTP {$status}");
     assert_same(true, strpos((string)($archiveBody($case)['mensagem'] ?? ''), $message) !== false, "F4 {$case}: mensagem");
     // A carga de emergencia do init.php grava os cadastros padrao (ids 1 a 17) sem banco.
-    assert_same(0, preg_match('/\[QA_WRITE\] (UPDATE |DELETE |INSERT INTO (pausas|portal_sync_queue|funcionarios id=90\d))/', $result['log']), "F4 {$case}: nada gravado");
+    assert_same(0, preg_match('/\[QA_WRITE\] (UPDATE |DELETE |INSERT INTO (pausas|portal_sync_queue|funcionarios id=banco))/', $result['log']), "F4 {$case}: nada gravado");
     assert_same(false, strpos($result['log'], 'FUNCIONARIO_ARQUIVADO') !== false || strpos($result['log'], 'FUNCIONARIO_RESTAURADO') !== false, "F4 {$case}: sem evento de sucesso");
     if ($status === 403) {
         assert_same(true, strpos($result['log'], '[QA_AUDIT] FUNCIONARIO_ALTERACAO_NEGADA [WARNING]') !== false, "F4 {$case}: recusa auditada");

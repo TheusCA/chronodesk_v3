@@ -38,8 +38,9 @@ export const reportFiltersSchema = z.object({
   employee_id: z.string().default(''),
 })
 
-export const employeeFormSchema = z.object({
-  id: employeeIdSchema,
+// [pos-deploy 1, D3] Campos do cadastro sem o ID: na criação o ID vem do banco
+// (AUTO_INCREMENT); na edição ele é só leitura e vai na requisição.
+const employeeFieldsShape = {
   nome: z.string({ error: 'Informe o nome do funcionário.' })
     .trim()
     .min(1, 'Informe o nome do funcionário.')
@@ -66,7 +67,11 @@ export const employeeFormSchema = z.object({
   // F4 (D4): ativo não é campo do formulário; arquivar e restaurar são ações da linha.
   // F1 (P12): só admin altera; os demais reenviam o valor atual.
   fora_mapa_escala: z.boolean({ error: 'Valor inválido para "Fora do Mapa PA e da escala".' }).default(false),
-}).superRefine((value, ctx) => {
+}
+
+type EmployeeHours = { jornada_entrada: string; jornada_saida: string; almoco_inicio: string; almoco_fim: string }
+
+function refineEmployeeHours(value: EmployeeHours, ctx: z.RefinementCtx): void {
   if (value.jornada_entrada >= value.jornada_saida) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -82,7 +87,13 @@ export const employeeFormSchema = z.object({
       message: 'Fim do almoço deve ser posterior ao início.',
     })
   }
-})
+}
+
+// Edição: o ID do cadastro (só leitura na tela) vai junto e é validado.
+export const employeeFormSchema = z.object({ id: employeeIdSchema, ...employeeFieldsShape }).superRefine(refineEmployeeHours)
+
+// Criação: sem ID; um 'id' que chegue aqui é descartado pelo Zod (chave desconhecida).
+export const employeeCreateSchema = z.object(employeeFieldsShape).superRefine(refineEmployeeHours)
 
 export const scheduleRuleSchema = z.object({
   employee_id: z.string()
@@ -257,4 +268,5 @@ export function absenceFormSchema({ today, canRetroactive, workday = null }: Abs
 
 export type ReportFiltersFormValues = z.infer<typeof reportFiltersSchema>
 export type EmployeeFormValues = z.infer<typeof employeeFormSchema>
+export type EmployeeCreateValues = z.infer<typeof employeeCreateSchema>
 export type ScheduleRuleFormValues = z.infer<typeof scheduleRuleSchema>

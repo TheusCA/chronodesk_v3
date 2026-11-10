@@ -41,25 +41,28 @@ assert.equal(existsSync(join(frontendRoot, 'scripts', 'qa-employee-form.mjs')), 
 assert.match(schemaSource, /export const employeeFormSchema = z\.object\(\{/, 'employeeFormSchema deve existir')
 
 assert.match(adminSource, /import \{ useForm \} from 'react-hook-form'/, 'AdminPage deve usar React Hook Form')
-assert.match(adminSource, /import \{ employeeFormSchema \} from '\.\.\/lib\/formSchemas'/, 'AdminPage deve importar employeeFormSchema')
+assert.match(adminSource, /import \{ employeeCreateSchema, employeeFormSchema \} from '\.\.\/lib\/formSchemas'/, 'AdminPage deve importar os schemas de criacao (sem ID, D3) e de edicao')
 assert.match(adminSource, /useForm\(\{[\s\S]*defaultValues:\s*emptyEmployee[\s\S]*\}\)/, 'Formulario de funcionario deve usar emptyEmployee como default')
 assert.match(adminSource, /handleCreateEmployeeSubmit\(create\)/, 'Criacao deve usar handleSubmit')
 assert.match(adminSource, /handleEditEmployeeSubmit\(update\)/, 'Edicao deve usar handleSubmit')
-assert.match(adminSource, /employeeFormSchema\.safeParse\(values\)/, 'AdminPage deve validar funcionario com safeParse')
+assert.match(adminSource, /employeeCreateSchema\.safeParse\(values\)/, 'AdminPage deve validar a criacao com safeParse (sem ID, D3)')
+assert.match(adminSource, /employeeFormSchema\.safeParse\(\{ \.\.\.values, id: editForm\?\.id \}\)/, 'AdminPage deve validar a edicao com o ID do cadastro aberto (D3)')
 assert.match(adminSource, /setError\(field, \{ type: 'zod'/, 'Erros Zod devem ir para formState.errors')
-assert.match(adminSource, /register\('id'\)[\s\S]*register\('nome'\)[\s\S]*register\('jornada_entrada'\)[\s\S]*register\('jornada_saida'\)[\s\S]*register\('almoco_inicio'\)[\s\S]*register\('almoco_fim'\)/, 'Campos de funcionario devem ser registrados no RHF')
+assert.match(adminSource, /register\('nome'\)[\s\S]*register\('jornada_entrada'\)[\s\S]*register\('jornada_saida'\)[\s\S]*register\('almoco_inicio'\)[\s\S]*register\('almoco_fim'\)/, 'Campos de funcionario devem ser registrados no RHF')
 // F4 (D4): sem o checkbox "Funcionário ativo"; ativo nao e campo do formulario.
 assert.doesNotMatch(adminSource, /register\('ativo'\)|Funcionário ativo/, 'Formulario sem o campo ativo (arquivar e restaurar sao acoes da linha)')
-assert.match(adminSource, /readOnly=\{editing\}[\s\S]*\{\.\.\.register\('id'\)\}/, 'Edicao deve preservar id no submit sem disabled')
+// [pos-deploy 1, D3] O ID vem do banco: sem campo na criacao; na edicao, so leitura (texto, nao input).
+assert.doesNotMatch(adminSource, /register\('id'\)|max="999"|Já existe um funcionário com este ID/, 'D3: sem campo ID registrado, sem o limite 999 na tela e sem a checagem de ID repetido')
+assert.match(adminSource, /\{editing && \(\s*<div className="label">ID\s*<p className="field mt-2 text-slate-300" data-employee-id-readonly="">\{form\.id\}<\/p>/u, 'D3: ID so na edicao, como texto')
 
 const createSource = adminSource.match(/async function create\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
-assert.match(createSource, /employeeFormSchema\.safeParse\(values\)/, 'Criacao deve validar schema')
-assert.match(createSource, /post\('adicionar_funcionario\.php', \{ \.\.\.parsed\.data, id: Number\(parsed\.data\.id\) \}\)/, 'Criacao deve preservar endpoint e id numerico')
-assert.match(createSource, /ACTION_FEEDBACK\.employeeCreated/, 'Criacao deve preservar feedback')
+assert.match(createSource, /employeeCreateSchema\.safeParse\(values\)/, 'Criacao deve validar schema sem ID')
+assert.match(createSource, /post\('adicionar_funcionario\.php', parsed\.data\)/, 'D3: criacao manda os dados sem ID (o servidor gera)')
+assert.match(createSource, /notify\(employeeCreatedFeedback\(result\)\)/, 'D3: a mensagem de sucesso traz o ID gerado')
 assert.match(createSource, /resetCreateEmployee\(emptyEmployee\)/, 'Criacao deve limpar formulario')
 
 const updateSource = adminSource.match(/async function update\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
-assert.match(updateSource, /employeeFormSchema\.safeParse\(values\)/, 'Edicao deve validar schema')
+assert.match(updateSource, /employeeFormSchema\.safeParse\(\{ \.\.\.values, id: editForm\?\.id \}\)/, 'Edicao deve validar schema com o ID do cadastro aberto')
 assert.match(updateSource, /post\('atualizar_funcionario\.php', \{ \.\.\.parsed\.data, id: Number\(parsed\.data\.id\), funcionario_id: Number\(parsed\.data\.id\) \}\)/, 'Edicao deve preservar endpoint, id e funcionario_id numericos')
 assert.match(updateSource, /ACTION_FEEDBACK\.employeeUpdated/, 'Edicao deve preservar feedback')
 assert.match(updateSource, /\(\) => setEditForm\(null\)/, 'Edicao deve fechar modo edicao apos sucesso')
@@ -539,6 +542,31 @@ const appliedFiltersOf = (markup) => Number(plain(markup).match(/Filtros aplicad
   }
   assert.ok(active.includes('<td class="bg-slate-950/40" colSpan="7">') || !active.includes('bg-slate-950/40'), 'almoco: a confirmacao ocupa as 7 colunas')
   assert.match(adminSource, /colSpan=\{7\}/u, 'almoco: confirmacao com colSpan 7')
+}
+
+// ---------------------------------------------------------------------------
+// Pos-deploy 1 (D3): criacao sem ID (schema e tela) e mensagem com o ID gerado.
+// ---------------------------------------------------------------------------
+{
+  const { employeeCreateSchema } = await import(pathToFileURL(join(srcRoot, 'lib', 'formSchemas.ts')).href)
+  const { employeeCreatedFeedback, ACTION_FEEDBACK: FEEDBACK } = await import(pathToFileURL(join(srcRoot, 'lib', 'actionFeedback.ts')).href)
+  const { id: _ignored, ...withoutId } = validEmployee
+  const created = employeeCreateSchema.safeParse(withoutId)
+  assert.deepEqual([created.success, 'id' in (created.data ?? {})], [true, false], 'D3: criacao valida sem ID')
+  const withStaleId = employeeCreateSchema.safeParse({ ...withoutId, id: '777' })
+  assert.deepEqual([withStaleId.success, 'id' in (withStaleId.data ?? {})], [true, false], 'D3: um id que chegue a criacao fica fora do corpo')
+  assert.equal(employeeCreateSchema.safeParse({ ...withoutId, almoco_inicio: '14:00' }).success, false, 'D3: a criacao continua validando os horarios')
+  assert.deepEqual([
+    employeeCreatedFeedback({ sucesso: true, funcionario: { id: 334 } }),
+    employeeCreatedFeedback({ sucesso: true }),
+    employeeCreatedFeedback({ funcionario: { id: 0 } }),
+    employeeCreatedFeedback(null),
+  ], ['Funcionário adicionado com o ID 334.', FEEDBACK.employeeCreated, FEEDBACK.employeeCreated, FEEDBACK.employeeCreated], 'D3: mensagem com o ID gerado; sem ID valido, a de sempre')
+
+  const markup = renderEmployees(ADMIN_SESSION)
+  const createForm = markup.slice(markup.indexOf('Adicionar funcionário'), markup.indexOf('>Funcionários</h2>'))
+  assert.equal(/<input[^>]*type="number"/u.test(createForm) || createForm.includes('data-employee-id-readonly'), false, 'D3: "Adicionar funcionario" sem campo ID')
+  assert.ok(plain(createForm).includes('Nome'), 'D3: o formulario de criacao foi lido')
 }
 
 console.log('Employee form RHF/Zod QA OK')

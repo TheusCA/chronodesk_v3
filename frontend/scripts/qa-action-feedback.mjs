@@ -74,7 +74,8 @@ assert.match(actionFeedbackSource, /requestRejected: 'Solicitação rejeitada co
 assert.match(actionFeedbackSource, /importFeedback/, 'Resumo de importacao deve ser padronizado')
 
 for (const [source, messageKey] of [
-  [adminSource, 'ACTION_FEEDBACK.employeeCreated'],
+  // [pos-deploy 1, D3] A criacao mostra o ID gerado: a mensagem vem de employeeCreatedFeedback(result).
+  [adminSource, 'notify(employeeCreatedFeedback(result))'],
   [adminSource, 'ACTION_FEEDBACK.employeeUpdated'],
   [adminSource, 'ACTION_FEEDBACK.employeeArchived'],
   [adminSource, 'ACTION_FEEDBACK.employeeRestored'],

@@ -451,7 +451,7 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.equal((tabSource.match(/onClick=\{closeEdit\} type="button">Cancelar<\/button>/g) || []).length, 2, 'Funcionarios: os dois Cancelar pelo closeEdit (pergunta)')
   assert.doesNotMatch(tabSource, /onClick=\{\(\) => setEditForm\(null\)\}/, 'Funcionarios: nenhum botao fecha a edicao direto sem perguntar')
   assert.match(tabSource, /<ConfirmDiscardDialog \{\.\.\.createGuard\.dialogProps\} \/>\s*<ConfirmDiscardDialog \{\.\.\.editGuard\.dialogProps\} \/>/, 'Funcionarios: um aviso de descarte para cada formulario')
-  assert.match(tabSource, /ACTION_FEEDBACK\.employeeCreated,\s*\(\) => resetCreateEmployee\(emptyEmployee\),/, 'Funcionarios: adicionar com sucesso limpa o formulario (deixa de estar sujo)')
+  assert.match(tabSource, /null,\s*\(result\) => \{\s*resetCreateEmployee\(emptyEmployee\)/, 'Funcionarios: adicionar com sucesso limpa o formulario (deixa de estar sujo)')
   assert.match(tabSource, /ACTION_FEEDBACK\.employeeUpdated,\s*\(\) => setEditForm\(null\),/, 'Funcionarios: salvar com sucesso fecha direto, sem perguntar; erro mantem o formulario')
   const fieldsSource = adminSource.slice(adminSource.indexOf('function EmployeeFields('), adminSource.indexOf('const archiveStateLabels'))
   assert.match(fieldsSource, /\{\.\.\.withFieldRef\(register\('nome'\), nameRef\)\}/, 'Funcionarios: o Nome continua registrado no React Hook Form e entrega o ref')

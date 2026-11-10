@@ -7,13 +7,13 @@ import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
 import { DecisionConfirmDialog } from '../components/ui/DecisionConfirmDialog'
 import { Dialog } from '../components/ui/Dialog'
 import { post } from '../lib/api'
-import { ACTION_FEEDBACK } from '../lib/actionFeedback'
+import { ACTION_FEEDBACK, employeeCreatedFeedback } from '../lib/actionFeedback'
 import { adjustmentTypeLabel } from '../lib/decisionConfirm'
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { archiveEffectsSummary, employeeArchiveState, matchesArchiveFilter } from '../lib/employeeArchive'
 import { keepLunchSelection, lunchKey, lunchOptions, matchesLunchFilter } from '../lib/employeeLunch'
-import { employeeFormSchema } from '../lib/formSchemas'
+import { employeeCreateSchema, employeeFormSchema } from '../lib/formSchemas'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import {
@@ -258,7 +258,7 @@ function SettingsTab({ resource, notify }) {
 }
 
 const emptyEmployee = {
-  id: '', nome: '', ad_login: '', equipe: 'n1', access_role: 'tecnico', jornada_entrada: '08:00',
+  nome: '', ad_login: '', equipe: 'n1', access_role: 'tecnico', jornada_entrada: '08:00',
   jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', fora_mapa_escala: false,
 }
 
@@ -302,10 +302,12 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
 
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <label className="label">ID
-        <input aria-disabled={editing} aria-invalid={Boolean(errors.id)} className="field mt-2" max="999" min="1" readOnly={editing} required type="number" {...register('id')} />
-        {errors.id && <span className="mt-1 block text-xs text-red-300">{errors.id.message}</span>}
-      </label>
+      {/* [pós-deploy 1, D3] O ID vem do banco: não há campo na criação; na edição, só leitura (texto). */}
+      {editing && (
+        <div className="label">ID
+          <p className="field mt-2 text-slate-300" data-employee-id-readonly="">{form.id}</p>
+        </div>
+      )}
       <label className="label xl:col-span-2">Nome
         <input aria-invalid={Boolean(errors.nome)} className="field mt-2" maxLength="100" minLength="3" required {...withFieldRef(register('nome'), nameRef)} />
         {errors.nome && <span className="mt-1 block text-xs text-red-300">{errors.nome.message}</span>}
@@ -532,13 +534,11 @@ function EmployeesTab({
 
   function validateUnique(form, editing = false) {
     const employees = resource.data?.funcionarios || []
-    const duplicateId = !editing && employees.some((item) => Number(item.id) === Number(form.id))
     const login = String(form.ad_login || '').trim().toLowerCase()
     const duplicateLogin = login && employees.some((item) => (
       String(item.ad_login || '').trim().toLowerCase() === login
       && (!editing || Number(item.id) !== Number(form.id))
     ))
-    if (duplicateId) return 'Já existe um funcionário com este ID.'
     if (duplicateLogin) return 'Este login AD já está vinculado a outro funcionário (ativo ou inativo).'
     if (login && !/^[a-z0-9._@-]+$/.test(login)) return 'O login AD contém caracteres inválidos.'
     return ''
@@ -546,7 +546,7 @@ function EmployeesTab({
 
   async function create(values) {
     clearCreateEmployeeErrors()
-    const parsed = employeeFormSchema.safeParse(values)
+    const parsed = employeeCreateSchema.safeParse(values)
     if (!parsed.success) {
       applyEmployeeErrors(parsed.error, setCreateEmployeeError, setCreateEmployeeFocus)
       return
@@ -558,18 +558,23 @@ function EmployeesTab({
     }
     setSubmitting(true)
     await perform(
-      () => post('adicionar_funcionario.php', { ...parsed.data, id: Number(parsed.data.id) }),
+      // [D3] Sem ID: o servidor gera e devolve em funcionario.id, que vai na mensagem.
+      () => post('adicionar_funcionario.php', parsed.data),
       [resource.refresh],
       notify,
-      ACTION_FEEDBACK.employeeCreated,
-      () => resetCreateEmployee(emptyEmployee),
+      null,
+      (result) => {
+        resetCreateEmployee(emptyEmployee)
+        notify(employeeCreatedFeedback(result))
+      },
     )
     setSubmitting(false)
   }
 
   async function update(values) {
     clearEditEmployeeErrors()
-    const parsed = employeeFormSchema.safeParse(values)
+    // [D3] O ID não é campo do formulário: vem do cadastro aberto.
+    const parsed = employeeFormSchema.safeParse({ ...values, id: editForm?.id })
     if (!parsed.success) {
       applyEmployeeErrors(parsed.error, setEditEmployeeError, setEditEmployeeFocus, true)
       return

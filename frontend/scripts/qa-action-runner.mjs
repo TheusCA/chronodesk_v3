@@ -99,7 +99,8 @@ assert.match(criticalImportSource, /post\('portal\/critical_incidents_import\.ph
 assert.match(criticalImportSource, /if \(inputRef\.current\) inputRef\.current\.value = ''/, 'Importacao deve continuar limpando input')
 
 for (const [source, pattern, label] of [
-  [adminSource, /ACTION_FEEDBACK\.employeeCreated[\s\S]*\(\) => resetCreateEmployee\(emptyEmployee\)/, 'Funcionario criado deve manter reset via onSuccess'],
+  // [D3] Sem mensagem padrao (null): o onSuccess limpa o formulario e avisa com o ID gerado.
+  [adminSource, /null,\s*\(result\) => \{\s*resetCreateEmployee\(emptyEmployee\)\s*notify\(employeeCreatedFeedback\(result\)\)/, 'Funcionario criado deve manter reset via onSuccess e avisar com o ID'],
   [adminSource, /ACTION_FEEDBACK\.employeeUpdated[\s\S]*\(\) => setEditForm\(null\)/, 'Funcionario atualizado deve sair de edicao via onSuccess'],
   [adminSource, /ACTION_FEEDBACK\.userCreated[\s\S]*\(\) => setForm\(\{ username: '', password: '', role: 'gestor' \}\)/, 'Usuario criado deve limpar formulario via onSuccess'],
   // F1: regra igual a vigente nao grava nada e o servidor avisa (unchanged);

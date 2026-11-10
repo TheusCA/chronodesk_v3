@@ -360,7 +360,8 @@ const EMPLOYEE_BOTTOM_CANCEL = button('Cancelar', `${EMPLOYEE_PANEL}.querySelect
 const EMPLOYEE_SUBMIT = `${EMPLOYEE_PANEL}.querySelector('form button[type="submit"]')`
 const CREATE_FORM = `[...document.querySelectorAll('form')].find((form) => !form.closest('[data-dialog-backdrop]') && form.querySelector('input[minlength="3"]'))`
 const CREATE_NAME = `${CREATE_FORM}.querySelector('input[minlength="3"]')`
-const CREATE_ID = `${CREATE_FORM}.querySelector('input[type="number"]')`
+// [pos-deploy 1, D3] Sem campo ID na criacao (o ID vem do banco); na edicao, ID so leitura (texto).
+const CREATE_ID_FIELDS = `${CREATE_FORM}.querySelectorAll('input[type="number"], [data-employee-id-readonly]').length`
 const CREATE_SUBMIT = `${CREATE_FORM}.querySelector('button[type="submit"]')`
 const ROW_EDIT = (index) => `[...document.querySelectorAll('button')].filter((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')[${index}]`
 const TAB = (label) => `[...document.querySelectorAll('button.tab-button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
@@ -377,7 +378,8 @@ const EMPLOYEE_STATE = `(() => {
     descartar: document.querySelectorAll('[role="alertdialog"]').length,
     foco: !active || active === document.body ? 'body' : active.tagName === 'INPUT' ? 'campo:' + (active.closest('label')?.childNodes[0]?.textContent.trim() || '') : (active.textContent || '').trim(),
     linha_do_foco: edits.indexOf(active),
-    id: panel ? panel.querySelector('input[type="number"]').value : null,
+    id: panel ? (panel.querySelector('[data-employee-id-readonly]')?.textContent.trim() ?? null) : null,
+    id_campo: panel ? panel.querySelectorAll('input[type="number"]').length : null,
     nome: panel ? panel.querySelector('input[minlength="3"]').value : null,
     novo_nome: create ? create.querySelector('input[minlength="3"]').value : null,
     beforeunload: (getEventListeners(window).beforeunload || []).length,
@@ -417,7 +419,7 @@ async function employees(page, port, mock) {
   // Abrir e fechar sem mexer nao conta como sujo, em cadastros diferentes.
   for (const index of [0, 1, 2, 3]) {
     await openEdit(index)
-    await expectEmployee(`editar, cadastro ${index + 1}, abrir: role="dialog", foco no Nome, um keydown, nao esta sujo`, { edicao: true, modal: 'true', foco: 'campo:Nome', keydown: 1, beforeunload: 0, id: String(index + 1) })
+    await expectEmployee(`editar, cadastro ${index + 1}, abrir: role="dialog", foco no Nome, um keydown, nao esta sujo`, { edicao: true, modal: 'true', foco: 'campo:Nome', keydown: 1, beforeunload: 0, id: String(index + 1), id_campo: 0 })
     await page.press('Escape')
     await expectEmployee(`editar, cadastro ${index + 1}, Esc: fecha sem perguntar, foco volta ao Editar dele`, { edicao: false, descartar: 0, foco: 'Editar', linha_do_foco: index, keydown: 0, dialogos: 0 })
   }
@@ -609,8 +611,7 @@ async function employees(page, port, mock) {
   await expectEmployee('os dois sujos, Descartar a edicao: fecha so a edicao, adicionar mantido', { edicao: false, descartar: 0, novo_nome: 'Rascunho QA', beforeunload: 1 })
 
   // Erro do servidor mantem o adicionar; sucesso limpa, sem perguntar.
-  await page.evaluate(`${CREATE_ID}.focus()`)
-  await page.typeText('900')
+  report('adicionar sem campo ID (D3)', (await page.evaluate(CREATE_ID_FIELDS)) === 0)
   await page.evaluate(`${CREATE_NAME}.select()`)
   await page.typeText(FAILING_EMPLOYEE)
   await page.click(CREATE_SUBMIT)
@@ -623,6 +624,11 @@ async function employees(page, port, mock) {
   await page.waitFor(`${CREATE_NAME}.value === ''`)
   await expectEmployee('adicionar com sucesso: formulario limpo, sem perguntar, sem listener', { novo_nome: '', descartar: 0, beforeunload: 0, dialogos: 0 })
   report('adicionar com sucesso: um POST', mock.requests.filter((r) => r.method === 'POST' && r.key === 'adicionar_funcionario.php').length === creates + 1)
+  {
+    const created = mock.requests.filter((r) => r.method === 'POST' && r.key === 'adicionar_funcionario.php').at(-1)
+    report('adicionar (D3): corpo sem id', !!created && !('id' in (created.body ?? {})), JSON.stringify(Object.keys(created?.body ?? {})))
+    report('adicionar (D3): o aviso mostra o ID gerado pelo servidor', await page.evaluate(`document.body.textContent.includes('Funcionário adicionado com o ID 334.')`))
+  }
   await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
   await expectEmployee('depois de adicionar, menu: troca de tela sem perguntar', { rota: '/app/calendario', descartar: 0 })
   await page.evaluate('history.back()'); await page.waitFor(`!!${CREATE_FORM}`)
@@ -1258,8 +1264,6 @@ async function toastAboveLayers(page, port) {
   // Menu do celular (z-50) aberto, com o aviso na tela.
   await goto(page, port, '/admin?tab=funcionarios', 390)
   await page.waitFor(`!!${CREATE_FORM}`)
-  await page.evaluate(`${CREATE_ID}.focus()`)
-  await page.typeText('900')
   await page.evaluate(`${CREATE_NAME}.focus()`)
   await page.typeText(FAILING_EMPLOYEE)
   await page.evaluate(`${CREATE_SUBMIT}.click()`)

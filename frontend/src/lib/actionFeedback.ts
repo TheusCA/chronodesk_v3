@@ -60,3 +60,14 @@ export function importFeedback(result?: Record<string, unknown> | null): string 
 
   return ACTION_FEEDBACK.importCompleted
 }
+
+// [pos-deploy 1, D3] Cadastro novo: o ID vem do banco e aparece na mensagem.
+// Resposta sem um ID inteiro positivo cai na mensagem de sempre.
+export function employeeCreatedFeedback(result: unknown): string {
+  const id = typeof result === 'object' && result !== null
+    ? Number((result as { funcionario?: { id?: unknown } }).funcionario?.id)
+    : Number.NaN
+  return Number.isInteger(id) && id > 0
+    ? `Funcionário adicionado com o ID ${id}.`
+    : ACTION_FEEDBACK.employeeCreated
+}

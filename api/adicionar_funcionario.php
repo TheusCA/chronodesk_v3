@@ -20,7 +20,9 @@ if (!$data) {
     json_response(['sucesso' => false, 'mensagem' => 'Dados inválidos'], 400);
 }
 
-$id = isset($data['id']) ? intval($data['id']) : 0;
+// [pos-deploy 1, D1] O ID vem do banco (AUTO_INCREMENT). Um 'id' enviado por
+// cliente antigo e ignorado (nao recusado); a auditoria registra so que veio.
+$id_recebido_ignorado = array_key_exists('id', $data);
 $nome = validate_nome($data['nome'] ?? '', 3, 100);
 $equipe = validate_funcionario_equipe($data['equipe'] ?? '');
 $access_role = validate_access_role($data['access_role'] ?? 'tecnico');
@@ -38,10 +40,6 @@ if (!in_array($ativo_input, [true, 1, '1'], true)) {
     json_response(['sucesso' => false, 'mensagem' => 'Cadastro novo é sempre ativo. Para arquivar, use Arquivar depois de salvar.'], 400);
 }
 $ativo = true;
-
-if ($id < 1 || $id > 999) {
-    json_response(['sucesso' => false, 'mensagem' => 'ID inválido (deve estar entre 1 e 999)'], 400);
-}
 
 if ($nome === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Nome inválido. Use de 3 a 100 caracteres válidos.'], 400);
@@ -95,30 +93,28 @@ if (!$gerenciador) {
     json_response(['sucesso' => false, 'mensagem' => 'Gerenciador não inicializado'], 500);
 }
 
-// Verificar se funcionário já existe
-$funcs = $gerenciador->obter_funcionarios();
-if (isset($funcs[$id])) {
-    json_response(['sucesso' => false, 'mensagem' => 'ID já existe. Use outro ID.'], 400);
-}
-
+// [D1] Sem a checagem "ID ja existe": ela so olhava a lista em memoria e
+// deixava o ID de um arquivado estourar como 500 na chave primaria.
 if ($ad_login !== null && funcionario_ad_login_em_uso($ad_login)) {
     json_response(['sucesso' => false, 'mensagem' => 'Login AD já vinculado a outro funcionário (ativo ou inativo).'], 400);
 }
 
-// Adicionar funcionário
+// Adicionar funcionário: INSERT sem a coluna id; o ID e o lastInsertId(),
+// conferido dentro da transacao (D2: acima da faixa aceita hoje, desfaz e 409).
+$pdo = null;
 try {
     $pdo = get_db_connection();
+    $pdo->beginTransaction();
     $stmt = $pdo->prepare(
         "INSERT INTO funcionarios (
-            id, nome, equipe, access_role, ad_login, jornada_entrada, jornada_saida,
+            nome, equipe, access_role, ad_login, jornada_entrada, jornada_saida,
             almoco_inicio, almoco_fim, ativo
         ) VALUES (
-            :id, :nome, :equipe, :access_role, :ad_login, :jornada_entrada, :jornada_saida,
+            :nome, :equipe, :access_role, :ad_login, :jornada_entrada, :jornada_saida,
             :almoco_inicio, :almoco_fim, :ativo
         )"
     );
     $stmt->execute([
-        ':id' => $id,
         ':nome' => $nome,
         ':equipe' => $equipe,
         ':access_role' => $access_role,
@@ -129,22 +125,45 @@ try {
         ':almoco_fim' => formatar_hora_mysql($almoco_fim, '13:00:00'),
         ':ativo' => $ativo ? 1 : 0,
     ]);
-    
+    $id = filter_var($pdo->lastInsertId(), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($id === false) {
+        $pdo->rollBack();
+        error_log('[FUNCIONARIO] lastInsertId invalido na criacao; INSERT desfeito');
+        json_response(['sucesso' => false, 'mensagem' => 'Erro ao adicionar funcionário.'], 500);
+    }
+    // [D2] Os outros endpoints aceitam so de 1 a 999 (validate_funcionario_id):
+    // um cadastro acima disso nao poderia ser editado, arquivado nem pausar.
+    if (validate_funcionario_id($id) === null) {
+        $pdo->rollBack();
+        audit_log('FUNCIONARIO_ID_FORA_DA_FAIXA', "Criacao desfeita: o banco gerou o ID {$id}, acima da faixa aceita (1 a 999)", 'WARNING');
+        json_response(['sucesso' => false, 'mensagem' => "O banco gerou o ID {$id}, acima da faixa aceita hoje (1 a 999). Nada foi gravado. Avise o administrador do sistema."], 409);
+    }
+    $pdo->commit();
+
     // Adicionar ao gerenciador em memória
     $funcionario = new Funcionario($id, $nome, $equipe, $jornada_entrada, $jornada_saida, $almoco_inicio, $almoco_fim, $ativo, $ad_login, $access_role);
     $gerenciador->adicionar_funcionario($funcionario);
     // [F4, L-11] Sem salvar_estado(): cadastro novo nao tem pausa, e regravar o
     // estado.json daqui, fora do lock, podia desfazer uma pausa em andamento.
+    // [D4] Nada e gravado no funcionarios.json na criacao: o ID do cadastro e
+    // so o do banco.
     audit_log('FUNCIONARIO_ADICIONADO', "Funcionario '{$nome}' adicionado (ID: {$id}, equipe: {$equipe}, perfil: {$access_role})", 'WARNING');
+    if ($id_recebido_ignorado) {
+        audit_log('FUNCIONARIO_ID_IGNORADO', "Criacao do funcionario ID {$id}: o campo id veio na requisicao e foi ignorado (o ID vem do banco)", 'INFO');
+    }
     if (funcionario_role_is_elevated($access_role)) {
         audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Funcionario ID {$id} criado com perfil {$access_role} por {$actor_role}", 'CRITICAL');
     }
-    
+
     json_response([
         'sucesso' => true,
-        'mensagem' => "Funcionário '{$nome}' adicionado com sucesso!"
+        'mensagem' => "Funcionário '{$nome}' adicionado com o ID {$id}.",
+        'funcionario' => ['id' => $id],
     ]);
 } catch (Exception $e) {
+    if ($pdo instanceof PDO && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log('[FUNCIONARIO] Erro ao adicionar funcionário: ' . $e->getMessage());
     json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao adicionar funcionário.')], 500);
 }
