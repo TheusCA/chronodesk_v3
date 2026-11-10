@@ -4697,6 +4697,57 @@ Fora do pedido e sem decisão: M2 (quem valida cada perfil no 7i), M14 (senha do
 - `gitleaks` 8.30.1 sobre o que entrou no commit: `no leaks found`. `shellcheck`, PHPStan e Psalm não estão instalados na estação.
 - **`test-local.ps1 -SkipHttp -Browser` com saída 0 no `d77858b`** (worktree separado, `npm ci` limpo): lint PHP, smoke, os QAs PHP (a trava com 291 verificações entre eles) e o roteiro de navegador **1026/1026**. O commit final difere do `d77858b` só nesta linha e na do registro (emenda local do mesmo commit, sem push); nenhum QA lê esses dois arquivos.
 
+### 9.14 Pós-deploy 1 (o deploy 1 foi executado em produção em 10/11/2026, no `2e27926`)
+
+Os commits seguintes partem do `2e27926`, que está no ar; o próximo deploy segue por `git merge --ff-only`. O registro da execução do deploy 1 vem no commit C (docs), depois dos commits de código A, B e D.
+
+#### 9.14.1 Commit A: `qa-security` com corpo binário, `fputcsv` explícito, `.gitleaksignore` e `npm audit` (`28fb746`, 2026-11-10; aguardando revisão)
+
+**A1. Falso negativo do `qa-security` no servidor.**
+- **Causa.** O filho grava o resultado com `json_encode(['status', 'body'])`. No servidor, a CLI tem `ZipArchive`, e o `api/download_relatorio.php` responde com o ZIP binário. O `json_encode` devolve `false` com bytes que não são UTF-8, a linha `QA_RESULT` sai vazia e o teste falha com "não devolveu resultado". Na estação não havia `ZipArchive`, a resposta era o 503 em JSON e o teste passava.
+- **Correção.** Corpo que não é UTF-8 vai em `body_b64`, e o pai o decodifica de volta aos bytes originais. Se o JSON ainda falhar, a linha traz o motivo (`encode_error`) em vez de sair vazia.
+- **Caso novo:** o download como admin, pelos dois caminhos.
+  - Pela CLI (`QA_RESULT`) e pelo servidor embutido do PHP (`php -S` no `127.0.0.1`). O servidor embutido é o único jeito de ver o `Content-Type`: a CLI descarta os cabeçalhos. Ele faz parte do PHP CLI, então não há dependência nova.
+  - Com `ZipArchive`: 200, `application/zip` e corpo começando com "PK".
+  - Sem `ZipArchive`: 503 com "Exportação indisponível no servidor." e `application/json`.
+  - O banco simulado devolve uma pausa de teste quando o caso a fornece (`db['pausas']`), para o download chegar ao ZIP sem depender do ambiente.
+- **Na estação**, o QA rodou sem e com `ZipArchive`. A extensão existe, mas não é carregada; ela foi ligada só no teste, por um `PHP_INI_SCAN_DIR` temporário fora do repositório.
+
+**A2. `fputcsv` no PHP 8.4.** As 9 chamadas fora de `scripts/` passam separador, aspas e escape `'\\'` explícitos:
+- `api/download_relatorio.php`;
+- `api/portal/critical_incidents_export.php`, duas;
+- `classes/GerenciadorPausas.php`;
+- `config.php`;
+- `services/OperationalService.php`, quatro.
+
+O escape `'\\'` é o padrão implícito de hoje. O QA compara a saída com a de antes, com as células `a\"b`, `c;d`, `e\`, `f"g` e `x`, nos separadores `;` e `,`: é igual byte a byte. Ele também confere que são exatamente 9 chamadas, todas com o escape explícito. O escape `''` mudaria `a\"b` e `e\` na saída, por isso não foi usado (exige aprovação).
+
+**A3. `.gitleaksignore`.** Dois fingerprints do mesmo falso positivo, o `QA_PASSWORD` de teste em `scripts/qa-security.php:25`: o do histórico, com o commit que o introduziu, e o da árvore. O `gitleaks` fica limpo nos modos `git` e `dir`. O fingerprint da árvore depende da linha: se a constante mudar de linha, volta a ser acusada.
+
+**A4. `npm audit` (4 → 0), só dentro das faixas do `package.json`** (`npm audit fix` sem `--force`, nenhum major):
+
+| Pacote | Severidade | Tipo | No bundle? | Antes → depois |
+|---|---|---|---|---|
+| `vite` | alta (5 avisos: servidor de desenvolvimento e `launch-editor`) | direta, desenvolvimento | não | 8.0.16 → 8.3.7 |
+| `zod` | alta (memória ao validar coleções grandes) | direta, produção | **sim** | 4.4.3 → 4.6.7 |
+| `source-map-js` | alta (DoS por offsets de seção) | transitiva de build (`postcss`) | não | 1.2.1 → 1.2.2 |
+| `postcss-selector-parser` | moderada (CPU) | transitiva de build (`tailwindcss`) | não | 6.1.4 → 6.1.6 |
+
+- **Junto vieram** o `rolldown` (1.0.3 → 1.2.18), o `lightningcss` (1.32.0 → 1.33.0) e os binários de plataforma deles. Saíram seis pacotes de suporte ao WASM e o `cssesc`.
+- **Entrada nova no lockfile:** `@rolldown/binding-android-arm-eabi`, um binário opcional de plataforma que não é instalado em x64. Fica registrado para a revisão.
+- **Nada virou proposta:** os quatro tinham correção sem major.
+
+**Validação executada pela IA:**
+- **`test-local.ps1 -SkipHttp -Browser` com saída 0 no `28fb746`** (worktree separado, `npm ci` limpo): lint PHP, smoke, os QAs PHP (`qa-security OK`; a trava com 291 verificações) e o roteiro de navegador 1026/1026. O build com as versões novas e o `qa:bundle` passaram.
+- **Mutação 8/8:**
+  - A1: `json_encode` puro no filho (mutante obrigatório; com ZIP, reprova com "não devolveu resultado"); o pai sem decodificar o `body_b64`; `Content-Type` errado no endpoint; leitura HTTP sem `Content-Type`; mensagem do 503 trocada;
+  - A2: escape vazio no `csvRow`; chamada sem o escape explícito; escape vazio no `config.php`.
+- `gitleaks` (modos `git` e `dir`) com `no leaks found`. `npm audit` com 0.
+
+**Fora do pedido, para decisão:** o `fgetcsv` sem `$escape` em `classes/GerenciadorPausas.php:666` e `:668` e em `migrar_csv_para_mysql.php`. Falta confirmar na documentação do PHP 8.4 se a depreciação também o alcança; se alcançar, a correção é a mesma (escape `'\\'` explícito).
+
+**Limitações declaradas:** o caso com `ZipArchive` rodou na estação com a extensão carregada de propósito. No PHP 8.4 do servidor, ele roda no próximo ensaio de código.
+
 ---
 
 ## 10. Riscos e pendências
