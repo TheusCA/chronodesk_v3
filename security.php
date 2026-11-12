@@ -113,9 +113,13 @@ function csv_neutralize_cell(string $text): string {
 // VALIDAÇÕES
 // ============================================
 
+// [pos-deploy 1, F] Teto do ID do funcionario = maximo do INT com sinal da
+// coluna funcionarios.id (AUTO_INCREMENT). Antes era 999 (desenho 9.14.6).
+const FUNCIONARIO_ID_MAX = 2147483647;
+
 function validate_funcionario_id($id) {
     $id = filter_var($id, FILTER_VALIDATE_INT, [
-        'options' => ['min_range' => 1, 'max_range' => 999]
+        'options' => ['min_range' => 1, 'max_range' => FUNCIONARIO_ID_MAX]
     ]);
     return $id !== false ? $id : null;
 }

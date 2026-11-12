@@ -2037,11 +2037,14 @@ $txDb = static fn (array $extra = []): array => $extra + ['log_tx' => true] + QA
 $idCases = qa_run_endpoints($qaDir, [
     'sem_id' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.sem.id']), $txDb(['last_insert_id' => '334'])),
     'id_ignorado' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['id' => 77, 'ad_login' => 'novo.com.id']), $txDb(['last_insert_id' => '335'])),
-    'acima_da_faixa' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.acima']), $txDb(['last_insert_id' => '1000'])),
+    // [F3] 1000 e o maximo do INT passam; so o impossivel (acima do INT) da 409.
+    'id_1000' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.mil']), $txDb(['last_insert_id' => '1000'])),
+    'id_maximo' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.maximo']), $txDb(['last_insert_id' => '2147483647'])),
+    'acima_da_faixa' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.acima']), $txDb(['last_insert_id' => '2147483648'])),
     'last_insert_invalido' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'novo.invalido']), $txDb(['last_insert_id' => '0'])),
     'login_duplicado_ativo' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $noIdBody(['ad_login' => 'joao.silva']), $txDb()),
 ]);
-foreach (['sem_id' => 334, 'id_ignorado' => 335] as $case => $generated) {
+foreach (['sem_id' => 334, 'id_ignorado' => 335, 'id_1000' => 1000, 'id_maximo' => 2147483647] as $case => $generated) {
     $result = $idCases[$case];
     $body = json_decode($result['body'], true);
     assert_same([200, $generated, "Funcionário 'Fulano Teste' adicionado com o ID {$generated}."], [$result['status'], $body['funcionario']['id'] ?? null, $body['mensagem'] ?? null], "D5 {$case}: 200 com o ID do banco na resposta");
@@ -2054,7 +2057,8 @@ $ignored = $idCases['id_ignorado']['log'];
 assert_same(true, strpos($ignored, '[QA_AUDIT] FUNCIONARIO_ID_IGNORADO [INFO]: Criacao do funcionario ID 335: o campo id veio na requisicao e foi ignorado') !== false, 'D5 id_ignorado: auditoria de que o campo veio e foi ignorado');
 assert_same(0, preg_match('/FUNCIONARIO_ID_IGNORADO[^\n]*\b77\b/', $ignored), 'D5 id_ignorado: auditoria sem o valor recebido');
 $above = $idCases['acima_da_faixa'];
-assert_same([409, true], [$above['status'], strpos((string)(json_decode($above['body'], true)['mensagem'] ?? ''), 'O banco gerou o ID 1000, acima da faixa aceita hoje (1 a 999). Nada foi gravado.') === 0], 'D5 acima_da_faixa: 409 com mensagem clara');
+assert_same([409, true], [$above['status'], strpos((string)(json_decode($above['body'], true)['mensagem'] ?? ''), 'O banco gerou o ID 2147483648, fora da faixa aceita (1 a 2147483647). Nada foi gravado.') === 0], 'D5/F2 acima_da_faixa: 409 com mensagem clara');
+assert_same(true, strpos($above['log'], '[QA_AUDIT] FUNCIONARIO_ID_FORA_DA_FAIXA [WARNING]: Criacao desfeita: o banco gerou o ID 2147483648, fora da faixa aceita (1 a 2147483647)') !== false, 'F2 acima_da_faixa: auditoria com a faixa nova');
 assert_same([true, false, false, true], [
     strpos($above['log'], '[QA_TX] rollback') !== false,
     strpos($above['log'], '[QA_TX] commit') !== false,
@@ -2067,6 +2071,47 @@ $duplicate = $idCases['login_duplicado_ativo'];
 assert_same([400, true, false], [$duplicate['status'], strpos($duplicate['body'], 'Login AD já vinculado a outro funcionário') !== false, strpos($duplicate['log'], 'INSERT INTO funcionarios id=banco') !== false], 'D5 login AD duplicado: 400, nada gravado');
 $createSource = (string)file_get_contents($root . '/api/adicionar_funcionario.php');
 assert_same([false, false], [strpos($createSource, "isset(\$funcs[\$id])") !== false, strpos($createSource, 'ID já existe') !== false], 'D1: sem a checagem "ID ja existe" da lista em memoria');
+
+// [pos-deploy 1, F3] Faixa do ID do funcionario ate o INT (2147483647).
+// ' 12' passa como 12: o FILTER_VALIDATE_INT ignora espaco nas pontas
+// (comportamento de antes do F, mantido; desenho 9.14.6).
+assert_same(2147483647, FUNCIONARIO_ID_MAX, 'F1: teto do ID = maximo do INT com sinal');
+foreach ([
+    [999, 999], [1000, 1000], [2147483647, 2147483647], ['2147483647', 2147483647],
+    [2147483648, null], ['2147483648', null], [0, null], ['0', null], [-1, null], ['-1', null],
+    ['1e3', null], [' 12', 12], ['12abc', null], [12.5, null], ['', null], [null, null],
+] as [$input, $expected]) {
+    assert_same($expected, validate_funcionario_id($input), 'F3 validate_funcionario_id(' . var_export($input, true) . ')');
+}
+// Carga em memoria (config.php, normalizar_funcionario_array): o PDO devolve o
+// id como texto; 1000 e o maximo nao viram 0, acima do INT vira 0 (descartado).
+foreach ([['999', 999], ['1000', 1000], [1000, 1000], ['2147483647', 2147483647], ['2147483648', 0]] as [$rawId, $expected]) {
+    assert_same($expected, normalizar_funcionario_array(['id' => $rawId, 'nome' => 'QA Faixa', 'equipe' => 'n1'])['id'], 'F3 carga em memoria: id ' . var_export($rawId, true));
+}
+// Endpoint de pausa (rejeitar_pausa.php, gestor) com os cadastros carregados
+// do funcionarios.json do caso: o ID valido chega ao cadastro em memoria (409
+// "sem solicitacao pendente"); o invalido para no 400.
+$rangeState = ['funcionarios.json' => (string)json_encode([
+    ['id' => 999, 'nome' => 'QA Faixa 999', 'equipe' => 'n1', 'ativo' => true],
+    ['id' => 1000, 'nome' => 'QA Faixa 1000', 'equipe' => 'n1', 'ativo' => true],
+    ['id' => 2147483647, 'nome' => 'QA Faixa Maximo', 'equipe' => 'n2', 'ativo' => true],
+])];
+$rangeInputs = [
+    '999' => 999, '1000' => 1000, 'maximo' => 2147483647, 'acima' => 2147483648,
+    'zero_texto' => '0', 'negativo' => -1, 'exponencial' => '1e3', 'espaco' => ' 12', 'sufixo' => '12abc',
+];
+$rangeSpecs = [];
+foreach ($rangeInputs as $case => $input) {
+    $rangeSpecs[$case] = ['endpoint' => 'api/rejeitar_pausa.php', 'method' => 'POST', 'content_type' => 'application/json', 'body' => (string)json_encode(['funcionario_id' => $input]), 'session' => $manager, 'state' => $rangeState];
+}
+$rangeCases = qa_run_endpoints($qaDir, $rangeSpecs);
+foreach (['999', '1000', 'maximo'] as $case) {
+    qa_assert_endpoint($rangeCases[$case], 409, 'Não há solicitação pendente para este funcionário.', "F3 rejeitar_pausa id {$case}: aceito e encontrado na memoria");
+}
+foreach (['acima', 'zero_texto', 'negativo', 'exponencial', 'sufixo'] as $case) {
+    qa_assert_endpoint($rangeCases[$case], 400, 'ID do funcionário inválido.', "F3 rejeitar_pausa id {$case}: 400");
+}
+qa_assert_endpoint($rangeCases['espaco'], 404, 'Funcionário não encontrado.', "F3 rejeitar_pausa id ' 12': aceito como 12 (inexistente no caso)");
 
 // [9.12, passo 6] Campo ausente no corpo mantem o gravado: perfil, login AD e
 // horarios. Antes, editar sem access_role (a tela legada nao manda) gravava

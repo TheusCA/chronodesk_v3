@@ -41,7 +41,7 @@ Fora do escopo:
 
 Validacoes:
 
-- `id` obrigatorio, inteiro, entre 1 e 999;
+- `id` obrigatorio, inteiro, entre 1 e 2147483647 (`EMPLOYEE_ID_MAX`, o `INT` do banco; era 999 ate o pos-deploy 1); so na edicao, vindo do cadastro aberto (na criacao o ID vem do banco);
 - `nome` obrigatorio, trimado e com minimo de 3 caracteres;
 - `equipe` limitada a `n1`, `n2` e `lideranca`;
 - horarios obrigatorios em `HH:MM`;
@@ -140,7 +140,7 @@ O schema e testado por comportamento: o script importa `formSchemas.ts` direto (
 - horarios fora de `HH:MM` (`24:00`, `8:00`, `08:60`, texto, vazio, `null`) falham no proprio campo;
 - entrada depois ou igual a saida falha em `jornada_saida`; almoco invertido falha em `almoco_fim`;
 - `equipe` e `access_role` fora da lista falham com mensagem propria;
-- `id` vazio, zero, acima de 999 ou fracionario, `nome` curto e `ativo` nao booleano falham;
+- `id` vazio, zero, negativo, acima de 2147483647, com sufixo (`12abc`) ou fracionario, `nome` curto e `ativo` nao booleano falham;
 - nenhuma mensagem cai no texto padrao do Zod em ingles.
 
 Checagens baseadas em `git diff` da arvore de trabalho foram retiradas deste script, porque so enxergam mudancas nao commitadas e passam vazias depois do commit:

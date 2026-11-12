@@ -20,12 +20,16 @@ export function isBusinessDay(date: string): boolean {
   return weekday >= 1 && weekday <= 5
 }
 
+// [pos-deploy 1, F] Mesmo teto do servidor (FUNCIONARIO_ID_MAX, security.php):
+// o maximo do INT com sinal de funcionarios.id. Antes era 999.
+export const EMPLOYEE_ID_MAX = 2147483647
+
 const employeeIdSchema = z.preprocess(
   (value) => (value === '' || value === null || value === undefined ? undefined : Number(value)),
   z.number({ error: 'Informe o ID do funcionário.' })
     .int('ID inválido.')
     .min(1, 'ID deve ser maior que zero.')
-    .max(999, 'ID deve ser no máximo 999.'),
+    .max(EMPLOYEE_ID_MAX, `ID deve ser no máximo ${EMPLOYEE_ID_MAX}.`),
 )
 
 const employeeTimeSchema = z.string({ error: 'Informe o horário.' })

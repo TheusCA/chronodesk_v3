@@ -131,12 +131,14 @@ try {
         error_log('[FUNCIONARIO] lastInsertId invalido na criacao; INSERT desfeito');
         json_response(['sucesso' => false, 'mensagem' => 'Erro ao adicionar funcionário.'], 500);
     }
-    // [D2] Os outros endpoints aceitam so de 1 a 999 (validate_funcionario_id):
-    // um cadastro acima disso nao poderia ser editado, arquivado nem pausar.
+    // [D2, F2] Os outros endpoints aceitam de 1 a FUNCIONARIO_ID_MAX (o INT da
+    // coluna; validate_funcionario_id). Fora disso, impossivel com a coluna INT,
+    // o cadastro nao poderia ser editado, arquivado nem pausar: desfaz e 409.
     if (validate_funcionario_id($id) === null) {
         $pdo->rollBack();
-        audit_log('FUNCIONARIO_ID_FORA_DA_FAIXA', "Criacao desfeita: o banco gerou o ID {$id}, acima da faixa aceita (1 a 999)", 'WARNING');
-        json_response(['sucesso' => false, 'mensagem' => "O banco gerou o ID {$id}, acima da faixa aceita hoje (1 a 999). Nada foi gravado. Avise o administrador do sistema."], 409);
+        $faixa = '1 a ' . FUNCIONARIO_ID_MAX;
+        audit_log('FUNCIONARIO_ID_FORA_DA_FAIXA', "Criacao desfeita: o banco gerou o ID {$id}, fora da faixa aceita ({$faixa})", 'WARNING');
+        json_response(['sucesso' => false, 'mensagem' => "O banco gerou o ID {$id}, fora da faixa aceita ({$faixa}). Nada foi gravado. Avise o administrador do sistema."], 409);
     }
     $pdo->commit();
 

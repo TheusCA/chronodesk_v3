@@ -263,13 +263,28 @@ for (const accessRole of ['root', 'Admin', 'admin', '', null]) {
 for (const [overrides, path] of [
   [{ id: '' }, 'id'],
   [{ id: '0' }, 'id'],
-  [{ id: '1000' }, 'id'],
+  [{ id: '2147483648' }, 'id'],
   [{ id: '1.5' }, 'id'],
   [{ nome: '  ab ' }, 'nome'],
   [{ nome: null }, 'nome'],
 ]) {
   assert.deepEqual(issuesFor(overrides).map((issue) => issue.path), [path], `${JSON.stringify(overrides)} deve falhar em ${path}`)
 }
+
+// [pos-deploy 1, F3] Faixa do ID na edicao ate o INT do banco (2147483647), o
+// mesmo teto do servidor. ' 12' e '1e3' passam pelo Number() do preprocess
+// (12 e 1000); na tela o ID vem do cadastro aberto, nao e digitado (9.14.6).
+for (const [id, expected] of [
+  [999, 999], ['999', 999], [1000, 1000], ['1000', 1000], [2147483647, 2147483647], ['2147483647', 2147483647],
+  [' 12', 12], ['1e3', 1000],
+]) {
+  const result = employeeFormSchema.safeParse({ ...validEmployee, id })
+  assert.deepEqual([result.success, result.data?.id], [true, expected], `F3: id ${JSON.stringify(id)} aceito como ${expected}`)
+}
+for (const id of [2147483648, '2147483648', 0, '0', -1, '-1', '12abc', 12.5]) {
+  assert.deepEqual(issuesFor({ id }).map((issue) => issue.path), ['id'], `F3: id ${JSON.stringify(id)} recusado`)
+}
+assert.deepEqual(issuesFor({ id: 2147483648 }), [{ path: 'id', message: 'ID deve ser no máximo 2147483647.' }], 'F3: acima do INT com a mensagem do teto')
 
 const allMessages = [
   { id: '' }, { id: '0' }, { id: 'x' }, { nome: '' }, { nome: null }, { ad_login: 5 }, { ad_login: 'a b' },

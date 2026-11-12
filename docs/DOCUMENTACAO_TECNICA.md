@@ -227,7 +227,7 @@ Nenhum dado pessoal é enviado a serviço externo. `portal_sync_queue` e `ShareP
 2. **Backup e teste de restauração entregues, ainda não instalados** no servidor. Quando instalado, o backup fica no mesmo disco da VM: não protege contra perda da VM.
 3. **Endpoint de saúde entregue (`api/health.php`), sem monitoramento configurado** para consumi-lo.
 4. **Sem histórico de escala** (seção 7.2).
-5. **Cadastro limitado a 999 colaboradores** por validação de entrada.
+5. **ID do colaborador limitado ao `INT` da coluna** (1 a 2147483647; `validate_funcionario_id` e o schema da tela). Até o pós-deploy 1 o limite era 999; o ID é gerado pelo banco (`AUTO_INCREMENT`).
 6. **Listas de tela limitadas a 100–500 registros**, com aviso quando há mais (Lote 6). As exportações CSV não truncam.
 7. **Estado de pausas em arquivo** (`estado.json`), não no banco — sem garantia transacional, serializado por lock global.
 8. **Interface legada em PHP** ainda presente no servidor; acessível por POST.
