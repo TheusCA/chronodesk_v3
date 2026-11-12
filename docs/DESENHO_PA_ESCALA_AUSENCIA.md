@@ -4822,7 +4822,7 @@ O escape `'\\'` é o padrão implícito de hoje. O QA compara a saída com a de 
 
 **Revisão (2026-11-10):** aprovados o `24dd59b` (A2b), o `c765a15` (docs do A2b), o `044c37b` (B) e o `3e038c8` (docs do B). O achado do `fgetcsv` (a célula que termina em barra invertida) fica como proposta, sem prazo. Dois ajustes antes do D: o frontend no `test-local.ps1` (9.14.4) e a trava dos scripts de mutação (registro de uso de IA).
 
-#### 9.14.4 Commit E: frontend na bateria completa do `test-local.ps1` (`c8b6a87`, 2026-11-10; aguardando revisão)
+#### 9.14.4 Commit E: frontend na bateria completa do `test-local.ps1` (`c8b6a87`, 2026-11-10; aprovado em 2026-11-12)
 
 **O que faltava.** O `test-local.ps1 -SkipHttp -Browser` rodava os QAs PHP, o `node --check` e o roteiro de navegador. Não rodava o frontend: `lint`, `typecheck`, build e os `npm run qa:*`.
 
@@ -4857,7 +4857,7 @@ A partir daqui, **bateria completa = `test-local.ps1 -SkipHttp -Browser`**. A tr
   - **2ª rodada, sozinha: saída 0.** Frontend 22/22, navegador 1026/1026.
   - **Risco registrado:** essa conferência pode falhar sob carga. Daqui em diante, a bateria completa roda sem nada pesado em paralelo.
 
-#### 9.14.5 Commit D: ID do funcionário gerado pelo banco (`a7912a4`, 2026-11-10; aguardando revisão)
+#### 9.14.5 Commit D: ID do funcionário gerado pelo banco (`a7912a4`, 2026-11-10; aprovado em 2026-11-12)
 
 **Pedido da gestão.** O cadastro pedia o ID na tela, e o `api/adicionar_funcionario.php` gravava o ID recebido (faixa 1-999). A tabela `funcionarios` já tem `id INT AUTO_INCREMENT`. O servidor foi conferido em 10/11/2026, só contagens: `auto_increment`, próximo ID 334, maior ID 333, 30 cadastros, nenhum acima de 900.
 
@@ -4933,6 +4933,77 @@ Já aceitam qualquer inteiro positivo, sem teto: o Mapa PA (`PaMapService::posit
 **Limitações declaradas:**
 - O INSERT, a transação e o `lastInsertId` rodaram contra o banco simulado, não contra o MySQL.
 - O `AUTO_INCREMENT` real e o rollback do InnoDB não foram exercitados aqui. Eles rodam no deploy 2, pelo cadastro na tela (roteiro do C).
+
+**Revisão (2026-11-12):** aprovados o `c8b6a87` e o `ea7e679` (E) e o `a7912a4` e o `2b8c51d` (D). Decisões:
+1. O risco da conferência "390 px, Documentação, enviando" sob carga fica registrado; a bateria completa roda sempre sozinha.
+2. **D2: opção (a)**, subir a faixa do ID do funcionário até 2147483647 (o `INT` do banco), no commit F, antes do C (9.14.6).
+
+#### 9.14.6 Commit F: faixa do ID do funcionário até 2147483647 (`6d68490`, 2026-11-12; aguardando revisão)
+
+**Pedido (decisão D2 (a) de 2026-11-12).** O teto do ID passa de 999 para 2147483647, o máximo do `INT` com sinal de `funcionarios.id`, em todo lugar que aplicava o 999.
+
+**F1. O que mudou.**
+- `security.php`: constante `FUNCIONARIO_ID_MAX = 2147483647`, usada pelo `validate_funcionario_id` (`FILTER_VALIDATE_INT`, `min_range` 1).
+- **Pela mesma função, sem mudar o código deles:**
+  - a carga em memória (`config.php:825`, `normalizar_funcionario_array`), o caso que zerava o ID;
+  - os endpoints de cadastro (`atualizar`, `remover` e `restaurar_funcionario.php`);
+  - os de pausa (`iniciar`, `finalizar`, `solicitar_pausa_com_aprovacao`, `aprovar` e `rejeitar_pausa.php`).
+- `frontend/src/lib/formSchemas.ts`: `EMPLOYEE_ID_MAX = 2147483647` no `employeeIdSchema` (a edição), com a mensagem "ID deve ser no máximo 2147483647.".
+- Docs: a linha do cadastro no `docs/API_CONTRACTS_FRONTEND.md`, a limitação 5 da `docs/DOCUMENTACAO_TECNICA.md` e o `docs/EMPLOYEE_FORM_RHF_ZOD.md`.
+
+**Varredura do repositório** (PHP, TS/JSX, SQL, migrations e verificações; por `999`, `max_range`, `.max(`, regex de dígitos e casts):
+
+| Achado | Mudou? | Motivo |
+|---|---|---|
+| `security.php:116` (`max_range` 999) | Sim | O teto em si |
+| `api/adicionar_funcionario.php` (409 e auditoria com "1 a 999") | Sim | F2 |
+| `formSchemas.ts` (`.max(999)`) | Sim | A edição pela tela |
+| `config.php:825` e os 8 endpoints acima | Não (código) | Usam o `validate_funcionario_id`; o QA prova o efeito |
+| `admin.php:176` (`max="999"`) e `static/js/admin.js:89-90` | Não | Páginas legadas, com 302/410/403 desde o deploy 1; os arquivos saem no passo 5 da 9.12 |
+| `static/js/script.js` (`parseInt`) | Não | Legado do `index.php`; sem teto |
+| Casts `(int)` em `classes/GerenciadorPausas.php` e `config.php:795/803` | Não | Não truncam abaixo do `INT`: no PHP de 64 bits o `int` vai até 9,2·10^18; num PHP de 32 bits o `PHP_INT_MAX` seria o próprio 2147483647, o mesmo teto |
+| `Number`/`parseInt` no frontend | Não | Inteiro seguro até 2^53; nenhum `\| 0` ou `>>> 0` sobre ID |
+| `funcionarios.id` e as colunas que o referenciam | Não | `id INT AUTO_INCREMENT`; `employee_id INT` nas tabelas `portal_*` e `pausas.funcionario_id INT`; nenhum `CHECK` sobre o ID; as migrations de verificação não têm teto (o `9999-12-31` delas é data) |
+| Outros `999` | Não | Cor `#999`, datas `9999-12-31`, `z-index`, `border-radius`, IDs inexistentes em QAs (`qa-absences`, `qa-pa-conflicts`, `qa-schedule-legacy-output`), o `N` do `medir-polling.sh`, telefone num teste de CSV |
+| Outros `max_range` e regex `\d{1,2}` | Não | Limite de login (`.env`), minutos do chamado crítico e dias do ciclo: nada de ID |
+
+**Fora do pedido (registrado, sem mudança).** Os validadores de ID do portal (`PaMapService`, `OperationalService`, `PresenceService`, `AbsenceRules`, `CriticalIncidentService`, `EmployeeLunchPolicy` e os `api/portal/*`) aceitam qualquer inteiro positivo, sem teto. Acima do `INT` não há truncamento: num `WHERE`, nada casa; num `INSERT` em modo estrito, o MySQL recusa (erro 1264, 500 genérico). Um teto comum em `FUNCIONARIO_ID_MAX` daria 400 no lugar do 500. Proposta, sem prazo.
+
+**F2. O 409 da criação.** Continua, agora só para ID fora de 1 a 2147483647 (impossível com a coluna `INT`).
+- Mensagem: "O banco gerou o ID N, fora da faixa aceita (1 a 2147483647). Nada foi gravado. Avise o administrador do sistema.".
+- Auditoria `FUNCIONARIO_ID_FORA_DA_FAIXA`: "Criacao desfeita: o banco gerou o ID N, fora da faixa aceita (1 a 2147483647)".
+- O rollback e o gasto de ID do InnoDB ficam como na 9.14.5.
+
+**F3. QA de borda.**
+- **`qa-security`, validador:** 999, 1000, 2147483647 e `'2147483647'` aceitos; 2147483648 (número e texto), `0`, `'0'`, `-1`, `'-1'`, `'1e3'`, `'12abc'`, `12.5`, `''` e `null` recusados; `' 12'` aceito como 12.
+- **`qa-security`, carga em memória (`normalizar_funcionario_array`):** `'999'`, `'1000'`, `1000` e `'2147483647'` mantêm o ID; `'2147483648'` vira 0 (descartado), como antes para qualquer ID inválido.
+- **`qa-security`, endpoint de pausa:** `rejeitar_pausa.php` como gestor, com 999, 1000 e 2147483647 carregados do `funcionarios.json` do caso. Os três chegam ao cadastro em memória (409 "Não há solicitação pendente"); 2147483648, `'0'`, -1, `'1e3'` e `'12abc'` dão 400; `' 12'` passa como 12 (404, não existe no caso).
+- **`qa-security`, criação:** o ID gerado 1000 e o 2147483647 dão 200 com `commit`; o 2147483648 dá o 409 com `rollback` e a auditoria nova.
+- **`qa:employee-form`, schema da edição:** 999, 1000 e 2147483647 (número e texto) aceitos; 2147483648, 0, -1, `'12abc'` e 12.5 recusados, com a mensagem do teto; `' 12'` vira 12 e `'1e3'` vira 1000.
+
+**Comportamentos registrados (de antes do F, mantidos; exigem aprovação para mudar).**
+- **`' 12'`:** o `FILTER_VALIDATE_INT` ignora espaço nas pontas, e o `Number()` do schema também.
+- **`'1e3'`:** diverge entre os dois. O servidor recusa; o schema aceita como 1000.
+- **Efeito na tela: nenhum.** O ID da edição vem do cadastro aberto, não é digitado.
+- **Proposta, sem prazo:** só dígitos nos dois lados (`/^\d+$/` antes do `Number()` e um `ctype_digit` antes do `filter_var`).
+
+**Validação executada pela IA:**
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, no worktree, sozinha) no `6d68490`: saída 0, `frontend: 22 scripts npm rodados (...): 22 OK, 0 com falha`, navegador 1029/1029, `qa-security OK`.
+- **Mutação 9/9, no worktree, com a trava dos scripts** (o teto 999 de volta em cada ponto, um por vez; todos com sintaxe válida; a árvore limpa depois). A trava recusou rodar sem o argumento e contra a cópia principal, antes de gravar.
+
+| Mutante | QA | Morreu na asserção |
+|---|---|---|
+| `FUNCIONARIO_ID_MAX = 999` | `qa-security` | "D5 id_1000: 200 com o ID do banco na resposta" |
+| `max_range` 999 literal no `validate_funcionario_id` | `qa-security` | "D5 id_1000: 200 ..." |
+| Carga em memória com teto 999 próprio (`config.php:825`) | `qa-security` | "F3 carga em memória: id '1000'" |
+| `rejeitar_pausa.php` com teto 999 próprio | `qa-security` | "F3 rejeitar_pausa id 1000: aceito e encontrado na memória" |
+| Criação com o 409 acima de 999 | `qa-security` | "D5 id_1000: 200 ..." |
+| Mensagem antiga do 409 | `qa-security` | "D5/F2 acima_da_faixa: 409 com mensagem clara" |
+| Auditoria com a faixa antiga | `qa-security` | "F2 acima_da_faixa: auditoria com a faixa nova" |
+| `EMPLOYEE_ID_MAX = 999` | `qa:employee-form` | "F3: id 1000 aceito como 1000" |
+| `.max(999)` literal no schema | `qa:employee-form` | "F3: id 1000 aceito como 1000" |
+
+**Limitações declaradas:** o ID acima de 999 não rodou contra o MySQL (o banco simulado devolve o `lastInsertId` do caso). Os outros 7 endpoints de cadastro e pausa usam a mesma função do `rejeitar_pausa.php`: o QA prova o efeito em um deles, e os mutantes, a função e a carga.
 
 ---
 

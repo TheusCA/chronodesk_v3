@@ -1285,7 +1285,7 @@ Base da afirmação:
 | **Pendente com o responsavel** | Revisao. |
 | **Validacao executada pela IA** | `test-local.ps1` analisado pelo PowerShell 5.1 sem erro. Mutacao 4/4 no worktree, com a trava dos scripts de mutacao: `qa:*` fora da lista, falha de script so como aviso e sem a linha de resumo (a trava reprova); `qa-table.mjs` quebrado de proposito (o `test-local` sai com 1 e o resumo diz "21 OK, 1 com falha"). `test-local.ps1 -SkipHttp -Browser` no `c8b6a87`: 1a rodada com saida 1 (frontend 22/22; navegador 1025/1026, a conferencia "remover documento, enviando" em 390 px, sensivel a tempo, com o `qa-security` e o navegador do D rodando em paralelo); 2a rodada sozinha com saida 0 (frontend 22/22, navegador 1026/1026). |
 | **Limitacoes declaradas** | O desenho 9.14.4 lista em quais entregas o frontend foi validado a parte; nas entregas que nao mexeram no frontend, ele nao foi rodado. |
-| **Validacao humana** | Pendente. |
+| **Validacao humana** | Aprovado em 2026-11-12 (`c8b6a87` e `ea7e679`). O risco da conferencia "390 px, Documentacao, enviando" sob carga fica registrado; a bateria completa roda sempre sozinha. |
 
 ---
 
@@ -1297,7 +1297,7 @@ Base da afirmação:
 | **O que aconteceu** | Na mutacao do commit B, o `Write` de um script novo (`mutB.php`, no scratchpad, fora do repositorio) falhou porque ja existia um arquivo com esse nome (a bateria do `sudo`, que recebia o diretorio como argumento). O comando seguinte rodou o script antigo **sem o argumento**: o diretorio virou vazio e ele tentou gravar em `/DEPLOY_LINUX.md` e `/docs/DEPLOY1_FOLHA_DO_DIA.md` na raiz do disco. As gravacoes falharam (permissao negada e diretorio inexistente); nada foi criado. Conferido depois: `/DEPLOY_LINUX.md`, `/docs` e `C:/dev/fora.txt` inexistentes; a arvore do repositorio sem alteracao alem das do trabalho em curso. |
 | **Causa** | Script que grava em arquivo aceitando o diretorio alvo como opcional, sem conferir que era uma copia do repositorio; e a falha do `Write` nao foi lida antes de rodar o script. |
 | **Trava (fora do repositorio)** | `mut_guard.php` no scratchpad. Todo script de mutacao que grava recebe o diretorio alvo como **1o argumento obrigatorio** e para com erro se ele faltar, nao existir, for a raiz de um disco, for a copia principal (`C:/dev/chronodesk`) ou nao for uma copia de trabalho do repositorio: um worktree do mesmo `.git` ou uma copia temporaria no scratchpad com o marcador `.copia-temporaria-chronodesk`. Toda gravacao passa por `mut_write()`, que recusa caminho absoluto, `..` e destino fora do diretorio alvo. Conferido em 9 casos (sem argumento, inexistente, raiz, copia principal, diretorio qualquer, worktree aceito; escrita absoluta, subindo e na raiz recusadas). Os seis scripts antigos sem trava tiveram o conteudo trocado por um aviso que sai com erro (o hook de seguranca nao permite apagar). |
-| **Validacao humana** | Pendente. |
+| **Validacao humana** | Aprovado em 2026-11-12, junto com o `ea7e679` (docs do E). |
 
 ---
 
@@ -1312,6 +1312,21 @@ Base da afirmação:
 | **Pendente com o responsavel** | Revisao. Decisao da faixa (a ou b). |
 | **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`) no `a7912a4` com saida 0: frontend 22/22, navegador 1029/1029, `qa-security OK`; e no `ea7e679` (docs do E) com saida 0. Mutacao 8/8 no worktree, com a trava dos scripts; um mutante que morreu por erro de sintaxe proprio foi refeito valido e morreu pela assercao certa. |
 | **Limitacoes declaradas** | INSERT, transacao e `lastInsertId` exercitados contra o banco simulado; o `AUTO_INCREMENT` real roda no deploy 2 (cadastro pela tela, roteiro do C). No InnoDB, cada 409 ou 500 consome um ID. |
+| **Validacao humana** | Aprovado em 2026-11-12 (`a7912a4` e `2b8c51d`). Decisao da faixa: opcao (a), ate 2147483647, no commit F. |
+
+---
+
+### Pos-deploy 1, commit F: faixa do ID do funcionario ate 2147483647 — 2026-11-12
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Decisao D2 (a) do responsavel (2026-11-12): o teto do ID do funcionario passa de 999 para 2147483647, o `INT` de `funcionarios.id`, antes do C. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `6d68490` (codigo, QAs e docs tecnicos) e o commit de docs dele (desenho 9.14.6 e esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `security.php` (`FUNCIONARIO_ID_MAX` no `validate_funcionario_id`; vale tambem para a carga em memoria do `config.php:825` e para os 8 endpoints de cadastro e pausa). `api/adicionar_funcionario.php` (409 e auditoria so fora de 1 a 2147483647, com o texto novo). `frontend/src/lib/formSchemas.ts` (`EMPLOYEE_ID_MAX`). QAs: `qa-security` (validador, carga em memoria, `rejeitar_pausa.php` com cadastros 999, 1000 e 2147483647, criacao com 1000, 2147483647 e 2147483648) e `qa:employee-form` (schema da edicao). `docs/API_CONTRACTS_FRONTEND.md`, `docs/DOCUMENTACAO_TECNICA.md` (limitacao 5) e `docs/EMPLOYEE_FORM_RHF_ZOD.md`. |
+| **Decisoes de implementacao** | Uma constante por lado (PHP e TS), nao o literal. `config.php` e os endpoints sem mudanca de codigo (usam a funcao). Paginas legadas (`admin.php`, `static/js/admin.js`) nao mudam (retiradas). Varredura completa na 9.14.6, com o motivo de cada achado nao mudado. |
+| **Pendente com o responsavel** | Revisao. Propostas sem prazo: so digitos no ID (o `' 12'` passa nos dois lados e o `'1e3'` so no schema; nenhum efeito na tela) e teto comum nos validadores de ID do portal (hoje sem teto; acima do `INT` da 500 em vez de 400). |
+| **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree) no `6d68490` com saida 0: frontend 22/22, navegador 1029/1029, `qa-security OK`. Mutacao no worktree, com a trava dos scripts (`mut_guard.php`; sem o argumento e com a copia principal ela recusou antes de gravar): **9/9**, o teto 999 de volta em cada ponto (constante e literal no validador, carga em memoria, endpoint de pausa, 409, mensagem e auditoria da criacao, constante e literal no schema), todos com sintaxe valida e mortos pela assercao do caso; arvore limpa depois. |
+| **Limitacoes declaradas** | O ID acima de 999 nao foi exercitado contra o MySQL (o banco simulado devolve o `lastInsertId` do caso). Nada de dado real. |
 | **Validacao humana** | Pendente. |
 
 ---
