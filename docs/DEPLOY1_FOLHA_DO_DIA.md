@@ -135,7 +135,7 @@ sh -c 'cat /var/log/apache2/chronodesk_access.log /var/log/apache2/chronodesk_ac
 - [ ] **20.** (0l) Esperado: `GET 302` no `/`; as demais, como hoje (anote). **PARE se:** nada (so anotar); o comando 109 repete com o esperado novo.
 
 ```bash
-for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "<URL>$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>/static/js/$j")"; done
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "http://$S$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "http://$S$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "http://$S/static/js/$j")"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
 - [ ] **21.** (0m) Esperado: seis linhas `OK` e `espaco livre: OK` (minimos: codigo 500 MB, cache do npm 200, `/var/backups` 100, raiz do Docker 200, `/tmp` 50, `/root` 50; o `npm ci` ocupa uns 114 MB, ate 150, mais ate 27 MB de cache; o build, 0,9 MB). Anote os livres. **PARE se:** qualquer `BAIXO` ou `PARE: espaco livre abaixo do minimo` (liberar espaco e da infraestrutura; nada se apaga de improviso).
@@ -521,7 +521,7 @@ cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit);
 find "$Q" -name '*.php' -not -path '*/node_modules/*' -exec runuser -u www-data -- php -l {} \; | grep -v '^No syntax errors' ; echo "fim do php -l"
 ```
 
-- [ ] **81.** (5) Esperado: os 16 QAs com `OK`. **PARE se:** algum `FALHOU`: antes do comando 82, envie so o nome do QA e a ultima linha dele (comando no passo 5 do roteiro).
+- [ ] **81.** (5) Esperado: os 16 QAs com `OK`. No deploy 1, o `qa-security` deu `FALHOU` por um falso negativo do proprio QA (o ZIP binario do `download_relatorio.php` sumia do `QA_RESULT`; o servidor tem `ZipArchive`, a estacao nao): o contorno do dia foi um ajuste so na copia temporaria do ensaio, com `qa-security OK` nela; a correcao entrou no commit A (`28fb746`) e o deploy seguinte roda sem contorno. **PARE se:** algum `FALHOU`: antes do comando 82, envie so o nome do QA e a ultima linha dele (comando no passo 5 do roteiro).
 
 ```bash
 [ ! -e /tmp/.env ] && for q in qa-smoke qa-auth qa-timezone qa-overtime qa-schedule-history qa-schedule-legacy-output qa-presence-engine qa-absences qa-calendar-text qa-archive qa-presence-cutoff qa-pa-conflicts qa-operational-view qa-employee-lunch qa-security qa-deploy-runbook; do printf '%s: ' "$q"; runuser -u www-data -- php "$Q/scripts/$q.php" >/dev/null 2>&1 && echo OK || echo FALHOU; done
@@ -534,6 +534,8 @@ case "$Q" in /tmp/ensaio-deploy1-qa.*) rm -r "$Q" && echo "ensaio removido";; *)
 ```
 
 ## 6. Q-F6, Q-F7, base, manutencao, 012 com o `merge`, corte do BIZ-02, 016b, build, recarga, validacao e reabertura
+
+**Shell root obrigatorio daqui em diante (comando 89 em diante).** No deploy 1, o `touch` do arquivo de manutencao (89) falhou num terminal de usuario comum. Antes do 89: o prompt termina em `#` e `id -u` da `0`; se nao, `sudo -i` e o comando 1 (conferencia do ambiente) de novo. As variaveis do terminal anterior se perdem: os comandos daqui leem o commit de `/var/backups/chronodesk/deploy1-commit`.
 
 - [ ] **83.** (6a, Q-F6) Esperado: `vinculos_de_inativos = 1` e `vinculos_fora_do_mapa = 0`; os demais como no comando 9. `pas_compartilhados_hoje` maior que o do aviso: avise a gestao (nao bloqueia). **PARE se:** saida diferente do esperado (nada do codigo mudou).
 
@@ -589,10 +591,10 @@ cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit);
 [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/deploy1-commit)" ] && echo "HEAD = deploy1-commit" || echo "PARE: HEAD diferente do deploy1-commit"; echo "alteracoes locais: $(git status --porcelain | wc -l)"
 ```
 
-- [ ] **92.** (6b) Esperado: `portal visto de fora (manutencao): 503` (sem `503`: confira de uma estacao que aparece "ChronoDesk temporariamente indisponivel."). **PARE se:** a estacao ve a tela do portal (a manutencao nao vale).
+- [ ] **92.** (6b) Esperado: `portal visto de fora (manutencao): 503` (sem `503`: confira de uma estacao que aparece "ChronoDesk temporariamente indisponivel."). O `curl` usa `http://` com o `ServerName` do `chronodesk.conf`: com `https`, a VM responde `200` de outro site (o `*:443` nao e o portal). **PARE se:** a estacao ve a tela do portal (a manutencao nao vale).
 
 ```bash
-curl -s -o /dev/null -w 'portal visto de fora (manutencao): %{http_code}\n' "<URL>/"
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora (manutencao): %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
 - [ ] **93.** (6b, espera e backup em manutencao) Esperado: depois de 10 s de espera, `backup em manutencao concluido: /var/backups/chronodesk/deploy1-manutencao-<data> (<tamanho>)` (anote: ponto de restauracao com o portal parado, A2). **PARE se:** `PARE: backup em manutencao falhou`: fique em manutencao, sem o comando 94 nem a 016b, e avise o responsavel.
@@ -664,7 +666,7 @@ cd /var/www/chronodesk; env PHPLOG='<log de erros do PHP>' bash scripts/smoke-de
 - [ ] **104.** (6g, reabertura) Esperado: so com os comandos 101, 102 e 103 como esperado (`FUMACA OK`). `manutencao encerrada` e `portal visto de fora: 302`. Numa tela, uma data de atualizacao recente bate com o relogio. **PARE se:** `PARE: arquivo de manutencao ainda presente`.
 
 ```bash
-[ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "<URL>/"
+[ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
 ## 7. Verificacao pos-deploy
@@ -693,12 +695,12 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT exception_type, COUNT(*) AS n, SUM(exception_date >= CURDATE()) AS futuras FROM portal_schedule_exceptions GROUP BY exception_type; SELECT action, COUNT(*) AS n FROM audit_log WHERE id > (SELECT COALESCE(MAX(linha_id), 0) FROM manutencao_biz02_datetime WHERE tabela = 'audit_log') GROUP BY action ORDER BY action;"; unset P
 ```
 
-- [ ] **7b.** Checagem HTTP do `scripts/test-linux.sh` (agora na arvore), sem `MAINTENANCE_TEST`.
+- [ ] **7b.** Checagem HTTP do `scripts/test-linux.sh` (agora na arvore), sem `MAINTENANCE_TEST`, **so o bloco HTTP** (o script inteiro roda o build de novo e os QAs como root em `/var/www`): `cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then { echo 'set -eu'; sed -n '/^check_status() {/,/^# Modo de manutencao/p' scripts/test-linux.sh; echo 'echo "checagem HTTP: OK"'; } | env BASE_URL="http://$S" sh; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S`. Esperado: 51 linhas de codigo (43 caminhos e 8 `POST` legados) e `checagem HTTP: OK` (no deploy 1: 51/51). PARE se: `Unexpected status`, `not blocked` ou `must return 410`.
 
 - [ ] **109.** (7c) Esperado: `GET 302` e `POST 410` em todas as paginas, menos `/logout.php` (`GET 410` e `POST 410`); `403` nos dois JS. **PARE se:** `GET 200` numa pagina legada (`AllowOverride`; o rollback e o `.htaccess` anterior).
 
 ```bash
-for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "<URL>$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "<URL>/static/js/$j")"; done
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "http://$S$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "http://$S$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "http://$S/static/js/$j")"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
 - [ ] **7d.** Repita os comandos 83 e 84: os mesmos numeros (diferencas batem com os `PA_MAP_*` do comando 108).
@@ -756,10 +758,10 @@ cd /var/www/chronodesk; echo "corte a registrar: $C"; read -rsp 'Senha root do M
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_019_presence_cutoff_check.sql; unset P
 ```
 
-- [ ] **118.** (7m) Esperado: `ensaio das migrations removido`. **PARE se:** `PARE: ... fora do padrao, nada apagado`.
+- [ ] **118.** (7m) Esperado: `removido: /root/ensaio-deploy1.<sufixo>` (e a do ensaio de codigo, se o comando 82 nao a removeu) e `ensaios restantes: 0`. A varredura e pelo padrao do `mktemp`, nao pelo `$E`: um `sudo -i` novo no meio do dia perde a variavel (achado do dia do deploy 1: o comando anterior dependia do `$E`). **PARE se:** `ensaios restantes` maior que `0` (envie so a contagem).
 
 ```bash
-case "$E" in /root/ensaio-deploy1.*) rm -r "$E" && echo "ensaio das migrations removido";; *) echo "PARE: $E fora do padrao, nada apagado";; esac; unset E D1
+for E in /root/ensaio-deploy1.?????? /tmp/ensaio-deploy1-qa.??????; do [ -d "$E" ] && rm -r -- "$E" && echo "removido: $E"; done; echo "ensaios restantes: $(ls -d /root/ensaio-deploy1.?????? /tmp/ensaio-deploy1-qa.?????? 2>/dev/null | wc -l)"; unset E D1
 ```
 
 - [ ] **119.** (7m, copia de ensaio) Esperado: `copia_restante = 0` (apagada na vespera, comando 42). **PARE se:** `copia_restante = 1`: apague-a com o comando 42 (nome digitado) e registre o atraso.

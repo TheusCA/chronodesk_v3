@@ -302,11 +302,15 @@ $sortedRunbookQas = $runbookQas;
 sort($sortedRunbookQas);
 sort($repoQas);
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');
-assert_same(1, preg_match('/^case "\$E" in \/root\/ensaio-deploy1\.\*\) rm -r "\$E" && echo "[^"]+";; \*\) echo "PARE: [^"]+";; esac; unset E D1$/', $commands[$first('case "$E" in /root/ensaio-deploy1.*)')] ?? ''), 'roteiro unico: limpeza do ensaio das migrations so do proprio diretorio');
+// [pos-deploy 1, C1c] O 7m varre pelo padrao do mktemp, nao pelo $E: um
+// sudo -i novo no meio do dia perde a variavel (achado do dia do deploy 1).
+$sweepNeedle = 'for E in /root/ensaio-deploy1.?????? /tmp/ensaio-deploy1-qa.??????; do';
+assert_same('for E in /root/ensaio-deploy1.?????? /tmp/ensaio-deploy1-qa.??????; do [ -d "$E" ] && rm -r -- "$E" && echo "removido: $E"; done; echo "ensaios restantes: $(ls -d /root/ensaio-deploy1.?????? /tmp/ensaio-deploy1-qa.?????? 2>/dev/null | wc -l)"; unset E D1', $commands[$first($sweepNeedle)] ?? '', 'roteiro unico: limpeza do 7m pelo padrao do mktemp (sem depender do $E), so os diretorios do ensaio');
+assert_same(0, preg_match('/case "\$E" in/', $text), 'roteiro unico: nenhuma limpeza depende do $E de um terminal anterior');
 $maintenanceOffLine = $first('[ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance;');
 $eveCleanupLine = $first('case "$EV" in /root/ensaio-vespera.*)');
 assert_same(1, preg_match('/^case "\$EV" in \/root\/ensaio-vespera\.\*\) rm -r "\$EV" && echo "[^"]+";; \*\) echo "PARE: [^"]+";; esac; unset EV$/', $commands[$eveCleanupLine] ?? ''), 'vespera: limpeza do ensaio so do proprio diretorio');
-assert_same([$eveCleanupLine, $qaCleanupLine, $maintenanceOffLine, $first('case "$E" in /root/ensaio-deploy1.*)')], array_keys(array_filter($commands, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'roteiro unico: so quatro remocoes: a extracao da vespera, o ensaio de codigo e a extracao do dia (guardadas por case) e o arquivo-sinal da manutencao (so ele, conferido depois)');
+assert_same([$eveCleanupLine, $qaCleanupLine, $maintenanceOffLine, $first($sweepNeedle)], array_keys(array_filter($commands, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'roteiro unico: so quatro remocoes: a extracao da vespera e o ensaio de codigo (guardados por case), o arquivo-sinal da manutencao (so ele, conferido depois) e a varredura do 7m (so os padroes do mktemp)');
 
 // ----------------------------------------------------------------------------
 // 6. Q-F6, Q-F7, base do criterio, build e recarga
@@ -382,7 +386,7 @@ assert_same(0, preg_match('/ensaio-migration\.sh" d1_/', implode("\n", array_sli
 // Copia apagada uma vez, no 7m, com confirmacao pelo nome, depois de todos os
 // ensaios; nenhum outro DROP DATABASE no roteiro.
 $copyDropLines = $all("DROP DATABASE IF EXISTS {$copyName};");
-$migrationsCleanupLine = $first('case "$E" in /root/ensaio-deploy1.*)');
+$migrationsCleanupLine = $first($sweepNeedle);
 assert_same(true, count($copyDropLines) === 1 && $copyDropLines[0] === $eveCleanupLine + 1 && $copyDropLines[0] > max($ensaioLines) && $copyDropLines[0] < $recordLine, 'vespera: copia do ensaio apagada no fim do 0q, depois de todos os ensaios');
 assert_same(true, strpos($commands[$migrationsCleanupLine + 1] ?? '', "SELECT COUNT(*) AS copia_restante FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '{$copyName}';") !== false && strpos($commands[$migrationsCleanupLine + 1], 'DROP') === false, 'roteiro unico: o 7m so confere que a copia nao existe mais');
 assert_same(1, preg_match('/^read -rp \'[^\']+\' NC; if \[ "\$NC" = "sistema_pausas_ensaio" \]; then read -rsp \'Senha root do MySQL: \' P; echo; docker exec [^;]+ -e "DROP DATABASE IF EXISTS sistema_pausas_ensaio; SELECT [^"]+"; unset P; else echo "nada apagado[^"]*"; fi; unset NC$/', $commands[$copyDropLines[0] ?? -1] ?? ''), 'roteiro unico: DROP da copia so com o nome digitado');
@@ -438,7 +442,7 @@ $biz02UndoLine = $first("DROP TABLE IF EXISTS manutencao_biz02_datetime; DELETE 
 // build retirado vai para /var/backups, nada e apagado); a fotografia do
 // BIZ-02 so sai se a correcao historica nao rodou.
 $appRestoreLine = $first('A=/var/backups/chronodesk/app-antes-deploy1; X=/var/backups/chronodesk/app-deploy1-retirado-');
-assert_same(true, $appRestoreLine === $checkoutLine + 1 && strpos($commands[$appRestoreLine], '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all('npm ci'), static fn (int $i): bool => $i > $checkoutLine)) === 0, 'roteiro unico: degrau 2 volta o app/ da copia, sem npm ci (C2)');
+assert_same(true, $appRestoreLine === $checkoutLine + 1 && strpos($commands[$appRestoreLine], '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all('npm '), static fn (int $i): bool => $i >= $checkoutLine)) === 0, 'roteiro unico: degrau 2 volta o app/ da copia, sem npm (nem na linha do checkout) (C2)');
 assert_same(true, strpos($commands[$biz02UndoLine] ?? '', "SELECT COUNT(*) FROM manutencao_marcadores WHERE chave = 'biz02_correcao';\"); if [ \"\$X\" = \"0\" ]; then ") !== false && strpos($commands[$biz02UndoLine], "if [ \"\$X\" = \"0\" ]") < strpos($commands[$biz02UndoLine], 'DROP TABLE IF EXISTS manutencao_biz02_datetime'), 'roteiro unico: o DROP da fotografia do BIZ-02 so sem a correcao historica (A3)');
 assert_same(true, strpos($prose, 'Se o `npm ci` falhar por rede') !== false && strpos($prose, 'o degrau 2 tambem nao resolve') === false, 'roteiro unico: 6e com PARE para falha de rede e degrau 2 sem npm (C2)');
 assert_same(true, $cycleDownLine > $switchLine && $cycleDownLine < $down016bLine && $down016bLine < $checkoutLine && $checkoutLine < $biz02UndoLine && $biz02UndoLine < $first('rollback da 019 aplicado'), 'roteiro unico: ciclo do F2B e 016b com o codigo novo no ar, depois o codigo, o corte do BIZ-02 e so entao as migrations');
@@ -629,5 +633,119 @@ assert_same([0, 0, 0, 0], [
     preg_match('/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(local|lan|corp|intra|internal|com|br|net|org)\b/i', $sheet),
     preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet),
 ], 'folha do dia: sem IP (alem do 127.0.0.1), e-mail, hostname ou senha');
+
+// [pos-deploy 1, C1a e C1b] Os curl "de fora" (0l, 6b, 6g, 7c) leem o
+// ServerName do chronodesk.conf e usam http:// (o *:443 da VM e outro site);
+// o marcador <URL> saiu. O 7b roda so o bloco HTTP do test-linux.sh, com o
+// mesmo comando no roteiro e na folha (fora da lista numerada).
+$serverNameRead = 'S=$(awk \'tolower($1) == "servername" {print $2; exit}\' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then ';
+assert_same(0, preg_match('/<URL>/', $text . "\n" . $sheet), 'roteiro e folha do deploy 1: sem o marcador <URL> nos comandos e na folha');
+$outsideCurlLines = array_values(array_filter(array_keys($commands), static fn (int $i): bool => preg_match('/curl [^|]*"http:\/\/\$S/', $commands[$i]) === 1));
+assert_same([4, true], [count($outsideCurlLines), count(array_filter($outsideCurlLines, static fn (int $i): bool => strpos($commands[$i], $serverNameRead) !== false && strpos($commands[$i], 'else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S') !== false)) === 4], 'roteiro unico: os quatro curl de fora (0l, 6b, 6g, 7c) com o ServerName lido do chronodesk.conf e http://');
+assert_same(0, preg_match('/https:\/\//', $text), 'roteiro unico: nenhum curl em https (o *:443 da VM e outro site)');
+$httpBlockCommand = 'cd /var/www/chronodesk; ' . $serverNameRead . '{ echo \'set -eu\'; sed -n \'/^check_status() {/,/^# Modo de manutencao/p\' scripts/test-linux.sh; echo \'echo "checagem HTTP: OK"\'; } | env BASE_URL="http://$S" sh; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S';
+assert_same([1, 1], [substr_count($runbook, '`' . $httpBlockCommand . '`'), substr_count($sheet, '`' . $httpBlockCommand . '`')], 'roteiro e folha: 7b com o mesmo comando do bloco HTTP do test-linux.sh');
+$linuxScript = $readOptional($root . '/scripts/test-linux.sh');
+assert_same([1, 1, true], [preg_match_all('/^check_status\(\) \{$/m', $linuxScript), preg_match_all('/^# Modo de manutencao/m', $linuxScript), strpos($linuxScript, 'check_status() {') < strpos($linuxScript, '# Modo de manutencao')], 'test-linux.sh: o bloco HTTP que o 7b extrai existe, uma vez, antes da manutencao');
+assert_same(true, strpos($prose, 'O contorno do dia foi um ajuste **so na copia temporaria do ensaio**') !== false && strpos($prose, '**Shell root obrigatorio do 6b em diante.**') !== false && strpos($sheet, '**Shell root obrigatorio daqui em diante (comando 89 em diante).**') !== false, 'roteiro e folha: falso negativo do qa-security no 5 e shell root obrigatorio do 6b (89) em diante');
+
+// ----------------------------------------------------------------------------
+// 14. Deploy 2 da Parte B (pos-deploy 1): so codigo, sem migration
+// ----------------------------------------------------------------------------
+$heading2 = '### Deploy 2 da Parte B (pos-deploy 1';
+$start2 = strpos($deployDoc, $heading2);
+$ends2 = $start2 === false ? [] : array_filter([strpos($deployDoc, "\n### ", $start2 + 1), strpos($deployDoc, "\n## ", $start2)], static fn ($pos): bool => $pos !== false);
+$runbook2 = $start2 === false ? '' : substr($deployDoc, $start2, ($ends2 === [] ? strlen($deployDoc) : min($ends2)) - $start2);
+$prose2 = (string)preg_replace('/\s+/', ' ', $runbook2);
+preg_match_all('/```(bash|powershell)\n(.*?)```/s', $runbook2, $blocks2);
+$commands2 = array_values(array_filter(explode("\n", implode("\n", $blocks2[2])), static fn (string $line): bool => trim($line) !== ''));
+$text2 = implode("\n", $commands2);
+$first2 = static function (string $needle) use ($commands2): int {
+    foreach ($commands2 as $i => $line) {
+        if (strpos($line, $needle) !== false) {
+            return $i;
+        }
+    }
+    return -1;
+};
+$all2 = static fn (string $needle): array => array_keys(array_filter($commands2, static fn (string $line): bool => strpos($line, $needle) !== false));
+assert_same([true, [], []], [$runbook2 !== '' && count($commands2) >= 20 && $blocks2[1] === array_fill(0, count($blocks2[1]), 'bash'), array_values(array_filter($commands2, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), array_values(array_filter($commands2, static fn (string $line): bool => preg_match('/\bsudo\b/', $line) === 1))], 'deploy 2: secao com os comandos Linux, um por linha, nenhum com sudo');
+assert_same([0, $envCheck], [$first2('R=OK; [ "$(id -u)" = 0 ]'), $commands2[0] ?? ''], 'deploy 2: o 1o comando e a conferencia do ambiente, igual a do deploy 1');
+$prodLine2 = $first2('if [ "$H" = "2e27926ebdd14c40e6bb173938e767a774fe640a" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy2-commit');
+$record2 = $first2('| tee /var/backups/chronodesk/deploy2-commit');
+$fetch2 = array_keys(array_filter($commands2, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
+$check2 = $first2('git merge-base --is-ancestor HEAD "$D2"');
+$merge2 = $first2('git merge --ff-only "$D2"');
+assert_same(true, $prodLine2 === 1 && strpos($commands2[1], 'echo "PARE: HEAD de producao') !== false && strpos($commands2[1], 'echo "alteracoes locais: $(git status --porcelain | wc -l)"') !== false, 'deploy 2: producao no 2e27926 (completo), gravado como ponto de volta, e alteracoes locais contadas');
+assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin feat\/employee-form-rhf-zod && K=\$\(git rev-parse origin\/feat\/employee-form-rhf-zod\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy2-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands2[$record2] ?? ''), 'deploy 2: fetch so do branch e grava so o commit validado na estacao');
+assert_same([[$record2], 0], [$fetch2, preg_match('/\bgit pull\b|(^|\s)(--force|-f)(\s|$)/m', $text2)], 'deploy 2: um fetch so (o da gravacao), sem pull, sem --force');
+assert_same(true, $check2 === $record2 + 1 && strpos($commands2[$check2], 'git cat-file -e "$D2^{commit}" && ') !== false && strpos($commands2[$check2], 'echo "migrations alteradas: $(git diff --name-only HEAD "$D2" -- migrations | wc -l)"') !== false && strpos($commands2[$check2], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D2" -- frontend/package-lock.json | wc -l)"') !== false, 'deploy 2: cat-file, fast-forward, migrations alteradas e lockfile conferidos logo depois de gravar');
+assert_same([[$merge2], 0, 0], [array_values(array_filter($all2('git merge'), static fn (int $i): bool => strpos($commands2[$i], 'merge-base') === false)), preg_match('/git show "\$D2:migrations|migrations\/20\d{6}_|biz02_0/', $text2), preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|GRANT)\b/', implode("\n", array_filter($commands2, static fn (string $line): bool => strpos($line, 'mysql -uroot') !== false)))], 'deploy 2: um merge so, nenhuma migration aplicada, nenhum comando de escrita no MySQL');
+assert_same(true, strpos($commands2[$merge2] ?? '', '[ "$(git rev-parse HEAD)" = "$D2" ] && echo "HEAD = deploy2-commit" || echo "PARE: ') !== false, 'deploy 2: HEAD conferido no comando do merge');
+// Ensaio do codigo como no deploy 1, com todos os QAs PHP do repositorio.
+$tmpEnv2 = $first2('[ ! -e /tmp/.env ] && echo "/tmp/.env ausente: OK"');
+$archive2 = $first2('Q=$(mktemp -d /tmp/ensaio-deploy2-qa.XXXXXX)');
+$qaLoop2 = $first2('[ ! -e /tmp/.env ] && for q in ');
+$qaSweep2 = $first2('for Q in /tmp/ensaio-deploy2-qa.??????; do');
+preg_match('/for q in ([a-z0-9 -]+); do/', $commands2[$qaLoop2] ?? '', $qaList2);
+$runbookQas2 = explode(' ', trim($qaList2[1] ?? ''));
+sort($runbookQas2);
+assert_same([true, $repoQas], [$check2 < $tmpEnv2 && $tmpEnv2 < $archive2 && $archive2 < $qaLoop2 && $qaLoop2 < $qaSweep2 && $qaSweep2 < $merge2, $runbookQas2], 'deploy 2: ensaio do codigo antes do merge, com todos os QAs PHP do repositorio');
+assert_same(true, strpos($commands2[$archive2] ?? '', 'bash -o pipefail -c \'git archive "$D2" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands2[$qaLoop2] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && strpos($text2, 'qa-timezone.php --db') !== false && substr_count($text2, '--db') === 1, 'deploy 2: ensaio com pipefail, como www-data, e o --db so no qa-timezone do passo 7');
+assert_same([$archive2], array_keys(array_filter($commands2, static fn (string $line): bool => preg_match('/\b(chown|chmod)\b/', $line) === 1)), 'deploy 2: permissao so do diretorio do ensaio');
+// Espaco, backup, manutencao, copia do app/, merge, build, recarga, validacao, reabertura.
+$space2 = $first2('for LIM in "/var/www/chronodesk:500"');
+$backup2 = $first2('mysqldump -uroot --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | gzip | tee "$B/database.sql.gz"');
+$maintOn2 = $first2('touch /var/www/chronodesk.maintenance;');
+$appCopy2 = $first2('A=/var/backups/chronodesk/app-antes-deploy2; if test -e "$A"; then');
+$build2 = $first2('cd /var/www/chronodesk/frontend && npm ci && npm run build');
+$reloads2 = $all2('systemctl reload "php$(php -r');
+$health2 = $first2("curl -s -o /dev/null -w 'health: %{http_code}\\n' -H \"Host: \$S\" http://127.0.0.1/api/health.php");
+$tz2 = $first2('runuser -u www-data -- php scripts/qa-timezone.php --db');
+$smoke2 = $first2('env PHPLOG=/var/log/chronodesk/php_error.log bash scripts/smoke-deploy1.sh "$S"');
+$autoInc2 = $first2('SET SESSION information_schema_stats_expiry = 0;');
+$maintOff2 = $first2('[ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance;');
+$polling2 = $all2('bash scripts/medir-polling.sh');
+$checkout2 = $first2('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy2-commit)"');
+$appBack2 = $first2('A=/var/backups/chronodesk/app-antes-deploy2; X=/var/backups/chronodesk/app-deploy2-retirado-');
+assert_same(true, $qaSweep2 < $space2 && $space2 + 1 === $backup2 && $backup2 < $maintOn2 && $maintOn2 < $appCopy2 && $appCopy2 < $merge2 && $merge2 < $build2 && ($reloads2[0] ?? -1) === $build2 + 1 && $build2 < $health2 && $health2 < $tz2 && $tz2 < $smoke2 && $smoke2 < $autoInc2 && $autoInc2 < $maintOff2 && $maintOff2 < min($polling2 ?: [-1]) && max($polling2 ?: [PHP_INT_MAX]) < $checkout2 && $checkout2 + 1 === $appBack2 && ($reloads2[1] ?? -1) === $appBack2 + 1, 'deploy 2: espaco e backup, manutencao e copia do app/, merge, build e recarga, health, fuso, fumaca, AUTO_INCREMENT, reabertura, polling e rollback, nesta ordem');
+assert_same(true, strpos($commands2[$backup2] ?? '', "read -rsp 'Senha root do MySQL: ' P;") !== false && strpos($commands2[$backup2], '&& gzip -t "$B/database.sql.gz" && ') !== false && strpos($commands2[$backup2], 'sha256sum database.sql.gz estado.tar.gz > SHA256SUMS') !== false && strpos($commands2[$backup2], '|| echo "PARE: backup falhou') !== false && ($commands[$spaceLines[0]] ?? '') === $commands2[$space2], 'deploy 2: o mesmo espaco livre do deploy 1 e o backup com pipefail, gzip -t e SHA256SUMS, ou PARE');
+assert_same(true, strpos($commands2[$appBack2] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all2('npm '), static fn (int $i): bool => $i >= $checkout2)) === 0, 'deploy 2: rollback volta o app/ da copia, sem npm (nem na linha do checkout)');
+assert_same(true, strpos($commands2[$autoInc2] ?? '', "AS id_extra, (SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'id') AS id_tipo, (SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios') AS proximo_id, (SELECT MAX(id) FROM funcionarios) AS maior_id, (SELECT COUNT(*) FROM funcionarios) AS cadastros;") !== false && strpos($prose2, 'Nenhum cadastro de teste: a criacao pela tela fica para o primeiro cadastro real.') !== false, 'deploy 2: AUTO_INCREMENT so leitura (sem cache do information_schema) e sem cadastro de teste');
+$outside2 = array_values(array_filter(array_keys($commands2), static fn (int $i): bool => preg_match('/curl [^|]*"http:\/\/\$S\//', $commands2[$i]) === 1));
+assert_same([2, true, 0, 0], [count($outside2), count(array_filter(array_merge($outside2, [$health2, $smoke2]), static fn (int $i): bool => strpos($commands2[$i], $serverNameRead) !== false)) === 4, preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text2), preg_match('/\brm\b/', implode("\n", array_diff_key($commands2, array_flip([$qaSweep2, $maintOff2]))))], 'deploy 2: ServerName do chronodesk.conf em todo curl de fora, no health e na fumaca; sem marcador, sem https; so duas remocoes (ensaio e arquivo-sinal)');
+$mysqlLines2 = $all2('MYSQL_PWD="$P"');
+assert_same([2, true], [count($mysqlLines2), count(array_filter($mysqlLines2, static fn (int $i): bool => strpos($commands2[$i], "read -rsp 'Senha root do MySQL: ' P;") !== false && preg_match('/unset P$/', rtrim($commands2[$i])) === 1)) === 2], 'deploy 2: senha do MySQL sem eco e apagada nas duas linhas que a usam (backup e AUTO_INCREMENT)');
+assert_same(true, strpos($prose2, '**Nenhuma migration**') !== false && strpos($prose2, '`npm ci` e obrigatorio no passo 6') !== false && strpos($prose2, 'p95 de **11,0 ms** no `status.php` e de **9,9 ms** no `dashboard.php`') !== false && strpos($runbook2, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy2 origin/feat/employee-form-rhf-zod;') !== false && strpos($runbook2, 'scripts\\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`') !== false, 'deploy 2: sem migration, npm ci, base do polling do deploy 1 e a bateria completa na estacao (item 0)');
+// Folha do deploy 2: os mesmos comandos, na mesma ordem, numerados.
+$sheet2 = $readOptional($root . '/docs/DEPLOY2_FOLHA_DO_DIA.md');
+[$runbook2All] = $fencedCommands($runbook2);
+[$sheet2All, $sheet2Blocks] = $fencedCommands($sheet2);
+assert_same([true, $runbook2All], [$sheet2 !== '' && count($runbook2All) === count($commands2), $sheet2All], 'folha do deploy 2: os mesmos comandos do roteiro, na mesma ordem');
+assert_same(count($sheet2All), $sheet2Blocks, 'folha do deploy 2: um comando por bloco');
+$sheet2Lines = explode("\n", $sheet2);
+$unmarked2 = [];
+foreach ($sheet2Lines as $i => $line) {
+    if (preg_match('/^```bash$/', $line) !== 1) {
+        continue;
+    }
+    $previous = '';
+    for ($j = $i - 1; $j >= 0 && $previous === ''; $j--) {
+        $previous = trim($sheet2Lines[$j]);
+    }
+    if (preg_match('/^- \[ \] \*\*\d+\.\*\* .*Esperado: .+ \*\*PARE se:\*\* .+/', $previous) !== 1) {
+        $unmarked2[] = $i + 1;
+    }
+}
+preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* \(/m', $sheet2, $sheet2Numbers);
+assert_same([[], range(1, count($sheet2All))], [$unmarked2, array_map('intval', $sheet2Numbers[1])], 'folha do deploy 2: cada comando com caixa, numero de 1 em diante, Esperado e PARE se');
+$sheet2NoLoopback = str_replace('127.0.0.1', '', $sheet2);
+assert_same([0, 0, 0, 0, 0], [
+    preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheet2NoLoopback),
+    preg_match('/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\./', $sheet2),
+    preg_match('/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(local|lan|corp|intra|internal|com|br|net|org)\b/i', $sheet2),
+    preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet2),
+    preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet2)),
+], 'folha do deploy 2: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
 
 echo "QA deploy runbook OK ({$checks} verificacoes)\n";
