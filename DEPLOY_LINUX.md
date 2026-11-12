@@ -277,8 +277,9 @@ registradas aqui sem valor secreto (desenho 9.14, commit C do pos-deploy
   fumaca (`PHPLOG=` do `scripts/smoke-deploy1.sh`).
 - **Rotacao:** `/etc/logrotate.d/chronodesk-php`, com `su www-data adm`
   (o logrotate roda como root e recusa diretorio que nao e do root sem o
-  `su`). O resto do arquivo (frequencia e quantas copias) nao foi
-  registrado no dia: conferir no proximo acesso e anotar aqui.
+  `su`). Conteudo conferido em 12/11/2026 (sem segredo): `su www-data adm`,
+  `daily`, `rotate 30`, `compress`, `delaycompress`, `missingok`,
+  `notifempty` e `create 640 www-data adm`.
 - **`/var/www/.env`:** `PHP_ERROR_LOG` apontando para o arquivo acima e
   `APP_ENV=production` (antes `staging`; o passo 3c do roteiro). Antes de
   cada mudanca, uma copia do `.env` em `/var/backups/chronodesk`, modo `600`,
@@ -1102,7 +1103,8 @@ docker exec -i Chrono_Desk_DB mysql -uroot -p sistema_pausas -e "SELECT equipe, 
   (passo 5 da 9.12). Entra no roteiro consolidado da Parte B (deploy unico
   depois do F9).
 - **Deploy 1 da Parte B (decisao de 2026-11-06: F1 a F7, acabamento,
-  retirada das paginas legadas e 9.12.1 a 9.12.5; F8 e F9 no deploy 2):**
+  retirada das paginas legadas e 9.12.1 a 9.12.5; F8 e F9 no deploy 2,
+  que desde 2026-11-12 se chama deploy 3):**
   siga o roteiro "Deploy 1 da Parte B (roteiro unico ...)", abaixo, e nao os
   itens por lote desta lista nem o `git pull` deste item. As mencoes a
   "deploy unico depois do F9" nos itens e roteiros por lote valem, desde
@@ -2608,7 +2610,9 @@ ele, e o desligamento rapido continua valendo sem rollback.
 **Decisao do responsavel (2026-11-06):** o deploy da Parte B passa a ser em
 **duas etapas**, porque o F8 e o F9 dependem da Lideranca, sem prazo. O
 **deploy 1** (este roteiro) leva tudo o que ja esta aprovado no branch; o
-**deploy 2** (depois, com roteiro proprio) leva o F8 e o F9. Desenho:
+**deploy 2** (depois, com roteiro proprio) leva o F8 e o F9 (desde
+2026-11-12, numeracao pela ordem de execucao: o deploy 2 foi o do
+pos-deploy 1, e o do F8 e do F9 passa a ser o deploy 3). Desenho:
 `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, secoes 9.13 e 10.
 
 **Correcao de 2026-11-09 (desenho 9.13.4): o servidor esta no `596db67`.** O
@@ -4344,8 +4348,8 @@ pelo banco) e F (faixa do ID ate 2147483647), mais os commits de docs.
 **Nenhuma migration** (o passo 1 confere) e **lockfile mudou** (`vite`,
 `zod` e as transitivas do A4): `npm ci` e obrigatorio no passo 6. O F8 e o
 F9 nao vao neste deploy: a decisao de 2026-11-06 chamava de "deploy 2" o
-do F8 e do F9; com este, o deles passa a ser o seguinte, com roteiro
-proprio (numeracao a confirmar com o responsavel; desenho 9.14).
+do F8 e do F9; desde 2026-11-12 a numeracao segue a ordem de execucao, e o
+deles passa a ser o **deploy 3**, com roteiro proprio (desenho 9.14.7).
 
 A folha do dia e `docs/DEPLOY2_FOLHA_DO_DIA.md`: os mesmos comandos, na
 mesma ordem (a trava `scripts/qa-deploy-runbook.php` confere). Mudou um,
@@ -4577,6 +4581,39 @@ nunca `--force`) e, com aprovacao, a limpeza do que o deploy deixou em
 `/var/backups/chronodesk` (`deploy2-<data>`, com dados pessoais,
 `app-antes-deploy2`, `pre-deploy2-commit` e `deploy2-commit`; listar antes
 so nome, modo, dono e tamanho).
+
+#### Registro da execucao do deploy 2 (12/11/2026, no `cf73984`)
+
+Executado pela `docs/DEPLOY2_FOLHA_DO_DIA.md`, com a manutencao das 14:10
+as 14:13, aproximadamente. So numeros, pela numeracao da folha (detalhe no
+desenho, 9.14.8):
+
+- **0 (estacao):** o hash do `origin` conferido igual ao `cf73984`, onde a
+  bateria completa ja tinha rodado sozinha (saida 0, frontend 22/22,
+  navegador 1029/1029).
+- **1 a 4:** ambiente OK; producao no `2e27926`
+  (`codex/modernizacao-ui-backend`); `fetch` com o hash certo;
+  fast-forward com 14 commits, migrations alteradas 0, lockfile alterado 1.
+- **5 a 9:** `php -l` limpo; os 16 QAs OK, o `qa-security` sem contorno (1a
+  vez com `ZipArchive` no PHP 8.4 do servidor); ensaios restantes 0.
+- **10 e 11:** espaco livre OK, com a menor folga em `/var` (763 MB) e em
+  `/` (589 MB); backup `deploy2-20261112-141024` (52K).
+- **12 a 22:** 503 de fora; copia do `app/` com 868K e 28 arquivos; `merge`
+  em fast-forward `2e27926..cf73984` (32 arquivos); `npm ci` com 0
+  vulnerabilidades; build em 1,22 s; recarga; health 200; `qa-timezone
+  --db` OK; `FUMACA OK` com 0 linhas novas no log; `AUTO_INCREMENT` com
+  `id_extra = auto_increment`, `id_tipo = int`, `proximo_id` 334,
+  `maior_id` 333, `cadastros` 30; reabertura com 302.
+- **23 e 24:** `status.php` na 1a rodada, logo depois da reabertura, com
+  p50 10,8, p95 46,0 e max 129,3 ms (todas as telas voltando juntas, cache
+  do PHP frio); na 2a, 1 minuto depois, p50 6,4, p95 9,6 e max 16,5 ms;
+  `dashboard.php` com p50 8,1 e p95 14,6 ms. Dentro do criterio.
+- **25 a 27:** rollback nao usado.
+
+**Proposta para as folhas dos proximos deploys (a aprovar):** a medicao do
+polling comeca so alguns minutos depois da reabertura, com 2 rodadas por
+endpoint, valendo a melhor. Os comandos deste roteiro ficam como foram
+executados.
 
 ## HTTPS Interno
 

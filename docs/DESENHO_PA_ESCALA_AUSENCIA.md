@@ -4217,7 +4217,7 @@ Também foi pedido tirar o Mapa PA da lista de depois do deploy do 17f na 9.11 (
 
 **Decisão do responsável (2026-11-06):** o deploy da Parte B passa a ser em **duas etapas**, porque o F8 e o F9 dependem da Liderança, sem prazo.
 - **Deploy 1 (agora):** tudo o que já está aprovado no branch: F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5.
-- **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder.
+- **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. **Numeração revista em 2026-11-12 (sequência de execução):** o deploy 2 foi o do pós-deploy 1 (9.14.8); o do F8 passa a ser o deploy 3.
 
 **Entrega:** o roteiro único do deploy 1 no `DEPLOY_LINUX.md` ("Deploy 1 da Parte B (roteiro unico ...)", depois do roteiro do F7), juntando os roteiros "Deploy que traz o F2" até o F7 e a 9.12.2, no padrão deles, e a trava `scripts/qa-deploy-runbook.php` (no `test-local.ps1` e no `test-linux.sh`). **Nenhum código de aplicação mudou.** Passos, na ordem pedida: 0 (pré-requisitos com o responsável: 0a a 0l, cada um com o comando numa linha e o esperado só com contagens), 1 (no dia), 2 (branch, commit gravado em `/var/backups/chronodesk/deploy1-commit` e fast-forward), 3 (ponto de rollback, `APP_ENV`, preflight e backup), 4 (migrations), 5 (ensaio do código), 6 (Q-F6, Q-F7, base do critério, 012 com o `merge --ff-only`, build e recarga), 7 (verificação), 8 (desligamento e rollback em degraus) e 9 (passo 5 da 9.12).
 
@@ -4706,7 +4706,7 @@ Fora do pedido e sem decisão: M2 (quem valida cada perfil no 7i), M14 (senha do
 
 ### 9.14 Pós-deploy 1 (o deploy 1 foi executado em produção em 10/11/2026, no `2e27926`)
 
-Os commits seguintes partem do `2e27926`, que está no ar; o próximo deploy segue por `git merge --ff-only`. O registro da execução do deploy 1 vem no commit C (docs), depois dos commits de código A, A2b, B, E, D e F (9.14.7, com o roteiro do deploy 2).
+Os commits seguintes partem do `2e27926`, que está no ar; o próximo deploy segue por `git merge --ff-only`. O registro da execução do deploy 1 vem no commit C (docs), depois dos commits de código A, A2b, B, E, D e F (9.14.7, com o roteiro do deploy 2). **O deploy 2 (A, A2b, B, E, D e F) foi executado em produção em 12/11/2026, no `cf73984`** (9.14.8).
 
 #### 9.14.1 Commit A: `qa-security` com corpo binário, `fputcsv` explícito, `.gitleaksignore` e `npm audit` (`28fb746`, 2026-11-10; aguardando revisão)
 
@@ -4938,7 +4938,7 @@ Já aceitam qualquer inteiro positivo, sem teto: o Mapa PA (`PaMapService::posit
 1. O risco da conferência "390 px, Documentação, enviando" sob carga fica registrado; a bateria completa roda sempre sozinha.
 2. **D2: opção (a)**, subir a faixa do ID do funcionário até 2147483647 (o `INT` do banco), no commit F, antes do C (9.14.6).
 
-#### 9.14.6 Commit F: faixa do ID do funcionário até 2147483647 (`6d68490`, 2026-11-12; aguardando revisão)
+#### 9.14.6 Commit F: faixa do ID do funcionário até 2147483647 (`6d68490`, 2026-11-12; aprovado em 2026-11-12)
 
 **Pedido (decisão D2 (a) de 2026-11-12).** O teto do ID passa de 999 para 2147483647, o máximo do `INT` com sinal de `funcionarios.id`, em todo lugar que aplicava o 999.
 
@@ -5005,7 +5005,7 @@ Já aceitam qualquer inteiro positivo, sem teto: o Mapa PA (`PaMapService::posit
 
 **Limitações declaradas:** o ID acima de 999 não rodou contra o MySQL (o banco simulado devolve o `lastInsertId` do caso). Os outros 7 endpoints de cadastro e pausa usam a mesma função do `rejeitar_pausa.php`: o QA prova o efeito em um deles, e os mutantes, a função e a carga.
 
-#### 9.14.7 Commit C: registro do deploy 1, ajustes do roteiro dele e roteiro do deploy 2 (`84c181c`, 2026-11-12; aguardando revisão)
+#### 9.14.7 Commit C: registro do deploy 1, ajustes do roteiro dele e roteiro do deploy 2 (`84c181c`, 2026-11-12; aprovado em 2026-11-12)
 
 **Registro da execução do deploy 1 (só números).** Executado em produção em **10/11/2026** (a data prevista era 11/11), com a manutenção das 13:22 às 13:31, no `2e27926`, pela folha do dia.
 
@@ -5116,11 +5116,68 @@ Já aceitam qualquer inteiro positivo, sem teto: o Mapa PA (`PaMapService::posit
   - **F10**: escala mensal que substitui o script e a planilha "Escala Home", com PA automático e paridade com o histórico.
 - **Propostas sem prazo:** a célula de CSV terminada em barra invertida (9.14.2); só dígitos no ID e um teto comum nos validadores de ID do portal (9.14.6).
 
+**Revisão (2026-11-12):** aprovados o `6d68490` e o `f875b41` (F) e o `84c181c` e o `cf73984` (C), com as 5 decisões de implementação acima:
+1. 7b fora da lista numerada da folha;
+2. espaço livre no passo 3 do deploy 2;
+3. `information_schema_stats_expiry = 0` no passo 8;
+4. **numeração dos deploys em sequência de execução:** o deste roteiro é o deploy 2; o do F8 passa a ser o **deploy 3**, e assim por diante (onde a 9.13 e a seção 10 dizem "deploy 2" para o F8 e o F9, vale o deploy 3);
+5. rollback do deploy 2 com aprovação.
+
+Os comportamentos da 9.14.6 (`' 12'` aceito; `'1e3'` recusado no servidor e aceito no schema) e o teto comum `FUNCIONARIO_ID_MAX` nos validadores de ID do portal ficam como proposta, sem prazo.
+
+#### 9.14.8 Deploy 2 executado em produção (12/11/2026, no `cf73984`)
+
+**Executado em 12/11/2026**, com a manutenção das 14:10 às 14:13, aproximadamente, no `cf73984`, pela `docs/DEPLOY2_FOLHA_DO_DIA.md`. Registro só com números, pela numeração da folha:
+
+| Comandos | Resultado |
+|---|---|
+| 0 (estação) | O hash do `origin/feat/employee-form-rhf-zod` conferido igual ao `cf73984`. A bateria completa já tinha rodado sozinha nesse mesmo commit (saída 0, frontend 22/22, navegador 1029/1029); o passo 0 foi cumprido assim, sem rodar de novo no worktree do `origin` |
+| 1 a 4 | Ambiente OK; produção no `2e27926` (branch `codex/modernizacao-ui-backend`); `fetch` com o hash certo; fast-forward com 14 commits, migrations alteradas 0, lockfile alterado 1 |
+| 5 a 9 | `php -l` limpo; os 16 QAs OK no servidor, o `qa-security` **sem contorno** (a 1ª vez com `ZipArchive` no PHP 8.4 do servidor: confirma a correção do A1, `28fb746`); ensaios restantes 0 |
+| 10 | Espaço livre OK, com a menor folga em `/var` (763 MB livres) e em `/` (589 MB livres) |
+| 11 | Backup `deploy2-20261112-141024` (52K) |
+| 12 a 14 | Manutenção: 503 visto de fora; cópia do `app/` com 868K e 28 arquivos |
+| 15 | `merge` em fast-forward `2e27926..cf73984` (32 arquivos) |
+| 16 | `npm ci` com 0 vulnerabilidades; build em 1,22 s |
+| 17 a 20 | Recarga; health 200; `qa-timezone --db` OK; `FUMACA OK`, 0 linhas novas no log |
+| 21 | `AUTO_INCREMENT`: `id_extra = auto_increment`, `id_tipo = int`, `proximo_id` 334, `maior_id` 333, `cadastros` 30 |
+| 22 | Reabertura: portal 302 de fora |
+| 23 e 24 | Polling, dentro do critério (tabela abaixo) |
+| 25 a 27 | Rollback não usado |
+
+**Polling (comandos 23 e 24), contra a base do deploy 1 (p95 de 11,0 ms no `status.php` e 9,9 ms no `dashboard.php`):**
+
+| Medição | p50 | p95 | máx. |
+|---|---|---|---|
+| `status.php`, 1ª rodada, logo depois da reabertura | 10,8 ms | 46,0 ms | 129,3 ms |
+| `status.php`, 2ª rodada, 1 min depois | 6,4 ms | 9,6 ms | 16,5 ms |
+| `dashboard.php` | 8,1 ms | 14,6 ms | — |
+
+A 1ª rodada do `status.php` coincidiu com todas as telas voltando ao mesmo tempo depois da manutenção, com o cache do PHP frio; mesmo assim, o p95 ficou abaixo dos 50 ms do critério (p95 acima de 50 ms **e** 20% acima da base). A 2ª rodada voltou ao nível da base.
+
+**Proposta para a folha dos próximos deploys (a aprovar):** a medição do polling começa só alguns minutos depois da reabertura, com 2 rodadas por endpoint, e vale a melhor. A folha do deploy 2 fica como foi executada.
+
+**Risco registrado: disco do servidor.** Depois do deploy 2, a menor folga do comando 10 ficou em `/var` (763 MB livres; o mínimo do comando é 500 MB no diretório da aplicação) e em `/` (589 MB livres; 599 MB em 09/11). Cada deploy deixa em `/var/backups/chronodesk` um backup com dados pessoais e uma cópia do `app/`, e o `npm ci` precisa de folga. **Proposta (só com aprovação):** depois de um ciclo estável, apagar os backups e as cópias do `app/` dos deploys 1 e 2 (do deploy 1: o 9e, com a cópia `env-antes-php-log-*` pelo nome; do deploy 2: `deploy2-<data>`, `app-antes-deploy2`, `pre-deploy2-commit` e `deploy2-commit`), listando antes só nome, modo, dono e tamanho. Liberar mais espaço continua sendo da infraestrutura.
+
+**Pendência fechada: `logrotate`.** O `/etc/logrotate.d/chronodesk-php` foi conferido em 12/11/2026 (sem segredo): `su www-data adm`, `daily`, `rotate 30`, `compress`, `delaycompress`, `missingok`, `notifempty`, `create 640 www-data adm`. Fecha a pendência da 9.14.7 (registrado no `DEPLOY_LINUX.md`, "Configuração do servidor feita no deploy 1").
+
+**Pendências que continuam:**
+- **Corte do F5 até 15/11:** os 6 sem regra; depois do 114 ao 117 da folha do deploy 1.
+- **1º cadastro real pela tela:** o comando 21 de novo (mensagem com o ID gerado; `proximo_id` mais 1, `maior_id` igual ao ID, `cadastros` mais 1).
+- **D5 pela tela** e o 111.
+- **7i** por perfil.
+- **Teste de manutenção** do `test-linux.sh`.
+- **Passo 5 da 9.12:** apagar os arquivos legados.
+- **Limpeza com aprovação:** do 9a ao 9e do deploy 1 e o pós-deploy 2, inclusive a cópia `env-antes-php-log-*` pelo nome.
+- **Push** do commit para o `codex/modernizacao-ui-backend` depois de um ciclo estável.
+
+**Este commit (só docs):** esta seção, a revisão da 9.14.7, o risco de disco e a numeração dos deploys na seção 10, o `DEPLOY_LINUX.md` (registro da execução no fim do roteiro do deploy 2, o `logrotate` e o deploy 3 do F8) e o `REGISTRO_USO_IA.md`. Nenhum comando nem a folha do deploy 2 mudaram: a trava continua com 322 verificações.
+
 ---
 
 ## 10. Riscos e pendências
 
-**Decisão do responsável (2026-11-06): deploy da Parte B em duas etapas.** O F8 e o F9 dependem da Liderança, sem prazo. **Deploy 1 (agora):** F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5, pelo roteiro único do `DEPLOY_LINUX.md` (seção 9.13; aprovado em 2026-11-09; quem acompanha: o responsável pela infraestrutura da VM). **Em 2026-11-09, a data de 11/11 (19:00 às 22:00) foi cancelada:** o servidor está no `596db67` e a fila antiga nunca foi aplicada; o roteiro passou a levar tudo desde o `596db67` (9.13.4, `docs/DEPLOY1_INVENTARIO.md`). **No mesmo dia, o roteiro consolidado foi aprovado e a data voltou:** **11/11/2026, das 19:00 às 23:00**, com a véspera em 10/11 (pré-requisitos, BIZ-02 e os 14 ensaios das migrations), a indisponibilidade prevista entre 20:00 e 21:00 e o corte do F5 em 16/11 (9.13.6; cerca de 3 h no dia). **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. O commit 1 do F8 (`EmployeeLunchPolicy`) vai no deploy 1 sem efeito (só o QA dele o chama). Onde este desenho diz "deploy único depois do F9", vale, desde 2026-11-06, o deploy 1 para o que já está aprovado e o deploy 2 para o F8 e o F9.
+**Decisão do responsável (2026-11-06): deploy da Parte B em duas etapas.** O F8 e o F9 dependem da Liderança, sem prazo. **Deploy 1 (agora):** F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5, pelo roteiro único do `DEPLOY_LINUX.md` (seção 9.13; aprovado em 2026-11-09; quem acompanha: o responsável pela infraestrutura da VM). **Em 2026-11-09, a data de 11/11 (19:00 às 22:00) foi cancelada:** o servidor está no `596db67` e a fila antiga nunca foi aplicada; o roteiro passou a levar tudo desde o `596db67` (9.13.4, `docs/DEPLOY1_INVENTARIO.md`). **No mesmo dia, o roteiro consolidado foi aprovado e a data voltou:** **11/11/2026, das 19:00 às 23:00**, com a véspera em 10/11 (pré-requisitos, BIZ-02 e os 14 ensaios das migrations), a indisponibilidade prevista entre 20:00 e 21:00 e o corte do F5 em 16/11 (9.13.6; cerca de 3 h no dia). **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. O commit 1 do F8 (`EmployeeLunchPolicy`) vai no deploy 1 sem efeito (só o QA dele o chama). Onde este desenho diz "deploy único depois do F9", vale, desde 2026-11-06, o deploy 1 para o que já está aprovado e o deploy 2 para o F8 e o F9. **Desde 2026-11-12, a numeração segue a ordem de execução:** o deploy 1 foi executado em 10/11 (9.14.7) e o deploy 2, com o pós-deploy 1, em 12/11 (9.14.8); o do F8 e do F9 passa a ser o **deploy 3**, e assim por diante.
 
 | Risco | Mitigação |
 |---|---|
@@ -5136,6 +5193,7 @@ Já aceitam qualquer inteiro positivo, sem teto: o Mapa PA (`PaMapService::posit
 | **Cópias de 2026-11-09 com dados pessoais:** o banco `sistema_pausas_ensaio` e o backup pré-dia em `/root/backups_chronodesk/` | Cópia apagada no fim do 0q, na véspera, com o nome digitado, também se um ensaio parar; o 7m confere que ela não existe (9.13.6). Backup pré-dia apagado com aprovação no 9e (9.13.5) |
 | **Véspera curta (2026-11-09):** os pré-requisitos, o BIZ-02 e os 14 ensaios ficam todos em 10/11, e o deploy é em 11/11 | Uma guarda do BIZ-02 ou um ensaio fora do esperado cancela o deploy de 11/11 (sem tempo para análise); nova data até 15/11 para manter o corte em 16/11 (9.13.6) |
 | **Disco do servidor (2026-11-09):** `/var` com 88% de uso (código e Docker), `/` com 599 MB livres; `npm ci` com uns 114 MB (até 150) | Espaço livre com limite mínimo no 0m e no 3d; `ENOSPC` no build deixa o portal em manutenção, e o degrau 2 não resolve (o `app/` não é versionado). Liberar espaço é da infraestrutura (9.13.5) |
+| **Disco depois do deploy 2 (2026-11-12):** a menor folga ficou em `/var` (763 MB livres) e em `/` (589 MB livres); cada deploy deixa um backup com dados pessoais e uma cópia do `app/` em `/var/backups/chronodesk` | O espaço livre continua conferido antes de cada deploy. Proposta, só com aprovação: apagar os backups e as cópias do `app/` dos deploys 1 e 2 depois de um ciclo estável, listando antes só nome, modo, dono e tamanho (9.14.8) |
 | `AdminPage.jsx` denso, alterado de novo em F4 | Mudança restrita à aba Funcionários; sem refatoração junto |
 | Carga extra no polling de 15 s (P14) | Referência de 2026-10-06 (p95 26,8 ms; seção 9.2). Base do critério: medição repetida logo antes do deploy do F2 (decisão de 2026-10-06); medir de novo depois, nas mesmas condições; piora (p95 + 50 ms **e** + 20% sobre essa base) desliga `STATUS_PRESENCE_ENABLED` |
 

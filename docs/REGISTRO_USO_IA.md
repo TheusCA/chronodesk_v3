@@ -1327,7 +1327,7 @@ Base da afirmação:
 | **Pendente com o responsavel** | Revisao. Propostas sem prazo: so digitos no ID (o `' 12'` passa nos dois lados e o `'1e3'` so no schema; nenhum efeito na tela) e teto comum nos validadores de ID do portal (hoje sem teto; acima do `INT` da 500 em vez de 400). |
 | **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree) no `6d68490` com saida 0: frontend 22/22, navegador 1029/1029, `qa-security OK`. Mutacao no worktree, com a trava dos scripts (`mut_guard.php`; sem o argumento e com a copia principal ela recusou antes de gravar): **9/9**, o teto 999 de volta em cada ponto (constante e literal no validador, carga em memoria, endpoint de pausa, 409, mensagem e auditoria da criacao, constante e literal no schema), todos com sintaxe valida e mortos pela assercao do caso; arvore limpa depois. |
 | **Limitacoes declaradas** | O ID acima de 999 nao foi exercitado contra o MySQL (o banco simulado devolve o `lastInsertId` do caso). Nada de dado real. |
-| **Validacao humana** | Pendente. |
+| **Validacao humana** | Aprovado em 2026-11-12 (`6d68490` e `f875b41`). O `' 12'` aceito, o `'1e3'` divergente entre servidor e schema e o teto comum `FUNCIONARIO_ID_MAX` nos validadores do portal ficam como proposta, sem prazo. |
 
 ---
 
@@ -1343,6 +1343,23 @@ Base da afirmação:
 | **Pendente com o responsavel** | Revisao. Nome do deploy do F8 e do F9 (a decisao de 2026-11-06 chamava de "deploy 2"). Conteudo do `logrotate` alem do `su`. Copia `env-antes-php-log-*` fora do `find` da limpeza do 8a (apagar pelo nome no 9e). Modulo de CHGs: proposta de desenvolver no mesmo branch com `CHG_MODULE_ENABLED=false` (confirmacao no G0c). Pedidos novos sem desenho: grupo Tools, versao 2 da ferramenta de CHGs (G0c) e F10 (escala mensal no lugar do script e da planilha "Escala Home"). |
 | **Validacao executada pela IA** | Mutacao da trava 19/19 no worktree, com a trava dos scripts (5 no deploy 1, 14 no deploy 2; arvore limpa depois). Na 1a rodada, um mutante vivo (`npm ci` na mesma linha do `checkout` do rollback passava; a trava so olhava as linhas seguintes, no deploy 1 tambem): corrigido nas duas, e o commit, ainda nao entregue, refeito (`fcaa08c` virou `84c181c`). `qa-deploy-runbook` com 322 verificacoes. Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree) no `84c181c` com saida 0: frontend 22/22, navegador 1029/1029, `qa-security OK`. A do commit de docs do C, no resumo da entrega. |
 | **Limitacoes declaradas** | Nenhum comando novo rodou no servidor (sem acesso); os numeros do registro sao os enviados pelo responsavel. O conteudo do `chronodesk.conf` nao foi visto: o `awk` le a primeira linha `ServerName` do arquivo. |
+| **Validacao humana** | Aprovado em 2026-11-12 (`84c181c` e `cf73984`), com as 5 decisoes: 7b fora da lista numerada; espaco livre no passo 3; `information_schema_stats_expiry = 0` no passo 8; numeracao dos deploys pela ordem de execucao (o do F8 passa a ser o deploy 3); rollback do deploy 2 com aprovacao. Deploy 2 executado em producao no `cf73984` no mesmo dia (entrada seguinte). |
+
+---
+
+### Deploy 2 executado em producao (pos-deploy 1) — 2026-11-12
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar a execucao do deploy 2 (A, A2b, B, E, D e F; so codigo, sem migration) so com numeros, fechar a pendencia do `logrotate` e registrar as aprovacoes do F e do C. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: um commit so de docs sobre o `cf73984` (desenho 9.14.8, `DEPLOY_LINUX.md` e esta entrada). O `ESTADO_SESSAO_CHRONODESK.md` e local, fora do git. Sem push pela IA. |
+| **Quem executou** | O responsavel, no servidor, pela `docs/DEPLOY2_FOLHA_DO_DIA.md`, em 12/11/2026, com a manutencao das 14:10 as 14:13, aproximadamente. A IA nao tem acesso ao servidor. |
+| **Registro da execucao (so numeros)** | Passo 0: hash do `origin` igual ao `cf73984`, onde a bateria completa ja tinha rodado sozinha. 1 a 4: ambiente OK, producao no `2e27926`, `fetch` com o hash certo, fast-forward com 14 commits, migrations 0, lockfile 1. 5 a 9: `php -l` limpo, 16 QAs OK, `qa-security` sem contorno (1a vez com `ZipArchive` no PHP 8.4 do servidor, confirma o A1), ensaios restantes 0. 10: espaco OK, menor folga em `/var` (763 MB) e `/` (589 MB). 11: backup `deploy2-20261112-141024` (52K). 12 a 22: 503 de fora; copia do `app/` 868K, 28 arquivos; fast-forward `2e27926..cf73984` (32 arquivos); `npm ci` com 0 vulnerabilidades; build 1,22 s; health 200; `qa-timezone --db` OK; `FUMACA OK`, 0 linhas novas no log; `AUTO_INCREMENT` com `proximo_id` 334, `maior_id` 333, `cadastros` 30; reabertura 302. 23 e 24: `status.php` p50 10,8 / p95 46,0 / max 129,3 ms logo depois da reabertura e p50 6,4 / p95 9,6 / max 16,5 ms 1 min depois; `dashboard.php` p50 8,1 / p95 14,6 ms; dentro do criterio. Rollback nao usado. |
+| **O que a IA alterou** | Desenho: 9.14.8 nova, 9.14.6 e 9.14.7 aprovadas (com a revisao), introducao da 9.14, numeracao dos deploys na 9.13 e na secao 10, risco de disco na secao 10. `DEPLOY_LINUX.md`: conteudo do `logrotate`, deploy 3 para o F8 e o F9, registro da execucao no fim do roteiro do deploy 2 (sem comando novo; a folha nao mudou). |
+| **Propostas (a aprovar)** | Medicao do polling nas folhas dos proximos deploys so alguns minutos depois da reabertura, com 2 rodadas, valendo a melhor. Limpeza dos backups e das copias do `app/` dos deploys 1 e 2 depois de um ciclo estavel, so com aprovacao (risco de disco). |
+| **Pendente com o responsavel** | Revisao. Corte do F5 ate 15/11 (6 sem regra; 114 a 117 da folha do deploy 1); 1o cadastro real pela tela com o comando 21 de novo; D5 pela tela e o 111; 7i por perfil; teste de manutencao do `test-linux.sh`; passo 5 da 9.12; limpeza do 9a ao 9e do deploy 1 e do pos-deploy 2 (com a copia `env-antes-php-log-*` pelo nome); push para o `codex/modernizacao-ui-backend` depois de um ciclo estavel. |
+| **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree) no commit de docs: no resumo da entrega (roda depois do commit). |
+| **Limitacoes declaradas** | Os numeros sao os enviados pelo responsavel; a IA nao os conferiu no servidor. |
 | **Validacao humana** | Pendente. |
 
 ---
