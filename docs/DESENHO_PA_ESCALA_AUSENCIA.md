@@ -5171,6 +5171,12 @@ A 1ª rodada do `status.php` coincidiu com todas as telas voltando ao mesmo temp
 - **Limpeza com aprovação:** do 9a ao 9e do deploy 1 e o pós-deploy 2, inclusive a cópia `env-antes-php-log-*` pelo nome.
 - **Push** do commit para o `codex/modernizacao-ui-backend` depois de um ciclo estável.
 
+**Revisão (2026-11-12):** aprovado o `07835ae` (este registro) e as duas propostas acima:
+1. nas folhas dos próximos deploys, a medição do polling começa alguns minutos depois da reabertura, com 2 rodadas por endpoint, valendo a melhor;
+2. limpeza dos backups e das cópias do `app/` dos deploys 1 e 2 depois de um ciclo estável, só com aprovação, listando antes só nome, modo, dono e tamanho (inclui a cópia `env-antes-php-log-*`, pelo nome).
+
+**F10 (escala mensal no portal, no lugar do script e da planilha "Escala Home"):** desenho em `docs/DESENHO_F10_ESCALA_MENSAL.md` (2026-11-12, só docs; a aprovar, com as decisões D-F10-1 a D-F10-19).
+
 **Este commit (só docs):** esta seção, a revisão da 9.14.7, o risco de disco e a numeração dos deploys na seção 10, o `DEPLOY_LINUX.md` (registro da execução no fim do roteiro do deploy 2, o `logrotate` e o deploy 3 do F8) e o `REGISTRO_USO_IA.md`. Nenhum comando nem a folha do deploy 2 mudaram: a trava continua com 322 verificações.
 
 ---

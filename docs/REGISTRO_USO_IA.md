@@ -1360,6 +1360,20 @@ Base da afirmação:
 | **Pendente com o responsavel** | Revisao. Corte do F5 ate 15/11 (6 sem regra; 114 a 117 da folha do deploy 1); 1o cadastro real pela tela com o comando 21 de novo; D5 pela tela e o 111; 7i por perfil; teste de manutencao do `test-linux.sh`; passo 5 da 9.12; limpeza do 9a ao 9e do deploy 1 e do pos-deploy 2 (com a copia `env-antes-php-log-*` pelo nome); push para o `codex/modernizacao-ui-backend` depois de um ciclo estavel. |
 | **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree) no commit de docs: no resumo da entrega (roda depois do commit). |
 | **Limitacoes declaradas** | Os numeros sao os enviados pelo responsavel; a IA nao os conferiu no servidor. |
+| **Validacao humana** | Aprovado em 2026-11-12 (`07835ae`), com as duas propostas: polling medido alguns minutos depois da reabertura, 2 rodadas por endpoint, valendo a melhor; limpeza dos backups e copias do `app/` dos deploys 1 e 2 depois de um ciclo estavel, so com aprovacao (inclui a copia `env-antes-php-log-*` pelo nome). |
+
+---
+
+### F10: desenho da escala mensal no portal (substitui o script e a planilha "Escala Home") — 2026-11-12
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Desenhar a escala mensal no portal: o que o script e a planilha fazem hoje, o que o portal ja cobre (com a prova de equivalencia do calculo), lacunas e proposta (modelo, APIs, permissoes, auditoria, telas, exportacao), paridade, decisoes, lotes, LGPD, rollback e deploy, e como cadastrar hoje cada modo para o corte de 16/11. So documentacao: nenhum codigo, migration ou teste. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: um commit so de docs (`docs/DESENHO_F10_ESCALA_MENSAL.md`, desenho 9.14.8, `DEPLOY_LINUX.md` e esta entrada; o `ESTADO_SESSAO_CHRONODESK.md` e local). Sem push pela IA. |
+| **Fontes e dados pessoais** | O script V17 (lido inteiro) e a planilha-base, locais em `_referencias/` (fora do git). A planilha tem nomes reais: foi lida por um leitor de xlsx da biblioteca padrao (sem dependencia nova), no scratchpad da sessao, que imprimiu so estrutura e contagens. O documento nao tem nome, login nem dado pessoal (conferido por busca dos nomes que aparecem no codigo do script). Os nomes fixos no codigo do script aparecem so como "dois nomes" e "tres desambiguacoes". |
+| **Validacao executada pela IA** | Prova de equivalencia, no scratchpad: indices gerados com as funcoes do script copiadas sem mudanca contra o `PresenceEngine` do repositorio, em todos os dias uteis de 02/06/2025 a 30/06/2027 (543). RODIZIO com 5 ancoras: 543/543 cada. FIXO CICLO de 1 a 4 semanas: 543/543 cada. Ancora numa quarta no script = segunda seguinte no portal (543/543). HISTORICO pelo motor: 638/638 nos ciclos; 115 iguais e 17 diferentes nos dias fixos (uma regra SEMANAL mudada depois da geracao). Ancoras por time para o corte de 16/11: de 295 a 300 dias, 0 diferentes. Ensaio da distribuicao de PA por uma porta em Python do algoritmo do script, so contagens (nao comparado com um arquivo mensal real). |
+| **Decisoes a confirmar** | D-F10-1 a D-F10-19 (secao 5 do desenho), com as tres propostas do responsavel (Hibrido como equipe no F9; mes publicado e congelado com "regerar a partir do dia X"; admin e Lideranca publicam). |
+| **Limitacoes declaradas** | Nada foi implementado. A estimativa de custo da programacao dinamica e por contagem de estados, nao medida. A paridade da distribuicao de PA precisa de um arquivo mensal gerado pelo script (nao ha na estacao). Os avisos de seguranca da biblioteca de Excel nao foram conferidos agora. |
 | **Validacao humana** | Pendente. |
 
 ---

@@ -4610,10 +4610,13 @@ desenho, 9.14.8):
   `dashboard.php` com p50 8,1 e p95 14,6 ms. Dentro do criterio.
 - **25 a 27:** rollback nao usado.
 
-**Proposta para as folhas dos proximos deploys (a aprovar):** a medicao do
-polling comeca so alguns minutos depois da reabertura, com 2 rodadas por
+**Para as folhas dos proximos deploys (aprovado em 2026-11-12):** a medicao
+do polling comeca so alguns minutos depois da reabertura, com 2 rodadas por
 endpoint, valendo a melhor. Os comandos deste roteiro ficam como foram
-executados.
+executados. Tambem aprovada: a limpeza dos backups e das copias do `app/`
+dos deploys 1 e 2 depois de um ciclo estavel, so com aprovacao, listando
+antes so nome, modo, dono e tamanho (inclui a copia `env-antes-php-log-*`,
+pelo nome).
 
 ## HTTPS Interno
 
