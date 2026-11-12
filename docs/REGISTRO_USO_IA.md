@@ -1331,6 +1331,22 @@ Base da afirmação:
 
 ---
 
+### Pos-deploy 1, commit C: registro do deploy 1, ajustes do roteiro dele e roteiro do deploy 2 — 2026-11-12
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar a execucao do deploy 1 (10/11/2026, manutencao 13:22-13:31, no `2e27926`) so com numeros; ajustar o roteiro e a folha dele com o que o dia mostrou (C1); registrar a configuracao feita no servidor (C2); escrever o roteiro e a folha do deploy 2 (A, A2b, B, E, D e F); listar as pendencias abertas (C4). |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `84c181c` (roteiros, folhas e trava) e o commit de docs dele (desenho 9.14.7 e esta entrada). Sem push pela IA. |
+| **Registro da execucao (so numeros)** | Backups `deploy1-20261110-110951` e `deploy1-manutencao-20261110-132324` (32K cada); 012 e `merge` em fast-forward `596db67..2e27926`, `HEAD = deploy1-commit`, alteracoes locais 0; corte do BIZ-02 com 921 linhas, guardas 0/0/0, fuso SYSTEM/UTC; 012 com colunas 10, fk 1, indice 1, checks 2; 016b com `lideranca` 3 e `admin_inativo` 1, contagens por equipe iguais as do ensaio; build 880 ms, health 200, `qa-timezone --db` OK, `FUMACA OK` (0 linhas novas no log); HTTP 51/51, legadas 302/410, JS 403; polling p95 11,0 ms (base 10,8) e 9,9 ms (base 10,0); corte planejado 2026-11-16, 22 ativos N1/N2, 6 sem regra, o 116 nao rodou (ate 15/11); D5 (1 cadastro) e 7i pendentes; ensaio removido, `copia_restante = 0`. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md`: no deploy 1, `ServerName` do `chronodesk.conf` com `http://` no lugar do `<URL>` (0l, 6b, 6g, 7c e 7b), o 7b com o bloco HTTP do `test-linux.sh`, o 7m pela varredura do `mktemp`, o falso negativo do `qa-security` no passo 5 e o shell root obrigatorio do 6b; secao nova "Configuracao do servidor feita no deploy 1"; roteiro novo "Deploy 2 da Parte B". `docs/DEPLOY1_FOLHA_DO_DIA.md` com os mesmos ajustes (numeracao mantida). `docs/DEPLOY2_FOLHA_DO_DIA.md` (nova, 27 comandos). `scripts/qa-deploy-runbook.php` (293 para 322 verificacoes). |
+| **Decisoes de implementacao** | 7b fora da lista numerada (numeracao do dia mantida); espaco livre no passo 3 do deploy 2 (fora do pedido, por causa do `npm ci`); `information_schema_stats_expiry = 0` na leitura do `AUTO_INCREMENT` (cache do MySQL 8); rollback do deploy 2 com aprovacao. Sem nome de site ou host nos documentos: o outro site do `*:443` fica como "outro site". |
+| **Pendente com o responsavel** | Revisao. Nome do deploy do F8 e do F9 (a decisao de 2026-11-06 chamava de "deploy 2"). Conteudo do `logrotate` alem do `su`. Copia `env-antes-php-log-*` fora do `find` da limpeza do 8a (apagar pelo nome no 9e). Modulo de CHGs: proposta de desenvolver no mesmo branch com `CHG_MODULE_ENABLED=false` (confirmacao no G0c). Pedidos novos sem desenho: grupo Tools, versao 2 da ferramenta de CHGs (G0c) e F10 (escala mensal no lugar do script e da planilha "Escala Home"). |
+| **Validacao executada pela IA** | Mutacao da trava 19/19 no worktree, com a trava dos scripts (5 no deploy 1, 14 no deploy 2; arvore limpa depois). Na 1a rodada, um mutante vivo (`npm ci` na mesma linha do `checkout` do rollback passava; a trava so olhava as linhas seguintes, no deploy 1 tambem): corrigido nas duas, e o commit, ainda nao entregue, refeito (`fcaa08c` virou `84c181c`). `qa-deploy-runbook` com 322 verificacoes. Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree) no `84c181c` com saida 0: frontend 22/22, navegador 1029/1029, `qa-security OK`. A do commit de docs do C, no resumo da entrega. |
+| **Limitacoes declaradas** | Nenhum comando novo rodou no servidor (sem acesso); os numeros do registro sao os enviados pelo responsavel. O conteudo do `chronodesk.conf` nao foi visto: o `awk` le a primeira linha `ServerName` do arquivo. |
+| **Validacao humana** | Pendente. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

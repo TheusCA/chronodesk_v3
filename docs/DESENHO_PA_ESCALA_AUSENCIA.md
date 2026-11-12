@@ -4706,7 +4706,7 @@ Fora do pedido e sem decisão: M2 (quem valida cada perfil no 7i), M14 (senha do
 
 ### 9.14 Pós-deploy 1 (o deploy 1 foi executado em produção em 10/11/2026, no `2e27926`)
 
-Os commits seguintes partem do `2e27926`, que está no ar; o próximo deploy segue por `git merge --ff-only`. O registro da execução do deploy 1 vem no commit C (docs), depois dos commits de código A, B e D.
+Os commits seguintes partem do `2e27926`, que está no ar; o próximo deploy segue por `git merge --ff-only`. O registro da execução do deploy 1 vem no commit C (docs), depois dos commits de código A, A2b, B, E, D e F (9.14.7, com o roteiro do deploy 2).
 
 #### 9.14.1 Commit A: `qa-security` com corpo binário, `fputcsv` explícito, `.gitleaksignore` e `npm audit` (`28fb746`, 2026-11-10; aguardando revisão)
 
@@ -5004,6 +5004,117 @@ Já aceitam qualquer inteiro positivo, sem teto: o Mapa PA (`PaMapService::posit
 | `.max(999)` literal no schema | `qa:employee-form` | "F3: id 1000 aceito como 1000" |
 
 **Limitações declaradas:** o ID acima de 999 não rodou contra o MySQL (o banco simulado devolve o `lastInsertId` do caso). Os outros 7 endpoints de cadastro e pausa usam a mesma função do `rejeitar_pausa.php`: o QA prova o efeito em um deles, e os mutantes, a função e a carga.
+
+#### 9.14.7 Commit C: registro do deploy 1, ajustes do roteiro dele e roteiro do deploy 2 (`84c181c`, 2026-11-12; aguardando revisão)
+
+**Registro da execução do deploy 1 (só números).** Executado em produção em **10/11/2026** (a data prevista era 11/11), com a manutenção das 13:22 às 13:31, no `2e27926`, pela folha do dia.
+
+| Item | Resultado |
+|---|---|
+| Backups | `deploy1-20261110-110951` (3d) e `deploy1-manutencao-20261110-132324` (6b), dump de 32K cada |
+| 012 e `merge` | 012 aplicada; fast-forward `596db67..2e27926`; `HEAD = deploy1-commit`; alterações locais 0 |
+| Corte do BIZ-02 | 921 linhas; guardas 0/0/0; fuso SYSTEM/UTC |
+| Verificação da 012 | colunas 10, fk 1, índice 1, checks 2 |
+| 016b | `lideranca` 3, `admin_inativo` 1; contagens por equipe iguais às do ensaio da véspera |
+| Build e validação | build 880 ms; health 200; `qa-timezone --db` OK; teste de fumaça `FUMACA OK`, 0 linhas novas no log |
+| HTTP | checagem do 7b 51/51; páginas legadas 302/410; JS 403 |
+| Polling (p95) | `status.php` 11,0 ms (base 10,8); `dashboard.php` 9,9 ms (base 10,0): dentro do critério |
+| Corte do F5 (114/115) | corte planejado 2026-11-16; 22 ativos N1/N2; 6 sem regra: **o 116 não rodou** (pendente até 15/11) |
+| D5 e 7i | 1 cadastro inativo a regularizar pela tela (pendente no registro); 7i pendente |
+| Limpeza | ensaio removido; `copia_restante = 0` |
+
+**C1. Ajustes no roteiro e na folha do deploy 1** (`DEPLOY_LINUX.md` e `docs/DEPLOY1_FOLHA_DO_DIA.md`; a numeração da folha não mudou):
+- **(a) `<URL>` trocado.** Os comandos 20 (0l), 92 (6b), 104 (6g) e 109 (7c) e o 7b leem o `ServerName` do `/etc/apache2/sites-enabled/chronodesk.conf` na hora e usam `http://`; sem `ServerName`, `PARE`. No 92 ficou registrado: na VM, o `*:443` é outro site e responde `200` de outro sistema (com `https`, a manutenção parece não valer sem ser). O marcador continua só no roteiro antigo da seção "Atualização de Versão" (fora do deploy 1).
+- **(b) 7b só com o bloco HTTP** do `scripts/test-linux.sh` (o script inteiro roda o build de novo e os QAs como root em `/var/www`): `sed` do `check_status() {` até `# Modo de manutencao`, com `set -eu`, o `BASE_URL` do `ServerName` e `checagem HTTP: OK` no fim. Esperado: 51 linhas (43 caminhos e 8 `POST` legados), como no dia. O comando fica no texto do 7b (fora da lista numerada), igual no roteiro e na folha.
+- **(c) 118 sem o `$E`.** Varredura pelos padrões do `mktemp` (`/root/ensaio-deploy1.??????` e `/tmp/ensaio-deploy1-qa.??????`), com `ensaios restantes: 0`; um `sudo -i` novo no meio do dia perdia a variável.
+- **(d) 81.** O falso negativo do `qa-security` no dia (ZIP binário no `QA_RESULT`, A1) e o contorno usado: ajuste só na cópia temporária do ensaio, com `qa-security OK` nela; a correção é o `28fb746`.
+- **(e) Shell root do 89 em diante**, no topo da seção 6 da folha e do passo 6 do roteiro: o `touch` do arquivo de manutenção falhou como usuário comum no dia.
+
+**C2. Configuração do servidor feita no dia** (seção nova no `DEPLOY_LINUX.md`, sem segredo): `/var/log/chronodesk/php_error.log` (`www-data:adm`, `640`) como log do PHP; `/etc/logrotate.d/chronodesk-php` com `su www-data adm`; no `/var/www/.env`, `PHP_ERROR_LOG` apontando para esse arquivo e `APP_ENV=production`, com as cópias do `.env` feitas antes de cada mudança (`env-antes-php-log-20261110-105724` e `env-antes-app-env-20261110-110942`). Uma conferência só de leitura acompanha. **Achado:** a cópia `env-antes-php-log-*` não casa com o `find` da limpeza do 8a (que procura `env-antes-interruptor-*` e `env-antes-app-env-*`); fica registrado para o 9e, apagar pelo nome.
+
+**Roteiro do deploy 2** (`DEPLOY_LINUX.md`, "Deploy 2 da Parte B", e a folha `docs/DEPLOY2_FOLHA_DO_DIA.md`, 27 comandos): A, A2b, B, E, D e F; só código, sem migration; `npm ci` obrigatório (o lockfile mudou). Shell root por `sudo -i`, sem `sudo` nos comandos, com a conferência do ambiente no 1º comando (a mesma do deploy 1).
+
+| Passo | O que faz | PARE se |
+|---|---|---|
+| 0 (estação) | Bateria completa sozinha sobre o commit do branch; anota o hash | qualquer falha |
+| 1 | Ambiente; produção no `2e27926` (gravado em `pre-deploy2-commit`); `fetch` só do branch e o commit validado gravado; `cat-file`, fast-forward, `migrations alteradas: 0`, `lockfile alterado: 1` | `BLOQUEADO`, outro HEAD, alteração local, migration |
+| 2 | Ensaio do commit em `/tmp` como `www-data`, os 16 QAs PHP (o `qa-security` sem contorno); nenhum QA no banco real; varredura do ensaio | `FALHOU` |
+| 3 | Espaço livre (o mesmo do 0m) e backup rápido (dump `--single-transaction`, estado, `gzip -t`, `SHA256SUMS`) | `BAIXO`, backup falhou |
+| 4 | Arquivo de manutenção, cópia do `app/` para o rollback e 503 visto de fora | `AUSENTE`, cópia falhou, tela do portal de fora |
+| 5 | `git merge --ff-only` do commit gravado, `HEAD` conferido | `HEAD` diferente |
+| 6 | `npm ci && npm run build` | as regras do 99 do deploy 1 (`ENOSPC`, rede) |
+| 7 | Recarga, health pelo loopback com o `Host` do `ServerName`, `qa-timezone --db`, fumaça com `PHPLOG=/var/log/chronodesk/php_error.log` | qualquer `PARE`, linha nova no log |
+| 8 | `AUTO_INCREMENT` só leitura (`id_extra`, `id_tipo`, `proximo_id`, `maior_id`, `cadastros`, com `information_schema_stats_expiry = 0`); nenhum cadastro de teste; o que conferir no 1º cadastro real | sem `auto_increment`; `proximo_id` ≤ `maior_id` |
+| 9 | Reabertura (302 de fora); na tela, o filtro e a coluna de almoço e "Adicionar funcionário" sem o ID | `PARE` ou outro código |
+| 10 | Polling dos dois endpoints contra a base do deploy 1 (11,0 e 9,9 ms de p95) | p95 > 50 ms **e** > 20% acima |
+| 11 | Rollback: `checkout` do `pre-deploy2-commit`, `app/` da cópia (sem `npm`), recarga; quando usar | `PARE` no `app/` |
+
+**Decisões de implementação (a aprovar):**
+1. **7b fora da lista numerada da folha.** Assim a numeração do dia (118, 89 e as outras) continua valendo para o registro. O comando está no texto do 7b, igual no roteiro e na folha, e a trava confere os dois.
+2. **Espaço livre no passo 3 do deploy 2.** Não estava no pedido; entrou porque o `npm ci` precisa dele (`/` com 599 MB livres em 09/11).
+3. **`SET SESSION information_schema_stats_expiry = 0` no passo 8.** No MySQL 8, o `AUTO_INCREMENT` do `information_schema.TABLES` vem de um cache de até 24 h; sem isso, o `proximo_id` podia vir velho.
+4. **Nome do deploy do F8 e do F9.** A decisão de 2026-11-06 chamava de "deploy 2" o do F8 e do F9; com este, o deles passa a ser o seguinte. A numeração fica a confirmar com o responsável.
+5. **Rollback do deploy 2 com aprovação**, como o degrau 2 do deploy 1. Os cadastros criados pelo código novo continuam válidos para o código anterior enquanto o ID ficar até 999.
+
+**Trava (`scripts/qa-deploy-runbook.php`, de 293 para 322 verificações):**
+- **Deploy 1:**
+  - nenhum `<URL>` nos comandos nem na folha;
+  - os quatro `curl` de fora com o `ServerName` do `chronodesk.conf` e `http://`; nenhum `https`;
+  - o 7b igual no roteiro e na folha, com o bloco do `test-linux.sh` existente;
+  - o 118 pela varredura, sem `case "$E"`;
+  - o 81 e o shell root do 89 registrados.
+- **Deploy 2:**
+  - a conferência do ambiente como 1º comando, igual à do deploy 1;
+  - produção no `2e27926` (hash completo);
+  - um `fetch` só, do branch, antes de gravar; sem `pull` nem `--force`;
+  - `cat-file`, fast-forward, migrations e lockfile conferidos;
+  - um `merge --ff-only` com o `HEAD` conferido;
+  - nenhuma migration nem escrita no MySQL;
+  - o ensaio com todos os QAs PHP do repositório, como `www-data`, e o `--db` só no `qa-timezone` do passo 7;
+  - a ordem: espaço e backup, manutenção e cópia do `app/`, `merge`, build e recarga, health, fuso, fumaça, `AUTO_INCREMENT`, reabertura, polling e rollback;
+  - o rollback sem `npm`; o `ServerName` em todo `curl` de fora, no health e na fumaça;
+  - a senha sem eco;
+  - a folha com os mesmos comandos, numerados, com Esperado e PARE se, sem IP, hostname, e-mail, senha nem `sudo`.
+
+**Validação executada pela IA:**
+- **Mutação da trava 19/19, no worktree, com a trava dos scripts** (cada erro no roteiro e na folha juntos, ou só na folha; a árvore limpa depois):
+  - **deploy 1:** `<URL>` de volta no 92; `https` no 109; 118 de volta ao `case "$E"`; 7b diferente na folha; `npm` na linha do `checkout` do degrau 2;
+  - **deploy 2:**
+    - comando diferente na folha;
+    - uma migration lida no `merge`;
+    - `UPDATE` no passo 8;
+    - `git pull` no lugar do `fetch`;
+    - `merge` sem `--ff-only`;
+    - `sudo` no build;
+    - ensaio sem o `qa-security`;
+    - `npm ci` no rollback;
+    - produção conferida pelo hash curto;
+    - folha sem o "PARE se";
+    - numeração pulando;
+    - fumaça sem o `PHPLOG`;
+    - `AUTO_INCREMENT` sem desligar o cache;
+    - build antes do `merge`.
+- **Mutante vivo, corrigido antes da entrega.** Na 1ª rodada (16/18), o `npm ci` posto **na mesma linha** do `checkout` do rollback passava. A trava só olhava as linhas depois do `checkout`, e a do deploy 1 tinha a mesma falha. As duas passaram a incluir a linha do `checkout` e a recusar qualquer `npm`. O commit com a correção, ainda não entregue, foi refeito (`fcaa08c` virou `84c181c`). Na mesma rodada, um mutante não aplicou (o `fetch` igual no deploy 1) e foi refeito só na seção do deploy 2.
+- **`qa-deploy-runbook`:** 322 verificações.
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, no worktree, sozinha) no `84c181c`: saída 0, frontend 22/22, navegador 1029/1029, `qa-security OK`, `QA deploy runbook OK (322 verificacoes)`. A do commit de docs deste C vai no resumo da entrega (roda depois do commit).
+
+**Pendências abertas (C4):** lista completa no `ESTADO_SESSAO_CHRONODESK.md`, seção 4.0 (arquivo local).
+- **Corte do F5 até 15/11:** os 6 sem regra, depois do 114 ao 117.
+- **D5 pela tela** e o 111.
+- **7i** por perfil.
+- **Teste de manutenção** do `test-linux.sh` (fila 2).
+- **Passo 5 da 9.12:** apagar os arquivos legados.
+- **9a, 9c, 9d e 9e** do deploy 1, incluindo a cópia `env-antes-php-log-*` do achado do C2.
+- **`logrotate`:** o conteúdo além do `su`.
+- **Deploy 2:** data a definir, depois da revisão.
+- **Nome do deploy do F8 e do F9.**
+- **F8:** espera o AD1 e o AD2 da Liderança. O F9 vem depois.
+- **Módulo de CHGs:** proposta de desenvolver no mesmo branch, com `CHG_MODULE_ENABLED=false` até ficar pronto. A decisão 4.5 deixa de ser "branch próprio" e aguarda a confirmação do responsável no G0c.
+- **Pedidos novos, ainda sem desenho:**
+  - **grupo Tools**, separado de equipe e perfil: lança e edita CHGs junto com a Liderança e o admin; os demais só leem;
+  - a **versão 2 da ferramenta de CHGs** como base do módulo (G0c);
+  - **F10**: escala mensal que substitui o script e a planilha "Escala Home", com PA automático e paridade com o histórico.
+- **Propostas sem prazo:** a célula de CSV terminada em barra invertida (9.14.2); só dígitos no ID e um teto comum nos validadores de ID do portal (9.14.6).
 
 ---
 
