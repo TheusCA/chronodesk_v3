@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR" data-direcao="a" data-tema="claro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Funcionários: protótipo R0</title>
+  <link rel="stylesheet" href="prototipo.css">
+</head>
+<body data-tela="funcionarios" data-titulo="Administração" data-usuario="lideranca.exemplo" data-perfil="Liderança">
+  <a class="skip" href="#conteudo">Ir para o conteúdo</a>
+  <div class="shell">
+    <aside class="side" data-side></aside>
+    <div class="main">
+      <header class="top" data-top></header>
+      <main class="content" id="conteudo">
+        <nav class="tabs" aria-label="Administração">
+          <a href="#">Aprovações <span class="side__count" aria-label="3 pendentes">3</span></a>
+          <a href="#" aria-current="page">Funcionários</a>
+        </nav>
+
+        <form class="toolbar" role="search" aria-label="Filtrar funcionários">
+          <label class="field grow">Buscar
+            <input type="search" placeholder="Nome ou login" autocomplete="off">
+          </label>
+          <label class="field opt">Equipe
+            <select><option>Todas</option><option>N1</option><option>N2</option><option>Liderança</option></select>
+          </label>
+          <label class="field opt">Perfil
+            <select><option>Todos</option><option>Técnico</option><option>Gestor</option><option>Liderança</option></select>
+          </label>
+          <label class="field opt">Situação
+            <select><option>Ativos</option><option>Arquivados</option><option>Todos</option></select>
+          </label>
+          <button class="btn btn--secondary filters-toggle" type="button" aria-expanded="false">Filtros</button>
+          <div class="push"><button class="btn btn--primary" type="button" data-editar="novo funcionário">Adicionar funcionário</button></div>
+        </form>
+
+        <section class="panel panel--flush" aria-labelledby="lista">
+          <div class="panel__head"><h2 id="lista">12 funcionários ativos</h2><span class="result">Ordenados por nome</span></div>
+          <table class="table table--cards">
+            <thead><tr><th scope="col">Nome</th><th scope="col">Equipe</th><th scope="col" class="hide-sm">Perfil</th><th scope="col" class="hide-sm">Jornada</th><th scope="col" class="hide-sm">Almoço</th><th scope="col" class="right"><span class="sr-only">Ações</span></th></tr></thead>
+            <tbody>
+              <tr><td data-col="name"><span class="person">Técnico 01 Exemplo<small>tecnico.01</small></span></td><td data-col="state"><span class="tag tag--plain">N1</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">08:00–17:00</td><td class="hide-sm num">12:00–13:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 01 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 02 Exemplo<small>tecnico.02</small></span></td><td data-col="state"><span class="tag tag--plain">N1</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">08:00–17:00</td><td class="hide-sm num">12:00–13:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 02 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 03 Exemplo<small>tecnico.03</small></span></td><td data-col="state"><span class="tag tag--plain">N1</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">09:00–18:00</td><td class="hide-sm num">13:00–14:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 03 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 04 Exemplo<small>tecnico.04</small></span></td><td data-col="state"><span class="tag tag--plain">N1</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">08:00–17:00</td><td class="hide-sm num">12:00–13:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 04 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 05 Exemplo<small>tecnico.05</small></span></td><td data-col="state"><span class="tag tag--plain">N1</span></td><td class="hide-sm">Gestor</td><td data-col="meta" class="num">08:00–17:00</td><td class="hide-sm num">12:00–13:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 05 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 06 Exemplo<small>tecnico.06</small></span></td><td data-col="state"><span class="tag tag--plain">N1</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">09:00–18:00</td><td class="hide-sm num">12:30–13:30</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 06 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 10 Exemplo<small>tecnico.10</small></span></td><td data-col="state"><span class="tag tag--plain">N2</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">08:00–17:00</td><td class="hide-sm num">12:00–13:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 10 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 11 Exemplo<small>tecnico.11</small></span></td><td data-col="state"><span class="tag tag--plain">N2</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">08:00–17:00</td><td class="hide-sm num">12:00–13:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 11 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 12 Exemplo<small>tecnico.12</small></span></td><td data-col="state"><span class="tag tag--plain">N2</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">09:00–18:00</td><td class="hide-sm num">13:00–14:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 12 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Técnico 13 Exemplo<small>tecnico.13</small></span></td><td data-col="state"><span class="tag tag--plain">N2</span></td><td class="hide-sm">Técnico</td><td data-col="meta" class="num">13:00–22:00</td><td class="hide-sm num">17:00–18:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Técnico 13 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Coordenação 01 Exemplo<small>lideranca.01</small></span></td><td data-col="state"><span class="tag tag--plain">Liderança</span></td><td class="hide-sm">Liderança</td><td data-col="meta" class="num">08:00–17:00</td><td class="hide-sm num">12:00–13:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Coordenação 01 Exemplo">Editar</button></div></td></tr>
+              <tr><td data-col="name"><span class="person">Coordenação 02 Exemplo<small>lideranca.02</small></span></td><td data-col="state"><span class="tag tag--plain">Liderança</span></td><td class="hide-sm">Liderança</td><td data-col="meta" class="num">09:00–18:00</td><td class="hide-sm num">13:00–14:00</td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--secondary" type="button" data-editar="Coordenação 02 Exemplo">Editar</button></div></td></tr>
+            </tbody>
+          </table>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="drawer-backdrop" data-fechar></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="painel-titulo">
+    <div class="drawer__head"><h2 id="painel-titulo" data-painel-titulo>Editar Técnico 03 Exemplo</h2><button class="btn btn--quiet btn--icon" type="button" data-fechar aria-label="Fechar" data-icone="close"></button></div>
+    <form class="drawer__body">
+      <div class="fields">
+        <label class="field wide">Nome<input type="text" value="Técnico 03 Exemplo" autocomplete="off"></label>
+        <label class="field">Login AD<input type="text" value="tecnico.03" autocomplete="off"></label>
+        <label class="field">Equipe operacional<select><option>N1</option><option>N2</option><option>Liderança</option></select></label>
+        <label class="field wide">Perfil de acesso<select><option>Técnico</option><option>Gestor</option><option>Liderança</option></select></label>
+        <label class="field">Entrada<input type="time" value="09:00"></label>
+        <label class="field">Saída<input type="time" value="18:00"></label>
+        <label class="field">Início do almoço<input type="time" value="13:00"></label>
+        <label class="field">Fim do almoço<input type="time" value="14:00"></label>
+      </div>
+    </form>
+    <div class="drawer__foot"><button class="btn btn--secondary" type="button" data-fechar>Cancelar</button><button class="btn btn--primary" type="button">Salvar alterações</button></div>
+  </aside>
+  <nav class="tabbar" aria-label="Atalhos" data-tabbar></nav>
+  <script type="module" src="prototipo.js"></script>
+</body>
+</html>

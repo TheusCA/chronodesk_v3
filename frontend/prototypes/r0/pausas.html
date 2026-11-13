@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR" data-direcao="a" data-tema="claro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pausas: protótipo R0</title>
+  <link rel="stylesheet" href="prototipo.css">
+</head>
+<body data-tela="pausas" data-titulo="Pausas" data-usuario="Técnico 01 Exemplo" data-perfil="Técnico N1">
+  <a class="skip" href="#conteudo">Ir para o conteúdo</a>
+  <div class="shell">
+    <aside class="side" data-side></aside>
+    <div class="main">
+      <header class="top" data-top></header>
+      <main class="content" id="conteudo">
+        <div class="layout-pausas">
+          <section class="panel mine" aria-labelledby="sua-pausa">
+            <div class="mine__who">
+              <h2 id="sua-pausa">Sua pausa</h2>
+              <span class="tag tag--ok when-start" data-icone="building" data-icone-classe="icon--sm">Presencial</span>
+              <span class="tag tag--pause when-active" data-icone="pause" data-icone-classe="icon--sm">Em pausa</span>
+            </div>
+            <form class="start mine">
+              <fieldset class="choice">
+                <legend>Motivo</legend>
+                <label><input type="radio" name="motivo" value="Café"><span>Café</span><small>até 20 min</small></label>
+                <label><input type="radio" name="motivo" value="Pessoal"><span>Pessoal</span><small>sem limite</small></label>
+                <label><input type="radio" name="motivo" value="Reunião"><span>Reunião</span><small>com aprovação</small></label>
+              </fieldset>
+              <label class="field note" data-contexto>Assunto da reunião
+                <input type="text" maxlength="500" autocomplete="off">
+              </label>
+              <button class="btn btn--primary btn--block" type="submit" data-iniciar disabled>Escolha o motivo</button>
+              <p class="hint">Jornada 08:00 às 17:00 · almoço 12:00 às 13:00</p>
+            </form>
+            <div class="active" data-medidor>
+              <p class="muted">Café desde <span class="num">10:31</span></p>
+              <p class="clock-big" data-desde="10:31:00" data-limite="1200">11:05</p>
+              <div class="meter" aria-hidden="true"><span></span></div>
+              <p class="muted"><span data-passou>faltam 8:55</span> · limite de 20 min</p>
+              <button class="btn btn--primary btn--block" type="button" data-encerrar>Encerrar pausa</button>
+            </div>
+          </section>
+
+          <section class="panel panel--flush" aria-labelledby="equipe-agora">
+            <div class="panel__head">
+              <h2 id="equipe-agora">Equipe agora</h2>
+              <div class="seg" role="group" aria-label="Filtrar a equipe">
+                <button type="button" data-filtro="todos" aria-pressed="true">Todos <span class="num">16</span></button>
+                <button type="button" data-filtro="disponivel" aria-pressed="false">Disponíveis <span class="num">10</span></button>
+                <button type="button" data-filtro="pausa" aria-pressed="false">Em pausa <span class="num">2</span></button>
+                <button type="button" data-filtro="outros" aria-pressed="false">Outros <span class="num">4</span></button>
+              </div>
+            </div>
+            <table class="table table--cards">
+              <thead><tr><th scope="col">Técnico</th><th scope="col">Situação</th><th scope="col" class="hide-sm">Jornada</th><th scope="col" class="right">Pausa</th></tr></thead>
+              <tbody>
+                <tr class="group"><td colspan="4">N1 · 6 de 9 disponíveis</td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 01 Exemplo</td><td data-col="state"><span class="tag tag--ok" data-icone="building" data-icone-classe="icon--sm">Presencial</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 02 Exemplo</td><td data-col="state"><span class="tag tag--ok" data-icone="building" data-icone-classe="icon--sm">Presencial</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 03 Exemplo</td><td data-col="state"><span class="tag tag--remote" data-icone="home" data-icone-classe="icon--sm">Remoto</span></td><td data-col="meta" class="hide-sm num">09:00–18:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="pausa"><td data-col="name">Técnico 04 Exemplo</td><td data-col="state"><span class="tag tag--pause" data-icone="pause" data-icone-classe="icon--sm">Café</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td data-col="meta" class="right"><span class="num" data-desde="10:18:00" data-limite="1200">24:05</span> <span class="muted" data-passou></span></td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 05 Exemplo</td><td data-col="state"><span class="tag tag--ok" data-icone="building" data-icone-classe="icon--sm">Presencial</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="outros"><td data-col="name">Técnico 06 Exemplo</td><td data-col="state"><span class="tag tag--lunch" data-icone="utensils" data-icone-classe="icon--sm">Almoço</span></td><td data-col="meta" class="hide-sm num">09:00–18:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 07 Exemplo</td><td data-col="state"><span class="tag tag--remote" data-icone="home" data-icone-classe="icon--sm">Remoto</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 08 Exemplo</td><td data-col="state"><span class="tag tag--ok" data-icone="building" data-icone-classe="icon--sm">Presencial</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="outros"><td data-col="name">Técnico 09 Exemplo</td><td data-col="state"><span class="tag tag--absent" data-icone="userMinus" data-icone-classe="icon--sm">Ausente</span></td><td data-col="meta" class="hide-sm num">09:00–18:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr class="group"><td colspan="4">N2 · 4 de 6 disponíveis</td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 10 Exemplo</td><td data-col="state"><span class="tag tag--ok" data-icone="building" data-icone-classe="icon--sm">Presencial</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="pausa"><td data-col="name">Técnico 11 Exemplo</td><td data-col="state"><span class="tag tag--pause" data-icone="pause" data-icone-classe="icon--sm">Reunião</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td data-col="meta" class="right"><span class="num" data-desde="10:12:00">30:05</span> <span class="muted" data-passou></span></td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 12 Exemplo</td><td data-col="state"><span class="tag tag--remote" data-icone="home" data-icone-classe="icon--sm">Remoto</span></td><td data-col="meta" class="hide-sm num">09:00–18:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="outros"><td data-col="name">Técnico 13 Exemplo</td><td data-col="state"><span class="tag tag--off" data-icone="clock" data-icone-classe="icon--sm">Fora do expediente</span></td><td data-col="meta" class="hide-sm num">13:00–22:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 14 Exemplo</td><td data-col="state"><span class="tag tag--ok" data-icone="building" data-icone-classe="icon--sm">Presencial</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="outros"><td data-col="name">Técnico 15 Exemplo</td><td data-col="state"><span class="tag tag--none" data-icone="help" data-icone-classe="icon--sm">Sem escala</span></td><td data-col="meta" class="hide-sm num">09:00–18:00</td><td class="right hide-sm muted">—</td></tr>
+                <tr data-grupo="disponivel"><td data-col="name">Técnico 16 Exemplo</td><td data-col="state"><span class="tag tag--remote" data-icone="home" data-icone-classe="icon--sm">Remoto</span></td><td data-col="meta" class="hide-sm num">08:00–17:00</td><td class="right hide-sm muted">—</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+  <nav class="tabbar" aria-label="Atalhos" data-tabbar></nav>
+  <script type="module" src="prototipo.js"></script>
+</body>
+</html>

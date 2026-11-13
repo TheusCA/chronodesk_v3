@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="pt-BR" data-direcao="a" data-tema="claro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Visão operacional: protótipo R0</title>
+  <link rel="stylesheet" href="prototipo.css">
+</head>
+<body data-tela="visao-operacional" data-titulo="Visão operacional" data-usuario="lideranca.exemplo" data-perfil="Liderança">
+  <a class="skip" href="#conteudo">Ir para o conteúdo</a>
+  <div class="shell">
+    <aside class="side" data-side></aside>
+    <div class="main">
+      <header class="top" data-top></header>
+      <main class="content" id="conteudo">
+        <div class="now">
+          <section class="panel now__all" aria-labelledby="agora-total">
+            <div class="panel__head">
+              <h2 id="agora-total">Disponíveis agora</h2>
+              <span class="muted">Situação às <time class="num" data-relogio-s>10:42:05</time></span>
+            </div>
+            <p class="now__big">10<small>de 15 escalados</small></p>
+            <div class="bar" role="img" aria-label="10 disponíveis, 2 em pausa, 1 no almoço, 1 ausente, 1 fora do expediente">
+              <span class="s-ok" data-n="10"></span><span class="s-pause" data-n="2"></span><span class="s-lunch" data-n="1"></span><span class="s-absent" data-n="1"></span><span class="s-off" data-n="1"></span>
+            </div>
+            <div class="legend">
+              <span><i class="s-ok"></i>Disponíveis <strong>10</strong></span>
+              <span><i class="s-pause"></i>Em pausa <strong>2</strong></span>
+              <span><i class="s-lunch"></i>Almoço <strong>1</strong></span>
+              <span><i class="s-absent"></i>Ausentes <strong>1</strong></span>
+              <span><i class="s-off"></i>Fora do expediente <strong>1</strong></span>
+              <span class="muted">Sem escala, fora da soma: <strong>1</strong></span>
+            </div>
+          </section>
+          <section class="panel now__team" aria-labelledby="agora-n1">
+            <h2 id="agora-n1">N1</h2>
+            <p class="num-line"><strong>6</strong><span class="muted">de 9 disponíveis</span></p>
+            <div class="bar" role="img" aria-label="N1: 6 disponíveis, 1 em pausa, 1 no almoço, 1 ausente"><span class="s-ok" data-n="6"></span><span class="s-pause" data-n="1"></span><span class="s-lunch" data-n="1"></span><span class="s-absent" data-n="1"></span></div>
+            <p class="counts legend"><span>Pausa<b>1</b></span><span>Almoço<b>1</b></span><span>Ausente<b>1</b></span></p>
+          </section>
+          <section class="panel now__team" aria-labelledby="agora-n2">
+            <h2 id="agora-n2">N2</h2>
+            <p class="num-line"><strong>4</strong><span class="muted">de 6 disponíveis</span></p>
+            <div class="bar" role="img" aria-label="N2: 4 disponíveis, 1 em pausa, 1 fora do expediente"><span class="s-ok" data-n="4"></span><span class="s-pause" data-n="1"></span><span class="s-off" data-n="1"></span></div>
+            <p class="counts legend"><span>Pausa<b>1</b></span><span>Fora<b>1</b></span><span>Sem escala<b>1</b></span></p>
+          </section>
+        </div>
+
+        <div class="split">
+          <section class="panel panel--flush" aria-labelledby="pausas-andamento">
+            <div class="panel__head"><h2 id="pausas-andamento">Pausas em andamento</h2><a class="btn btn--quiet" href="pausas.html">Ver equipe</a></div>
+            <table class="table table--cards">
+              <thead><tr><th scope="col">Técnico</th><th scope="col">Motivo</th><th scope="col" class="right">Tempo</th><th scope="col" class="right"><span class="sr-only">Ações</span></th></tr></thead>
+              <tbody>
+                <tr><td data-col="name"><span class="person">Técnico 04 Exemplo<small>N1 · desde 10:18</small></span></td><td data-col="state"><span class="tag tag--pause" data-icone="pause" data-icone-classe="icon--sm">Café</span></td><td data-col="meta" class="right"><span class="num" data-desde="10:18:00" data-limite="1200">24:05</span> <span class="muted" data-passou></span></td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--danger" type="button">Encerrar pausa</button></div></td></tr>
+                <tr><td data-col="name"><span class="person">Técnico 11 Exemplo<small>N2 · desde 10:12</small></span></td><td data-col="state"><span class="tag tag--pause" data-icone="pause" data-icone-classe="icon--sm">Reunião</span></td><td data-col="meta" class="right"><span class="num" data-desde="10:12:00">30:05</span> <span class="muted" data-passou></span></td><td data-col="act" class="right"><div class="row-actions"><button class="btn btn--danger" type="button">Encerrar pausa</button></div></td></tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section class="panel panel--flush" aria-labelledby="atencao">
+            <div class="panel__head"><h2 id="atencao">Precisa de você</h2></div>
+            <div class="attention">
+              <a href="funcionarios.html"><span data-icone="shield"></span><div><strong>3 aprovações pendentes</strong><p>1 reunião, 1 hora extra, 1 correção de ponto</p></div><span data-icone="chevron"></span></a>
+              <a href="pausas.html"><span data-icone="timer"></span><div><strong>Café passou do limite</strong><p>Técnico 04 Exemplo, limite de 20 min</p></div><span data-icone="chevron"></span></a>
+              <a href="#"><span data-icone="alert"></span><div><strong>1 chamado crítico aberto</strong><p>War room desde 09:20</p></div><span data-icone="chevron"></span></a>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel" aria-labelledby="cobertura">
+          <div class="panel__head panel__head--flush"><h2 id="cobertura">Cobertura</h2>
+            <p class="coverage"><span><b>2</b>plantonistas ativos</span><span><b>1</b>sobreaviso</span><span><b>2</b>da Liderança presentes, fora dos totais</span></p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+  <nav class="tabbar" aria-label="Atalhos" data-tabbar></nav>
+  <script type="module" src="prototipo.js"></script>
+</body>
+</html>
