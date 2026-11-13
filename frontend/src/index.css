@@ -233,8 +233,10 @@
     @apply btn border border-transparent bg-transparent text-ink-2 hover:bg-ink/5 hover:text-ink;
   }
 
+  /* [R2] Campo (components/ui/Field.jsx): 40 px, borda de 3:1, erro com borda
+     de erro (e o texto do erro abaixo, nunca só a cor). */
   .field {
-    @apply min-w-0 w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-muted transition-colors hover:border-ink-2 focus:border-focus;
+    @apply min-h-10 min-w-0 w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted transition-colors hover:border-ink-2 focus:border-focus aria-[invalid=true]:border-danger;
   }
 
   .field:disabled {
@@ -250,7 +252,19 @@
   }
 
   .label {
-    @apply block text-sm font-semibold text-ink-2;
+    @apply block text-sm font-medium text-ink-2;
+  }
+
+  .field-group {
+    @apply flex min-w-0 flex-col gap-1.5;
+  }
+
+  .field-help {
+    @apply text-xs text-muted;
+  }
+
+  .field-error {
+    @apply flex items-start gap-1.5 text-xs font-medium text-danger;
   }
 
   .sidebar-link {
@@ -333,12 +347,13 @@
     @apply w-full min-w-[760px] border-collapse text-left text-sm;
   }
 
+  /* [R2] Tabela densa (components/ui/Table.jsx usa estas classes). */
   .data-table th {
-    @apply border-b border-line bg-surface-2 px-4 py-3 text-xs font-semibold text-muted;
+    @apply border-b border-line bg-surface-2 px-4 py-2.5 text-xs font-semibold text-muted;
   }
 
   .data-table td {
-    @apply border-b border-line px-4 py-4 align-top text-ink-2;
+    @apply border-b border-line px-4 py-3 align-top text-ink-2;
   }
 
   .data-table tbody tr {
@@ -557,6 +572,79 @@
 
 .data-table tbody tr:hover > .data-table-sticky-end {
   background-image: linear-gradient(rgb(var(--ink) / 0.03), rgb(var(--ink) / 0.03));
+}
+
+/* [R2] Linha de grupo da tabela (Table com groupOf). Fora de @layer: só o
+   Table a usa. */
+.data-table .data-table-group th {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--ink));
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 1.25rem 1rem 0.5rem;
+}
+
+/* [R2] Tabela em cartões abaixo de 640 px (Table com cards): cada linha vira um
+   bloco, cada célula mostra o rótulo da coluna (data-label) antes do valor, e
+   a tabela deixa de ter largura mínima (sem rolagem lateral no celular). */
+@media (max-width: 639.98px) {
+  .data-table.data-table--cards {
+    min-width: 0;
+  }
+
+  .data-table--cards thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .data-table--cards,
+  .data-table--cards tbody,
+  .data-table--cards tr,
+  .data-table--cards td {
+    display: block;
+  }
+
+  .data-table--cards tbody tr {
+    border-bottom: 1px solid rgb(var(--line));
+    padding: 0.75rem 0;
+  }
+
+  .data-table--cards td {
+    display: grid;
+    grid-template-columns: minmax(7rem, 40%) 1fr;
+    gap: 0.75rem;
+    border: 0;
+    padding: 0.25rem 1rem;
+  }
+
+  .data-table--cards td::before {
+    content: attr(data-label);
+    color: rgb(var(--muted));
+    font-size: 0.8125rem;
+  }
+
+  .data-table--cards .data-table-group th {
+    display: block;
+  }
+}
+
+/* [R2] Rodapé do painel lateral (Drawer): as ações ficam visíveis no fim,
+   mesmo com o formulário rolado. */
+.drawer-footer {
+  position: sticky;
+  bottom: -1.5rem;
+  margin: 1.5rem -1.5rem -1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  border-top: 1px solid rgb(var(--line));
+  background-color: rgb(var(--surface));
+  padding: 1rem 1.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -150,4 +150,80 @@ for (const [file, pattern, label] of [
   assert.match(buttons[0], /<span class="segmented-count">16<\/span>/, 'Segmented: contagem com classe própria')
 }
 
+// ---------------------------------------------------------------------------
+// 5. Field: rótulo acima, ajuda e erro ligados ao controle.
+// ---------------------------------------------------------------------------
+{
+  const { Field } = await ui('Field')
+  const plain = render(h(Field, { label: 'Nome' }, h('input', { name: 'nome' })))
+  const controlId = plain.match(/<input[^>]*id="([^"]+)"/)?.[1]
+  assert.ok(controlId, 'Field: o controle ganha um id')
+  assert.ok(plain.startsWith(`<div class="field-group"><label class="label" for="${controlId}">Nome</label><input`), 'Field: rótulo acima, ligado ao controle')
+  assert.match(plain, /<input[^>]*class="field"/, 'Field: controle com a classe .field por padrão')
+  assert.doesNotMatch(plain, /aria-describedby|aria-invalid/, 'Field: sem ajuda nem erro, sem aria-describedby nem aria-invalid')
+  const full = render(h(Field, { label: 'Login AD', help: 'Como no AD', error: 'Informe o login' }, h('input', { 'aria-describedby': 'aviso-externo', className: 'field mt-2' })))
+  const describedBy = full.match(/<input[^>]*aria-describedby="([^"]+)"/)?.[1].split(' ') ?? []
+  assert.equal(describedBy[0], 'aviso-externo', 'Field: mantém o aria-describedby que o controle já tinha')
+  const helpId = full.match(/<p class="field-help" id="([^"]+)">Como no AD<\/p>/)?.[1]
+  const errorId = full.match(/<p class="field-error" id="([^"]+)">/)?.[1]
+  assert.ok(helpId && describedBy.includes(helpId), 'Field: ajuda ligada por aria-describedby')
+  assert.ok(errorId && describedBy.includes(errorId), 'Field: erro ligado por aria-describedby')
+  assert.match(full, /<input[^>]*aria-invalid="true"/, 'Field: com erro, aria-invalid')
+  assert.match(full, /<p class="field-error" id="[^"]+"><svg[^>]*aria-hidden="true"[\s\S]*<span>Informe o login<\/span><\/p>/, 'Field: erro com ícone e texto, abaixo do campo')
+  assert.ok(full.indexOf('<input') < full.indexOf('field-help') && full.indexOf('field-help') < full.indexOf('field-error'), 'Field: ordem rótulo, controle, ajuda, erro')
+  assert.match(full, /<input[^>]*class="field mt-2"/, 'Field: respeita a classe do controle')
+  assert.match(render(h(Field, { label: 'Data' }, h('input', { id: 'data-fixa' }))), /<label class="label" for="data-fixa">/, 'Field: respeita o id do controle')
+  assert.ok((mobileMinHeight('field') ?? 0) >= 40, '.field com 40 px')
+  assert.match(compiled, /\.field\[aria-invalid="true"\] \{[^}]*border-color: rgb\(var\(--danger\)/, '.field com erro: borda de erro')
+  assert.match(rulesOf(outsideMedia, 'field').join(' '), /min-width: 0px/, '.field pode encolher')
+}
+
+// ---------------------------------------------------------------------------
+// 6. Table: densa, cabeçalho com escopo, grupo e modo cartão.
+// ---------------------------------------------------------------------------
+{
+  const { Table } = await ui('Table')
+  const columns = [{ key: 'nome', label: 'Funcionário' }, { key: 'equipe', label: 'Equipe', render: (row) => row.equipe.toUpperCase() }]
+  const rows = [{ id: 1, nome: 'Técnico 01 Exemplo', equipe: 'n1' }, { id: 2, nome: 'Técnico 02 Exemplo', equipe: 'n1' }, { id: 3, nome: 'Técnico 10 Exemplo', equipe: 'n2' }]
+  const markup = render(h(Table, { caption: 'Funcionários', columns, rows, rowKey: (row) => row.id }))
+  assert.match(markup, /^<div class="table-wrap"><table class="data-table"><caption class="sr-only">Funcionários<\/caption>/, 'Table: rolagem só na tabela e nome para o leitor de tela')
+  assert.match(markup, /<thead><tr><th scope="col">Funcionário<\/th><th scope="col">Equipe<\/th><\/tr><\/thead>/, 'Table: cabeçalho com scope="col"')
+  assert.equal((markup.match(/<td data-label="Funcionário">/g) ?? []).length, 3, 'Table: célula com o rótulo da coluna (modo cartão)')
+  assert.match(markup, /<td data-label="Equipe">N2<\/td>/, 'Table: render da coluna')
+  const grouped = render(h(Table, { columns, rows, rowKey: (row) => row.id, groupOf: (row) => `Equipe ${row.equipe.toUpperCase()}`, cards: true }))
+  assert.match(grouped, /<table class="data-table data-table--cards">/, 'Table: modo cartão por opção')
+  const groups = [...grouped.matchAll(/<tr class="data-table-group"><th colSpan="2" scope="colgroup">([^<]+)<\/th><\/tr>/g)].map((match) => match[1])
+  assert.deepEqual(groups, ['Equipe N1', 'Equipe N2'], 'Table: uma linha de grupo quando o grupo muda, ocupando todas as colunas')
+  assert.ok(grouped.indexOf('Equipe N2') > grouped.indexOf('Técnico 02 Exemplo') && grouped.indexOf('Equipe N2') < grouped.indexOf('Técnico 10 Exemplo'), 'Table: grupo antes das suas linhas')
+  // Modo cartão no celular: sem largura mínima e com o rótulo da coluna.
+  const cardsAt = compiled.indexOf('@media (max-width: 639.98px)')
+  assert.ok(cardsAt >= 0, 'Table: regra do modo cartão abaixo de 640 px')
+  const cardsMedia = compiled.slice(cardsAt, compiled.indexOf('\n}\n', cardsAt))
+  assert.match(cardsMedia, /\.data-table\.data-table--cards \{\s*min-width: 0;/, 'Table: cartões sem largura mínima abaixo de 640 px')
+  assert.match(cardsMedia, /\.data-table--cards td::before \{\s*content: attr\(data-label\);/, 'Table: rótulo da coluna antes do valor')
+  assert.match(cardsMedia, /\.data-table--cards thead \{[^}]*clip: rect\(0 0 0 0\)/, 'Table: cabeçalho fora da tela, mas para o leitor de tela')
+}
+
+// ---------------------------------------------------------------------------
+// 7. Drawer: o Dialog do 17f na lateral.
+// ---------------------------------------------------------------------------
+{
+  const { Drawer } = await ui('Drawer')
+  const markup = render(h(Drawer, { title: 'Editar funcionário', description: 'Alteração auditada', onClose: () => {}, footer: h('button', { type: 'button' }, 'Salvar') }, h('p', null, 'Corpo')))
+  assert.match(markup, /^<div class="fixed inset-0 z-\[60\] flex justify-end bg-black\/75" data-dialog-backdrop="">/, 'Drawer: fundo do Dialog, alinhado à direita')
+  const titleId = markup.match(/<h2[^>]*id="([^"]+)">Editar funcionário<\/h2>/)?.[1]
+  const descriptionId = markup.match(/<p[^>]*id="([^"]+)">Alteração auditada<\/p>/)?.[1]
+  assert.ok(titleId && descriptionId, 'Drawer: título e descrição com id')
+  assert.ok(markup.includes(`aria-describedby="${descriptionId}" aria-labelledby="${titleId}" aria-modal="true" class="relative h-full w-full max-w-xl overflow-y-auto border-l border-line bg-surface p-6 " role="dialog" tabindex="-1"`), 'Drawer: role="dialog", aria-modal, título e descrição ligados, painel na altura toda')
+  assert.match(markup, /<button aria-label="Fechar painel" class="btn-ghost shrink-0 px-2\.5" type="button"><svg/, 'Drawer: botão de fechar com nome acessível')
+  assert.match(markup, /<div class="mt-6"><p>Corpo<\/p><\/div><div class="drawer-footer"><button type="button">Salvar<\/button><\/div>/, 'Drawer: corpo e ações no rodapé')
+  assert.doesNotMatch(render(h(Drawer, { title: 'T', onClose: () => {} }, 'x')), /drawer-footer/, 'Drawer: sem ações, sem rodapé')
+  const drawerSource = read('src/components/ui/Drawer.jsx')
+  assert.match(drawerSource, /<Dialog\b[\s\S]*placement="end"/, 'Drawer: é o Dialog (foco preso, Esc, trava de rolagem e foco de volta vêm dele)')
+  for (const prop of ['initialFocusRef={initialFocusRef}', 'returnFocusRef={returnFocusRef}', 'onClose={onClose}']) {
+    assert.ok(drawerSource.includes(prop), `Drawer: repassa ${prop} ao Dialog`)
+  }
+  assert.match(compiled, /\.drawer-footer \{[^}]*position: sticky;/, 'Drawer: ações fixas no fim do painel')
+}
+
 console.log('Primitivos QA OK')
