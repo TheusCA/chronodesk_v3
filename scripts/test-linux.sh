@@ -58,6 +58,10 @@ echo "== PHP employee lunch QA =="
 # Almoco por contrato (F8, commit 1): regra pura, sem duracoes reais; sem banco.
 php scripts/qa-employee-lunch.php
 
+echo "== PHP PA distribution QA =="
+# Motor de distribuicao de PA (F10-1): regra do script, porta x motor; sem banco.
+php scripts/qa-pa-distribution.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php

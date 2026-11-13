@@ -301,6 +301,12 @@ $repoQas = array_map(static fn (string $path): string => basename($path, '.php')
 $sortedRunbookQas = $runbookQas;
 sort($sortedRunbookQas);
 sort($repoQas);
+// [F10-1] Os roteiros dos deploys 1 e 2 ja foram executados e ficam como
+// foram. QA criado depois do deploy 2 fica nesta lista ate entrar no roteiro
+// do proximo deploy; QA novo fora dela continua reprovando aqui.
+$qasAfterDeploy2 = ['qa-pa-distribution'];
+assert_same($qasAfterDeploy2, array_values(array_intersect($qasAfterDeploy2, $repoQas)), 'QAs criados depois do deploy 2: cada um existe no repositorio');
+$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2));
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');
 // [pos-deploy 1, C1c] O 7m varre pelo padrao do mktemp, nao pelo $E: um
 // sudo -i novo no meio do dia perde a variavel (achado do dia do deploy 1).

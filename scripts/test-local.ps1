@@ -166,6 +166,14 @@ if (!$phpExecutable) {
         Pass "QA do almoco por contrato concluido"
     }
 
+    # Sem banco: motor de distribuicao de PA (F10-1): regra do script, porta x motor.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-pa-distribution.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA da distribuicao de PA falhou"
+    } else {
+        Pass "QA da distribuicao de PA concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {
