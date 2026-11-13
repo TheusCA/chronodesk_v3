@@ -63,7 +63,7 @@ export function PresenceDaySummary({ events }) {
   return (
     <div aria-label={daySummaryAriaLabel(summary)} className="flex flex-wrap gap-1" role="group">
       {PRESENCE_LEGEND.filter((item) => summary[item.status] > 0).map((item) => (
-        <span aria-hidden="true" className={`inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[11px] font-bold ${item.tone}`} key={item.status} title={item.label}>
+        <span aria-hidden="true" className={`inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-xs font-semibold ${item.tone}`} key={item.status} title={item.label}>
           <Icon name={item.icon} className="h-3 w-3" />{item.letter} {summary[item.status]}
         </span>
       ))}

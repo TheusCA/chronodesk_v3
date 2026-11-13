@@ -69,7 +69,7 @@ function OperationalSummary({ data }) {
   // tabela; a Liderança num bloco à parte, fora dos totais.
   const card = ([team, label, note = null]) => (
     <article className="rounded-card border border-line bg-surface-2 p-4" data-team={team} key={team}>
-      <h3 className="text-sm font-bold text-ink">{label}{note && <small className="ml-2 text-xs font-normal text-muted">{note}</small>}</h3>
+      <h3 className="text-sm font-semibold text-ink">{label}{note && <small className="ml-2 text-xs font-normal text-muted">{note}</small>}</h3>
       <dl className="mt-3 space-y-2">
         {OPERATIONAL_SUMMARY_COLUMNS.map((column) => (
           <div className="flex items-center justify-between gap-3" key={column.key}>
@@ -153,7 +153,7 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
         <div className="grid gap-6 lg:grid-cols-[1.4fr_0.8fr] lg:items-center">
           <div>
             <p className="section-eyebrow">Portal SDK — Centro Operacional de TI</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-ink sm:text-3xl">Operação agora</h2>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Operação agora</h2>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
               Painel de disponibilidade, pausas, aprovações e incidentes críticos da operação SDK.
             </p>
@@ -203,12 +203,12 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
                       <UserAvatar name={item.nome} />
                       <div className="min-w-0">
                         <p className="font-semibold text-ink-2">{item.nome}</p>
-                        <p className="text-xs uppercase tracking-wider text-muted">Equipe {item.equipe}</p>
+                        <p className="text-xs text-muted">Equipe {item.equipe}</p>
                       </div>
                     </div>
                     <span className="status-badge status-warning">{item.motivo_pausa}</span>
                   </div>
-                  <p className="mt-5 rounded-card border border-warn-line bg-warn-bg px-3 py-2 font-mono text-2xl font-bold text-warn">{formatDuration(livePauses.elapsedFor(item))}</p>
+                  <p className="mt-5 rounded-card border border-warn-line bg-warn-bg px-3 py-2 font-mono text-2xl font-semibold text-warn">{formatDuration(livePauses.elapsedFor(item))}</p>
                   {/* [F7, DV11] Sem a chave (colega, para quem não é gestão), sem a caixa. */}
                   {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && 'observacao_reuniao' in item && (
                     <p

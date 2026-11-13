@@ -23,12 +23,12 @@ function Ranking({ title, values, formatter = (value) => value }) {
   const entries = Object.entries(values || {}).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 8)
   return (
     <section className="card">
-      <h3 className="mb-4 font-bold text-ink">{title}</h3>
+      <h3 className="mb-4 font-semibold text-ink">{title}</h3>
       {entries.length === 0 && <p className="text-sm text-muted">Sem dados no período.</p>}
       <div className="space-y-3">
         {entries.map(([label, value], index) => (
           <div className="flex items-center gap-3" key={label}>
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface-2 text-xs font-bold text-muted">{index + 1}</span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface-2 text-xs font-semibold text-muted">{index + 1}</span>
             <span className="min-w-0 flex-1 truncate text-sm text-muted">{label}</span>
             <strong className="text-sm text-ink-2">{formatter(value)}</strong>
           </div>

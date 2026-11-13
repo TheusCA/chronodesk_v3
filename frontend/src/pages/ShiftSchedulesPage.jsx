@@ -154,8 +154,8 @@ function UploadShift({ limits, onClose, onUploaded }) {
       <form className="card relative mx-auto my-6 max-w-2xl space-y-5" onSubmit={submit}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-info">Publicação segura</p>
-            <h2 className="mt-2 text-xl font-bold text-ink">Publicar Escala de Sábado</h2>
+            <p className="text-xs font-semibold text-info">Publicação segura</p>
+            <h2 className="mt-2 text-xl font-semibold text-ink">Publicar Escala de Sábado</h2>
             <p className="mt-2 text-sm text-muted">Publique imagens, PDFs ou planilhas da escala de sábado.</p>
           </div>
           <button className="text-sm text-muted hover:text-ink-2" onClick={onClose} type="button">Cancelar</button>
@@ -261,7 +261,7 @@ export function ShiftSchedulesPage({ notify }) {
             return (
               <article className="card overflow-hidden p-0" key={item.id}>
                 <div className="flex gap-4 p-5">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-info-bg text-sm font-black text-info">{authorInitials(item.uploaded_by)}</div>
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-info-bg text-sm font-semibold text-info">{authorInitials(item.uploaded_by)}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                       <strong className="text-ink">{item.uploaded_by}</strong>
@@ -273,7 +273,7 @@ export function ShiftSchedulesPage({ notify }) {
                       <span className="status-badge status-neutral">{teamLabel(item.team)}</span>
                       <FileTypeBadge extension={extension} />
                     </div>
-                    <h3 className="mt-3 text-xl font-bold text-ink">{item.title}</h3>
+                    <h3 className="mt-3 text-xl font-semibold text-ink">{item.title}</h3>
                     {item.notes && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink-2">{item.notes}</p>}
                     {image && !imageBroken ? (
                       <a className="mt-4 block overflow-hidden rounded-xl border border-line bg-surface-2" href={preview} target="_blank" rel="noreferrer">

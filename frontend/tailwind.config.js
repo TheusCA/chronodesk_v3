@@ -37,7 +37,22 @@ export default {
       warn: tone('warn'),
       info: tone('info'),
     },
+    // [R1] Só os pesos da fonte carregada (D-R0-3): sem 700 ou 900, que o
+    // navegador engrossaria por conta própria. font-bold e font-black não geram
+    // CSS e o qa:visual os reprova.
+    fontWeight: {
+      normal: '400',
+      medium: '500',
+      semibold: '600',
+    },
     extend: {
+      // [R1] Nada abaixo de 13 px (text-xs). Corpo em 15 px (direção A).
+      fontSize: {
+        xs: ['0.8125rem', { lineHeight: '1.125rem' }],
+        sm: ['0.875rem', { lineHeight: '1.25rem' }],
+        base: ['0.9375rem', { lineHeight: '1.5rem' }],
+        lg: ['1.0625rem', { lineHeight: '1.5rem' }],
+      },
       borderRadius: {
         card: '10px',
       },

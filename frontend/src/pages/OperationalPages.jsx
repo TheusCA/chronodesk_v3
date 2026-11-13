@@ -258,7 +258,7 @@ function RulePreviewPanel({ preview, fresh }) {
   const days = preview?.preview || []
   return (
     <div className={`space-y-3 rounded-lg border p-3 ${fresh ? 'border-line bg-surface-2' : 'border-warn-line bg-warn-bg'}`}>
-      <p className="text-xs font-bold uppercase tracking-wider text-muted">Prévia das próximas 2 semanas (calculada pelo servidor)</p>
+      <p className="text-xs font-semibold text-muted">Prévia das próximas 2 semanas (calculada pelo servidor)</p>
       {!fresh && (
         <InlineAlert tone="warning" title="Prévia desatualizada">
           Um campo mudou depois da prévia. Gere a prévia de novo para poder salvar.
@@ -682,7 +682,7 @@ export function SchedulePage({ session, notify }) {
             {rule.rule_type === 'fixed_weekdays' && (
               <div className="space-y-3 rounded-lg border border-line bg-surface-2 p-3">
                 <fieldset className="flex flex-wrap gap-4 text-sm text-ink-2">
-                  <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Informar</legend>
+                  <legend className="mb-2 text-xs font-semibold text-muted">Informar</legend>
                   <label className="inline-flex items-center gap-2"><input type="radio" value="onsite" {...registerRule('input_mode', { onChange: () => clearRuleErrors(['weekdays', 'home_weekdays']) })} />dias presenciais</label>
                   <label className="inline-flex items-center gap-2"><input type="radio" value="home" {...registerRule('input_mode', { onChange: () => clearRuleErrors(['weekdays', 'home_weekdays']) })} />dias de home office</label>
                 </fieldset>
@@ -727,7 +727,7 @@ export function SchedulePage({ session, notify }) {
                   </label>
                 </div>
                 <fieldset className="flex flex-wrap gap-4 text-sm text-ink-2">
-                  <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Começa por</legend>
+                  <legend className="mb-2 text-xs font-semibold text-muted">Começa por</legend>
                   <label className="inline-flex items-center gap-2"><input type="radio" value="onsite" {...registerRule('cycle_starts_with')} />Presencial</label>
                   <label className="inline-flex items-center gap-2"><input type="radio" value="remote" {...registerRule('cycle_starts_with')} />Remoto</label>
                 </fieldset>
@@ -812,7 +812,7 @@ export function SchedulePage({ session, notify }) {
       <OperationalShell resource={resource}>
         {activeRules.length > 0 && (
           <section className="card">
-            <h2 className="mb-4 font-bold text-ink" ref={rulesTitleRef} tabIndex={-1}>Regras vigentes e agendadas</h2>
+            <h2 className="mb-4 font-semibold text-ink" ref={rulesTitleRef} tabIndex={-1}>Regras vigentes e agendadas</h2>
             {/* [17e] Abaixo de 1280 px, um cartão por regra, com os mesmos blocos e ações da linha. */}
             <div className="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-rule-list="">{activeRules.map((item) => (
               <article className="min-w-0 space-y-3 rounded-card border border-line bg-surface-2 p-4" data-rule={item.id ?? `implicita-${item.employee_id}`} key={item.id ?? `implicita-${item.employee_id}`}>
@@ -850,7 +850,7 @@ export function SchedulePage({ session, notify }) {
         {historyEmployee && (
           <section className="card table-wrap">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="scroll-mt-28 font-bold text-ink" ref={historyTitleRef} tabIndex={-1}>Histórico de {historyEmployee.name}</h2>
+              <h2 className="scroll-mt-28 font-semibold text-ink" ref={historyTitleRef} tabIndex={-1}>Histórico de {historyEmployee.name}</h2>
               <button className="table-action" onClick={closeHistory} type="button">Fechar</button>
             </div>
             <OperationalShell resource={history}>
@@ -1078,7 +1078,7 @@ function WorkflowPage({ kind, session, notify }) {
               <label className="label">Hora de saída<input className="field mt-2" required type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} /></label>
               <label className="label xl:col-span-2">Descrição/Motivo<input className="field mt-2" maxLength="500" required value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
               <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2">
-                <span className="block text-xs font-bold uppercase tracking-wider text-muted">Total calculado</span>
+                <span className="block text-xs font-semibold text-muted">Total calculado</span>
                 <strong className="mt-1 block text-ink">{minutesLabel(preview.minutes)}</strong>
                 {preview.overnight && <small className="mt-1 block text-warn">Virada de dia considerada no cálculo.</small>}
                 {preview.sameTime && <small className="mt-1 block text-danger" role="alert">{SAME_TIME_MESSAGE}</small>}
@@ -1165,7 +1165,7 @@ export function OncallPage({ session, notify }) {
       <PeriodFilters filters={filters} setFilters={setFilters} />
       {canManage && (
         <form className="card space-y-4" onSubmit={create}>
-          <h2 className="font-bold text-ink">Cadastrar plantão</h2>
+          <h2 className="font-semibold text-ink">Cadastrar plantão</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label className="label xl:col-span-2">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>
             <label className="label">Data inicial<input className="field mt-2" required type="date" value={form.starts_on} onChange={(event) => setForm({ ...form, starts_on: event.target.value })} /></label>
@@ -1277,9 +1277,9 @@ export function OperationalReportsPage() {
       <OperationalShell resource={resource}>
         <>
           {cutoffNotice && <InlineAlert tone="info" title={cutoffTitle}>{cutoffNotice}</InlineAlert>}
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-muted">{label}</p><p className="mt-3 text-2xl font-black text-ink">{value}</p></article>)}</section>
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-muted">{label}</p><p className="mt-3 text-2xl font-semibold text-ink">{value}</p></article>)}</section>
           <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div><h2 className="font-bold text-ink">Competência {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-muted">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>
+            <div><h2 className="font-semibold text-ink">Competência {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-muted">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>
             <a className="btn-primary" href={apiUrl(`portal/reports.php${queryString({ ...filters, format: 'csv' })}`)}>Exportar CSV</a>
           </section>
           <section className="grid gap-5 lg:grid-cols-2">
@@ -1326,7 +1326,7 @@ function ReportsSummaryTable({ title, values }) {
 
   return (
     <section className="card">
-      <h2 className="mb-4 font-bold text-ink">{title}</h2>
+      <h2 className="mb-4 font-semibold text-ink">{title}</h2>
       {data.length === 0 ? <p className="text-sm text-muted">Sem dados no período.</p> : (
         <div className="table-wrap">
           <table className="data-table">

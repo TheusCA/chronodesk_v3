@@ -5,7 +5,6 @@ import { guardLeave } from '../lib/navigationGuard'
 import { useResource } from '../hooks/useResource'
 import { Icon } from './ui/Icon'
 import { BrandMark } from './BrandMark'
-import { StatusDot } from './ui/Primitives'
 import { activeTheme, chooseTheme, oppositeTheme } from '../lib/theme'
 
 function userLabel(session) {
@@ -90,7 +89,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
       <div className={`relative flex items-center border-b border-line ${compact ? 'h-24 flex-col justify-center gap-2 px-2' : 'h-20 gap-3 px-5'}`}>
         <BrandMark className="h-10 w-10 shrink-0" />
         {!compact && <div className="min-w-0">
-          <p className="truncate font-bold tracking-tight text-ink">Portal SDK</p>
+          <p className="truncate font-semibold tracking-tight text-ink">Portal SDK</p>
           <p className="truncate text-xs text-muted">Centro Operacional de TI</p>
         </div>}
         {showCollapseToggle && (
@@ -112,7 +111,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
             if (compact) {
               return <div className="my-3 h-px bg-ink/5" key={`${item.section}-${index}`} aria-hidden="true" />
             }
-            return <p className="px-3 pb-2 pt-5 text-[10px] font-bold uppercase tracking-[0.2em] text-muted" key={`${item.section}-${index}`}>{item.section}</p>
+            return <p className="px-3 pb-2 pt-5 text-xs font-semibold text-muted" key={`${item.section}-${index}`}>{item.section}</p>
           }
           if (item.permission && !permissions.has(item.permission)) return null
           const active = path === item.path
@@ -135,7 +134,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
       <div className={`border-t border-line ${compact ? 'p-2' : 'p-4'}`} title={compact ? 'Desenvolvido por Matheus Camargo' : undefined}>
         <div className={`rounded-card border border-line bg-surface ${compact ? 'grid place-items-center p-2' : 'p-3'}`} title={compact ? currentUserLabel : undefined}>
           {compact ? (
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-2 text-sm font-black text-ink">{userInitial}</span>
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-2 text-sm font-semibold text-ink">{userInitial}</span>
           ) : (
             <>
               <p className="truncate text-sm font-semibold text-ink-2">{currentUserLabel}</p>
@@ -143,7 +142,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
             </>
           )}
         </div>
-        {!compact && <p className="mt-3 text-center text-[11px] font-medium text-muted">Desenvolvido por Matheus Camargo</p>}
+        {!compact && <p className="mt-3 text-center text-xs font-medium text-muted">Desenvolvido por Matheus Camargo</p>}
       </div>
     </>
     )
@@ -174,13 +173,12 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
                 <Icon name="menu" />
               </button>
               <div className="min-w-0">
-                <p className="hidden text-[10px] font-bold uppercase tracking-[0.18em] text-muted sm:block">Portal SDK</p>
-                <h1 className="truncate text-lg font-bold text-ink outline-none sm:text-xl" data-page-title="" tabIndex={-1}>{metadata[0]}</h1>
+                <p className="hidden text-xs font-semibold text-muted sm:block">Portal SDK</p>
+                <h1 className="truncate text-lg font-semibold text-ink outline-none sm:text-xl" data-page-title="" tabIndex={-1}>{metadata[0]}</h1>
                 <p className="hidden truncate text-xs text-muted sm:block">{metadata[1]}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
-              <div className="hidden md:block"><StatusDot tone="success" label="Operação online" /></div>
               <Clock />
               <ThemeToggle />
               <div className="relative">
@@ -190,7 +188,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
                 </button>
                 {notificationsOpen && (
                   <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-card border border-line bg-surface p-2 shadow-lg" id={notificationsPanelId} role="dialog" aria-label="Notificações recentes">
-                    <p className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted">Notificações</p>
+                    <p className="px-3 py-2 text-xs font-semibold text-muted">Notificações</p>
                     {(notificationResource.data?.items || []).length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">Nenhuma notificação.</p>}
                     {(notificationResource.data?.items || []).slice(0, 6).map((notification) => (
                       <button className={`w-full rounded-lg px-3 py-3 text-left hover:bg-ink/5 ${notification.is_read ? 'opacity-60' : ''}`} key={notification.id} onClick={() => openNotification(notification)} type="button">

@@ -95,7 +95,7 @@ function EventChip({ event }) {
   if (isEngineScheduleEvent(event)) {
     const item = presenceLegendItem(event.status)
     return (
-      <div className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-[11px] font-semibold leading-tight ${item?.tone || typeTones.schedule}`} title={engineEventFullText(event)}>
+      <div className={`flex items-center gap-1 rounded-md border px-1.5 py-1 text-xs font-semibold leading-tight ${item?.tone || typeTones.schedule}`} title={engineEventFullText(event)}>
         {item && <Icon name={item.icon} className="h-3 w-3 shrink-0" />}
         {item && <span className="sr-only">{item.label}: </span>}
         <span className="line-clamp-2 min-w-0 break-words">{engineEventName(event)}</span>
@@ -104,7 +104,7 @@ function EventChip({ event }) {
     )
   }
   return (
-    <div className={`truncate rounded-md border px-2 py-1 text-[11px] font-semibold ${typeTones[event.event_type] || typeTones.manual}`}>
+    <div className={`truncate rounded-md border px-2 py-1 text-xs font-semibold ${typeTones[event.event_type] || typeTones.manual}`}>
       {event.title}
     </div>
   )
@@ -216,7 +216,7 @@ export function CalendarPage({ session, notify }) {
             <button className="btn-secondary" onClick={() => setAnchor(new Date())} type="button">Hoje</button>
             <button className="btn-secondary px-3" onClick={() => move(-1)} type="button" aria-label="Período anterior">‹</button>
             <button className="btn-secondary px-3" onClick={() => move(1)} type="button" aria-label="Próximo período">›</button>
-            <h2 className="ml-1 text-xl font-black capitalize text-ink">
+            <h2 className="ml-1 text-xl font-semibold capitalize text-ink">
               {anchor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
             </h2>
           </div>
@@ -272,7 +272,7 @@ export function CalendarPage({ session, notify }) {
             return (
               <section aria-labelledby={`semana-${key}`} data-week-day={key} key={key}>
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
-                  <h3 className="flex items-center gap-2 text-sm font-bold text-ink" id={`semana-${key}`}>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-ink" id={`semana-${key}`}>
                     {weekDayLabel(day)}
                     {key === localDate() && <span className="status-badge status-info normal-case">Hoje</span>}
                   </h3>
@@ -289,7 +289,7 @@ export function CalendarPage({ session, notify }) {
 
       <section className={`grid gap-5 ${view === 'week' ? '2xl:grid-cols-[minmax(0,1fr)_320px]' : 'xl:grid-cols-[minmax(0,1fr)_320px]'}`}>
         <div className={`card overflow-hidden p-0 ${view === 'week' ? 'hidden xl:block' : ''}`}>
-          <div className="grid grid-cols-7 border-b border-line bg-surface-2 text-center text-[11px] font-bold uppercase tracking-wider text-muted">
+          <div className="grid grid-cols-7 border-b border-line bg-surface-2 text-center text-xs font-semibold text-muted">
             {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'].map((label) => <div className="p-3" key={label}>{label}</div>)}
           </div>
           <div className="grid grid-cols-7">
@@ -310,12 +310,12 @@ export function CalendarPage({ session, notify }) {
                   onClick={() => setSelectedDay(key)}
                   type="button"
                 >
-                  <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-bold ${key === localDate() ? 'bg-action text-action-ink' : 'text-muted'}`}>{day.getDate()}</span>
+                  <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-semibold ${key === localDate() ? 'bg-action text-action-ink' : 'text-muted'}`}>{day.getDate()}</span>
                   <div className="mt-2 space-y-1">
                     {view === 'month' && <PresenceDaySummary events={engineEvents} />}
                     {view === 'week' && engineEvents.map((event) => <EventChip event={event} key={`${key}-${event.id}`} />)}
                     {otherEvents.slice(0, limit).map((event) => <EventChip event={event} key={`${key}-${event.id}`} />)}
-                    {otherEvents.length > limit && <p className="px-1 text-[10px] text-muted">+{otherEvents.length - limit} eventos</p>}
+                    {otherEvents.length > limit && <p className="px-1 text-xs text-muted">+{otherEvents.length - limit} eventos</p>}
                   </div>
                 </button>
               )
@@ -323,8 +323,8 @@ export function CalendarPage({ session, notify }) {
           </div>
         </div>
         <aside className={`card h-fit ${view === 'week' ? 'hidden xl:block 2xl:sticky 2xl:top-28' : 'xl:sticky xl:top-28'}`}>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-info">Detalhes do dia</p>
-          <h3 className="mt-2 text-lg font-bold capitalize text-ink">{new Date(`${selectedDay}T12:00:00`).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</h3>
+          <p className="text-xs font-semibold text-info">Detalhes do dia</p>
+          <h3 className="mt-2 text-lg font-semibold capitalize text-ink">{new Date(`${selectedDay}T12:00:00`).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</h3>
           <div className="mt-5 space-y-3">
             {selectedEvents.length === 0 && <EmptyState title="Dia sem eventos" description="Selecione outro dia ou cadastre um evento manual." />}
             <PresenceDaySummary events={selectedEvents} />

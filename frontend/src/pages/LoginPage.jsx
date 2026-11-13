@@ -7,7 +7,7 @@ export function LoginPage({ onLoginCI, loading }) {
       <div className="w-full max-w-5xl">
         <div className="mb-8 text-center">
           <BrandMark className="mx-auto mb-4 h-16 w-16" />
-          <h1 className="text-3xl font-black tracking-tight text-ink">Portal SDK</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-ink">Portal SDK</h1>
           <p className="mt-2 text-muted">Operações, métricas e aprovações em um único lugar.</p>
         </div>
         <div className="mx-auto max-w-md">

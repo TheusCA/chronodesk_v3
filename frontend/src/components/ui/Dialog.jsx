@@ -74,7 +74,7 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
           <div className="min-w-0">
             {eyebrow && <p className="section-eyebrow">{eyebrow}</p>}
             {headerLead}
-            <h2 className={`${eyebrow ? 'mt-2 ' : ''}${titleClassName} font-bold text-ink`} id={titleId}>{title}</h2>
+            <h2 className={`${eyebrow ? 'mt-2 ' : ''}${titleClassName} font-semibold text-ink`} id={titleId}>{title}</h2>
             {description && <p className="mt-2 text-sm leading-6 text-ink-2" id={descriptionId}>{description}</p>}
           </div>
           {headerAction}

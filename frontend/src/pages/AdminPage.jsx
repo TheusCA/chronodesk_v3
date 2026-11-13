@@ -826,7 +826,7 @@ function UsersTab({ enabled, resource, notify }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
       <form className="card space-y-4" onSubmit={create}>
-        <h3 className="font-bold text-ink">Criar usuário local</h3>
+        <h3 className="font-semibold text-ink">Criar usuário local</h3>
         <label className="label">Login<input className="field mt-2" minLength="3" required value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label>
         <label className="label">Senha<input autoComplete="new-password" className="field mt-2" minLength="8" required type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
         <label className="label">Perfil<select className="field mt-2" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option value="gestor">Gestor</option><option value="admin">Admin</option></select></label>
@@ -934,8 +934,8 @@ function SecurityTab({ config, notify }) {
       <section className="card overflow-hidden border-info-line">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-info">Postura de segurança</p>
-            <h2 className="mt-2 text-2xl font-black text-ink">Checklist de Segurança</h2>
+            <p className="text-xs font-semibold text-info">Postura de segurança</p>
+            <h2 className="mt-2 text-2xl font-semibold text-ink">Checklist de Segurança</h2>
             <p className="mt-2 max-w-2xl text-sm text-muted">Visão consolidada dos controles presentes no código e na configuração de deploy, sem expor segredos ou caminhos internos.</p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -950,7 +950,7 @@ function SecurityTab({ config, notify }) {
       {groupedProtections.map(([group, items]) => (
         <section className="space-y-3" key={group}>
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-muted">{group}</h3>
+            <h3 className="text-sm font-semibold text-muted">{group}</h3>
             <span className="h-px flex-1 bg-ink/5" />
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -960,7 +960,7 @@ function SecurityTab({ config, notify }) {
                   <div className="grid h-10 w-10 place-items-center rounded-xl bg-info-bg text-info"><Icon name={icon} /></div>
                   <span className={`status-badge ${securityStatusClass[status]}`}>{status}</span>
                 </div>
-                <h4 className="mt-4 font-bold text-ink">{title}</h4>
+                <h4 className="mt-4 font-semibold text-ink">{title}</h4>
                 <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
               </article>
             ))}
@@ -971,19 +971,19 @@ function SecurityTab({ config, notify }) {
       <section className="grid gap-5 md:grid-cols-2">
         <div className="card">
           <p className="text-sm text-muted">Modo de autenticação</p>
-          <h3 className="mt-2 text-xl font-bold text-ink">{config?.local_admin_enabled ? 'AD/LDAP e acesso local de emergência' : 'AD/LDAP'}</h3>
+          <h3 className="mt-2 text-xl font-semibold text-ink">{config?.local_admin_enabled ? 'AD/LDAP e acesso local de emergência' : 'AD/LDAP'}</h3>
           <p className="mt-3 text-sm text-muted">Credenciais, servidores e segredos permanecem exclusivamente no backend.</p>
         </div>
         <div className="card">
           <p className="text-sm text-muted">Administração local</p>
-          <h3 className="mt-2 text-xl font-bold text-ink">{config?.local_admin_enabled ? 'Habilitada' : 'Desabilitada'}</h3>
+          <h3 className="mt-2 text-xl font-semibold text-ink">{config?.local_admin_enabled ? 'Habilitada' : 'Desabilitada'}</h3>
           <p className="mt-3 text-sm text-muted">O acesso local só é permitido quando habilitado explicitamente por ambiente.</p>
         </div>
       </section>
 
       {config?.local_password_change_allowed && (
         <form className="card max-w-xl space-y-4" onSubmit={submit}>
-          <h3 className="font-bold text-ink">Alterar minha senha local</h3>
+          <h3 className="font-semibold text-ink">Alterar minha senha local</h3>
           <label className="label">Nova senha<input autoComplete="new-password" className="field mt-2" minLength="8" maxLength="128" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           <label className="label">Confirmar senha<input autoComplete="new-password" className="field mt-2" minLength="8" maxLength="128" required type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
           <button className="btn-primary" type="submit">Alterar senha</button>

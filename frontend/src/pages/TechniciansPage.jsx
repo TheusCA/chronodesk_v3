@@ -49,7 +49,7 @@ export function TechniciansPage() {
   return (
     <div className="space-y-5">
       <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="font-bold text-ink">Base operacional</h2><p className="text-sm text-muted">Situação de cada técnico no momento em que a tela foi aberta.</p></div>
+        <div><h2 className="font-semibold text-ink">Base operacional</h2><p className="text-sm text-muted">Situação de cada técnico no momento em que a tela foi aberta.</p></div>
         <input className="field sm:max-w-xs" placeholder="Buscar técnico" value={search} onChange={(event) => setSearch(event.target.value)} />
       </section>
       {!available && (

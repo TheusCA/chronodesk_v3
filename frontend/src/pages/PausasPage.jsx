@@ -34,14 +34,14 @@ function ActivePauseCard({ current, elapsed, loading, onFinish }) {
           <UserAvatar name={current.nome} />
           <div>
             <p className="section-eyebrow">Pausa ativa</p>
-            <h2 className="mt-1 text-xl font-bold text-ink">{current.motivo_pausa}</h2>
+            <h2 className="mt-1 text-xl font-semibold text-ink">{current.motivo_pausa}</h2>
             <p className="mt-1 text-xs text-muted">{current.nome}</p>
           </div>
         </div>
         <span className={`status-badge ${statusClass}`}>{status}</span>
       </div>
       <div className="my-7 rounded-card border border-line bg-surface-2 p-5 text-center">
-        <p className="font-mono text-4xl font-black tracking-tight text-ink sm:text-5xl">{formatDuration(elapsed)}</p>
+        <p className="font-mono text-4xl font-semibold tracking-tight text-ink sm:text-5xl">{formatDuration(elapsed)}</p>
         <p className="mt-2 text-sm text-muted">
           {unlimited ? 'Timer ativo sem limite automático' : `Limite ${formatDuration(limit)} · ${remaining >= 0 ? `${formatDuration(remaining)} restantes` : `${formatDuration(Math.abs(remaining))} excedidos`}`}
         </p>
@@ -149,8 +149,8 @@ function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loadin
               </div>
               {item.em_pausa && (
                 <div className="mt-4 rounded-card border border-warn-line bg-warn-bg px-3 py-2">
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-warn">{item.motivo_pausa}</p>
-                  <p className="mt-1 font-mono text-lg font-bold text-warn">{formatDuration(elapsedFor(item))}</p>
+                  <p className="text-xs font-semibold text-warn">{item.motivo_pausa}</p>
+                  <p className="mt-1 font-mono text-lg font-semibold text-warn">{formatDuration(elapsedFor(item))}</p>
                 </div>
               )}
               {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && item.observacao_reuniao && (
@@ -194,7 +194,7 @@ export function PausasPage({ session, status, livePauses, loading, onStart, onRe
               <UserAvatar name={session.ci.nome} />
               <div>
                 <p className="section-eyebrow">Sessão do colaborador</p>
-                <h2 className="mt-1 text-2xl font-bold text-ink">{session.ci.nome}</h2>
+                <h2 className="mt-1 text-2xl font-semibold text-ink">{session.ci.nome}</h2>
                 <p className="mt-1 text-sm text-muted">{session.ci.username}</p>
               </div>
             </div>

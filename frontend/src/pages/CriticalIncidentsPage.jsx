@@ -495,8 +495,8 @@ export function CriticalIncidentsPage({ session, notify }) {
     <div className="space-y-5">
       <section className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-danger">War room e sala de crise</p>
-          <h2 className="mt-2 text-2xl font-black text-ink">Chamados críticos</h2>
+          <p className="text-xs font-semibold text-danger">War room e sala de crise</p>
+          <h2 className="mt-2 text-2xl font-semibold text-ink">Chamados críticos</h2>
           <p className="mt-2 text-sm text-muted">Registro central de impacto, resposta, mitigação, causa raiz e resolução.</p>
         </div>
         <div className="flex flex-wrap gap-2">

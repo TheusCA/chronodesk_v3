@@ -46,7 +46,7 @@ const emptySession = {
 function AccessDenied({ navigate }) {
   return (
     <div className="card mx-auto max-w-xl border-danger-line text-center">
-      <h2 className="text-xl font-bold text-ink">Acesso não autorizado</h2>
+      <h2 className="text-xl font-semibold text-ink">Acesso não autorizado</h2>
       <p className="mt-2 text-sm text-muted">Seu perfil não possui permissão para acessar este módulo.</p>
       <button className="btn-secondary mt-5" onClick={() => navigate('/dashboard')} type="button">Voltar ao dashboard</button>
     </div>

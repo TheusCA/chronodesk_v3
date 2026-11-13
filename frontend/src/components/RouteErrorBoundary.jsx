@@ -24,7 +24,7 @@ export class RouteErrorBoundary extends Component {
       <div className="card mx-auto max-w-2xl border-danger-line bg-danger-bg" role="alert">
         <div className="space-y-3">
           <p className="section-eyebrow text-danger">Portal SDK</p>
-          <h2 className="text-xl font-bold text-ink">Nao foi possivel carregar este modulo.</h2>
+          <h2 className="text-xl font-semibold text-ink">Nao foi possivel carregar este modulo.</h2>
           <p className="text-sm leading-6 text-ink-2">
             Atualize a pagina ou tente novamente. Caso o problema persista, acione o suporte responsavel pelo Portal SDK.
           </p>

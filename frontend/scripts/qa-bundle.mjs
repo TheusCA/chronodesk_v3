@@ -116,4 +116,23 @@ assert.deepEqual(pageTsFiles, [], 'Nenhuma pagina deve ser migrada para TypeScri
 
 assert.doesNotMatch(sourceText, /frontend\/poc|\.example\.tsx?|from ['"][^'"]*\/poc/, 'POC deve continuar fora do runtime')
 
-console.log('Bundle frontend QA OK')
+// [R1, D-R1-2] Orçamento do build (../app, gerado pelo "npm run build", que a
+// bateria roda antes dos qa:*). Linha de base do JS de entrada: 201 KB no
+// fdefa83 (docs/design/PLANO_LOTES_R.md). KB aqui é 1000 bytes, como no Vite.
+const BUDGET = { entryJs: Math.round(201_000 * 1.05), css: 70_000, fonts: 100_000 }
+const appRoot = join(projectRoot, 'app')
+assert.ok(existsSync(join(appRoot, 'index.html')), 'Orçamento: falta o build em ../app (rode npm run build antes)')
+const appIndex = readFileSync(join(appRoot, 'index.html'), 'utf8')
+const entryJs = appIndex.match(/<script type="module" crossorigin src="\/app\/assets\/([^"]+\.js)"><\/script>/)?.[1]
+assert.ok(entryJs, 'Orçamento: index.html do build com o JS de entrada')
+const assets = readdirSync(join(appRoot, 'assets'))
+const sizeOf = (name) => statSync(join(appRoot, 'assets', name)).size
+const sumOf = (pattern) => assets.filter((name) => pattern.test(name)).reduce((total, name) => total + sizeOf(name), 0)
+const measured = { entryJs: sizeOf(entryJs), css: sumOf(/\.css$/), fonts: sumOf(/\.woff2$/) }
+for (const [key, limit] of Object.entries(BUDGET)) {
+  assert.ok(measured[key] <= limit, `Orçamento do build: ${key} com ${measured[key]} bytes (limite ${limit})`)
+}
+assert.ok(measured.fonts > 0, 'Orçamento: as fontes do portal estão no build')
+assert.deepEqual(assets.filter((name) => /\.(woff|ttf|otf|eot)$/.test(name)), [], 'Fontes só em woff2')
+
+console.log(`Bundle frontend QA OK (JS de entrada ${measured.entryJs} de ${BUDGET.entryJs} bytes, CSS ${measured.css} de ${BUDGET.css}, fontes ${measured.fonts} de ${BUDGET.fonts})`)

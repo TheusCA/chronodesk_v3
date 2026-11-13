@@ -102,12 +102,12 @@ export function AssignmentChip({ item }) {
           <Icon name={status.icon} className="h-3 w-3 shrink-0" />
           <span className="truncate" title={item.employee_name}>{item.employee_name}</span>
         </span>
-        <span className="flex shrink-0 items-center gap-1 text-[10px] font-bold">
+        <span className="flex shrink-0 items-center gap-1 text-xs font-semibold">
           {item.presence?.parcial && <PartialMarker time={item.presence.parcial} />}
           {status.label}
         </span>
       </div>
-      <p className="mt-1 truncate text-[10px] uppercase tracking-[0.14em] opacity-75">Equipe {teamLabel(item.team)} · {item.schedule_rule_label}</p>
+      <p className="mt-1 truncate text-xs opacity-75">Equipe {teamLabel(item.team)} · {item.schedule_rule_label}</p>
     </div>
   )
 }
@@ -129,15 +129,15 @@ export function PaCard({ pa, canManage, onOpen }) {
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-info">PA</p>
-          <strong className="mt-1 block text-2xl font-black text-ink">{pa.pa_number}</strong>
+          <p className="text-xs font-semibold text-info">PA</p>
+          <strong className="mt-1 block text-2xl font-semibold text-ink">{pa.pa_number}</strong>
         </div>
         {pa.has_conflict ? (
-          <span className="flex shrink-0 items-center gap-1 rounded-full border border-danger-line bg-danger-bg px-2.5 py-1 text-[11px] font-bold text-danger">
+          <span className="flex shrink-0 items-center gap-1 rounded-full border border-danger-line bg-danger-bg px-2.5 py-1 text-xs font-semibold text-danger">
             <Icon name="alert" className="h-3 w-3" />Conflito
           </span>
         ) : (
-          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${onsiteCount ? 'border-ok-line bg-ok-bg text-ok' : 'border-line-strong bg-surface-2 text-muted'}`}>
+          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${onsiteCount ? 'border-ok-line bg-ok-bg text-ok' : 'border-line-strong bg-surface-2 text-muted'}`}>
             {assignments.length ? `${onsiteCount}/${assignments.length} presencial` : 'Livre'}
           </span>
         )}
@@ -303,7 +303,7 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
         {canManage ? (
           <div className="mt-6 rounded-card border border-line bg-surface-2 p-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-muted">{editing ? 'Editar vínculo' : 'Adicionar colaborador'}</h3>
+              <h3 className="text-sm font-semibold text-muted">{editing ? 'Editar vínculo' : 'Adicionar colaborador'}</h3>
               {editing && <button className="table-action" onClick={requestNew} type="button">Novo vínculo</button>}
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">

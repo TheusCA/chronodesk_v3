@@ -44,7 +44,7 @@ export function Feedback({ feedback, onClose }) {
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" name={variant.icon} />
       <div className="min-w-0 flex-1">
-        <strong className="block text-xs uppercase tracking-[0.14em]">{variant.title}</strong>
+        <strong className="block text-xs">{variant.title}</strong>
         <span className="mt-1 block leading-5 text-ink">{feedback.message}</span>
       </div>
       {onClose && (

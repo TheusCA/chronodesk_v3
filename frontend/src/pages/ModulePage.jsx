@@ -51,7 +51,7 @@ export function ModulePage({ path }) {
   return (
     <div className="space-y-5">
       <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div><h2 className="font-bold text-ink">Base operacional</h2><p className="text-sm text-muted">Estrutura preparada para persistência e integrações futuras.</p></div>
+        <div><h2 className="font-semibold text-ink">Base operacional</h2><p className="text-sm text-muted">Estrutura preparada para persistência e integrações futuras.</p></div>
         <input className="field sm:max-w-xs" placeholder={`Buscar ${definition.noun}`} value={search} onChange={(event) => setSearch(event.target.value)} />
       </section>
       <TruncationNotice limit={resource.data?.limit} truncated={resource.data?.truncated}>
@@ -77,7 +77,7 @@ export function ReportsPage() {
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {(resource.data?.reports || []).map((report) => (
         <article className="card" key={report.key}>
-          <h2 className="font-bold text-ink">{report.name}</h2>
+          <h2 className="font-semibold text-ink">{report.name}</h2>
           <p className="mt-2 text-sm text-muted">{report.description}</p>
           <a className="btn-secondary mt-5" href={apiUrl(report.download_url)}>Baixar relatório</a>
         </article>
@@ -91,12 +91,12 @@ export function SettingsPage({ session }) {
     <div className="grid gap-5 md:grid-cols-2">
       <section className="card">
         <p className="text-sm text-muted">Perfil ativo</p>
-        <h2 className="mt-2 text-xl font-bold capitalize text-ink">{session.role?.replace('_', ' ')}</h2>
+        <h2 className="mt-2 text-xl font-semibold capitalize text-ink">{session.role?.replace('_', ' ')}</h2>
         <p className="mt-3 text-sm text-muted">As permissões são calculadas no backend e refletidas na navegação.</p>
       </section>
       <section className="card">
         <p className="text-sm text-muted">Notificações</p>
-        <h2 className="mt-2 text-xl font-bold text-ink">Polling seguro</h2>
+        <h2 className="mt-2 text-xl font-semibold text-ink">Polling seguro</h2>
         <p className="mt-3 text-sm text-muted">O sino consulta notificações internas sem expor tokens ou segredos no navegador.</p>
       </section>
     </div>

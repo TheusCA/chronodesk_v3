@@ -97,8 +97,8 @@ function UploadPanel({ limits, onClose, onUploaded }) {
       <form className="relative h-full w-full max-w-xl overflow-y-auto border-l border-line bg-surface-2 p-6 shadow-2xl" onSubmit={submit}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-info">Armazenamento privado</p>
-            <h2 className="mt-2 text-xl font-bold text-ink">Adicionar arquivo</h2>
+            <p className="text-xs font-semibold text-info">Armazenamento privado</p>
+            <h2 className="mt-2 text-xl font-semibold text-ink">Adicionar arquivo</h2>
             <p className="mt-2 text-sm text-muted">O backend valida extensão, MIME real, conteúdo, tamanho e integridade.</p>
           </div>
           <button className="rounded-lg p-2 text-muted hover:bg-ink/5 hover:text-ink" onClick={onClose} type="button" aria-label="Fechar">
@@ -272,7 +272,7 @@ export function DocumentsPage({ notify }) {
                   {item.visibility === 'management' && <span className="status-badge status-warning">Gestão</span>}
                 </div>
               </div>
-              <h3 className="mt-4 line-clamp-2 font-bold text-ink">{item.title}</h3>
+              <h3 className="mt-4 line-clamp-2 font-semibold text-ink">{item.title}</h3>
               <p className="mt-1 truncate text-xs text-muted">{item.original_name}</p>
               <p className="mt-3 line-clamp-2 text-sm text-muted">{item.description || 'Sem descrição.'}</p>
               <div className="mt-auto pt-5 text-xs text-muted">

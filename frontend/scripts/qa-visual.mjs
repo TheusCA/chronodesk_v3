@@ -399,4 +399,22 @@ assert.match(readFileSync(join(srcRoot, 'assets', 'fontes', 'LICENSE-ibm-plex-sa
 assert.doesNotMatch(cssSource, /@import|url\(['"]?(?:https?:)?\/\//, 'CSP: nenhum recurso externo no CSS')
 assert.match(read('tailwind.config.js'), /sans: \['"IBM Plex Sans"', 'system-ui', 'sans-serif'\]/, 'texto em IBM Plex Sans, com a fonte do sistema como reserva')
 
+// [R1, commit 2] Tipografia (sinais S4 e S5 da auditoria) e a casca sem o
+// "Operação online" fixo (S12): nada abaixo de 13 px, sem maiúsculas com
+// espaçamento largo, só os pesos carregados.
+const { default: twConfig } = await import(pathToFileURL(join(frontendRoot, 'tailwind.config.js')).href)
+assert.deepEqual(twConfig.theme.fontWeight, { normal: '400', medium: '500', semibold: '600' }, 'só os pesos da fonte carregada (400, 500 e 600)')
+const pxOf = (size) => Number.parseFloat(size) * (String(size).endsWith('rem') ? 16 : 1)
+assert.ok(pxOf(twConfig.theme.extend.fontSize.xs[0]) >= 13, 'text-xs com 13 px ou mais')
+for (const path of sourceFiles) {
+  const text = readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const name = path.slice(frontendRoot.length + 1)
+  const small = [...text.matchAll(/(?<![\w-])text-\[(\d+(?:\.\d+)?)px\]/g)].filter((match) => Number(match[1]) < 13)
+  assert.deepEqual(small.map((match) => match[0]), [], `Texto abaixo de 13 px em ${name}`)
+  assert.doesNotMatch(text, /(?<![\w-])(?:[a-z]+:)*uppercase(?![\w-])|text-transform:\s*uppercase/, `Maiúsculas por classe em ${name}`)
+  assert.doesNotMatch(text, /(?<![\w-])(?:[a-z]+:)*tracking-(?:wide|wider|widest|\[0?\.\d+em\])(?![\w-])|letter-spacing:\s*0?\.\d+em/, `Espaçamento largo de letra em ${name}`)
+  assert.doesNotMatch(text, /(?<![\w-])(?:[a-z]+:)*font-(?:bold|extrabold|black)(?![\w-])|font-weight:\s*(?:700|800|900|bold)/, `Peso acima de 600 em ${name}`)
+}
+assert.doesNotMatch(read('src/components/PortalLayout.jsx'), /Operação online/, 'Topo sem o selo fixo "Operação online" (não mede nada)')
+
 console.log('Visual frontend QA OK')

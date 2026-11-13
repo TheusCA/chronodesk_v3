@@ -11,7 +11,7 @@ export function LoginCI({ onSubmit, loading }) {
   return (
     <form className="card space-y-4" onSubmit={submit}>
       <div>
-        <h2 className="text-lg font-bold">Acesso corporativo</h2>
+        <h2 className="text-lg font-semibold">Acesso corporativo</h2>
         <p className="text-sm text-muted">Entre com sua conta AD.</p>
       </div>
       <label className="block text-sm font-medium">
