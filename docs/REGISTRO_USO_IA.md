@@ -1393,6 +1393,22 @@ Base da afirmação:
 
 ---
 
+### Redesenho R0: direção visual, auditoria de UX e protótipo isolado — 2026-11-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Auditar o visual e a UX do portal, propor duas direções visuais com uma recomendação e mostrar as três telas mais usadas num protótipo isolado, para o responsável escolher. Sem mudar o app em produção. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `d92b23c` (protótipo isolado em `frontend/prototypes/r0/`, fora do build) e um commit só de docs (`docs/design/`: auditoria, direção, backlog de ideias, plano dos lotes R1 em diante, 63 capturas "antes" e 32 "depois" em WebP, 3,1 MB; esta entrada). O `ESTADO_SESSAO_CHRONODESK.md` é local. Sem push pela IA. |
+| **O que a IA alterou** | Nada no `src/`, no build, nos QAs nem nas dependências. Novo `frontend/prototypes/r0/`: três telas estáticas, `prototipo.css` (tokens das duas direções e dos dois temas), `prototipo.js` (casca, tema, timers; sem rede nem armazenamento), `capturar.mjs` (capturas por perfil pelo servidor simulado, com um proxy que troca só a sessão; o `mock-server.mjs` não mudou) e `contraste.mjs` (WCAG dos tokens). |
+| **Fontes** | IBM Plex Sans e Mono, Atkinson Hyperlegible e JetBrains Mono, OFL 1.1, só o subconjunto latino em woff2 (cerca de 205 KB), registradas em `frontend/prototypes/r0/fontes/README.md`. Baixadas do registro npm (`@fontsource/*` 5.3.0, publicadas em 2026-07-19) só como arquivo, por `npm pack`, num diretório isolado do scratchpad; nenhuma entrou no `package.json` nem no lockfile. A skill de design pedida pelo responsável (`design-taste-frontend`) foi carregada; o "finish gate" dela é para sites institucionais e não foi armado (o portal é aplicativo operacional), o que foi dito no resumo. |
+| **Dados pessoais** | Só dados fictícios ("Técnico NN Exemplo", logins `tecnico.NN`, os do servidor simulado). As capturas "antes" mostram o rodapé do app com o crédito do autor, que já está no código. |
+| **Validacao executada pela IA** | Contraste dos tokens do protótipo: 24 pares por tema, 0 falhas nos quatro (menor contraste de texto 4,99:1 a 6,85:1; borda de campo 3,72:1 a 3,86:1). Em 390 px: 0 alvos de toque abaixo de 40 px e 0 rolagens laterais nas 12 combinações. ESLint do frontend limpo (o `prototipo.js` entra no `eslint .`). Mutação das duas travas novas (`contraste.mjs` e `capturar.mjs verificar`), numa cópia temporária marcada no scratchpad, com a trava `mut_guard.php`: 9/9 mutantes mortos (texto apagado, borda de campo, Em pausa, foco, tema faltando, controle de 36 px, rolagem lateral, filtro de 32 px, link de pular pequeno), com o original passando. Contraste de hoje calculado: `slate-500` 3,81:1, `slate-600` 2,39:1, borda de campo 1,31:1 (falham AA). `gitleaks` sem achados. Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree) no `d92b23c` e no commit de docs: no resumo da entrega. |
+| **Decisoes a confirmar** | D-R0-1 a D-R0-9 (`docs/design/DIRECAO_VISUAL.md`, seção 5) e D-R1-1 a D-R1-3 (`docs/design/PLANO_LOTES_R.md`). Recomendação: direção A (Mesa clara), dois temas com o claro como padrão. |
+| **Limitacoes declaradas** | O protótipo não grava nada; o menu do celular não abre e os filtros de Funcionários não filtram. As capturas "antes" saem do servidor simulado (marca quebrada e relógio do navegador são artefatos dele). O `qa:bundle` não tem orçamento de tamanho hoje: entra no R1 (D-R1-2). A troca de cor de "Em pausa" (violeta da DV7 do F7) depende da D-R0-4. |
+| **Validacao humana** | Pendente: escolha da direção e decisões D-R0-1 a D-R0-9. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
