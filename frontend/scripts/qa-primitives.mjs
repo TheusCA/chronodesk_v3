@@ -89,6 +89,8 @@ for (const [file, pattern, label] of [
 ]) {
   assert.doesNotMatch(read(file), pattern, label)
 }
+// Caixa de marcar dentro de rótulo: o alvo é o rótulo inteiro, com 40 px.
+assert.match(read('src/pages/OperationalPages.jsx'), /<label className="[^"]*\bmin-h-10\b[^"]*">\s*<input checked=\{hideNoSchedule\}/, '"Ocultar sem escala": rótulo com 40 px de alvo')
 
 // ---------------------------------------------------------------------------
 // 2. Button.
@@ -224,6 +226,50 @@ for (const [file, pattern, label] of [
     assert.ok(drawerSource.includes(prop), `Drawer: repassa ${prop} ao Dialog`)
   }
   assert.match(compiled, /\.drawer-footer \{[^}]*position: sticky;/, 'Drawer: ações fixas no fim do painel')
+}
+
+// ---------------------------------------------------------------------------
+// 8. Estados: carregando com a forma do conteúdo, vazio e erro.
+// ---------------------------------------------------------------------------
+{
+  const { EmptyState, ErrorState, LoadingState } = await ui('States')
+  const blocksOf = (markup) => (markup.match(/class="skeleton /g) ?? []).length
+  const cards = render(h(LoadingState, { label: 'Carregando módulo...' }))
+  assert.match(cards, /^<div class="space-y-4" aria-label="Carregando módulo\.\.\." aria-live="polite" data-loading-shape="cards" role="status">/, 'LoadingState: role="status", aria-live e rótulo')
+  assert.match(cards, /<p class="text-sm text-muted">Carregando módulo\.\.\.<\/p>/, 'LoadingState: o rótulo aparece na tela')
+  assert.match(cards, /<div aria-hidden="true" class="grid gap-4 md:grid-cols-3">/, 'LoadingState: esqueleto escondido do leitor de tela')
+  assert.equal(blocksOf(cards), 3, 'LoadingState: cartões, três blocos')
+  const table = render(h(LoadingState, { shape: 'table' }))
+  assert.match(table, /data-loading-shape="table"/, 'LoadingState: forma de tabela')
+  assert.equal(blocksOf(table), 5, 'LoadingState: tabela, cabeçalho e quatro linhas')
+  assert.equal(blocksOf(render(h(LoadingState, { shape: 'list' }))), 4, 'LoadingState: lista, quatro itens')
+  const unknown = render(h(LoadingState, { shape: 'roxo' }))
+  assert.match(unknown, /data-loading-shape="cards"/, 'LoadingState: forma desconhecida vira cartões')
+  assert.equal(blocksOf(unknown), 3)
+  const empty = render(h(EmptyState, { title: 'Nenhum funcionário', description: 'Ajuste os filtros.', action: h('button', { type: 'button' }, 'Limpar filtros') }))
+  assert.match(empty, /<h3 class="mt-3 font-semibold text-ink">Nenhum funcionário<\/h3><p class="mx-auto mt-1 max-w-xl text-sm text-muted">Ajuste os filtros\.<\/p><div class="mt-5 flex justify-center"><button type="button">Limpar filtros<\/button><\/div>/, 'EmptyState: título, descrição e próximo passo')
+  assert.doesNotMatch(render(h(EmptyState)), /mt-5 flex justify-center/, 'EmptyState: sem ação, sem o bloco')
+  assert.match(render(h(EmptyState)), /Nenhum dado disponível/, 'EmptyState: texto padrão de antes')
+  const error = render(h(ErrorState, { message: 'Servidor indisponível', onRetry: () => {} }))
+  assert.match(error, /role="alert"/, 'ErrorState: anunciado como alerta')
+  assert.match(error, /Não foi possível carregar os dados<\/h3><p class="mt-1 text-sm text-ink-2">Servidor indisponível<\/p><button type="button" class="btn-secondary mt-4">Tentar novamente<\/button>/, 'ErrorState: título de antes, motivo e Tentar novamente')
+  assert.doesNotMatch(render(h(ErrorState, { message: 'x' })), /Tentar novamente/, 'ErrorState: sem onRetry, sem botão')
+}
+
+// ---------------------------------------------------------------------------
+// 9. Aviso (Feedback): título escrito, cor na barra e no ícone, fechar com 40 px.
+// ---------------------------------------------------------------------------
+{
+  const { Feedback } = await import(pathToFileURL(join(srcRoot, 'components', 'Feedback.jsx')).href)
+  for (const [type, title, accent, region] of [['success', 'Sucesso', 'border-l-ok', 'polite'], ['error', 'Atenção', 'border-l-danger', 'assertive'], ['warning', 'Aviso', 'border-l-warn', 'polite'], ['info', 'Informação', 'border-l-info', 'polite']]) {
+    const markup = render(h(Feedback, { feedback: { message: 'Mensagem QA', type, id: 1 }, onClose: () => {} }))
+    const toast = markup.slice(markup.indexOf('<div class="portal-toast'))
+    assert.ok(markup.includes(`data-feedback-region="${region}"`) && markup.indexOf(`data-feedback-region="${region}"`) < markup.indexOf('portal-toast'), `Aviso ${type}: na região ${region}`)
+    assert.match(toast, new RegExp(`^<div class="portal-toast fixed bottom-4 left-4 right-4 z-\\[70\\] [^"]*\\bbg-surface\\b[^"]*\\btext-ink\\b[^"]*\\b${accent}"`), `Aviso ${type}: fundo do cartão, texto em tinta e barra na cor do tipo`)
+    assert.match(toast, new RegExp(`<strong class="block font-semibold">${title}</strong>`), `Aviso ${type}: título escrito`)
+    assert.match(toast, /<span class="mt-0\.5 block leading-5 text-ink-2">Mensagem QA<\/span>/, `Aviso ${type}: mensagem`)
+    assert.match(toast, /<button aria-label="Fechar mensagem" class="[^"]*\bh-10 w-10\b/, `Aviso ${type}: fechar com 40 px`)
+  }
 }
 
 console.log('Primitivos QA OK')

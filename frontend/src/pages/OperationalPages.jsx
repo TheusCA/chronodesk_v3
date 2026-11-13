@@ -870,7 +870,7 @@ export function SchedulePage({ session, notify }) {
         )}
         {(resource.data?.generated || []).length === 0 ? <EmptyState title="Nenhuma escala gerada" description="Cadastre regras fixas para gerar automaticamente os dias presenciais e remotos." /> : (
           <section className="card table-wrap">
-            <label className="mb-4 inline-flex items-center gap-2 text-sm text-ink-2">
+            <label className="mb-4 inline-flex min-h-10 cursor-pointer items-center gap-2 text-sm text-ink-2">
               <input checked={hideNoSchedule} className="h-4 w-4" type="checkbox" onChange={(event) => setHideNoSchedule(event.target.checked)} />
               Ocultar sem escala
             </label>

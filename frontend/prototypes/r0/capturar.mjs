@@ -191,7 +191,7 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 
 const MEASURE = `(() => {
   const small = [...document.querySelectorAll('a, button, input, select, textarea, [tabindex="0"]')]
     .filter((el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' })
-    .filter((el) => { const r = el.getBoundingClientRect(); return Math.min(r.width, r.height) < 40 && !(el.matches('input[type=radio]') && el.closest('label')) })
+    .filter((el) => { const r = el.getBoundingClientRect(); if (Math.min(r.width, r.height) >= 40) return false; const label = el.matches('input[type=radio], input[type=checkbox]') ? el.closest('label') : null; return !(label && (el.matches('input[type=radio]') || label.getBoundingClientRect().height >= 40)) })
     .map((el) => (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 30))
   return { overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth, small }
 })()`

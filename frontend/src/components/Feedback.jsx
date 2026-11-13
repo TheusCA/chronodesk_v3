@@ -3,31 +3,37 @@ import { Icon } from './ui/Icon'
 
 const variants = {
   success: {
-    colors: 'border-ok-line bg-ok-bg text-ok',
+    accent: 'border-l-ok',
+    iconColor: 'text-ok',
     icon: 'shield',
     title: 'Sucesso',
     role: 'status',
   },
   error: {
-    colors: 'border-danger-line bg-danger-bg text-danger',
+    accent: 'border-l-danger',
+    iconColor: 'text-danger',
     icon: 'alert',
     title: 'Atenção',
     role: 'alert',
   },
   warning: {
-    colors: 'border-warn-line bg-warn-bg text-warn',
+    accent: 'border-l-warn',
+    iconColor: 'text-warn',
     icon: 'alert',
     title: 'Aviso',
     role: 'status',
   },
   info: {
-    colors: 'border-info-line bg-info-bg text-info',
+    accent: 'border-l-info',
+    iconColor: 'text-info',
     icon: 'bell',
     title: 'Informação',
     role: 'status',
   },
 }
 
+// [R2] Aviso no fundo do cartão, com a barra e o ícone na cor do tipo e o
+// título escrito (nunca só a cor); o texto em tinta, legível nos dois temas.
 // [17f, DD2] Duas regiões vivas ficam no body o tempo todo, vazias sem aviso:
 // erro em role="alert" (assertive) e os demais em role="status" (polite). O
 // aviso entra dentro da região já existente, e o leitor de tela o anuncia; uma
@@ -38,19 +44,19 @@ export function Feedback({ feedback, onClose }) {
 
   const toast = feedback && (
     <div
-      className={`portal-toast fixed bottom-4 left-4 right-4 z-[70] flex max-w-md items-start gap-3 rounded-card border px-4 py-3 text-sm shadow-lg sm:left-auto ${variant.colors}`}
+      className={`portal-toast fixed bottom-4 left-4 right-4 z-[70] flex max-w-md items-start gap-3 rounded-card border border-l-4 border-line bg-surface py-3 pl-4 pr-2 text-sm text-ink shadow-lg sm:left-auto ${variant.accent}`}
       data-feedback-type={feedback.type || 'success'}
       key={feedback.id ?? feedback.message}
     >
-      <Icon className="mt-0.5 h-4 w-4 shrink-0" name={variant.icon} />
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${variant.iconColor}`} name={variant.icon} />
       <div className="min-w-0 flex-1">
-        <strong className="block text-xs">{variant.title}</strong>
-        <span className="mt-1 block leading-5 text-ink">{feedback.message}</span>
+        <strong className="block font-semibold">{variant.title}</strong>
+        <span className="mt-0.5 block leading-5 text-ink-2">{feedback.message}</span>
       </div>
       {onClose && (
         <button
           aria-label="Fechar mensagem"
-          className="-mr-1 rounded-md p-1 text-current/70 transition hover:bg-ink/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="-my-2 grid h-10 w-10 shrink-0 place-items-center rounded-md text-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           onClick={onClose}
           // Fechar o aviso não tira o foco de quem está com ele (por exemplo, um diálogo aberto).
           onMouseDown={(event) => event.preventDefault()}
