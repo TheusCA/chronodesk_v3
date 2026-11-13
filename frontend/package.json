@@ -21,6 +21,7 @@
     "qa:operational": "node scripts/qa-operational.mjs",
     "qa:operational-view": "node scripts/qa-operational-view.mjs",
     "qa:pa-map": "node scripts/qa-pa-map.mjs",
+    "qa:primitives": "node scripts/qa-primitives.mjs",
     "qa:query": "node scripts/qa-query.mjs",
     "qa:resource": "node scripts/qa-resource.mjs",
     "qa:schedule-form": "node scripts/qa-schedule-form.mjs",

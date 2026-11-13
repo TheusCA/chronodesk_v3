@@ -214,8 +214,8 @@ export function CalendarPage({ session, notify }) {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-2">
             <button className="btn-secondary" onClick={() => setAnchor(new Date())} type="button">Hoje</button>
-            <button className="btn-secondary px-3" onClick={() => move(-1)} type="button" aria-label="Período anterior">‹</button>
-            <button className="btn-secondary px-3" onClick={() => move(1)} type="button" aria-label="Próximo período">›</button>
+            <button className="btn-secondary min-w-10 px-3" onClick={() => move(-1)} type="button" aria-label="Período anterior">‹</button>
+            <button className="btn-secondary min-w-10 px-3" onClick={() => move(1)} type="button" aria-label="Próximo período">›</button>
             <h2 className="ml-1 text-xl font-semibold capitalize text-ink">
               {anchor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
             </h2>

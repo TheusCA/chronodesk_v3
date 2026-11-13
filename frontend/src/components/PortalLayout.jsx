@@ -157,7 +157,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
         <div className="fixed inset-0 z-50 lg:hidden">
           <button className="absolute inset-0 bg-black/70" aria-label="Fechar menu" onClick={() => setMobileOpen(false)} type="button" />
           <aside className="relative flex h-full w-72 flex-col border-r border-line bg-surface" role="dialog" aria-label="Menu principal" aria-modal="true">
-            <button className="absolute right-3 top-3 rounded-lg p-2 text-muted" onClick={() => setMobileOpen(false)} type="button" aria-label="Fechar menu">
+            <button className="absolute right-3 top-3 rounded-lg p-2.5 text-muted" onClick={() => setMobileOpen(false)} type="button" aria-label="Fechar menu">
               <Icon name="close" />
             </button>
             {navContent()}
@@ -169,7 +169,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
         <header className="sticky top-0 z-30 border-b border-line bg-bg">
           <div className="flex min-h-20 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex min-w-0 items-center gap-3">
-              <button className="rounded-lg border border-line bg-surface p-2 text-ink-2 lg:hidden" onClick={() => setMobileOpen(true)} type="button" aria-label="Abrir menu">
+              <button className="rounded-lg border border-line bg-surface p-2.5 text-ink-2 lg:hidden" onClick={() => setMobileOpen(true)} type="button" aria-label="Abrir menu">
                 <Icon name="menu" />
               </button>
               <div className="min-w-0">

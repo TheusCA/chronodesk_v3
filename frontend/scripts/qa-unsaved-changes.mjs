@@ -20,7 +20,8 @@ const walk = (dir) => readdirSync(dir).flatMap((entry) => { const path = join(di
 const packageJson = JSON.parse(read('package.json'))
 assert.equal(packageJson.scripts['qa:unsaved-changes'], 'node scripts/qa-unsaved-changes.mjs', 'Script qa:unsaved-changes registrado')
 // [R1] 20: entrou o qa:contrast (tokens, contraste AA nos dois temas e tema).
-assert.equal(Object.keys(packageJson.scripts).filter((name) => name.startsWith('qa:')).length, 20, 'Bateria com 20 qa:*')
+// [R2] 21: entrou o qa:primitives (componentes de components/ui e alvo de 40 px).
+assert.equal(Object.keys(packageJson.scripts).filter((name) => name.startsWith('qa:')).length, 21, 'Bateria com 21 qa:*')
 
 // Navegador simulado: location e history que se atualizam no pushState, e
 // listeners contados por tipo.

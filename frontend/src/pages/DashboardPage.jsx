@@ -220,7 +220,7 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
                   )}
                   {canForceEndBreak && (
                     <button
-                      className="btn-danger mt-4 min-h-9 px-3 py-1.5 text-xs"
+                      className="btn-danger btn-sm mt-4"
                       disabled={loading}
                       onClick={() => onForceEndBreak(item)}
                       title="Derrubar pausa do CI"

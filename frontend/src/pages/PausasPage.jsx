@@ -160,7 +160,7 @@ function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loadin
               )}
               {canForceEndBreak && item.em_pausa && (
                 <button
-                  className="btn-danger mt-4 min-h-9 px-3 py-1.5 text-xs"
+                  className="btn-danger btn-sm mt-4"
                   disabled={loading}
                   onClick={() => onForceEndBreak(item)}
                   title="Derrubar pausa do CI"

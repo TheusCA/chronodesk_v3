@@ -101,7 +101,7 @@ function UploadPanel({ limits, onClose, onUploaded }) {
             <h2 className="mt-2 text-xl font-semibold text-ink">Adicionar arquivo</h2>
             <p className="mt-2 text-sm text-muted">O backend valida extensão, MIME real, conteúdo, tamanho e integridade.</p>
           </div>
-          <button className="rounded-lg p-2 text-muted hover:bg-ink/5 hover:text-ink" onClick={onClose} type="button" aria-label="Fechar">
+          <button className="rounded-lg p-2.5 text-muted hover:bg-ink/5 hover:text-ink" onClick={onClose} type="button" aria-label="Fechar">
             <Icon name="close" />
           </button>
         </div>

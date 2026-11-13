@@ -65,10 +65,10 @@ function workflowStatusLabel(value) {
 function ApprovalActions({ onApprove, onReject }) {
   return (
     <div className="flex flex-wrap gap-2 lg:justify-end">
-      <button className="btn-primary min-h-9 px-3 py-1.5 text-xs" onClick={onApprove} type="button">
+      <button className="btn-primary btn-sm" onClick={onApprove} type="button">
         <Icon className="h-4 w-4" name="shield" /> Aprovar
       </button>
-      <button className="btn-danger min-h-9 px-3 py-1.5 text-xs" onClick={onReject} type="button">
+      <button className="btn-danger btn-sm" onClick={onReject} type="button">
         <Icon className="h-4 w-4" name="alert" /> Rejeitar
       </button>
     </div>
