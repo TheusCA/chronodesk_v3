@@ -1,6 +1,6 @@
 # Desenho do F10: escala mensal no portal (substitui o script e a planilha "Escala Home")
 
-**Estado:** desenho, só documentação (2026-11-12). Nenhum código, migration ou teste. A aprovar pelo responsável, com as decisões da seção 5.
+**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 entregue (seção 8), aguardando revisão.
 
 **Fontes lidas** (locais, fora do git, em `_referencias/`): o script `gerar_escala_home_V17_ARQUIVO_MENSAL.py` (1.660 linhas, lido inteiro) e a planilha `Escala Home - Base.xlsx`. A planilha tem nomes reais. Este documento traz só estrutura, regras e contagens: nenhum nome, login ou dado pessoal. As linhas citadas são do script V17.
 
@@ -82,7 +82,7 @@ Para cada dia útil do mês, na ordem:
 4. **Ocupantes "Híbrido" e "Crítico" como texto**, sempre presentes. Os números da CONFIG (B8 e B9) só entram no indicador "total"; **B9 = 2 com 1 PA do Crítico** no CONFIG PA.
 5. **`last_pa` zera a cada mês** (384): a continuidade quebra na virada.
 6. **Capacidade digitada:** o `PA INSUFICIENTE` compara com B7 (12), mas a distribuição usa os PAs reais disponíveis do dia (11 flexíveis; o FIXO do grupo comum não empresta). Pode sair `STATUS OK` com pessoa em "SEM PA", e o contrário.
-7. **Padrões silenciosos:** âncora, PAs, Híbrido, Crítico e âncora das regras fixas caem em valores do código quando a célula está vazia ou inválida (81-89, 162). FIXO sem regra vira PRESENCIAL; fase fora de 0..2 nunca dá HOME; semana do CICLO sem linha usa a 1.
+7. **Padrões silenciosos:** âncora, PAs, Híbrido, Crítico e âncora das regras fixas caem em valores do código quando a célula está vazia ou inválida (81-89, 162). FIXO sem regra vira PRESENCIAL; fase fora de 0..2 nunca dá HOME; semana do CICLO sem linha usa a 1. E a célula com **0** também vale o padrão (`int(valor or padrão)`, 82-89 e 152): a fase 0 digitada para o Time 2 ou o 3 vira 1 ou 2, e a semana 0 das REGRAS FIXAS vira 1 (achado do F10-1, 8.4).
 8. **Ciclo do RODÍZIO fixo em 3 e times fixos em 3** (1036-1039, 86-89).
 9. **Exceção:** a primeira linha que cobre a data vence; a PRIORIDADE não é usada; só três status.
 10. **GRUPO COMUM? = SIM ignorado** fora de RODÍZIO, FIXO e SEM HOME (2 casos na base), sem aviso.
@@ -452,6 +452,8 @@ A porta não foi comparada com um arquivo mensal real.
 
 ## 5. Decisões a confirmar
 
+**Revisão de 2026-11-13:** D-F10-1 a D-F10-18 aprovadas como recomendadas na tabela abaixo (D-F10-4 e D-F10-9 na opção (a)). A D-F10-19 (assentos do Crítico) fica com o responsável, a responder antes do F10-3.
+
 | # | Decisão | Recomendação | O que muda conforme a resposta |
 |---|---|---|---|
 | D-F10-1 | **Híbrido (torre "HB") vira equipe própria**, como o Crítico, no F9 (proposta do responsável) | Confirmar | Sim: a 020 do F9 amplia o enum com `hibrido`, e o assento reservado vira do time. Não: o Híbrido fica `separado` com assento reservado, sem equipe |
@@ -581,3 +583,141 @@ Como cadastrar hoje, pelo portal, cada modo da planilha, para resolver os 6 sem 
 | **EXCECOES FÉRIAS** | **Ausência** (F3) de dia inteiro, com o período e a categoria |
 
 Depois de cadastrar, rodar de novo os comandos 114 e 115 (`sem_regra_no_corte = 0` e `sem_regra_na_competencia = 0`) e seguir o 116 e o 117, até 15/11.
+
+---
+
+## 8. Execução
+
+### 8.1 Lote F10-1: motor de distribuição de PA, QA e paridade (2026-11-13)
+
+**Commits** (branch `feat/employee-form-rhf-zod`, sem push):
+
+| Commit | Conteúdo |
+|---|---|
+| `968e9b1` | `services/PaDistributionEngine.php` (motor puro), `scripts/qa-pa-distribution.php`, o QA novo no `test-local.ps1` e no `test-linux.sh` e a lista de QAs posteriores ao deploy 2 na trava do roteiro |
+| `665b219` | `scripts/paridade-escala-mensal.php` (paridade, só contagens), `scripts/qa-paridade-escala.php` e os mesmos registros |
+| o de docs | esta seção, a aprovação do desenho e o `REGISTRO_USO_IA.md` |
+
+**Nada em produção chama o motor nem a paridade.** O QA trava isso: fora do QA e da paridade, nenhum arquivo cita o `PaDistributionEngine`. O rollback é reverter os commits.
+
+**Motor (`PaDistributionEngine::distribute`).**
+- Entrada e saída como na 3.4. A saída traz, por dia:
+  - o ocupante por PA, com a fonte `fixed`, `reserved`, `lock` ou `engine`;
+  - o sem PA, as trocas e quem trocou;
+  - o método (`dp`, `greedy` ou `none`);
+  - a capacidade (PAs livres do dia) e os presenciais;
+  - os alertas e o status.
+- **Status do dia:** `ATENCAO CONFIG` e `PA INSUFICIENTE`, nessa ordem, a mesma do script (linhas 1121-1122). Lista vazia é o `OK`.
+- **Alertas:**
+  - `no_pa`;
+  - `greedy_large`, acima de 16 PAs livres (não muda o status);
+  - `lock_ignored`, com o motivo: `duplicate_seat`, `duplicate_person`, `unknown_seat`, `seat_not_available`, `person_not_common`, `person_has_fixed_seat` ou `person_not_onsite`;
+  - `presence_missing`, `owner_overlap` e `owner_multiple_seats`.
+- **Validação na fronteira:** entrada fora da forma dá `InvalidArgumentException` com o campo. Exemplos: data, PA repetido, tipo, reserva fora de `fixed`, vigência invertida, situação desconhecida, ID que não é inteiro positivo.
+- **Diferenças em relação ao script, além das da 3.4:**
+  - dono com dois PAs fixos no mesmo dia: só o primeiro da ordem; o outro empresta, se puder, com `owner_multiple_seats` (o script sentava a mesma pessoa nos dois);
+  - o nome normalizado cobre ASCII e Latin-1 sem depender do `mbstring`. O resultado é o mesmo em qualquer servidor; um nome com caractere fora do Latin-1 pode ordenar diferente do Python.
+- **Desempenho medido:** pior caso (16 PAs livres e 16 pessoas por dia, 23 dias) em 1,1 s por mês, com pico de 12 MB.
+
+**QA do motor (`qa-pa-distribution.php`, 93 verificações).**
+- Casos em tabela: custo, desempate, ordem, empréstimo, reservado, vigência, bloqueado e inativo, travas com cada motivo, guloso, limite de 16, continuidade, alertas, status, determinismo e validação.
+- A porta em PHP do `build_pa_assignments` contra o motor, em 1000 meses de semente fixa (21.712 dias).
+- A pureza do motor e a ausência de chamada em produção.
+
+**Script de paridade (`paridade-escala-mensal.php`).**
+- Ferramenta da estação, só linha de comando (fora dela, 404). A pasta `scripts/` já é bloqueada no `.htaccess`.
+- Recebe por argumento a planilha, o casamento e o JSON do portal, todos em `_referencias/`.
+- Imprime só contagens. Com `--detalhe`, o `employee_id` (ou um índice provisório `#n`) e a data, nunca o nome.
+- O leitor de xlsx é próprio (zip e zlib, sem `ZipArchive`), com limites de tamanho e de entradas, e recusa XML com `DOCTYPE`.
+- Três comandos:
+  - `modelo-casamento <planilha> <_referencias/casamento-nome-id.csv>`: grava só numa pasta `_referencias` e nunca sobrescreve;
+  - `escala <planilha> --meses=… [--casamento=… --portal=…] [--detalhe]`: sem `--portal`, recalcula o HISTÓRICO pela configuração atual da planilha, traduzida em regras do portal (2.2), no `PresenceEngine`; com `--portal`, compara com o JSON do portal pelos motivos da 4.1;
+  - `pa <planilha> --mes=… [--mensal=…] [--casamento=…] [--fora-da-equipe=presente|ausente]`: monta a entrada do motor pela presença do HISTÓRICO e pelo CONFIG PA (4.4); com `--mensal`, compara com a aba `PA DIARIO MM-AAAA`.
+- **QA (`qa-paridade-escala.php`, 79 verificações):** monta um xlsx sintético com nomes fictícios e confere:
+  - o leitor e as conversões;
+  - cada aba de entrada, com as regras do script;
+  - a tradução de cada modo;
+  - cada motivo, com e sem portal;
+  - o modelo do casamento;
+  - a entrada do motor e a comparação com o PA DIARIO;
+  - que a linha de comando não imprime nenhum nome.
+
+**Contrato do JSON do portal (`paridade-escala-v1`).** O `GET portal/monthly_schedule.php?mes=AAAA-MM&formato=paridade` do F10-4, só para admin, precisa cumprir:
+
+```json
+{"formato": "paridade-escala-v1", "mes": "2026-10",
+ "linhas": [{"employee_id": 12, "data": "2026-10-05", "situacao": "presencial",
+             "fonte": "regra", "rule_type": "cycle"}]}
+```
+
+- `situacao`: `presencial`, `remoto`, `ausente`, `sem_escala`, `dia_nao_util` ou `fora` (fora do Mapa e da escala).
+- `fonte`: `regra`, `excecao`, `ausencia`, `implicita` ou `nenhuma`, as do `PresenceEngine`.
+- Nenhum nome.
+
+### 8.2 Resultados da paridade (só contagens)
+
+**Algoritmo de PA, motor contra o script.**
+
+| Comparação | Dias | Diferentes |
+|---|---|---|
+| Motor x `build_pa_assignments` **real** (copiado do V17 sem mudança), meses aleatórios com nomes fictícios, sementes 1 e 20261113, 1000 meses cada (scratchpad) | 43.566 | 0 |
+| Motor x porta em PHP do QA, 1000 meses | 21.712 | 0 |
+| Motor x `build_pa_assignments` real **na base**, com a presença do HISTÓRICO, out a dez/2026, comparado por hash do nome (scratchpad) | 66 dias (832 células) | 0; trocas e sem PA iguais em todos os dias |
+
+**Escala (4.1) sem casamento e sem portal:** HISTÓRICO x configuração atual da planilha no motor do portal.
+
+| Mês | Linhas | Iguais | Mesma regra, dia diferente | Modo ou time mudou depois |
+|---|---|---|---|---|
+| out/2026 | 308 | 233 | 9 | 66 |
+| nov/2026 | 294 | 244 | 8 | 42 |
+| dez/2026 | 276 | 276 | 0 | 0 |
+
+São os números do ensaio da 4.3, agora pelo script do repositório. As 17 "mesma regra, dia diferente" são a regra SEMANAL alterada depois da geração.
+
+**PA na base, pelo motor (`pa`):**
+
+| Mês | Dias | Programação dinâmica | Sem PA | Trocas | Presenciais comuns (máx.) | PAs livres no dia |
+|---|---|---|---|---|---|---|
+| out/2026 | 22 | 22 | 0 | 13 | 11 | 11 |
+| nov/2026 | 21 | 21 | 0 | 27 | 10 | 11 |
+| dez/2026 | 23 | 23 | 0 | 17 | 9 | 11 |
+
+**Por que out e nov diferem da 3.6 e da 4.4** (12 e 14 trocas, máximo de 9): aquele ensaio recalculou a presença pela regra atual. Aqui a presença é a do HISTÓRICO, como a 4.4 pede. Dezembro, gerado com a configuração atual, coincide (17 trocas, máximo 9).
+
+**Casamento nome → ID:** `_referencias/casamento-nome-id.csv`, gerado na estação (fora do git, conferido com `git check-ignore`).
+- 23 nomes (EQUIPE, HISTÓRICO, REGRAS FIXAS, EXCECOES e CONFIG PA), com a coluna `employee_id` vazia.
+- **Primeiro nome do PA DIARIO:** preenchido localmente, no scratchpad, pelo `short_pa_name` real do script. Entraram as 3 desambiguações; sobrou 1 par de primeiros nomes ambíguo (2 linhas), que conta à parte.
+- **Sem casamento de ID na entrada do `pa`:** 16 em out e nov e 14 em dez (pessoas do mês, donos e preferências).
+
+### 8.3 O que falta para a paridade completa
+
+1. **O responsável preenche o `employee_id`** dos 23 nomes no `_referencias/casamento-nome-id.csv`, conferindo na tela de funcionários. O arquivo nunca vai ao git.
+2. **O JSON do portal** (`paridade-escala-v1`) de out, nov e dez/2026, que vem do endpoint do F10-4.
+   - Até lá, a escala só se compara com a configuração da planilha (8.2), não com as regras gravadas no portal.
+   - A paridade real depende de o portal ter as regras com a vigência certa: os 6 sem regra do corte de 16/11 e as datas de início da seção 7.
+3. **Um arquivo mensal gerado pelo script** (ex.: dez/2026), copiado para `_referencias/`, para rodar o `pa --mensal`.
+   - O algoritmo já bateu com a função real na base (8.2).
+   - O arquivo confere o resto da cadeia: a leitura da aba, o primeiro nome e a configuração do dia da geração.
+   - Só um mês gerado com a base atual é comparável: out e nov foram gerados com outra configuração (4.3).
+4. **A aba MAPA PA não é lida:** é a mesma distribuição em outro desenho (linhas 837-992). O PA DIARIO cobre ocupante, trocas e sem PA.
+
+### 8.4 Achados
+
+- **`int(valor or padrão)` no script** (linhas 82-89 e 152): a célula com **0** vale o padrão (fase 0 do Time 2 ou 3; semana 0 das REGRAS FIXAS). A paridade reproduz o comportamento (`paridade_int_or`); a base de hoje não tem o caso. Registrado também nos pontos frágeis (1.6, item 7).
+- **O PHP da estação (8.2, WinGet) não tem `ZipArchive` nem `mbstring`.** O servidor tem `ZipArchive` (deploy 2). Para o F10-6 (gerador próprio, D-F10-9), o QA da exportação precisa rodar na estação sem a extensão: escrever o zip sem o `ZipArchive`, como o gerador do `qa-paridade-escala`, ou rodar o QA com `php -d extension=zip`.
+- **A trava do roteiro exigia todo QA novo no roteiro dos deploys 1 e 2**, que já foram executados e ficam como estão.
+  - A trava agora tira da comparação os QAs da lista `$qasAfterDeploy2` (`qa-pa-distribution` e `qa-paridade-escala`). QA novo fora da lista continua reprovando.
+  - **O roteiro do próximo deploy (3) precisa rodar os dois**, e a trava dele substitui a lista. Proposta a aprovar.
+
+### 8.5 Validação
+
+- **Mutação** no worktree, com a trava `mut_guard.php`:
+  - commit 1: 73/73 mortos (motor, travas do roteiro e baterias);
+  - commit 2: 55/55 (leitor, abas, tradução, motivos, modelo, entrada do motor, PA DIARIO, linha de comando sem nome e travas).
+- **Sobreviventes da 1ª rodada, todos tratados:**
+  - commit 1: o custo 13 (passou a ser travado como constante do script); o NBSP explícito no `trim` (equivalente: trocado pelo `\s` com `/u`); a ordem de `moved` (caso novo);
+  - commit 2: o método de compressão desconhecido (falso morto: o nome do arquivo de teste aparecia na mensagem; arquivo renomeado); o tamanho declarado e o limite de entradas do zip (casos novos); a exceção HOME (caso novo).
+- **Os commits foram refeitos antes da entrega:** `ba17ac5` virou `968e9b1`; `2b691c4`, `c7ef561` e `d79a1cf` viraram `665b219` (o último ajuste foi o título da saída sem o JSON do portal).
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree):
+  - `968e9b1`: saída 0, frontend 22/22, navegador 1029/1029;
+  - `665b219` e o commit de docs: no resumo da entrega.
