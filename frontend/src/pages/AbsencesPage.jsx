@@ -74,7 +74,7 @@ function buildAbsencePayload(data, editingId) {
 }
 
 function FieldError({ error }) {
-  return error ? <span className="mt-1 block text-xs text-red-300">{error.message}</span> : null
+  return error ? <span className="mt-1 block text-xs text-danger">{error.message}</span> : null
 }
 
 export function AbsencesPage({ session, notify }) {
@@ -256,7 +256,7 @@ export function AbsencesPage({ session, notify }) {
     return (
       <span className="shrink-0 text-right">
         <span className={`status-badge ${item.status === 'approved' ? 'status-success' : 'status-neutral'}`}>{item.status === 'approved' ? 'Ativa' : 'Cancelada'}</span>
-        {Number(item.retroactive) === 1 && <small className="mt-1 block text-xs text-slate-500">Retroativa</small>}
+        {Number(item.retroactive) === 1 && <small className="mt-1 block text-xs text-muted">Retroativa</small>}
       </span>
     )
   }
@@ -267,8 +267,8 @@ export function AbsencesPage({ session, notify }) {
     if (confirmCancelId === item.id) {
       return (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-300">Cancelar esta ausência?</span>
-          <button className="table-action text-red-300" onClick={() => cancelAbsence(item)} type="button">Confirmar</button>
+          <span className="text-xs text-ink-2">Cancelar esta ausência?</span>
+          <button className="table-action text-danger" onClick={() => cancelAbsence(item)} type="button">Confirmar</button>
           <button className="table-action" onClick={() => setConfirmCancelId(null)} type="button">Voltar</button>
         </div>
       )
@@ -276,7 +276,7 @@ export function AbsencesPage({ session, notify }) {
     return (
       <div className="flex flex-wrap gap-2">
         <button className="table-action" onClick={() => guard.requestLeave(() => editAbsence(item))} type="button">Editar</button>
-        <button className="table-action text-red-300" onClick={() => setConfirmCancelId(item.id)} type="button">Cancelar</button>
+        <button className="table-action text-danger" onClick={() => setConfirmCancelId(item.id)} type="button">Cancelar</button>
       </div>
     )
   }
@@ -311,7 +311,7 @@ export function AbsencesPage({ session, notify }) {
             {editing ? (
               <div className="label">Técnico
                 <p className="field mt-2 cursor-default">{editing.employee_name} - {teamLabel(editing.team)}</p>
-                <span className="mt-1 block text-xs text-slate-500">O técnico não muda na edição: para trocar, cancele e lance de novo.</span>
+                <span className="mt-1 block text-xs text-muted">O técnico não muda na edição: para trocar, cancele e lance de novo.</span>
               </div>
             ) : (
               <label className="label">Técnico
@@ -320,7 +320,7 @@ export function AbsencesPage({ session, notify }) {
                   {formEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.nome} - {teamLabel(employee.equipe)}</option>)}
                 </select>
                 <FieldError error={errors.employee_id} />
-                {selectedEmployee && <span className="mt-1 block text-xs text-slate-500">Jornada: {hhmm(selectedEmployee.jornada_entrada)}–{hhmm(selectedEmployee.jornada_saida)}</span>}
+                {selectedEmployee && <span className="mt-1 block text-xs text-muted">Jornada: {hhmm(selectedEmployee.jornada_entrada)}–{hhmm(selectedEmployee.jornada_saida)}</span>}
               </label>
             )}
             <label className="label">De
@@ -337,16 +337,16 @@ export function AbsencesPage({ session, notify }) {
               {editingStarted ? 'A ausência já começou: a alteração fica marcada como retroativa e registrada na auditoria.' : 'A data inicial é anterior a hoje: o lançamento fica marcado como retroativo e registrado na auditoria.'}
             </InlineAlert>
           )}
-          {!canRetroactive && <p className="text-xs text-slate-500">{ABSENCE_RETROACTIVE_MESSAGE}</p>}
+          {!canRetroactive && <p className="text-xs text-muted">{ABSENCE_RETROACTIVE_MESSAGE}</p>}
           <fieldset className="space-y-3">
             <legend className="label">Período</legend>
-            <div className="flex flex-wrap gap-4 text-sm text-slate-300">
+            <div className="flex flex-wrap gap-4 text-sm text-ink-2">
               <label className="inline-flex items-center gap-2"><input type="radio" value="full_day" {...register('period_type', { onChange: () => clearErrors(['period_type', 'start_time', 'end_time']) })} />Dia todo</label>
               <label className={`inline-flex items-center gap-2 ${singleDay ? '' : 'opacity-50'}`}><input disabled={!singleDay} type="radio" value="from_time" {...register('period_type', { onChange: () => clearErrors(['period_type', 'start_time', 'end_time']) })} />A partir de</label>
               <label className={`inline-flex items-center gap-2 ${singleDay ? '' : 'opacity-50'}`}><input disabled={!singleDay} type="radio" value="interval" {...register('period_type', { onChange: () => clearErrors(['period_type', 'start_time', 'end_time']) })} />Intervalo</label>
             </div>
             <FieldError error={errors.period_type} />
-            {!singleDay && <p className="text-xs text-slate-500">Horário só em ausência de um dia (De igual a Até).</p>}
+            {!singleDay && <p className="text-xs text-muted">Horário só em ausência de um dia (De igual a Até).</p>}
             {singleDay && values.period_type !== 'full_day' && (
               <div className="grid gap-4 sm:grid-cols-2 md:max-w-md">
                 <label className="label">{values.period_type === 'interval' ? 'Das' : 'A partir de'}
@@ -372,8 +372,8 @@ export function AbsencesPage({ session, notify }) {
             <label className="label md:col-span-2">Observação (opcional)
               <textarea aria-describedby={NOTE_WARNING_ID} aria-invalid={Boolean(errors.note)} className="field mt-2 min-h-20" rows="3" {...register('note', { onChange: () => clearErrors('note') })} />
               <span className="mt-1 flex items-start justify-between gap-3 text-xs">
-                <span className="font-semibold text-amber-300" id={NOTE_WARNING_ID}>⚠ Não registre informação médica ou de saúde neste campo.</span>
-                <span className={noteLength > ABSENCE_NOTE_MAX_CHARS ? 'text-red-300' : 'text-slate-500'}>{noteLength}/{ABSENCE_NOTE_MAX_CHARS}</span>
+                <span className="font-semibold text-warn" id={NOTE_WARNING_ID}>⚠ Não registre informação médica ou de saúde neste campo.</span>
+                <span className={noteLength > ABSENCE_NOTE_MAX_CHARS ? 'text-danger' : 'text-muted'}>{noteLength}/{ABSENCE_NOTE_MAX_CHARS}</span>
               </span>
               <FieldError error={errors.note} />
             </label>
@@ -405,16 +405,16 @@ export function AbsencesPage({ session, notify }) {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-start gap-3">
                         <UserAvatar name={item.employee_name} />
-                        <div className="min-w-0"><strong className="block text-slate-200">{item.employee_name}</strong><span className="text-xs text-slate-500">{teamLabel(item.team)}</span></div>
+                        <div className="min-w-0"><strong className="block text-ink-2">{item.employee_name}</strong><span className="text-xs text-muted">{teamLabel(item.team)}</span></div>
                       </div>
                       {statusCell(item)}
                     </div>
                     <dl className="grid grid-cols-2 gap-3 text-sm">
-                      <div><dt className="text-xs text-slate-500">Data(s)</dt><dd className="text-slate-300">{datesLabel(item)}</dd></div>
-                      <div><dt className="text-xs text-slate-500">Período</dt><dd className="text-slate-300">{periodLabel(item)}</dd></div>
-                      <div className="col-span-2"><dt className="text-xs text-slate-500">Categoria</dt><dd className="text-slate-300 [&_small]:block [&_small]:text-xs [&_small]:text-slate-500">{categoryCell(item)}</dd></div>
+                      <div><dt className="text-xs text-muted">Data(s)</dt><dd className="text-ink-2">{datesLabel(item)}</dd></div>
+                      <div><dt className="text-xs text-muted">Período</dt><dd className="text-ink-2">{periodLabel(item)}</dd></div>
+                      <div className="col-span-2"><dt className="text-xs text-muted">Categoria</dt><dd className="text-ink-2 [&_small]:block [&_small]:text-xs [&_small]:text-muted">{categoryCell(item)}</dd></div>
                     </dl>
-                    {canManage && <div className="border-t border-white/5 pt-3">{actionsCell(item)}</div>}
+                    {canManage && <div className="border-t border-line pt-3">{actionsCell(item)}</div>}
                   </article>
                 ))}
               </section>

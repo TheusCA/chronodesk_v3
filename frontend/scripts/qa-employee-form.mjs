@@ -53,7 +53,7 @@ assert.match(adminSource, /register\('nome'\)[\s\S]*register\('jornada_entrada'\
 assert.doesNotMatch(adminSource, /register\('ativo'\)|Funcionário ativo/, 'Formulario sem o campo ativo (arquivar e restaurar sao acoes da linha)')
 // [pos-deploy 1, D3] O ID vem do banco: sem campo na criacao; na edicao, so leitura (texto, nao input).
 assert.doesNotMatch(adminSource, /register\('id'\)|max="999"|Já existe um funcionário com este ID/, 'D3: sem campo ID registrado, sem o limite 999 na tela e sem a checagem de ID repetido')
-assert.match(adminSource, /\{editing && \(\s*<div className="label">ID\s*<p className="field mt-2 text-slate-300" data-employee-id-readonly="">\{form\.id\}<\/p>/u, 'D3: ID so na edicao, como texto')
+assert.match(adminSource, /\{editing && \(\s*<div className="label">ID\s*<p className="field mt-2 text-ink-2" data-employee-id-readonly="">\{form\.id\}<\/p>/u, 'D3: ID so na edicao, como texto')
 
 const createSource = adminSource.match(/async function create\(values\) \{[\s\S]*?\n  \}/)?.[0] || ''
 assert.match(createSource, /employeeCreateSchema\.safeParse\(values\)/, 'Criacao deve validar schema sem ID')
@@ -555,7 +555,10 @@ const appliedFiltersOf = (markup) => Number(plain(markup).match(/Filtros aplicad
     assert.equal(cellOf(rowOf(active, item.id), 5), lunchText, `almoco: linha ${item.id} com ${lunchText}`)
     assert.ok(cardOf(active, item.id).includes(`data-employee-lunch="">${lunchText}</dd>`), `almoco: cartao ${item.id} com ${lunchText}`)
   }
-  assert.ok(active.includes('<td class="bg-slate-950/40" colSpan="7">') || !active.includes('bg-slate-950/40'), 'almoco: a confirmacao ocupa as 7 colunas')
+  // [R1] Antes, a linha era achada pela classe bg-slate-950/40; com o token
+  // (bg-surface-2), a classe aparece em outras partes. Toda celula com colSpan
+  // na lista ocupa as 7 colunas.
+  assert.ok(!/colSpan="(?!7")\d+"/u.test(active), 'almoco: a confirmacao ocupa as 7 colunas')
   assert.match(adminSource, /colSpan=\{7\}/u, 'almoco: confirmacao com colSpan 7')
 }
 

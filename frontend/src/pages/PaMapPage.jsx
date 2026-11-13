@@ -88,7 +88,7 @@ function assignmentStatus(item) {
   if (legend !== null) {
     return { tone: legend.tone, icon: legend.icon, label: situationLabel(item.presence.situacao) || legend.label }
   }
-  return { tone: 'border-slate-600/50 bg-slate-900/40 text-slate-400', icon: 'help', label: presenceReasonLabel(item.presence_reason) }
+  return { tone: 'border-line-strong bg-surface text-muted', icon: 'help', label: presenceReasonLabel(item.presence_reason) }
 }
 
 // Cartão do técnico: preenchido na cor da situação (ausente no laranja da
@@ -117,8 +117,8 @@ export function PaCard({ pa, canManage, onOpen }) {
   const onsiteCount = assignments.filter((item) => item.presence?.status === 'onsite').length
   const conflictDays = conflictDaysLabel(pa.conflict_days)
   const outline = pa.has_conflict
-    ? 'border-red-400/80 bg-slate-900/80 ring-2 ring-red-400/60'
-    : assignments.length ? 'border-white/10 bg-slate-900/80' : 'border-dashed border-white/10 bg-slate-950/45'
+    ? 'border-danger bg-surface ring-2 ring-danger'
+    : assignments.length ? 'border-line bg-surface' : 'border-dashed border-line bg-surface-2'
   return (
     <button
       aria-label={`PA ${pa.pa_number}${pa.has_conflict ? `, conflito: ${conflictDays}` : ''}`}
@@ -129,30 +129,30 @@ export function PaCard({ pa, canManage, onOpen }) {
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-300/70">PA</p>
-          <strong className="mt-1 block text-2xl font-black text-white">{pa.pa_number}</strong>
+          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-info">PA</p>
+          <strong className="mt-1 block text-2xl font-black text-ink">{pa.pa_number}</strong>
         </div>
         {pa.has_conflict ? (
-          <span className="flex shrink-0 items-center gap-1 rounded-full border border-red-400/50 bg-red-500/15 px-2.5 py-1 text-[11px] font-bold text-red-200">
+          <span className="flex shrink-0 items-center gap-1 rounded-full border border-danger-line bg-danger-bg px-2.5 py-1 text-[11px] font-bold text-danger">
             <Icon name="alert" className="h-3 w-3" />Conflito
           </span>
         ) : (
-          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${onsiteCount ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300' : 'border-slate-600/50 bg-slate-950/60 text-slate-500'}`}>
+          <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${onsiteCount ? 'border-ok-line bg-ok-bg text-ok' : 'border-line-strong bg-surface-2 text-muted'}`}>
             {assignments.length ? `${onsiteCount}/${assignments.length} presencial` : 'Livre'}
           </span>
         )}
       </div>
-      {pa.has_conflict && <p className="mt-2 text-xs font-semibold text-red-200">Conflito: {conflictDays}</p>}
+      {pa.has_conflict && <p className="mt-2 text-xs font-semibold text-danger">Conflito: {conflictDays}</p>}
 
       {assignments.length ? (
         <div className="mt-4 space-y-2">
           {assignments.slice(0, 3).map((item) => <AssignmentChip item={item} key={`${item.source}-${item.id}`} />)}
-          {assignments.length > 3 && <p className="text-xs text-slate-500">+{assignments.length - 3} vínculo(s)</p>}
+          {assignments.length > 3 && <p className="text-xs text-muted">+{assignments.length - 3} vínculo(s)</p>}
         </div>
       ) : (
-        <div className="mt-8 flex items-center justify-between gap-3 text-sm text-slate-500">
+        <div className="mt-8 flex items-center justify-between gap-3 text-sm text-muted">
           <span>Livre</span>
-          {canManage && <span className="rounded-md border border-white/10 px-2 py-1 text-xs text-cyan-300">Alocar</span>}
+          {canManage && <span className="rounded-md border border-line px-2 py-1 text-xs text-info">Alocar</span>}
         </div>
       )}
     </button>
@@ -166,24 +166,24 @@ export function AssignmentList({ assignments, canManage, onEdit, onRemove, savin
   return (
     <div className="space-y-2">
       {assignments.map((item) => (
-        <div className="rounded-lg border border-white/5 bg-slate-950/35 p-3" key={`${item.source}-${item.id}`}>
+        <div className="rounded-lg border border-line bg-surface-2 p-3" key={`${item.source}-${item.id}`}>
           <div className="flex items-start gap-3">
             <UserAvatar name={item.employee_name} />
             <div className="min-w-0 flex-1">
               <AssignmentChip item={item} />
-              {item.presence?.detalhe && <p className="mt-2 text-xs text-slate-400">{item.presence.detalhe}</p>}
-              {item.presence?.categoria && <p className="mt-1 text-xs text-slate-400">Categoria: {item.presence.categoria}</p>}
-              <p className="mt-2 text-xs text-slate-500">Desde {brDate(item.valid_from)}{item.valid_until ? ` até ${brDate(item.valid_until)}` : ''}</p>
-              {item.notes && <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-400" title={item.notes}>{item.notes}</p>}
+              {item.presence?.detalhe && <p className="mt-2 text-xs text-muted">{item.presence.detalhe}</p>}
+              {item.presence?.categoria && <p className="mt-1 text-xs text-muted">Categoria: {item.presence.categoria}</p>}
+              <p className="mt-2 text-xs text-muted">Desde {brDate(item.valid_from)}{item.valid_until ? ` até ${brDate(item.valid_until)}` : ''}</p>
+              {item.notes && <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted" title={item.notes}>{item.notes}</p>}
             </div>
           </div>
           {canManage && item.source === 'assignment' && (
             <div className="mt-3 flex gap-2">
               <button className="table-action" disabled={saving} onClick={() => onEdit(item)} type="button">Editar</button>
-              <button className="table-action text-red-300" disabled={saving} onClick={() => onRemove(item.id)} type="button">Remover</button>
+              <button className="table-action text-danger" disabled={saving} onClick={() => onRemove(item.id)} type="button">Remover</button>
             </div>
           )}
-          {item.source !== 'assignment' && <p className="mt-2 text-xs text-slate-600">Vínculo legado por data.</p>}
+          {item.source !== 'assignment' && <p className="mt-2 text-xs text-muted">Vínculo legado por data.</p>}
         </div>
       ))}
     </div>
@@ -279,9 +279,9 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
     <Dialog
       description={`Situação de cada técnico em ${brDate(date)}, pela escala e pelas ausências.`}
       eyebrow="Mapa de PA"
-      headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={close} type="button">Fechar</button>}
+      headerAction={<button className="text-sm text-muted hover:text-ink" onClick={close} type="button">Fechar</button>}
       onClose={close}
-      panelClassName="border-blue-500/20"
+      panelClassName="border-info-line"
       returnFocusRef={returnFocusRef}
       size="max-w-3xl"
       title={`PA ${pa.pa_number}`}
@@ -301,9 +301,9 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
         </div>
 
         {canManage ? (
-          <div className="mt-6 rounded-card border border-white/5 bg-slate-950/25 p-4">
+          <div className="mt-6 rounded-card border border-line bg-surface-2 p-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">{editing ? 'Editar vínculo' : 'Adicionar colaborador'}</h3>
+              <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-muted">{editing ? 'Editar vínculo' : 'Adicionar colaborador'}</h3>
               {editing && <button className="table-action" onClick={requestNew} type="button">Novo vínculo</button>}
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -311,19 +311,19 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
               <label className="label">Início da validade<input className="field mt-2" required type="date" value={form.valid_from} onChange={(event) => updateDate('valid_from', event.target.value)} /></label>
               <div>
                 <label className="label">Fim da validade<input aria-describedby={endError ? `${endHintId} ${endErrorId}` : endHintId} aria-invalid={Boolean(endError)} className="field mt-2" ref={endRef} type="date" value={form.valid_until} onChange={(event) => updateDate('valid_until', event.target.value)} /></label>
-                <p className="mt-1 text-xs text-slate-500" id={endHintId}>Opcional: vazio, o vínculo fica sem fim.</p>
-                {endError && <p className="mt-1 text-xs text-red-300" id={endErrorId}>{endError}</p>}
+                <p className="mt-1 text-xs text-muted" id={endHintId}>Opcional: vazio, o vínculo fica sem fim.</p>
+                {endError && <p className="mt-1 text-xs text-danger" id={endErrorId}>{endError}</p>}
               </div>
               <label className="label sm:col-span-2">Observação<textarea className="field mt-2 min-h-24" maxLength="1000" value={form.notes} onChange={(event) => update('notes', event.target.value)} /></label>
             </div>
-            <p className="mt-3 text-xs text-slate-500">Conflito, remoto, ausência e falta de escala não impedem o vínculo: o mapa salva e mostra o aviso.</p>
+            <p className="mt-3 text-xs text-muted">Conflito, remoto, ausência e falta de escala não impedem o vínculo: o mapa salva e mostra o aviso.</p>
             <div className="mt-5 flex justify-end gap-3">
               <button className="btn-secondary" disabled={saving} onClick={requestReset} type="button">Limpar</button>
               <button className="btn-primary" disabled={saving || !form.employee_id} type="submit">{saving ? 'Salvando...' : 'Salvar vínculo'}</button>
             </div>
           </div>
         ) : (
-          <p className="mt-6 rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-400">Seu perfil permite apenas visualizar o mapa.</p>
+          <p className="mt-6 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-muted">Seu perfil permite apenas visualizar o mapa.</p>
         )}
       </form>
     </Dialog>
@@ -340,7 +340,7 @@ export function AbsencesTable({ items }) {
   }
   const withCategory = showsCategory(items)
   return (
-    <div className="overflow-x-auto rounded-card border border-white/5">
+    <div className="overflow-x-auto rounded-card border border-line">
       <table className="data-table">
         <thead>
           <tr><th>Técnico</th><th>Equipe</th><th>Data</th><th>Período</th><th>Origem</th>{withCategory && <th>Categoria</th>}</tr>
@@ -482,7 +482,7 @@ export function PaMapPage({ notify }) {
 
       <section aria-label="Legenda do mapa" className="card flex flex-wrap gap-2">
         <PresenceLegend />
-        <span className="status-badge gap-1 border-red-400/60 bg-red-500/15 text-red-200"><Icon name="alert" className="h-3 w-3" />PA em conflito (contorno)</span>
+        <span className="status-badge gap-1 border-danger bg-danger-bg text-danger"><Icon name="alert" className="h-3 w-3" />PA em conflito (contorno)</span>
         <span className="status-badge status-neutral border-dashed">PA livre</span>
       </section>
 

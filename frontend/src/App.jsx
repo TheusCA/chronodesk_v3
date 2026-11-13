@@ -45,9 +45,9 @@ const emptySession = {
 
 function AccessDenied({ navigate }) {
   return (
-    <div className="card mx-auto max-w-xl border-red-500/30 text-center">
-      <h2 className="text-xl font-bold text-white">Acesso não autorizado</h2>
-      <p className="mt-2 text-sm text-slate-400">Seu perfil não possui permissão para acessar este módulo.</p>
+    <div className="card mx-auto max-w-xl border-danger-line text-center">
+      <h2 className="text-xl font-bold text-ink">Acesso não autorizado</h2>
+      <p className="mt-2 text-sm text-muted">Seu perfil não possui permissão para acessar este módulo.</p>
       <button className="btn-secondary mt-5" onClick={() => navigate('/dashboard')} type="button">Voltar ao dashboard</button>
     </div>
   )
@@ -245,7 +245,7 @@ export default function App() {
 
   let screen
   if (loading) {
-    screen = <div className="grid min-h-screen place-items-center text-sm text-slate-400">Carregando Portal Operacional...</div>
+    screen = <div className="grid min-h-screen place-items-center text-sm text-muted">Carregando Portal Operacional...</div>
   } else if (!authenticated) {
     screen = <LoginPage onLoginCI={loginCI} loading={actionLoading} />
   } else {
@@ -273,7 +273,7 @@ export default function App() {
               <textarea aria-describedby={forceEndHelpId} className="field mt-2 min-h-20" disabled={forceEndBusy} maxLength={500} value={forceEndNote} onChange={(event) => setForceEndNote(event.target.value)} />
             </label>
             {/* Fora do label: a ajuda é descrição do campo, não parte do nome dele. */}
-            <p className="mt-1 text-xs text-slate-400" id={forceEndHelpId}>{FORCE_END_NOTE_HELP}</p>
+            <p className="mt-1 text-xs text-muted" id={forceEndHelpId}>{FORCE_END_NOTE_HELP}</p>
           </ConfirmActionDialog>
         )}
       </PortalLayout>

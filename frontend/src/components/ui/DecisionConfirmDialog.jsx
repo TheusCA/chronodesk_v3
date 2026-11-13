@@ -13,7 +13,7 @@ export function DecisionConfirmDialog({ request, busy, onConfirm, onCancel, retu
       confirmLabel={confirmLabel}
       description={(
         <>
-          <span className="block font-semibold text-white">{employee}</span>
+          <span className="block font-semibold text-ink">{employee}</span>
           <span className="block">{detail}</span>
           <span className="mt-2 block">{DECISION_WARNING}</span>
         </>

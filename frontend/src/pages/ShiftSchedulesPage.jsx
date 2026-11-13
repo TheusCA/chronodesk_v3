@@ -64,23 +64,23 @@ function UploadPreview({ file, previewUrl, imageFailed, onImageError }) {
   return (
     <div className="file-preview-panel p-4">
       {image && previewUrl && !imageFailed ? (
-        <img alt="Preview da escala selecionada" className="mb-3 max-h-72 w-full rounded-lg bg-slate-950 object-contain" onError={onImageError} src={previewUrl} />
+        <img alt="Preview da escala selecionada" className="mb-3 max-h-72 w-full rounded-lg bg-surface-2 object-contain" onError={onImageError} src={previewUrl} />
       ) : (
-        <div className="mb-3 flex items-center gap-3 rounded-lg border border-white/10 bg-slate-900/70 p-4">
-          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-blue-500/10 text-blue-300">
+        <div className="mb-3 flex items-center gap-3 rounded-lg border border-line bg-surface p-4">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-lg bg-info-bg text-info">
             <Icon name={image ? 'file' : 'download'} />
           </span>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-200">{label}</p>
-            <p className="mt-1 text-xs text-slate-500">{image ? 'Preview indisponível neste navegador.' : 'O anexo será exibido como card no feed.'}</p>
+            <p className="text-sm font-semibold text-ink-2">{label}</p>
+            <p className="mt-1 text-xs text-muted">{image ? 'Preview indisponível neste navegador.' : 'O anexo será exibido como card no feed.'}</p>
           </div>
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <p className="truncate text-sm font-semibold text-slate-200">{file.name}</p>
+        <p className="truncate text-sm font-semibold text-ink-2">{file.name}</p>
         <FileTypeBadge extension={extension} />
       </div>
-      <p className="mt-1 text-xs text-slate-500">{formatBytes(file.size)}</p>
+      <p className="mt-1 text-xs text-muted">{formatBytes(file.size)}</p>
     </div>
   )
 }
@@ -149,16 +149,16 @@ function UploadShift({ limits, onClose, onUploaded }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 p-4">
       <button className="fixed inset-0" aria-label="Fechar upload" onClick={onClose} type="button" />
       <form className="card relative mx-auto my-6 max-w-2xl space-y-5" onSubmit={submit}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-blue-400">Publicação segura</p>
-            <h2 className="mt-2 text-xl font-bold text-white">Publicar Escala de Sábado</h2>
-            <p className="mt-2 text-sm text-slate-400">Publique imagens, PDFs ou planilhas da escala de sábado.</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-info">Publicação segura</p>
+            <h2 className="mt-2 text-xl font-bold text-ink">Publicar Escala de Sábado</h2>
+            <p className="mt-2 text-sm text-muted">Publique imagens, PDFs ou planilhas da escala de sábado.</p>
           </div>
-          <button className="text-sm text-slate-400 hover:text-slate-200" onClick={onClose} type="button">Cancelar</button>
+          <button className="text-sm text-muted hover:text-ink-2" onClick={onClose} type="button">Cancelar</button>
         </div>
         <button
           className={`drop-zone ${dragging ? 'drop-zone-active' : ''}`}
@@ -169,9 +169,9 @@ function UploadShift({ limits, onClose, onUploaded }) {
           onDrop={(event) => { event.preventDefault(); setDragging(false); choose(event.dataTransfer.files) }}
           type="button"
         >
-          <Icon className="h-9 w-9 text-blue-400" name="upload" />
-          <strong className="mt-3 text-sm text-slate-200">Clique ou arraste a escala</strong>
-          <span className="mt-1 text-xs text-slate-500">{allowedFormats}, até 10 MB</span>
+          <Icon className="h-9 w-9 text-info" name="upload" />
+          <strong className="mt-3 text-sm text-ink-2">Clique ou arraste a escala</strong>
+          <span className="mt-1 text-xs text-muted">{allowedFormats}, até 10 MB</span>
         </button>
         <input ref={inputRef} accept={accepted.join(',')} className="hidden" onChange={(event) => choose(event.target.files)} type="file" />
         {file && <UploadPreview file={file} imageFailed={imageFailed} onImageError={() => setImageFailed(true)} previewUrl={previewUrl} />}
@@ -200,17 +200,17 @@ function AttachmentCard({ item, download, preview }) {
   const extension = String(item.extension || '').toLowerCase()
   const spreadsheet = isSpreadsheetExtension(extension)
   return (
-    <a className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-slate-950/50 p-4 transition hover:border-blue-500/30 hover:bg-slate-900/80" href={extension === 'pdf' ? preview : download} rel="noreferrer" target={extension === 'pdf' ? '_blank' : undefined}>
+    <a className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-line bg-surface-2 p-4 transition hover:border-info-line hover:bg-surface" href={extension === 'pdf' ? preview : download} rel="noreferrer" target={extension === 'pdf' ? '_blank' : undefined}>
       <div className="flex min-w-0 items-center gap-3">
-        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg ${spreadsheet ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
+        <span className={`grid h-12 w-12 shrink-0 place-items-center rounded-lg ${spreadsheet ? 'bg-ok-bg text-ok' : 'bg-danger-bg text-danger'}`}>
           <Icon name={spreadsheet ? 'file' : 'download'} />
         </span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-semibold text-slate-100">{item.original_name}</p>
+            <p className="truncate text-sm font-semibold text-ink">{item.original_name}</p>
             <FileTypeBadge extension={extension} />
           </div>
-          <p className="mt-1 text-xs text-slate-500">{attachmentLabel(extension)} · {formatBytes(item.size_bytes)}</p>
+          <p className="mt-1 text-xs text-muted">{attachmentLabel(extension)} · {formatBytes(item.size_bytes)}</p>
         </div>
       </div>
       <span className="btn-secondary shrink-0">{extension === 'pdf' ? 'Abrir' : 'Baixar'}</span>
@@ -261,22 +261,22 @@ export function ShiftSchedulesPage({ notify }) {
             return (
               <article className="card overflow-hidden p-0" key={item.id}>
                 <div className="flex gap-4 p-5">
-                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-500/15 text-sm font-black text-blue-200">{authorInitials(item.uploaded_by)}</div>
+                  <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-info-bg text-sm font-black text-info">{authorInitials(item.uploaded_by)}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                      <strong className="text-slate-100">{item.uploaded_by}</strong>
-                      <span className="text-slate-600">·</span>
-                      <span className="text-slate-500">{formatDateTime(item.uploaded_at)}</span>
+                      <strong className="text-ink">{item.uploaded_by}</strong>
+                      <span className="text-muted">·</span>
+                      <span className="text-muted">{formatDateTime(item.uploaded_at)}</span>
                     </div>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <span className="status-badge status-info">{monthLabel(item.reference_month)}</span>
                       <span className="status-badge status-neutral">{teamLabel(item.team)}</span>
                       <FileTypeBadge extension={extension} />
                     </div>
-                    <h3 className="mt-3 text-xl font-bold text-white">{item.title}</h3>
-                    {item.notes && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{item.notes}</p>}
+                    <h3 className="mt-3 text-xl font-bold text-ink">{item.title}</h3>
+                    {item.notes && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink-2">{item.notes}</p>}
                     {image && !imageBroken ? (
-                      <a className="mt-4 block overflow-hidden rounded-xl border border-white/10 bg-slate-950/50" href={preview} target="_blank" rel="noreferrer">
+                      <a className="mt-4 block overflow-hidden rounded-xl border border-line bg-surface-2" href={preview} target="_blank" rel="noreferrer">
                         <img alt={`Anexo da escala ${item.title}`} className="max-h-[680px] w-full object-contain" loading="lazy" onError={() => setBrokenPreviews((current) => ({ ...current, [item.id]: true }))} src={preview} />
                       </a>
                     ) : (

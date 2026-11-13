@@ -53,7 +53,7 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
   const lateral = placement === 'end'
   const backdrop = (
     <div
-      className={lateral ? 'fixed inset-0 z-[60] flex justify-end bg-black/75 backdrop-blur-sm' : 'fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/75 p-4 backdrop-blur-sm'}
+      className={lateral ? 'fixed inset-0 z-[60] flex justify-end bg-black/75' : 'fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-black/75 p-4'}
       data-dialog-backdrop=""
       // Sem o preventDefault, o clique no fundo (que não recebe foco) leva o
       // foco para o body depois que o diálogo o devolveu.
@@ -65,7 +65,7 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
         aria-modal="true"
         // my-auto centraliza quando cabe e, quando o conteúdo é mais alto que a
         // tela, vira 0 e deixa o topo alcançável pela rolagem do fundo.
-        className={lateral ? `relative h-full w-full ${size} overflow-y-auto border-l border-white/10 bg-slate-950 p-6 ${panelClassName}` : `card relative my-auto w-full ${size} ${panelClassName}`}
+        className={lateral ? `relative h-full w-full ${size} overflow-y-auto border-l border-line bg-surface p-6 ${panelClassName}` : `card relative my-auto w-full ${size} ${panelClassName}`}
         ref={panelRef}
         role={role}
         tabIndex={-1}
@@ -74,8 +74,8 @@ export function Dialog({ open = true, role = 'dialog', title, description = null
           <div className="min-w-0">
             {eyebrow && <p className="section-eyebrow">{eyebrow}</p>}
             {headerLead}
-            <h2 className={`${eyebrow ? 'mt-2 ' : ''}${titleClassName} font-bold text-white`} id={titleId}>{title}</h2>
-            {description && <p className="mt-2 text-sm leading-6 text-slate-300" id={descriptionId}>{description}</p>}
+            <h2 className={`${eyebrow ? 'mt-2 ' : ''}${titleClassName} font-bold text-ink`} id={titleId}>{title}</h2>
+            {description && <p className="mt-2 text-sm leading-6 text-ink-2" id={descriptionId}>{description}</p>}
           </div>
           {headerAction}
         </div>

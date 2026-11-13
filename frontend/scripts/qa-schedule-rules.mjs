@@ -234,7 +234,7 @@ const EXPECTED_RULE_BUTTONS = {
 }
 for (const [role, permissions] of [['admin', ['escalas.manage']], ['gestor', []], ['tecnico', []]]) {
   const markup = renderSchedule(scheduleSession(role, permissions))
-  const start = markup.indexOf('<section class="card"><h2 class="mb-4 font-bold text-white" tabindex="-1">Regras vigentes e agendadas</h2>')
+  const start = markup.indexOf('<section class="card"><h2 class="mb-4 font-bold text-ink" tabindex="-1">Regras vigentes e agendadas</h2>')
   assert.ok(start >= 0, `${role}: o cartao das regras nao rola inteiro (sem table-wrap)`)
   const section = markup.slice(start, markup.indexOf('</table>', start))
   assert.match(section, /<div class="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-rule-list="">/, `${role}: cartoes abaixo de 1280 px, uma coluna e duas de 768 px`)

@@ -133,13 +133,13 @@ assert.match(weekendChip, />Fim de semana<\/span>/, 'sem dia no motor: o motivo 
 const conflictPa = { pa_number: '1730', has_conflict: true, conflict_days: ['2026-10-19', '2026-10-21'], assignments: [chips.onsite, chips.absence] }
 const conflictCard = render(page.PaCard, { pa: conflictPa, canManage: false, onOpen: () => {} })
 assert.match(conflictCard, /data-conflict="true"/, 'PA em conflito marcado')
-assert.match(conflictCard, /class="pa-cell [^"]*ring-2 ring-red-400\/60/, 'PA em conflito com contorno (D6)')
+assert.match(conflictCard, /class="pa-cell [^"]*ring-2 ring-danger/, 'PA em conflito com contorno (D6)')
 assert.match(conflictCard, /Conflito: seg 19, qua 21/, 'PA em conflito com os dias')
 assert.match(conflictCard, /aria-label="PA 1730, conflito: seg 19, qua 21"/, 'conflito no nome acessível, não só na cor')
 assert.match(conflictCard, /presence-absence/, 'técnico ausente preenchido na cor da legenda dentro do PA em conflito (níveis diferentes, D6)')
 const freeCard = render(page.PaCard, { pa: { pa_number: '1729', has_conflict: false, conflict_days: [], assignments: [chips.onsite, chips.remote] }, canManage: false, onOpen: () => {} })
 assert.match(freeCard, /data-conflict="false"/)
-assert.doesNotMatch(freeCard, /ring-red|Conflito/, 'PA sem conflito sem contorno')
+assert.doesNotMatch(freeCard, /ring-danger|Conflito/, 'PA sem conflito sem contorno')
 assert.match(freeCard, /1\/2 presencial/, 'contagem de presenciais pela situação do motor')
 
 const managerItem = assignment({ notes: 'nota do vínculo', employee_login: 'qa.login' })
@@ -162,7 +162,7 @@ assert.match(managerModal, /não impedem o vínculo/, 'formulário explica que n
 // [II3] Campo "Fim da validade": data opcional, vazio ao adicionar, com a ajuda
 // fora do label (ligada por aria-describedby) e sem aviso antes de salvar.
 {
-  const endField = managerModal.match(/<label class="label">Fim da validade<input ([^>]*)\/><\/label><p class="mt-1 text-xs text-slate-500" id="([^"]+)">Opcional: vazio, o vínculo fica sem fim\.<\/p>/)
+  const endField = managerModal.match(/<label class="label">Fim da validade<input ([^>]*)\/><\/label><p class="mt-1 text-xs text-muted" id="([^"]+)">Opcional: vazio, o vínculo fica sem fim\.<\/p>/)
   assert.ok(endField, 'campo do fim com a ajuda logo abaixo, fora do label')
   assert.match(endField[1], /type="date"/, 'fim: campo de data')
   assert.match(endField[1], /value=""/, 'fim: vazio ao adicionar (sem fim)')
@@ -248,8 +248,8 @@ assert.doesNotMatch(source, /anterior ao início/, 'a mensagem vem da lib (uma s
   const compiled = (await postcss([tailwindcss({ ...tailwindConfig, content: tailwindConfig.content.map((glob) => join(frontendRoot, glob).replaceAll('\\', '/')) })]).process(read('src/index.css'), { from: join(frontendRoot, 'src', 'index.css') })).css
   // Os tons metric-card-* e inline-alert-* (montados por template no
   // Primitives) são conferidos no qa:calendar-presence, com os das outras telas.
-  // No CSS gerado, a barra do modificador de opacidade vem escapada: .ring-red-400\/60.
-  for (const name of ['presence-onsite', 'presence-remote', 'presence-absence', 'presence-no-schedule', 'pa-cell', 'data-table', 'status-neutral', 'ring-red-400/60', 'border-red-400/80', 'bg-red-500/15', 'ring-2']) {
+  // [R1] Classes por token (antes ring-red-400/60, border-red-400/80 e bg-red-500/15).
+  for (const name of ['presence-onsite', 'presence-remote', 'presence-absence', 'presence-no-schedule', 'pa-cell', 'data-table', 'status-neutral', 'ring-danger', 'border-danger', 'bg-danger-bg', 'ring-2']) {
     assert.match(compiled, new RegExp(`\\.${name.split('/').join(String.raw`\\\/`)}[\\s,{:]`), `CSS gerado com .${name}`)
   }
 }

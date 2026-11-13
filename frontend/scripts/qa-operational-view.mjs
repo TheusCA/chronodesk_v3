@@ -208,15 +208,15 @@ const metricValue = (markup, label) => markup.match(new RegExp(`<p class="metric
       assert.ok(labels[index].includes(column.tone) && /<svg[^>]*aria-hidden="true"/u.test(labels[index]) && textOf(labels[index].slice(0, labels[index].indexOf('</dt>'))) === column.label, `17d: cartão ${team}, ${column.label} com cor, ícone e rótulo da legenda`)
     })
   }
-  assert.ok(teamCard(section, 'total').includes('>Total<small class="ml-2 text-xs font-normal text-slate-400">N1 + N2</small></h3>'), '17d: cartão Total com a nota "N1 + N2"')
-  assert.ok(teamCard(section, 'lideranca').includes('>Liderança<small class="ml-2 text-xs font-normal text-slate-400">fora dos totais</small></h3>'), '17d: cartão Liderança com a nota "fora dos totais"')
+  assert.ok(teamCard(section, 'total').includes('>Total<small class="ml-2 text-xs font-normal text-muted">N1 + N2</small></h3>'), '17d: cartão Total com a nota "N1 + N2"')
+  assert.ok(teamCard(section, 'lideranca').includes('>Liderança<small class="ml-2 text-xs font-normal text-muted">fora dos totais</small></h3>'), '17d: cartão Liderança com a nota "fora dos totais"')
   const cardsStart = section.indexOf('<div class="mt-5 xl:hidden">')
-  const divider = section.indexOf('border-t-2 border-white/10 pt-3', cardsStart)
+  const divider = section.indexOf('border-t-2 border-line pt-3', cardsStart)
   assert.ok(cardsStart > 0 && cardsStart < section.indexOf('<table'), '17d: cartões só abaixo de 1280 px (xl:hidden), antes da tabela')
   assert.ok(['n1', 'n2', 'total'].every((team) => section.indexOf(`data-team="${team}"`) < divider) && section.indexOf('data-team="lideranca"') > divider, '17d: Liderança num bloco à parte, depois de N1, N2 e Total')
   assert.ok(section.includes('<div class="table-wrap mt-5 hidden xl:block">'), '17d: a tabela só de 1280 px para cima (hidden xl:block)')
   assert.equal((section.match(/data-team="/gu) ?? []).length, 4, '17d: quatro cartões')
-  assert.equal((section.match(/<div class="(?:mt-3 )?grid gap-3 (?:border-t-2 border-white\/10 pt-3 )?sm:grid-cols-2 md:grid-cols-3">/gu) ?? []).length, 2, '17d: uma coluna no celular, duas de 640 px e três de 768 px, nos dois blocos (a Liderança com a largura dos outros)')
+  assert.equal((section.match(/<div class="(?:mt-3 )?grid gap-3 (?:border-t-2 border-line pt-3 )?sm:grid-cols-2 md:grid-cols-3">/gu) ?? []).length, 2, '17d: uma coluna no celular, duas de 640 px e três de 768 px, nos dois blocos (a Liderança com a largura dos outros)')
   // Cabeçalho: cada coluna com o ícone, a cor e o rótulo da legenda.
   const head = section.slice(section.indexOf('<thead>'), section.indexOf('</thead>'))
   const headers = head.split('<th ').slice(2)
@@ -249,8 +249,8 @@ const metricValue = (markup, label) => markup.match(new RegExp(`<p class="metric
   // Cartões pelo resumo, nunca pela disponibilidade do status.php.
   assert.equal(metricValue(markup, 'CIs disponíveis'), '11', '"CIs disponíveis" = total.disponiveis do resumo (o cálculo antigo daria 9)')
   assert.ok(markup.includes('Aptos para atendimento agora'), '"CIs disponíveis" com o texto de sempre')
-  assert.match(markup, /N1 <strong class="ml-2 text-lg text-emerald-300">4<\/strong>/u, '"Disponíveis por equipe": N1 pelo resumo (o cálculo antigo daria 6)')
-  assert.match(markup, /N2 <strong class="ml-2 text-lg text-emerald-300">7<\/strong>/u, '"Disponíveis por equipe": N2 pelo resumo (o cálculo antigo daria 3)')
+  assert.match(markup, /N1 <strong class="ml-2 text-lg text-ok">4<\/strong>/u, '"Disponíveis por equipe": N1 pelo resumo (o cálculo antigo daria 6)')
+  assert.match(markup, /N2 <strong class="ml-2 text-lg text-ok">7<\/strong>/u, '"Disponíveis por equipe": N2 pelo resumo (o cálculo antigo daria 3)')
   // Os cartões que continuam: pausas, aprovações e chamados críticos.
   for (const label of ['Técnicos monitorados', 'Pausas ativas', 'Aprovações pendentes', 'Chamados críticos', 'War rooms', 'Plantonistas ativos', 'Sobreavisos ativos']) {
     assert.ok(markup.includes(`<p class="metric-label">${label}</p>`), `cartão "${label}" continua`)
@@ -276,8 +276,8 @@ for (const [label, data] of [
   assert.ok(section.includes('inline-alert inline-alert-warning') && section.includes('Situação da equipe indisponível'), `${label}: aviso da presença indisponível`)
   assert.equal(metricValue(markup, 'CIs disponíveis'), '—', `${label}: "CIs disponíveis" com "—" (nunca o cálculo antigo)`)
   assert.ok(markup.includes('Indisponível: presença não calculada'), `${label}: "CIs disponíveis" com o aviso`)
-  assert.match(markup, /N1 <strong class="ml-2 text-lg text-emerald-300">—<\/strong>/u, `${label}: N1 por equipe com "—"`)
-  assert.match(markup, /N2 <strong class="ml-2 text-lg text-emerald-300">—<\/strong>/u, `${label}: N2 por equipe com "—"`)
+  assert.match(markup, /N1 <strong class="ml-2 text-lg text-ok">—<\/strong>/u, `${label}: N1 por equipe com "—"`)
+  assert.match(markup, /N2 <strong class="ml-2 text-lg text-ok">—<\/strong>/u, `${label}: N2 por equipe com "—"`)
   assert.ok(section.includes('Ausentes: somente ausências lançadas'), `${label}: a nota continua`)
 }
 // Estado de pausas ilegível: "—" só em Em pausa, com aviso (DV6).

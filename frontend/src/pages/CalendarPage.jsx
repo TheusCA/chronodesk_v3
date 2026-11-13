@@ -20,15 +20,19 @@ const typeLabels = {
   absence: 'Ausência',
 }
 
+// [R1, D-R0-4] Tons por token. Ausência no vermelho de ausente (o mesmo da
+// legenda); War Room no vermelho de erro, com a borda cheia para não se
+// confundir com ela; hora extra só com contorno azul, para não se confundir
+// com a escala (azul preenchido).
 const typeTones = {
-  manual: 'border-violet-500/30 bg-violet-500/10 text-violet-200',
-  pause: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
-  schedule: 'border-blue-500/30 bg-blue-500/10 text-blue-200',
-  overtime: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
-  time_adjustment: 'border-slate-500/30 bg-slate-500/10 text-slate-200',
-  oncall: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
-  war_room: 'border-red-500/30 bg-red-500/10 text-red-200',
-  absence: 'border-orange-500/30 bg-orange-500/10 text-orange-200',
+  manual: 'border-line-strong bg-surface text-ink-2',
+  pause: 'border-pause-line bg-pause-bg text-pause',
+  schedule: 'border-remote-line bg-remote-bg text-remote',
+  overtime: 'border-info-line bg-surface text-info',
+  time_adjustment: 'border-off-line bg-off-bg text-off',
+  oncall: 'border-ok-line bg-ok-bg text-ok',
+  war_room: 'border-danger bg-danger-bg text-danger',
+  absence: 'border-absent-line bg-absent-bg text-absent',
 }
 
 const statusLabels = {
@@ -114,19 +118,19 @@ function EventCard({ event }) {
       // [F5, ajuste b] Cartão do técnico: situação, origem, detalhe (com
       // o marcador do campo parcial) e a categoria, só quando o servidor
       // manda (P9); sem a description, que repetia a regra.
-      <article className="rounded-xl border border-white/[0.07] bg-slate-950/30 p-3">
-        <div className="flex items-start justify-between gap-2"><strong className="text-sm text-slate-200">{event.title}</strong><PresenceBadge status={event.status} /></div>
-        <p className="mt-2 text-xs text-slate-500">{situationLabel(event.situacao)} · Origem: {originLabel(event.origem)}</p>
-        {event.detalhe && <p className="mt-2 flex items-center gap-1 text-sm leading-5 text-slate-300">{hasPartialMarker(event) && <PartialMarker time={partialTime(event)} />}{event.detalhe}</p>}
-        {event.categoria && <p className="mt-1 text-sm leading-5 text-slate-400">Categoria: {event.categoria}</p>}
+      <article className="rounded-xl border border-line bg-surface-2 p-3">
+        <div className="flex items-start justify-between gap-2"><strong className="text-sm text-ink-2">{event.title}</strong><PresenceBadge status={event.status} /></div>
+        <p className="mt-2 text-xs text-muted">{situationLabel(event.situacao)} · Origem: {originLabel(event.origem)}</p>
+        {event.detalhe && <p className="mt-2 flex items-center gap-1 text-sm leading-5 text-ink-2">{hasPartialMarker(event) && <PartialMarker time={partialTime(event)} />}{event.detalhe}</p>}
+        {event.categoria && <p className="mt-1 text-sm leading-5 text-muted">Categoria: {event.categoria}</p>}
       </article>
     )
   }
   return (
-    <article className="rounded-xl border border-white/[0.07] bg-slate-950/30 p-3">
-      <div className="flex items-start justify-between gap-2"><strong className="text-sm text-slate-200">{event.title}</strong><span className={`status-badge ${typeTones[event.event_type] || typeTones.manual}`}>{typeLabels[event.event_type] || event.event_type}</span></div>
-      <p className="mt-2 text-xs text-slate-500">{formatDateTime(event.starts_at)} - {statusLabels[event.status] || event.status}</p>
-      {event.description && <p className="mt-2 text-sm leading-5 text-slate-400">{event.description}</p>}
+    <article className="rounded-xl border border-line bg-surface-2 p-3">
+      <div className="flex items-start justify-between gap-2"><strong className="text-sm text-ink-2">{event.title}</strong><span className={`status-badge ${typeTones[event.event_type] || typeTones.manual}`}>{typeLabels[event.event_type] || event.event_type}</span></div>
+      <p className="mt-2 text-xs text-muted">{formatDateTime(event.starts_at)} - {statusLabels[event.status] || event.status}</p>
+      {event.description && <p className="mt-2 text-sm leading-5 text-muted">{event.description}</p>}
     </article>
   )
 }
@@ -212,7 +216,7 @@ export function CalendarPage({ session, notify }) {
             <button className="btn-secondary" onClick={() => setAnchor(new Date())} type="button">Hoje</button>
             <button className="btn-secondary px-3" onClick={() => move(-1)} type="button" aria-label="Período anterior">‹</button>
             <button className="btn-secondary px-3" onClick={() => move(1)} type="button" aria-label="Próximo período">›</button>
-            <h2 className="ml-1 text-xl font-black capitalize text-white">
+            <h2 className="ml-1 text-xl font-black capitalize text-ink">
               {anchor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
             </h2>
           </div>
@@ -267,15 +271,15 @@ export function CalendarPage({ session, notify }) {
             const dayEvents = byDay.get(key) || []
             return (
               <section aria-labelledby={`semana-${key}`} data-week-day={key} key={key}>
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
-                  <h3 className="flex items-center gap-2 text-sm font-bold text-white" id={`semana-${key}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
+                  <h3 className="flex items-center gap-2 text-sm font-bold text-ink" id={`semana-${key}`}>
                     {weekDayLabel(day)}
                     {key === localDate() && <span className="status-badge status-info normal-case">Hoje</span>}
                   </h3>
                   <PresenceDaySummary events={dayEvents.filter(isEngineScheduleEvent)} />
                 </div>
                 {dayEvents.length === 0
-                  ? <p className="mt-3 text-sm text-slate-500">Sem eventos neste dia.</p>
+                  ? <p className="mt-3 text-sm text-muted">Sem eventos neste dia.</p>
                   : <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{dayEvents.map((event) => <EventCard event={event} key={`${key}-${event.id}`} />)}</div>}
               </section>
             )
@@ -285,7 +289,7 @@ export function CalendarPage({ session, notify }) {
 
       <section className={`grid gap-5 ${view === 'week' ? '2xl:grid-cols-[minmax(0,1fr)_320px]' : 'xl:grid-cols-[minmax(0,1fr)_320px]'}`}>
         <div className={`card overflow-hidden p-0 ${view === 'week' ? 'hidden xl:block' : ''}`}>
-          <div className="grid grid-cols-7 border-b border-white/10 bg-slate-950/40 text-center text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <div className="grid grid-cols-7 border-b border-line bg-surface-2 text-center text-[11px] font-bold uppercase tracking-wider text-muted">
             {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'].map((label) => <div className="p-3" key={label}>{label}</div>)}
           </div>
           <div className="grid grid-cols-7">
@@ -301,17 +305,17 @@ export function CalendarPage({ session, notify }) {
               const selected = selectedDay === key
               return (
                 <button
-                  className={`flex min-h-28 flex-col justify-start border-b border-r border-white/[0.06] p-2 text-left align-top transition hover:bg-white/[0.03] sm:min-h-36 ${outside ? 'bg-slate-950/30 opacity-45' : ''} ${selected ? 'ring-1 ring-inset ring-blue-500/60' : ''}`}
+                  className={`flex min-h-28 flex-col justify-start border-b border-r border-line p-2 text-left align-top transition hover:bg-ink/[0.03] sm:min-h-36 ${outside ? 'bg-surface-2 opacity-45' : ''} ${selected ? 'ring-1 ring-inset ring-focus' : ''}`}
                   key={key}
                   onClick={() => setSelectedDay(key)}
                   type="button"
                 >
-                  <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-bold ${key === localDate() ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>{day.getDate()}</span>
+                  <span className={`grid h-7 w-7 place-items-center rounded-full text-xs font-bold ${key === localDate() ? 'bg-action text-action-ink' : 'text-muted'}`}>{day.getDate()}</span>
                   <div className="mt-2 space-y-1">
                     {view === 'month' && <PresenceDaySummary events={engineEvents} />}
                     {view === 'week' && engineEvents.map((event) => <EventChip event={event} key={`${key}-${event.id}`} />)}
                     {otherEvents.slice(0, limit).map((event) => <EventChip event={event} key={`${key}-${event.id}`} />)}
-                    {otherEvents.length > limit && <p className="px-1 text-[10px] text-slate-500">+{otherEvents.length - limit} eventos</p>}
+                    {otherEvents.length > limit && <p className="px-1 text-[10px] text-muted">+{otherEvents.length - limit} eventos</p>}
                   </div>
                 </button>
               )
@@ -319,8 +323,8 @@ export function CalendarPage({ session, notify }) {
           </div>
         </div>
         <aside className={`card h-fit ${view === 'week' ? 'hidden xl:block 2xl:sticky 2xl:top-28' : 'xl:sticky xl:top-28'}`}>
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-400">Detalhes do dia</p>
-          <h3 className="mt-2 text-lg font-bold capitalize text-white">{new Date(`${selectedDay}T12:00:00`).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</h3>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-info">Detalhes do dia</p>
+          <h3 className="mt-2 text-lg font-bold capitalize text-ink">{new Date(`${selectedDay}T12:00:00`).toLocaleDateString('pt-BR', { dateStyle: 'full' })}</h3>
           <div className="mt-5 space-y-3">
             {selectedEvents.length === 0 && <EmptyState title="Dia sem eventos" description="Selecione outro dia ou cadastre um evento manual." />}
             <PresenceDaySummary events={selectedEvents} />

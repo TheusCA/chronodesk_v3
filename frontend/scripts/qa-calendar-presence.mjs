@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { blend, contrast, hue, hueDistance, readThemeTokens, resolveColor } from './lib/contrast.mjs'
 
 // F5, commit 4 (desenho 5.1, 5.5 e 9.7): legenda única, resumo do dia no
 // Calendário, tela Escala (pendência 8a), relatório com o corte, L-13 e L-14.
@@ -92,7 +93,7 @@ assert.deepEqual(Object.fromEntries(NOW_PRESENCE_LEGEND.map((item) => [item.situ
   ausente: ['userMinus', 'presence-absence'],
   fora_expediente: ['clock', 'presence-off-hours'],
   sem_escala: ['help', 'presence-no-schedule'],
-}, 'DV7: pausa violeta, almoço com talheres, fora do expediente com relógio; presencial, remoto, ausente e sem escala com a cor do F5')
+}, 'DV7: pausa com o ícone de pausa, almoço com talheres, fora do expediente com relógio; presencial, remoto, ausente e sem escala com o ícone do F5 (cores da D-R0-4 conferidas no CSS gerado)')
 assert.deepEqual(OPERATIONAL_SUMMARY_COLUMNS.map((column) => [column.key, column.label]), [['escalados', 'Escalados'], ['disponiveis', 'Disponíveis'], ['em_pausa', 'Em pausa'], ['almoco', 'Almoço'], ['ausentes', 'Ausentes'], ['fora_expediente', 'Fora do expediente'], ['sem_escala', 'Sem escala']], 'colunas da tabela da 5.7, na ordem do presence_summary')
 for (const column of OPERATIONAL_SUMMARY_COLUMNS.slice(2)) {
   assert.ok(NOW_PRESENCE_LEGEND.some((item) => item.icon === column.icon && item.tone === column.tone), `coluna ${column.label} com o ícone e a cor da situação`)
@@ -124,63 +125,54 @@ assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src
   // [F7, DV7] Situação de agora (Em pausa, Almoço, Fora do expediente) e os
   // cabeçalhos da Visão Operacional: nomes só no .ts, então fora de @layer e
   // conferidos no CSS gerado, com borda, fundo e texto.
-  const rgbOf = (rule, property) => {
-    const found = rule.match(new RegExp(`(?:^|[;\\s{])${property}: rgb\\((\\d+) (\\d+) (\\d+)(?: / ([\\d.]+|var\\([^)]*\\)))?\\)`))
-    if (!found) return null
-    const alpha = found[4] === undefined || found[4].startsWith('var') ? 1 : Number(found[4])
-    return { rgb: found.slice(1, 4).map(Number), alpha }
-  }
+  // [R1] As cores agora são tokens (rgb(var(--ok) / ...)): cada cor é resolvida
+  // nos dois temas, pelos blocos do index.css (antes: rgb fixo, só o escuro).
+  const themeTokens = readThemeTokens(cssSource)
+  const THEMES = [['claro', themeTokens.light], ['escuro', themeTokens.darkChosen]]
   const nowTones = [...new Set([...NOW_PRESENCE_LEGEND.map((item) => item.tone), ...OPERATIONAL_SUMMARY_COLUMNS.map((column) => column.tone)])]
-  const ruleOf = (tone) => compiled.match(new RegExp(`\\.${tone} \\{([^}]*)\\}`))?.[1] ?? ''
-  for (const tone of nowTones) {
-    assert.ok(rgbOf(ruleOf(tone), 'border-color'), `CSS gerado com a classe ${tone} (borda)`)
-    assert.ok(rgbOf(ruleOf(tone), 'color'), `CSS gerado com a classe ${tone} (texto)`)
-    if (tone !== 'presence-no-schedule') assert.ok(rgbOf(ruleOf(tone), 'background-color'), `CSS gerado com a classe ${tone} (fundo)`)
+  const ruleOf = (tone) => compiled.match(new RegExp(`\.${tone} \{([^}]*)\}`))?.[1] ?? ''
+  for (const [themeName, tokens] of THEMES) {
+    const colorOf = (tone, property) => resolveColor(ruleOf(tone), property, tokens)
+    for (const tone of nowTones) {
+      assert.ok(colorOf(tone, 'border-color'), `${themeName}: CSS gerado com a classe ${tone} (borda)`)
+      assert.ok(colorOf(tone, 'color'), `${themeName}: CSS gerado com a classe ${tone} (texto)`)
+      if (tone !== 'presence-no-schedule') assert.ok(colorOf(tone, 'background-color'), `${themeName}: CSS gerado com a classe ${tone} (fundo)`)
+    }
+    // Contraste do texto sobre o fundo do selo (fundo sobre o cartão, token
+    // --surface): pelo menos 4,5:1 (WCAG AA) em todas as situações, nos dois temas.
+    const card = tokens.surface
+    const badgeBackground = (tone) => { const bg = colorOf(tone, 'background-color'); return bg ? blend(bg, card) : card }
+    for (const tone of nowTones) {
+      const ratio = contrast(blend(colorOf(tone, 'color'), card), badgeBackground(tone))
+      assert.ok(ratio >= 4.5, `${themeName}: contraste do texto em ${tone}: ${ratio.toFixed(2)}:1 (mínimo 4,5:1)`)
+    }
+    // [R1, D-R0-4] Em pausa âmbar, Almoço verde-azulado e Ausente vermelho, na
+    // borda, no fundo e no texto (antes, DV7: pausa violeta, almoço amarelo e
+    // ausente laranja). Almoço e ausente ficam em lados opostos do círculo de
+    // matiz (antes: 15° de distância, por isso o fundo tinha de ser bem mais
+    // claro ou escuro); pausa e ausente, vizinhos, ficam a 15° ou mais.
+    for (const property of ['border-color', 'background-color', 'color']) {
+      const pause = hue(colorOf('presence-pause', property).rgb)
+      const lunch = hue(colorOf('presence-lunch', property).rgb)
+      const absence = hue(colorOf('presence-absence', property).rgb)
+      assert.ok(pause >= 25 && pause <= 50, `${themeName}: em pausa âmbar (${property}: matiz ${pause.toFixed(0)}°)`)
+      assert.ok(lunch >= 160 && lunch <= 200, `${themeName}: almoço verde-azulado (${property}: matiz ${lunch.toFixed(0)}°)`)
+      assert.ok(absence <= 15 || absence >= 345, `${themeName}: ausente vermelho (${property}: matiz ${absence.toFixed(0)}°)`)
+      assert.ok(hueDistance(lunch, absence) >= 90, `${themeName}: almoço e ausente com matiz distinto (${property}: ${lunch.toFixed(0)}° × ${absence.toFixed(0)}°)`)
+      assert.ok(hueDistance(pause, absence) >= 15, `${themeName}: em pausa e ausente com matiz distinto (${property}: ${pause.toFixed(0)}° × ${absence.toFixed(0)}°)`)
+    }
+    const distance = (a, b) => Math.hypot(...a.map((value, index) => value - b[index]))
+    assert.ok(distance(blend(colorOf('presence-lunch', 'border-color'), card), blend(colorOf('presence-absence', 'border-color'), card)) >= 60, `${themeName}: borda do almoço distinta da borda do ausente`)
+    // Fora do expediente preenchido (fundo distinto do cartão); sem escala
+    // tracejado e sem fundo.
+    const offHours = colorOf('presence-off-hours', 'background-color')
+    assert.ok(offHours.alpha >= 0.2 && contrast(blend(offHours, card), card) >= 1.1, `${themeName}: fora do expediente cinza preenchido`)
   }
+  assert.doesNotMatch(ruleOf('presence-off-hours'), /border-style: dashed/, 'fora do expediente sem tracejado (forma distinta do sem escala)')
   for (const tone of ['presence-pause', 'presence-lunch', 'presence-off-hours', 'presence-scheduled', 'presence-available']) {
     assert.ok(nowTones.includes(tone), `classe nova ${tone} em uso na legenda`)
-    assert.match(sourceCssOutsideLayers, new RegExp(`\\.${tone} \\{`), `${tone} fora de @layer`)
+    assert.match(sourceCssOutsideLayers, new RegExp(`\.${tone} \{`), `${tone} fora de @layer`)
   }
-  // Contraste do texto sobre o fundo do selo (fundo com alfa sobre o cartão,
-  // chrono.card #0d1625): pelo menos 4,5:1 (WCAG AA) em todas as situações.
-  const card = [13, 22, 37]
-  const blend = ({ rgb, alpha }) => rgb.map((value, index) => value * alpha + card[index] * (1 - alpha))
-  const luminance = (rgb) => {
-    const [r, g, b] = rgb.map((value) => { const c = value / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 })
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
-  }
-  const contrast = (a, b) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05) }
-  const badgeBackground = (tone) => { const bg = rgbOf(ruleOf(tone), 'background-color'); return bg ? blend(bg) : card }
-  for (const tone of nowTones) {
-    const ratio = contrast(blend(rgbOf(ruleOf(tone), 'color')), badgeBackground(tone))
-    assert.ok(ratio >= 4.5, `contraste do texto em ${tone}: ${ratio.toFixed(2)}:1 (mínimo 4,5:1)`)
-  }
-  // Almoço × ausente (aprovação do plano, DV7): matiz amarelo × laranja na
-  // borda, no fundo e no texto; fundo e borda finais (com o alfa sobre o
-  // cartão) bem diferentes.
-  const hue = ([r, g, b]) => {
-    const max = Math.max(r, g, b)
-    const min = Math.min(r, g, b)
-    const d = max - min
-    if (d === 0) return 0
-    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
-    return (h * 60 + 360) % 360
-  }
-  for (const property of ['border-color', 'background-color', 'color']) {
-    const lunch = hue(rgbOf(ruleOf('presence-lunch'), property).rgb)
-    const absence = hue(rgbOf(ruleOf('presence-absence'), property).rgb)
-    assert.ok(lunch >= 45 && lunch <= 65, `almoço amarelo (${property}: matiz ${lunch.toFixed(0)}°)`)
-    assert.ok(absence >= 15 && absence <= 40, `ausente laranja (${property}: matiz ${absence.toFixed(0)}°)`)
-    assert.ok(lunch - absence >= 15, `almoço e ausente com matiz distinto (${property}: ${lunch.toFixed(0)}° × ${absence.toFixed(0)}°)`)
-  }
-  const lunchBackground = badgeBackground('presence-lunch')
-  const absenceBackground = badgeBackground('presence-absence')
-  assert.ok(contrast(lunchBackground, absenceBackground) >= 1.3, `fundo do almoço distinto do fundo do ausente (${contrast(lunchBackground, absenceBackground).toFixed(2)}:1)`)
-  const distance = (a, b) => Math.hypot(...a.map((value, index) => value - b[index]))
-  assert.ok(distance(blend(rgbOf(ruleOf('presence-lunch'), 'border-color')), blend(rgbOf(ruleOf('presence-absence'), 'border-color'))) >= 60, 'borda do almoço distinta da borda do ausente')
-  // Fora do expediente preenchido; sem escala tracejado e sem fundo.
-  assert.ok(rgbOf(ruleOf('presence-off-hours'), 'background-color').alpha >= 0.2, 'fora do expediente cinza preenchido')
-  assert.doesNotMatch(ruleOf('presence-off-hours'), /border-style: dashed/, 'fora do expediente sem tracejado (forma distinta do sem escala)')
 
   // Achado do F6 (commit 3), corrigido antes do commit 4: o mesmo defeito nos
   // tons do MetricCard e do InlineAlert, montados por template no Primitives
@@ -449,14 +441,18 @@ assert.match(calendarSource, /\{situationLabel\(event\.situacao\)\} · Origem: \
 // [17b] O cartão do técnico fica no EventCard (painel do dia e lista da semana).
 const engineCardSource = calendarSource.slice(calendarSource.indexOf('[F5, ajuste b] Cartão do técnico'), calendarSource.indexOf('\n  return (\n    <article', calendarSource.indexOf('[F5, ajuste b] Cartão do técnico')))
 assert.match(engineCardSource, /\{hasPartialMarker\(event\) && <PartialMarker time=\{partialTime\(event\)\} \/>\}\{event\.detalhe\}/, 'cartão com o detalhe e o marcador do campo parcial')
-assert.match(engineCardSource, /\{event\.categoria && <p className="mt-1 text-sm leading-5 text-slate-400">Categoria: \{event\.categoria\}<\/p>\}/, 'categoria só quando o servidor manda (campo categoria)')
+assert.match(engineCardSource, /\{event\.categoria && <p className="mt-1 text-sm leading-5 text-muted">Categoria: \{event\.categoria\}<\/p>\}/, 'categoria só quando o servidor manda (campo categoria)')
 assert.doesNotMatch(engineCardSource, /event\.description/,'cartão do motor sem a description (sem texto repetido, ajuste b)')
 assert.doesNotMatch(calendarSource, /\b(reason|observacao|note|ausencias|category)\b/, 'o Calendário não lê observação, itens internos nem a categoria crua')
 assert.doesNotMatch(calendarSource, /\brole\b.*situacao|isManagerRole\([^)]*\)[^\n]*description/, 'a tela não decide perfil para a categoria')
 assert.match(calendarSource, /no_schedule: 'Sem escala',\n {2}day_off: 'Folga',/, 'rótulo de Sem escala e Folga mantida')
 assert.match(calendarSource, /'onsite', 'remote', 'absence', 'no_schedule', 'day_off'\]\.map\(\(status\)/, 'filtro de status com Ausência, Sem escala e Folga')
-assert.match(calendarSource, /war_room: 'border-red-500\/30 bg-red-500\/10 text-red-200'/, 'War Room no tom de hoje (ausência continua laranja)')
-assert.match(calendarSource, /schedule: 'border-blue-500\/30 bg-blue-500\/10 text-blue-200'/, 'escala de antes do corte no tom de hoje')
+// [R1, D-R0-4] Ausente virou vermelho: o War Room fica no vermelho de erro com
+// a borda cheia (antes: os dois em tons distintos, vermelho e laranja), e a
+// escala de antes do corte no azul do remoto.
+assert.match(calendarSource, /war_room: 'border-danger bg-danger-bg text-danger'/, 'War Room no vermelho de erro, com a borda cheia (distinto da ausência)')
+assert.match(calendarSource, /absence: 'border-absent-line bg-absent-bg text-absent'/, 'ausência no tom de ausente da legenda')
+assert.match(calendarSource, /schedule: 'border-remote-line bg-remote-bg text-remote'/, 'escala de antes do corte no azul do remoto')
 assert.match(presenceSource, /const label = time \? `\$\{PARTIAL_MARKER_LEGEND\.label\} \$\{time\}` : PARTIAL_MARKER_LEGEND\.label/, 'marcador da parcial: horário no nome acessível quando vem')
 assert.match(presenceSource, /<span aria-label=\{label\} className="inline-flex shrink-0" role="img" title=\{label\}>/, 'marcador da parcial com nome acessível')
 assert.match(presenceSource, /aria-label=\{daySummaryAriaLabel\(summary\)\} className="flex flex-wrap gap-1" role="group"/, 'resumo com nome acessível')
@@ -578,7 +574,7 @@ const asideOf = (markup) => markup.slice(markup.indexOf('<aside'), markup.indexO
     if (engineEvents.length > 0) assert.ok(section.includes(`aria-label="${daySummaryAriaLabel(presenceDaySummary(engineEvents))}"`), `17b: ${key} com o resumo do dia por situação`)
   }
   const monday0 = daySection(week, weekKeys[0])
-  assert.ok(monday0.includes('<strong class="text-sm text-slate-200">Ausência: QA Tres</strong>') && monday0.includes(`${situationLabel('ausente')} · Origem: ${originLabel('ausencia')}`), '17b: cartão completo com o título inteiro (com a situação)')
+  assert.ok(monday0.includes('<strong class="text-sm text-ink-2">Ausência: QA Tres</strong>') && monday0.includes(`${situationLabel('ausente')} · Origem: ${originLabel('ausencia')}`), '17b: cartão completo com o título inteiro (com a situação)')
   assert.ok(monday0.includes('Categoria: Férias') && monday0.includes('Detalhe e3') && /role="img" title="Ausência parcial a partir de 14:00"/u.test(monday0), '17b: cartão com detalhe, categoria e marcador da parcial')
   assert.doesNotMatch(list, /line-clamp-2/u, '17b: a lista não corta o nome em duas linhas')
   assert.ok(daySection(week, weekKeys[2]).includes('Descrição QA'), '17b: evento de outro tipo com a descrição, como no painel do dia')

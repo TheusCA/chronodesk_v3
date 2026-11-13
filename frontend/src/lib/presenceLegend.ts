@@ -16,7 +16,8 @@ export type PresenceLegendItem = {
   shape: string
 }
 
-// Ausência com o mesmo laranja do evento de ausência de antes do corte.
+// Ausência no mesmo tom do evento de ausência do Calendário (vermelho desde o
+// R1, D-R0-4).
 export const PRESENCE_LEGEND: PresenceLegendItem[] = [
   { status: 'onsite', label: 'Presencial', letter: 'P', icon: 'building', tone: 'presence-onsite', shape: 'Preenchido' },
   { status: 'remote', label: 'Remoto', letter: 'R', icon: 'home', tone: 'presence-remote', shape: 'Preenchido' },
@@ -33,10 +34,10 @@ export function presenceLegendItem(status: unknown): PresenceLegendItem | null {
 }
 
 // F7 (desenho 5.7 e 9.9, DV7): situação de agora, com relógio (o campo
-// situacao do motor no status.php e no technicians.php). Em pausa violeta,
-// Almoço amarelo (bem distinto do laranja de ausente) e Fora do expediente
-// cinza preenchido; as demais com a cor da legenda do F5. Cada uma com rótulo
-// e ícone: nenhuma só pela cor.
+// situacao do motor no status.php e no technicians.php). Desde o R1 (D-R0-4):
+// Em pausa âmbar, Almoço verde-azulado (bem distinto do vermelho de ausente) e
+// Fora do expediente cinza preenchido; as demais com a cor da legenda do F5.
+// Cada uma com rótulo e ícone: nenhuma só pela cor.
 export type NowSituation = 'presencial' | 'remoto' | 'pausa' | 'almoco' | 'ausente' | 'fora_expediente' | 'sem_escala'
 
 export type NowLegendItem = {

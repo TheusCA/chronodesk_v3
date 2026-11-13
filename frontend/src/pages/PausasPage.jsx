@@ -13,7 +13,7 @@ function PauseProgress({ elapsed, limit }) {
   const tone = ratio < 0.6 ? 'progress-blue' : ratio < 0.85 ? 'progress-yellow' : ratio <= 1 ? 'progress-orange' : 'progress-red'
   return (
     <div className="grid grid-cols-20 gap-1" aria-label={`Progresso da pausa: ${Math.round(ratio * 100)}%`}>
-      {Array.from({ length: 20 }, (_, index) => <span className={`h-2 rounded-full ${index < completed ? tone : 'bg-slate-800'}`} key={index} />)}
+      {Array.from({ length: 20 }, (_, index) => <span className={`h-2 rounded-full ${index < completed ? tone : 'bg-surface-2'}`} key={index} />)}
     </div>
   )
 }
@@ -28,28 +28,28 @@ function ActivePauseCard({ current, elapsed, loading, onFinish }) {
   const statusClass = unlimited ? 'status-info' : ratio < 0.6 ? 'status-info' : ratio < 0.85 ? 'status-warning' : 'status-danger'
 
   return (
-    <section className="card border-amber-500/20">
+    <section className="card border-warn-line">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <UserAvatar name={current.nome} />
           <div>
             <p className="section-eyebrow">Pausa ativa</p>
-            <h2 className="mt-1 text-xl font-bold text-white">{current.motivo_pausa}</h2>
-            <p className="mt-1 text-xs text-slate-500">{current.nome}</p>
+            <h2 className="mt-1 text-xl font-bold text-ink">{current.motivo_pausa}</h2>
+            <p className="mt-1 text-xs text-muted">{current.nome}</p>
           </div>
         </div>
         <span className={`status-badge ${statusClass}`}>{status}</span>
       </div>
-      <div className="my-7 rounded-card border border-white/10 bg-slate-950/45 p-5 text-center">
-        <p className="font-mono text-4xl font-black tracking-tight text-white sm:text-5xl">{formatDuration(elapsed)}</p>
-        <p className="mt-2 text-sm text-slate-500">
+      <div className="my-7 rounded-card border border-line bg-surface-2 p-5 text-center">
+        <p className="font-mono text-4xl font-black tracking-tight text-ink sm:text-5xl">{formatDuration(elapsed)}</p>
+        <p className="mt-2 text-sm text-muted">
           {unlimited ? 'Timer ativo sem limite automático' : `Limite ${formatDuration(limit)} · ${remaining >= 0 ? `${formatDuration(remaining)} restantes` : `${formatDuration(Math.abs(remaining))} excedidos`}`}
         </p>
       </div>
       {!unlimited && <PauseProgress elapsed={elapsed} limit={limit} />}
       {pauseReason.startsWith('reuni') && (
         <p
-          className="mt-5 line-clamp-3 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400"
+          className="mt-5 line-clamp-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-muted"
           title={current.observacao_reuniao || 'Sem observação informada'}
         >
           {current.observacao_reuniao || 'Sem observação informada'}
@@ -94,7 +94,7 @@ function StartPauseCard({ loading, onStart, onRequest }) {
         <label className="label">
           Contexto da reunião
           <textarea className="field mt-2 min-h-28" maxLength={500} onChange={(event) => setObservation(event.target.value)} required value={observation} />
-          <span className="mt-1 block text-right text-xs text-slate-600">{observation.length}/500</span>
+          <span className="mt-1 block text-right text-xs text-muted">{observation.length}/500</span>
         </label>
       )}
       <button className="btn-primary w-full" disabled={loading || !reason} type="submit">
@@ -138,8 +138,8 @@ function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loadin
                 <div className="flex min-w-0 items-start gap-3">
                   <UserAvatar name={item.nome} />
                   <div className="min-w-0">
-                    <h3 className="truncate font-semibold text-slate-200">{item.nome}</h3>
-                    <p className="mt-1 text-xs text-slate-600">Jornada {item.jornada_entrada} - {item.jornada_saida}</p>
+                    <h3 className="truncate font-semibold text-ink-2">{item.nome}</h3>
+                    <p className="mt-1 text-xs text-muted">Jornada {item.jornada_entrada} - {item.jornada_saida}</p>
                   </div>
                 </div>
                 <span className={`status-badge shrink-0 gap-1 ${badgeClass}`} title={item.presenca?.detalhe || undefined}>
@@ -148,13 +148,13 @@ function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loadin
                 </span>
               </div>
               {item.em_pausa && (
-                <div className="mt-4 rounded-card border border-amber-400/15 bg-amber-500/5 px-3 py-2">
-                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">{item.motivo_pausa}</p>
-                  <p className="mt-1 font-mono text-lg font-bold text-amber-100">{formatDuration(elapsedFor(item))}</p>
+                <div className="mt-4 rounded-card border border-warn-line bg-warn-bg px-3 py-2">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-warn">{item.motivo_pausa}</p>
+                  <p className="mt-1 font-mono text-lg font-bold text-warn">{formatDuration(elapsedFor(item))}</p>
                 </div>
               )}
               {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && item.observacao_reuniao && (
-                <p className="mt-3 line-clamp-2 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-xs leading-5 text-slate-400" title={item.observacao_reuniao}>
+                <p className="mt-3 line-clamp-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs leading-5 text-muted" title={item.observacao_reuniao}>
                   {item.observacao_reuniao}
                 </p>
               )}
@@ -194,19 +194,19 @@ export function PausasPage({ session, status, livePauses, loading, onStart, onRe
               <UserAvatar name={session.ci.nome} />
               <div>
                 <p className="section-eyebrow">Sessão do colaborador</p>
-                <h2 className="mt-1 text-2xl font-bold text-white">{session.ci.nome}</h2>
-                <p className="mt-1 text-sm text-slate-400">{session.ci.username}</p>
+                <h2 className="mt-1 text-2xl font-bold text-ink">{session.ci.nome}</h2>
+                <p className="mt-1 text-sm text-muted">{session.ci.username}</p>
               </div>
             </div>
             {current?.status_aprovacao === 'pendente' && (
-              <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-amber-200">
+              <div className="mt-5 rounded-xl border border-warn-line bg-warn-bg p-4 text-sm text-warn">
                 Sua solicitação de reunião está aguardando aprovação.
               </div>
             )}
           </section>
         </div>
       ) : (
-        <div className="card border-blue-500/20 bg-blue-500/5 text-sm text-blue-200">
+        <div className="card border-info-line bg-info-bg text-sm text-info">
           A sessão administrativa permite monitoramento. Entre como CI para iniciar ou finalizar sua própria pausa.
         </div>
       )}

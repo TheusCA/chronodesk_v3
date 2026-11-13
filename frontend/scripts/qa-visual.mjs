@@ -261,13 +261,20 @@ for (const [pattern, label] of [
   [/(^|\n)\s*right:\s*0;/, 'right: 0'],
   [/(^|\n)\s*z-index:\s*10;/, 'z-index acima das outras celulas'],
   [/(^|\n)\s*white-space:\s*nowrap;/, 'botoes sem quebra no meio da palavra'],
-  [/(^|\n)\s*background-color:\s*theme\('colors\.chrono\.card'\);/, 'fundo da cor do cartao'],
+  // [R1] O fundo vem do token do cartao (antes theme('colors.chrono.card')).
+  [/(^|\n)\s*background-color:\s*rgb\(var\(--surface\)\);/, 'fundo da cor do cartao'],
 ]) {
   assert.match(stickyRule, pattern, `Coluna fixa: ${label}`)
 }
 const tailwindSource = read('tailwind.config.js')
-assert.match(tailwindSource, /chrono:\s*\{[\s\S]*?\bcard:\s*'#[0-9a-f]{6}'/i, 'Cor do cartao com 6 digitos: fundo opaco, sem transparencia')
-assert.match(cssSource, /\n\.data-table th\.data-table-sticky-end \{[^}]*background-image:\s*linear-gradient\(rgba\(2, 6, 23, 0\.3\)/, 'Cabecalho fixo com o mesmo tom do cabecalho, por cima do fundo opaco')
+// [R1] Antes: chrono.card com 6 digitos no tailwind.config.js. Agora o cartao e
+// o token --surface: tres canais, sem alfa, no tema claro e nos dois blocos do
+// escuro (fundo opaco nos dois temas).
+assert.match(tailwindSource, /surface: token\('surface'\)/, 'Cor do cartao pelo token --surface')
+const surfaceTokens = [...cssSource.matchAll(/\n\s*--surface:\s*([^;]+);/g)].map((match) => match[1].trim())
+assert.equal(surfaceTokens.length, 3, '--surface no tema claro e nos dois blocos do escuro')
+for (const value of surfaceTokens) assert.match(value, /^\d{1,3} \d{1,3} \d{1,3}$/, `--surface opaco (tres canais, sem alfa): ${value}`)
+assert.match(cssSource, /\n\.data-table th\.data-table-sticky-end \{[^}]*background-color:\s*rgb\(var\(--surface-2\)\);/, 'Cabecalho fixo com o mesmo tom do cabecalho (--surface-2), opaco')
 assert.match(cssSource, /\n\.data-table tbody tr:hover > \.data-table-sticky-end \{[^}]*background-image:/, 'Realce da linha tambem na celula fixa, sem perder o fundo opaco')
 
 const resourceStub = 'data:text/javascript,' + encodeURIComponent(
@@ -351,5 +358,45 @@ for (const role of ['gestor', 'lideranca', 'admin', 'tecnico']) {
 const emptyMarkup = renderIncidents('gestor', [])
 assert.doesNotMatch(emptyMarkup, /<table|data-table-sticky-end/, 'Lista vazia sem tabela nem coluna fixa')
 assert.match(emptyMarkup, /Nenhum chamado crítico encontrado/u, 'Lista vazia com o estado vazio')
+
+// ---------------------------------------------------------------------------
+// [R1] Cores só por token e fontes auto-hospedadas (docs/design/PLANO_LOTES_R.md).
+// ---------------------------------------------------------------------------
+// Nenhuma classe da paleta padrão do Tailwind (slate, cyan...) nem as antigas
+// chrono-*: o tailwind.config.js só tem tokens, e uma classe solta não gera
+// CSS (a tela ficaria sem a cor, calada). Vale para o código e para o CSS.
+const PALETTE = 'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|chrono'
+const paletteClass = new RegExp(`(?<![\\w-])(?:[a-z-]+:)*(?:text|bg|border(?:-[lrtbxy])?|ring(?:-offset)?|from|via|to|divide|outline|accent|fill|stroke|decoration|placeholder|caret|shadow)-(?:${PALETTE})(?:-\\d+)?(?:\\/[\\w.[\\]]+)?(?![\\w-])`, 'g')
+for (const path of sourceFiles) {
+  const found = readFileSync(path, 'utf8').match(paletteClass)
+  assert.equal(found, null, `Classe de cor fora dos tokens em ${path.slice(frontendRoot.length + 1)}: ${found?.slice(0, 5).join(', ')}`)
+}
+// Cor solta em CSS ou JSX (hex, rgb ou rgba com número): só nos tokens do
+// index.css (canais R G B) e na sombra da coluna fixa.
+const cssWithoutComments = cssSource.replace(/\/\*[\s\S]*?\*\//g, '')
+assert.doesNotMatch(cssWithoutComments.replace(/rgb\(0 0 0 \/ 0\.35\)/, ''), /#[0-9a-f]{3,8}\b|rgba?\(\s*\d/i, 'index.css sem cor solta: só tokens')
+for (const path of sourceFiles.filter((file) => /\.(jsx?|tsx?)$/.test(file))) {
+  assert.doesNotMatch(readFileSync(path, 'utf8'), /rgba?\(\s*\d|#[0-9a-f]{6}\b/i, `Cor solta no código: ${path.slice(frontendRoot.length + 1)}`)
+}
+
+// Fontes: só as aprovadas (D-R0-3), em woff2 no repositório, com swap.
+const fontFaces = [...cssSource.matchAll(/@font-face \{([^}]*)\}/g)].map((match) => match[1])
+const fontFiles = fontFaces.map((face) => {
+  assert.match(face, /font-display:\s*swap;/, '@font-face com font-display: swap')
+  const url = face.match(/src:\s*url\('([^']+)'\) format\('woff2'\);/)?.[1]
+  assert.ok(url, '@font-face com um arquivo woff2')
+  assert.match(url, /^\.\/assets\/fontes\/[a-z0-9-]+\.woff2$/, `fonte servida do repositório (mesma origem): ${url}`)
+  assert.ok(existsSync(join(srcRoot, url)), `arquivo da fonte presente: ${url}`)
+  const family = face.match(/font-family:\s*'([^']+)';/)?.[1]
+  const weight = face.match(/font-weight:\s*(\d+);/)?.[1]
+  return `${family} ${weight}`
+})
+assert.deepEqual(fontFiles.sort(), ['IBM Plex Mono 500', 'IBM Plex Sans 400', 'IBM Plex Sans 500', 'IBM Plex Sans 600'], 'só as fontes e os pesos da D-R0-3')
+for (const license of ['LICENSE-ibm-plex-sans.txt', 'LICENSE-ibm-plex-mono.txt', 'README.md']) {
+  assert.ok(existsSync(join(srcRoot, 'assets', 'fontes', license)), `registro da fonte: ${license}`)
+}
+assert.match(readFileSync(join(srcRoot, 'assets', 'fontes', 'LICENSE-ibm-plex-sans.txt'), 'utf8'), /SIL OPEN FONT LICENSE Version 1\.1/, 'licença OFL 1.1 da Plex Sans')
+assert.doesNotMatch(cssSource, /@import|url\(['"]?(?:https?:)?\/\//, 'CSP: nenhum recurso externo no CSS')
+assert.match(read('tailwind.config.js'), /sans: \['"IBM Plex Sans"', 'system-ui', 'sans-serif'\]/, 'texto em IBM Plex Sans, com a fonte do sistema como reserva')
 
 console.log('Visual frontend QA OK')

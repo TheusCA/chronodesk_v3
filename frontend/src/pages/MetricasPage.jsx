@@ -14,7 +14,7 @@ function periodStart(period) {
   return null
 }
 
-function Indicator({ label, value, tone = 'text-white' }) {
+function Indicator({ label, value, tone = 'text-ink' }) {
   const metricTone = tone.includes('red') ? 'danger' : tone.includes('amber') ? 'warning' : tone.includes('emerald') ? 'success' : 'info'
   return <MetricCard detail="Indicador filtrado do período selecionado" label={label} tone={metricTone} value={value} />
 }
@@ -23,14 +23,14 @@ function Ranking({ title, values, formatter = (value) => value }) {
   const entries = Object.entries(values || {}).sort((a, b) => Number(b[1]) - Number(a[1])).slice(0, 8)
   return (
     <section className="card">
-      <h3 className="mb-4 font-bold text-white">{title}</h3>
-      {entries.length === 0 && <p className="text-sm text-slate-500">Sem dados no período.</p>}
+      <h3 className="mb-4 font-bold text-ink">{title}</h3>
+      {entries.length === 0 && <p className="text-sm text-muted">Sem dados no período.</p>}
       <div className="space-y-3">
         {entries.map(([label, value], index) => (
           <div className="flex items-center gap-3" key={label}>
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-slate-800 text-xs font-bold text-slate-400">{index + 1}</span>
-            <span className="min-w-0 flex-1 truncate text-sm text-slate-400">{label}</span>
-            <strong className="text-sm text-slate-200">{formatter(value)}</strong>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface-2 text-xs font-bold text-muted">{index + 1}</span>
+            <span className="min-w-0 flex-1 truncate text-sm text-muted">{label}</span>
+            <strong className="text-sm text-ink-2">{formatter(value)}</strong>
           </div>
         ))}
       </div>
@@ -135,12 +135,12 @@ export function MetricasPage() {
   return (
     <div className="space-y-6">
       {resource.data?.dados_truncados && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-xl border border-warn-line bg-warn-bg px-4 py-3 text-sm text-warn">
           A análise está limitada aos {resource.data.limite_registros} registros mais recentes. Use um período menor para resultados precisos.
         </div>
       )}
       {resource.data?.solicitacoes_reuniao_truncadas && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200">
+        <div className="rounded-xl border border-warn-line bg-warn-bg px-4 py-3 text-sm text-warn">
           As decisões de reunião consideram só as {resource.data.solicitacoes_reuniao_limite} solicitações mais recentes.
         </div>
       )}
@@ -162,16 +162,16 @@ export function MetricasPage() {
         )}
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Indicator label="Total de pausas" value={summary.total} tone="text-blue-300" />
+        <Indicator label="Total de pausas" value={summary.total} tone="text-ink" />
         <Indicator label="Tempo total" value={formatDuration(summary.totalSeconds)} />
         <Indicator label="Tempo médio" value={formatDuration(summary.average)} />
-        <Indicator label="Pausas excedidas" value={summary.exceeded} tone="text-red-300" />
-        <Indicator label="Maior tempo acumulado" value={summary.topEmployee?.[0] || 'Sem dados'} tone="text-amber-300" />
-        <Indicator label="Equipe com maior volume" value={summary.topTeam?.[0] || 'Sem dados'} tone="text-violet-300" />
+        <Indicator label="Pausas excedidas" value={summary.exceeded} tone="text-danger" />
+        <Indicator label="Maior tempo acumulado" value={summary.topEmployee?.[0] || 'Sem dados'} tone="text-ink" />
+        <Indicator label="Equipe com maior volume" value={summary.topTeam?.[0] || 'Sem dados'} tone="text-ink" />
         <Indicator label="Reuniões aprovadas" value={rows.filter((row) => !row.is_request && row.motivo_pausa === 'Reunião' && row.status_aprovacao === 'aprovado').length} />
         <Indicator label="Reuniões pendentes" value={rows.filter((row) => row.is_request && row.status_aprovacao === 'pendente').length} />
-        <Indicator label="Reuniões rejeitadas" value={rows.filter((row) => row.is_request && row.status_aprovacao === 'rejeitado').length} tone="text-red-300" />
-        <Indicator label="Registros filtrados" value={rows.length} tone="text-emerald-300" />
+        <Indicator label="Reuniões rejeitadas" value={rows.filter((row) => row.is_request && row.status_aprovacao === 'rejeitado').length} tone="text-danger" />
+        <Indicator label="Registros filtrados" value={rows.length} tone="text-ink" />
       </section>
 
       <section className="grid gap-5 lg:grid-cols-3">

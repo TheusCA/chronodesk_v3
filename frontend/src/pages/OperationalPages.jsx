@@ -257,14 +257,14 @@ function PeriodFilters({ filters, setFilters, extra = null }) {
 function RulePreviewPanel({ preview, fresh }) {
   const days = preview?.preview || []
   return (
-    <div className={`space-y-3 rounded-lg border p-3 ${fresh ? 'border-white/10 bg-slate-950/35' : 'border-amber-400/40 bg-amber-500/5'}`}>
-      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Prévia das próximas 2 semanas (calculada pelo servidor)</p>
+    <div className={`space-y-3 rounded-lg border p-3 ${fresh ? 'border-line bg-surface-2' : 'border-warn-line bg-warn-bg'}`}>
+      <p className="text-xs font-bold uppercase tracking-wider text-muted">Prévia das próximas 2 semanas (calculada pelo servidor)</p>
       {!fresh && (
         <InlineAlert tone="warning" title="Prévia desatualizada">
           Um campo mudou depois da prévia. Gere a prévia de novo para poder salvar.
         </InlineAlert>
       )}
-      <p className="text-sm font-semibold text-slate-200">{preview.rule_label}</p>
+      <p className="text-sm font-semibold text-ink-2">{preview.rule_label}</p>
       <div className="grid grid-cols-5 gap-1">
         {days.map((day) => (
           <span className={`status-badge justify-center ${day.presence_type === 'onsite' ? 'status-success' : day.presence_type === 'remote' ? 'status-info' : 'status-neutral'}`} key={day.date} title={day.rule_label}>
@@ -272,13 +272,13 @@ function RulePreviewPanel({ preview, fresh }) {
           </span>
         ))}
       </div>
-      <p className="text-xs text-slate-500">P = presencial, R = remoto, — = sem escala.</p>
+      <p className="text-xs text-muted">P = presencial, R = remoto, — = sem escala.</p>
       {preview.unchanged && <InlineAlert tone="info" title="Regra igual à vigente">Ao salvar, nada será alterado.</InlineAlert>}
       {!preview.unchanged && preview.closes && (
-        <p className="text-sm text-slate-300">Ao salvar: a regra atual “{preview.closes.rule_label}” será encerrada em {formatDate(preview.closes.effective_until)}.</p>
+        <p className="text-sm text-ink-2">Ao salvar: a regra atual “{preview.closes.rule_label}” será encerrada em {formatDate(preview.closes.effective_until)}.</p>
       )}
       {!preview.unchanged && preview.effective_until && (
-        <p className="text-sm text-slate-300">A nova regra vale até {formatDate(preview.effective_until)}, véspera da regra já agendada.</p>
+        <p className="text-sm text-ink-2">A nova regra vale até {formatDate(preview.effective_until)}, véspera da regra já agendada.</p>
       )}
       {preview.retroactive && <InlineAlert tone="warning" title="Início retroativo">Reescreve o histórico e fica auditado.</InlineAlert>}
     </div>
@@ -634,7 +634,7 @@ export function SchedulePage({ session, notify }) {
     return (
       <div className="flex flex-wrap gap-2">
         {canManage && <button className="table-action" onClick={() => ruleGuard.requestLeave(() => editRule(item))} type="button">Editar</button>}
-        {canRemoveRule ? <button className="table-action text-red-300" onClick={(event) => askRemoveRule(item, event.currentTarget)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
+        {canRemoveRule ? <button className="table-action text-danger" onClick={(event) => askRemoveRule(item, event.currentTarget)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
         <button aria-expanded={String(historyEmployee?.id) === String(item.employee_id)} className="table-action" onClick={(event) => toggleHistory(item, event.currentTarget)} type="button">Histórico</button>
       </div>
     )
@@ -658,7 +658,7 @@ export function SchedulePage({ session, notify }) {
                   <option key={employee.id} value={employee.id}>{employee.nome} - {teamLabel(employee.equipe)}</option>
                 ))}
               </select>
-              {ruleErrors.employee_id && <span className="mt-1 block text-xs text-red-300">{ruleErrors.employee_id.message}</span>}
+              {ruleErrors.employee_id && <span className="mt-1 block text-xs text-danger">{ruleErrors.employee_id.message}</span>}
             </label>
             <label className="label">Regra
               <select
@@ -677,12 +677,12 @@ export function SchedulePage({ session, notify }) {
               >
                 {SCHEDULE_RULE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
-              {ruleErrors.rule_type && <span className="mt-1 block text-xs text-red-300">{ruleErrors.rule_type.message}</span>}
+              {ruleErrors.rule_type && <span className="mt-1 block text-xs text-danger">{ruleErrors.rule_type.message}</span>}
             </label>
             {rule.rule_type === 'fixed_weekdays' && (
-              <div className="space-y-3 rounded-lg border border-white/10 bg-slate-950/35 p-3">
-                <fieldset className="flex flex-wrap gap-4 text-sm text-slate-300">
-                  <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Informar</legend>
+              <div className="space-y-3 rounded-lg border border-line bg-surface-2 p-3">
+                <fieldset className="flex flex-wrap gap-4 text-sm text-ink-2">
+                  <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Informar</legend>
                   <label className="inline-flex items-center gap-2"><input type="radio" value="onsite" {...registerRule('input_mode', { onChange: () => clearRuleErrors(['weekdays', 'home_weekdays']) })} />dias presenciais</label>
                   <label className="inline-flex items-center gap-2"><input type="radio" value="home" {...registerRule('input_mode', { onChange: () => clearRuleErrors(['weekdays', 'home_weekdays']) })} />dias de home office</label>
                 </fieldset>
@@ -691,7 +691,7 @@ export function SchedulePage({ session, notify }) {
                     const field = rule.input_mode === 'home' ? 'home_weekdays' : 'weekdays'
                     const selected = (rule[field] || []).includes(option.value)
                     return (
-                      <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${selected ? 'border-cyan-400/40 bg-cyan-500/10 text-cyan-200' : 'border-white/10 bg-slate-900/60 text-slate-400 hover:border-white/20'}`} key={option.value}>
+                      <label className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition ${selected ? 'border-info-line bg-info-bg text-info' : 'border-line bg-surface text-muted hover:border-line-strong'}`} key={option.value}>
                         <input
                           checked={selected}
                           className="sr-only"
@@ -705,9 +705,9 @@ export function SchedulePage({ session, notify }) {
                     )
                   })}
                 </div>
-                {ruleErrors.weekdays && <span className="block text-xs text-red-300">{ruleErrors.weekdays.message}</span>}
-                {ruleErrors.home_weekdays && <span className="block text-xs text-red-300">{ruleErrors.home_weekdays.message}</span>}
-                <p className="text-xs text-slate-500">
+                {ruleErrors.weekdays && <span className="block text-xs text-danger">{ruleErrors.weekdays.message}</span>}
+                {ruleErrors.home_weekdays && <span className="block text-xs text-danger">{ruleErrors.home_weekdays.message}</span>}
+                <p className="text-xs text-muted">
                   {rule.input_mode === 'home'
                     ? `Resultado: presencial ${weekdaySummary(otherWeekdays(rule.home_weekdays || []))} · home ${weekdaySummary(rule.home_weekdays || [])}.`
                     : `Resultado: presencial ${weekdaySummary(rule.weekdays || [])} · home ${weekdaySummary(otherWeekdays(rule.weekdays || []))}.`}
@@ -715,29 +715,29 @@ export function SchedulePage({ session, notify }) {
               </div>
             )}
             {rule.rule_type === 'cycle' && (
-              <div className="space-y-3 rounded-lg border border-white/10 bg-slate-950/35 p-3">
+              <div className="space-y-3 rounded-lg border border-line bg-surface-2 p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="label">Dias presenciais
                     <input aria-invalid={Boolean(ruleErrors.cycle_onsite_days)} className="field mt-2" inputMode="numeric" max="19" min="1" type="number" {...registerRule('cycle_onsite_days')} />
-                    {ruleErrors.cycle_onsite_days && <span className="mt-1 block text-xs text-red-300">{ruleErrors.cycle_onsite_days.message}</span>}
+                    {ruleErrors.cycle_onsite_days && <span className="mt-1 block text-xs text-danger">{ruleErrors.cycle_onsite_days.message}</span>}
                   </label>
                   <label className="label">Dias remotos
                     <input aria-invalid={Boolean(ruleErrors.cycle_remote_days)} className="field mt-2" inputMode="numeric" max="19" min="1" type="number" {...registerRule('cycle_remote_days')} />
-                    {ruleErrors.cycle_remote_days && <span className="mt-1 block text-xs text-red-300">{ruleErrors.cycle_remote_days.message}</span>}
+                    {ruleErrors.cycle_remote_days && <span className="mt-1 block text-xs text-danger">{ruleErrors.cycle_remote_days.message}</span>}
                   </label>
                 </div>
-                <fieldset className="flex flex-wrap gap-4 text-sm text-slate-300">
-                  <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">Começa por</legend>
+                <fieldset className="flex flex-wrap gap-4 text-sm text-ink-2">
+                  <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">Começa por</legend>
                   <label className="inline-flex items-center gap-2"><input type="radio" value="onsite" {...registerRule('cycle_starts_with')} />Presencial</label>
                   <label className="inline-flex items-center gap-2"><input type="radio" value="remote" {...registerRule('cycle_starts_with')} />Remoto</label>
                 </fieldset>
-                <p className="text-xs text-slate-500">Conta só dias úteis (segunda a sexta); feriado conta como dia útil. Até 20 dias no ciclo.</p>
+                <p className="text-xs text-muted">Conta só dias úteis (segunda a sexta); feriado conta como dia útil. Até 20 dias no ciclo.</p>
               </div>
             )}
             <label className="label">{rule.rule_type === 'cycle' ? 'Data inicial do ciclo' : 'Início da vigência'}
               <input aria-invalid={Boolean(ruleErrors.effective_from)} className="field mt-2" min={canRetroactiveRule ? undefined : today} required type="date" {...registerRule('effective_from')} />
-              {ruleErrors.effective_from && <span className="mt-1 block text-xs text-red-300">{ruleErrors.effective_from.message}</span>}
-              <span className="mt-1 block text-xs text-slate-500">
+              {ruleErrors.effective_from && <span className="mt-1 block text-xs text-danger">{ruleErrors.effective_from.message}</span>}
+              <span className="mt-1 block text-xs text-muted">
                 {rule.rule_type === 'cycle' ? 'Precisa ser dia útil; o ciclo vale a partir dela. ' : ''}
                 A regra vigente termina na véspera e o histórico fica guardado.
                 {canRetroactiveRule ? ' Data anterior a hoje reescreve o histórico e fica auditada.' : ' Data anterior a hoje: só administradores e Liderança.'}
@@ -748,7 +748,7 @@ export function SchedulePage({ session, notify }) {
               <button className="btn-secondary" disabled={previewLoading} onClick={previewRule} type="button">{previewLoading ? 'Calculando...' : 'Ver prévia'}</button>
               <button className="btn-primary" disabled={!previewFresh} type="submit">Salvar regra</button>
             </div>
-            {!previewFresh && <p className="text-xs text-slate-500">Salvar fica disponível depois da prévia calculada pelo servidor.</p>}
+            {!previewFresh && <p className="text-xs text-muted">Salvar fica disponível depois da prévia calculada pelo servidor.</p>}
           </form>
           <form className="card space-y-4" onSubmit={saveException}>
             <SectionHeader
@@ -762,7 +762,7 @@ export function SchedulePage({ session, notify }) {
               <label className="label">Tipo<select aria-describedby={exceptionStatusId} className="field mt-2" disabled={exceptionStatus !== 'ready'} value={exception.exception_type} onChange={(event) => updateException('exception_type', event.target.value)}>{EXCEPTION_TYPE_OPTIONS.filter((option) => !(exceptionIsLeadership && option.value === 'remote')).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
             </div>
             {/* [9.12.4] Situação da escolha: nova, edição da gravada, conferindo ou falha. */}
-            <p aria-live="polite" className={`text-xs ${storedException ? 'text-cyan-300' : 'text-slate-500'}`} data-exception-status={exceptionStatus === 'ready' ? (storedException ? 'editar' : 'nova') : exceptionStatus} id={exceptionStatusId}>
+            <p aria-live="polite" className={`text-xs ${storedException ? 'text-info' : 'text-muted'}`} data-exception-status={exceptionStatus === 'ready' ? (storedException ? 'editar' : 'nova') : exceptionStatus} id={exceptionStatusId}>
               {exceptionStatus === 'none' && 'Escolha o colaborador e a data. Se já houver exceção nesse dia, o formulário traz o tipo e a observação gravados.'}
               {exceptionStatus === 'loading' && 'Conferindo se já há exceção nesse dia...'}
               {exceptionStatus === 'ready' && storedException && 'Editando a exceção gravada nesse dia: salvar troca o tipo e a observação. Observação vazia apaga a gravada.'}
@@ -770,7 +770,7 @@ export function SchedulePage({ session, notify }) {
               {exceptionStatus === 'error' && 'Não foi possível conferir se já há exceção nesse dia.'}
             </p>
             {exceptionStatus === 'error' && <button className="table-action" onClick={() => exceptionLookup.refresh()} type="button">Tentar de novo</button>}
-            <p className="text-xs text-slate-500">Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências.</p>
+            <p className="text-xs text-muted">Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências.</p>
             <label className="label">Observação<input aria-describedby={exceptionStatusId} className="field mt-2" disabled={exceptionStatus !== 'ready'} maxLength="1000" value={exception.note} onChange={(event) => updateException('note', event.target.value)} /></label>
             {exceptionError && <InlineAlert tone="danger" title="Exceção não salva">{exceptionError}</InlineAlert>}
             <div className="flex flex-wrap gap-3">
@@ -793,15 +793,15 @@ export function SchedulePage({ session, notify }) {
               onDrop={(event) => { event.preventDefault(); setDragging(false); readSpreadsheet(event.dataTransfer.files?.[0]) }}
               type="button"
             >
-              <strong className="text-sm text-slate-200">{importLoading ? 'Validando planilha...' : 'Clique ou arraste a planilha'}</strong>
-              <span className="mt-1 text-xs text-slate-500">CSV ou XLSX; preview obrigatório</span>
+              <strong className="text-sm text-ink-2">{importLoading ? 'Validando planilha...' : 'Clique ou arraste a planilha'}</strong>
+              <span className="mt-1 text-xs text-muted">CSV ou XLSX; preview obrigatório</span>
             </button>
             <input ref={importInputRef} accept={IMPORT_LIMITS.acceptedExtensions.join(',')} className="hidden" type="file" onChange={(event) => { readSpreadsheet(event.target.files?.[0]); event.target.value = '' }} />
             {preview && (
               <div className="space-y-3">
-                <p className="text-sm text-slate-300">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s){preview.ignored_count ? `, ${preview.ignored_count} ignorada(s)` : ''}.</p>
-                <div className="max-h-56 overflow-auto rounded-lg border border-white/5">
-                  {preview.rows.map((row) => <div className="border-b border-white/5 px-3 py-2 text-sm" key={row.line}><span className={row.ignored ? 'text-amber-300' : row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span> - {row.employee_name || row.ad_login || 'Não identificado'} - {row.ignored ? (row.warnings || []).join(' ') : row.rule_type || row.errors.join(' ')}</div>)}
+                <p className="text-sm text-ink-2">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s){preview.ignored_count ? `, ${preview.ignored_count} ignorada(s)` : ''}.</p>
+                <div className="max-h-56 overflow-auto rounded-lg border border-line">
+                  {preview.rows.map((row) => <div className="border-b border-line px-3 py-2 text-sm" key={row.line}><span className={row.ignored ? 'text-warn' : row.valid ? 'text-ok' : 'text-danger'}>Linha {row.line}</span> - {row.employee_name || row.ad_login || 'Não identificado'} - {row.ignored ? (row.warnings || []).join(' ') : row.rule_type || row.errors.join(' ')}</div>)}
                 </div>
                 <button className="btn-primary" disabled={preview.invalid_count > 0 || preview.valid_count === 0} onClick={confirmImport} type="button">Confirmar importação</button>
               </div>
@@ -812,23 +812,23 @@ export function SchedulePage({ session, notify }) {
       <OperationalShell resource={resource}>
         {activeRules.length > 0 && (
           <section className="card">
-            <h2 className="mb-4 font-bold text-white" ref={rulesTitleRef} tabIndex={-1}>Regras vigentes e agendadas</h2>
+            <h2 className="mb-4 font-bold text-ink" ref={rulesTitleRef} tabIndex={-1}>Regras vigentes e agendadas</h2>
             {/* [17e] Abaixo de 1280 px, um cartão por regra, com os mesmos blocos e ações da linha. */}
             <div className="grid items-start gap-3 md:grid-cols-2 xl:hidden" data-rule-list="">{activeRules.map((item) => (
-              <article className="min-w-0 space-y-3 rounded-card border border-white/[0.07] bg-slate-950/30 p-4" data-rule={item.id ?? `implicita-${item.employee_id}`} key={item.id ?? `implicita-${item.employee_id}`}>
+              <article className="min-w-0 space-y-3 rounded-card border border-line bg-surface-2 p-4" data-rule={item.id ?? `implicita-${item.employee_id}`} key={item.id ?? `implicita-${item.employee_id}`}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-3">
                     <UserAvatar name={item.employee_name} />
                     <div className="min-w-0">
-                      <strong className="block font-semibold text-slate-200">{item.employee_name}</strong>
-                      <span className="block text-xs text-slate-500 [overflow-wrap:anywhere]">{item.ad_login || 'Sem login AD'}</span>
+                      <strong className="block font-semibold text-ink-2">{item.employee_name}</strong>
+                      <span className="block text-xs text-muted [overflow-wrap:anywhere]">{item.ad_login || 'Sem login AD'}</span>
                     </div>
                   </div>
-                  <span className="shrink-0 whitespace-nowrap text-xs text-slate-400">{teamLabel(item.team)}</span>
+                  <span className="shrink-0 whitespace-nowrap text-xs text-muted">{teamLabel(item.team)}</span>
                 </div>
                 <div>{ruleBadge(item)}</div>
-                <div className="[&_small]:mt-1 [&_small]:text-xs [&_small]:text-slate-500">{ruleValidity(item)}</div>
-                <div className="border-t border-white/5 pt-3 text-xs text-slate-400">{ruleActions(item)}</div>
+                <div className="[&_small]:mt-1 [&_small]:text-xs [&_small]:text-muted">{ruleValidity(item)}</div>
+                <div className="border-t border-line pt-3 text-xs text-muted">{ruleActions(item)}</div>
               </article>
             ))}</div>
             <div className="table-wrap hidden xl:block">
@@ -850,7 +850,7 @@ export function SchedulePage({ session, notify }) {
         {historyEmployee && (
           <section className="card table-wrap">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="scroll-mt-28 font-bold text-white" ref={historyTitleRef} tabIndex={-1}>Histórico de {historyEmployee.name}</h2>
+              <h2 className="scroll-mt-28 font-bold text-ink" ref={historyTitleRef} tabIndex={-1}>Histórico de {historyEmployee.name}</h2>
               <button className="table-action" onClick={closeHistory} type="button">Fechar</button>
             </div>
             <OperationalShell resource={history}>
@@ -870,7 +870,7 @@ export function SchedulePage({ session, notify }) {
         )}
         {(resource.data?.generated || []).length === 0 ? <EmptyState title="Nenhuma escala gerada" description="Cadastre regras fixas para gerar automaticamente os dias presenciais e remotos." /> : (
           <section className="card table-wrap">
-            <label className="mb-4 inline-flex items-center gap-2 text-sm text-slate-300">
+            <label className="mb-4 inline-flex items-center gap-2 text-sm text-ink-2">
               <input checked={hideNoSchedule} className="h-4 w-4" type="checkbox" onChange={(event) => setHideNoSchedule(event.target.checked)} />
               Ocultar sem escala
             </label>
@@ -878,8 +878,8 @@ export function SchedulePage({ session, notify }) {
               <thead><tr><th>Data</th><th>Colaborador</th><th>Equipe</th><th>Modalidade</th><th>Origem</th></tr></thead>
               <tbody>{generatedRows.map((item) => <tr key={`${item.employee_id}-${item.date}`}><td>{formatDate(item.date)}</td><td><strong>{item.employee_name}</strong><small>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</small></td><td className="whitespace-nowrap">{teamLabel(item.team)}</td><td>{presenceLegendItem(item.presence_type) ? <PresenceBadge status={item.presence_type} label={statusLabel(item.presence_type)} /> : <Status value={item.presence_type} />}{(item.presence_type === 'absence' || rowPartialTime(item) !== null) && item.detalhe && <small className="mt-1 flex items-center gap-1">{rowPartialTime(item) !== null && <PartialMarker time={rowPartialTime(item)} />}{item.detalhe}</small>}</td><td>{scheduleSourceLabel(item)}</td></tr>)}</tbody>
             </table>
-            {generatedRows.length === 0 && <p className="mt-3 text-sm text-slate-500">Todos os dias do filtro estão sem escala.</p>}
-            <p className="mt-3 text-xs text-slate-500">Dias úteis de segunda a sexta; sábado e domingo só aparecem com exceção de trabalho. Quem não tem regra aparece como “Sem escala”. Ausência aparece sem a categoria.</p>
+            {generatedRows.length === 0 && <p className="mt-3 text-sm text-muted">Todos os dias do filtro estão sem escala.</p>}
+            <p className="mt-3 text-xs text-muted">Dias úteis de segunda a sexta; sábado e domingo só aparecem com exceção de trabalho. Quem não tem regra aparece como “Sem escala”. Ausência aparece sem a categoria.</p>
           </section>
         )}
       </OperationalShell>
@@ -986,8 +986,8 @@ function WorkflowPage({ kind, session, notify }) {
   function decisionContent(item) {
     return canApprove && item.status === 'pending' ? (
       <div className="flex flex-wrap gap-2">
-        <button className="table-action text-emerald-300" onClick={(event) => decision.ask(overtime ? 'overtime' : 'adjustment', item, 'approved', event.currentTarget, pendingTitleRef)} type="button">Aprovar</button>
-        <button className="table-action text-red-300" onClick={(event) => decision.ask(overtime ? 'overtime' : 'adjustment', item, 'rejected', event.currentTarget, pendingTitleRef)} type="button">Rejeitar</button>
+        <button className="table-action text-ok" onClick={(event) => decision.ask(overtime ? 'overtime' : 'adjustment', item, 'approved', event.currentTarget, pendingTitleRef)} type="button">Aprovar</button>
+        <button className="table-action text-danger" onClick={(event) => decision.ask(overtime ? 'overtime' : 'adjustment', item, 'rejected', event.currentTarget, pendingTitleRef)} type="button">Rejeitar</button>
       </div>
     ) : (
       <>
@@ -1012,20 +1012,20 @@ function WorkflowPage({ kind, session, notify }) {
   // [17e] Pendentes abaixo de 1280 px: um cartão por solicitação, com os mesmos dados e ações da linha.
   function renderCards(rows) {
     return rows.map((item) => (
-      <article className="min-w-0 space-y-3 rounded-card border border-white/[0.07] bg-slate-950/30 p-4" data-request={item.id} key={item.id}>
+      <article className="min-w-0 space-y-3 rounded-card border border-line bg-surface-2 p-4" data-request={item.id} key={item.id}>
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <UserAvatar name={item.employee_name} />
             <div className="min-w-0">
-              <strong className="block font-semibold text-slate-200">{item.employee_name}</strong>
-              <span className="block text-xs text-slate-500">Equipe {item.team.toUpperCase()}</span>
-              <span className="block text-xs text-slate-500">Data: {formatDate(overtime ? item.work_date : item.adjustment_date)}</span>
+              <strong className="block font-semibold text-ink-2">{item.employee_name}</strong>
+              <span className="block text-xs text-muted">Equipe {item.team.toUpperCase()}</span>
+              <span className="block text-xs text-muted">Data: {formatDate(overtime ? item.work_date : item.adjustment_date)}</span>
             </div>
           </div>
           <Status value={item.status} />
         </div>
-        <div className="min-w-0 text-sm [overflow-wrap:anywhere] [&_small]:mt-1 [&_small]:block [&_small]:text-xs [&_small]:leading-5 [&_small]:text-slate-500">{detailContent(item)}</div>
-        <div className="border-t border-white/5 pt-3 [&_small]:block [&_small]:text-xs [&_small]:text-slate-500 [&_strong]:block [&_strong]:text-slate-200">{decisionContent(item)}</div>
+        <div className="min-w-0 text-sm [overflow-wrap:anywhere] [&_small]:mt-1 [&_small]:block [&_small]:text-xs [&_small]:leading-5 [&_small]:text-muted">{detailContent(item)}</div>
+        <div className="border-t border-line pt-3 [&_small]:block [&_small]:text-xs [&_small]:text-muted [&_strong]:block [&_strong]:text-ink-2">{decisionContent(item)}</div>
       </article>
     ))
   }
@@ -1077,11 +1077,11 @@ function WorkflowPage({ kind, session, notify }) {
               <label className="label">Hora de entrada<input className="field mt-2" required type="time" value={form.start_time} onChange={(event) => setForm({ ...form, start_time: event.target.value })} /></label>
               <label className="label">Hora de saída<input className="field mt-2" required type="time" value={form.end_time} onChange={(event) => setForm({ ...form, end_time: event.target.value })} /></label>
               <label className="label xl:col-span-2">Descrição/Motivo<input className="field mt-2" maxLength="500" required value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></label>
-              <div className="rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-300">
-                <span className="block text-xs font-bold uppercase tracking-wider text-slate-600">Total calculado</span>
-                <strong className="mt-1 block text-white">{minutesLabel(preview.minutes)}</strong>
-                {preview.overnight && <small className="mt-1 block text-amber-300">Virada de dia considerada no cálculo.</small>}
-                {preview.sameTime && <small className="mt-1 block text-red-300" role="alert">{SAME_TIME_MESSAGE}</small>}
+              <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2">
+                <span className="block text-xs font-bold uppercase tracking-wider text-muted">Total calculado</span>
+                <strong className="mt-1 block text-ink">{minutesLabel(preview.minutes)}</strong>
+                {preview.overnight && <small className="mt-1 block text-warn">Virada de dia considerada no cálculo.</small>}
+                {preview.sameTime && <small className="mt-1 block text-danger" role="alert">{SAME_TIME_MESSAGE}</small>}
               </div>
             </>
           ) : (
@@ -1165,7 +1165,7 @@ export function OncallPage({ session, notify }) {
       <PeriodFilters filters={filters} setFilters={setFilters} />
       {canManage && (
         <form className="card space-y-4" onSubmit={create}>
-          <h2 className="font-bold text-white">Cadastrar plantão</h2>
+          <h2 className="font-bold text-ink">Cadastrar plantão</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <label className="label xl:col-span-2">Colaborador<EmployeeSelect employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>
             <label className="label">Data inicial<input className="field mt-2" required type="date" value={form.starts_on} onChange={(event) => setForm({ ...form, starts_on: event.target.value })} /></label>
@@ -1253,7 +1253,7 @@ export function OperationalReportsPage() {
       <form className="card grid gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))_auto] md:items-start" onSubmit={handleSubmit(applyReportFilters)}>
         <label className="label">Competência
           <input aria-invalid={Boolean(errors.competency)} className="field mt-2" required type="month" {...register('competency')} />
-          {errors.competency && <span className="mt-1 block text-xs text-red-300">{errors.competency.message}</span>}
+          {errors.competency && <span className="mt-1 block text-xs text-danger">{errors.competency.message}</span>}
         </label>
         <label className="label">Equipe
           <select aria-invalid={Boolean(errors.team)} className="field mt-2" {...register('team')}>
@@ -1261,7 +1261,7 @@ export function OperationalReportsPage() {
             <option value="n1">N1</option>
             <option value="n2">N2</option>
           </select>
-          {errors.team && <span className="mt-1 block text-xs text-red-300">{errors.team.message}</span>}
+          {errors.team && <span className="mt-1 block text-xs text-danger">{errors.team.message}</span>}
         </label>
         <label className="label">Colaborador
           <select aria-invalid={Boolean(errors.employee_id)} className="field mt-2" {...register('employee_id')}>
@@ -1270,16 +1270,16 @@ export function OperationalReportsPage() {
               <option key={employee.id} value={employee.id}>{employee.nome} - {employee.equipe.toUpperCase()}</option>
             ))}
           </select>
-          {errors.employee_id && <span className="mt-1 block text-xs text-red-300">{errors.employee_id.message}</span>}
+          {errors.employee_id && <span className="mt-1 block text-xs text-danger">{errors.employee_id.message}</span>}
         </label>
         <button className="btn-secondary mt-7" type="submit">Aplicar filtros</button>
       </form>
       <OperationalShell resource={resource}>
         <>
           {cutoffNotice && <InlineAlert tone="info" title={cutoffTitle}>{cutoffNotice}</InlineAlert>}
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-slate-500">{label}</p><p className="mt-3 text-2xl font-black text-white">{value}</p></article>)}</section>
+          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{indicators.map(([label, value]) => <article className="card" key={label}><p className="text-sm text-muted">{label}</p><p className="mt-3 text-2xl font-black text-ink">{value}</p></article>)}</section>
           <section className="card flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div><h2 className="font-bold text-white">Competência {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-slate-500">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>
+            <div><h2 className="font-bold text-ink">Competência {resource.data?.competency?.label}</h2><p className="mt-1 text-sm text-muted">{formatDate(resource.data?.period?.from)} a {formatDate(resource.data?.period?.to)}. O MySQL permanece como fonte principal.</p></div>
             <a className="btn-primary" href={apiUrl(`portal/reports.php${queryString({ ...filters, format: 'csv' })}`)}>Exportar CSV</a>
           </section>
           <section className="grid gap-5 lg:grid-cols-2">
@@ -1301,7 +1301,7 @@ function ReportsSummaryTable({ title, values }) {
     {
       accessorKey: 'label',
       header: title,
-      cell: ({ getValue }) => <strong className="text-slate-200">{getValue()}</strong>,
+      cell: ({ getValue }) => <strong className="text-ink-2">{getValue()}</strong>,
     },
     {
       accessorKey: 'value',
@@ -1309,7 +1309,7 @@ function ReportsSummaryTable({ title, values }) {
       cell: ({ getValue }) => {
         const value = getValue() || {}
         return (
-          <span className="text-right text-slate-500">
+          <span className="text-right text-muted">
             {minutesLabel(value.overtime_approved_minutes)} HE aprovada(s), {minutesLabel(value.overtime_pending_minutes)} pendente(s), {value.adjustments || 0} ajuste(s), {value.oncall || 0} plantão(ões), {value.onsite_days || 0} presencial(is)
             {'absence_days' in value && `, ${value.absence_days} ausência(s)`}
             {'no_schedule_days' in value && `, ${value.no_schedule_days} sem escala`}
@@ -1326,8 +1326,8 @@ function ReportsSummaryTable({ title, values }) {
 
   return (
     <section className="card">
-      <h2 className="mb-4 font-bold text-white">{title}</h2>
-      {data.length === 0 ? <p className="text-sm text-slate-500">Sem dados no período.</p> : (
+      <h2 className="mb-4 font-bold text-ink">{title}</h2>
+      {data.length === 0 ? <p className="text-sm text-muted">Sem dados no período.</p> : (
         <div className="table-wrap">
           <table className="data-table">
             <thead>

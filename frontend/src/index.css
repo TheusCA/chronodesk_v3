@@ -2,20 +2,186 @@
 @tailwind components;
 @tailwind utilities;
 
+/* [R1] Fontes auto-hospedadas (src/assets/fontes, OFL 1.1, registro no
+   README de lá). O Vite as serve de /app/assets/, na mesma origem
+   (font-src 'self'). swap: o texto aparece na fonte do sistema e troca
+   quando a Plex chega. */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('./assets/fontes/ibm-plex-sans-latin-400-normal.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('./assets/fontes/ibm-plex-sans-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('./assets/fontes/ibm-plex-sans-latin-600-normal.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('./assets/fontes/ibm-plex-mono-latin-500-normal.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* [R1] Tokens da direção A (docs/design/DIRECAO_VISUAL.md). Canais "R G B"
+   para o Tailwind aplicar a opacidade (bg-ink/5); o hex vai no comentário.
+   Claro é o padrão (D-R0-2). O escuro vale pela preferência do sistema ou
+   pelo botão do topo (data-theme na raiz, guardado só na sessão: D-R1-1).
+   Os dois blocos do escuro são iguais; o qa:contrast confere isso e o
+   contraste AA de cada par nos dois temas. Fora de @layer: sempre no CSS. */
+:root {
+  color-scheme: light;
+  --bg: 244 243 239; /* #F4F3EF */
+  --surface: 255 255 255; /* #FFFFFF */
+  --surface-2: 240 238 233; /* #F0EEE9 */
+  --line: 225 222 214; /* #E1DED6 */
+  --line-strong: 138 132 120; /* #8A8478 */
+  --ink: 28 27 25; /* #1C1B19 */
+  --ink-2: 69 66 60; /* #45423C */
+  --muted: 103 99 91; /* #67635B */
+  --focus: 47 86 214; /* #2F56D6 */
+  --action: 28 27 25; /* #1C1B19 */
+  --action-ink: 255 255 255; /* #FFFFFF */
+  --action-hover: 58 56 51; /* #3A3833 */
+  --ok: 23 99 58; /* #17633A */
+  --ok-bg: 226 240 230; /* #E2F0E6 */
+  --ok-line: 169 210 182; /* #A9D2B6 */
+  --remote: 31 78 150; /* #1F4E96 */
+  --remote-bg: 227 235 247; /* #E3EBF7 */
+  --remote-line: 179 199 232; /* #B3C7E8 */
+  --pause: 134 71 0; /* #864700 */
+  --pause-bg: 251 235 208; /* #FBEBD0 */
+  --pause-line: 233 196 138; /* #E9C48A */
+  --lunch: 11 94 94; /* #0B5E5E */
+  --lunch-bg: 221 240 238; /* #DDF0EE */
+  --lunch-line: 159 208 203; /* #9FD0CB */
+  --absent: 163 38 27; /* #A3261B */
+  --absent-bg: 251 229 225; /* #FBE5E1 */
+  --absent-line: 239 177 168; /* #EFB1A8 */
+  --off: 69 66 60; /* #45423C */
+  --off-bg: 233 231 226; /* #E9E7E2 */
+  --off-line: 207 203 194; /* #CFCBC2 */
+  --danger: 180 35 24; /* #B42318 */
+  --danger-bg: 251 233 230; /* #FBE9E6 */
+  --danger-line: 239 177 168; /* #EFB1A8 */
+  --warn: 134 71 0; /* #864700 */
+  --warn-bg: 251 235 208; /* #FBEBD0 */
+  --warn-line: 233 196 138; /* #E9C48A */
+  --info: 31 78 150; /* #1F4E96 */
+  --info-bg: 227 235 247; /* #E3EBF7 */
+  --info-line: 179 199 232; /* #B3C7E8 */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: 20 20 19; /* #141413 */
+    --surface: 27 27 25; /* #1B1B19 */
+    --surface-2: 37 37 34; /* #252522 */
+    --line: 51 50 46; /* #33322E */
+    --line-strong: 122 118 109; /* #7A766D */
+    --ink: 238 236 230; /* #EEECE6 */
+    --ink-2: 207 203 194; /* #CFCBC2 */
+    --muted: 162 158 149; /* #A29E95 */
+    --focus: 142 168 255; /* #8EA8FF */
+    --action: 238 236 230; /* #EEECE6 */
+    --action-ink: 20 20 19; /* #141413 */
+    --action-hover: 214 211 203; /* #D6D3CB */
+    --ok: 143 212 165; /* #8FD4A5 */
+    --ok-bg: 27 46 34; /* #1B2E22 */
+    --ok-line: 47 90 61; /* #2F5A3D */
+    --remote: 157 187 239; /* #9DBBEF */
+    --remote-bg: 27 37 54; /* #1B2536 */
+    --remote-line: 52 73 110; /* #34496E */
+    --pause: 242 194 122; /* #F2C27A */
+    --pause-bg: 51 39 15; /* #33270F */
+    --pause-line: 107 80 33; /* #6B5021 */
+    --lunch: 134 211 203; /* #86D3CB */
+    --lunch-bg: 20 45 43; /* #142D2B */
+    --lunch-line: 43 90 85; /* #2B5A55 */
+    --absent: 244 164 151; /* #F4A497 */
+    --absent-bg: 58 30 26; /* #3A1E1A */
+    --absent-line: 115 53 44; /* #73352C */
+    --off: 207 203 194; /* #CFCBC2 */
+    --off-bg: 42 42 39; /* #2A2A27 */
+    --off-line: 69 67 62; /* #45433E */
+    --danger: 255 138 122; /* #FF8A7A */
+    --danger-bg: 58 30 26; /* #3A1E1A */
+    --danger-line: 115 53 44; /* #73352C */
+    --warn: 242 194 122; /* #F2C27A */
+    --warn-bg: 51 39 15; /* #33270F */
+    --warn-line: 107 80 33; /* #6B5021 */
+    --info: 157 187 239; /* #9DBBEF */
+    --info-bg: 27 37 54; /* #1B2536 */
+    --info-line: 52 73 110; /* #34496E */
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: 20 20 19; /* #141413 */
+  --surface: 27 27 25; /* #1B1B19 */
+  --surface-2: 37 37 34; /* #252522 */
+  --line: 51 50 46; /* #33322E */
+  --line-strong: 122 118 109; /* #7A766D */
+  --ink: 238 236 230; /* #EEECE6 */
+  --ink-2: 207 203 194; /* #CFCBC2 */
+  --muted: 162 158 149; /* #A29E95 */
+  --focus: 142 168 255; /* #8EA8FF */
+  --action: 238 236 230; /* #EEECE6 */
+  --action-ink: 20 20 19; /* #141413 */
+  --action-hover: 214 211 203; /* #D6D3CB */
+  --ok: 143 212 165; /* #8FD4A5 */
+  --ok-bg: 27 46 34; /* #1B2E22 */
+  --ok-line: 47 90 61; /* #2F5A3D */
+  --remote: 157 187 239; /* #9DBBEF */
+  --remote-bg: 27 37 54; /* #1B2536 */
+  --remote-line: 52 73 110; /* #34496E */
+  --pause: 242 194 122; /* #F2C27A */
+  --pause-bg: 51 39 15; /* #33270F */
+  --pause-line: 107 80 33; /* #6B5021 */
+  --lunch: 134 211 203; /* #86D3CB */
+  --lunch-bg: 20 45 43; /* #142D2B */
+  --lunch-line: 43 90 85; /* #2B5A55 */
+  --absent: 244 164 151; /* #F4A497 */
+  --absent-bg: 58 30 26; /* #3A1E1A */
+  --absent-line: 115 53 44; /* #73352C */
+  --off: 207 203 194; /* #CFCBC2 */
+  --off-bg: 42 42 39; /* #2A2A27 */
+  --off-line: 69 67 62; /* #45433E */
+  --danger: 255 138 122; /* #FF8A7A */
+  --danger-bg: 58 30 26; /* #3A1E1A */
+  --danger-line: 115 53 44; /* #73352C */
+  --warn: 242 194 122; /* #F2C27A */
+  --warn-bg: 51 39 15; /* #33270F */
+  --warn-line: 107 80 33; /* #6B5021 */
+  --info: 157 187 239; /* #9DBBEF */
+  --info-bg: 27 37 54; /* #1B2536 */
+  --info-line: 52 73 110; /* #34496E */
+}
+
 @layer base {
   * {
-    @apply border-chrono-border;
-  }
-
-  html {
-    color-scheme: dark;
+    @apply border-line;
   }
 
   body {
-    @apply min-h-screen bg-chrono-bg font-sans text-slate-100 antialiased;
-    background-image:
-      linear-gradient(135deg, rgba(14, 165, 233, 0.06), transparent 34%),
-      linear-gradient(180deg, rgba(15, 23, 42, 0), rgba(2, 6, 23, 0.52));
+    @apply min-h-screen bg-bg font-sans text-ink antialiased;
   }
 
   button,
@@ -23,70 +189,70 @@
   textarea,
   select,
   a {
-    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-chrono-bg;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg;
   }
 
   select option {
-    @apply bg-slate-900 text-slate-100;
+    @apply bg-surface text-ink;
   }
 }
 
 @layer components {
   .card {
-    @apply min-w-0 rounded-card border border-white/[0.08] bg-chrono-card/95 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.22)];
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);
+    @apply min-w-0 rounded-card border border-line bg-surface p-5;
   }
 
   .card-interactive {
-    @apply transition duration-200 hover:-translate-y-0.5 hover:border-cyan-400/20 hover:bg-slate-800/80;
+    @apply transition-colors duration-150 hover:border-line-strong;
   }
 
   .btn {
-    @apply inline-flex min-h-10 max-w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-center text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex min-h-10 max-w-full items-center justify-center gap-2 rounded-lg px-4 py-2 text-center text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .btn-primary {
-    @apply btn border border-cyan-400/20 bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/10 hover:bg-cyan-400;
+    @apply btn border border-action bg-action text-action-ink hover:border-action-hover hover:bg-action-hover;
   }
 
   .btn-secondary {
-    @apply btn border border-white/10 bg-slate-900/80 text-slate-200 hover:border-cyan-400/20 hover:bg-slate-800;
+    @apply btn border border-line-strong bg-surface text-ink hover:bg-surface-2;
   }
 
   .btn-danger {
-    @apply btn border border-red-400/20 bg-red-500/10 text-red-200 hover:bg-red-500/20;
+    @apply btn border border-danger-line bg-danger-bg text-danger hover:border-danger;
   }
 
   .btn-ghost {
-    @apply btn border border-transparent bg-transparent text-slate-300 hover:border-white/10 hover:bg-white/5;
+    @apply btn border border-transparent bg-transparent text-ink-2 hover:bg-ink/5 hover:text-ink;
   }
 
   .field {
-    @apply min-w-0 w-full rounded-lg border border-white/10 bg-slate-950/70 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 transition hover:border-white/20 focus:border-cyan-400/60;
+    @apply min-w-0 w-full rounded-lg border border-line-strong bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-muted transition-colors hover:border-ink-2 focus:border-focus;
   }
 
   .field:disabled {
-    @apply cursor-not-allowed border-white/5 bg-slate-900/60 text-slate-500;
+    @apply cursor-not-allowed border-line bg-surface-2 text-muted;
   }
 
   .drop-zone {
-    @apply grid w-full place-items-center rounded-card border border-dashed border-white/15 bg-slate-950/50 px-5 py-10 text-center transition hover:border-cyan-400/50 hover:bg-cyan-500/5;
+    @apply grid w-full place-items-center rounded-card border border-dashed border-line-strong bg-surface-2 px-5 py-10 text-center transition-colors hover:border-ink-2;
   }
 
   .drop-zone-active {
-    @apply border-cyan-300 bg-cyan-500/10;
+    @apply border-focus bg-info-bg;
   }
 
   .label {
-    @apply block text-sm font-semibold text-slate-300;
+    @apply block text-sm font-semibold text-ink-2;
   }
 
   .sidebar-link {
-    @apply flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-slate-100;
+    @apply relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-ink-2 transition-colors hover:bg-ink/5 hover:text-ink;
   }
 
+  /* Item atual: fundo de superfície e barra à esquerda, sem brilho. */
   .sidebar-link-active {
-    @apply bg-cyan-500/10 text-cyan-200 ring-1 ring-inset ring-cyan-400/20;
+    @apply bg-surface-2 font-semibold text-ink before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-ink;
   }
 
   .status-badge {
@@ -94,47 +260,47 @@
   }
 
   .status-success {
-    @apply border-emerald-500/20 bg-emerald-500/10 text-emerald-300;
+    @apply border-ok-line bg-ok-bg text-ok;
   }
 
   .status-info {
-    @apply border-cyan-500/20 bg-cyan-500/10 text-cyan-200;
+    @apply border-info-line bg-info-bg text-info;
   }
 
   .status-warning {
-    @apply border-amber-500/20 bg-amber-500/10 text-amber-300;
+    @apply border-warn-line bg-warn-bg text-warn;
   }
 
   .status-danger {
-    @apply border-red-500/20 bg-red-500/10 text-red-300;
+    @apply border-danger-line bg-danger-bg text-danger;
   }
 
   .status-neutral {
-    @apply border-slate-600/40 bg-slate-800 text-slate-400;
+    @apply border-off-line bg-off-bg text-off;
   }
 
   .tab-button {
-    @apply whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold text-slate-500 transition hover:bg-white/5 hover:text-slate-200;
+    @apply whitespace-nowrap rounded-lg px-4 py-2 text-sm font-semibold text-muted transition-colors hover:bg-ink/5 hover:text-ink;
   }
 
   .tab-button-active {
-    @apply bg-cyan-500/10 text-cyan-200;
+    @apply bg-surface-2 text-ink;
   }
 
   .check-row {
-    @apply flex cursor-pointer items-start gap-3 rounded-xl border border-white/5 bg-slate-950/30 p-4;
+    @apply flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-surface-2 p-4;
   }
 
   .check-row input {
-    @apply mt-1 h-4 w-4 accent-blue-600;
+    @apply mt-1 h-4 w-4 accent-ink;
   }
 
   .check-row span {
-    @apply flex flex-col text-sm text-slate-300;
+    @apply flex flex-col text-sm text-ink-2;
   }
 
   .check-row small {
-    @apply mt-1 text-xs text-slate-500;
+    @apply mt-1 text-xs text-muted;
   }
 
   .table-wrap {
@@ -146,124 +312,55 @@
   }
 
   .data-table th {
-    @apply border-b border-white/[0.07] bg-slate-950/30 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-500;
+    @apply border-b border-line bg-surface-2 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-muted;
   }
 
   .data-table td {
-    @apply border-b border-white/[0.05] px-4 py-4 align-top text-slate-400;
+    @apply border-b border-line px-4 py-4 align-top text-ink-2;
   }
 
   .data-table tbody tr {
-    @apply transition hover:bg-white/[0.02];
+    @apply transition-colors hover:bg-ink/[0.03];
   }
 
   .data-table strong {
-    @apply block font-semibold text-slate-200;
+    @apply block font-semibold text-ink;
   }
 
   .data-table small {
-    @apply mt-1 block text-xs leading-5 text-slate-600;
+    @apply mt-1 block text-xs leading-5 text-muted;
   }
 
   .data-table th button {
-    @apply inline-flex items-center gap-1 text-left uppercase tracking-wider text-slate-400 hover:text-cyan-200;
+    @apply inline-flex items-center gap-1 text-left uppercase tracking-wider text-ink-2 hover:text-ink;
   }
 
   .table-action {
-    @apply inline-flex min-h-8 max-w-full items-center justify-center rounded-md border border-transparent px-2.5 py-1 text-center text-xs font-semibold text-cyan-200 transition hover:border-white/10 hover:bg-white/5;
+    @apply inline-flex min-h-8 max-w-full items-center justify-center rounded-md border border-transparent px-2.5 py-1 text-center text-xs font-semibold text-ink underline decoration-line-strong underline-offset-4 transition-colors hover:border-line hover:bg-ink/5 hover:decoration-ink;
   }
 
   .skeleton {
-    @apply animate-pulse rounded-card border border-white/5 bg-slate-900/70;
-    background-image: linear-gradient(90deg, rgba(15, 23, 42, 0.35), rgba(51, 65, 85, 0.38), rgba(15, 23, 42, 0.35));
-    background-size: 220% 100%;
-    animation: skeleton-scan 1.8s ease-in-out infinite;
+    @apply animate-pulse rounded-card border border-line bg-surface-2;
   }
 
   .progress-blue {
-    @apply bg-blue-500;
+    @apply bg-info;
   }
 
   .progress-yellow {
-    @apply bg-amber-400;
+    @apply bg-warn;
   }
 
   .progress-orange {
-    @apply bg-orange-500;
+    @apply bg-absent;
   }
 
   .progress-red {
-    @apply bg-red-600;
+    @apply bg-danger;
   }
 
-  .login-glow {
-    @apply pointer-events-none absolute rounded-full blur-3xl;
-  }
-
-  .login-glow-left {
-    @apply -left-32 top-0 h-96 w-96 bg-blue-600/10;
-  }
-
-  .login-glow-right {
-    @apply -right-32 bottom-0 h-96 w-96 bg-cyan-500/5;
-  }
-
-  .tech-login-shell {
-    background:
-      radial-gradient(circle at 50% 45%, rgba(15, 23, 42, 0.2), rgba(2, 6, 23, 0.92) 65%),
-      linear-gradient(145deg, #020617 0%, #071326 48%, #020617 100%);
-  }
-
-  .tech-grid {
-    @apply pointer-events-none absolute inset-0 opacity-30;
-    background-image:
-      linear-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(56, 189, 248, 0.08) 1px, transparent 1px);
-    background-size: 48px 48px;
-    mask-image: linear-gradient(to bottom, transparent, black 22%, black 70%, transparent);
-  }
-
-  .tech-horizon {
-    @apply pointer-events-none absolute bottom-[-18%] left-1/2 h-[55%] w-[130%] -translate-x-1/2 rounded-[50%] border border-cyan-400/10;
-    box-shadow:
-      0 -20px 90px rgba(14, 165, 233, 0.08),
-      inset 0 20px 80px rgba(37, 99, 235, 0.05);
-  }
-
-  .tech-node {
-    @apply pointer-events-none absolute h-2 w-2 rounded-full bg-cyan-300/60 shadow-[0_0_20px_rgba(34,211,238,0.55)];
-  }
-
-  .tech-node::before,
-  .tech-node::after {
-    content: '';
-    @apply absolute left-1/2 top-1/2 h-px origin-left bg-gradient-to-r from-cyan-400/30 to-transparent;
-  }
-
-  .tech-node-one {
-    @apply left-[8%] top-[24%];
-  }
-
-  .tech-node-one::before {
-    @apply w-44 -rotate-12;
-  }
-
-  .tech-node-two {
-    @apply right-[12%] top-[18%];
-  }
-
-  .tech-node-two::before {
-    @apply w-36 rotate-[155deg];
-  }
-
-  .tech-node-three {
-    @apply bottom-[18%] right-[20%];
-  }
-
-  .tech-node-three::before {
-    @apply w-52 rotate-[205deg];
-  }
-
+  /* Contexto de empilhamento da casca; o aviso (portal-toast) fica no body,
+     fora dele, para passar por cima dos diálogos. */
   .portal-tech-shell {
     @apply relative isolate overflow-x-hidden;
   }
@@ -282,36 +379,21 @@
     }
   }
 
-  .portal-tech-shell::before {
-    content: '';
-    @apply pointer-events-none fixed inset-0 -z-10 opacity-50;
-    background-image:
-      linear-gradient(rgba(56, 189, 248, 0.035) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(56, 189, 248, 0.035) 1px, transparent 1px),
-      linear-gradient(120deg, transparent 0%, rgba(14, 165, 233, 0.045) 45%, transparent 72%);
-    background-size: 64px 64px, 64px 64px, auto;
-  }
-
-  .portal-tech-shell::after {
-    content: '';
-    @apply pointer-events-none fixed inset-x-0 top-0 -z-10 h-px bg-cyan-300/20;
-  }
-
   .section-header {
     @apply flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between;
   }
 
   .section-eyebrow {
-    @apply text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-300/80;
+    @apply text-[11px] font-bold uppercase tracking-[0.18em] text-muted;
   }
 
   .section-title {
-    @apply mt-1 text-xl font-bold tracking-tight text-white sm:text-2xl;
+    @apply mt-1 text-xl font-bold tracking-tight text-ink sm:text-2xl;
     overflow-wrap: anywhere;
   }
 
   .section-description {
-    @apply mt-1 max-w-3xl text-sm leading-6 text-slate-400;
+    @apply mt-1 max-w-3xl text-sm leading-6 text-muted;
     overflow-wrap: anywhere;
   }
 
@@ -324,7 +406,7 @@
   }
 
   .filter-actions {
-    @apply flex flex-wrap items-center gap-2 border-t border-white/5 pt-4;
+    @apply flex flex-wrap items-center gap-2 border-t border-line pt-4;
   }
 
   .form-section {
@@ -336,7 +418,7 @@
   }
 
   .form-actions {
-    @apply mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-white/5 pt-4;
+    @apply mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-line pt-4;
   }
 
   .inline-alert {
@@ -344,15 +426,15 @@
   }
 
   .approval-card {
-    @apply card flex flex-col justify-between gap-5 border-l-4 border-l-amber-400 lg:flex-row lg:items-center;
+    @apply card flex flex-col justify-between gap-5 border-l-4 border-l-pause lg:flex-row lg:items-center;
   }
 
   .detail-pill {
-    @apply inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-xs text-slate-400;
+    @apply inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-xs text-ink-2;
   }
 
   .detail-pill strong {
-    @apply font-semibold text-slate-100;
+    @apply font-semibold text-ink;
     overflow-wrap: anywhere;
   }
 
@@ -361,50 +443,49 @@
   }
 
   .legend-item {
-    @apply inline-flex items-center gap-2 text-xs font-semibold text-slate-400;
+    @apply inline-flex items-center gap-2 text-xs font-semibold text-ink-2;
   }
 
   .legend-dot {
-    @apply h-2.5 w-2.5 rounded-full bg-slate-500;
+    @apply h-2.5 w-2.5 rounded-full bg-line-strong;
   }
 
   .pa-grid-shell {
-    @apply w-full min-w-0 overflow-x-auto rounded-card border border-white/5 bg-slate-950/25 p-4;
+    @apply w-full min-w-0 overflow-x-auto rounded-card border border-line bg-surface-2 p-4;
   }
 
   .pa-cell {
-    @apply min-h-44 w-full min-w-0 overflow-hidden rounded-card border p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-400/40;
+    @apply min-h-44 w-full min-w-0 overflow-hidden rounded-card border p-4 text-left transition-colors hover:border-ink-2;
     overflow-wrap: anywhere;
   }
 
   .file-preview-panel {
-    @apply rounded-card border border-white/10 bg-slate-950/40 p-4;
+    @apply rounded-card border border-line bg-surface-2 p-4;
   }
 
   .metric-card {
-    @apply min-w-0 rounded-card border bg-slate-900/80 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.18)];
-    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent);
+    @apply min-w-0 rounded-card border bg-surface p-4;
   }
 
   .metric-label {
-    @apply text-xs font-bold uppercase tracking-[0.14em] text-slate-500;
+    @apply text-xs font-bold uppercase tracking-[0.14em] text-muted;
   }
 
   .metric-value {
-    @apply mt-3 text-3xl font-black tracking-tight text-white;
+    @apply mt-3 text-3xl font-black tracking-tight text-ink;
     overflow-wrap: anywhere;
   }
 
   .metric-detail {
-    @apply mt-3 text-xs leading-5 text-slate-500;
+    @apply mt-3 text-xs leading-5 text-muted;
   }
 
   .metric-icon {
-    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-slate-950/60 text-cyan-200;
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface-2 text-ink-2;
   }
 
   .user-avatar {
-    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-500/10 text-sm font-black text-cyan-100;
+    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-sm font-black text-ink;
   }
 
   .status-dot {
@@ -416,12 +497,12 @@
   }
 
   .operator-card {
-    @apply relative min-w-0 overflow-hidden rounded-card border border-white/[0.07] bg-slate-900/80 p-4 transition duration-200 hover:border-cyan-400/20 hover:bg-slate-800/80;
+    @apply relative min-w-0 overflow-hidden rounded-card border border-line bg-surface p-4 transition-colors duration-150 hover:border-line-strong;
   }
 
   .operator-card::before {
     content: '';
-    @apply absolute inset-y-0 left-0 w-1 bg-slate-600;
+    @apply absolute inset-y-0 left-0 w-1 bg-line-strong;
   }
 }
 
@@ -436,33 +517,24 @@
 
 /* [17e] Coluna fixa à direita (Ações de Chamados críticos). Fundo opaco para o
    conteúdo rolado não aparecer por baixo. Fora do @layer e com dois seletores
-   para vencer `.data-table th` e `.data-table td` (lição do A1). */
+   para vencer `.data-table th` e `.data-table td` (lição do A1). [R1] O fundo
+   é o token do cartão (--surface, sem alfa nos dois temas). */
 .data-table .data-table-sticky-end {
   position: sticky;
   right: 0;
   z-index: 10;
   /* Sem isso, o `overflow-wrap: anywhere` acima parte "Visualizar" ao meio. */
   white-space: nowrap;
-  background-color: theme('colors.chrono.card');
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.08), -12px 0 12px -12px rgba(0, 0, 0, 0.7);
+  background-color: rgb(var(--surface));
+  box-shadow: inset 1px 0 0 rgb(var(--line)), -12px 0 12px -12px rgb(0 0 0 / 0.35);
 }
 
 .data-table th.data-table-sticky-end {
-  background-image: linear-gradient(rgba(2, 6, 23, 0.3), rgba(2, 6, 23, 0.3));
+  background-color: rgb(var(--surface-2));
 }
 
 .data-table tbody tr:hover > .data-table-sticky-end {
-  background-image: linear-gradient(rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
-}
-
-@keyframes skeleton-scan {
-  0% {
-    background-position: 120% 0;
-  }
-
-  100% {
-    background-position: -120% 0;
-  }
+  background-image: linear-gradient(rgb(var(--ink) / 0.03), rgb(var(--ink) / 0.03));
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -479,47 +551,48 @@
 /* F5: legenda única da situação (src/lib/presenceLegend.ts). Fora de @layer
    de propósito: o Tailwind descarta classe de @layer components que não
    aparece nos arquivos que ele varre (js e jsx), e estes nomes só aparecem no
-   .ts; regra fora de camada sempre vai para o CSS. Ausente no mesmo laranja
-   do evento de ausência do Calendário; sem escala tracejado. */
+   .ts; regra fora de camada sempre vai para o CSS. Sem escala tracejado.
+   [R1, D-R0-4] Ausente vermelho, no mesmo tom do evento de ausência do
+   Calendário. */
 .presence-onsite {
-  @apply border-green-500/30 bg-green-500/10 text-green-200;
+  @apply border-ok-line bg-ok-bg text-ok;
 }
 
 .presence-remote {
-  @apply border-sky-500/30 bg-sky-500/10 text-sky-200;
+  @apply border-remote-line bg-remote-bg text-remote;
 }
 
 .presence-absence {
-  @apply border-orange-500/30 bg-orange-500/10 text-orange-200;
+  @apply border-absent-line bg-absent-bg text-absent;
 }
 
 .presence-no-schedule {
-  @apply border-dashed border-slate-400/60 bg-transparent text-slate-300;
+  @apply border-dashed border-line-strong bg-transparent text-ink-2;
 }
 
-/* F7 (DV7): situação de agora. Em pausa violeta (o azul-céu já é o remoto);
-   Almoço amarelo forte, com fundo e borda mais densos que o laranja claro de
-   ausente, para os dois não se confundirem; Fora do expediente cinza
-   preenchido (o sem escala é o cinza tracejado, sem fundo). Escalados e
-   Disponíveis são só cabeçalhos da tabela da Visão Operacional. */
+/* F7 (DV7), revisto no R1 (D-R0-4): situação de agora. Em pausa âmbar,
+   Almoço verde-azulado (matiz bem longe do vermelho de ausente), Fora do
+   expediente cinza preenchido (o sem escala é o cinza tracejado, sem fundo).
+   Sempre com ícone e rótulo. Escalados e Disponíveis são só cabeçalhos da
+   tabela da Visão Operacional. */
 .presence-pause {
-  @apply border-violet-400/40 bg-violet-500/15 text-violet-200;
+  @apply border-pause-line bg-pause-bg text-pause;
 }
 
 .presence-lunch {
-  @apply border-yellow-300/60 bg-yellow-300/20 text-yellow-200;
+  @apply border-lunch-line bg-lunch-bg text-lunch;
 }
 
 .presence-off-hours {
-  @apply border-slate-500/50 bg-slate-500/30 text-slate-200;
+  @apply border-off-line bg-off-bg text-off;
 }
 
 .presence-scheduled {
-  @apply border-white/15 bg-slate-950/40 text-slate-200;
+  @apply border-line bg-surface-2 text-ink-2;
 }
 
 .presence-available {
-  @apply border-emerald-400/30 bg-emerald-500/10 text-emerald-200;
+  @apply border-ok-line bg-ok-bg text-ok;
 }
 
 /* Variantes de classe montadas por template no className: tons do InlineAlert,
@@ -531,78 +604,78 @@
    disponível sem a barra verde). Fora de camada, como as presence-* do F5,
    sempre vão para o CSS. O qa:calendar-presence confere cada prefixo. */
 .inline-alert-info {
-  @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-100;
+  @apply border-info-line bg-info-bg text-info;
 }
 
 .inline-alert-warning {
-  @apply border-amber-400/20 bg-amber-500/5 text-amber-100;
+  @apply border-warn-line bg-warn-bg text-warn;
 }
 
 .inline-alert-danger {
-  @apply border-red-400/20 bg-red-500/5 text-red-100;
+  @apply border-danger-line bg-danger-bg text-danger;
 }
 
 .metric-card-info {
-  @apply border-cyan-400/15;
+  @apply border-line;
 }
 
 .metric-card-success {
-  @apply border-emerald-400/15;
+  @apply border-ok-line;
 }
 
 .metric-card-warning {
-  @apply border-amber-400/20;
+  @apply border-warn-line;
 }
 
 .metric-card-danger {
-  @apply border-red-400/20;
+  @apply border-danger-line;
 }
 
 .status-dot-info {
-  @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-200;
+  @apply border-info-line bg-info-bg text-info;
 }
 
 .status-dot-info span {
-  @apply bg-cyan-300;
+  @apply bg-info;
 }
 
 .status-dot-success {
-  @apply border-emerald-400/20 bg-emerald-500/5 text-emerald-200;
+  @apply border-ok-line bg-ok-bg text-ok;
 }
 
 .status-dot-success span {
-  @apply bg-emerald-300;
+  @apply bg-ok;
 }
 
 .status-dot-warning {
-  @apply border-amber-400/20 bg-amber-500/5 text-amber-200;
+  @apply border-warn-line bg-warn-bg text-warn;
 }
 
 .status-dot-warning span {
-  @apply bg-amber-300;
+  @apply bg-warn;
 }
 
 .detail-pill-neutral {
-  @apply border-white/10 bg-slate-950/40;
+  @apply border-line bg-surface-2;
 }
 
 .detail-pill-info {
-  @apply border-cyan-400/20 bg-cyan-500/5 text-cyan-200;
+  @apply border-info-line bg-info-bg text-info;
 }
 
 .detail-pill-warning {
-  @apply border-amber-400/20 bg-amber-500/5 text-amber-200;
+  @apply border-warn-line bg-warn-bg text-warn;
 }
 
 .operator-card-available::before {
-  @apply bg-emerald-400;
+  @apply bg-ok;
 }
 
 .operator-card-paused::before,
 .operator-card-pending::before {
-  @apply bg-amber-400;
+  @apply bg-pause;
 }
 
 .operator-card-offline::before {
-  @apply bg-slate-600;
+  @apply bg-line-strong;
 }

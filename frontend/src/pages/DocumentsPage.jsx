@@ -92,22 +92,22 @@ function UploadPanel({ limits, onClose, onUploaded }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/70">
       <button aria-label="Fechar envio de documento" className="absolute inset-0" onClick={onClose} type="button" />
-      <form className="relative h-full w-full max-w-xl overflow-y-auto border-l border-white/10 bg-slate-950 p-6 shadow-2xl" onSubmit={submit}>
+      <form className="relative h-full w-full max-w-xl overflow-y-auto border-l border-line bg-surface-2 p-6 shadow-2xl" onSubmit={submit}>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-400">Armazenamento privado</p>
-            <h2 className="mt-2 text-xl font-bold text-white">Adicionar arquivo</h2>
-            <p className="mt-2 text-sm text-slate-400">O backend valida extensão, MIME real, conteúdo, tamanho e integridade.</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-info">Armazenamento privado</p>
+            <h2 className="mt-2 text-xl font-bold text-ink">Adicionar arquivo</h2>
+            <p className="mt-2 text-sm text-muted">O backend valida extensão, MIME real, conteúdo, tamanho e integridade.</p>
           </div>
-          <button className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white" onClick={onClose} type="button" aria-label="Fechar">
+          <button className="rounded-lg p-2 text-muted hover:bg-ink/5 hover:text-ink" onClick={onClose} type="button" aria-label="Fechar">
             <Icon name="close" />
           </button>
         </div>
 
         <button
-          className={`mt-6 grid w-full place-items-center rounded-2xl border border-dashed px-5 py-10 text-center transition ${dragging ? 'border-blue-400 bg-blue-500/10' : 'border-white/15 bg-slate-900/50 hover:border-blue-500/50'}`}
+          className={`mt-6 grid w-full place-items-center rounded-2xl border border-dashed px-5 py-10 text-center transition ${dragging ? 'border-info bg-info-bg' : 'border-line bg-surface hover:border-info-line'}`}
           onClick={() => inputRef.current?.click()}
           onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
           onDragLeave={(event) => { event.preventDefault(); setDragging(false) }}
@@ -119,9 +119,9 @@ function UploadPanel({ limits, onClose, onUploaded }) {
           }}
           type="button"
         >
-          <Icon name="upload" className="h-8 w-8 text-blue-400" />
-          <strong className="mt-3 text-sm text-slate-200">Clique para escolher ou arraste o arquivo</strong>
-          <span className="mt-2 text-xs text-slate-500">{(limits?.allowed_extensions || DEFAULT_EXTENSIONS).join(', ')} · até {formatBytes(limits?.max_file_bytes || DEFAULT_MAX_FILE_BYTES)}</span>
+          <Icon name="upload" className="h-8 w-8 text-info" />
+          <strong className="mt-3 text-sm text-ink-2">Clique para escolher ou arraste o arquivo</strong>
+          <span className="mt-2 text-xs text-muted">{(limits?.allowed_extensions || DEFAULT_EXTENSIONS).join(', ')} · até {formatBytes(limits?.max_file_bytes || DEFAULT_MAX_FILE_BYTES)}</span>
         </button>
         <input
           ref={inputRef}
@@ -134,13 +134,13 @@ function UploadPanel({ limits, onClose, onUploaded }) {
         {file && (
           <div className="file-preview-panel mt-4 p-4">
             <div className="flex items-start gap-3">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-blue-500/10 text-blue-300"><Icon name="file" /></div>
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-info-bg text-info"><Icon name="file" /></div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className="truncate text-sm font-semibold text-slate-200">{file.name}</p>
+                  <p className="truncate text-sm font-semibold text-ink-2">{file.name}</p>
                   <FileTypeBadge extension={extensionOf(file.name)} />
                 </div>
-                <p className="mt-1 text-xs text-slate-500">{formatBytes(file.size)} · {file.type || 'MIME informado pelo navegador indisponível'}</p>
+                <p className="mt-1 text-xs text-muted">{formatBytes(file.size)} · {file.type || 'MIME informado pelo navegador indisponível'}</p>
                 <span className={`status-badge mt-3 ${validation ? 'status-danger' : 'status-success'}`}>{validation || 'Validação inicial aprovada'}</span>
               </div>
             </div>
@@ -266,25 +266,25 @@ export function DocumentsPage({ notify }) {
           {filtered.map((item) => (
             <article className="card card-interactive flex min-h-56 flex-col" key={item.id}>
               <div className="flex items-start justify-between gap-3">
-                <div className="grid h-11 w-11 place-items-center rounded-xl bg-blue-500/10 text-blue-300"><Icon name="file" /></div>
+                <div className="grid h-11 w-11 place-items-center rounded-xl bg-info-bg text-info"><Icon name="file" /></div>
                 <div className="flex gap-2">
                   <FileTypeBadge extension={item.extension} />
                   {item.visibility === 'management' && <span className="status-badge status-warning">Gestão</span>}
                 </div>
               </div>
-              <h3 className="mt-4 line-clamp-2 font-bold text-white">{item.title}</h3>
-              <p className="mt-1 truncate text-xs text-slate-500">{item.original_name}</p>
-              <p className="mt-3 line-clamp-2 text-sm text-slate-400">{item.description || 'Sem descrição.'}</p>
-              <div className="mt-auto pt-5 text-xs text-slate-500">
+              <h3 className="mt-4 line-clamp-2 font-bold text-ink">{item.title}</h3>
+              <p className="mt-1 truncate text-xs text-muted">{item.original_name}</p>
+              <p className="mt-3 line-clamp-2 text-sm text-muted">{item.description || 'Sem descrição.'}</p>
+              <div className="mt-auto pt-5 text-xs text-muted">
                 <p>{item.category} · {formatBytes(item.size_bytes)}</p>
                 <p className="mt-1">{item.uploaded_by} · {formatDateTime(item.uploaded_at)}</p>
               </div>
-              <div className="mt-4 flex gap-2 border-t border-white/5 pt-4">
+              <div className="mt-4 flex gap-2 border-t border-line pt-4">
                 <a className="btn-secondary flex-1 gap-2" href={apiUrl(`portal/documents_download.php?id=${item.id}`)}>
                   <Icon name="download" className="h-4 w-4" /> Baixar
                 </a>
                 {resource.data?.can_upload && (
-                  <button className="btn-secondary px-3 text-red-300" disabled={deletingId === item.id} onClick={(event) => askRemove(item, event.currentTarget)} type="button" aria-label={`Remover ${item.title}`}>
+                  <button className="btn-secondary px-3 text-danger" disabled={deletingId === item.id} onClick={(event) => askRemove(item, event.currentTarget)} type="button" aria-label={`Remover ${item.title}`}>
                     <Icon name="trash" className="h-4 w-4" />
                   </button>
                 )}

@@ -265,7 +265,7 @@ for (const [session, label, confirmCancelId] of [[MANAGER, 'gestor', null], [MAN
     assert.equal(cells.length, manages ? 7 : 6, `${label}: linha ${index + 1} com ${manages ? 7 : 6} celulas`)
     assert.ok(card.includes(cells[5]), `${label}: cartao ${index + 1} com a mesma situacao da linha`)
     assert.ok(card.includes(`>${cells[2]}</dd>`) && card.includes(`>${cells[3]}</dd>`), `${label}: cartao ${index + 1} com as mesmas datas e o mesmo periodo`)
-    const actions = card.match(/<div class="border-t border-white\/5 pt-3">([\s\S]*)<\/div><\/article>$/)?.[1] ?? null
+    const actions = card.match(/<div class="border-t border-line pt-3">([\s\S]*)<\/div><\/article>$/)?.[1] ?? null
     if (manages) assert.equal(actions, cells[6], `${label}: cartao ${index + 1} com as mesmas acoes da linha`)
     else assert.equal(actions, null, `${label}: sem a permissao, cartao sem acoes, como a linha sem a coluna`)
   })

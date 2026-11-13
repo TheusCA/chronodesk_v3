@@ -68,13 +68,13 @@ function OperationalSummary({ data }) {
   // cabe sem rolagem de 1280 px para cima (medição do A1). Mesmo cell() da
   // tabela; a Liderança num bloco à parte, fora dos totais.
   const card = ([team, label, note = null]) => (
-    <article className="rounded-card border border-white/10 bg-slate-950/45 p-4" data-team={team} key={team}>
-      <h3 className="text-sm font-bold text-white">{label}{note && <small className="ml-2 text-xs font-normal text-slate-400">{note}</small>}</h3>
+    <article className="rounded-card border border-line bg-surface-2 p-4" data-team={team} key={team}>
+      <h3 className="text-sm font-bold text-ink">{label}{note && <small className="ml-2 text-xs font-normal text-muted">{note}</small>}</h3>
       <dl className="mt-3 space-y-2">
         {OPERATIONAL_SUMMARY_COLUMNS.map((column) => (
           <div className="flex items-center justify-between gap-3" key={column.key}>
             <dt><span className={`status-badge gap-1 normal-case tracking-normal ${column.tone}`}><Icon className="h-3 w-3 shrink-0" name={column.icon} />{column.label}</span></dt>
-            <dd><strong className="text-lg text-white">{cell(team, column.key)}</strong></dd>
+            <dd><strong className="text-lg text-ink">{cell(team, column.key)}</strong></dd>
           </div>
         ))}
       </dl>
@@ -100,7 +100,7 @@ function OperationalSummary({ data }) {
       )}
       <div className="mt-5 xl:hidden">
         <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">{TEAM_ROWS.map((team) => card(team))}</div>
-        <div className="mt-3 grid gap-3 border-t-2 border-white/10 pt-3 sm:grid-cols-2 md:grid-cols-3">{card(LEADERSHIP_ROW)}</div>
+        <div className="mt-3 grid gap-3 border-t-2 border-line pt-3 sm:grid-cols-2 md:grid-cols-3">{card(LEADERSHIP_ROW)}</div>
       </div>
       <div className="table-wrap mt-5 hidden xl:block">
         <table className="data-table">
@@ -113,14 +113,14 @@ function OperationalSummary({ data }) {
             </tr>
           </thead>
           <tbody>{TEAM_ROWS.map((team) => row(team))}</tbody>
-          <tbody>{row(LEADERSHIP_ROW, 'border-t-2 border-white/10')}</tbody>
+          <tbody>{row(LEADERSHIP_ROW, 'border-t-2 border-line')}</tbody>
         </table>
       </div>
       {/* [Ajuste A3] Tabela toda em zero por falta de escala (fim de semana, feriado ou sem regra), não por falha. */}
       {presence !== null && summaryCount(presence.total, 'escalados') === 0 && (
-        <p className="mt-3 text-sm leading-6 text-slate-300">Ninguém escalado neste momento (fim de semana, feriado ou sem regra de escala).</p>
+        <p className="mt-3 text-sm leading-6 text-ink-2">Ninguém escalado neste momento (fim de semana, feriado ou sem regra de escala).</p>
       )}
-      <p className="mt-3 text-xs leading-5 text-slate-500">Ausentes: somente ausências lançadas; pausas não entram. Sem escala fica fora de Escalados.</p>
+      <p className="mt-3 text-xs leading-5 text-muted">Ausentes: somente ausências lançadas; pausas não entram. Sem escala fica fora de Escalados.</p>
     </section>
   )
 }
@@ -149,12 +149,12 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
 
   return (
     <div className="space-y-7">
-      <section className="card overflow-hidden border-cyan-400/15">
+      <section className="card overflow-hidden border-info-line">
         <div className="grid gap-6 lg:grid-cols-[1.4fr_0.8fr] lg:items-center">
           <div>
             <p className="section-eyebrow">Portal SDK — Centro Operacional de TI</p>
-            <h2 className="mt-2 text-2xl font-black tracking-tight text-white sm:text-3xl">Operação agora</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-ink sm:text-3xl">Operação agora</h2>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
               Painel de disponibilidade, pausas, aprovações e incidentes críticos da operação SDK.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
@@ -163,15 +163,15 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-card border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-card border border-line bg-surface-2 p-4">
               <p className="metric-label">Disponíveis por equipe</p>
-              <p className="mt-3 text-sm text-slate-300">N1 <strong className="ml-2 text-lg text-emerald-300">{n1Available}</strong></p>
-              <p className="mt-2 text-sm text-slate-300">N2 <strong className="ml-2 text-lg text-emerald-300">{n2Available}</strong></p>
+              <p className="mt-3 text-sm text-ink-2">N1 <strong className="ml-2 text-lg text-ok">{n1Available}</strong></p>
+              <p className="mt-2 text-sm text-ink-2">N2 <strong className="ml-2 text-lg text-ok">{n2Available}</strong></p>
             </div>
-            <div className="rounded-card border border-white/10 bg-slate-950/45 p-4">
+            <div className="rounded-card border border-line bg-surface-2 p-4">
               <p className="metric-label">Pausas por tipo</p>
-              <p className="mt-3 text-sm text-slate-300">Reunião <strong className="ml-2 text-lg text-amber-300">{meetingPauses}</strong></p>
-              <p className="mt-2 text-sm text-slate-300">Café <strong className="ml-2 text-lg text-cyan-200">{coffeePauses}</strong></p>
+              <p className="mt-3 text-sm text-ink-2">Reunião <strong className="ml-2 text-lg text-warn">{meetingPauses}</strong></p>
+              <p className="mt-2 text-sm text-ink-2">Café <strong className="ml-2 text-lg text-info">{coffeePauses}</strong></p>
             </div>
           </div>
         </div>
@@ -202,17 +202,17 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
                     <div className="flex min-w-0 items-start gap-3">
                       <UserAvatar name={item.nome} />
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-200">{item.nome}</p>
-                        <p className="text-xs uppercase tracking-wider text-slate-500">Equipe {item.equipe}</p>
+                        <p className="font-semibold text-ink-2">{item.nome}</p>
+                        <p className="text-xs uppercase tracking-wider text-muted">Equipe {item.equipe}</p>
                       </div>
                     </div>
                     <span className="status-badge status-warning">{item.motivo_pausa}</span>
                   </div>
-                  <p className="mt-5 rounded-card border border-amber-400/15 bg-amber-500/5 px-3 py-2 font-mono text-2xl font-bold text-amber-200">{formatDuration(livePauses.elapsedFor(item))}</p>
+                  <p className="mt-5 rounded-card border border-warn-line bg-warn-bg px-3 py-2 font-mono text-2xl font-bold text-warn">{formatDuration(livePauses.elapsedFor(item))}</p>
                   {/* [F7, DV11] Sem a chave (colega, para quem não é gestão), sem a caixa. */}
                   {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && 'observacao_reuniao' in item && (
                     <p
-                      className="mt-3 line-clamp-2 rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2 text-xs leading-5 text-slate-400"
+                      className="mt-3 line-clamp-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs leading-5 text-muted"
                       title={item.observacao_reuniao || 'Sem observação informada'}
                     >
                       {item.observacao_reuniao || 'Sem observação informada'}

@@ -141,7 +141,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-3">
                 <UserAvatar name={request.nome} />
-                <h4 className="font-semibold text-white">{request.nome}</h4>
+                <h4 className="font-semibold text-ink">{request.nome}</h4>
                 <span className="status-badge status-neutral">Equipe {request.equipe?.toUpperCase()}</span>
                 <span className="status-badge status-warning">Pendente</span>
               </div>
@@ -149,7 +149,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
                 <DetailPill label="Tipo" value={request.motivo} tone="warning" />
                 <DetailPill label="Solicitado" value={formatDateTime(request.solicitacao_timestamp)} />
               </div>
-              <p className="mt-3 rounded-card border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400">{request.observacao || 'Sem observação.'}</p>
+              <p className="mt-3 rounded-card border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-muted">{request.observacao || 'Sem observação.'}</p>
             </div>
             <ApprovalActions onApprove={() => decidePause(request.id, 'aprovar')} onReject={() => decidePause(request.id, 'rejeitar')} />
           </article>
@@ -162,7 +162,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-3">
                 <UserAvatar name={item.employee_name} />
-                <h4 className="font-semibold text-white">{item.employee_name}</h4>
+                <h4 className="font-semibold text-ink">{item.employee_name}</h4>
                 <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
                 <span className="status-badge status-warning">{workflowStatusLabel(item.status)}</span>
               </div>
@@ -171,8 +171,8 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
                 <DetailPill label="Período" value={`${String(item.start_time).slice(0, 5)} - ${String(item.end_time).slice(0, 5)}`} />
                 <DetailPill label="Total" value={approvalMinutes(item.total_minutes)} tone="warning" />
               </div>
-              <p className="mt-3 rounded-card border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400">{item.reason} - {item.justification}</p>
-              <p className="mt-2 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
+              <p className="mt-3 rounded-card border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-muted">{item.reason} - {item.justification}</p>
+              <p className="mt-2 text-xs text-muted">Criado em {formatDateTime(item.created_at)}</p>
             </div>
             <ApprovalActions onApprove={(event) => decision.ask('overtime', item, 'approved', event.currentTarget, overtimeTitleRef)} onReject={(event) => decision.ask('overtime', item, 'rejected', event.currentTarget, overtimeTitleRef)} />
           </article>
@@ -185,7 +185,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-3">
                 <UserAvatar name={item.employee_name} />
-                <h4 className="font-semibold text-white">{item.employee_name}</h4>
+                <h4 className="font-semibold text-ink">{item.employee_name}</h4>
                 <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
                 <span className="status-badge status-warning">{workflowStatusLabel(item.status)}</span>
               </div>
@@ -194,8 +194,8 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
                 <DetailPill label="Tipo" value={adjustmentTypeLabel(item.adjustment_type)} tone="warning" />
                 <DetailPill label="Horário correto" value={item.correct_time ? String(item.correct_time).slice(0, 5) : 'Sem horário'} />
               </div>
-              <p className="mt-3 rounded-card border border-white/5 bg-slate-950/40 px-3 py-2 text-sm leading-6 text-slate-400">{item.justification}</p>
-              <p className="mt-2 text-xs text-slate-600">Criado em {formatDateTime(item.created_at)}</p>
+              <p className="mt-3 rounded-card border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-muted">{item.justification}</p>
+              <p className="mt-2 text-xs text-muted">Criado em {formatDateTime(item.created_at)}</p>
             </div>
             <ApprovalActions onApprove={(event) => decision.ask('adjustment', item, 'approved', event.currentTarget, adjustmentTitleRef)} onReject={(event) => decision.ask('adjustment', item, 'rejected', event.currentTarget, adjustmentTitleRef)} />
           </article>
@@ -305,16 +305,16 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
       {/* [pós-deploy 1, D3] O ID vem do banco: não há campo na criação; na edição, só leitura (texto). */}
       {editing && (
         <div className="label">ID
-          <p className="field mt-2 text-slate-300" data-employee-id-readonly="">{form.id}</p>
+          <p className="field mt-2 text-ink-2" data-employee-id-readonly="">{form.id}</p>
         </div>
       )}
       <label className="label xl:col-span-2">Nome
         <input aria-invalid={Boolean(errors.nome)} className="field mt-2" maxLength="100" minLength="3" required {...withFieldRef(register('nome'), nameRef)} />
-        {errors.nome && <span className="mt-1 block text-xs text-red-300">{errors.nome.message}</span>}
+        {errors.nome && <span className="mt-1 block text-xs text-danger">{errors.nome.message}</span>}
       </label>
       <label className="label">Login AD
         <input aria-invalid={Boolean(errors.ad_login)} className="field mt-2" maxLength="100" placeholder="nome.sobrenome" {...register('ad_login')} />
-        {errors.ad_login && <span className="mt-1 block text-xs text-red-300">{errors.ad_login.message}</span>}
+        {errors.ad_login && <span className="mt-1 block text-xs text-danger">{errors.ad_login.message}</span>}
       </label>
       <label className="label">Equipe operacional
         <input type="hidden" {...register('equipe')} />
@@ -333,23 +333,23 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
           <option value="somente_leitura">Somente leitura</option>
           {form.access_role === 'admin' && <option disabled value="admin">Admin (legado)</option>}
         </select>
-        {form.access_role === 'admin' && <span className="mt-1 block text-xs text-amber-300">Admin vem da lista AD_ADMIN_USERS. Escolha outro perfil para salvar.</span>}
+        {form.access_role === 'admin' && <span className="mt-1 block text-xs text-warn">Admin vem da lista AD_ADMIN_USERS. Escolha outro perfil para salvar.</span>}
       </label>
       <label className="label">Entrada
         <input aria-invalid={Boolean(errors.jornada_entrada)} className="field mt-2" required type="time" {...register('jornada_entrada')} />
-        {errors.jornada_entrada && <span className="mt-1 block text-xs text-red-300">{errors.jornada_entrada.message}</span>}
+        {errors.jornada_entrada && <span className="mt-1 block text-xs text-danger">{errors.jornada_entrada.message}</span>}
       </label>
       <label className="label">Saída
         <input aria-invalid={Boolean(errors.jornada_saida)} className="field mt-2" required type="time" {...register('jornada_saida')} />
-        {errors.jornada_saida && <span className="mt-1 block text-xs text-red-300">{errors.jornada_saida.message}</span>}
+        {errors.jornada_saida && <span className="mt-1 block text-xs text-danger">{errors.jornada_saida.message}</span>}
       </label>
       <label className="label">Início almoço
         <input aria-invalid={Boolean(errors.almoco_inicio)} className="field mt-2" required type="time" {...register('almoco_inicio')} />
-        {errors.almoco_inicio && <span className="mt-1 block text-xs text-red-300">{errors.almoco_inicio.message}</span>}
+        {errors.almoco_inicio && <span className="mt-1 block text-xs text-danger">{errors.almoco_inicio.message}</span>}
       </label>
       <label className="label">Fim almoço
         <input aria-invalid={Boolean(errors.almoco_fim)} className="field mt-2" required type="time" {...register('almoco_fim')} />
-        {errors.almoco_fim && <span className="mt-1 block text-xs text-red-300">{errors.almoco_fim.message}</span>}
+        {errors.almoco_fim && <span className="mt-1 block text-xs text-danger">{errors.almoco_fim.message}</span>}
       </label>
       {editing && (
         <label className="check-row md:col-span-2">
@@ -399,7 +399,7 @@ function EmployeeActionConfirmation({ item, kind, error, busy, onConfirm, onCanc
   return (
     <div aria-label={title} className="space-y-3" role="group">
       <InlineAlert title={title} tone={kind === 'restore' ? 'info' : 'warning'}>{text}</InlineAlert>
-      {error && <p className="text-sm text-red-300" role="alert">{error}</p>}
+      {error && <p className="text-sm text-danger" role="alert">{error}</p>}
       <div className="flex flex-wrap gap-2">
         <button className={kind === 'restore' ? 'btn-primary' : 'btn-danger'} disabled={busy} onClick={onConfirm} type="button">
           {busy ? 'Aguarde...' : kind === 'restore' ? 'Confirmar restauração' : 'Confirmar arquivamento'}
@@ -642,14 +642,14 @@ function EmployeesTab({
       actions.push(<button className="table-action" key="edit" onClick={(event) => edit(item, event.currentTarget)} type="button">Editar</button>)
     }
     if (state !== 'arquivado' && canArchive(item)) {
-      actions.push(<button className="table-action text-red-300" key="archive" onClick={() => setPendingAction({ id: item.id, kind: 'archive', error: '' })} type="button">{state === 'inativo_antigo' ? 'Arquivar (regularizar)' : 'Arquivar'}</button>)
+      actions.push(<button className="table-action text-danger" key="archive" onClick={() => setPendingAction({ id: item.id, kind: 'archive', error: '' })} type="button">{state === 'inativo_antigo' ? 'Arquivar (regularizar)' : 'Arquivar'}</button>)
     }
     if (state !== 'ativo' && canRestore) {
       actions.push(<button className="table-action" key="restore" onClick={() => setPendingAction({ id: item.id, kind: 'restore', error: '' })} type="button">Restaurar</button>)
     }
     if (actions.length > 0) return <div className="flex flex-wrap gap-2">{actions}</div>
-    if (state === 'ativo' && isOwnRecord(item)) return <span className="text-xs text-slate-500">Seu cadastro</span>
-    return <span className="text-xs text-slate-500">{state === 'ativo' ? 'Só administradores' : 'Só administradores restauram'}</span>
+    if (state === 'ativo' && isOwnRecord(item)) return <span className="text-xs text-muted">Seu cadastro</span>
+    return <span className="text-xs text-muted">{state === 'ativo' ? 'Só administradores' : 'Só administradores restauram'}</span>
   }
 
   // Confirmação de arquivar ou restaurar, a mesma na tabela e no cartão.
@@ -706,24 +706,24 @@ function EmployeesTab({
           {/* [17] Abaixo de 1280 px, cartões: a tabela (min-w-[760px] da .data-table) rolava dentro do cartão e deixava Editar e Arquivar fora da tela. */}
           <div className="mt-5 grid items-start gap-3 md:grid-cols-2 xl:hidden" data-employee-list="">
             {filtered.map((item) => (
-              <article className="space-y-3 rounded-card border border-white/10 bg-slate-950/45 p-4" data-employee={item.id} key={item.id}>
+              <article className="space-y-3 rounded-card border border-line bg-surface-2 p-4" data-employee={item.id} key={item.id}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-3">
                     <UserAvatar name={item.nome} />
                     <div className="min-w-0">
-                      <strong className="block break-words text-slate-200">{item.nome}</strong>
-                      <span className="block break-all text-xs text-slate-500">ID {item.id} · {item.ad_login || 'Sem login AD'}</span>
+                      <strong className="block break-words text-ink-2">{item.nome}</strong>
+                      <span className="block break-all text-xs text-muted">ID {item.id} · {item.ad_login || 'Sem login AD'}</span>
                     </div>
                   </div>
-                  <div className="shrink-0 text-right [&_small]:mt-1 [&_small]:block [&_small]:text-xs [&_small]:text-slate-500"><EmployeeStatusBadge item={item} /></div>
+                  <div className="shrink-0 text-right [&_small]:mt-1 [&_small]:block [&_small]:text-xs [&_small]:text-muted"><EmployeeStatusBadge item={item} /></div>
                 </div>
                 <dl className="grid grid-cols-2 gap-3 text-sm">
-                  <div><dt className="text-xs text-slate-500">Equipe</dt><dd className="mt-1"><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></dd></div>
-                  <div><dt className="text-xs text-slate-500">Perfil</dt><dd className="mt-1"><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></dd></div>
-                  <div><dt className="text-xs text-slate-500">Jornada</dt><dd className="text-slate-300">{item.jornada_entrada} - {item.jornada_saida}</dd></div>
-                  <div><dt className="text-xs text-slate-500">Almoço</dt><dd className="text-slate-300" data-employee-lunch="">{lunchKey(item) || '—'}</dd></div>
+                  <div><dt className="text-xs text-muted">Equipe</dt><dd className="mt-1"><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></dd></div>
+                  <div><dt className="text-xs text-muted">Perfil</dt><dd className="mt-1"><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></dd></div>
+                  <div><dt className="text-xs text-muted">Jornada</dt><dd className="text-ink-2">{item.jornada_entrada} - {item.jornada_saida}</dd></div>
+                  <div><dt className="text-xs text-muted">Almoço</dt><dd className="text-ink-2" data-employee-lunch="">{lunchKey(item) || '—'}</dd></div>
                 </dl>
-                <div className="border-t border-white/5 pt-3">{rowActions(item)}</div>
+                <div className="border-t border-line pt-3">{rowActions(item)}</div>
                 {actionConfirmation(item)}
               </article>
             ))}
@@ -753,7 +753,7 @@ function EmployeesTab({
                 </tr>
                 {pendingAction?.id === item.id && (
                   <tr>
-                    <td className="bg-slate-950/40" colSpan={7}>
+                    <td className="bg-surface-2" colSpan={7}>
                       <div className="max-w-3xl">{actionConfirmation(item)}</div>
                     </td>
                   </tr>
@@ -763,7 +763,7 @@ function EmployeesTab({
             </tbody>
           </table>
           </div>
-        {filtered.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Nenhum funcionário corresponde aos filtros.</p>}
+        {filtered.length === 0 && <p className="py-8 text-center text-sm text-muted">Nenhum funcionário corresponde aos filtros.</p>}
         </section>
       </div>
 
@@ -771,10 +771,10 @@ function EmployeesTab({
         <Dialog
           description="Dados atuais do CI carregados. Alterações de perfil são restritas a administradores e registradas em auditoria."
           eyebrow="Alteração auditada"
-          headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={closeEdit} type="button">Cancelar</button>}
+          headerAction={<button className="text-sm text-muted hover:text-ink" onClick={closeEdit} type="button">Cancelar</button>}
           initialFocusRef={editNameRef}
           onClose={closeEdit}
-          panelClassName="border-cyan-500/20"
+          panelClassName="border-info-line"
           returnFocusRef={editTriggerRef}
           size="max-w-5xl"
           title="Editar funcionário"
@@ -826,7 +826,7 @@ function UsersTab({ enabled, resource, notify }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
       <form className="card space-y-4" onSubmit={create}>
-        <h3 className="font-bold text-white">Criar usuário local</h3>
+        <h3 className="font-bold text-ink">Criar usuário local</h3>
         <label className="label">Login<input className="field mt-2" minLength="3" required value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label>
         <label className="label">Senha<input autoComplete="new-password" className="field mt-2" minLength="8" required type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></label>
         <label className="label">Perfil<select className="field mt-2" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}><option value="gestor">Gestor</option><option value="admin">Admin</option></select></label>
@@ -841,7 +841,7 @@ function UsersTab({ enabled, resource, notify }) {
                 <td><strong>{user.username}</strong><small>Criado em {formatDateTime(user.created_at)}</small></td>
                 <td><select className="field min-w-28 py-1.5" value={user.role} onChange={(event) => updateRole(user.id, event.target.value)}><option value="gestor">Gestor</option><option value="admin">Admin</option></select></td>
                 <td>{formatDateTime(user.last_login)}</td>
-                <td><button className="table-action text-red-300" onClick={() => remove(user.id)} type="button">Remover</button></td>
+                <td><button className="table-action text-danger" onClick={() => remove(user.id)} type="button">Remover</button></td>
               </tr>
             ))}
           </tbody>
@@ -931,18 +931,18 @@ function SecurityTab({ config, notify }) {
 
   return (
     <div className="space-y-5">
-      <section className="card overflow-hidden border-blue-500/15">
+      <section className="card overflow-hidden border-info-line">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-400">Postura de segurança</p>
-            <h2 className="mt-2 text-2xl font-black text-white">Checklist de Segurança</h2>
-            <p className="mt-2 max-w-2xl text-sm text-slate-400">Visão consolidada dos controles presentes no código e na configuração de deploy, sem expor segredos ou caminhos internos.</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-info">Postura de segurança</p>
+            <h2 className="mt-2 text-2xl font-black text-ink">Checklist de Segurança</h2>
+            <p className="mt-2 max-w-2xl text-sm text-muted">Visão consolidada dos controles presentes no código e na configuração de deploy, sem expor segredos ou caminhos internos.</p>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-3"><strong className="block text-xl text-emerald-300">{activeCount}</strong><span className="text-xs text-slate-500">Ativas/configuradas</span></div>
-            <div className="rounded-xl border border-amber-500/15 bg-amber-500/5 p-3"><strong className="block text-xl text-amber-300">{pendingCount}</strong><span className="text-xs text-slate-500">Parciais/pendentes</span></div>
-            <div className="rounded-xl border border-red-500/15 bg-red-500/5 p-3"><strong className="block text-xl text-red-300">1</strong><span className="text-xs text-slate-500">Risco relevante</span></div>
-            <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 p-3"><strong className="block text-sm text-blue-300">13/06/2026</strong><span className="text-xs text-slate-500">Última revisão</span></div>
+            <div className="rounded-xl border border-ok-line bg-ok-bg p-3"><strong className="block text-xl text-ok">{activeCount}</strong><span className="text-xs text-muted">Ativas/configuradas</span></div>
+            <div className="rounded-xl border border-warn-line bg-warn-bg p-3"><strong className="block text-xl text-warn">{pendingCount}</strong><span className="text-xs text-muted">Parciais/pendentes</span></div>
+            <div className="rounded-xl border border-danger-line bg-danger-bg p-3"><strong className="block text-xl text-danger">1</strong><span className="text-xs text-muted">Risco relevante</span></div>
+            <div className="rounded-xl border border-info-line bg-info-bg p-3"><strong className="block text-sm text-info">13/06/2026</strong><span className="text-xs text-muted">Última revisão</span></div>
           </div>
         </div>
       </section>
@@ -950,18 +950,18 @@ function SecurityTab({ config, notify }) {
       {groupedProtections.map(([group, items]) => (
         <section className="space-y-3" key={group}>
           <div className="flex items-center gap-3">
-            <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-400">{group}</h3>
-            <span className="h-px flex-1 bg-white/5" />
+            <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-muted">{group}</h3>
+            <span className="h-px flex-1 bg-ink/5" />
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {items.map(([title, status, icon, description]) => (
               <article className="card min-h-44" key={title}>
                 <div className="flex items-start justify-between gap-3">
-                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-500/10 text-blue-300"><Icon name={icon} /></div>
+                  <div className="grid h-10 w-10 place-items-center rounded-xl bg-info-bg text-info"><Icon name={icon} /></div>
                   <span className={`status-badge ${securityStatusClass[status]}`}>{status}</span>
                 </div>
-                <h4 className="mt-4 font-bold text-white">{title}</h4>
-                <p className="mt-2 text-sm leading-6 text-slate-400">{description}</p>
+                <h4 className="mt-4 font-bold text-ink">{title}</h4>
+                <p className="mt-2 text-sm leading-6 text-muted">{description}</p>
               </article>
             ))}
           </div>
@@ -970,20 +970,20 @@ function SecurityTab({ config, notify }) {
 
       <section className="grid gap-5 md:grid-cols-2">
         <div className="card">
-          <p className="text-sm text-slate-500">Modo de autenticação</p>
-          <h3 className="mt-2 text-xl font-bold text-white">{config?.local_admin_enabled ? 'AD/LDAP e acesso local de emergência' : 'AD/LDAP'}</h3>
-          <p className="mt-3 text-sm text-slate-400">Credenciais, servidores e segredos permanecem exclusivamente no backend.</p>
+          <p className="text-sm text-muted">Modo de autenticação</p>
+          <h3 className="mt-2 text-xl font-bold text-ink">{config?.local_admin_enabled ? 'AD/LDAP e acesso local de emergência' : 'AD/LDAP'}</h3>
+          <p className="mt-3 text-sm text-muted">Credenciais, servidores e segredos permanecem exclusivamente no backend.</p>
         </div>
         <div className="card">
-          <p className="text-sm text-slate-500">Administração local</p>
-          <h3 className="mt-2 text-xl font-bold text-white">{config?.local_admin_enabled ? 'Habilitada' : 'Desabilitada'}</h3>
-          <p className="mt-3 text-sm text-slate-400">O acesso local só é permitido quando habilitado explicitamente por ambiente.</p>
+          <p className="text-sm text-muted">Administração local</p>
+          <h3 className="mt-2 text-xl font-bold text-ink">{config?.local_admin_enabled ? 'Habilitada' : 'Desabilitada'}</h3>
+          <p className="mt-3 text-sm text-muted">O acesso local só é permitido quando habilitado explicitamente por ambiente.</p>
         </div>
       </section>
 
       {config?.local_password_change_allowed && (
         <form className="card max-w-xl space-y-4" onSubmit={submit}>
-          <h3 className="font-bold text-white">Alterar minha senha local</h3>
+          <h3 className="font-bold text-ink">Alterar minha senha local</h3>
           <label className="label">Nova senha<input autoComplete="new-password" className="field mt-2" minLength="8" maxLength="128" required type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
           <label className="label">Confirmar senha<input autoComplete="new-password" className="field mt-2" minLength="8" maxLength="128" required type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
           <button className="btn-primary" type="submit">Alterar senha</button>
@@ -1025,7 +1025,7 @@ export function AdminPage({ session, search, navigate, notify, refreshStatus }) 
 
   return (
     <div className="space-y-5">
-      <div className="flex gap-2 overflow-x-auto border-b border-white/5 pb-3">
+      <div className="flex gap-2 overflow-x-auto border-b border-line pb-3">
         {availableTabs.map(([key, label]) => (
           <button className={`tab-button ${activeTab === key ? 'tab-button-active' : ''}`} key={key} onClick={() => navigate(`/admin?tab=${key}`)} type="button">{label}</button>
         ))}

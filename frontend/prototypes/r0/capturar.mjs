@@ -13,6 +13,12 @@
 // Uso (na pasta frontend, com o build feito em ../app):
 //   CHROME_PATH="C:\...\chrome.exe" node prototypes/r0/capturar.mjs antes <pasta de saida>
 //   CHROME_PATH="C:\...\chrome.exe" node prototypes/r0/capturar.mjs depois <pasta de saida>
+// [R1] Opções do "antes" (o app), para os lotes R:
+//   --tema=claro|escuro   emula prefers-color-scheme (o app segue o sistema)
+//   --plano=r             só as telas principais (admin), o login e Pausas do
+//                         técnico, em 1280 e 390 px; sem isso, o plano do R0
+//   --medir               em 390 px, conta alvos de toque abaixo de 40 px e
+//                         rolagem lateral em cada tela (sai 1 se houver)
 import { createServer, request } from 'node:http'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, extname, join, normalize, resolve } from 'node:path'
@@ -21,7 +27,13 @@ import { launchChrome, openPage, sleep } from '../../scripts/browser/lib/chrome.
 import { startMockServer } from '../../scripts/browser/lib/mock-server.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const [mode, outArg] = process.argv.slice(2)
+const positional = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
+const option = (name) => process.argv.find((arg) => arg.startsWith(`--${name}=`))?.split('=')[1] ?? null
+const [mode, outArg] = positional
+const theme = option('tema')
+const planName = option('plano')
+const measureApp = process.argv.includes('--medir')
+if (theme !== null && !['claro', 'escuro'].includes(theme)) { console.error('--tema=claro|escuro'); process.exit(2) }
 if (!['antes', 'depois', 'verificar'].includes(mode) || (mode !== 'verificar' && !outArg)) {
   console.error('uso: node prototypes/r0/capturar.mjs antes|depois <pasta de saida> | verificar')
   process.exit(2)
@@ -101,6 +113,12 @@ const PLAN = [
   ['gestor', ['/dashboard', '/pausas', '/admin', '/calendario', '/metricas'], [1280, 390]],
   ['tecnico', ['/pausas', '/dashboard', '/calendario', '/mapa-pa', '/ausencias'], [1280, 390]],
 ]
+// [R1] Plano dos lotes R: as telas que mais mudam, nos dois tamanhos.
+const PLAN_R = [
+  ['anonimo', ['/'], [1280, 390]],
+  ['admin', MAIN, [1280, 390]],
+  ['tecnico', ['/pausas'], [1280, 390]],
+]
 const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-')
 
 // ---------------------------------------------------------------------------
@@ -138,16 +156,24 @@ async function before() {
   const base = `http://127.0.0.1:${proxy.address().port}/app`
   const chrome = await launchChrome()
   const page = await openPage(chrome.port)
+  if (theme !== null) await page.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme === 'escuro' ? 'dark' : 'light' }] })
+  const suffix = theme === null ? '' : `-${theme}`
   let total = 0
+  let problems = 0
   try {
-    for (const [who, routes, widths] of PLAN) {
+    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : PLAN) {
       profile = who
       for (const width of widths) {
         const height = WIDTHS.find(([w]) => w === width)[1]
         for (const route of routes) {
           const ready = who === 'anonimo' ? "document.querySelector('form') !== null" : "document.querySelector('[data-page-title]') !== null && !document.querySelector('[role=status][aria-label]')"
-          await shoot(page, `${base}${route === '/' ? '/' : route}`, width, height, join(outDir, `${who}-${slug(route)}-${width}.webp`), ready)
+          await shoot(page, `${base}${route === '/' ? '/' : route}`, width, height, join(outDir, `${who}-${slug(route)}-${width}${suffix}.webp`), ready)
           total++
+          if (measureApp && width === 390) {
+            const result = await page.evaluate(MEASURE)
+            problems += result.small.length + (result.overflow ? 1 : 0)
+            if (result.small.length || result.overflow) console.log(`${who} ${route} 390: rolagem lateral ${result.overflow ? 'SIM' : 'nao'}, alvos < 40 px: ${result.small.length}${result.small.length ? ' (' + result.small.slice(0, 8).join(' | ') + ')' : ''}`)
+          }
         }
       }
     }
@@ -156,7 +182,8 @@ async function before() {
     await chrome.close()
     proxy.close()
   }
-  console.log(`capturas antes: ${total}`)
+  console.log(`capturas antes: ${total}${measureApp ? `, problemas em 390 px: ${problems}` : ''}`)
+  return problems
 }
 
 const TYPES = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.woff2': 'font/woff2', '.svg': 'image/svg+xml' }
@@ -237,6 +264,6 @@ async function after() {
   console.log(`capturas depois: ${total}`)
 }
 
-await (mode === 'antes' ? before() : after())
+const appProblems = await (mode === 'antes' ? before() : after())
 // O servidor simulado nao expoe close(): sai explicitamente.
-process.exit(0)
+process.exit(measureApp && appProblems > 0 ? 1 : 0)

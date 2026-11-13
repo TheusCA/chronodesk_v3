@@ -146,7 +146,7 @@ function sourceLabel(value) {
   return 'Outros'
 }
 
-function SummaryCard({ label, value, tone = 'text-white' }) {
+function SummaryCard({ label, value, tone = 'text-ink' }) {
   const metricTone = tone.includes('red') ? 'danger' : tone.includes('amber') ? 'warning' : tone.includes('emerald') ? 'success' : 'info'
   return <MetricCard detail="Indicador operacional filtrado" icon="alert" label={label} tone={metricTone} value={value} />
 }
@@ -162,7 +162,7 @@ function CalculatedTimeField({ label, value }) {
   return (
     <div className="label">
       {label}
-      <div className="field mt-2 flex items-center text-slate-300" aria-live="polite">
+      <div className="field mt-2 flex items-center text-ink-2" aria-live="polite">
         {value || '--:--'}
       </div>
     </div>
@@ -215,17 +215,17 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
     <Dialog
       description="Alterações ficam vinculadas ao usuário autenticado e registradas em auditoria."
       eyebrow={editing ? `Registro #${initial.id}` : 'Novo registro'}
-      headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={close} type="button">Cancelar</button>}
+      headerAction={<button className="text-sm text-muted hover:text-ink" onClick={close} type="button">Cancelar</button>}
       initialFocusRef={firstFieldRef}
       returnFocusRef={returnFocusRef}
       onClose={close}
-      panelClassName="border-red-500/20"
+      panelClassName="border-danger-line"
       size="max-w-6xl"
       title={editing ? 'Editar chamado crítico' : 'Cadastrar chamado crítico'}
       titleClassName="text-xl"
     >
       <form className="mt-6 space-y-6" onSubmit={submit}>
-        <section className="rounded-card border border-white/5 bg-slate-950/20 p-4">
+        <section className="rounded-card border border-line bg-surface-2 p-4">
           <SectionHeader description="Dados principais do incidente e estado atual da sala crítica." eyebrow="Identificação" title="Identificação" />
           <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -236,13 +236,13 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
           {canManage ? (
             <label className="label">Status<select className="field mt-2" value={form.status} onChange={(event) => update('status', event.target.value)}>{statusOptions.map((item) => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
           ) : (
-            <div className="label">Status<div className="field mt-2 flex items-center text-slate-300">Aberto</div></div>
+            <div className="label">Status<div className="field mt-2 flex items-center text-ink-2">Aberto</div></div>
           )}
           </div>
           </div>
         </section>
 
-        <section className="rounded-card border border-white/5 bg-slate-950/20 p-4">
+        <section className="rounded-card border border-line bg-surface-2 p-4">
           <SectionHeader description="Tempos são calculados no cliente apenas para orientar o preenchimento; o backend continua validando e persistindo." eyebrow="Horários" title="Linha do tempo" />
           <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -256,7 +256,7 @@ function IncidentForm({ initial, onClose, onSave, submitting, canManage, sdkResp
           </div>
         </section>
 
-        <section className="rounded-card border border-white/5 bg-slate-950/20 p-4">
+        <section className="rounded-card border border-line bg-surface-2 p-4">
           <SectionHeader description="Impacto, sala, responsáveis e documentação operacional da tratativa." eyebrow="Impacto e tratativa" title="Detalhes operacionais" />
           <div className="mt-5">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -294,10 +294,10 @@ function IncidentDetails({ item, onClose, returnFocusRef }) {
   return (
     <Dialog
       description={`Sala em ${item.room_date} / origem ${sourceLabel(item.source)} / incidente aberto em ${formatDateTime(item.incident_opened_at || item.opened_at)}`}
-      headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>}
+      headerAction={<button className="text-sm text-muted hover:text-ink" onClick={onClose} type="button">Fechar</button>}
       headerLead={<div className="flex flex-wrap gap-2"><IncidentBadge value={item.severity} /><IncidentBadge value={item.status} /></div>}
       onClose={onClose}
-      panelClassName="border-red-500/20"
+      panelClassName="border-danger-line"
       returnFocusRef={returnFocusRef}
       size="max-w-4xl"
       title={item.incident_number || item.ticket_number}
@@ -309,7 +309,7 @@ function IncidentDetails({ item, onClose, returnFocusRef }) {
         <DetailPill label="Área responsável" value={item.responsible_area || 'Não informado'} />
         <DetailPill label="Tempo para abrir sala" value={minutesLabel(item.room_opening_duration_minutes)} tone="warning" />
         <DetailPill label="Tempo de sala" value={minutesLabel(item.room_duration_minutes)} tone="warning" />
-        {fields.map(([label, value]) => value && <div className="rounded-xl border border-white/5 bg-slate-950/30 p-4 sm:col-span-2" key={label}><small className="text-slate-600">{label}</small><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{value}</p></div>)}
+        {fields.map(([label, value]) => value && <div className="rounded-xl border border-line bg-surface-2 p-4 sm:col-span-2" key={label}><small className="text-muted">{label}</small><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink-2">{value}</p></div>)}
       </div>
       {item.meeting_url && <a className="btn-secondary mt-5" href={item.meeting_url} rel="noreferrer" target="_blank">Abrir sala de crise</a>}
     </Dialog>
@@ -373,7 +373,7 @@ function ImportPanel({ onClose, onImported }) {
     <Dialog
       description="CSV ou XLSX com cabeçalhos da planilha War Room, como INCIDENTE e Data da Sala. Campos incompletos podem ser ajustados depois. Limite de 500 linhas e 2 MB."
       eyebrow="Preview obrigatório"
-      headerAction={<button className="text-sm text-slate-400 hover:text-white" onClick={onClose} type="button">Fechar</button>}
+      headerAction={<button className="text-sm text-muted hover:text-ink" onClick={onClose} type="button">Fechar</button>}
       onClose={onClose}
       placement="end"
       size="max-w-2xl"
@@ -385,7 +385,7 @@ function ImportPanel({ onClose, onImported }) {
         <FileTypeBadge extension="xlsx" />
       </div>
       <button
-        className={`mt-6 grid w-full place-items-center rounded-2xl border border-dashed px-5 py-10 ${dragging ? 'border-blue-400 bg-blue-500/10' : 'border-white/15 bg-slate-900/50'}`}
+        className={`mt-6 grid w-full place-items-center rounded-2xl border border-dashed px-5 py-10 ${dragging ? 'border-info bg-info-bg' : 'border-line bg-surface'}`}
         onClick={() => inputRef.current?.click()}
         onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
         onDragLeave={(event) => { event.preventDefault(); setDragging(false) }}
@@ -393,21 +393,21 @@ function ImportPanel({ onClose, onImported }) {
         onDrop={(event) => { event.preventDefault(); setDragging(false); choose(event.dataTransfer.files) }}
         type="button"
       >
-        <Icon className="h-8 w-8 text-blue-400" name="upload" />
-        <strong className="mt-3 text-sm text-slate-200">Clique ou arraste CSV/XLSX</strong>
+        <Icon className="h-8 w-8 text-info" name="upload" />
+        <strong className="mt-3 text-sm text-ink-2">Clique ou arraste CSV/XLSX</strong>
       </button>
       <input ref={inputRef} accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(event) => choose(event.target.files)} type="file" />
       {loading && <InlineAlert title="Processando arquivo">Validando planilha antes da confirmação.</InlineAlert>}
       {error && <InlineAlert tone="danger" title="Falha na importação">{error}</InlineAlert>}
       {preview && (
         <div className="mt-5 space-y-4">
-          <p className="text-sm text-slate-300">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s).</p>
-          <div className="max-h-80 overflow-auto rounded-xl border border-white/5">
+          <p className="text-sm text-ink-2">{preview.valid_count} válida(s), {preview.invalid_count} inválida(s).</p>
+          <div className="max-h-80 overflow-auto rounded-xl border border-line">
             {preview.rows.map((row) => (
-              <div className="border-b border-white/5 px-3 py-3 text-sm" key={row.line}>
-                <span className={row.valid ? 'text-emerald-300' : 'text-red-300'}>Linha {row.line}</span>
-                <p className="mt-1 text-slate-400">{row.ticket_number || 'Sem chamado'} / {row.title || 'Sem título'}</p>
-                {row.errors.length > 0 && <p className="mt-1 text-xs text-red-300">{row.errors.join(' ')}</p>}
+              <div className="border-b border-line px-3 py-3 text-sm" key={row.line}>
+                <span className={row.valid ? 'text-ok' : 'text-danger'}>Linha {row.line}</span>
+                <p className="mt-1 text-muted">{row.ticket_number || 'Sem chamado'} / {row.title || 'Sem título'}</p>
+                {row.errors.length > 0 && <p className="mt-1 text-xs text-danger">{row.errors.join(' ')}</p>}
               </div>
             ))}
           </div>
@@ -495,9 +495,9 @@ export function CriticalIncidentsPage({ session, notify }) {
     <div className="space-y-5">
       <section className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-red-400">War room e sala de crise</p>
-          <h2 className="mt-2 text-2xl font-black text-white">Chamados críticos</h2>
-          <p className="mt-2 text-sm text-slate-500">Registro central de impacto, resposta, mitigação, causa raiz e resolução.</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-danger">War room e sala de crise</p>
+          <h2 className="mt-2 text-2xl font-black text-ink">Chamados críticos</h2>
+          <p className="mt-2 text-sm text-muted">Registro central de impacto, resposta, mitigação, causa raiz e resolução.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha CSV</a>
@@ -507,13 +507,13 @@ export function CriticalIncidentsPage({ session, notify }) {
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Críticos abertos" tone="text-red-300" value={summary.open_count || 0} />
-        <SummaryCard label="Em war room" tone="text-amber-300" value={summary.war_room_count || 0} />
-        <SummaryCard label="Resolvidos no período" tone="text-emerald-300" value={summary.resolved_count || 0} />
+        <SummaryCard label="Críticos abertos" tone="text-danger" value={summary.open_count || 0} />
+        <SummaryCard label="Em war room" tone="text-warn" value={summary.war_room_count || 0} />
+        <SummaryCard label="Resolvidos no período" tone="text-ok" value={summary.resolved_count || 0} />
         <SummaryCard label="Alta / crítica" value={summary.high_critical_count || 0} />
         <SummaryCard label="Tempo médio para mitigar" value={minutesLabel(summary.avg_mitigation_minutes)} />
         <SummaryCard label="Tempo médio para resolver" value={minutesLabel(summary.avg_resolution_minutes)} />
-        <SummaryCard label="Sem causa raiz" tone="text-amber-300" value={summary.missing_root_cause_count || 0} />
+        <SummaryCard label="Sem causa raiz" tone="text-warn" value={summary.missing_root_cause_count || 0} />
         <SummaryCard label="Principal área responsável" value={topAreas[0]?.responsible_area || 'Sem dados'} />
       </section>
 
@@ -560,8 +560,8 @@ export function CriticalIncidentsPage({ session, notify }) {
                     <div className="grid gap-1 sm:grid-cols-2">
                       <button className="table-action" disabled={loadingItemId === item.id} onClick={(event) => { dialogTriggerRef.current = event.currentTarget; openItem(item.id, 'view') }} type="button">{loadingItemId === item.id ? 'Carregando' : 'Visualizar'}</button>
                       {canManage && <button className="table-action" disabled={loadingItemId === item.id} onClick={(event) => { dialogTriggerRef.current = event.currentTarget; openItem(item.id, 'edit') }} type="button">Editar</button>}
-                      {canManage && !['mitigated', 'resolved', 'cancelled'].includes(item.status) && <button className="table-action text-blue-300" onClick={() => changeStatus(item.id, 'mitigated')} type="button">Mitigar</button>}
-                      {canManage && item.status !== 'resolved' && item.status !== 'cancelled' && <button className="table-action text-emerald-300" onClick={() => changeStatus(item.id, 'resolved')} type="button">Resolver</button>}
+                      {canManage && !['mitigated', 'resolved', 'cancelled'].includes(item.status) && <button className="table-action text-info" onClick={() => changeStatus(item.id, 'mitigated')} type="button">Mitigar</button>}
+                      {canManage && item.status !== 'resolved' && item.status !== 'cancelled' && <button className="table-action text-ok" onClick={() => changeStatus(item.id, 'resolved')} type="button">Resolver</button>}
                     </div>
                   </td>
                 </tr>

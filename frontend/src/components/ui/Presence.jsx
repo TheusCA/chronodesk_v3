@@ -67,7 +67,7 @@ export function PresenceDaySummary({ events }) {
           <Icon name={item.icon} className="h-3 w-3" />{item.letter} {summary[item.status]}
         </span>
       ))}
-      {summary.partial > 0 && <span aria-hidden="true" className="inline-flex items-center text-slate-400" title={PARTIAL_MARKER_LEGEND.label}><Icon name={PARTIAL_MARKER_LEGEND.icon} className="h-3 w-3" /></span>}
+      {summary.partial > 0 && <span aria-hidden="true" className="inline-flex items-center text-muted" title={PARTIAL_MARKER_LEGEND.label}><Icon name={PARTIAL_MARKER_LEGEND.icon} className="h-3 w-3" /></span>}
     </div>
   )
 }

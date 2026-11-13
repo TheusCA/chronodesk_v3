@@ -3,25 +3,25 @@ import { Icon } from './ui/Icon'
 
 const variants = {
   success: {
-    colors: 'border-emerald-400/40 bg-emerald-500/15 text-emerald-100',
+    colors: 'border-ok-line bg-ok-bg text-ok',
     icon: 'shield',
     title: 'Sucesso',
     role: 'status',
   },
   error: {
-    colors: 'border-red-400/45 bg-red-500/15 text-red-100',
+    colors: 'border-danger-line bg-danger-bg text-danger',
     icon: 'alert',
     title: 'Atenção',
     role: 'alert',
   },
   warning: {
-    colors: 'border-amber-400/45 bg-amber-500/15 text-amber-100',
+    colors: 'border-warn-line bg-warn-bg text-warn',
     icon: 'alert',
     title: 'Aviso',
     role: 'status',
   },
   info: {
-    colors: 'border-blue-400/40 bg-blue-500/15 text-blue-100',
+    colors: 'border-info-line bg-info-bg text-info',
     icon: 'bell',
     title: 'Informação',
     role: 'status',
@@ -38,19 +38,19 @@ export function Feedback({ feedback, onClose }) {
 
   const toast = feedback && (
     <div
-      className={`portal-toast fixed bottom-4 left-4 right-4 z-[70] flex max-w-md items-start gap-3 rounded-card border px-4 py-3 text-sm shadow-2xl backdrop-blur sm:left-auto ${variant.colors}`}
+      className={`portal-toast fixed bottom-4 left-4 right-4 z-[70] flex max-w-md items-start gap-3 rounded-card border px-4 py-3 text-sm shadow-lg sm:left-auto ${variant.colors}`}
       data-feedback-type={feedback.type || 'success'}
       key={feedback.id ?? feedback.message}
     >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" name={variant.icon} />
       <div className="min-w-0 flex-1">
         <strong className="block text-xs uppercase tracking-[0.14em]">{variant.title}</strong>
-        <span className="mt-1 block leading-5 text-slate-100">{feedback.message}</span>
+        <span className="mt-1 block leading-5 text-ink">{feedback.message}</span>
       </div>
       {onClose && (
         <button
           aria-label="Fechar mensagem"
-          className="-mr-1 rounded-md p-1 text-current/70 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+          className="-mr-1 rounded-md p-1 text-current/70 transition hover:bg-ink/10 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
           onClick={onClose}
           // Fechar o aviso não tira o foco de quem está com ele (por exemplo, um diálogo aberto).
           onMouseDown={(event) => event.preventDefault()}
