@@ -62,6 +62,10 @@ echo "== PHP PA distribution QA =="
 # Motor de distribuicao de PA (F10-1): regra do script, porta x motor; sem banco.
 php scripts/qa-pa-distribution.php
 
+echo "== PHP schedule parity QA =="
+# Script de paridade da escala mensal (F10-1): xlsx sintetico, so contagens; sem banco.
+php scripts/qa-paridade-escala.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php

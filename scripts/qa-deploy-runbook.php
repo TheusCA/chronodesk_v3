@@ -304,7 +304,7 @@ sort($repoQas);
 // [F10-1] Os roteiros dos deploys 1 e 2 ja foram executados e ficam como
 // foram. QA criado depois do deploy 2 fica nesta lista ate entrar no roteiro
 // do proximo deploy; QA novo fora dela continua reprovando aqui.
-$qasAfterDeploy2 = ['qa-pa-distribution'];
+$qasAfterDeploy2 = ['qa-pa-distribution', 'qa-paridade-escala'];
 assert_same($qasAfterDeploy2, array_values(array_intersect($qasAfterDeploy2, $repoQas)), 'QAs criados depois do deploy 2: cada um existe no repositorio');
 $repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2));
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');

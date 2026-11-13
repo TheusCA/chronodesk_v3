@@ -174,6 +174,14 @@ if (!$phpExecutable) {
         Pass "QA da distribuicao de PA concluido"
     }
 
+    # Sem banco: script de paridade da escala mensal (F10-1): xlsx sintetico, so contagens.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-paridade-escala.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA da paridade da escala falhou"
+    } else {
+        Pass "QA da paridade da escala concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {
