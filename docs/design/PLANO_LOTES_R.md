@@ -1,6 +1,6 @@
 # Plano dos lotes do redesenho (R1 em diante)
 
-**Estado:** R0, proposta (2026-11-13). Os lotes valem para a direção que o responsável escolher (`DIRECAO_VISUAL.md`, D-R0-1). A estimativa abaixo é para a recomendada (A, dois temas). **Cada lote para para revisão.**
+**Estado:** aprovado em 2026-11-13, com a direção A e as decisões D-R1-1 a D-R1-3 como recomendadas. R1 e R2 em execução, nessa ordem, com uma parada para revisão no fim do R2. **Cada lote para para revisão.**
 
 ## Regras de todos os lotes R
 
@@ -127,7 +127,7 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 | R4a | Pausas | Escolha visível com um botão que diz a ação (D-R0-5); lista densa com filtro; tempo restante e estouro destacado | `qa:operational-view`, `qa:action-feedback`, navegador (bloco 13, derrubar pausa, DD3) | Médio: tela mais usada |
 | R4b | Visão operacional e modo painel | Disponíveis e composição na primeira tela; "Precisa de você"; pausas em andamento; sai o cartão de abertura e os 8 cartões iguais; modo painel para a tela fixa | `qa:operational-view`, `qa-operational-view.php` (contadores e "—" ficam) | Médio |
 | R4c | Aprovações | Lista com um botão principal por vez (o pedido em foco); contador por tipo como filtro; a confirmação fica | navegador (Aprovar e Rejeitar, 17g; já decidido em outra aba) | Médio |
-| R4d | Funcionários | Lista na primeira tela; Adicionar e Editar no painel lateral (D-R0-6) | `qa:employee-form`, navegador (bloco 4, editar e adicionar) | Médio |
+| R4d | Funcionários | Lista na primeira tela; Adicionar e Editar no painel lateral (D-R0-6). Mantém o filtro e a coluna de Almoço do deploy 2 e reserva lugar para o grupo Tools (marca no cadastro e filtro, do módulo de CHGs): correção do responsável de 13/11/2026 (`AUDITORIA_UX.md`, 3.5) | `qa:employee-form` (inclui o filtro de Almoço), navegador (bloco 4, editar e adicionar) | Médio |
 
 ## R5 · Escala, Mapa de PA e ausências
 
@@ -157,10 +157,98 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 4. **O F8 e o F9, quando a Liderança responder,** entram no próximo intervalo, como já está combinado.
 5. **Deploy:** os lotes R são só frontend (`npm ci` e build) e podem ir juntos no deploy seguinte, com o aviso à gestão. Nenhum precisa de migration.
 
-## Decisões que o plano levanta
+## Decisões que o plano levanta (aprovadas em 2026-11-13, como recomendadas)
 
 | # | Decisão | Recomendação |
 |---|---|---|
 | D-R1-1 | Guardar o tema escolhido | Seguir o sistema e manter a escolha na sessão. Guardar na conta pede API: fica para depois, com desenho próprio |
 | D-R1-2 | Orçamento do bundle no `qa:bundle` | JS de entrada até a linha de base mais 5%; CSS até 70 KB; fontes até 100 KB |
 | D-R1-3 | Onde mora a fonte | `frontend/src/assets/fontes/`, servida pelo Vite em `/app/assets/` (mesma origem) |
+
+---
+
+## Execução
+
+### R1 · Tokens, tipografia e limpeza do fundo (13/11/2026)
+
+**Commits:** `af453f7` (tokens, dois temas e fontes) e `00651ff` (tipografia e orçamento do build), mais um de docs. Sem push.
+
+**O que mudou na divisão dos commits:**
+- O plano punha a limpeza do fundo no segundo commit. Ela foi para o **primeiro**: a grade, o gradiente, a cena do login, o vidro e o brilho estavam escritos na paleta do Tailwind que o primeiro commit tira (uma classe fora dos tokens não gera CSS).
+- O segundo ficou com a tipografia, as travas de texto e o orçamento do `qa:bundle`.
+
+**Commit 1 (`af453f7`):**
+- **Tokens** no `index.css`, em canais R G B, em três blocos:
+  - claro, que é o padrão;
+  - escuro pela preferência do sistema;
+  - escuro pelo botão do topo, guardado só na sessão da aba (`src/lib/theme.ts`, D-R1-1).
+- **`tailwind.config.js` só com tokens.** A paleta padrão sai, e as 613 classes de cor das telas foram trocadas por uma tabela única:
+  - `text-white` vira `text-ink`; `slate-200`/`300` viram `ink-2`; `slate-400` a `600` viram `muted`;
+  - ciano e azul viram `info`; verde vira `ok`; âmbar vira `warn`; vermelho vira `danger`.
+- **D-R0-4:** as classes `presence-*` mantêm o nome, e só a cor muda.
+- **Calendário:**
+  - a ausência fica no vermelho de ausente, o mesmo da legenda;
+  - o War Room fica no vermelho de erro com a borda cheia;
+  - a escala de antes do corte fica no azul do remoto;
+  - a hora extra fica só com o contorno azul.
+- **Fontes:** Plex Sans 400, 500 e 600 e Plex Mono 500 em `src/assets/fontes/` (86 KB, OFL, swap). O registro está no README de lá.
+
+**Commit 2 (`00651ff`):**
+- **Tamanho e peso:** `text-xs` passa a 13 px, o corpo a 15 px e os pesos ficam em 400, 500 e 600.
+- **Sem maiúsculas espaçadas:** saem os `uppercase` e os `tracking` largos (sinais S4 e S5).
+- **Topo:** sai o "Operação online" fixo (S12).
+
+**QA novo e travas:**
+- **`qa:contrast` (novo; a bateria passa de 22 para 23 scripts npm):**
+  - os três blocos de tokens, com os dois escuros iguais;
+  - o tailwind sem cor solta;
+  - 31 pares AA em cada tema;
+  - o comportamento do tema: sem escolha, segue o sistema; a escolha fica na sessão; o armazenamento bloqueado é tolerado.
+- **`qa:visual`:**
+  - nenhuma classe fora dos tokens e nenhuma cor solta no CSS ou no código;
+  - fontes: só as aprovadas, woff2 local, com swap e licença;
+  - texto ≥ 13 px, sem `uppercase` e sem `tracking` largo;
+  - peso ≤ 600;
+  - sem "Operação online".
+- **`qa:bundle`:** orçamento (D-R1-2). JS de entrada até 211 050 bytes, CSS até 70 KB, fontes até 100 KB. No `00651ff`: 197 638, 52 874 e 85 912 bytes.
+
+**Expectativas que mudaram (justificativa por caso):**
+
+| QA | O que mudou | Por quê |
+|---|---|---|
+| `qa:absences-form`, `qa:operational-view`, `qa:pa-map`, `qa:schedule-rules`, `qa:unsaved-changes`, `qa:calendar-presence` (texto) | A classe de cor esperada no HTML: `border-white/5` → `border-line`, `text-slate-400` → `text-muted`, `ring-red-400/60` → `ring-danger` e semelhantes | Só a classe: a estrutura conferida é a mesma |
+| `qa:unsaved-changes` | Fundo dos diálogos sem `backdrop-blur-sm`; painel lateral `bg-surface`; contagem de `qa:*` de 19 para 20 | Vidro saiu (S3); entrou o `qa:contrast` |
+| `qa:unsaved-changes`, `qa:schedule-rules` (commit 2) | Título dos diálogos e das regras com `font-semibold` | O peso 700 deixou de existir |
+| `qa:employee-form` | A linha de confirmação do almoço era achada pela classe `bg-slate-950/40`; agora pelo `colSpan`: toda célula com `colSpan` na lista ocupa as 7 colunas | Com o token, a classe `bg-surface-2` aparece em outras partes da lista |
+| `qa:visual` | Fundo da coluna fixa pelo token `--surface` (opaco nos três blocos), no lugar de `theme('colors.chrono.card')` | A cor `chrono` saiu |
+| `qa:calendar-presence` (cores) | As cores são resolvidas pelos tokens nos dois temas (antes, rgb fixo e só o escuro). Matiz da D-R0-4: pausa 25° a 50°, almoço 160° a 200°, ausente até 15°. Almoço × ausente separados pelo matiz (≥ 90°), e não pela claridade do fundo | A regra mudou com a D-R0-4; a garantia (não confundir almoço com ausente) continua, por outro caminho |
+
+**Validação:**
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`), sozinha no worktree:
+  - `af453f7`: saída 0, frontend 23/23, navegador 1029/1029;
+  - `00651ff`: saída 0, frontend 23/23, navegador 1029/1029.
+- **Mutação** com o `mut_guard.php`:
+  - commit 1: 21/21 mortos (contraste nos dois temas, blocos e tokens, cor solta, matiz e contraste das situações, classes fora dos tokens, fontes, coluna fixa, tema na sessão, botão de tema);
+  - commit 2: 12/12 mortos (texto de 11 px, maiúsculas e espaçamento por classe e por CSS, peso 700 na config, numa tela e no CSS, `text-xs` de 12 px, "Operação online" de volta, e os três orçamentos do build, cada um reprovado pelo próprio orçamento e não por erro de build).
+- **Contraste dos tokens do app,** menor valor de texto em cada tema:
+  - claro: `--muted` sobre `--surface-2`, 5,16:1 (borda de campo sobre `--surface-2`, 3,20:1);
+  - escuro: `--muted` sobre `--surface-2`, 5,75:1 (borda de campo, 3,40:1).
+  - Hoje, antes do R1: `slate-500` 3,81:1, `slate-600` 2,39:1 e borda de campo 1,31:1 (auditoria, 5.1).
+- **Medição em 390 px** (`prototypes/r0/capturar.mjs antes --medir`, nos dois temas):
+  - 0 rolagens laterais;
+  - 69 alvos abaixo de 40 px, os mesmos de antes: o botão do menu, as abas da Administração, as ações de tabela, Aprovar e Rejeitar, Derrubar pausa e as setas do Calendário.
+  - Eles são do R2, que leva o alvo de 40 px para os primitivos.
+
+**Capturas:**
+- **"Antes":** as do R0, `capturas/antes/<perfil>-<tela>-<largura>.webp`, só o escuro, porque o app só tinha ele. O código das telas não mudou entre o R0 e o R1.
+- **"Depois", no git:** `capturas/r1/<perfil>-<tela>-<largura>-<tema>.webp`, 40 arquivos (1,2 MB):
+  - o login;
+  - as 8 telas principais do admin;
+  - Pausas do técnico;
+  - em 1280 e 390 px, claro e escuro.
+- **Capturas do commit intermediário** (`af453f7`, as mesmas 40): ficaram fora do git, só na estação, como prevê a D-R0-9 para o que não é o fim do lote.
+
+**Movido para os lotes das telas:**
+- **"Filtros aplicados":** sai no R4d, junto com a tela de Funcionários. A contagem dele é o que o `qa:employee-form` usa para conferir o filtro de Almoço do deploy 2; ela sai junto com a fileira de filtros nova, que mostra o filtro ativo.
+- **"Permissão" do Mapa de PA:** sai no R5, onde o plano já o tirava também.
+- **O texto de permissão** ("só Admin e Liderança editam o mapa") fica, sem mudar uma palavra, como linha da tela.

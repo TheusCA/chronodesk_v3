@@ -1,6 +1,6 @@
 # Direção visual do portal (R0 do redesenho)
 
-**Estado:** R0, a escolher pelo responsável (2026-11-13). Duas direções, a mesma estrutura de tela e o mesmo protótipo (`frontend/prototypes/r0/`). A direção muda só pelos tokens (`?direcao=a|b`, `?tema=claro|escuro`). Os problemas que elas resolvem estão em `AUDITORIA_UX.md`.
+**Estado:** decisões D-R0-1 a D-R0-9 aprovadas como recomendadas em 2026-11-13: direção A (Mesa clara), os dois temas com o claro como padrão. R1 em execução (`PLANO_LOTES_R.md`). Os problemas que a direção resolve estão em `AUDITORIA_UX.md`; o protótipo do R0 continua em `frontend/prototypes/r0/` (`?direcao=a|b`, `?tema=claro|escuro`).
 
 **Para quem é:**
 - técnicos N1 e N2, o dia inteiro, no computador e às vezes no celular;
@@ -186,7 +186,9 @@ O escuro é grafite quente, não ardósia azulada.
 
 ---
 
-## 5. Decisões a confirmar
+## 5. Decisões (aprovadas em 2026-11-13)
+
+**Aprovação do responsável:** todas como recomendadas, na coluna do meio. As decisões do plano (D-R1-1 a D-R1-3, `PLANO_LOTES_R.md`) também.
 
 | # | Decisão | Recomendação | O que muda conforme a resposta |
 |---|---|---|---|

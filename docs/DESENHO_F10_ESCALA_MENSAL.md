@@ -1,6 +1,6 @@
 # Desenho do F10: escala mensal no portal (substitui o script e a planilha "Escala Home")
 
-**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 entregue (seção 8), aguardando revisão.
+**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8).
 
 **Fontes lidas** (locais, fora do git, em `_referencias/`): o script `gerar_escala_home_V17_ARQUIVO_MENSAL.py` (1.660 linhas, lido inteiro) e a planilha `Escala Home - Base.xlsx`. A planilha tem nomes reais. Este documento traz só estrutura, regras e contagens: nenhum nome, login ou dado pessoal. As linhas citadas são do script V17.
 
@@ -695,7 +695,7 @@ São os números do ensaio da 4.3, agora pelo script do repositório. As 17 "mes
 2. **O JSON do portal** (`paridade-escala-v1`) de out, nov e dez/2026, que vem do endpoint do F10-4.
    - Até lá, a escala só se compara com a configuração da planilha (8.2), não com as regras gravadas no portal.
    - A paridade real depende de o portal ter as regras com a vigência certa: os 6 sem regra do corte de 16/11 e as datas de início da seção 7.
-3. **Um arquivo mensal gerado pelo script** (ex.: dez/2026), copiado para `_referencias/`, para rodar o `pa --mensal`.
+3. **Um arquivo mensal gerado pelo script** (ex.: dez/2026), copiado para `_referencias/`, para rodar o `pa --mensal`. Os itens 1 e 3 ficam com o responsável (aprovação de 2026-11-13).
    - O algoritmo já bateu com a função real na base (8.2).
    - O arquivo confere o resto da cadeia: a leitura da aba, o primeiro nome e a configuração do dia da geração.
    - Só um mês gerado com a base atual é comparável: out e nov foram gerados com outra configuração (4.3).
@@ -707,7 +707,7 @@ São os números do ensaio da 4.3, agora pelo script do repositório. As 17 "mes
 - **O PHP da estação (8.2, WinGet) não tem `ZipArchive` nem `mbstring`.** O servidor tem `ZipArchive` (deploy 2). Para o F10-6 (gerador próprio, D-F10-9), o QA da exportação precisa rodar na estação sem a extensão: escrever o zip sem o `ZipArchive`, como o gerador do `qa-paridade-escala`, ou rodar o QA com `php -d extension=zip`.
 - **A trava do roteiro exigia todo QA novo no roteiro dos deploys 1 e 2**, que já foram executados e ficam como estão.
   - A trava agora tira da comparação os QAs da lista `$qasAfterDeploy2` (`qa-pa-distribution` e `qa-paridade-escala`). QA novo fora da lista continua reprovando.
-  - **O roteiro do próximo deploy (3) precisa rodar os dois**, e a trava dele substitui a lista. Proposta a aprovar.
+  - **O roteiro do próximo deploy (3) precisa rodar os dois**, e a trava dele substitui a lista. **Aprovado em 2026-11-13:** quando o roteiro do deploy 3 for escrito, ele roda o `qa-pa-distribution` e o `qa-paridade-escala`, e a trava passa a comparar com ele (a lista `$qasAfterDeploy2` sai).
 
 ### 8.5 Validação
 

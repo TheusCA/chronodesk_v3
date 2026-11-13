@@ -92,6 +92,9 @@ O nome do arquivo é `<perfil>-<tela>-<largura>.webp`.
 - **Quatro cartões de contagem** antes do formulário, inclusive "Filtros aplicados 0".
 - **Texto com nome de configuração interna:** "admin vem só da lista AD_ADMIN_USERS" (`AdminPage.jsx:675` e `:681`). É texto de segurança e só muda com decisão (restrição dos lotes R); fica anotado.
 - **Editar custa 4 ações:** a aba, rolar até a lista, Editar no diálogo e Salvar.
+- **Correção do responsável (13/11/2026), para o R4d:** o protótipo R0 de Funcionários não tinha o **filtro de Almoço** que a tela real tem desde o deploy 2, com a coluna Almoço na lista. A tela nova do R4d:
+  - mantém o filtro e a coluna;
+  - já reserva lugar para o **grupo Tools** (a marca no cadastro e o filtro), que vem do módulo de CHGs.
 
 ### 3.6 Escala presencial, Mapa de PA e Calendário
 
