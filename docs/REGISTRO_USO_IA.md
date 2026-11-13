@@ -1423,6 +1423,20 @@ Base da afirmação:
 
 ---
 
+### Redesenho R2: primitivos (botão, selo, filtro, campo, tabela, painel lateral, aviso e estados) — 2026-11-13
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Segundo lote do redesenho (`docs/design/PLANO_LOTES_R.md`, R2): os componentes da direção A para as telas dos lotes R4 a R6 e para as telas novas do F10 e das CHGs, e o alvo de toque de 40 px no celular. Só apresentação: nenhuma regra, API, permissão ou texto mudou. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `936d866` (Button, Tag, Segmented e alvos de 40 px), `6b6b209` (Field, Table e Drawer), `3365fc7` (aviso e estados) e um commit só de docs (execução do R2 no plano, capturas "depois" em `docs/design/capturas/r2/`, esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | Novos `src/components/ui/Button.jsx`, `Tag.jsx`, `Segmented.jsx`, `Field.jsx`, `Table.jsx` e `Drawer.jsx`; `Feedback.jsx` e `States.jsx` redesenhados (mesmos textos e regiões vivas); no `index.css`, as classes do portal (`.btn-*`, `.status-badge`, `.tab-button`, `.table-action`, `.field`, `.data-table`) com o visual novo e 40 px no celular, e as classes novas (`.segmented*`, `.field-*`, `.data-table--cards`, `.data-table-group`, `.drawer-footer`). Nas telas, só a altura de Aprovar, Rejeitar e Derrubar pausa, a largura das setas do Calendário e o tamanho dos botões de menu e de fechar. QA novo `qa:primitives`. |
+| **Dados pessoais** | Nenhum. QA e capturas com dados fictícios. |
+| **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree) em `936d866`, `6b6b209` e `3365fc7`: saída 0, frontend 24/24, navegador 1029/1029 (e no commit de docs do R1, `1609e98`: 23/23 e 1029/1029). Mutação: 14/14, 14/14 e 10/10 mortos. Medição em 390 px: 0 alvos abaixo de 40 px e 0 rolagens laterais nas 10 telas, nos dois temas (69 por tema no fim do R1). Orçamento do build: JS de entrada 197 893 de 211 050 bytes, CSS 59 625 de 70 000, fontes 85 912 de 100 000. `gitleaks` sem achados em cada commit. |
+| **Limitacoes declaradas** | As telas ainda não usam os componentes novos; usam as classes de hoje, que já desenham o visual novo. A troca é tela a tela nos lotes R4 a R6. O tema da sessão, o "Filtros aplicados" e o "Permissão" seguem como no R1. |
+| **Validacao humana** | Pendente: revisão única do R1 e do R2. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

@@ -252,3 +252,57 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 - **"Filtros aplicados":** sai no R4d, junto com a tela de Funcionários. A contagem dele é o que o `qa:employee-form` usa para conferir o filtro de Almoço do deploy 2; ela sai junto com a fileira de filtros nova, que mostra o filtro ativo.
 - **"Permissão" do Mapa de PA:** sai no R5, onde o plano já o tirava também.
 - **O texto de permissão** ("só Admin e Liderança editam o mapa") fica, sem mudar uma palavra, como linha da tela.
+
+### R2 · Primitivos (13/11/2026)
+
+**Commits:** `936d866` (botão, selo e filtro segmentado, alvo de 40 px), `6b6b209` (campo, tabela e painel lateral), `3365fc7` (aviso e estados) e um de docs. Sem push.
+
+**Componentes novos em `src/components/ui/`:**
+
+| Componente | O que faz | Onde já está |
+|---|---|---|
+| `Button` | Principal, secundário, discreto e perigo sobre as classes `.btn-*`; `type="button"` por padrão; ocupado com `aria-busy`, desabilitado e o rótulo de envio; compacto (`btn-sm`) só encolhe de 640 px para cima | As classes `.btn-*` de todas as telas já desenham o botão novo; Aprovar, Rejeitar e Derrubar pausa usam o compacto |
+| `Tag` | Selo de estado ou de situação, sempre com rótulo e, quando há, o ícone da legenda | A classe `.status-badge` de todas as telas já desenha o selo novo |
+| `Segmented` | Filtro com contagem, grupo com nome, escolha em `aria-pressed` | Telas do R4 (Pausas, Visão operacional), do F10 e das CHGs |
+| `Field` | Rótulo acima (com `for`), ajuda e erro abaixo ligados por `aria-describedby`; com erro, `aria-invalid`, ícone e texto | Formulários novos; os de hoje mudam na tela de cada um (R4 a R6). A classe `.field` já tem 40 px e borda de erro |
+| `Table` | Densa, cabeçalho com `scope`, linha de grupo e modo cartão abaixo de 640 px | Telas novas; a classe `.data-table` de hoje já ficou mais densa |
+| `Drawer` | Painel lateral (D-R0-6) sobre o `Dialog` do 17f: foco preso, Esc, trava de rolagem e foco de volta vêm dele; ações fixas no rodapé | R4d (Funcionários), F10 e CHGs |
+| Aviso (`Feedback.jsx`) | Fundo do cartão, barra e ícone na cor do tipo, título escrito, fechar com 40 px; regiões vivas e posição do 17f como estavam | Todas as telas |
+| `LoadingState`, `EmptyState`, `ErrorState` | Esqueleto com a forma do conteúdo (`shape`: cartões, tabela ou lista), vazio com o próximo passo (`action`), erro com `role="alert"` e "Tentar novamente" | Todas as telas (a forma padrão continua cartões) |
+
+**Alvos de toque em 390 px:** corrigidos os que a medição do R1 achou, pelos primitivos:
+- as classes `.btn-*` e `.btn-sm`, `.table-action`, `.tab-button` e `.segmented-option` com 40 px fora de `@media`;
+- Aprovar, Rejeitar e Derrubar pausa sem o `min-h-9`;
+- as setas do Calendário com 40 px de largura;
+- abrir e fechar o menu e fechar a prévia de documento com `p-2.5`;
+- fechar o aviso com 40 px.
+- **Medição no fim do R2** (`capturar.mjs antes --plano=r --medir`, nos dois temas): **0 alvos abaixo de 40 px e 0 rolagens laterais** nas 10 telas em 390 px (no R1, 69 por tema). O último foi o rótulo "Ocultar sem escala" da Escala presencial, que passou a ter 40 px; a medição passou a aceitar caixa de marcar dentro de rótulo com 40 px, como já aceitava o rádio.
+
+**O que o plano previa e mudou:**
+- **Os cartões "Filtros aplicados" e "Permissão"** saem no R4d e no R5 (seção do R1, acima).
+- **As telas não trocaram as classes pelos componentes.** As classes de hoje (`.btn-*`, `.status-badge`, `.field`, `.data-table`) passaram a desenhar o visual novo, como o plano pedia ("as páginas mudam o mínimo"). A troca acontece tela a tela, nos lotes R4 a R6.
+
+**QA:**
+- **`qa:primitives` (novo; a bateria passa de 23 para 24 scripts npm):**
+  - cada componente desenhado com o React do projeto (`react-dom/server`), nos seus estados e ligações de acessibilidade;
+  - o CSS gerado com a configuração do projeto, com a altura mínima de 40 px de cada controle fora de `@media`.
+- **Expectativa que mudou:** `qa:unsaved-changes`, a contagem de `qa:*` de 20 para 21, porque entrou o `qa:primitives`. Nenhuma outra expectativa mudou: os `data-*`, os papéis e os textos são os mesmos.
+
+**Validação:**
+- **Bateria completa,** sozinha no worktree, em cada commit:
+  - `936d866`, `6b6b209` e `3365fc7`: saída 0 nos três, frontend 24/24 (lint, typecheck, build e 21 `qa:*`), navegador 1029/1029;
+  - o commit de docs do R1 (`1609e98`): saída 0, 23/23 e 1029/1029.
+- **Mutação** com o `mut_guard.php`:
+  - commit 1: 14/14 mortos (Tag sem rótulo ou com tom solto, Button sem `type`, ocupado clicável ou sem `aria-busy`, os 40 px de botão, compacto, ação de tabela, aba e filtro, o grupo e a escolha do Segmented, Aprovar e Derrubar pausa com 36 px);
+  - commit 2: 14/14 (Field sem as ligações de ajuda e erro, sem `for`, sem `aria-invalid` ou com erro só na borda; campo com 36 px e sem borda de erro; Table sem `scope`, sem rótulo da coluna, grupo de uma coluna e cartões com largura mínima; Drawer sem devolver o foco, fechar sem nome e ações que rolam);
+  - commit 3: 10/10 (esqueleto sem `role="status"`, lido pelo leitor de tela ou vazio; erro sem `role="alert"`; vazio sem o próximo passo; aviso sem título, sem a barra, fechar com 24 px, erro na região educada; "Ocultar sem escala" com 20 px).
+- **Orçamento no `3365fc7`:**
+  - JS de entrada 197 893 de 211 050 bytes;
+  - CSS 59 625 de 70 000;
+  - fontes 85 912 de 100 000.
+
+**Capturas:**
+- **"Antes":** as do R1, em `capturas/r1/`.
+- **"Depois", no git:** `capturas/r2/`, o mesmo plano (login, 8 telas do admin e Pausas do técnico, 1280 e 390 px, claro e escuro).
+  - São 40 arquivos, 1,3 MB.
+- **Capturas dos commits intermediários** (`936d866` e `6b6b209`): fora do git (D-R0-9).
