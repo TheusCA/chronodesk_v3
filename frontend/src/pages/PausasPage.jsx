@@ -181,12 +181,13 @@ function TeamRow({ item, elapsedFor, canForceEndBreak, loading, onForceEndBreak 
     <tr data-overdue={timing?.overdue ? '' : undefined} data-row="" data-state={state}>
       <td className="min-w-[11rem]" data-col="name">
         <span className="block font-medium text-ink">{item.nome}</span>
+        {/* Jornada embaixo do nome: com o painel "Sua pausa" ao lado, a lista cabe em 1280 px. */}
+        <small className="block font-mono text-xs tabular-nums text-muted" data-schedule="">{item.jornada_entrada}–{item.jornada_saida}</small>
         {meetingNote && <small className="mt-0.5 line-clamp-2 block text-xs leading-5 text-muted" title={meetingNote}>{meetingNote}</small>}
       </td>
       <td className="w-px whitespace-nowrap" data-col="state">
         <Tag icon={icon} title={item.presenca?.detalhe || undefined} tone={badgeClass.replace(/^status-/u, '')}>{label}</Tag>
       </td>
-      <td className="w-px whitespace-nowrap font-mono text-sm tabular-nums" data-col="meta" data-hide-sm="">{item.jornada_entrada}–{item.jornada_saida}</td>
       <td className="whitespace-nowrap text-right" data-col="meta" data-hide-sm={timing ? undefined : ''}>
         {timing ? (
           <span className="pause-time">
@@ -215,7 +216,7 @@ function TeamPanel({ teams, livePauses, canForceEndBreak, loading, onForceEndBre
   for (const item of all) counts[filterOf(operatorState(item)[0])] += 1
   const visible = (item) => filter === 'todos' || filterOf(operatorState(item)[0]) === filter
   const shown = teams.map(([title, items]) => [title, items, items.filter(visible)])
-  const columns = canForceEndBreak ? 5 : 4
+  const columns = canForceEndBreak ? 4 : 3
   const nothing = shown.every(([, , rows]) => rows.length === 0)
   return (
     <section aria-labelledby="equipe-agora" className="card overflow-hidden p-0">
@@ -236,7 +237,6 @@ function TeamPanel({ teams, livePauses, canForceEndBreak, loading, onForceEndBre
               <tr>
                 <th scope="col">Técnico</th>
                 <th scope="col">Situação</th>
-                <th scope="col">Jornada</th>
                 <th className="text-right" scope="col">Pausa</th>
                 {canForceEndBreak && <th className="text-right" scope="col"><span className="sr-only">Ações</span></th>}
               </tr>

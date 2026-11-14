@@ -2586,6 +2586,7 @@ const PAUSE_STATE = `(() => {
     derrubar: [...document.querySelectorAll('main button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Derrubar pausa').length,
     derrubar_alvo: Math.min(...[...document.querySelectorAll('main button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Derrubar pausa').map((b) => { const r = b.getBoundingClientRect(); return Math.min(r.width, r.height) })),
     rolagem_lateral: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    tabela_rola: [...document.querySelectorAll('main .table-wrap')].some((wrap) => wrap.scrollWidth > wrap.clientWidth + 1),
     cabecalho_visivel: [...document.querySelectorAll('main thead')].some((head) => head.getBoundingClientRect().height > 1),
   }
 })()`
@@ -2620,6 +2621,10 @@ async function pausesR4a(page, port, mock) {
       const asked = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'solicitar_pausa_com_aprovacao.php', mock.requests.length - 5)
       report(`Pausas, ${width} px, reunião: um POST de pedido com o contexto`, posts('solicitar_pausa_com_aprovacao.php').length === requests + 1 && asked?.body?.motivo_pausa === 'Reunião' && asked?.body?.observacao === 'Alinhamento de teste', JSON.stringify(asked?.body))
     }
+    // Com o painel "Sua pausa" ao lado, a lista cabe em 1280 px (sem rolar de lado).
+    await goto(page, port, '/pausas', 1280)
+    await page.waitFor(`!!document.querySelector('main tr[data-row]')`)
+    await expectPause('1280 px, técnico: a lista da equipe cabe ao lado de "Sua pausa", sem rolagem lateral', { tabela_rola: false, rolagem_lateral: false })
   } finally {
     mock.useAdminSession()
   }
