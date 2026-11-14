@@ -2571,6 +2571,70 @@ async function shellR3(page, port, mock) {
   report('Casca, 390 px, sujo e descartado: nenhum POST de funcionário', !mock.requests.some((r) => r.method === 'POST' && r.key === 'adicionar_funcionario.php' && r.body?.nome === 'Rascunho de teste'))
 }
 
+// 23. [R4a] Pausas: iniciar em 2 acoes (escolha visivel e o botao que diz a
+// acao), reuniao com o contexto, e a lista densa com filtro em 390 px.
+const PAUSE_STATE = `(() => {
+  const form = document.querySelector('[data-own-pause="start"]')
+  const go = form?.querySelector('button[type="submit"]')
+  const rows = [...document.querySelectorAll('main tr[data-row]')].filter((row) => row.getClientRects().length)
+  return {
+    motivos: form ? [...form.querySelectorAll('input[name="motivo_pausa"]')].map((input) => input.value).join('|') : null,
+    botao: go?.textContent.trim() ?? null,
+    habilitado: go ? !go.disabled : null,
+    contexto: !!form?.querySelector('textarea'),
+    linhas: rows.map((row) => row.dataset.state).join('|'),
+    derrubar: [...document.querySelectorAll('main button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Derrubar pausa').length,
+    rolagem_lateral: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    cabecalho_visivel: [...document.querySelectorAll('main thead')].some((head) => head.getBoundingClientRect().height > 1),
+  }
+})()`
+const CHOICE = (value) => `[...document.querySelectorAll('[data-own-pause="start"] label')].find((label) => label.querySelector('input')?.value === ${JSON.stringify(value)})`
+
+async function pausesR4a(page, port, mock) {
+  const expectPause = (label, expected) => expectState(page, `Pausas, ${label}`, expected, PAUSE_STATE)
+  const posts = (key) => mock.requests.filter((r) => r.method === 'POST' && r.key === key)
+  mock.restoreDecisions()
+  mock.setPausedEmployee(true)
+  mock.useTechnicianSession()
+  try {
+    for (const width of [1366, 390]) {
+      await goto(page, port, '/pausas', width)
+      await page.waitFor(`!!document.querySelector('[data-own-pause="start"]')`)
+      await expectPause(`${width} px, técnico: os três motivos à vista, botão desabilitado "Escolha o motivo"`, { motivos: 'Café|Pessoal|Reunião', botao: 'Escolha o motivo', habilitado: false, contexto: false })
+      const before = posts('iniciar_pausa.php').length
+      await page.click(CHOICE('Café'))
+      await expectPause(`${width} px, 1ª ação, Café: o botão diz a ação`, { botao: 'Iniciar pausa de café', habilitado: true, contexto: false })
+      await page.click(`document.querySelector('[data-own-pause="start"] button[type="submit"]')`)
+      const started = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'iniciar_pausa.php', mock.requests.length - 5)
+      report(`Pausas, ${width} px, 2ª ação: um POST de iniciar_pausa com o motivo e o técnico da sessão`, posts('iniciar_pausa.php').length === before + 1 && started?.body?.motivo_pausa === 'Café' && Number(started?.body?.funcionario_id) === 3, JSON.stringify(started?.body))
+      await page.waitFor(`document.querySelector('[data-own-pause="start"] button[type="submit"]')?.textContent.trim() === 'Escolha o motivo'`)
+      await page.click(CHOICE('Pessoal'))
+      await expectPause(`${width} px, Pessoal: "Iniciar pausa pessoal"`, { botao: 'Iniciar pausa pessoal', contexto: false })
+      await page.click(CHOICE('Reunião'))
+      await expectPause(`${width} px, Reunião: pede o contexto e diz "Pedir aprovação da reunião"`, { botao: 'Pedir aprovação da reunião', contexto: true })
+      const requests = posts('solicitar_pausa_com_aprovacao.php').length
+      await page.evaluate(`document.querySelector('[data-own-pause="start"] textarea').focus()`)
+      await page.typeText('Alinhamento de teste')
+      await page.click(`document.querySelector('[data-own-pause="start"] button[type="submit"]')`)
+      const asked = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'solicitar_pausa_com_aprovacao.php', mock.requests.length - 5)
+      report(`Pausas, ${width} px, reunião: um POST de pedido com o contexto`, posts('solicitar_pausa_com_aprovacao.php').length === requests + 1 && asked?.body?.motivo_pausa === 'Reunião' && asked?.body?.observacao === 'Alinhamento de teste', JSON.stringify(asked?.body))
+    }
+  } finally {
+    mock.useAdminSession()
+  }
+
+  // Gestao em 390 px: cartoes sem rolagem lateral, filtro e Derrubar pausa.
+  await goto(page, port, '/pausas', 390)
+  await page.waitFor(`!!document.querySelector('main tr[data-row]')`)
+  await expectPause('390 px, gestão: lista em cartões, sem rolagem lateral nem cabeçalho de tabela', { rolagem_lateral: false, cabecalho_visivel: false, linhas: 'paused', derrubar: 1 })
+  await page.click(`[...document.querySelectorAll('main [role="group"] button')].find((b) => b.textContent.startsWith('Disponíveis'))`)
+  await expectPause('390 px, filtro Disponíveis: ninguém (vazio), sem Derrubar pausa', { linhas: '', derrubar: 0 })
+  report('Pausas, 390 px, filtro sem ninguém: o vazio diz o próximo passo', await page.evaluate(`document.querySelector('main').textContent.includes('Escolha outro filtro para ver o resto da equipe.')`))
+  await page.click(`[...document.querySelectorAll('main [role="group"] button')].find((b) => b.textContent.startsWith('Em pausa'))`)
+  await expectPause('390 px, filtro Em pausa: a linha em pausa, com Derrubar pausa', { linhas: 'paused', derrubar: 1 })
+  report('Pausas, 390 px, filtro marcado com aria-pressed', await page.evaluate(`[...document.querySelectorAll('main [role="group"] button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent).join() .startsWith('Em pausa')`))
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2607,6 +2671,7 @@ try {
     [20, 'Mapa PA: remover o vinculo em edicao (9.12.1)', () => paMapRemoveEditing(page, mock.port, mock)],
     [21, 'Escala: excecao por data carrega a gravada (9.12.4)', () => scheduleExceptionLoad(page, mock.port, mock)],
     [22, 'Casca: primeiro Tab, contador e atalhos do celular (R3)', () => shellR3(page, mock.port, mock)],
+    [23, 'Pausas: iniciar em 2 acoes e lista com filtro (R4a)', () => pausesR4a(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

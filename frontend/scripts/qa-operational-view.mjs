@@ -48,6 +48,17 @@ registerHooks({
         if (!source.includes(searchState)) throw new Error('TechniciansPage sem o estado da busca esperado pelo QA')
         source = source.replace(searchState, "const [search, setSearch] = useState(globalThis.qaInitialSearch ?? '')")
       }
+      // [R4a] O render estático não clica: o teste dá o motivo escolhido e o
+      // filtro da lista (globalThis.qaInitialReason e qaInitialFilter).
+      if (url.endsWith('/src/pages/PausasPage.jsx')) {
+        for (const [from, to] of [
+          ["const [reason, setReason] = useState('')", "const [reason, setReason] = useState(globalThis.qaInitialReason ?? '')"],
+          ["const [filter, setFilter] = useState('todos')", "const [filter, setFilter] = useState(globalThis.qaInitialFilter ?? 'todos')"],
+        ]) {
+          if (!source.includes(from)) throw new Error(`PausasPage sem o estado esperado pelo QA: ${from}`)
+          source = source.replace(from, to)
+        }
+      }
       const output = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(url) }).outputText
       return { format: 'module', source: output, shortCircuit: true }
     }
@@ -87,8 +98,11 @@ const livePauses = (employees) => ({
 const session = (role, funcionarioId) => ({
   role, permissions: [], ci: { autenticado: true, funcionario_id: funcionarioId, nome: 'QA', username: 'qa' },
 })
-// Um pedaço do HTML por cartão de técnico, na ordem dos itens.
+// Um pedaço do HTML por cartão de técnico, na ordem dos itens (Visão operacional).
 const cards = (markup) => markup.split('<article class="operator-card').slice(1)
+// [R4a] Pausas: uma linha da lista densa por técnico, com o estado em data-state.
+const teamRows = (markup) => [...markup.matchAll(/<tr (data-overdue="" )?data-row="" data-state="([a-z]+)">([\s\S]*?)<\/tr>/gu)].map((match) => ({ overdue: Boolean(match[1]), state: match[2], html: match[3] }))
+const ownPause = (markup) => markup.slice(markup.indexOf('aria-labelledby="sua-pausa"'), markup.indexOf('aria-labelledby="equipe-agora"'))
 const NO_NOTE = 'Sem observação informada'
 
 // ---------------------------------------------------------------------------
@@ -118,10 +132,11 @@ const renderPausas = (employees, role, id) => renderToStaticMarkup(h(PausasPage,
   loading: false, onStart: noop, onRequest: noop, onFinish: noop, onForceEndBreak: noop,
 }))
 {
+  // [R4a] Os cartões viraram linhas da lista; a regra do DV11 é a mesma.
   const markup = renderPausas(technicianView, 'tecnico', 1)
-  const [, colleague] = cards(markup)
-  assert.match(markup.split('<article class="operator-card')[0], /Pausa ativa[\s\S]*QA pauta própria/u, 'Pausas: a própria pausa de reunião mostra a observação')
-  assert.doesNotMatch(colleague, /line-clamp-2|Sem observação informada/u, 'Pausas: cartão do colega sem a chave fica sem a caixa (sem mudança de código)')
+  const [, colleague] = teamRows(markup)
+  assert.match(ownPause(markup), /data-own-pause="active"[\s\S]*QA pauta própria/u, 'Pausas: a própria pausa de reunião mostra a observação')
+  assert.doesNotMatch(colleague.html, /line-clamp-2|Sem observação informada/u, 'Pausas: linha do colega sem a chave fica sem a observação')
   assert.equal(markup.includes(NO_NOTE), false, 'Pausas: nenhum "Sem observação informada" para o técnico')
 }
 
@@ -467,9 +482,10 @@ function presencaOf(situacao, detalhe) {
     worker(20, undefined, { disponibilidade: { status: 'indisponivel', label: 'Fora do horário' } }),
     worker(21, presencaOf('ausente', 'Ausente 10:00–11:00'), { em_pausa: true, motivo_pausa: 'Café' }),
   ]
+  // [R4a] Linhas da lista no lugar dos cartões: o estado em data-state.
   const markup = renderPausas(employees, 'gestor', 0)
-  const list = cards(markup)
-  assert.equal(list.length, employees.length, 'um cartão por técnico')
+  const list = teamRows(markup)
+  assert.equal(list.length, employees.length, 'uma linha por técnico')
   const expected = [
     ['available', 'presence-onsite', 'Presencial'],
     ['available', 'presence-remote', 'Remoto'],
@@ -480,17 +496,17 @@ function presencaOf(situacao, detalhe) {
     ['offline', 'presence-no-schedule', 'Sem escala'],
   ]
   expected.forEach(([state, tone, label], index) => {
-    const card = list[index]
-    assert.ok(card.startsWith(` operator-card-${state}"`), `${label}: cartão ${state} pela presenca`)
-    assert.ok(card.includes(tone), `${label}: cor da legenda`)
-    assert.match(card, new RegExp(`<svg[^>]*aria-hidden="true"[\\s\\S]*?</svg>${label}</span>`, 'u'), `${label}: ícone e rótulo`)
-    assert.ok(card.includes(`title="${employees[index].presenca.detalhe}"`), `${label}: detalhe no title`)
-    if (label !== 'Presencial' && label !== 'Remoto') assert.ok(!card.includes('>Disponível<'), `${label}: nunca "Disponível" do cálculo antigo`)
+    const row = list[index]
+    assert.equal(row.state, state, `${label}: linha ${state} pela presenca`)
+    assert.ok(row.html.includes(tone), `${label}: cor da legenda`)
+    assert.match(row.html, new RegExp(`<svg[^>]*aria-hidden="true"[\\s\\S]*?</svg>${label}</span>`, 'u'), `${label}: ícone e rótulo`)
+    assert.ok(row.html.includes(`title="${employees[index].presenca.detalhe}"`), `${label}: detalhe no title`)
+    if (label !== 'Presencial' && label !== 'Remoto') assert.ok(!row.html.includes('>Disponível<'), `${label}: nunca "Disponível" do cálculo antigo`)
   })
-  assert.ok(list[7].startsWith(' operator-card-pending"') && list[7].includes('Aguardando aprovação'), 'aprovação pendente continua primeiro')
-  assert.ok(list[8].startsWith(' operator-card-available"') && list[8].includes('status-success') && list[8].includes('>Disponível</span>'), 'presenca nula (fora do Mapa ou presença desligada): cálculo antigo')
-  assert.ok(list[9].startsWith(' operator-card-offline"') && list[9].includes('Fora do horário'), 'sem presenca: cálculo antigo (indisponível)')
-  assert.ok(list[10].startsWith(' operator-card-offline"') && list[10].includes('presence-absence') && list[10].includes('font-mono'), 'em pausa durante ausência: situação do motor, com o timer da pausa')
+  assert.ok(list[7].state === 'pending' && list[7].html.includes('Aguardando aprovação'), 'aprovação pendente continua primeiro')
+  assert.ok(list[8].state === 'available' && list[8].html.includes('status-success') && list[8].html.includes('>Disponível</span>'), 'presenca nula (fora do Mapa ou presença desligada): cálculo antigo')
+  assert.ok(list[9].state === 'offline' && list[9].html.includes('Fora do horário'), 'sem presenca: cálculo antigo (indisponível)')
+  assert.ok(list[10].state === 'offline' && list[10].html.includes('presence-absence') && list[10].html.includes('data-pause-clock'), 'em pausa durante ausência: situação do motor, com o timer da pausa')
 }
 {
   // Interruptor desligado: o status.php não manda presenca; tudo como antes.
@@ -499,11 +515,104 @@ function presencaOf(situacao, detalhe) {
     worker(32, undefined),
     worker(33, undefined, { disponibilidade: { status: 'indisponivel', label: 'Almoço' } }),
   ]
-  const list = cards(renderPausas(employees, 'gestor', 0))
-  assert.ok(list[0].startsWith(' operator-card-paused"') && list[0].includes('status-warning') && list[0].includes('Em pausa'), 'sem presenca: em pausa como antes')
-  assert.ok(list[1].startsWith(' operator-card-available"') && list[1].includes('status-success'), 'sem presenca: disponível como antes')
-  assert.ok(list[2].startsWith(' operator-card-offline"') && list[2].includes('status-neutral') && list[2].includes('Almoço'), 'sem presenca: indisponível como antes')
-  assert.doesNotMatch(list.join(''), /presence-/u, 'sem presenca: nenhuma cor da legenda nova')
+  const list = teamRows(renderPausas(employees, 'gestor', 0))
+  assert.ok(list[0].state === 'paused' && list[0].html.includes('status-warning') && list[0].html.includes('Em pausa'), 'sem presenca: em pausa como antes')
+  assert.ok(list[1].state === 'available' && list[1].html.includes('status-success'), 'sem presenca: disponível como antes')
+  assert.ok(list[2].state === 'offline' && list[2].html.includes('status-neutral') && list[2].html.includes('Almoço'), 'sem presenca: indisponível como antes')
+  assert.doesNotMatch(list.map((row) => row.html).join(''), /presence-/u, 'sem presenca: nenhuma cor da legenda nova')
+}
+
+// ---------------------------------------------------------------------------
+// 6. [R4a] Pausas: escolha visível, lista densa com filtro e o estouro
+// ---------------------------------------------------------------------------
+const renderPausasWith = (employees, { role = 'tecnico', id = 1, permissions = [], reason, filter, elapsed = () => 90, ci = true } = {}) => {
+  globalThis.qaInitialReason = reason
+  globalThis.qaInitialFilter = filter
+  try {
+    return renderToStaticMarkup(h(PausasPage, {
+      session: { role, permissions, ci: { autenticado: ci, funcionario_id: id, nome: 'QA', username: 'qa' } },
+      status: { n1: employees.filter((item) => item.equipe === 'n1'), n2: employees.filter((item) => item.equipe === 'n2') },
+      livePauses: { employees, status: {}, connection: 'online', serverNow: Date.now(), elapsedFor: elapsed },
+      loading: false, onStart: noop, onRequest: noop, onFinish: noop, onForceEndBreak: noop,
+    }))
+  } finally {
+    delete globalThis.qaInitialReason
+    delete globalThis.qaInitialFilter
+  }
+}
+const free = (id, extra = {}) => worker(id, presencaOf('presencial', 'Presencial'), { duracao_limite_segundos: 900, ...extra })
+const FILTER_LABEL = { available: 'Disponíveis', paused: 'Em pausa', outros: 'Outros' }
+const textOfHtml = (html) => html.replace(/<!-- -->/gu, '').replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim()
+{
+  // Escolha visível (D-R0-5): os três motivos à vista, o botão diz a ação.
+  const start = ownPause(renderPausasWith([free(1)]))
+  const radios = [...start.matchAll(/<input [^>]*name="motivo_pausa"[^>]*value="([^"]+)"/gu)].map((match) => match[1])
+  assert.deepEqual(radios, ['Café', 'Pessoal', 'Reunião'], 'os três motivos visíveis, como escolha (rádio)')
+  assert.match(start, /<legend[^>]*>Motivo<\/legend>/u, 'grupo com nome "Motivo"')
+  assert.match(start, /<button class="btn-primary w-full" disabled="" type="submit">Escolha o motivo<\/button>/u, 'sem escolha: botão desabilitado, "Escolha o motivo"')
+  assert.ok(start.includes('até 15 min'), 'limite do café pela configuração do servidor (duracao_limite_segundos), não fixo')
+  assert.ok(start.includes('sem limite de tempo') && start.includes('com aprovação'), 'Pessoal sem limite; Reunião com aprovação')
+  assert.ok(start.includes('Café usa limite próprio; reunião segue o fluxo de aprovação configurado.'), 'a regra das pausas, com as mesmas palavras (D-R0-8)')
+  assert.ok(!start.includes('<select'), 'sem o seletor (antes: abrir, escolher, confirmar)')
+  for (const [reason, action] of [['Café', 'Iniciar pausa de café'], ['Pessoal', 'Iniciar pausa pessoal'], ['Reunião', 'Pedir aprovação da reunião']]) {
+    const chosen = ownPause(renderPausasWith([free(1)], { reason }))
+    assert.match(chosen, new RegExp(`<button class="btn-primary w-full" type="submit">${action}</button>`, 'u'), `${reason}: o botão diz a ação ("${action}")`)
+    assert.match(chosen, new RegExp(`<input name="motivo_pausa" required="" type="radio" checked="" value="${reason}"/>`, 'u'), `${reason}: marcado`)
+    assert.equal(chosen.includes('Contexto da reunião'), reason === 'Reunião', `${reason}: o contexto só na reunião`)
+  }
+  assert.match(ownPause(renderPausasWith([free(1)], { reason: 'Reunião' })), /<textarea [^>]*maxLength="500"[^>]*required=""/u, 'reunião: contexto obrigatório, até 500 caracteres')
+  assert.ok(ownPause(renderPausasWith([free(1, { duracao_limite_segundos: undefined })])).includes('até 20 min'), 'sem o campo: os 20 min de antes')
+  const pending = ownPause(renderPausasWith([free(1, { status_aprovacao: 'pendente' })]))
+  assert.ok(pending.includes('Sua solicitação de reunião está aguardando aprovação.'), 'pedido de reunião pendente: o aviso de sempre')
+  const admin = renderPausasWith([free(1)], { role: 'admin', id: 0, ci: false })
+  assert.ok(admin.includes('A sessão administrativa permite monitoramento. Entre como CI para iniciar ou finalizar sua própria pausa.') && !admin.includes('sua-pausa'), 'sessão administrativa: o aviso de sempre, sem o bloco "Sua pausa"')
+  assert.ok(!renderPausasWith([free(1)]).includes('Sessão do colaborador'), 'sai o cartão "Sessão do colaborador" (nome e login ficam no rodapé do menu)')
+}
+{
+  // Pausa em andamento: relógio grande, o que falta, o estouro escrito.
+  const coffee = (extra = {}) => free(1, { em_pausa: true, motivo_pausa: 'Café', inicio_pausa: '2026-10-28T10:31:00-03:00', presenca: presencaOf('pausa', 'Café'), ...extra })
+  const within = ownPause(renderPausasWith([coffee()], { elapsed: () => 305 }))
+  assert.match(within, /data-pause-clock="">5:05</u, 'relógio grande com o tempo da pausa')
+  assert.ok(textOfHtml(within).includes('faltam 9:55 · limite de 15 min') && within.includes('Dentro do tempo'), 'o que falta e o limite do servidor')
+  assert.ok(within.includes('aria-label="Progresso da pausa: 34%"'), 'faixa do tempo usado')
+  assert.match(within, /<button class="btn-primary w-full" type="button">Finalizar pausa<\/button>/u, 'encerrar a própria pausa: a ação principal')
+  const late = ownPause(renderPausasWith([coffee()], { elapsed: () => 1000 }))
+  assert.ok(textOfHtml(late).includes('passou 1:40 · limite de 15 min') && late.includes('Tempo excedido'), 'estouro escrito ("passou"), não só a cor')
+  assert.match(late, /text-danger[^"]*" data-pause-clock="">16:40</u, 'estouro: relógio em vermelho')
+  const personal = ownPause(renderPausasWith([coffee({ motivo_pausa: 'Pessoal' })], { elapsed: () => 5000 }))
+  assert.ok(personal.includes('Timer ativo sem limite automático') && personal.includes('Sem limite') && !personal.includes('passou'), 'pessoal: sem limite, nunca "passou"')
+}
+{
+  // Lista densa: filtro com contagem, grupos por equipe, estouro na linha.
+  const team = [
+    free(1, { nome: 'QA Um' }),
+    free(2, { em_pausa: true, motivo_pausa: 'Café', presenca: presencaOf('pausa', 'Café') }),
+    free(3, { em_pausa: true, motivo_pausa: 'Reunião', presenca: presencaOf('pausa', 'Reunião') }),
+    free(4, { presenca: presencaOf('almoco', 'Almoço') }),
+    free(5, { equipe: 'n2', presenca: presencaOf('remoto', 'Remoto') }),
+    free(6, { equipe: 'n2', status_aprovacao: 'pendente' }),
+  ]
+  const elapsed = (item) => (item.id === 2 ? 1000 : 120)
+  const all = renderPausasWith(team, { role: 'lideranca', id: 0, ci: false, permissions: ['pausas.force_end'], elapsed })
+  const filters = [...all.matchAll(/<button aria-pressed="(true|false)" class="segmented-option" type="button"><span>([^<]+)<\/span><span class="segmented-count">(\d+)<\/span><\/button>/gu)].map((match) => [match[2], match[3], match[1]])
+  assert.deepEqual(filters, [['Todos', '6', 'true'], ['Disponíveis', '2', 'false'], ['Em pausa', '2', 'false'], ['Outros', '2', 'false']], 'filtro com a contagem de cada grupo, "Todos" escolhido')
+  assert.match(all, /<div aria-label="Filtrar a equipe" class="segmented" role="group">/u, 'filtro com nome')
+  assert.ok(textOfHtml(all).includes('Equipe N1 · 1 de 4 disponíveis') && textOfHtml(all).includes('Equipe N2 · 1 de 2 disponíveis'), 'linha de grupo por equipe, com os disponíveis')
+  const rows = teamRows(all)
+  assert.deepEqual(rows.map((row) => row.overdue), [false, true, false, false, false, false], 'só o café de 16:40 com limite de 15 min marcado como estouro')
+  assert.ok(textOfHtml(rows[1].html).includes('Café 16:40 passou 1:40') && /text-danger[^"]*" data-pause-clock="">16:40</u.test(rows[1].html), 'estouro: tempo em vermelho e "passou" escrito na linha')
+  assert.ok(textOfHtml(rows[2].html).includes('Reunião 2:00 sem limite'), 'reunião: sem limite')
+  assert.equal((all.match(/>Derrubar pausa<\/button>/gu) ?? []).length, 2, 'Derrubar pausa só nas linhas em pausa (Liderança)')
+  assert.ok(rows.filter((row) => row.state !== 'paused').every((row) => !row.html.includes('Derrubar pausa')), 'sem Derrubar pausa fora da pausa')
+  assert.equal((renderPausasWith(team, { role: 'gestor', id: 0, ci: false, elapsed }).match(/Derrubar pausa/gu) ?? []).length, 0, 'sem pausas.force_end: sem Derrubar pausa nem a coluna')
+  for (const [filter, states] of [['available', ['available', 'available']], ['paused', ['paused', 'paused']], ['outros', ['offline', 'pending']]]) {
+    const filtered = renderPausasWith(team, { role: 'gestor', id: 0, ci: false, filter, elapsed })
+    assert.deepEqual(teamRows(filtered).map((row) => row.state), states, `filtro ${filter}: só as linhas do grupo`)
+    assert.match(filtered, new RegExp(`aria-pressed="true" class="segmented-option" type="button"><span>${FILTER_LABEL[filter]}<`, 'u'), `filtro ${filter} marcado`)
+  }
+  const empty = renderPausasWith([free(1)], { role: 'gestor', id: 0, ci: false, filter: 'paused' })
+  assert.ok(empty.includes('Ninguém nesta situação agora') && !empty.includes('<table'), 'filtro sem ninguém: vazio com o próximo passo, sem a tabela')
+  assert.ok(all.includes('<caption class="sr-only">Equipe agora</caption>') && all.includes('scope="colgroup"'), 'tabela com nome e linhas de grupo com escopo')
 }
 
 console.log('QA operational view OK')

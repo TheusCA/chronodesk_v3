@@ -224,6 +224,9 @@ assert.equal(renderToStaticMarkup(h(UserAvatar, { name: '' })), '<span class="us
 {
   const { markup } = renderLayout({ session: technicianSession })
   assert.match(markup, /<span aria-hidden="true" class="user-avatar h-9 w-9">TE<\/span>/u, 'rodapé do menu com as iniciais de quem entrou')
+  // [R4a] O login do técnico saiu do cartão "Sessão do colaborador" de Pausas e fica aqui.
+  assert.match(markup, /<span class="font-mono" data-user-login="">tecnico\.01 · <\/span>/u, 'rodapé do menu com o login do técnico')
+  assert.ok(!renderLayout().markup.includes('data-user-login'), 'gestão (sem CI): sem a linha do login de técnico')
 }
 
 // ---------------------------------------------------------------------------

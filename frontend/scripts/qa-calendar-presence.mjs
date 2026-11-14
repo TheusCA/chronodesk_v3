@@ -291,7 +291,9 @@ assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src
       }
     }
   }
-  for (const prefix of ['metric-card', 'inline-alert', 'status-dot', 'detail-pill', 'operator-card', 'status']) {
+  // [R4a] Sem 'operator-card': os cartões de Pausas viraram linhas da lista
+  // densa, com o estado em data-state (não há mais molde operator-card-${...}).
+  for (const prefix of ['metric-card', 'inline-alert', 'status-dot', 'detail-pill', 'status']) {
     assert.ok(templated.has(prefix), `varredura acha o template de ${prefix}`)
   }
   for (const prefix of ['pause', 'overtime', 'adjustment', 'implicita']) {
@@ -301,7 +303,7 @@ assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src
   assert.deepEqual([...templated.get('inline-alert')].sort(), [...usedTones['inline-alert']].sort(), 'varredura e tons do InlineAlert batem')
   // A varredura não pode voltar vazia: as variantes de hoje precisam aparecer
   // (uma nova, com a sua regra, passa; sem regra, cai no laço abaixo).
-  const known = { 'status-dot': ['info', 'success', 'warning'], 'detail-pill': ['info', 'neutral', 'warning'], 'operator-card': ['available', 'offline', 'paused', 'pending'], status: ['danger', 'info', 'neutral', 'success'] }
+  const known = { 'status-dot': ['info', 'success', 'warning'], 'detail-pill': ['info', 'neutral', 'warning'], status: ['danger', 'info', 'neutral', 'success'] }
   for (const [prefix, variants] of Object.entries(known)) {
     for (const variant of variants) assert.ok(templated.get(prefix).has(variant), `varredura acha a variante ${prefix}-${variant} em uso`)
   }

@@ -183,7 +183,11 @@ export function PortalLayout({ session, path, navigate, onLogout, serverNow, chi
           {!compact && (
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-ink">{currentUserLabel}</p>
-              <p className="text-xs capitalize text-muted">{session.role?.replace('_', ' ')}</p>
+              {/* [R4a] O login do técnico, que estava no cartão "Sessão do colaborador" de Pausas. */}
+              <p className="truncate text-xs text-muted">
+                {session.ci.autenticado && session.ci.username && <span className="font-mono" data-user-login="">{session.ci.username} · </span>}
+                <span className="capitalize">{session.role?.replace('_', ' ')}</span>
+              </p>
             </div>
           )}
         </div>

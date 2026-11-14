@@ -557,6 +557,44 @@
     @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line bg-surface-2 text-ink-2;
   }
 
+  /* [R4a, D-R0-5] Motivo da pausa: a escolha visível, cada opção um alvo de
+     52 px com o limite ao lado; a escolhida ganha a borda em tinta. */
+  .pause-choice {
+    @apply grid min-h-[3.25rem] cursor-pointer grid-cols-[1.25rem_1fr_auto] items-center gap-3 rounded-md border border-line bg-surface px-3.5 transition-colors hover:bg-surface-2 has-[:checked]:border-ink has-[:checked]:ring-1 has-[:checked]:ring-inset has-[:checked]:ring-ink;
+  }
+
+  .pause-choice input {
+    @apply h-[1.125rem] w-[1.125rem] accent-ink;
+  }
+
+  /* [R4a] Lista densa da equipe (Pausas) e das pausas em andamento (Visão
+     operacional): linha de 44 px, grupo por equipe, estouro marcado na
+     borda da linha e escrito ("passou"), nunca só pela cor. */
+  .team-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+
+  .team-table th {
+    @apply whitespace-nowrap border-b border-line px-4 py-2.5 text-xs font-medium text-muted first:pl-5 last:pr-5;
+  }
+
+  .team-table td {
+    @apply h-11 border-b border-line px-4 py-2 align-middle text-ink-2 first:pl-5 last:pr-5;
+  }
+
+  .team-table tbody tr[data-row] {
+    @apply transition-colors hover:bg-ink/[0.03];
+  }
+
+  .team-table .team-group th {
+    @apply bg-bg py-2 text-xs font-medium text-muted;
+  }
+
+  /* Motivo e tempo numa linha; o que falta ou passou embaixo. */
+  .pause-time {
+    @apply inline-flex flex-col items-end leading-5;
+  }
+
   .user-avatar {
     @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-line bg-surface-2 text-sm font-semibold text-ink;
   }
@@ -586,6 +624,79 @@
 
 .data-table td > * {
   min-width: 0;
+}
+
+/* [R4a] Estouro: borda vermelha à esquerda da linha (além do "passou"
+   escrito). Fora de @layer, para valer sobre o hover. */
+.team-table tr[data-overdue] td:first-child {
+  box-shadow: inset 3px 0 0 rgb(var(--danger));
+}
+
+/* [R4a] Abaixo de 640 px, cada linha vira um cartão compacto (protótipo R0):
+   nome e situação na primeira linha, o tempo embaixo; jornada e "—" somem. */
+@media (max-width: 639px) {
+  .team-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .team-table,
+  .team-table tbody,
+  .team-table tr,
+  .team-table td,
+  .team-table .team-group th {
+    display: block;
+  }
+
+  .team-table tbody tr[data-row] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.375rem 0.75rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid rgb(var(--line));
+  }
+
+  .team-table td {
+    height: auto;
+    padding: 0;
+    border: 0;
+  }
+
+  .team-table td[data-col='name'] {
+    grid-column: 1;
+  }
+
+  .team-table td[data-col='state'] {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .team-table td[data-col='meta'],
+  .team-table td[data-col='act'] {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+
+  .team-table .pause-time {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.5rem;
+  }
+
+  .team-table td[data-hide-sm] {
+    display: none;
+  }
+
+  .team-table .team-group th {
+    padding: 0.5rem 1rem;
+  }
 }
 
 /* [17e] Coluna fixa à direita (Ações de Chamados críticos). Fundo opaco para o

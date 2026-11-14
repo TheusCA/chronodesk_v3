@@ -1,112 +1,25 @@
 import { useMemo, useState } from 'react'
-import { formatDuration } from '../lib/format'
-import { Icon } from '../components/ui/Icon'
-import { SectionHeader, StatusDot, UserAvatar } from '../components/ui/Primitives'
+import { parseDate } from '../lib/format'
+import { InlineAlert, StatusDot } from '../components/ui/Primitives'
+import { Segmented } from '../components/ui/Segmented'
+import { Tag } from '../components/ui/Tag'
+import { EmptyState } from '../components/ui/States'
 import { hasPermission } from '../lib/roles'
 import { nowLegendItem } from '../lib/presenceLegend'
+import { clockDuration, isMeeting, pauseLimitSeconds, pauseTiming, pauseTimingNote } from '../lib/pauseTimer'
 
-const reasons = ['Café', 'Pessoal', 'Reunião']
+// [R4a] Os três motivos ficam visíveis (D-R0-5): escolher e confirmar com um
+// botão que diz o que vai acontecer. Dois toques, no lugar de três.
+const REASONS = [
+  { value: 'Café', action: 'Iniciar pausa de café' },
+  { value: 'Pessoal', action: 'Iniciar pausa pessoal' },
+  { value: 'Reunião', action: 'Pedir aprovação da reunião' },
+]
+// Regra das pausas, com as mesmas palavras de antes (D-R0-8).
+const PAUSE_RULE = 'Café usa limite próprio; reunião segue o fluxo de aprovação configurado.'
 
-function PauseProgress({ elapsed, limit }) {
-  const ratio = limit > 0 ? elapsed / limit : 0
-  const completed = Math.min(20, Math.ceil(ratio * 20))
-  const tone = ratio < 0.6 ? 'progress-blue' : ratio < 0.85 ? 'progress-yellow' : ratio <= 1 ? 'progress-orange' : 'progress-red'
-  return (
-    <div className="grid grid-cols-20 gap-1" aria-label={`Progresso da pausa: ${Math.round(ratio * 100)}%`}>
-      {Array.from({ length: 20 }, (_, index) => <span className={`h-2 rounded-full ${index < completed ? tone : 'bg-surface-2'}`} key={index} />)}
-    </div>
-  )
-}
-
-function ActivePauseCard({ current, elapsed, loading, onFinish }) {
-  const pauseReason = String(current.motivo_pausa || '').toLowerCase()
-  const unlimited = pauseReason === 'pessoal' || pauseReason.startsWith('reuni')
-  const limit = unlimited ? 0 : Number(current.duracao_limite_segundos || 1200)
-  const remaining = limit - elapsed
-  const ratio = limit > 0 ? elapsed / limit : 0
-  const status = unlimited ? 'Sem limite' : ratio < 0.6 ? 'Dentro do tempo' : ratio < 0.85 ? 'Próximo do limite' : ratio <= 1 ? 'Próximo do limite' : 'Tempo excedido'
-  const statusClass = unlimited ? 'status-info' : ratio < 0.6 ? 'status-info' : ratio < 0.85 ? 'status-warning' : 'status-danger'
-
-  return (
-    <section className="card border-warn-line">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
-          <UserAvatar name={current.nome} />
-          <div>
-            <p className="section-eyebrow">Pausa ativa</p>
-            <h2 className="mt-1 text-xl font-semibold text-ink">{current.motivo_pausa}</h2>
-            <p className="mt-1 text-xs text-muted">{current.nome}</p>
-          </div>
-        </div>
-        <span className={`status-badge ${statusClass}`}>{status}</span>
-      </div>
-      <div className="my-7 rounded-card border border-line bg-surface-2 p-5 text-center">
-        <p className="font-mono text-4xl font-semibold tracking-tight text-ink sm:text-5xl">{formatDuration(elapsed)}</p>
-        <p className="mt-2 text-sm text-muted">
-          {unlimited ? 'Timer ativo sem limite automático' : `Limite ${formatDuration(limit)} · ${remaining >= 0 ? `${formatDuration(remaining)} restantes` : `${formatDuration(Math.abs(remaining))} excedidos`}`}
-        </p>
-      </div>
-      {!unlimited && <PauseProgress elapsed={elapsed} limit={limit} />}
-      {pauseReason.startsWith('reuni') && (
-        <p
-          className="mt-5 line-clamp-3 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-muted"
-          title={current.observacao_reuniao || 'Sem observação informada'}
-        >
-          {current.observacao_reuniao || 'Sem observação informada'}
-        </p>
-      )}
-      <button className="btn-danger mt-6 w-full" disabled={loading} onClick={onFinish} type="button">
-        {loading ? 'Finalizando...' : 'Finalizar pausa'}
-      </button>
-    </section>
-  )
-}
-
-function StartPauseCard({ loading, onStart, onRequest }) {
-  const [reason, setReason] = useState('')
-  const [observation, setObservation] = useState('')
-  const meeting = reason === 'Reunião'
-
-  async function submit(event) {
-    event.preventDefault()
-    const result = meeting ? await onRequest(reason, observation) : await onStart(reason)
-    if (result) {
-      setReason('')
-      setObservation('')
-    }
-  }
-
-  return (
-    <form className="card space-y-5" onSubmit={submit}>
-      <SectionHeader
-        description="Café usa limite próprio; reunião segue o fluxo de aprovação configurado."
-        eyebrow="Nova pausa"
-        title="Iniciar pausa"
-      />
-      <label className="label">
-        Motivo
-        <select className="field mt-2" value={reason} onChange={(event) => setReason(event.target.value)} required>
-          <option value="">Selecione o motivo</option>
-          {reasons.map((item) => <option value={item} key={item}>{item}{item === 'Reunião' ? ' com aprovação' : ''}</option>)}
-        </select>
-      </label>
-      {meeting && (
-        <label className="label">
-          Contexto da reunião
-          <textarea className="field mt-2 min-h-28" maxLength={500} onChange={(event) => setObservation(event.target.value)} required value={observation} />
-          <span className="mt-1 block text-right text-xs text-muted">{observation.length}/500</span>
-        </label>
-      )}
-      <button className="btn-primary w-full" disabled={loading || !reason} type="submit">
-        <Icon className="h-4 w-4" name={meeting ? 'bell' : 'pause'} />
-        {loading ? 'Processando...' : meeting ? 'Solicitar aprovação' : 'Iniciar pausa'}
-      </button>
-    </form>
-  )
-}
-
-// [F7, DV12] Situação do cartão pela presenca do status.php (motor: escala,
-// ausência lançada, expediente, pausa e almoço), a mesma da Visão
+// [F7, DV12] Situação de cada técnico pela presenca do status.php (motor:
+// escala, ausência lançada, expediente, pausa e almoço), a mesma da Visão
 // Operacional. O cálculo antigo (disponibilidade) só quando ela não vem:
 // interruptor desligado, falha no cálculo ou cadastro fora do Mapa.
 function operatorState(item) {
@@ -122,57 +35,225 @@ function operatorState(item) {
   return ['offline', item.disponibilidade?.label || 'Indisponível', 'status-neutral', null]
 }
 
-function TeamStatus({ title, items, elapsedFor, canForceEndBreak = false, loading = false, onForceEndBreak }) {
+// Filtro da lista: Disponíveis, Em pausa e o resto (aprovação pendente,
+// almoço, ausente, fora do expediente, sem escala).
+const FILTERS = [
+  { value: 'todos', label: 'Todos' },
+  { value: 'available', label: 'Disponíveis' },
+  { value: 'paused', label: 'Em pausa' },
+  { value: 'outros', label: 'Outros' },
+]
+const filterOf = (state) => (state === 'available' || state === 'paused' ? state : 'outros')
+
+function hourOf(value) {
+  const date = parseDate(value)
+  return Number.isNaN(date.getTime()) ? null : new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(date)
+}
+
+// Faixa do tempo usado: 20 partes (sem atributo style, pela CSP), em âmbar
+// até o limite e em vermelho depois dele.
+function PauseProgress({ ratio }) {
+  const completed = Math.min(20, Math.ceil(ratio * 20))
+  const tone = ratio > 1 ? 'bg-danger' : 'bg-pause'
   return (
-    <section>
-      <SectionHeader
-        meta={<span className="status-badge status-neutral">{items.length} técnicos</span>}
-        title={title}
-      />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {items.map((item) => {
-          const [state, label, badgeClass, icon] = operatorState(item)
-          return (
-            <article className={`operator-card operator-card-${state}`} key={item.id}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <UserAvatar name={item.nome} />
-                  <div className="min-w-0">
-                    <h3 className="truncate font-semibold text-ink-2">{item.nome}</h3>
-                    <p className="mt-1 text-xs text-muted">Jornada {item.jornada_entrada} - {item.jornada_saida}</p>
-                  </div>
-                </div>
-                <span className={`status-badge shrink-0 gap-1 ${badgeClass}`} title={item.presenca?.detalhe || undefined}>
-                  {icon && <Icon className="h-3 w-3 shrink-0" name={icon} />}
-                  {label}
-                </span>
-              </div>
-              {item.em_pausa && (
-                <div className="mt-4 rounded-card border border-warn-line bg-warn-bg px-3 py-2">
-                  <p className="text-xs font-semibold text-warn">{item.motivo_pausa}</p>
-                  <p className="mt-1 font-mono text-lg font-semibold text-warn">{formatDuration(elapsedFor(item))}</p>
-                </div>
-              )}
-              {String(item.motivo_pausa || '').toLowerCase().startsWith('reuni') && item.observacao_reuniao && (
-                <p className="mt-3 line-clamp-2 rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs leading-5 text-muted" title={item.observacao_reuniao}>
-                  {item.observacao_reuniao}
-                </p>
-              )}
-              {canForceEndBreak && item.em_pausa && (
-                <button
-                  className="btn-danger btn-sm mt-4"
-                  disabled={loading}
-                  onClick={() => onForceEndBreak(item)}
-                  title="Derrubar pausa do CI"
-                  type="button"
-                >
-                  {loading ? 'Finalizando...' : 'Derrubar pausa'}
-                </button>
-              )}
-            </article>
-          )
-        })}
+    <div className="grid grid-cols-20 gap-1" aria-label={`Progresso da pausa: ${Math.round(ratio * 100)}%`} role="img">
+      {Array.from({ length: 20 }, (_, index) => <span className={`h-1.5 rounded-full ${index < completed ? tone : 'bg-surface-2'}`} key={index} />)}
+    </div>
+  )
+}
+
+function timingTone(timing) {
+  if (timing.remaining === null) return ['info', 'Sem limite']
+  if (timing.overdue) return ['danger', 'Tempo excedido']
+  return timing.ratio < 0.6 ? ['info', 'Dentro do tempo'] : ['warning', 'Próximo do limite']
+}
+
+function ActivePause({ current, elapsed, loading, onFinish }) {
+  const timing = pauseTiming(current, elapsed)
+  const [tone, status] = timingTone(timing)
+  const since = hourOf(current.inicio_pausa)
+  return (
+    <div className="space-y-4" data-own-pause="active">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-ink-2">
+          <strong className="font-semibold text-ink">{current.motivo_pausa}</strong>
+          {since && <> desde <span className="font-mono tabular-nums">{since}</span></>}
+        </p>
+        <Tag tone={tone}>{status}</Tag>
       </div>
+      <p className={`font-mono text-5xl font-medium tabular-nums ${timing.overdue ? 'text-danger' : 'text-ink'}`} data-pause-clock="">{clockDuration(timing.elapsed)}</p>
+      {timing.limit > 0 && <PauseProgress ratio={timing.ratio} />}
+      <p className={`text-sm ${timing.overdue ? 'font-medium text-danger' : 'text-muted'}`}>
+        {timing.limit > 0 ? `${pauseTimingNote(timing)} · limite de ${Math.round(timing.limit / 60)} min` : 'Timer ativo sem limite automático'}
+      </p>
+      {isMeeting(current.motivo_pausa) && (
+        <p className="line-clamp-3 rounded-md border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-ink-2" title={current.observacao_reuniao || 'Sem observação informada'}>
+          {current.observacao_reuniao || 'Sem observação informada'}
+        </p>
+      )}
+      <button className="btn-primary w-full" disabled={loading} onClick={onFinish} type="button">
+        {loading ? 'Finalizando...' : 'Finalizar pausa'}
+      </button>
+    </div>
+  )
+}
+
+function StartPause({ current, loading, onStart, onRequest }) {
+  const [reason, setReason] = useState('')
+  const [observation, setObservation] = useState('')
+  const chosen = REASONS.find((item) => item.value === reason) ?? null
+  const meeting = reason === 'Reunião'
+  // Limite do café pela configuração que o servidor manda (sem pausa, o
+  // status.php traz o limite de quem conta no tempo).
+  const coffeeLimit = current && !current.em_pausa ? pauseLimitSeconds({ motivo_pausa: 'Café', duracao_limite_segundos: current.duracao_limite_segundos }) : 0
+  const hints = {
+    'Café': coffeeLimit > 0 ? `até ${Math.round(coffeeLimit / 60)} min` : 'com limite de tempo',
+    'Pessoal': 'sem limite de tempo',
+    'Reunião': 'com aprovação',
+  }
+
+  async function submit(event) {
+    event.preventDefault()
+    if (!chosen) return
+    const result = meeting ? await onRequest(reason, observation) : await onStart(reason)
+    if (result) {
+      setReason('')
+      setObservation('')
+    }
+  }
+
+  return (
+    <form className="space-y-4" data-own-pause="start" onSubmit={submit}>
+      <fieldset className="space-y-2">
+        <legend className="mb-2 text-sm font-medium text-ink-2">Motivo</legend>
+        {REASONS.map((item) => (
+          <label className="pause-choice" key={item.value}>
+            <input checked={reason === item.value} name="motivo_pausa" onChange={() => setReason(item.value)} required type="radio" value={item.value} />
+            <span className="font-medium text-ink">{item.value}</span>
+            <small className="text-xs text-muted">{hints[item.value]}</small>
+          </label>
+        ))}
+      </fieldset>
+      {meeting && (
+        <label className="label">
+          Contexto da reunião
+          <textarea className="field mt-2 min-h-24" maxLength={500} onChange={(event) => setObservation(event.target.value)} required value={observation} />
+          <span className="mt-1 block text-right text-xs text-muted">{observation.length}/500</span>
+        </label>
+      )}
+      <button className="btn-primary w-full" disabled={loading || !chosen} type="submit">
+        {loading ? 'Processando...' : chosen ? chosen.action : 'Escolha o motivo'}
+      </button>
+      <p className="text-xs leading-5 text-muted">{PAUSE_RULE}</p>
+      {current && (
+        <p className="text-xs text-muted" data-own-schedule="">
+          Jornada <span className="font-mono tabular-nums">{current.jornada_entrada}</span> às <span className="font-mono tabular-nums">{current.jornada_saida}</span>
+          {current.almoco_inicio && current.almoco_fim && <> · almoço <span className="font-mono tabular-nums">{current.almoco_inicio}</span> às <span className="font-mono tabular-nums">{current.almoco_fim}</span></>}
+        </p>
+      )}
+    </form>
+  )
+}
+
+function MyPause({ current, elapsed, loading, onStart, onRequest, onFinish }) {
+  const state = current ? operatorState(current) : null
+  return (
+    <section aria-labelledby="sua-pausa" className="card space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold text-ink" id="sua-pausa">Sua pausa</h2>
+        {state && <Tag icon={state[3]} title={current.presenca?.detalhe || undefined} tone={state[2].replace(/^status-/u, '')}>{state[1]}</Tag>}
+      </div>
+      {current?.status_aprovacao === 'pendente' && (
+        <InlineAlert tone="warning">Sua solicitação de reunião está aguardando aprovação.</InlineAlert>
+      )}
+      {current?.em_pausa
+        ? <ActivePause current={current} elapsed={elapsed} loading={loading} onFinish={onFinish} />
+        : <StartPause current={current} loading={loading} onRequest={onRequest} onStart={onStart} />}
+    </section>
+  )
+}
+
+function TeamRow({ item, elapsedFor, canForceEndBreak, loading, onForceEndBreak }) {
+  const [state, label, badgeClass, icon] = operatorState(item)
+  const timing = item.em_pausa ? pauseTiming(item, elapsedFor(item)) : null
+  const meetingNote = isMeeting(item.motivo_pausa) && item.observacao_reuniao ? item.observacao_reuniao : null
+  return (
+    <tr data-overdue={timing?.overdue ? '' : undefined} data-row="" data-state={state}>
+      <td className="min-w-[11rem]" data-col="name">
+        <span className="block font-medium text-ink">{item.nome}</span>
+        {meetingNote && <small className="mt-0.5 line-clamp-2 block text-xs leading-5 text-muted" title={meetingNote}>{meetingNote}</small>}
+      </td>
+      <td className="w-px whitespace-nowrap" data-col="state">
+        <Tag icon={icon} title={item.presenca?.detalhe || undefined} tone={badgeClass.replace(/^status-/u, '')}>{label}</Tag>
+      </td>
+      <td className="w-px whitespace-nowrap font-mono text-sm tabular-nums" data-col="meta" data-hide-sm="">{item.jornada_entrada}–{item.jornada_saida}</td>
+      <td className="whitespace-nowrap text-right" data-col="meta" data-hide-sm={timing ? undefined : ''}>
+        {timing ? (
+          <span className="pause-time">
+            <span><span className="text-muted">{item.motivo_pausa}</span> <span className={`font-mono font-medium tabular-nums ${timing.overdue ? 'text-danger' : 'text-ink'}`} data-pause-clock="">{clockDuration(timing.elapsed)}</span></span>
+            <span className={`text-xs ${timing.overdue ? 'font-medium text-danger' : 'text-muted'}`}>{pauseTimingNote(timing)}</span>
+          </span>
+        ) : <span className="text-muted">—</span>}
+      </td>
+      {canForceEndBreak && (
+        <td className="w-px whitespace-nowrap text-right" data-col="act" data-hide-sm={item.em_pausa ? undefined : ''}>
+          {item.em_pausa && (
+            <button className="btn-danger btn-sm" disabled={loading} onClick={() => onForceEndBreak(item)} title="Derrubar pausa do CI" type="button">
+              {loading ? 'Finalizando...' : 'Derrubar pausa'}
+            </button>
+          )}
+        </td>
+      )}
+    </tr>
+  )
+}
+
+function TeamPanel({ teams, livePauses, canForceEndBreak, loading, onForceEndBreak }) {
+  const [filter, setFilter] = useState('todos')
+  const all = teams.flatMap(([, items]) => items)
+  const counts = { todos: all.length, available: 0, paused: 0, outros: 0 }
+  for (const item of all) counts[filterOf(operatorState(item)[0])] += 1
+  const visible = (item) => filter === 'todos' || filterOf(operatorState(item)[0]) === filter
+  const shown = teams.map(([title, items]) => [title, items, items.filter(visible)])
+  const columns = canForceEndBreak ? 5 : 4
+  const nothing = shown.every(([, , rows]) => rows.length === 0)
+  return (
+    <section aria-labelledby="equipe-agora" className="card overflow-hidden p-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <h2 className="text-lg font-semibold text-ink" id="equipe-agora">Equipe agora</h2>
+          <StatusDot tone={livePauses.connection === 'online' ? 'success' : 'warning'} label={livePauses.connection === 'online' ? 'Atualização em tempo real ativa' : 'Conexão instável; exibindo o último estado recebido'} />
+        </div>
+        <Segmented label="Filtrar a equipe" onChange={setFilter} options={FILTERS.map((option) => ({ ...option, count: counts[option.value] }))} value={filter} />
+      </div>
+      {nothing ? (
+        <div className="p-5"><EmptyState title="Ninguém nesta situação agora" description="Escolha outro filtro para ver o resto da equipe." /></div>
+      ) : (
+        <div className="table-wrap">
+          <table className="team-table">
+            <caption className="sr-only">Equipe agora</caption>
+            <thead>
+              <tr>
+                <th scope="col">Técnico</th>
+                <th scope="col">Situação</th>
+                <th scope="col">Jornada</th>
+                <th className="text-right" scope="col">Pausa</th>
+                {canForceEndBreak && <th className="text-right" scope="col"><span className="sr-only">Ações</span></th>}
+              </tr>
+            </thead>
+            {shown.map(([title, items, rows]) => rows.length > 0 && (
+              <tbody data-team={title} key={title}>
+                <tr className="team-group">
+                  <th colSpan={columns} scope="colgroup">
+                    Equipe {title} · {items.filter((item) => operatorState(item)[0] === 'available').length} de {items.length} disponíveis
+                  </th>
+                </tr>
+                {rows.map((item) => <TeamRow canForceEndBreak={canForceEndBreak} elapsedFor={livePauses.elapsedFor} item={item} key={item.id} loading={loading} onForceEndBreak={onForceEndBreak} />)}
+              </tbody>
+            ))}
+          </table>
+        </div>
+      )}
     </section>
   )
 }
@@ -181,38 +262,20 @@ export function PausasPage({ session, status, livePauses, loading, onStart, onRe
   const employees = useMemo(() => [...(status.n1 || []), ...(status.n2 || [])], [status])
   const current = employees.find((item) => Number(item.id) === Number(session.ci.funcionario_id))
   const canForceEndBreak = hasPermission(session, 'pausas.force_end')
+  const teams = [['N1', status.n1 || []], ['N2', status.n2 || []]]
 
   return (
-    <div className="space-y-7">
-      {session.ci.autenticado ? (
-        <div className="grid gap-5 lg:grid-cols-2">
-          {current?.em_pausa
-            ? <ActivePauseCard current={current} elapsed={livePauses.elapsedFor(current)} loading={loading} onFinish={onFinish} />
-            : <StartPauseCard loading={loading} onStart={onStart} onRequest={onRequest} />}
-          <section className="card flex flex-col justify-center">
-            <div className="flex items-center gap-3">
-              <UserAvatar name={session.ci.nome} />
-              <div>
-                <p className="section-eyebrow">Sessão do colaborador</p>
-                <h2 className="mt-1 text-2xl font-semibold text-ink">{session.ci.nome}</h2>
-                <p className="mt-1 text-sm text-muted">{session.ci.username}</p>
-              </div>
-            </div>
-            {current?.status_aprovacao === 'pendente' && (
-              <div className="mt-5 rounded-xl border border-warn-line bg-warn-bg p-4 text-sm text-warn">
-                Sua solicitação de reunião está aguardando aprovação.
-              </div>
-            )}
-          </section>
-        </div>
-      ) : (
-        <div className="card border-info-line bg-info-bg text-sm text-info">
-          A sessão administrativa permite monitoramento. Entre como CI para iniciar ou finalizar sua própria pausa.
-        </div>
+    <div className="space-y-6">
+      {!session.ci.autenticado && (
+        <InlineAlert tone="info">A sessão administrativa permite monitoramento. Entre como CI para iniciar ou finalizar sua própria pausa.</InlineAlert>
       )}
-      <StatusDot tone={livePauses.connection === 'online' ? 'success' : 'warning'} label={livePauses.connection === 'online' ? 'Atualização em tempo real ativa' : 'Conexão instável; exibindo o último estado recebido'} />
-      <TeamStatus title="Equipe N1" items={status.n1 || []} elapsedFor={livePauses.elapsedFor} canForceEndBreak={canForceEndBreak} loading={loading} onForceEndBreak={onForceEndBreak} />
-      <TeamStatus title="Equipe N2" items={status.n2 || []} elapsedFor={livePauses.elapsedFor} canForceEndBreak={canForceEndBreak} loading={loading} onForceEndBreak={onForceEndBreak} />
+      <div className={session.ci.autenticado ? 'grid items-start gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]' : ''}>
+        {session.ci.autenticado && (
+          <MyPause current={current} elapsed={current ? livePauses.elapsedFor(current) : 0} loading={loading} onFinish={onFinish} onRequest={onRequest} onStart={onStart} />
+        )}
+        <TeamPanel canForceEndBreak={canForceEndBreak} livePauses={livePauses} loading={loading} onForceEndBreak={onForceEndBreak} teams={teams} />
+      </div>
     </div>
   )
 }
+
