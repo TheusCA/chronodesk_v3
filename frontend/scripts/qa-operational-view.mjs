@@ -112,14 +112,15 @@ const renderDashboard = (employees, role, id) => renderToStaticMarkup(h(Dashboar
   navigate: noop, session: session(role, id), livePauses: livePauses(employees), loading: false, onForceEndBreak: noop,
 }))
 {
-  const [own, colleague, coffee] = cards(renderDashboard(technicianView, 'tecnico', 1))
+  // [R4b] Os cartões viraram linhas da lista "Pausas em andamento"; a regra do DV11 é a mesma.
+  const [own, colleague, coffee] = teamRows(renderDashboard(technicianView, 'tecnico', 1)).map((row) => row.html)
   assert.match(own, /QA pauta própria/u, 'DV11: a própria observação de reunião aparece')
-  assert.doesNotMatch(colleague, /line-clamp-2|Sem observação informada/u, 'DV11: sem a chave, a caixa do colega não aparece (nem "Sem observação informada")')
-  assert.match(colleague, /QA 2[\s\S]*Reunião/u, 'DV11: o cartão do colega continua, com o motivo da lista fechada')
-  assert.doesNotMatch(coffee, /line-clamp-2/u, 'café: nunca a caixa, com ou sem a chave')
+  assert.doesNotMatch(colleague, /line-clamp-2|Sem observação informada/u, 'DV11: sem a chave, a observação do colega não aparece (nem "Sem observação informada")')
+  assert.match(colleague, /QA 2[\s\S]*Reunião/u, 'DV11: a linha do colega continua, com o motivo da lista fechada')
+  assert.doesNotMatch(coffee, /line-clamp-2/u, 'café: nunca a observação, com ou sem a chave')
 }
 {
-  const [own, colleague] = cards(renderDashboard(managerView, 'gestor', 0))
+  const [own, colleague] = teamRows(renderDashboard(managerView, 'gestor', 0)).map((row) => row.html)
   assert.match(own, /QA pauta própria/u, 'gestão: a observação de reunião aparece')
   assert.ok(colleague.includes(NO_NOTE), 'gestão: chave nula continua "Sem observação informada", como antes')
 }
@@ -200,7 +201,9 @@ const cardValues = (section, team) => [...teamCard(section, team).matchAll(/<dd>
 const columnOrder = ['escalados', 'disponiveis', 'em_pausa', 'almoco', 'ausentes', 'fora_expediente', 'sem_escala']
 const expectedRow = (team, dash = []) => columnOrder.map((key) => (dash.includes(key) ? '—' : String(SUMMARY[team][key])))
 const textOf = (html) => html.replace(/^[^>]*>/u, '').replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim()
-const metricValue = (markup, label) => markup.match(new RegExp(`<p class="metric-label">${label}</p><p class="metric-value">([^<]*)</p>`, 'u'))?.[1]
+// [R4b] Os 8 cartões viraram a lista "Totais da operação" (mesmos rótulos).
+const metricValue = (markup, label) => markup.match(new RegExp(`<dt class="text-muted">${label}</dt><dd class="[^"]*">([^<]*)</dd>`, 'u'))?.[1]
+const teamAvailable = (markup, team) => markup.match(new RegExp(`data-team-now="${team}"[\\s\\S]*?data-available="([^"]*)"`, 'u'))?.[1]
 {
   const markup = renderDashboardWith(dashboardData())
   const section = summarySection(markup)
@@ -260,15 +263,15 @@ const metricValue = (markup, label) => markup.match(new RegExp(`<p class="metric
   assert.deepEqual(OPERATIONAL_SUMMARY_COLUMNS.map((column) => textOf(headers[OPERATIONAL_SUMMARY_COLUMNS.indexOf(column)])), ['Escalados', 'Disponíveis', 'Em pausa', 'Almoço', 'Ausentes', 'Fora do expediente', 'Sem escala'], 'rótulos das colunas')
   assert.ok(section.includes('Ausentes: somente ausências lançadas; pausas não entram.'), 'nota dos ausentes')
   assert.ok(section.includes('Situação às 10:32'), 'hora do servidor (server_now), sem o fuso do navegador')
-  assert.doesNotMatch(section, /inline-alert/u, 'sem aviso com a presença e as pausas disponíveis')
+  assert.doesNotMatch(markup, /inline-alert/u, 'sem aviso com a presença e as pausas disponíveis')
   // Cartões pelo resumo, nunca pela disponibilidade do status.php.
   assert.equal(metricValue(markup, 'CIs disponíveis'), '11', '"CIs disponíveis" = total.disponiveis do resumo (o cálculo antigo daria 9)')
-  assert.ok(markup.includes('Aptos para atendimento agora'), '"CIs disponíveis" com o texto de sempre')
-  assert.match(markup, /N1 <strong class="ml-2 text-lg text-ok">4<\/strong>/u, '"Disponíveis por equipe": N1 pelo resumo (o cálculo antigo daria 6)')
-  assert.match(markup, /N2 <strong class="ml-2 text-lg text-ok">7<\/strong>/u, '"Disponíveis por equipe": N2 pelo resumo (o cálculo antigo daria 3)')
-  // Os cartões que continuam: pausas, aprovações e chamados críticos.
+  assert.match(markup, /data-now-available="">11</u, '[R4b] "Disponíveis agora" no topo = total.disponiveis do resumo')
+  assert.equal(teamAvailable(markup, 'n1'), '4', 'N1 disponíveis pelo resumo (o cálculo antigo daria 6)')
+  assert.equal(teamAvailable(markup, 'n2'), '7', 'N2 disponíveis pelo resumo (o cálculo antigo daria 3)')
+  // Os totais que continuam, na lista do pé da tela.
   for (const label of ['Técnicos monitorados', 'Pausas ativas', 'Aprovações pendentes', 'Chamados críticos', 'War rooms', 'Plantonistas ativos', 'Sobreavisos ativos']) {
-    assert.ok(markup.includes(`<p class="metric-label">${label}</p>`), `cartão "${label}" continua`)
+    assert.notEqual(metricValue(markup, label), undefined, `total "${label}" continua`)
   }
   assert.equal(metricValue(markup, 'Técnicos monitorados'), '30', 'demais cartões do summary como antes')
 }
@@ -288,11 +291,13 @@ for (const [label, data] of [
   for (const team of ['n1', 'n2', 'total', 'lideranca']) {
     assert.deepEqual(cardValues(section, team), Array(7).fill('—'), `${label}: 17d, cartão ${team} com "—"`)
   }
-  assert.ok(section.includes('inline-alert inline-alert-warning') && section.includes('Situação da equipe indisponível'), `${label}: aviso da presença indisponível`)
+  assert.ok(markup.includes('inline-alert inline-alert-warning') && markup.includes('Situação da equipe indisponível'), `${label}: aviso da presença indisponível (no topo da tela)`)
   assert.equal(metricValue(markup, 'CIs disponíveis'), '—', `${label}: "CIs disponíveis" com "—" (nunca o cálculo antigo)`)
   assert.ok(markup.includes('Indisponível: presença não calculada'), `${label}: "CIs disponíveis" com o aviso`)
-  assert.match(markup, /N1 <strong class="ml-2 text-lg text-ok">—<\/strong>/u, `${label}: N1 por equipe com "—"`)
-  assert.match(markup, /N2 <strong class="ml-2 text-lg text-ok">—<\/strong>/u, `${label}: N2 por equipe com "—"`)
+  assert.equal(teamAvailable(markup, 'n1'), '—', `${label}: N1 por equipe com "—"`)
+  assert.equal(teamAvailable(markup, 'n2'), '—', `${label}: N2 por equipe com "—"`)
+  assert.match(markup, /data-now-available="">—</u, `${label}: "Disponíveis agora" com "—"`)
+  assert.doesNotMatch(markup, /data-composition=/u, `${label}: sem a barra de composição (nada inventado)`)
   assert.ok(section.includes('Ausentes: somente ausências lançadas'), `${label}: a nota continua`)
 }
 // Estado de pausas ilegível: "—" só em Em pausa, com aviso (DV6).
@@ -303,7 +308,7 @@ for (const [label, data] of [
     assert.deepEqual(rowValues(section, label), expectedRow(team, ['em_pausa']), `pausas ilegíveis: ${label} com "—" só em Em pausa`)
     assert.deepEqual(cardValues(section, team), expectedRow(team, ['em_pausa']), `pausas ilegíveis: 17d, cartão ${label} com "—" só em Em pausa`)
   }
-  assert.ok(section.includes('Pausas indisponíveis') && !section.includes('Situação da equipe indisponível'), 'pausas ilegíveis: o aviso das pausas, não o da presença')
+  assert.ok(markup.includes('Pausas indisponíveis') && !markup.includes('Situação da equipe indisponível'), 'pausas ilegíveis: o aviso das pausas, não o da presença')
   assert.equal(metricValue(markup, 'CIs disponíveis'), '11', 'pausas ilegíveis: "CIs disponíveis" continua pelo resumo')
 }
 // [Ajuste A3] Ninguém escalado (fim de semana, feriado ou sem regra): texto
@@ -361,7 +366,9 @@ for (const serverNow of [null, undefined, '', 'x', 0]) {
 {
   const source = read('src/pages/DashboardPage.jsx')
   assert.doesNotMatch(source, /\.disponibilidade\b/u, 'Visão Operacional não lê a disponibilidade do cálculo antigo')
-  assert.match(source, /summaryCount\(presence\.total, 'disponiveis'\)/u, '"CIs disponíveis" pelo total do resumo')
+  // [R4b] A conta passa por presenceOf (o mesmo summaryCount do resumo, com o "—" do DV5 e do DV6).
+  assert.match(source, /const availableCis = count\('total', 'disponiveis'\)/u, '"CIs disponíveis" pelo total do resumo')
+  assert.match(source, /return summaryCount\(presence\[team\], key\)/u, 'contadores do topo pelo summaryCount do resumo')
   assert.equal((source.match(/\{cell\(team, column\.key\)\}/gu) ?? []).length, 2, '17d: tabela e cartões pelo mesmo cell()')
 }
 
@@ -613,6 +620,104 @@ const textOfHtml = (html) => html.replace(/<!-- -->/gu, '').replace(/<[^>]+>/gu,
   const empty = renderPausasWith([free(1)], { role: 'gestor', id: 0, ci: false, filter: 'paused' })
   assert.ok(empty.includes('Ninguém nesta situação agora') && !empty.includes('<table'), 'filtro sem ninguém: vazio com o próximo passo, sem a tabela')
   assert.ok(all.includes('<caption class="sr-only">Equipe agora</caption>') && all.includes('scope="colgroup"'), 'tabela com nome e linhas de grupo com escopo')
+}
+
+// ---------------------------------------------------------------------------
+// 7. [R4b] Visão operacional: disponíveis e composição no topo, "Precisa de
+// você", pausas em andamento com o estouro, totais e o modo painel
+// ---------------------------------------------------------------------------
+const renderDashboardR4b = (data, { permissions = [], role = 'gestor', employees = [], elapsed = () => 0, panel = false } = {}) => {
+  globalThis.qaResourceData = data
+  try {
+    return renderToStaticMarkup(h(DashboardPage, {
+      navigate: noop, loading: false, onForceEndBreak: noop, panel,
+      panelHeader: panel ? h('header', { 'data-qa-panel-header': '' }, 'Topo QA') : null,
+      session: { role, permissions, ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' } },
+      livePauses: { employees, status: { n1: employees, n2: [], server_now: '2026-10-27T10:32:40-03:00' }, connection: 'online', serverNow: Date.parse('2026-10-27T10:32:50-03:00'), elapsedFor: elapsed },
+    }))
+  } finally {
+    delete globalThis.qaResourceData
+  }
+}
+const cellsOf = (markup, team) => {
+  const bar = markup.match(new RegExp(`<div aria-label="([^"]*)" class="[^"]*" data-composition="${team}" role="img">([\\s\\S]*?)</div>`, 'u'))
+  if (!bar) return null
+  const counts = {}
+  for (const [, key] of bar[2].matchAll(/data-cell="([a-z_]+)"/gu)) counts[key] = (counts[key] ?? 0) + 1
+  return { label: bar[1], counts }
+}
+const MANAGER_PERMISSIONS = ['operacao.approve', 'pausas.force_end']
+const livePause = (id, motivo, extra = {}) => ({ id, nome: `QA Pausa ${id}`, equipe: 'n1', em_pausa: true, motivo_pausa: motivo, inicio_pausa: '2026-10-27T10:00:00-03:00', status_aprovacao: 'aprovado', ...extra })
+{
+  const markup = renderDashboardR4b(dashboardData({ summary: { tecnicos_monitorados: 30, solicitacoes_pendentes: 3, chamados_criticos_abertos: 1, war_rooms_ativas: 1 } }), { permissions: MANAGER_PERMISSIONS })
+  // Saem o cartão de abertura e os 8 cartões iguais.
+  for (const gone of ['Operação agora', 'Portal SDK — Centro Operacional de TI', 'metric-card', 'Disponíveis por equipe', 'Pausas por tipo', 'Monitoramento em tempo real']) {
+    assert.ok(!markup.includes(gone), `sai "${gone}"`)
+  }
+  // A primeira tela: disponíveis e composição, depois pausas e "Precisa de você"; o detalhe e os totais embaixo.
+  const order = ['Disponíveis agora', 'Pausas em andamento', 'Precisa de você', 'Situação da equipe agora', 'Totais da operação'].map((text) => markup.indexOf(text))
+  assert.ok(order.every((index, position) => index > 0 && (position === 0 || index > order[position - 1])), `ordem da tela: disponíveis, pausas, "Precisa de você", detalhe e totais (${order.join(', ')})`)
+  // Composição: uma célula por pessoa escalada, na ordem e na cor da legenda.
+  const total = cellsOf(markup, 'total')
+  assert.deepEqual(total?.counts, { disponiveis: 11, em_pausa: 3, almoco: 3, ausentes: 3, fora_expediente: 3 }, 'composição do total: uma célula por escalado (23)')
+  assert.equal(total.label, 'Equipe N1 + N2: 11 disponíveis, 3 em pausa, 3 almoço, 3 ausentes, 3 fora do expediente', 'composição com a frase para o leitor de tela')
+  assert.ok(textOfHtml(markup).includes('11 de 23 escalados'), 'disponíveis de quantos escalados')
+  assert.ok(textOfHtml(markup).includes('Sem escala, fora da soma: 43'), 'sem escala fora da soma, com o número')
+  assert.deepEqual(cellsOf(markup, 'n1')?.counts, { disponiveis: 4, em_pausa: 2, almoco: 1, ausentes: 3, fora_expediente: 1 }, 'composição do N1')
+  assert.ok(textOfHtml(markup).includes('4 de 11 disponíveis') && textOfHtml(markup).includes('7 de 12 disponíveis'), 'N1 e N2: disponíveis de quantos escalados')
+  // "Precisa de você": aprovações e chamado crítico, com o caminho.
+  const needs = markup.slice(markup.indexOf('data-needs-you'), markup.indexOf('</section>', markup.indexOf('data-needs-you')))
+  assert.match(needs, /data-need="approvals"><button [^>]*type="button">[\s\S]*3 aprovações pendentes[\s\S]*Pausas, ponto e horas extras/u, 'aprovações pendentes, com o botão para a tela')
+  assert.match(needs, /data-need="critical"><button [^>]*type="button">[\s\S]*1 chamado crítico aberto[\s\S]*1 war room ativa/u, 'chamado crítico aberto e war room')
+  assert.equal(metricValue(markup, 'Aprovações pendentes'), '3', 'o total de aprovações continua na lista de totais')
+  assert.ok(markup.includes('data-panel-open=""') && markup.includes('Modo painel'), 'botão "Modo painel" na tela normal')
+}
+{
+  // Sem nada pendente: o vazio diz isso. Sem operacao.approve, sem o atalho de aprovações.
+  const calm = renderDashboardR4b(dashboardData({ summary: { solicitacoes_pendentes: 0, chamados_criticos_abertos: 0 } }))
+  assert.ok(calm.includes('Nada precisa de você agora.'), '"Precisa de você" vazio, com o texto')
+  const noApprove = renderDashboardR4b(dashboardData({ summary: { solicitacoes_pendentes: 2 } }), { role: 'tecnico' })
+  assert.ok(!noApprove.includes('data-need="approvals"'), 'sem operacao.approve: sem o atalho para Aprovações (a rota pede a permissão)')
+}
+{
+  // Pausas em andamento: estouro marcado e escrito; "Precisa de você" com a pausa estourada.
+  const employees = [livePause(1, 'Café', { duracao_limite_segundos: 1200 }), livePause(2, 'Reunião', { equipe: 'n2', observacao_reuniao: null })]
+  const markup = renderDashboardR4b(dashboardData(), { permissions: MANAGER_PERMISSIONS, employees, elapsed: (item) => (item.id === 1 ? 1500 : 600) })
+  const rows = teamRows(markup)
+  assert.deepEqual(rows.map((row) => row.overdue), [true, false], 'café de 25 min com limite de 20: linha marcada; reunião nunca')
+  assert.ok(textOfHtml(rows[0].html).includes('25:00 passou 5:00'), 'estouro escrito na linha ("passou")')
+  assert.ok(textOfHtml(rows[1].html).includes('10:00 sem limite'), 'reunião sem limite')
+  assert.ok(textOfHtml(markup).includes('2 em andamento · Café 1 · Reunião 1'), 'pausas por tipo no cabeçalho da lista')
+  assert.match(markup, /data-need="overdue"><button [^>]*type="button">[\s\S]*Café passou do limite[\s\S]*QA Pausa 1, limite de 20 min · passou 5:00/u, '"Precisa de você": a pausa estourada, com quem e quanto')
+  assert.equal((markup.match(/>Derrubar pausa<\/button>/gu) ?? []).length, 2, 'Derrubar pausa em cada pausa (com pausas.force_end)')
+  assert.equal((renderDashboardR4b(dashboardData(), { employees, elapsed: () => 0 }).match(/Derrubar pausa/gu) ?? []).length, 0, 'sem pausas.force_end: sem Derrubar pausa')
+  // Pausas ilegíveis: sem célula de pausa e "—" na legenda.
+  const unreadable = renderDashboardR4b(dashboardData({ presence_meta: { disponivel: true, pausas_disponiveis: false } }))
+  assert.equal(cellsOf(unreadable, 'total')?.counts.em_pausa, undefined, 'pausas ilegíveis: sem célula de pausa na composição')
+  assert.ok(textOfHtml(unreadable).includes('Em pausa —'), 'pausas ilegíveis: "Em pausa" com "—" na legenda')
+}
+{
+  // Modo painel: sem ações, sem o detalhe e os totais, números de destaque maiores.
+  const employees = [livePause(1, 'Café', { duracao_limite_segundos: 1200 })]
+  const panel = renderDashboardR4b(dashboardData({ summary: { solicitacoes_pendentes: 3, chamados_criticos_abertos: 1 } }), { permissions: MANAGER_PERMISSIONS, employees, elapsed: () => 1500, panel: true })
+  assert.ok(panel.includes('data-dashboard="painel"') && panel.includes('data-qa-panel-header'), 'painel com o topo próprio')
+  for (const gone of ['Derrubar pausa', 'Abrir pausas', 'Modo painel', 'Situação da equipe agora', 'Totais da operação']) assert.ok(!panel.includes(gone), `painel sem "${gone}"`)
+  assert.doesNotMatch(panel.slice(panel.indexOf('data-needs-you')), /<button/u, 'painel: "Precisa de você" só como lista, sem botões')
+  assert.ok(panel.includes('Café passou do limite') && panel.includes('3 aprovações pendentes'), 'painel: o que precisa de atenção continua visível')
+  assert.match(panel, /class="font-mono font-medium leading-none tabular-nums text-ink text-\[7rem\]" data-now-available="">11</u, 'painel: disponíveis em 7rem')
+  assert.match(panel, /text-\[4rem\]" data-available="4"/u, 'painel: equipes em 4rem')
+  const unavailable = renderDashboardR4b(dashboardData({ presence_meta: { disponivel: false } }), { panel: true })
+  assert.ok(unavailable.includes('Situação da equipe indisponível') && unavailable.includes('data-now-available="">—<'), 'painel: o "—" e o aviso de presença indisponível')
+  const dashboardSource = read('src/pages/DashboardPage.jsx')
+  assert.match(dashboardSource, /document\.documentElement\.dataset\.panelMode = ''[\s\S]*delete document\.documentElement\.dataset\.panelMode/u, 'painel: a fonte da raiz cresce enquanto ele está aberto, e volta ao sair')
+  assert.match(read('src/index.css'), /:root\[data-panel-mode\] \{\s*font-size: 112\.5%;[\s\S]*@media \(min-width: 1600px\) \{\s*:root\[data-panel-mode\] \{\s*font-size: 137\.5%;/u, 'painel: fonte maior, e mais ainda na tela grande')
+  assert.match(dashboardSource, /onClick=\{\(\) => navigate\('\/dashboard\?painel=1'\)\}/u, '"Modo painel" pelo navigate (endereço que a tela fixa guarda)')
+  const app = read('src/App.jsx')
+  assert.match(app, /const panelMode = authenticated && allowed && router\.path === '\/dashboard' && new URLSearchParams\(router\.search\)\.get\('painel'\) === '1'/u, 'painel só com sessão e a mesma permissão da tela')
+  const branch = app.slice(app.indexOf('} else if (panelMode) {'), app.indexOf('} else {', app.indexOf('} else if (panelMode) {')))
+  assert.ok(branch.includes('<DashboardPage') && branch.includes(' panel ') && !branch.includes('PortalLayout'), 'painel sem a casca (menu, topo e atalhos)')
+  assert.match(app, /<h1 className="[^"]*" data-page-title="" tabIndex=\{-1\}>Visão operacional<\/h1>/u, 'painel com o título focável')
+  assert.match(app, /<ThemeToggle \/>\s*<button className="btn-secondary" data-panel-exit="" onClick=\{onExit\} type="button">Sair do modo painel<\/button>/u, 'painel com o tema e a saída')
 }
 
 console.log('QA operational view OK')

@@ -27,7 +27,7 @@ function userLabel(session) {
 }
 
 // [R1] Troca o tema na sessão (D-R1-1). O rótulo diz a ação, não o estado.
-function ThemeToggle() {
+export function ThemeToggle() {
   const [theme, setTheme] = useState(() => (typeof document === 'undefined' ? 'light' : activeTheme()))
   const next = oppositeTheme(theme)
   const label = next === 'dark' ? 'Usar tema escuro' : 'Usar tema claro'
@@ -48,7 +48,7 @@ function ThemeToggle() {
 // [R3] Hora do servidor (o status.php acerta a diferença do relógio local a
 // cada leitura), no lugar da hora do navegador. Sem leitura ainda, a do
 // navegador. Só hora e minuto: o segundo correndo no topo distrai.
-function Clock({ serverNow }) {
+export function Clock({ serverNow }) {
   const instant = Number.isFinite(serverNow) ? new Date(serverNow) : new Date()
   const text = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(instant)
   return (

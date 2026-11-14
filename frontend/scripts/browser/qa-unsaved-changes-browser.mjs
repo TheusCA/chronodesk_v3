@@ -2637,6 +2637,63 @@ async function pausesR4a(page, port, mock) {
   report('Pausas, 390 px, filtro marcado com aria-pressed', await page.evaluate(`[...document.querySelectorAll('main [role="group"] button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent).join() .startsWith('Em pausa')`))
 }
 
+// 24. [R4b] Visao operacional: disponiveis e "Precisa de voce" na primeira
+// tela; modo painel (tela fixa) sem a casca e sem acoes, com o tema e a saida.
+const DASH_STATE = `(() => {
+  const top = (text) => { const h = [...document.querySelectorAll('main h2')].find((el) => el.textContent === text); return h ? Math.round(h.getBoundingClientRect().top) : null }
+  return {
+    rota: location.pathname + location.search,
+    disponiveis_topo: top('Disponíveis agora'),
+    precisa_topo: top('Precisa de você'),
+    altura: innerHeight,
+    menu: !!document.querySelector('nav[aria-label="Módulos do portal"]'),
+    atalhos: !!document.querySelector('nav[aria-label="Atalhos"]'),
+    sino: !!document.querySelector('[aria-label="Notificações"]'),
+    titulo: document.querySelector('[data-page-title]')?.textContent ?? null,
+    derrubar: [...document.querySelectorAll('main button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Derrubar pausa').length,
+    fonte_raiz: parseFloat(getComputedStyle(document.documentElement).fontSize),
+    tema: document.documentElement.dataset.theme ?? 'sistema',
+    rolagem_lateral: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  }
+})()`
+
+async function dashboardR4b(page, port, mock) {
+  const expectDash = (label, expected) => expectState(page, `Visao operacional, ${label}`, expected, DASH_STATE)
+  mock.setPausedEmployee(true)
+  for (const width of [1366, 390]) {
+    await goto(page, port, '/dashboard', width)
+    await page.waitFor(`[...document.querySelectorAll('main h2')].some((h) => h.textContent === 'Disponíveis agora')`)
+    const state = await page.evaluate(DASH_STATE)
+    report(`Visao operacional, ${width} px: "Disponíveis agora" na primeira tela`, state.disponiveis_topo !== null && state.disponiveis_topo < state.altura, JSON.stringify({ topo: state.disponiveis_topo, altura: state.altura }))
+    if (width > 1000) report('Visao operacional, 1366 px: "Precisa de você" na primeira tela', state.precisa_topo !== null && state.precisa_topo < state.altura, JSON.stringify({ topo: state.precisa_topo }))
+  }
+
+  // Modo painel pelo botao da tela.
+  await goto(page, port, '/dashboard', 1366)
+  await page.waitFor(`!!document.querySelector('[data-panel-open]')`)
+  await expectDash('1366 px, tela normal: menu, Derrubar pausa e fonte de 16 px', { menu: true, derrubar: 1, fonte_raiz: 16 })
+  await page.click(`document.querySelector('[data-panel-open]')`)
+  await page.waitFor(`!!document.querySelector('[data-panel-shell]')`)
+  await sleep(300)
+  await expectDash('modo painel: endereço guardável, sem menu, atalhos, sino nem Derrubar pausa', { rota: '/app/dashboard?painel=1', menu: false, atalhos: false, sino: false, derrubar: 0, titulo: 'Visão operacional' })
+  await expectDash('modo painel: fonte maior (112,5%)', { fonte_raiz: 18 })
+  const before = (await page.evaluate(DASH_STATE)).tema
+  await page.click(`document.querySelector('[data-theme-toggle]')`)
+  await expectDash('modo painel: o botão de tema troca o tema', { tema: (value) => value !== before && (value === 'dark' || value === 'light') })
+  await page.click(`document.querySelector('[data-panel-exit]')`)
+  await page.waitFor(`!!document.querySelector('nav[aria-label="Módulos do portal"]')`)
+  await expectDash('"Sair do modo painel": volta à tela com o menu e a fonte de 16 px', { rota: '/app/dashboard', menu: true, fonte_raiz: 16, derrubar: 1 })
+  await page.evaluate(`document.querySelector('[data-theme-toggle]').click()`)
+
+  // Endereco aberto direto (a tela fixa guarda o endereco) e no celular.
+  await goto(page, port, '/dashboard?painel=1', 1920)
+  await page.waitFor(`!!document.querySelector('[data-panel-shell]')`)
+  await expectDash('1920 px, aberto pelo endereço: painel, fonte de 137,5%', { menu: false, fonte_raiz: 22, titulo: 'Visão operacional' })
+  await goto(page, port, '/dashboard?painel=1', 390)
+  await page.waitFor(`!!document.querySelector('[data-panel-shell]')`)
+  await expectDash('390 px, painel: sem rolagem lateral', { rolagem_lateral: false, menu: false })
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2674,6 +2731,7 @@ try {
     [21, 'Escala: excecao por data carrega a gravada (9.12.4)', () => scheduleExceptionLoad(page, mock.port, mock)],
     [22, 'Casca: primeiro Tab, contador e atalhos do celular (R3)', () => shellR3(page, mock.port, mock)],
     [23, 'Pausas: iniciar em 2 acoes e lista com filtro (R4a)', () => pausesR4a(page, mock.port, mock)],
+    [24, 'Visao operacional e modo painel (R4b)', () => dashboardR4b(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

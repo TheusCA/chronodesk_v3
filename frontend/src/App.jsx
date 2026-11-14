@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Feedback } from './components/Feedback'
-import { PortalLayout } from './components/PortalLayout'
+import { Clock, PortalLayout, ThemeToggle } from './components/PortalLayout'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { ConfirmActionDialog } from './components/ui/ConfirmActionDialog'
 import { LoadingState } from './components/ui/States'
@@ -41,6 +41,21 @@ const emptySession = {
   permissions: [],
   ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' },
   gestor: { autenticado: false, admin: false, username: '', role: null },
+}
+
+// [R4b] Topo do modo painel (tela fixa): o título, a hora do servidor, o tema
+// e a saída. Sem menu, sem sino e sem ações.
+function PanelHeader({ serverNow, onExit }) {
+  return (
+    <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+      <h1 className="text-2xl font-semibold text-ink outline-none" data-page-title="" tabIndex={-1}>Visão operacional</h1>
+      <div className="flex items-center gap-3">
+        <Clock serverNow={serverNow} />
+        <ThemeToggle />
+        <button className="btn-secondary" data-panel-exit="" onClick={onExit} type="button">Sair do modo painel</button>
+      </div>
+    </header>
+  )
 }
 
 function AccessDenied({ navigate }) {
@@ -151,6 +166,9 @@ export default function App() {
   const route = navigation.find((item) => item.path === router.path)
   const allowed = !route?.permission || permissions.has(route.permission)
   const funcionarioId = session.ci.funcionario_id
+  // [R4b] Modo painel da Visão operacional (/app/dashboard?painel=1): a tela
+  // fixa, sem a casca. Mesma permissão e mesmos dados da tela normal.
+  const panelMode = authenticated && allowed && router.path === '/dashboard' && new URLSearchParams(router.search).get('painel') === '1'
 
   // [17f, DD3] Derrubar pausa pelo ConfirmActionDialog (antes, confirmação e
   // pergunta nativas do navegador). O payload é o de antes; a justificativa continua opcional.
@@ -248,6 +266,16 @@ export default function App() {
     screen = <div className="grid min-h-screen place-items-center text-sm text-muted">Carregando Portal Operacional...</div>
   } else if (!authenticated) {
     screen = <LoginPage onLoginCI={loginCI} loading={actionLoading} />
+  } else if (panelMode) {
+    screen = (
+      <main className="mx-auto min-h-screen w-full max-w-[1920px] bg-bg px-4 py-6 outline-none sm:px-8" data-panel-shell="" id="conteudo" tabIndex={-1}>
+        <RouteErrorBoundary resetKey="painel">
+          <Suspense fallback={<LoadingState label="Carregando módulo..." />}>
+            <DashboardPage livePauses={livePauses} loading={false} navigate={router.navigate} onForceEndBreak={() => {}} panel panelHeader={<PanelHeader onExit={() => router.navigate('/dashboard')} serverNow={livePauses.serverNow} />} session={session} />
+          </Suspense>
+        </RouteErrorBoundary>
+      </main>
+    )
   } else {
     screen = (
       <PortalLayout session={session} path={router.path} navigate={router.navigate} onLogout={logout} serverNow={livePauses.serverNow}>
