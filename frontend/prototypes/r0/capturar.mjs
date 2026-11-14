@@ -42,6 +42,8 @@ const outDir = resolve(outArg || '.')
 if (mode !== 'verificar') mkdirSync(outDir, { recursive: true })
 
 const WIDTHS = [[1280, 900], [390, 844]]
+// [R4b] 1920 x 1080: a tela fixa do modo painel (só no plano dos lotes R).
+const HEIGHTS = new Map([...WIDTHS, [1920, 1080]])
 const SERVER_NOW = '2026-10-28T10:42:00-03:00'
 
 // ---------------------------------------------------------------------------
@@ -119,8 +121,10 @@ const PLAN_R = [
   ['anonimo', ['/'], [1280, 390]],
   ['admin', MAIN, [1280, 390]],
   ['tecnico', ['/pausas'], [1280, 390]],
+  // [R4b] Modo painel da Visão operacional, também na tela fixa de 1920 px.
+  ['admin', ['/dashboard?painel=1'], [1920, 1280, 390]],
 ]
-const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-')
+const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel')
 
 // ---------------------------------------------------------------------------
 async function shoot(page, url, width, height, file, ready) {
@@ -165,7 +169,7 @@ async function before() {
     for (const [who, routes, widths] of planName === 'r' ? PLAN_R : PLAN) {
       profile = who
       for (const width of widths) {
-        const height = WIDTHS.find(([w]) => w === width)[1]
+        const height = HEIGHTS.get(width)
         for (const route of routes) {
           const ready = who === 'anonimo' ? "document.querySelector('form') !== null" : "document.querySelector('[data-page-title]') !== null && !document.querySelector('[role=status][aria-label]')"
           await shoot(page, `${base}${route === '/' ? '/' : route}`, width, height, join(outDir, `${who}-${slug(route)}-${width}${suffix}.webp`), ready)

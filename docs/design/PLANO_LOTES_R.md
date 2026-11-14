@@ -476,3 +476,84 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 **Capturas:**
 - **"Antes":** as do R3, `capturas/r3/*-pausas-*`.
 - **"Depois", no git:** `capturas/r4a/`: Pausas do técnico e da gestão, 1280 e 390 px, claro e escuro. São 8 arquivos, tirados do build do `a584367` (o código de Pausas do `906ae83`).
+
+### R4b · Visão operacional e modo painel (14/11/2026)
+
+**Commits:** `34f7de6` (a tela e o modo painel), `2da62d4` (correção: o painel sem a observação de reunião) e um de docs. Sem push.
+
+**O que entrou (protótipo aprovado):**
+- **Primeira tela:**
+  - "Disponíveis agora": o total do `presence_summary`, de quantos escalados, e a hora do servidor;
+  - a composição da equipe: uma célula por pessoa escalada, na cor e na ordem da legenda, com a frase para o leitor de tela (sem largura calculada em `style`, pela CSP);
+  - N1 e N2 lado a lado, cada um com o número, a composição e a legenda.
+- **"Pausas em andamento"** em lista densa:
+  - o estouro marcado na linha e escrito ("passou");
+  - os tipos no cabeçalho ("2 em andamento · Café 1 · Reunião 1");
+  - a observação de reunião pela regra do DV11, e "Derrubar pausa" só com `pausas.force_end`.
+- **"Precisa de você":**
+  - aprovações pendentes, com o atalho só para quem tem `operacao.approve`;
+  - cada pausa que passou do limite, com quem e quanto;
+  - os chamados críticos abertos, com as war rooms;
+  - cada item leva à tela dele; vazio, "Nada precisa de você agora.".
+- **Sai o cartão "Operação agora" e os 8 cartões iguais.**
+- **Modo painel para a tela fixa:**
+  - endereço `/app/dashboard?painel=1` (a tela fixa guarda o endereço), aberto pelo botão "Modo painel";
+  - sem a casca (menu, topo, sino e atalhos) e sem ações (sem Derrubar pausa, sem "Abrir pausas", "Precisa de você" só como lista, sem a tabela de detalhe e sem os totais);
+  - o título, a hora do servidor, o tema (o escuro disponível pelo botão, como no resto do portal, D-R1-1) e "Sair do modo painel";
+  - a fonte da raiz cresce (112,5%, e 137,5% de 1600 px para cima), e os números de destaque vão a 7rem e 4rem;
+  - mesma sessão, mesma permissão e mesmos dados da tela; nenhum endereço novo no servidor.
+- **CSS:** sai o CSS morto dos cartões de Pausas (`operator-card-*`, fora de camada); as classes da tela usam os utilitários que o build já tem. Ícone "chevron" novo no `Icon.jsx`, com o traço do protótipo.
+
+**O que saiu da tela e onde ficou:**
+
+| Saiu | Onde ficou |
+|---|---|
+| Cartão "Operação agora" (sobretítulo, título e frase) | Saiu (texto de apresentação, D-R0-8). Os dois indicadores de atualização ficam na linha do topo, com o mesmo texto (DV14) |
+| "Disponíveis por equipe" | Painéis N1 e N2 |
+| "Pausas por tipo" | Cabeçalho de "Pausas em andamento" |
+| Cartão "CIs disponíveis" | "Disponíveis agora" (o número grande) e a lista "Totais da operação"; sem presença, "—" e "Indisponível: presença não calculada" |
+| Cartões "Técnicos monitorados", "Pausas ativas", "Aprovações pendentes", "Chamados críticos", "War rooms", "Plantonistas ativos" e "Sobreavisos ativos" | Lista "Totais da operação", no pé da tela, com os mesmos rótulos e números do `dashboard.php`. Aprovações, chamados críticos e war rooms também em "Precisa de você", quando há |
+| Frases sob os números ("Aptos para atendimento agora", "Timers sincronizados pelo servidor"...) | Saíram (apresentação, S9) |
+| Avisos "Situação da equipe indisponível" e "Pausas indisponíveis" | No topo da tela, com o mesmo texto |
+| Sobretítulo "Visão Operacional" da tabela | Saiu. A tabela "Situação da equipe agora" fica como o detalhe por equipe, com a Liderança fora dos totais e as notas |
+| Cartões de "Pausas em andamento" | Linhas da lista, com o mesmo conteúdo |
+
+**A correção (`2da62d4`):** o modo painel é para a TV da sala, à vista de todos. Numa sessão de gestão, a lista mostrava a observação de reunião (DV11: só a gestão e o próprio a veem), e ela iria para a TV. No painel ela não aparece; na tela normal, nada muda. Achado na revisão das capturas do painel.
+
+**Para decidir (não implementado):** o painel mostra os nomes de quem está em pausa e de quem passou do limite, como a tela de sempre. Numa TV de sala, isso é exposição maior que a da tela de cada um (LGPD: o mínimo necessário). Se preferir, o painel pode mostrar só os números e o tempo, sem nomes; é uma linha de código.
+
+**QA:**
+- **`qa:operational-view`:**
+  - seção 1: a lista "Pausas em andamento" no lugar dos cartões (DV11 como antes);
+  - seção 3: os contadores e o "—" continuam conferidos, agora no topo ("Disponíveis agora", N1 e N2), na tabela e na lista de totais; os avisos, no topo;
+  - seção 7 (nova): o que saiu, a ordem da tela, a composição (uma célula por escalado e a frase), disponíveis de quantos escalados, "Precisa de você" (aprovações só para quem decide, estouro, chamado crítico, vazio), o estouro na linha, os tipos no cabeçalho, pausas ilegíveis, o modo painel (sem ações, sem o detalhe, números maiores, o "—", a fonte da raiz, o endereço, a permissão, sem a casca, o título, o tema e a saída) e o painel sem a observação de reunião.
+- **Navegador, bloco 24 (novo, 10 conferências):** "Disponíveis agora" e "Precisa de você" na primeira tela (1366 px) e "Disponíveis agora" em 390 px; entrar no painel pelo botão (endereço, sem casca, sem Derrubar pausa, fonte de 18 px), trocar o tema, sair (volta o menu e a fonte de 16 px); abrir pelo endereço em 1920 px (fonte de 22 px) e em 390 px, sem rolagem lateral.
+
+**Expectativas que mudaram:**
+
+| QA | O que mudou | Por quê |
+|---|---|---|
+| `qa:operational-view` (seção 1) | Acha cada pausa pela linha da lista, não pelo cartão | Os cartões viraram a lista densa; a regra do DV11 conferida é a mesma |
+| `qa:operational-view` (seção 3) | "CIs disponíveis" e os demais totais lidos da lista "Totais da operação" (antes, dos cartões); N1 e N2 lidos dos painéis (antes, de "Disponíveis por equipe"); os avisos procurados na tela toda (antes, só na seção da tabela); a conferência de código do total de disponíveis segue o `presenceOf` (o mesmo `summaryCount`) | Mesmos números, com o mesmo "—", em outro lugar da tela |
+| `qa:operational-view` (seção 3) | Sai a conferência do texto "Aptos para atendimento agora" | Texto de apresentação sob o número (S9, D-R0-8) |
+
+**Validação:**
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`), sozinha no worktree:
+  - `34f7de6`: saída 0, frontend 25/25, navegador 1074/1074;
+  - `2da62d4`: saída 0, frontend 25/25, navegador 1075/1075, na bateria repetida sozinha. A primeira rodada, com capturas e mutação rodando em paralelo na mesma máquina, falhou numa conferência de tempo do bloco 13 ("Pausas, 390 px, derrubar pausa, enviando, Esc e clique fora: não fecha"): ela tem uma janela de 900 ms, o atraso do servidor simulado, e sob carga a resposta chegou antes. O commit só muda o `DashboardPage.jsx`; o bloco 13 sozinho passou 3 vezes em 3 e a bateria repetida passou inteira. Fica anotado: rodar as baterias sem nada em paralelo.
+- **Mutação** com o `mut_guard.php`, cada mutante morto pela conferência certa:
+  - 19/19 no QA ("Operação agora" de volta; composição por situação e não por pessoa, ou sem a frase; "—" virando 0; disponíveis pelo cálculo antigo; aviso de presença fora da tela; "Precisa de você" sem o estouro; atalho de aprovações para quem não aprova; estouro sem marcar a linha; painel com Derrubar pausa, com o detalhe, com botões, sem a fonte maior ou sem a de 137,5%; painel sem conferir a permissão, sem o modo na página ou sem a saída; totais sem um contador; tipos fora do cabeçalho);
+  - 3/3 no navegador (painel sem a fonte maior, disponíveis fora da primeira tela, painel com Derrubar pausa);
+  - correção: 1/1 (painel com a observação de reunião).
+- **Medição em 390 px,** nos dois temas, inclusive o painel: 0 alvos abaixo de 40 px e 0 rolagens laterais.
+- **Orçamento no `2da62d4`:** JS de entrada 199 158 de 211 050 bytes, CSS 67 012 de 70 000, fontes 85 912 de 100 000. Sem tirar o CSS morto dos cartões e sem trocar as classes novas por utilitários, o CSS passava do teto (70 257); o teto de 70 KB (D-R1-2) não mudou.
+
+**Capturas:**
+- **"Antes":** as do R3, `capturas/r3/admin-dashboard-*`.
+- **"Depois", no git:** `capturas/r4b/`, do build do `2da62d4`:
+  - a Visão operacional em 1280 e 390 px;
+  - o modo painel em 1920 (a tela fixa), 1280 e 390 px;
+  - claro e escuro. São 10 arquivos.
+- **O `capturar.mjs`** ganhou o modo painel no plano dos lotes R (`--plano=r`), com a largura de 1920 × 1080 só para ele; o plano do R0 e o protótipo ficam como estavam.
+
+**Para o deploy do redesenho (depois do R4 completo):** só frontend (`npm ci` e build), sem migration. O roteiro ganha: o aviso curto à gestão (o visual muda para todos), a medição do contador do menu (R3) e, se a sala for usar o modo painel, o endereço `/app/dashboard?painel=1` numa sessão que tenha acesso à Visão operacional.

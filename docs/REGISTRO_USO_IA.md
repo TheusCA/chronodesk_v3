@@ -1465,6 +1465,20 @@ Base da afirmação:
 
 ---
 
+### Redesenho R4b: Visão operacional e modo painel — 2026-11-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Quinto lote do redesenho (`docs/design/PLANO_LOTES_R.md`, R4b): a Visão operacional pelo protótipo aprovado (disponíveis e composição na primeira tela, "Precisa de você", pausas em andamento com o estouro; saem "Operação agora" e os 8 cartões iguais) e o modo painel para a tela fixa. Só apresentação: nenhuma regra, API, permissão ou texto de segurança mudou; os contadores e o "—" continuam. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `34f7de6` (a tela e o modo painel), `2da62d4` (correção: o painel sem a observação de reunião) e um commit só de docs (execução do R4b no plano, capturas em `docs/design/capturas/r4b/`, `capturar.mjs` com o modo painel, esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `DashboardPage.jsx` (reescrita da tela e o modo painel), `App.jsx` (o modo painel em `/app/dashboard?painel=1`, sem a casca, com a mesma permissão), `PortalLayout.jsx` (exporta o relógio e o botão de tema), `index.css` (fonte do painel; sai o CSS morto dos cartões), `Icon.jsx` (ícone "chevron"). QA: `qa:operational-view` (seções 1 e 3 e a seção 7 nova); bloco 24 no roteiro do navegador. |
+| **Dados pessoais** | Nenhum nos testes e nas capturas (fictícios). O modo painel não mostra a observação de reunião, que só a gestão vê (correção `2da62d4`). Fica para decisão do responsável se o painel deve esconder também os nomes de quem está em pausa (exposição numa TV de sala). |
+| **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree): `34f7de6` saída 0 (25/25, navegador 1074/1074); `2da62d4` saída 0 (25/25, 1075/1075) na bateria repetida sozinha; a primeira rodada, com outros processos em paralelo, falhou numa conferência de tempo do bloco 13 (janela de 900 ms), que passou 3/3 sozinha. Mutação: 19/19 no QA, 3/3 no navegador e 1/1 na correção. Em 390 px, nos dois temas e no painel: 0 alvos abaixo de 40 px e 0 rolagens laterais. Orçamento: CSS 67 012 de 70 000 (o teto não mudou). `gitleaks` sem achados em cada commit. Expectativas que mudaram, com a justificativa, em `PLANO_LOTES_R.md` (Execução, R4b). |
+| **Limitacoes declaradas** | O modo painel não força o tema escuro: o botão de tema está nele, e a escolha vale na sessão (D-R1-1). O painel mostra nomes, como a tela de sempre (decisão pendente acima). O custo do contador do menu (R3) continua sem medição no servidor. |
+| **Validacao humana** | Pendente: revisão única do R3, do R4a e do R4b. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
