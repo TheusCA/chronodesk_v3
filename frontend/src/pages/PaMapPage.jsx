@@ -461,11 +461,8 @@ export function PaMapPage({ notify }) {
 
   return (
     <div className="min-w-0 space-y-5">
-      <SectionHeader
-        description="Situação de cada técnico pela escala e pelas ausências, com conflito de PA na semana (segunda a sexta)."
-        eyebrow="Mapa visual da operação"
-        title="Mapa de PA"
-      />
+      {/* [R3] O título fica só no topo; a regra do conflito continua, com as mesmas palavras. */}
+      <p className="text-sm text-muted">Situação de cada técnico pela escala e pelas ausências, com conflito de PA na semana (segunda a sexta).</p>
       <FilterBar>
           <label className="label">Data<input className="field mt-2" type="date" value={filters.date} onChange={(event) => setFilters({ ...filters, date: event.target.value })} /></label>
           <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select></label>

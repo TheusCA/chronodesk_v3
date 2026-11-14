@@ -287,6 +287,18 @@
     @apply right-2 top-1 translate-y-0;
   }
 
+  /* [R3, D-R0-7] Barra de atalhos do celular (abaixo de 640 px): fixa embaixo,
+     alvo de 64 px, item atual em tinta. Abaixo do menu em folha (z-50), dos
+     diálogos (z-[60]) e do aviso (z-[70]). */
+  .tabbar {
+    @apply fixed inset-x-0 bottom-0 z-30 grid auto-cols-fr grid-flow-col border-t border-line bg-surface;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .tabbar-item {
+    @apply flex min-h-16 flex-col items-center justify-center gap-1 text-xs font-medium text-muted transition-colors hover:text-ink aria-[current=page]:font-semibold aria-[current=page]:text-ink;
+  }
+
   /* [R3] "Ir para o conteúdo": fora da tela até receber o foco (primeiro Tab). */
   .skip-link {
     @apply absolute left-2 top-2 z-[60] inline-flex min-h-11 -translate-y-24 items-center rounded-md bg-action px-4 text-sm font-medium text-action-ink focus:translate-y-0;
@@ -416,6 +428,14 @@
      fora dele, para passar por cima dos diálogos. */
   .portal-tech-shell {
     @apply relative isolate overflow-x-hidden;
+  }
+
+  /* [R3] No celular, o aviso fica acima da barra de atalhos. Vem antes da regra
+     do diálogo (mesma especificidade): com um diálogo aberto, vale a dela. */
+  @media (max-width: 639px) {
+    body:has([data-tabbar]) .portal-toast {
+      bottom: calc(5rem + env(safe-area-inset-bottom));
+    }
   }
 
   /* [17f, BB1] Com um diálogo aberto, o aviso sobe para o canto esquerdo: embaixo,

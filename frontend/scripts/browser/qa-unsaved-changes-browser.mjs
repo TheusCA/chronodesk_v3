@@ -2497,6 +2497,80 @@ async function scheduleExceptionLoad(page, port, mock) {
   mock.setScheduleExceptions([])
 }
 
+// 22. [R3] Casca: "Ir para o conteudo" no primeiro Tab, contador de pendencias
+// (so o numero, como descricao do item), barra de atalhos do celular com a
+// guarda do formulario sujo e o menu em folha inteira.
+const TABBAR_BUTTON = (label) => `[...document.querySelectorAll('nav[aria-label="Atalhos"] button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)})`
+const SHELL_STATE = `(() => {
+  const active = document.activeElement
+  const bar = document.querySelector('nav[aria-label="Atalhos"]')
+  const items = bar ? [...bar.querySelectorAll('button')] : []
+  const sheet = document.querySelector('[role="dialog"][aria-label="Menu principal"]')
+  return {
+    rota: location.pathname + location.search + location.hash,
+    foco: !active || active === document.body ? 'body' : active.id === 'conteudo' ? 'conteudo' : (active.textContent || '').trim(),
+    barra: !!bar && bar.getClientRects().length > 0,
+    atalhos: items.map((b) => b.textContent.trim()).join('|'),
+    atual: items.find((b) => b.getAttribute('aria-current') === 'page')?.textContent.trim() ?? null,
+    menor_alvo: items.length ? Math.min(...items.map((b) => b.getBoundingClientRect().height)) : 0,
+    folha: sheet ? Math.round(sheet.getBoundingClientRect().width) === document.documentElement.clientWidth : null,
+    descartar: !!document.querySelector('[role="alertdialog"]'),
+  }
+})()`
+
+async function shellR3(page, port, mock) {
+  const expectShell = (label, expected) => expectState(page, `Casca, ${label}`, expected, SHELL_STATE)
+
+  // "Ir para o conteudo": primeiro Tab, visivel com o foco; Enter leva ao conteudo sem mudar o endereco.
+  await goto(page, port, '/dashboard', 1366)
+  await page.evaluate('document.activeElement?.blur(); window.scrollTo(0, 0)')
+  await page.press('Tab')
+  await expectShell('1366 px, primeiro Tab: "Ir para o conteúdo"', { foco: 'Ir para o conteúdo' })
+  report('Casca, 1366 px, "Ir para o conteúdo" com o foco: visível na tela', await page.evaluate(`(() => { const r = document.activeElement.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && r.height >= 40 })()`))
+  await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' })
+  await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
+  await sleep(200)
+  await expectShell('1366 px, Enter: foco no conteúdo, mesmo endereço (sem #)', { foco: 'conteudo', rota: '/app/dashboard' })
+  await page.press('Tab')
+  report('Casca, 1366 px, depois do conteúdo, o Tab segue dentro dele (não volta ao menu)', await page.evaluate(`!!document.activeElement.closest('main')`))
+
+  // Contador de pendencias: so o numero, descricao do item (arvore de acessibilidade do Chrome).
+  const count = await page.evaluate(`(() => { const badge = [...document.querySelectorAll('[data-nav-count]')].find((el) => el.getClientRects().length); return badge ? { visivel: badge.querySelector('[aria-hidden="true"]').textContent, nav: badge.closest('nav').textContent } : null })()`)
+  report('Casca, contador de "Aprovações e admin": só o número (5 do servidor simulado)', count?.visivel === '5', JSON.stringify(count?.visivel))
+  report('Casca, menu sem nome de quem pediu', !!count && !count.nav.includes('Tecnico 01 Sobrenome') && !count.nav.includes('Observacao de teste'))
+  const { result } = await page.send('Runtime.evaluate', { expression: NAV_BUTTON('Aprovações e admin'), returnByValue: false })
+  const node = result.objectId ? (await page.send('Accessibility.getPartialAXTree', { objectId: result.objectId, fetchRelatives: false })).nodes[0] : null
+  const ax = { nome: node?.name?.value ?? null, descricao: node?.description?.value ?? null }
+  report('Casca, item com o rótulo como nome e "5 pendentes" como descrição', ax.nome === 'Aprovações e admin' && ax.descricao === '5 pendentes', JSON.stringify(ax))
+  await expectShell('1366 px: sem a barra de atalhos', { barra: false })
+
+  // Celular: barra com 4 atalhos de 48 px ou mais; o atual marcado; Menu abre a folha inteira.
+  await goto(page, port, '/dashboard', 390)
+  await expectShell('390 px: barra com Agora, Pausas, Escala e Menu, alvo de 48 px ou mais, Agora atual', { barra: true, atalhos: 'Agora|Pausas|Escala|Menu', atual: 'Agora', menor_alvo: (value) => value >= 48 })
+  await page.click(TABBAR_BUTTON('Pausas'))
+  await expectShell('390 px, Pausas: troca de tela, Pausas atual', { rota: '/app/pausas', atual: 'Pausas', descartar: false })
+  await page.click(TABBAR_BUTTON('Escala'))
+  await expectShell('390 px, Escala: Escala presencial, Escala atual', { rota: '/app/escala-presencial', atual: 'Escala' })
+  await page.click(TABBAR_BUTTON('Menu'))
+  await expectShell('390 px, Menu: menu em folha inteira', { folha: true })
+  await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
+  await expectShell('390 px, item do menu: troca de tela e fecha a folha', { rota: '/app/calendario', folha: null })
+
+  // Formulario sujo: o atalho pergunta, como o menu.
+  await goto(page, port, '/admin?tab=funcionarios', 390)
+  await page.waitFor(`!!${CREATE_FORM}`)
+  await page.evaluate(`${CREATE_NAME}.focus()`)
+  await page.typeText('Rascunho de teste')
+  await page.click(TABBAR_BUTTON('Agora'))
+  await expectShell('390 px, sujo, atalho Agora: pergunta e não troca de tela', { descartar: true, rota: '/app/admin?tab=funcionarios' })
+  await page.click(button('Continuar editando', ALERT))
+  report('Casca, 390 px, sujo, Continuar: fica, dados mantidos', await page.evaluate(`${CREATE_NAME}.value === 'Rascunho de teste' && location.pathname === '/app/admin'`))
+  await page.click(TABBAR_BUTTON('Agora'))
+  await page.click(button('Descartar alterações', ALERT))
+  await expectShell('390 px, sujo, Descartar: vai para a Visão operacional', { rota: '/app/dashboard', descartar: false, atual: 'Agora' })
+  report('Casca, 390 px, sujo e descartado: nenhum POST de funcionário', !mock.requests.some((r) => r.method === 'POST' && r.key === 'adicionar_funcionario.php' && r.body?.nome === 'Rascunho de teste'))
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2532,6 +2606,7 @@ try {
     [19, 'Escala: corpo da excecao por data (9.12.1)', () => scheduleExceptionBody(page, mock.port, mock)],
     [20, 'Mapa PA: remover o vinculo em edicao (9.12.1)', () => paMapRemoveEditing(page, mock.port, mock)],
     [21, 'Escala: excecao por data carrega a gravada (9.12.4)', () => scheduleExceptionLoad(page, mock.port, mock)],
+    [22, 'Casca: primeiro Tab, contador e atalhos do celular (R3)', () => shellR3(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

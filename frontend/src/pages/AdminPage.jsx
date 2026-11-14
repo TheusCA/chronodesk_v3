@@ -113,12 +113,7 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        description="Decisões operacionais pendentes, separadas por tipo para reduzir erro e acelerar a triagem."
-        eyebrow="Central operacional"
-        meta={<span className="status-badge status-warning">{total} pendente(s)</span>}
-        title="Aprovações"
-      />
+      {/* [R3] Sem repetir "Aprovações" (a aba já diz); o total continua no cartão "Total pendente". */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard detail="Reuniões e pausas que aguardam decisão" icon="pause" label="Pausas/Reuniões" tone="warning" value={pauses.length} />
         <MetricCard detail="Solicitações de horas adicionais" icon="timer" label="Horas extras" tone="warning" value={overtime.length} />

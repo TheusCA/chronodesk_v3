@@ -226,4 +226,55 @@ assert.equal(renderToStaticMarkup(h(UserAvatar, { name: '' })), '<span class="us
   assert.match(markup, /<span aria-hidden="true" class="user-avatar h-9 w-9">TE<\/span>/u, 'rodapé do menu com as iniciais de quem entrou')
 }
 
+// ---------------------------------------------------------------------------
+// 8. [Commit 2] Celular: barra de atalhos (D-R0-7) e menu em folha inteira
+// ---------------------------------------------------------------------------
+const { default: postcss } = await import('postcss')
+const { default: tailwindcss } = await import('tailwindcss')
+const { default: tailwindConfig } = await import(pathToFileURL(join(frontendRoot, 'tailwind.config.js')).href)
+const compiled = (await postcss([tailwindcss({ ...tailwindConfig, content: tailwindConfig.content.map((glob) => join(frontendRoot, glob).replaceAll('\\', '/')) })]).process(read('src/index.css'), { from: join(srcRoot, 'index.css') })).css
+const ruleOf = (className) => compiled.match(new RegExp(`(?:^|[\\n,])\\s*\\.${className}\\s*\\{([^}]*)\\}`, 'u'))?.[1] ?? ''
+{
+  const tabbar = (session, path = '/dashboard') => {
+    const nav = section(renderLayout({ session, path }).markup, '<nav aria-label="Atalhos"', '</nav>')
+    return { nav, items: [...nav.matchAll(/<button ([^>]*)>([\s\S]*?)<\/button>/gu)].map((match) => ({ attrs: match[1], label: text(match[2]) })) }
+  }
+  const manager = tabbar(managerSession)
+  assert.match(manager.nav, /^<nav aria-label="Atalhos" class="tabbar sm:hidden" data-tabbar="">/u, 'barra de atalhos só abaixo de 640 px')
+  assert.deepEqual(manager.items.map((item) => item.label), ['Agora', 'Pausas', 'Escala', 'Menu'], '4 atalhos: Agora, Pausas, Escala e Menu')
+  assert.ok(manager.items.every((item) => /type="button"/u.test(item.attrs) && /class="tabbar-item"/u.test(item.attrs)), 'atalhos são botões com o alvo da barra')
+  assert.ok(/aria-current="page"/u.test(manager.items[0].attrs) && manager.items.slice(1).every((item) => !/aria-current/u.test(item.attrs)), 'o atalho da tela atual com aria-current')
+  assert.match(manager.items[3].attrs, /aria-expanded="false" aria-haspopup="dialog"/u, '"Menu" abre o menu (diálogo)')
+  assert.ok(/aria-current="page"/u.test(tabbar(managerSession, '/escala-presencial').items[2].attrs), 'Escala atual na Escala presencial')
+  const readOnly = tabbar({ ...managerSession, role: 'somente_leitura', permissions: ['portal.read'] })
+  assert.deepEqual(readOnly.items.map((item) => item.label), ['Agora', 'Escala', 'Menu'], 'sem pausas.use, sem o atalho de Pausas (a mesma permissão do menu)')
+  const layoutSource = read('src/components/PortalLayout.jsx')
+  const tabbarSource = layoutSource.slice(layoutSource.indexOf('<nav aria-label="Atalhos"'), layoutSource.indexOf('</nav>', layoutSource.indexOf('<nav aria-label="Atalhos"')))
+  assert.match(tabbarSource, /onClick=\{\(\) => goTo\(item\.path\)\}/u, 'atalho pelo goTo (navigate do roteador, com a guarda do formulário sujo)')
+  assert.doesNotMatch(tabbarSource, /history\.|location\.|href=/u, 'atalho sem atalho de navegação fora do roteador')
+  assert.match(layoutSource, /function goTo\(target\) \{\n {4}navigate\(target\)/u, 'goTo continua pelo navigate')
+  // Alvo de 64 px fora de @media (vale em 390 px) e a barra fixa embaixo.
+  assert.match(ruleOf('tabbar-item'), /min-height:\s*4rem/u, 'atalho com 64 px de alto')
+  assert.match(ruleOf('tabbar'), /position:\s*fixed[\s\S]*bottom:\s*0px/u, 'barra fixa embaixo')
+  // Menu em folha inteira no celular; de 640 px para cima, a coluna de 320 px.
+  assert.match(layoutSource, /<aside className="relative flex h-full w-full flex-col bg-surface sm:w-80[^"]*" role="dialog" aria-label="Menu principal" aria-modal="true">/u, 'menu do celular em folha inteira')
+  // O conteúdo não fica escondido atrás da barra: folga embaixo no celular.
+  assert.match(renderLayout().markup, /<main class="[^"]*\bpb-28\b[^"]*\bsm:pb-6\b/u, 'folga de 112 px embaixo do conteúdo no celular')
+}
+
+// ---------------------------------------------------------------------------
+// 9. [Commit 2] A página não repete o título do topo
+// ---------------------------------------------------------------------------
+{
+  const pa = read('src/pages/PaMapPage.jsx')
+  assert.doesNotMatch(pa, /title="Mapa de PA"|eyebrow="Mapa visual da operação"/u, 'Mapa de PA sem repetir o título')
+  assert.ok(pa.includes('Situação de cada técnico pela escala e pelas ausências, com conflito de PA na semana (segunda a sexta).'), 'Mapa de PA: a regra do conflito fica, com as mesmas palavras')
+  const critical = read('src/pages/CriticalIncidentsPage.jsx')
+  assert.doesNotMatch(critical, />Chamados críticos<\/h2>|War room e sala de crise|Registro central de impacto/u, 'Chamados críticos sem repetir o título nem a apresentação')
+  assert.match(critical, /Exportar planilha CSV[\s\S]*Importar planilha[\s\S]*Novo chamado/u, 'Chamados críticos: as ações ficam')
+  const admin = read('src/pages/AdminPage.jsx')
+  assert.doesNotMatch(admin, /title="Aprovações"|eyebrow="Central operacional"/u, 'Aprovações sem repetir o nome da aba')
+  assert.match(admin, /label="Total pendente"/u, 'Aprovações: o total continua no cartão "Total pendente"')
+}
+
 console.log('QA da casca OK')

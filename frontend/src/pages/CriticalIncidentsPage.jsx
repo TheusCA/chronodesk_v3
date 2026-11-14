@@ -493,12 +493,8 @@ export function CriticalIncidentsPage({ session, notify }) {
 
   return (
     <div className="space-y-5">
-      <section className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
-        <div>
-          <p className="text-xs font-semibold text-danger">War room e sala de crise</p>
-          <h2 className="mt-2 text-2xl font-semibold text-ink">Chamados críticos</h2>
-          <p className="mt-2 text-sm text-muted">Registro central de impacto, resposta, mitigação, causa raiz e resolução.</p>
-        </div>
+      {/* [R3] O título fica só no topo: aqui, só as ações da tela. */}
+      <section className="flex flex-col gap-4 sm:flex-row sm:justify-end">
         <div className="flex flex-wrap gap-2">
           <a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha CSV</a>
           {canManage && <button className="btn-secondary gap-2" onClick={() => setImportOpen(true)} type="button"><Icon className="h-4 w-4" name="upload" /> Importar planilha</button>}

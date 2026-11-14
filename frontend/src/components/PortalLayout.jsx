@@ -12,6 +12,13 @@ import { activeTheme, chooseTheme, oppositeTheme } from '../lib/theme'
 // [R3] Item do menu que leva o contador de pendências (só o número).
 const PENDING_PATH = '/admin'
 const PENDING_INTERVAL_MS = 60000
+// [R3, D-R0-7] Barra de atalhos do celular: as telas de todo dia e o menu.
+// Cada atalho passa pelo navigate (a guarda do formulário sujo, 17f).
+const TABBAR = [
+  { path: '/dashboard', label: 'Agora', icon: 'dashboard' },
+  { path: '/pausas', label: 'Pausas', icon: 'pause', permission: 'pausas.use' },
+  { path: '/escala-presencial', label: 'Escala', icon: 'calendar' },
+]
 
 function userLabel(session) {
   return session.ci.autenticado
@@ -195,7 +202,8 @@ export function PortalLayout({ session, path, navigate, onLogout, serverNow, chi
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button className="absolute inset-0 bg-black/70" aria-label="Fechar menu" onClick={() => setMobileOpen(false)} type="button" />
-          <aside className="relative flex h-full w-72 flex-col border-r border-line bg-surface" role="dialog" aria-label="Menu principal" aria-modal="true">
+          {/* [R3] No celular, o menu ocupa a tela inteira (folha); de 640 px para cima, a coluna de antes. */}
+          <aside className="relative flex h-full w-full flex-col bg-surface sm:w-80 sm:border-r sm:border-line" role="dialog" aria-label="Menu principal" aria-modal="true">
             <button className="absolute right-3 top-3 rounded-lg p-2.5 text-muted" onClick={() => setMobileOpen(false)} type="button" aria-label="Fechar menu">
               <Icon name="close" />
             </button>
@@ -238,8 +246,20 @@ export function PortalLayout({ session, path, navigate, onLogout, serverNow, chi
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full min-w-0 max-w-[1600px] px-4 py-6 outline-none sm:px-6 lg:px-8" id="conteudo" tabIndex={-1}>{children}</main>
+        <main className="mx-auto w-full min-w-0 max-w-[1600px] px-4 pb-28 pt-6 outline-none sm:px-6 sm:pb-6 lg:px-8" id="conteudo" tabIndex={-1}>{children}</main>
       </div>
+      <nav aria-label="Atalhos" className="tabbar sm:hidden" data-tabbar="">
+        {TABBAR.filter((item) => !item.permission || permissions.has(item.permission)).map((item) => (
+          <button aria-current={path === item.path ? 'page' : undefined} className="tabbar-item" key={item.path} onClick={() => goTo(item.path)} type="button">
+            <Icon name={item.icon} className="h-5 w-5" />
+            <span>{item.label}</span>
+          </button>
+        ))}
+        <button aria-expanded={mobileOpen} aria-haspopup="dialog" className="tabbar-item" onClick={() => setMobileOpen(true)} type="button">
+          <Icon name="menu" className="h-5 w-5" />
+          <span>Menu</span>
+        </button>
+      </nav>
     </div>
   )
 }
