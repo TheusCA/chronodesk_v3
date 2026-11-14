@@ -397,3 +397,82 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 - **"Antes":** as do R2, em `capturas/r2/`.
 - **"Depois", no git:** `capturas/r3/`, o mesmo plano (login, 8 telas do admin e Pausas do técnico, 1280 e 390 px, claro e escuro). São 40 arquivos, 1,2 MB.
 - **O servidor das capturas** (`capturar.mjs`) passou a pôr o café do técnico 04 às 10:18, como no protótipo: o estouro (24 min com limite de 20) aparece nas capturas do R3 em diante. No R2, o café era às 10:31.
+
+### R4a · Pausas (14/11/2026)
+
+**Commits:** `9711d2b` (escolha visível e lista densa), duas correções achadas pelas capturas (`d16c9a8` e `906ae83`), a trava da segunda com dados de lista cheia (`a584367`) e um de docs. Sem push.
+
+**O que entrou (protótipo aprovado, D-R0-5):**
+- **"Sua pausa", sem pausa:**
+  - os três motivos visíveis, como escolha (rádio), cada um com o limite ao lado;
+  - o limite do café vem do servidor (`duracao_limite_segundos`, a configuração de pausas), não fica fixo; sem o campo, os 20 min de antes;
+  - um botão que diz a ação: "Iniciar pausa de café", "Iniciar pausa pessoal" ou "Pedir aprovação da reunião". **Duas ações no lugar de três** (o seletor saiu);
+  - reunião continua pedindo o contexto (obrigatório, até 500 caracteres);
+  - a regra das pausas fica, com as mesmas palavras ("Café usa limite próprio; reunião segue o fluxo de aprovação configurado.").
+- **"Sua pausa", em andamento:**
+  - relógio grande, "faltam" ou "passou" escrito, o limite do servidor e a faixa do tempo usado;
+  - o estouro em vermelho, com "Tempo excedido";
+  - "Finalizar pausa" passa a ser a ação principal.
+- **"Equipe agora":** lista densa no lugar dos cartões de 3 colunas.
+  - Filtro com contagem: Todos, Disponíveis, Em pausa e Outros.
+  - Linha de grupo por equipe, com os disponíveis ("Equipe N1 · 6 de 9 disponíveis").
+  - A situação pela mesma regra de antes (`operatorState`, DV12), com ícone e rótulo.
+  - O tempo da pausa com o motivo e "faltam" ou "passou"; no estouro, a linha ganha a borda vermelha.
+  - A observação de reunião pela regra do DV11, e "Derrubar pausa" só nas linhas em pausa, com `pausas.force_end`.
+  - Abaixo de 640 px, cada linha vira um cartão compacto, sem rolagem lateral.
+- **A conta do tempo** saiu para `src/lib/pauseTimer.ts`, com a regra do servidor (Pessoal e Reunião sem limite), para a Visão operacional usar a mesma.
+
+**O que saiu da tela e onde ficou:**
+
+| Saiu | Onde ficou |
+|---|---|
+| Cartão "Sessão do colaborador" (nome e login) | Rodapé do menu: nome, login e perfil |
+| Seletor de motivo | Os três motivos à vista |
+| Selo "N técnicos" de cada equipe | Linha de grupo ("Equipe N1 · 6 de 9 disponíveis") e o filtro "Todos N" |
+| Coluna "Jornada" (só na correção `906ae83`) | Embaixo do nome, em cada linha |
+| Bloco do tempo dentro do cartão do colega | Coluna "Pausa", com o motivo e o "faltam" ou "passou" |
+| Barra de 20 partes em quatro cores | Faixa em âmbar até o limite e em vermelho depois, com o texto |
+
+**O que mudou em relação ao protótipo:**
+- **"Finalizar pausa" e "Derrubar pausa" ficam com o texto de hoje.** O protótipo dizia "Encerrar pausa" nos dois. "Derrubar pausa" é o verbo da confirmação e da auditoria (DD3); mudar o texto de uma ação auditada fica para decisão sua.
+- **Jornada embaixo do nome,** e não numa coluna: com o painel "Sua pausa" ao lado, a lista cabe em 1280 px.
+
+**As duas correções (achadas nas capturas do próprio lote):**
+- **`d16c9a8`:** no cartão do celular, a célula de ações herdava a largura de 1 px que encolhe a coluna no computador, e "Derrubar pausa" ficava abaixo de 40 px de alvo. A medição em 390 px (`capturar.mjs --medir`) achou; o bloco 23 só contava os botões. Trava nova: alvo de 40 px no cartão.
+- **`906ae83` e `a584367`:** com "Sua pausa" ao lado (sessão de técnico), as quatro colunas passavam de 1280 px, e a coluna Pausa ficava cortada. A captura achou. A trava em 1280 px do `906ae83` rodava com um técnico só no servidor simulado e não pegava o defeito (a mutação com o `PausasPage.jsx` de antes sobreviveu); o `a584367` dá ao servidor simulado uma lista cheia, e a mesma mutação passou a morrer.
+
+**QA:**
+- **`qa:operational-view`:**
+  - seções 2 e 5: a lista no lugar dos cartões, com o estado em `data-state` na linha (as mesmas situações, cores, ícones e detalhe; DV11 e DV12 como antes);
+  - seção 6 (nova): escolha visível, botão que diz a ação, limite do servidor, contexto só na reunião, estouro escrito, Pessoal sem limite, filtro com contagem e marcado, grupos, Derrubar pausa só na pausa e só com a permissão, vazio do filtro e o aviso da sessão administrativa.
+- **`qa:shell`:** o login do técnico no rodapé do menu.
+- **Navegador, bloco 23 (novo, 19 conferências):**
+  - o técnico inicia em 2 ações (um POST com o motivo e o técnico da sessão) em 1366 e 390 px;
+  - reunião com o contexto (um POST com a observação);
+  - em 1280 px, a lista cheia cabe ao lado de "Sua pausa";
+  - em 390 px, cartões sem rolagem lateral, filtro e "Derrubar pausa" com 40 px.
+  - O servidor simulado ganhou a sessão de técnico e `setStatusEmployees` (dados fictícios).
+
+**Expectativas que mudaram:**
+
+| QA | O que mudou | Por quê |
+|---|---|---|
+| `qa:operational-view` (seções 2 e 5) | As conferências que achavam o técnico pelo cartão (`operator-card-${state}`) o acham pela linha (`data-state`) | Os cartões viraram a lista densa; o estado e as regras conferidas são os mesmos |
+| `qa:calendar-presence` | Deixa de exigir o molde `operator-card-${state}` na varredura de classes montadas | O molde saiu com os cartões; a varredura genérica continua pegando qualquer molde novo sem regra no CSS |
+
+**Validação:**
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`), sozinha no worktree:
+  - `9711d2b`: saída 0, frontend 25/25, navegador 1063/1063;
+  - `d16c9a8`: saída 0, frontend 25/25, navegador 1064/1064;
+  - `906ae83`: saída 0, frontend 25/25, navegador 1075/1075;
+  - `a584367`: saída 0, frontend 25/25, navegador 1075/1075.
+- **Mutação** com o `mut_guard.php`, cada mutante morto pela conferência certa:
+  - 17/17 no QA (botão sem dizer a ação ou habilitado sem escolha; limite do café fixo; reunião sem contexto obrigatório ou contexto em qualquer motivo; sem a regra das pausas; estouro só pela cor ou sem marcar a linha; Pessoal com limite; filtro sem contagem ou que não filtra; Derrubar pausa fora da pausa ou sem a permissão; observação do colega sem a chave; situação pelo cálculo antigo; "Sessão do colaborador" de volta; login fora do rodapé);
+  - 3/3 no navegador (lista sem o modo cartão, botão sem dizer a ação, filtro que não filtra);
+  - correções: 1/1 (`d16c9a8`, célula de 1 px) e 1/1 (`906ae83`, o `PausasPage.jsx` de antes, com a lista cheia do `a584367`).
+- **Medição em 390 px,** nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais.
+- **Orçamento:** no `9711d2b`, JS de entrada 198 009, CSS 67 172 e fontes 85 912 bytes; no `a584367`, 199 158, 67 012 e 85 912 (o CSS desce com a saída do CSS morto no R4b).
+
+**Capturas:**
+- **"Antes":** as do R3, `capturas/r3/*-pausas-*`.
+- **"Depois", no git:** `capturas/r4a/`: Pausas do técnico e da gestão, 1280 e 390 px, claro e escuro. São 8 arquivos, tirados do build do `a584367` (o código de Pausas do `906ae83`).

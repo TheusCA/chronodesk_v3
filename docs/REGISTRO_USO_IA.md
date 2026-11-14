@@ -1451,6 +1451,20 @@ Base da afirmação:
 
 ---
 
+### Redesenho R4a: Pausas (escolha visível e lista densa) — 2026-11-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Quarto lote do redesenho (`docs/design/PLANO_LOTES_R.md`, R4a): a tela de Pausas pelo protótipo aprovado (D-R0-5), com iniciar pausa em 2 ações e a lista densa da equipe com filtro e o estouro em destaque. Só apresentação: nenhuma regra, API, permissão ou texto de segurança mudou. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `9711d2b` (escolha visível e lista densa), `d16c9a8` (correção: alvo do Derrubar pausa no cartão do celular), `906ae83` (correção: a lista cabe ao lado de "Sua pausa" em 1280 px), `a584367` (lista cheia na trava de 1280 px) e um commit só de docs (execução do R4a no plano, capturas em `docs/design/capturas/r4a/`, esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `PausasPage.jsx` (reescrita da tela), novo `src/lib/pauseTimer.ts` (a conta do tempo, com a regra do servidor), `index.css` (escolha do motivo, lista densa e o cartão do celular), `PortalLayout.jsx` (o login do técnico no rodapé do menu). QA: `qa:operational-view` (lista no lugar dos cartões e a seção 6), `qa:calendar-presence` (sem o molde dos cartões), `qa:shell` (login no rodapé); bloco 23 no roteiro do navegador; servidor simulado com a sessão de técnico e a lista cheia. |
+| **Dados pessoais** | Nenhum. QA, navegador e capturas com dados fictícios. A observação de reunião segue a regra do DV11. |
+| **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree): `9711d2b` saída 0 (25/25, navegador 1063/1063); `d16c9a8` saída 0 (25/25, 1064/1064); `906ae83` saída 0 (25/25, 1075/1075); `a584367` saída 0 (25/25, 1075/1075). Mutação: 17/17 no QA e 3/3 no navegador; correções 1/1 e 1/1. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. `gitleaks` sem achados em cada commit. Expectativas que mudaram, com a justificativa, em `PLANO_LOTES_R.md` (Execução, R4a). |
+| **Limitacoes declaradas** | "Finalizar pausa" e "Derrubar pausa" ficam com o texto de hoje (o protótipo dizia "Encerrar pausa"): mudar o texto de uma ação auditada fica para decisão do responsável. Dois defeitos do primeiro commit (alvo no celular e largura em 1280 px) só apareceram nas capturas; ganharam travas no navegador e a correção em commits próprios. Sem atalho de teclado para iniciar ou encerrar pausa (fora do plano). |
+| **Validacao humana** | Pendente: revisão única no fim do R4b. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
