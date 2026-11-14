@@ -706,6 +706,11 @@ const livePause = (id, motivo, extra = {}) => ({ id, nome: `QA Pausa ${id}`, equ
   assert.ok(panel.includes('Café passou do limite') && panel.includes('3 aprovações pendentes'), 'painel: o que precisa de atenção continua visível')
   assert.match(panel, /class="font-mono font-medium leading-none tabular-nums text-ink text-\[7rem\]" data-now-available="">11</u, 'painel: disponíveis em 7rem')
   assert.match(panel, /text-\[4rem\]" data-available="4"/u, 'painel: equipes em 4rem')
+  // DV11 no painel: a tela fixa fica à vista de todos; a observação de reunião (só da gestão) não vai para ela.
+  const meeting = [livePause(5, 'Reunião', { observacao_reuniao: 'Pauta QA da gestão' })]
+  assert.ok(renderDashboardR4b(dashboardData(), { permissions: MANAGER_PERMISSIONS, employees: meeting }).includes('Pauta QA da gestão'), 'tela normal, gestão: a observação de reunião aparece (DV11)')
+  const panelMeeting = renderDashboardR4b(dashboardData(), { permissions: MANAGER_PERMISSIONS, employees: meeting, panel: true })
+  assert.ok(!panelMeeting.includes('Pauta QA da gestão') && !panelMeeting.includes(NO_NOTE) && panelMeeting.includes('QA Pausa 5'), 'painel: a linha da reunião sem a observação (nem "Sem observação informada")')
   const unavailable = renderDashboardR4b(dashboardData({ presence_meta: { disponivel: false } }), { panel: true })
   assert.ok(unavailable.includes('Situação da equipe indisponível') && unavailable.includes('data-now-available="">—<'), 'painel: o "—" e o aviso de presença indisponível')
   const dashboardSource = read('src/pages/DashboardPage.jsx')

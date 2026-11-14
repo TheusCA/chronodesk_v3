@@ -177,8 +177,9 @@ function ActivePauses({ pauses, livePauses, canForceEndBreak, loading, onForceEn
                     <td data-col="name">
                       <span className="block font-medium text-ink">{item.nome}</span>
                       <small className="block text-xs text-muted">Equipe {String(item.equipe || '').toUpperCase()}{sinceText && <> · desde <span className="font-mono tabular-nums">{sinceText}</span></>}</small>
-                      {/* [F7, DV11] Sem a chave (colega, para quem não é gestão), sem a observação. */}
-                      {isMeeting(item.motivo_pausa) && 'observacao_reuniao' in item && (
+                      {/* [F7, DV11] Sem a chave (colega, para quem não é gestão), sem a observação.
+                          No modo painel (tela fixa na sala, à vista de todos), nunca: só a gestão a vê. */}
+                      {!panel && isMeeting(item.motivo_pausa) && 'observacao_reuniao' in item && (
                         <small className="mt-1 line-clamp-2 block text-xs leading-5 text-ink-2" title={item.observacao_reuniao || 'Sem observação informada'}>
                           {item.observacao_reuniao || 'Sem observação informada'}
                         </small>
