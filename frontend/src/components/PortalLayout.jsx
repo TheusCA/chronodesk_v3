@@ -1,11 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { post } from '../lib/api'
 import { navigation, pageMetadata } from '../lib/navigation'
 import { guardLeave } from '../lib/navigationGuard'
+import { nameInitials } from '../lib/initials'
+import { pendingApprovalsLabel } from '../lib/pendingApprovals'
 import { useResource } from '../hooks/useResource'
 import { Icon } from './ui/Icon'
 import { BrandMark } from './BrandMark'
 import { activeTheme, chooseTheme, oppositeTheme } from '../lib/theme'
+
+// [R3] Item do menu que leva o contador de pendências (só o número).
+const PENDING_PATH = '/admin'
+const PENDING_INTERVAL_MS = 60000
 
 function userLabel(session) {
   return session.ci.autenticado
@@ -32,20 +38,27 @@ function ThemeToggle() {
   )
 }
 
-function Clock() {
-  const [now, setNow] = useState(new Date())
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
+// [R3] Hora do servidor (o status.php acerta a diferença do relógio local a
+// cada leitura), no lugar da hora do navegador. Sem leitura ainda, a do
+// navegador. Só hora e minuto: o segundo correndo no topo distrai.
+function Clock({ serverNow }) {
+  const instant = Number.isFinite(serverNow) ? new Date(serverNow) : new Date()
+  const text = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(instant)
   return (
-    <time className="hidden text-right text-xs text-muted xl:block">
-      {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' }).format(now)}
-    </time>
+    <p className="hidden items-baseline gap-2 whitespace-nowrap text-sm text-muted sm:flex" data-server-clock="">
+      Servidor <time className="font-mono font-medium tabular-nums text-ink-2">{text}</time>
+    </p>
   )
 }
 
-export function PortalLayout({ session, path, navigate, onLogout, children }) {
+// [R3] Primeiro Tab da casca. Não muda o endereço (o roteador trataria o
+// "#conteudo" como navegação): só leva o foco ao conteúdo.
+function skipToContent(event) {
+  event.preventDefault()
+  document.getElementById('conteudo')?.focus()
+}
+
+export function PortalLayout({ session, path, navigate, onLogout, serverNow, children }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -53,14 +66,29 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
   const notificationResource = useResource('portal/notifications.php')
   const refreshNotifications = notificationResource.refresh
   const permissions = useMemo(() => new Set(session.permissions || []), [session.permissions])
+  // [R3] Contador de pendências: só para quem decide (o endpoint exige a
+  // gestão), a cada 60 s com a aba visível e a cada troca de tela.
+  const canApprove = permissions.has('operacao.approve')
+  const pendingResource = useResource('solicitacoes_pendentes.php', { enabled: canApprove, intervalMs: PENDING_INTERVAL_MS })
+  const refreshPending = pendingResource.refresh
+  const pendingLabel = canApprove ? pendingApprovalsLabel(pendingResource.data) : null
+  const firstPathRef = useRef(true)
   const currentUserLabel = userLabel(session)
-  const userInitial = currentUserLabel.trim().slice(0, 1).toUpperCase() || 'S'
+  const userInitials = nameInitials(currentUserLabel, 'S')
   const metadata = pageMetadata[path] || ['Portal Operacional', 'Módulo do Portal SDK.']
 
   useEffect(() => {
     const timer = window.setInterval(() => refreshNotifications(), 60000)
     return () => window.clearInterval(timer)
   }, [refreshNotifications])
+
+  useEffect(() => {
+    if (firstPathRef.current) {
+      firstPathRef.current = false
+      return
+    }
+    if (canApprove) refreshPending()
+  }, [canApprove, path, refreshPending])
 
   function goTo(target) {
     navigate(target)
@@ -83,15 +111,13 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
     setNotificationsOpen(false)
   }
 
-  function navContent(compact = false, showCollapseToggle = false) {
+  function navContent(compact = false, showCollapseToggle = false, idPrefix = 'nav') {
+    const countId = `${idPrefix}-pending-count`
     return (
     <>
-      <div className={`relative flex items-center border-b border-line ${compact ? 'h-24 flex-col justify-center gap-2 px-2' : 'h-20 gap-3 px-5'}`}>
-        <BrandMark className="h-10 w-10 shrink-0" />
-        {!compact && <div className="min-w-0">
-          <p className="truncate font-semibold tracking-tight text-ink">Portal SDK</p>
-          <p className="truncate text-xs text-muted">Centro Operacional de TI</p>
-        </div>}
+      <div className={`flex items-center border-b border-line ${compact ? 'h-24 flex-col justify-center gap-2 px-2' : 'h-16 gap-3 px-5'}`}>
+        <BrandMark className="h-8 w-8 text-xs" />
+        {!compact && <p className="min-w-0 truncate font-semibold text-ink">Portal SDK</p>}
         {showCollapseToggle && (
           <button
             aria-expanded={!compact}
@@ -105,44 +131,56 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
           </button>
         )}
       </div>
-      <nav className="sidebar-scroll flex-1 space-y-1 overflow-y-auto px-3 py-5" aria-label="Módulos do portal">
+      <nav className="sidebar-scroll flex-1 space-y-0.5 overflow-y-auto px-3 py-4" aria-label="Módulos do portal">
         {navigation.map((item, index) => {
           if (item.section) {
             if (compact) {
-              return <div className="my-3 h-px bg-ink/5" key={`${item.section}-${index}`} aria-hidden="true" />
+              return <div className="my-3 h-px bg-line" key={`${item.section}-${index}`} aria-hidden="true" />
             }
-            return <p className="px-3 pb-2 pt-5 text-xs font-semibold text-muted" key={`${item.section}-${index}`}>{item.section}</p>
+            return <p className="px-3 pb-1.5 pt-4 text-xs font-medium text-muted first:pt-1" key={`${item.section}-${index}`}>{item.section}</p>
           }
           if (item.permission && !permissions.has(item.permission)) return null
           const active = path === item.path
+          // O número fica fora do botão: o nome do item continua só o rótulo
+          // (o roteiro de navegador acha o item pelo texto) e o leitor de tela
+          // ouve a contagem como descrição.
+          const count = item.path === PENDING_PATH ? pendingLabel : null
           return (
-            <button
-              className={`sidebar-link ${compact ? 'justify-center px-2' : ''} ${active ? 'sidebar-link-active' : ''}`}
-              key={item.path}
-              onClick={() => goTo(item.path)}
-              title={compact ? item.label : undefined}
-              type="button"
-            >
-              <span className={`grid h-8 w-8 place-items-center rounded-lg ${active ? 'text-ink' : 'text-muted'}`}>
-                <Icon name={item.icon} className="h-[17px] w-[17px]" />
-              </span>
-              {!compact && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
-            </button>
+            <div className="relative" key={item.path}>
+              <button
+                aria-current={active ? 'page' : undefined}
+                aria-describedby={count ? countId : undefined}
+                className={`sidebar-link ${compact ? 'justify-center px-2' : ''} ${count && !compact ? 'pr-10' : ''} ${active ? 'sidebar-link-active' : ''}`}
+                onClick={() => goTo(item.path)}
+                title={compact ? item.label : undefined}
+                type="button"
+              >
+                <span className={`grid h-6 w-6 place-items-center ${active ? 'text-ink' : 'text-muted'}`}>
+                  <Icon name={item.icon} className="h-[17px] w-[17px]" />
+                </span>
+                {!compact && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+              </button>
+              {count && (
+                <span className={`nav-count ${compact ? 'nav-count-compact' : ''}`} data-nav-count="" id={countId}>
+                  <span aria-hidden="true">{count}</span>
+                  <span className="sr-only">{count} pendentes</span>
+                </span>
+              )}
+            </div>
           )
         })}
       </nav>
       <div className={`border-t border-line ${compact ? 'p-2' : 'p-4'}`} title={compact ? 'Desenvolvido por Matheus Camargo' : undefined}>
-        <div className={`rounded-card border border-line bg-surface ${compact ? 'grid place-items-center p-2' : 'p-3'}`} title={compact ? currentUserLabel : undefined}>
-          {compact ? (
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-surface-2 text-sm font-semibold text-ink">{userInitial}</span>
-          ) : (
-            <>
-              <p className="truncate text-sm font-semibold text-ink-2">{currentUserLabel}</p>
-              <p className="mt-0.5 text-xs capitalize text-muted">{session.role?.replace('_', ' ')}</p>
-            </>
+        <div className={`flex items-center gap-3 ${compact ? 'justify-center' : ''}`} title={compact ? currentUserLabel : undefined}>
+          <span aria-hidden="true" className="user-avatar h-9 w-9">{userInitials}</span>
+          {!compact && (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-ink">{currentUserLabel}</p>
+              <p className="text-xs capitalize text-muted">{session.role?.replace('_', ' ')}</p>
+            </div>
           )}
         </div>
-        {!compact && <p className="mt-3 text-center text-xs font-medium text-muted">Desenvolvido por Matheus Camargo</p>}
+        {!compact && <p className="mt-3 text-xs text-muted">Desenvolvido por Matheus Camargo</p>}
       </div>
     </>
     )
@@ -150,8 +188,9 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
 
   return (
     <div className="portal-tech-shell min-h-screen bg-bg">
+      <a className="skip-link" href="#conteudo" onClick={skipToContent}>Ir para o conteúdo</a>
       <aside className={`fixed inset-y-0 left-0 z-40 hidden border-r border-line bg-surface transition-[width] duration-200 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        {navContent(sidebarCollapsed, true)}
+        {navContent(sidebarCollapsed, true, 'nav-lateral')}
       </aside>
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
@@ -160,26 +199,20 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
             <button className="absolute right-3 top-3 rounded-lg p-2.5 text-muted" onClick={() => setMobileOpen(false)} type="button" aria-label="Fechar menu">
               <Icon name="close" />
             </button>
-            {navContent()}
+            {navContent(false, false, 'nav-celular')}
           </aside>
         </div>
       )}
 
       <div className={`min-w-0 transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
         <header className="sticky top-0 z-30 border-b border-line bg-bg">
-          <div className="flex min-h-20 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-            <div className="flex min-w-0 items-center gap-3">
-              <button className="rounded-lg border border-line bg-surface p-2.5 text-ink-2 lg:hidden" onClick={() => setMobileOpen(true)} type="button" aria-label="Abrir menu">
-                <Icon name="menu" />
-              </button>
-              <div className="min-w-0">
-                <p className="hidden text-xs font-semibold text-muted sm:block">Portal SDK</p>
-                <h1 className="truncate text-lg font-semibold text-ink outline-none sm:text-xl" data-page-title="" tabIndex={-1}>{metadata[0]}</h1>
-                <p className="hidden truncate text-xs text-muted sm:block">{metadata[1]}</p>
-              </div>
-            </div>
+          <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+            <button className="rounded-lg border border-line bg-surface p-2.5 text-ink-2 lg:hidden" onClick={() => setMobileOpen(true)} type="button" aria-label="Abrir menu">
+              <Icon name="menu" />
+            </button>
+            <h1 className="min-w-0 flex-1 truncate text-lg font-semibold text-ink outline-none sm:text-xl" data-page-title="" tabIndex={-1}>{metadata[0]}</h1>
             <div className="flex items-center gap-2 sm:gap-3">
-              <Clock />
+              <Clock serverNow={serverNow} />
               <ThemeToggle />
               <div className="relative">
                 <button aria-controls={notificationsPanelId} aria-expanded={notificationsOpen} aria-haspopup="dialog" className="relative rounded-lg border border-line bg-surface p-2.5 text-ink-2 hover:border-line-strong hover:bg-surface-2" onClick={() => setNotificationsOpen((open) => !open)} type="button" aria-label="Notificações">
@@ -205,7 +238,7 @@ export function PortalLayout({ session, path, navigate, onLogout, children }) {
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full min-w-0 max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="mx-auto w-full min-w-0 max-w-[1600px] px-4 py-6 outline-none sm:px-6 lg:px-8" id="conteudo" tabIndex={-1}>{children}</main>
       </div>
     </div>
   )

@@ -250,7 +250,7 @@ export default function App() {
     screen = <LoginPage onLoginCI={loginCI} loading={actionLoading} />
   } else {
     screen = (
-      <PortalLayout session={session} path={router.path} navigate={router.navigate} onLogout={logout}>
+      <PortalLayout session={session} path={router.path} navigate={router.navigate} onLogout={logout} serverNow={livePauses.serverNow}>
         <RouteErrorBoundary resetKey={router.path}>
           <Suspense fallback={<LoadingState label="Carregando módulo..." />}>
             {content}

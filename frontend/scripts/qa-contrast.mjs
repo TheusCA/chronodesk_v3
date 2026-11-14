@@ -120,7 +120,8 @@ delete globalThis.document
 // 5. Botão do topo e abertura.
 const layoutSource = read('src/components/PortalLayout.jsx')
 assert.match(layoutSource, /function ThemeToggle\(\)/, 'botão de tema na casca')
-assert.match(layoutSource, /<Clock \/>\s*<ThemeToggle \/>/, 'botão de tema no topo, ao lado do relógio')
+// [R3] O relógio do topo passou a receber a hora do servidor (serverNow).
+assert.match(layoutSource, /<Clock serverNow=\{serverNow\} \/>\s*<ThemeToggle \/>/, 'botão de tema no topo, ao lado do relógio')
 assert.match(layoutSource, /next === 'dark' \? 'Usar tema escuro' : 'Usar tema claro'/, 'o rótulo do botão diz a ação')
 assert.match(layoutSource, /aria-label=\{label\}/, 'botão de tema com nome acessível')
 assert.match(read('src/main.jsx'), /restoreTheme\(\)\n/, 'a escolha da sessão é aplicada antes do primeiro desenho')

@@ -276,6 +276,22 @@
     @apply bg-surface-2 font-semibold text-ink before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-ink;
   }
 
+  /* [R3] Contador de pendências do menu: só o número, no tom de pausa, fora
+     do botão (não entra no nome do item). Não recebe clique: o toque vai
+     para o botão de baixo. */
+  .nav-count {
+    @apply pointer-events-none absolute right-2 top-1/2 min-w-[1.5rem] -translate-y-1/2 rounded-full border border-pause-line bg-pause-bg px-1.5 text-center font-mono text-xs font-medium tabular-nums leading-5 text-pause;
+  }
+
+  .nav-count-compact {
+    @apply right-2 top-1 translate-y-0;
+  }
+
+  /* [R3] "Ir para o conteúdo": fora da tela até receber o foco (primeiro Tab). */
+  .skip-link {
+    @apply absolute left-2 top-2 z-[60] inline-flex min-h-11 -translate-y-24 items-center rounded-md bg-action px-4 text-sm font-medium text-action-ink focus:translate-y-0;
+  }
+
   /* [R2] Selo (components/ui/Tag.jsx): retângulo de canto 4 px, sempre com
      rótulo. A cor vem do tom (status-*) ou da situação (presence-*). */
   .status-badge {

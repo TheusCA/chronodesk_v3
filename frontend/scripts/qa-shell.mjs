@@ -1,0 +1,229 @@
+// [R3] Casca do app (docs/design/PLANO_LOTES_R.md, R3): o PortalLayout e o
+// login desenhados de verdade (JSX transpilado pelo TypeScript do projeto e
+// react-dom/server), sem rede. O useResource da casca responde com o que o
+// teste põe em globalThis.qaResources e anota cada chamada.
+// Confere:
+// 1. "Ir para o conteúdo" como primeiro elemento focável, levando ao <main>;
+// 2. um título só no topo (sem o "Portal SDK" de sobretítulo nem a descrição);
+// 3. a marca sem imagem, com o nome "Portal SDK" escrito, e o crédito;
+// 4. o contador de pendências do menu: só o número, fora do botão (o nome do
+//    item continua o rótulo), ligado como descrição, e só para quem decide;
+// 5. o item atual com aria-current e a barra;
+// 6. o relógio do topo pela hora do servidor;
+// 7. as iniciais do avatar: primeiro e último nome, sem número.
+import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import ts from 'typescript'
+
+const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const srcRoot = join(frontendRoot, 'src')
+const srcUrl = pathToFileURL(srcRoot).href + '/'
+const read = (path) => readFileSync(join(frontendRoot, path), 'utf8')
+const resourceStub = 'data:text/javascript,' + encodeURIComponent(
+  'export function useResource(path, options = {}) {'
+  + ' const enabled = options.enabled ?? true;'
+  + ' (globalThis.qaResourceCalls ??= []).push({ path, enabled, intervalMs: options.intervalMs ?? 0 });'
+  + ' return { loading: false, error: null, data: enabled ? (globalThis.qaResources?.[path] ?? null) : null, refresh: async () => null, setData: () => {} } }',
+)
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === '../hooks/useResource' && /\/src\/components\/PortalLayout\.jsx$/u.test(context.parentURL ?? '')) {
+      return { url: resourceStub, shortCircuit: true }
+    }
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.[cm]?[jt]sx?$/u.test(specifier) && context.parentURL?.startsWith(srcUrl)) {
+      for (const extension of ['.ts', '.tsx', '.js', '.jsx']) {
+        const candidate = new URL(specifier + extension, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return nextResolve(candidate.href, context)
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    const path = url.split('?')[0]
+    if (path.startsWith(srcUrl) && /\.(jsx|tsx|ts)$/u.test(path)) {
+      const output = ts.transpileModule(readFileSync(fileURLToPath(path), 'utf8'), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(path) }).outputText
+      return { format: 'module', source: output, shortCircuit: true }
+    }
+    return nextLoad(url, context)
+  },
+})
+
+const { createElement: h } = await import('react')
+const { renderToStaticMarkup } = await import('react-dom/server')
+const src = (path) => import(pathToFileURL(join(srcRoot, path)).href)
+const { PortalLayout } = await src('components/PortalLayout.jsx')
+const { LoginPage } = await src('pages/LoginPage.jsx')
+const { UserAvatar } = await src('components/ui/Primitives.jsx')
+const { nameInitials } = await src('lib/initials.ts')
+const { pendingApprovalsLabel } = await src('lib/pendingApprovals.ts')
+const { navigation, pageMetadata } = await src('lib/navigation.ts')
+const text = (markup) => markup.replace(/<[^>]+>/gu, '').replace(/\s+/gu, ' ').trim()
+
+const MANAGER = ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage']
+const managerSession = { role: 'gestor', permissions: MANAGER, ci: { autenticado: false, nome: '' }, gestor: { autenticado: true, username: 'gestor.exemplo' } }
+const technicianSession = { role: 'tecnico', permissions: ['portal.read', 'pausas.use'], ci: { autenticado: true, nome: 'Técnico 01 Exemplo', username: 'tecnico.01' }, gestor: { autenticado: false, username: '' } }
+// Nomes e observação fictícios, para provar que não chegam ao menu.
+const PENDING = {
+  solicitacoes: [{ id: 1, nome: 'Pessoa Pedido Exemplo', equipe: 'n1', motivo: 'Reunião', observacao: 'Pauta QA reservada' }],
+  overtime: [{ id: 2, employee_name: 'Outra Pessoa Exemplo' }],
+  time_adjustments: [{ id: 3, employee_name: 'Terceira Pessoa Exemplo' }],
+  overtime_truncated: false,
+  time_adjustments_truncated: false,
+}
+const SERVER_NOW = Date.parse('2026-10-28T10:42:05-03:00')
+const renderLayout = ({ session = managerSession, path = '/pausas', resources = {}, serverNow = SERVER_NOW } = {}) => {
+  globalThis.qaResources = resources
+  globalThis.qaResourceCalls = []
+  try {
+    const markup = renderToStaticMarkup(h(PortalLayout, { session, path, navigate: () => {}, onLogout: () => {}, serverNow }, h('p', null, 'Conteúdo QA')))
+    return { markup, calls: globalThis.qaResourceCalls }
+  } finally {
+    delete globalThis.qaResources
+    delete globalThis.qaResourceCalls
+  }
+}
+const section = (markup, open, close) => {
+  const start = markup.indexOf(open)
+  assert.ok(start >= 0, `trecho ${open}`)
+  return markup.slice(start, markup.indexOf(close, start) + close.length)
+}
+
+// ---------------------------------------------------------------------------
+// 1. "Ir para o conteúdo": o primeiro focável, e o conteúdo recebe o foco
+// ---------------------------------------------------------------------------
+{
+  const { markup } = renderLayout()
+  const focusable = markup.match(/<(a|button|input|select|textarea)\b[^>]*>|<[a-z]+\b[^>]*tabindex="0"[^>]*>/u)?.[0] ?? ''
+  assert.match(focusable, /^<a [^>]*href="#conteudo"/u, '"Ir para o conteúdo" é o primeiro elemento focável da casca')
+  assert.ok(markup.includes('>Ir para o conteúdo</a>'), '"Ir para o conteúdo" com o texto')
+  assert.match(markup, /<main [^>]*id="conteudo"[^>]*tabindex="-1"/u, 'o <main> é o destino (id="conteudo") e recebe foco por script')
+  assert.equal((markup.match(/id="conteudo"/gu) ?? []).length, 1, 'um destino só')
+  const layoutSource = read('src/components/PortalLayout.jsx')
+  assert.match(layoutSource, /function skipToContent\(event\) \{\n {2}event\.preventDefault\(\)\n {2}document\.getElementById\('conteudo'\)\?\.focus\(\)/u, '"Ir para o conteúdo" leva o foco sem mudar o endereço (o roteador trataria o #conteudo como navegação)')
+}
+
+// ---------------------------------------------------------------------------
+// 2. Um título só no topo
+// ---------------------------------------------------------------------------
+for (const path of ['/pausas', '/dashboard', '/admin', '/mapa-pa', '/chamados-criticos']) {
+  const { markup } = renderLayout({ path })
+  const header = section(markup, '<header', '</header>')
+  const [title, description] = pageMetadata[path]
+  assert.equal((markup.match(/<h1\b/gu) ?? []).length, 1, `${path}: um <h1> só`)
+  assert.match(header, new RegExp(`<h1 [^>]*data-page-title=""[^>]*tabindex="-1"[^>]*>${title}</h1>`, 'u'), `${path}: o título da tela, focável (data-page-title)`)
+  assert.ok(!header.includes('Portal SDK'), `${path}: sem o "Portal SDK" de sobretítulo no topo`)
+  assert.ok(!markup.includes(description), `${path}: sem a descrição da tela (D-R0-8)`)
+}
+
+// ---------------------------------------------------------------------------
+// 3. Marca sem imagem, nome escrito e crédito
+// ---------------------------------------------------------------------------
+{
+  const { markup } = renderLayout()
+  const login = renderToStaticMarkup(h(LoginPage, { onLoginCI: async () => null, loading: false }))
+  for (const [label, html] of [['casca', markup], ['login', login]]) {
+    assert.doesNotMatch(html, /<img\b/u, `${label}: marca sem imagem (nada de arquivo fora do build)`)
+    assert.match(html, /<span aria-hidden="true" class="[^"]*" data-brand-mark="">SDK<\/span>/u, `${label}: marca em texto, decorativa`)
+    assert.ok(html.includes('Portal SDK'), `${label}: o nome "Portal SDK" escrito`)
+    assert.ok(html.includes('Desenvolvido por Matheus Camargo'), `${label}: crédito do desenvolvedor`)
+  }
+  assert.doesNotMatch(read('src/components/BrandMark.jsx').replace(/^\s*\/\/.*$/gmu, ''), /\.png|<img|src=/u, 'BrandMark sem imagem (fora os comentários)')
+}
+
+// ---------------------------------------------------------------------------
+// 4. Contador de pendências: só o número, fora do botão, só para quem decide
+// ---------------------------------------------------------------------------
+assert.equal(pendingApprovalsLabel(PENDING), '3', 'pausas + horas extras + correções de ponto')
+assert.equal(pendingApprovalsLabel({ ...PENDING, overtime_truncated: true }), '3+', 'lista cortada pelo servidor: "N+"')
+assert.equal(pendingApprovalsLabel({ solicitacoes: [], overtime: [], time_adjustments: [] }), null, 'sem pendência: sem contador')
+assert.equal(pendingApprovalsLabel(null), null, 'sem resposta: sem contador')
+assert.equal(pendingApprovalsLabel({ solicitacoes: 'x', overtime: 2 }), null, 'campos fora do formato não contam')
+{
+  const { markup, calls } = renderLayout({ resources: { 'solicitacoes_pendentes.php': PENDING } })
+  const pendingCall = calls.find((call) => call.path === 'solicitacoes_pendentes.php')
+  assert.ok(pendingCall?.enabled === true && pendingCall.intervalMs === 60000, 'gestão: busca as pendências a cada 60 s')
+  const nav = section(markup, '<nav class="sidebar-scroll', '</nav>')
+  const item = nav.split('<div class="relative">').find((part) => part.includes('Aprovações e admin'))
+  assert.ok(item, 'item "Aprovações e admin" no menu')
+  const button = item.slice(0, item.indexOf('</button>') + '</button>'.length)
+  assert.equal(text(button), 'Aprovações e admin', 'o nome do item continua só o rótulo (o número fica fora do botão)')
+  const countId = button.match(/aria-describedby="([^"]+)"/u)?.[1]
+  assert.ok(countId, 'o botão aponta para o contador como descrição')
+  const badge = item.match(new RegExp(`<span class="nav-count[^"]*" data-nav-count="" id="${countId}">([\\s\\S]*?)</span></span>`, 'u'))
+  assert.ok(badge, 'contador ao lado do botão, com o id da descrição')
+  const visible = badge[1].match(/<span aria-hidden="true">([^<]*)<\/span>/u)?.[1]
+  assert.match(visible ?? '', /^\d+\+?$/u, 'o contador mostra só o número')
+  assert.equal(visible, '3')
+  assert.ok(badge[0].replaceAll('<!-- -->', '').includes('<span class="sr-only">3 pendentes</span>'), 'o leitor de tela ouve "3 pendentes"')
+  for (const secret of ['Pessoa Pedido Exemplo', 'Outra Pessoa Exemplo', 'Terceira Pessoa Exemplo', 'Pauta QA reservada', 'Reunião']) {
+    assert.ok(!markup.includes(secret), `nada de quem pediu no menu (${secret})`)
+  }
+  assert.equal((markup.match(/data-nav-count=""/gu) ?? []).length, 1, 'um contador só, no item de Aprovações')
+  const truncated = renderLayout({ resources: { 'solicitacoes_pendentes.php': { ...PENDING, time_adjustments_truncated: true } } }).markup
+  assert.match(truncated, /<span aria-hidden="true">3\+<\/span>/u, 'lista cortada: "3+"')
+  const none = renderLayout({ resources: { 'solicitacoes_pendentes.php': { solicitacoes: [], overtime: [], time_adjustments: [] } } }).markup
+  assert.ok(!none.includes('data-nav-count') && !none.includes('aria-describedby="nav-lateral-pending-count"'), 'sem pendência: sem contador e sem descrição')
+}
+{
+  const { markup, calls } = renderLayout({ session: technicianSession, resources: { 'solicitacoes_pendentes.php': PENDING } })
+  const pendingCall = calls.find((call) => call.path === 'solicitacoes_pendentes.php')
+  assert.equal(pendingCall?.enabled, false, 'técnico: não busca as pendências (o endpoint é da gestão)')
+  assert.ok(!markup.includes('data-nav-count') && !markup.includes('Aprovações e admin'), 'técnico: sem o item e sem contador')
+}
+
+// ---------------------------------------------------------------------------
+// 5. Item atual
+// ---------------------------------------------------------------------------
+{
+  const { markup } = renderLayout({ path: '/dashboard' })
+  const nav = section(markup, '<nav class="sidebar-scroll', '</nav>')
+  const current = nav.match(/<button aria-current="page"[^>]*>([\s\S]*?)<\/button>/gu) ?? []
+  assert.equal(current.length, 1, 'um item atual')
+  assert.ok(current[0].includes('sidebar-link-active') && text(current[0]) === 'Visão operacional', 'item atual com a barra (sidebar-link-active) e aria-current')
+  const routes = navigation.filter((entry) => entry.path && (!entry.permission || MANAGER.includes(entry.permission)))
+  assert.equal((nav.match(/<button /gu) ?? []).length, routes.length, 'um botão por rota permitida')
+  for (const entry of navigation.filter((item) => item.section)) assert.ok(nav.includes(`>${entry.section}</p>`), `grupo "${entry.section}" em caixa normal`)
+}
+
+// ---------------------------------------------------------------------------
+// 6. Relógio do topo pela hora do servidor
+// ---------------------------------------------------------------------------
+{
+  const format = (instant) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(new Date(instant))
+  for (const serverNow of [SERVER_NOW, SERVER_NOW + 3 * 3600_000 + 17 * 60_000]) {
+    const header = section(renderLayout({ serverNow }).markup, '<header', '</header>')
+    const clock = header.match(/<p [^>]*data-server-clock="">([\s\S]*?)<\/p>/u)?.[1] ?? ''
+    assert.equal(clock.match(/<time [^>]*>([^<]*)<\/time>/u)?.[1], format(serverNow), `relógio do topo pela hora do servidor (${format(serverNow)})`)
+    assert.ok(text(clock).startsWith('Servidor'), 'relógio com o rótulo "Servidor"')
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 7. Iniciais do avatar
+// ---------------------------------------------------------------------------
+for (const [name, expected, label] of [
+  ['Técnico 01 Exemplo', 'TE', 'número no meio não conta (antes, "T0")'],
+  ['Maria da Conceição Souza', 'MS', 'nome composto: primeiro e último'],
+  ['Ângela Úrsula', 'ÂÚ', 'acento mantido'],
+  ['élcio pereira', 'ÉP', 'minúscula com acento vira maiúscula'],
+  ['Admin', 'A', 'uma palavra: uma letra'],
+  ['Técnico 01', 'T', 'nome com número no fim: só o primeiro'],
+  ['01 02', '', 'só números: texto de reserva'],
+  ['lideranca.exemplo', 'LE', 'login com ponto: os dois nomes'],
+  ['   ', '', 'vazio: texto de reserva'],
+  [null, '', 'nulo: texto de reserva'],
+]) {
+  assert.equal(nameInitials(name), expected, `iniciais de ${JSON.stringify(name)}: ${label}`)
+}
+assert.equal(nameInitials('42', 'SDK'), 'SDK', 'reserva escolhida por quem chama')
+assert.equal(renderToStaticMarkup(h(UserAvatar, { name: 'Técnico 01 Exemplo' })), '<span class="user-avatar " aria-hidden="true">TE</span>', 'UserAvatar com as iniciais novas')
+assert.equal(renderToStaticMarkup(h(UserAvatar, { name: '' })), '<span class="user-avatar " aria-hidden="true">SDK</span>', 'UserAvatar sem nome: "SDK", como antes')
+{
+  const { markup } = renderLayout({ session: technicianSession })
+  assert.match(markup, /<span aria-hidden="true" class="user-avatar h-9 w-9">TE<\/span>/u, 'rodapé do menu com as iniciais de quem entrou')
+}
+
+console.log('QA da casca OK')

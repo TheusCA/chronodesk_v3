@@ -21,7 +21,8 @@ const packageJson = JSON.parse(read('package.json'))
 assert.equal(packageJson.scripts['qa:unsaved-changes'], 'node scripts/qa-unsaved-changes.mjs', 'Script qa:unsaved-changes registrado')
 // [R1] 20: entrou o qa:contrast (tokens, contraste AA nos dois temas e tema).
 // [R2] 21: entrou o qa:primitives (componentes de components/ui e alvo de 40 px).
-assert.equal(Object.keys(packageJson.scripts).filter((name) => name.startsWith('qa:')).length, 21, 'Bateria com 21 qa:*')
+// [R3] 22: entrou o qa:shell (casca: "Ir para o conteúdo", título, marca, contador e iniciais).
+assert.equal(Object.keys(packageJson.scripts).filter((name) => name.startsWith('qa:')).length, 22, 'Bateria com 22 qa:*')
 
 // Navegador simulado: location e history que se atualizam no pushState, e
 // listeners contados por tipo.

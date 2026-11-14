@@ -1,4 +1,5 @@
 import { Icon } from './Icon'
+import { nameInitials } from '../../lib/initials'
 
 export function SectionHeader({ eyebrow, title, description, action = null, meta = null, titleRef = null }) {
   return (
@@ -35,16 +36,9 @@ export function MetricCard({ label, value, detail, tone = 'info', icon = 'dashbo
   )
 }
 
+// [R3] Primeiro e último nome, sem número (lib/initials.ts).
 export function UserAvatar({ name, className = '' }) {
-  const initials = String(name || 'SDK')
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join('')
-    .toUpperCase()
-
-  return <span className={`user-avatar ${className}`} aria-hidden="true">{initials || 'SDK'}</span>
+  return <span className={`user-avatar ${className}`} aria-hidden="true">{nameInitials(name, 'SDK')}</span>
 }
 
 export function StatusDot({ tone = 'info', label }) {

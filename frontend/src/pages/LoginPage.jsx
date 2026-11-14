@@ -6,7 +6,7 @@ export function LoginPage({ onLoginCI, loading }) {
     <main className="grid min-h-screen place-items-center px-4 py-10">
       <div className="w-full max-w-5xl">
         <div className="mb-8 text-center">
-          <BrandMark className="mx-auto mb-4 h-16 w-16" />
+          <BrandMark className="mx-auto mb-4 h-14 w-14 text-lg" />
           <h1 className="text-3xl font-semibold tracking-tight text-ink">Portal SDK</h1>
           <p className="mt-2 text-muted">Operações, métricas e aprovações em um único lugar.</p>
         </div>
