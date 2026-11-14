@@ -2584,6 +2584,7 @@ const PAUSE_STATE = `(() => {
     contexto: !!form?.querySelector('textarea'),
     linhas: rows.map((row) => row.dataset.state).join('|'),
     derrubar: [...document.querySelectorAll('main button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Derrubar pausa').length,
+    derrubar_alvo: Math.min(...[...document.querySelectorAll('main button')].filter((b) => b.getClientRects().length && b.textContent.trim() === 'Derrubar pausa').map((b) => { const r = b.getBoundingClientRect(); return Math.min(r.width, r.height) })),
     rolagem_lateral: document.documentElement.scrollWidth > document.documentElement.clientWidth,
     cabecalho_visivel: [...document.querySelectorAll('main thead')].some((head) => head.getBoundingClientRect().height > 1),
   }
@@ -2627,6 +2628,7 @@ async function pausesR4a(page, port, mock) {
   await goto(page, port, '/pausas', 390)
   await page.waitFor(`!!document.querySelector('main tr[data-row]')`)
   await expectPause('390 px, gestão: lista em cartões, sem rolagem lateral nem cabeçalho de tabela', { rolagem_lateral: false, cabecalho_visivel: false, linhas: 'paused', derrubar: 1 })
+  await expectPause('390 px, gestão: "Derrubar pausa" com 40 px ou mais de alvo no cartão', { derrubar_alvo: (value) => value >= 40 })
   await page.click(`[...document.querySelectorAll('main [role="group"] button')].find((b) => b.textContent.startsWith('Disponíveis'))`)
   await expectPause('390 px, filtro Disponíveis: ninguém (vazio), sem Derrubar pausa', { linhas: '', derrubar: 0 })
   report('Pausas, 390 px, filtro sem ninguém: o vazio diz o próximo passo', await page.evaluate(`document.querySelector('main').textContent.includes('Escolha outro filtro para ver o resto da equipe.')`))

@@ -662,6 +662,7 @@
   }
 
   .team-table td {
+    width: auto;
     height: auto;
     padding: 0;
     border: 0;
