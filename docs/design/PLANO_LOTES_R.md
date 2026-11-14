@@ -1,6 +1,6 @@
 # Plano dos lotes do redesenho (R1 em diante)
 
-**Estado:** aprovado em 2026-11-13, com a direção A e as decisões D-R1-1 a D-R1-3 como recomendadas. R1 e R2 em execução, nessa ordem, com uma parada para revisão no fim do R2. **Cada lote para para revisão.**
+**Estado:** aprovado em 2026-11-13, com a direção A e as decisões D-R1-1 a D-R1-3 como recomendadas. R1 e R2 aprovados em 2026-11-14. R3, R4a e R4b em execução, nessa ordem, com uma parada para revisão no fim do R4b; o deploy do redesenho fica para depois do R4 completo. **Cada lote para para revisão.**
 
 ## Regras de todos os lotes R
 
@@ -306,3 +306,94 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 - **"Depois", no git:** `capturas/r2/`, o mesmo plano (login, 8 telas do admin e Pausas do técnico, 1280 e 390 px, claro e escuro).
   - São 40 arquivos, 1,3 MB.
 - **Capturas dos commits intermediários** (`936d866` e `6b6b209`): fora do git (D-R0-9).
+
+### R3 · Casca do app (14/11/2026)
+
+**Commits:** `8dec4a9` (topo, marca, iniciais, "Ir para o conteúdo" e contador) e `8348df8` (atalhos do celular e páginas sem repetir o título), mais um de docs. Sem push. O R1 e o R2 não vão sozinhos: o deploy do redesenho fica para depois do R4 completo (decisão do responsável de 14/11/2026).
+
+**Ajustes do responsável para o R3 (14/11/2026):**
+
+| # | Pedido | Como ficou |
+|---|---|---|
+| 1 | Marca do topo e do login sem imagem raster | `BrandMark` em texto ("SDK" no quadrado de ação, que segue o tema), com "Portal SDK" escrito ao lado. Nada fora de `/app/assets/` |
+| 2 | Iniciais pela primeira letra do primeiro e do último nome, sem número | `src/lib/initials.ts`, usado pelo `UserAvatar` e pelo rodapé do menu. "Técnico 01 Exemplo" vira "TE" (antes "T0") |
+| 3 | "Desenvolvido por Matheus Camargo" no rodapé do menu e do login | Mantido nos dois; o `qa:shell` e o `qa:action-runner` conferem |
+
+**Como o logo é servido em produção hoje** (conferido no repositório, sem acesso ao servidor):
+- o arquivo é `frontend/public/sdk-icon.png` (versionado, PNG de 256 × 256, 100 KB);
+- o Vite copia o `public/` para a raiz do build, e o arquivo vai para `app/sdk-icon.png`;
+- no Apache, ele é arquivo de verdade: a regra do SPA (`.htaccess`, `RewriteCond %{REQUEST_FILENAME} !-f`) não o reescreve para o `index.html`;
+- cai no ramo sem cache do `.htaccess` (tudo em `/app/` fora de `/app/assets/` leva `no-store`), e a CSP o permite (`img-src 'self'`);
+- em produção ele carrega; quebrava só no servidor simulado, que serve apenas `/app/assets/` (auditoria, seção 1).
+- **Depois do R3, nada do `src/` usa o `sdk-icon.png`.** O arquivo continua no `public/` e no build (100 KB copiados a cada deploy). Proposta: tirar numa limpeza à parte, com a sua aprovação. O `favicon.png` e o `apple-touch-icon.png` continuam em uso pelo `index.html`.
+
+**Commit 1 (`8dec4a9`):**
+- **Topo com um título só.** Sai o "Portal SDK" de sobretítulo e a descrição da tela (D-R0-8). Ficam:
+  - o relógio, agora com a hora do servidor (a diferença é acertada a cada `status.php`), só hora e minuto, com o rótulo "Servidor";
+  - o tema, o sino e Sair, que continua passando pela guarda do formulário sujo.
+- **"Ir para o conteúdo"** é o primeiro Tab. Leva o foco ao `<main id="conteudo">` sem mudar o endereço: um `#conteudo` no endereço dispararia o `popstate`, que o roteador trata como navegação.
+- **Menu:** item atual com `aria-current` e a barra; grupos em caixa normal (desde o R1).
+- **Contador de pendências em "Aprovações e admin":**
+  - soma pausas e reuniões, horas extras e correções de ponto, pela mesma resposta do `solicitacoes_pendentes.php` que a aba Aprovações usa;
+  - mostra **só o número** ("N+" quando a lista vem cortada pelo limite do servidor); nome, equipe e observação de quem pediu nunca chegam ao menu;
+  - fica fora do botão, ligado como descrição (`aria-describedby`): o nome do item continua só o rótulo;
+  - só para quem tem `operacao.approve`, que é quem o endpoint aceita;
+  - busca a cada 60 s com a aba visível e a cada troca de tela.
+- **Custo da chamada nova: não medido aqui** (sem MySQL local). O `scripts/medir-polling.sh` aceita outra URL. Proposta para o roteiro do deploy do redesenho, com uma sessão de gestão, antes de liberar: `URL=http://127.0.0.1/api/solicitacoes_pendentes.php N=50 bash scripts/medir-polling.sh`.
+
+**Commit 2 (`8348df8`):**
+- **Barra de atalhos no celular** (abaixo de 640 px, D-R0-7): Agora (Visão operacional), Pausas (só com `pausas.use`, a mesma permissão do menu), Escala (Escala presencial) e Menu.
+  - O alvo tem 64 px, e o atalho atual leva `aria-current`.
+  - Cada atalho passa pelo `navigate` do roteador, com a guarda do formulário sujo do 17f.
+- **Menu do celular em folha inteira** abaixo de 640 px. De 640 px para cima, fica a coluna de 320 px.
+- **O conteúdo ganha folga embaixo** no celular, para não ficar atrás da barra. O aviso sobe acima dela; com um diálogo aberto, continua valendo a regra do BB1.
+- **A página deixa de repetir o título do topo:**
+  - Mapa de PA: a frase da regra do conflito fica, com as mesmas palavras;
+  - Chamados críticos: ficam só as ações;
+  - Aprovações: o total continua no cartão "Total pendente".
+
+**O que mudou em relação ao plano e ao protótipo:**
+- **Sair fica no topo,** como o plano pede. No protótipo ele estava no rodapé do menu.
+- **O atalho "Escala" abre a Escala presencial.** A de sábado continua no menu.
+- **O texto de apresentação do login** ("Operações, métricas e aprovações em um único lugar.") fica para o R6, que redesenha o login. No R3 só a marca mudou.
+
+**QA:**
+- **`qa:shell` (novo; a bateria passa de 21 para 22 `qa:*`).** Desenha o `PortalLayout` e o login de verdade e confere:
+  - o primeiro focável e o destino do "Ir para o conteúdo";
+  - um `<h1>` só, sem sobretítulo nem descrição;
+  - a marca sem imagem e o crédito;
+  - o contador: só o número, fora do botão, como descrição, sem nomes, e só para quem decide;
+  - o item atual e o relógio pela hora do servidor;
+  - as iniciais: nome composto, acento, uma palavra, número e login com ponto;
+  - a barra de atalhos (itens, permissão, alvo de 64 px fora de `@media`, `goTo` pelo roteador), a folha inteira e as páginas sem o título repetido.
+- **Roteiro do navegador, bloco 22 (novo, 17 conferências):**
+  - primeiro Tab e Enter, sem mudar o endereço;
+  - o contador só com o número e, na árvore de acessibilidade do Chrome, o rótulo como nome e "5 pendentes" como descrição;
+  - os atalhos e a folha em 390 px;
+  - com o formulário sujo, o atalho pergunta; Continuar fica; Descartar sai sem POST.
+  - **As 1029 conferências de antes passam sem mudança; o total vai a 1046.**
+
+**Expectativas que mudaram:**
+
+| QA | O que mudou | Por quê |
+|---|---|---|
+| `qa:unsaved-changes` | Contagem de `qa:*` de 21 para 22 | Entrou o `qa:shell` |
+| `qa:contrast` | O relógio do topo é `<Clock serverNow={serverNow} />`; o botão de tema continua logo depois dele | O relógio passou a mostrar a hora do servidor |
+
+**Validação:**
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`), sozinha no worktree:
+  - `8dec4a9`: saída 0, frontend 25/25 (lint, typecheck, build e 22 `qa:*`), navegador 1029/1029;
+  - `8348df8`: saída 0, frontend 25/25, navegador 1046/1046.
+- **Mutação** com o `mut_guard.php`, cada mutante morto pela conferência certa:
+  - commit 1: 15/15 ("Ir para o conteúdo" depois do menu ou mudando o endereço; contador com o nome de quem pediu, dentro do botão, buscado para todos ou sem o "+"; "Portal SDK" e a descrição de volta no topo; marca de volta como imagem; relógio pela hora do navegador; iniciais com número, pelas duas primeiras palavras ou sem acento; sem o crédito; item atual sem `aria-current`);
+  - commit 2: 11/11 no `qa:shell` (atalho sem a guarda, sem Pausas ou sem a permissão dela, com 40 px, sem `aria-current`; menu de volta à coluna; conteúdo sem folga; as três páginas repetindo o título; o Mapa de PA sem a regra do conflito) e 3/3 no navegador (atalho sem a guarda, atalho com 40 px, menu em coluna).
+- **Medição em 390 px** (`capturar.mjs antes --plano=r --medir`, nos dois temas): 0 alvos abaixo de 40 px e 0 rolagens laterais.
+- **Orçamento no `8348df8`:**
+  - JS de entrada: 199 670 de 211 050 bytes;
+  - CSS: 63 626 de 70 000 (no R2, 59 625);
+  - fontes: 85 912 de 100 000.
+
+**Capturas:**
+- **"Antes":** as do R2, em `capturas/r2/`.
+- **"Depois", no git:** `capturas/r3/`, o mesmo plano (login, 8 telas do admin e Pausas do técnico, 1280 e 390 px, claro e escuro). São 40 arquivos, 1,2 MB.
+- **O servidor das capturas** (`capturar.mjs`) passou a pôr o café do técnico 04 às 10:18, como no protótipo: o estouro (24 min com limite de 20) aparece nas capturas do R3 em diante. No R2, o café era às 10:31.

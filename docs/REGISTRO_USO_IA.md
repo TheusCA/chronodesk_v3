@@ -1437,6 +1437,20 @@ Base da afirmação:
 
 ---
 
+### Redesenho R3: casca do app (topo, marca, menu, atalhos do celular) — 2026-11-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Terceiro lote do redesenho (`docs/design/PLANO_LOTES_R.md`, R3), com os ajustes do responsável de 14/11/2026: marca sem imagem raster, iniciais do avatar sem número e o crédito mantido. Só apresentação: nenhuma regra, API, permissão ou texto de segurança mudou. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `8dec4a9` (topo com um título, marca em texto, iniciais, "Ir para o conteúdo" e contador de pendências no menu), `8348df8` (barra de atalhos do celular, menu em folha inteira e páginas sem repetir o título) e um commit só de docs (execução do R3 no plano, capturas em `docs/design/capturas/r3/`, esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `PortalLayout.jsx` (topo, menu, contador, "Ir para o conteúdo", barra de atalhos, folha), `BrandMark.jsx` (marca em texto), `App.jsx` (hora do servidor para o topo), `LoginPage.jsx` (tamanho da marca), `Primitives.jsx` (`UserAvatar` pelas iniciais novas), novos `src/lib/initials.ts` e `src/lib/pendingApprovals.ts`, `index.css` (contador, "Ir para o conteúdo", barra e aviso acima dela), e as páginas Mapa de PA, Chamados críticos e Aprovações sem o título repetido. QA novo `qa:shell`; bloco 22 no roteiro do navegador; o `capturar.mjs` põe o café do técnico 04 às 10:18. |
+| **Dados pessoais** | Nenhum. O contador do menu mostra só o número; o QA e o navegador conferem que nome, equipe e observação de quem pediu não chegam ao menu. Capturas com dados fictícios. |
+| **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree): `8dec4a9` saída 0 (frontend 25/25, navegador 1029/1029); `8348df8` saída 0 (frontend 25/25, navegador 1046/1046, com as 17 conferências novas do bloco 22). Mutação: commit 1, 15/15; commit 2, 11/11 no `qa:shell` e 3/3 no navegador. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. `gitleaks` sem achados em cada commit. Expectativas que mudaram, com a justificativa, em `PLANO_LOTES_R.md` (Execução, R3). |
+| **Limitacoes declaradas** | O custo da chamada nova do contador (`solicitacoes_pendentes.php` a cada 60 s por sessão de gestão) não foi medido: sem MySQL local. Fica proposta a medição pelo `medir-polling.sh` no roteiro do deploy do redesenho. O `sdk-icon.png` deixou de ser usado pelo app e continua no `public/` até uma limpeza aprovada. O texto de apresentação do login fica para o R6. |
+| **Validacao humana** | Pendente: revisão única no fim do R4b. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

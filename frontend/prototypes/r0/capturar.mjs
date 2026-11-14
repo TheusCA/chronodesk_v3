@@ -63,7 +63,8 @@ const SESSIONS = {
 // Situacao da equipe mais cheia (ficticia): 16 tecnicos em N1 e N2
 // ---------------------------------------------------------------------------
 const SITUATIONS = ['presencial', 'presencial', 'remoto', 'pausa', 'presencial', 'almoco', 'remoto', 'presencial', 'ausente', 'presencial', 'pausa', 'remoto', 'fora_expediente', 'presencial', 'sem_escala', 'remoto']
-const PAUSES = { 4: ['Café', '10:31'], 11: ['Reunião', '10:12'] }
+// [R3] Café do 04 desde 10:18, como no protótipo: o estouro (24 min com limite de 20) aparece nas capturas dos lotes R.
+const PAUSES = { 4: ['Café', '10:18'], 11: ['Reunião', '10:12'] }
 const person = (index) => {
   const id = index + 1
   const situacao = SITUATIONS[index]
