@@ -2621,11 +2621,18 @@ async function pausesR4a(page, port, mock) {
       const asked = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'solicitar_pausa_com_aprovacao.php', mock.requests.length - 5)
       report(`Pausas, ${width} px, reunião: um POST de pedido com o contexto`, posts('solicitar_pausa_com_aprovacao.php').length === requests + 1 && asked?.body?.motivo_pausa === 'Reunião' && asked?.body?.observacao === 'Alinhamento de teste', JSON.stringify(asked?.body))
     }
-    // Com o painel "Sua pausa" ao lado, a lista cabe em 1280 px (sem rolar de lado).
+    // Com o painel "Sua pausa" ao lado, a lista cheia (nomes longos, selos
+    // largos, pausa estourada) cabe em 1280 px, sem rolar de lado.
+    const person = (id, situacao, extra = {}) => ({ id, nome: `Tecnico ${id} Com Um Nome Bem Comprido`, equipe: id < 30 ? 'n1' : 'n2', ativo: true, em_pausa: false, jornada_entrada: '08:00', jornada_saida: '17:00', presenca: { situacao, origem: 'regra_escala', detalhe: situacao }, ...extra })
+    mock.setStatusEmployees({
+      n1: [person(21, 'presencial'), person(22, 'fora_expediente'), person(23, 'sem_escala'), person(24, 'pausa', { em_pausa: true, motivo_pausa: 'Café', inicio_pausa: '2026-10-28T09:20:00-03:00', duracao_limite_segundos: 1200 })],
+      n2: [person(31, 'ausente'), person(32, 'almoco'), person(33, 'pausa', { em_pausa: true, motivo_pausa: 'Reunião', inicio_pausa: '2026-10-28T09:10:00-03:00' })],
+    })
     await goto(page, port, '/pausas', 1280)
-    await page.waitFor(`!!document.querySelector('main tr[data-row]')`)
-    await expectPause('1280 px, técnico: a lista da equipe cabe ao lado de "Sua pausa", sem rolagem lateral', { tabela_rola: false, rolagem_lateral: false })
+    await page.waitFor(`document.querySelectorAll('main tr[data-row]').length >= 8`)
+    await expectPause('1280 px, técnico, lista cheia: a lista da equipe cabe ao lado de "Sua pausa", sem rolagem lateral', { tabela_rola: false, rolagem_lateral: false })
   } finally {
+    mock.setStatusEmployees(null)
     mock.useAdminSession()
   }
 
