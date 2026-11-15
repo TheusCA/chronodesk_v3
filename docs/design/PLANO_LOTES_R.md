@@ -730,3 +730,24 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 As oito primeiras são da varredura final de 14/11/2026, rodada em sequência depois de todos os commits, sem nada em paralelo. O `906caa8` vem depois do `77c4940` no histórico, por isso já soma 1091. Este commit de docs tem a bateria rodada depois dele, com o resultado no estado da sessão.
 
 **Folha do deploy 3:** a contagem de scripts npm não mudou (26: lint, typecheck, build e 23 `qa:*`), e a folha não fixa o número de conferências do navegador (pede `falharam: 0`). Não muda.
+
+### Limpeza do sdk-icon.png e commit do deploy 3 (15/11/2026)
+
+**Aprovados:** o acabamento do R4d (`e627fb3`) e o registro das baterias (`bde0913`).
+
+**Limpeza (`e500a39`, D-R4-2):** o `frontend/public/sdk-icon.png` sai do repositório. A retirada foi preparada pelo responsável, porque a trava de Segurança da Informação da estação barra a IA; a IA gravou o commit. Conferido antes do commit:
+- `git status` só com o arquivo preparado para sair (e o `docs/SCHEDULE_FORM_RHF_ZOD - Copia.md`, intocado e fora do commit);
+- no `src/` e no `index.html`, o nome só aparece num comentário do `BrandMark.jsx`, que não vai para o build;
+- o `public/` fica com o `favicon.png` e o `apple-touch-icon.png`;
+- o `vite.config` tem `emptyOutDir: true`: o build do deploy esvazia o `app/`, e o `sdk-icon.png` antigo do servidor sai junto (o passo 6 do roteiro confere `sdk-icon.png fora do build`).
+
+**Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree de validação, sem nada em paralelo):
+
+| Commit | O que é | Saída | Frontend (lint, typecheck, build e `qa:*`) | Navegador |
+|---|---|---|---|---|
+| `bde0913` | Docs do acabamento e das baterias | 0 | 26/26 | 1092/1092 |
+| `e500a39` | Limpeza do `sdk-icon.png` | 0 | 26/26 | 1092/1092 |
+
+A bateria do `bde0913` rodou depois dele e estava só no estado da sessão; agora fica aqui. Este commit de docs tem a bateria rodada depois dele, com o resultado no estado da sessão.
+
+**Deploy 3:** o commit a publicar é o deste registro (o último do `feat/employee-form-rhf-zod`), porque o roteiro só aceita um commit sem o `sdk-icon.png` (passo 1: `sdk-icon.png no commit: removido`). O hash completo dele é o `<commit validado na estação>` do item 0 da folha, depois da bateria na estação. A folha não muda: continuam 26 scripts npm, e ela pede `falharam: 0` no navegador.

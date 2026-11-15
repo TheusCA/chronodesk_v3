@@ -1419,7 +1419,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. Capturas pelo servidor simulado, com dados fictícios. |
 | **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree): `af453f7` saída 0 (frontend 23/23, navegador 1029/1029); `00651ff` saída 0 (frontend 23/23, navegador 1029/1029). Mutação: commit 1, 21/21 mortos; commit 2, 12/12 (incluindo os três orçamentos do build). Contraste dos tokens do app: 31 pares por tema, 0 falhas (menor texto 5,16:1 no claro e 5,75:1 no escuro). Em 390 px: 0 rolagens laterais; 69 alvos abaixo de 40 px, os mesmos de antes, que ficam para o R2. `gitleaks` sem achados. Expectativas de QA que mudaram, com a justificativa por caso, em `PLANO_LOTES_R.md` (Execução, R1). |
 | **Limitacoes declaradas** | O tema escolhido vale só na aba (D-R1-1); guardar na conta pede API. O selo de algumas telas ainda usa as classes de antes com a cor nova; o redesenho de cada tela é dos lotes R4 a R6. Os cartões "Filtros aplicados" e "Permissão" saem no R4d e no R5 (não no R2): a contagem do primeiro é o que confere o filtro de Almoço do deploy 2. As capturas do commit intermediário ficaram fora do git (D-R0-9). |
-| **Validacao humana** | Pendente: revisão única no fim do R2. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-14 (`af453f7`, `00651ff`, `1609e98`). |
 
 ---
 
@@ -1433,7 +1433,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. QA e capturas com dados fictícios. |
 | **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree) em `936d866`, `6b6b209` e `3365fc7`: saída 0, frontend 24/24, navegador 1029/1029 (e no commit de docs do R1, `1609e98`: 23/23 e 1029/1029). Mutação: 14/14, 14/14 e 10/10 mortos. Medição em 390 px: 0 alvos abaixo de 40 px e 0 rolagens laterais nas 10 telas, nos dois temas (69 por tema no fim do R1). Orçamento do build: JS de entrada 197 893 de 211 050 bytes, CSS 59 625 de 70 000, fontes 85 912 de 100 000. `gitleaks` sem achados em cada commit. |
 | **Limitacoes declaradas** | As telas ainda não usam os componentes novos; usam as classes de hoje, que já desenham o visual novo. A troca é tela a tela nos lotes R4 a R6. O tema da sessão, o "Filtros aplicados" e o "Permissão" seguem como no R1. |
-| **Validacao humana** | Pendente: revisão única do R1 e do R2. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-14 (`936d866`, `6b6b209`, `3365fc7`, `e214ae8`). |
 
 ---
 
@@ -1447,7 +1447,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. O contador do menu mostra só o número; o QA e o navegador conferem que nome, equipe e observação de quem pediu não chegam ao menu. Capturas com dados fictícios. |
 | **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree): `8dec4a9` saída 0 (frontend 25/25, navegador 1029/1029); `8348df8` saída 0 (frontend 25/25, navegador 1046/1046, com as 17 conferências novas do bloco 22). Mutação: commit 1, 15/15; commit 2, 11/11 no `qa:shell` e 3/3 no navegador. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. `gitleaks` sem achados em cada commit. Expectativas que mudaram, com a justificativa, em `PLANO_LOTES_R.md` (Execução, R3). |
 | **Limitacoes declaradas** | O custo da chamada nova do contador (`solicitacoes_pendentes.php` a cada 60 s por sessão de gestão) não foi medido: sem MySQL local. Fica proposta a medição pelo `medir-polling.sh` no roteiro do deploy do redesenho. O `sdk-icon.png` deixou de ser usado pelo app e continua no `public/` até uma limpeza aprovada. O texto de apresentação do login fica para o R6. |
-| **Validacao humana** | Pendente: revisão única no fim do R4b. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-14, na revisão única do R3, do R4a e do R4b. |
 
 ---
 
@@ -1461,7 +1461,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. QA, navegador e capturas com dados fictícios. A observação de reunião segue a regra do DV11. |
 | **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree): `9711d2b` saída 0 (25/25, navegador 1063/1063); `d16c9a8` saída 0 (25/25, 1064/1064); `906ae83` saída 0 (25/25, 1075/1075); `a584367` saída 0 (25/25, 1075/1075). Mutação: 17/17 no QA e 3/3 no navegador; correções 1/1 e 1/1. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. `gitleaks` sem achados em cada commit. Expectativas que mudaram, com a justificativa, em `PLANO_LOTES_R.md` (Execução, R4a). |
 | **Limitacoes declaradas** | "Finalizar pausa" e "Derrubar pausa" ficam com o texto de hoje (o protótipo dizia "Encerrar pausa"): mudar o texto de uma ação auditada fica para decisão do responsável. Dois defeitos do primeiro commit (alvo no celular e largura em 1280 px) só apareceram nas capturas; ganharam travas no navegador e a correção em commits próprios. Sem atalho de teclado para iniciar ou encerrar pausa (fora do plano). |
-| **Validacao humana** | Pendente: revisão única no fim do R4b. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-14, na revisão única do R3, do R4a e do R4b. |
 
 ---
 
@@ -1475,7 +1475,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum nos testes e nas capturas (fictícios). O modo painel não mostra a observação de reunião, que só a gestão vê (correção `2da62d4`). Fica para decisão do responsável se o painel deve esconder também os nomes de quem está em pausa (exposição numa TV de sala). |
 | **Validacao executada pela IA** | Bateria completa (`test-local.ps1 -SkipHttp -Browser`, sozinha no worktree): `34f7de6` saída 0 (25/25, navegador 1074/1074); `2da62d4` saída 0 (25/25, 1075/1075) na bateria repetida sozinha; a primeira rodada, com outros processos em paralelo, falhou numa conferência de tempo do bloco 13 (janela de 900 ms), que passou 3/3 sozinha. Mutação: 19/19 no QA, 3/3 no navegador e 1/1 na correção. Em 390 px, nos dois temas e no painel: 0 alvos abaixo de 40 px e 0 rolagens laterais. Orçamento: CSS 67 012 de 70 000 (o teto não mudou). `gitleaks` sem achados em cada commit. Expectativas que mudaram, com a justificativa, em `PLANO_LOTES_R.md` (Execução, R4b). |
 | **Limitacoes declaradas** | O modo painel não força o tema escuro: o botão de tema está nele, e a escolha vale na sessão (D-R1-1). O painel mostra nomes, como a tela de sempre (decisão pendente acima). O custo do contador do menu (R3) continua sem medição no servidor. |
-| **Validacao humana** | Pendente: revisão única do R3, do R4a e do R4b. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-14 com o R3 e o R4a, e as decisões D-R4-1 (modo painel com os nomes; a observação da reunião fora do painel), D-R4-2 (tirar o `sdk-icon.png`) e D-R4-3 (textos de Finalizar e Derrubar pausa mantidos). |
 
 ---
 
@@ -1489,7 +1489,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum nos testes e nas capturas (fictícios). Modo painel: decisão D-R4-1 registrada (os nomes ficam, a mesma informação da tela de Pausas; a observação de reunião continua fora). |
 | **Validacao executada pela IA** | Bateria completa: `f9790b5` saída 0 (25/25, navegador 1079/1079); `a900eef` saída 0 (26/26, 1084/1084); as duas refeitas sozinhas na varredura final (o lint e o build da estação rodaram alguns segundos em paralelo com a primeira). Mutação: R4c 8/8 no QA e 2/2 no navegador; ajustes 2/2 no navegador. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. `gitleaks` sem achados. |
 | **Limitacoes declaradas** | O `git rm` do `sdk-icon.png` foi bloqueado pela trava de Segurança da Informação da estação; a remoção fica com o responsável, e o roteiro do deploy 3 confere que o commit a traz. |
-| **Validacao humana** | Pendente: revisão única no fim do R4d e do roteiro do deploy 3. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-15 (`f9790b5`, `a900eef`, `c837dc5`, `77c4940`, `906caa8`, `9d22316`). |
 
 ---
 
@@ -1503,7 +1503,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum nos testes e nas capturas (fictícios). O grupo Tools não guarda nada: a marca e o filtro são desabilitados e ficam fora do formulário enviado (o navegador confere o corpo do POST). |
 | **Validacao executada pela IA** | Bateria completa: na varredura final, sozinha, antes da revisão. Mutação: 11/11 no QA, 2/2 no navegador, correção 3/3. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. Navegador 1091/1091 na estação antes do commit. `gitleaks` sem achados. Expectativas que mudaram, com a justificativa, em `PLANO_LOTES_R.md` (Execução, R4d). |
 | **Limitacoes declaradas** | O grupo Tools é só o lugar reservado: o campo, a regra e o filtro de verdade chegam com o módulo de CHGs (P13), com desenho próprio. A sequência "adicionar e editar sujos ao mesmo tempo" deixou de existir (os painéis são modais). |
-| **Validacao humana** | Pendente: revisão única no fim do R4d e do roteiro do deploy 3. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-15 (`f9790b5`, `a900eef`, `c837dc5`, `77c4940`, `906caa8`, `9d22316`). |
 
 ---
 
@@ -1517,7 +1517,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. Sem senha, hostname, IP, nome ou login no roteiro e na folha; o `ServerName` é lido na hora; a senha do MySQL sem eco; o aviso à gestão com marcadores. |
 | **Validacao executada pela IA** | `qa-deploy-runbook.php`: OK (as travas dos deploys 1 e 2 continuam passando com a seção nova). Os 28 comandos com `bash -n` sem erro; roteiro e folha iguais. |
 | **Limitacoes declaradas** | Data, janela e quem acompanha: A DEFINIR. A trava própria do roteiro do deploy 3 no `qa-deploy-runbook.php` (que substitui a lista `$qasAfterDeploy2`, como aprovado no F10-1) fica para o commit seguinte, de teste. O deploy só segue com o commit que traz a remoção do `sdk-icon.png` (o passo 1 dá PARE se ele estiver presente). Os comandos não foram executados contra o servidor. |
-| **Validacao humana** | Pendente: revisão do roteiro e da folha. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-15 (`9815213`, `48d27e1`). |
 
 ---
 
@@ -1531,7 +1531,21 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. QA, navegador e capturas com dados fictícios. |
 | **Validacao executada pela IA** | Baterias completas, sozinhas: `f9790b5` 0 (25/25, 1079/1079); `a900eef` 0 (26/26, 1084/1084); `c837dc5` 0 (26/26, 1089/1089); `77c4940` 0 (26/26, 1091/1091); `906caa8`, `9d22316`, `9815213` e `48d27e1` 0 (26/26, 1091/1091); `e627fb3` 0 (26/26, 1092/1092). Mutação do acabamento: 8/8. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. `gitleaks` sem achados. |
 | **Limitacoes declaradas** | A bateria deste commit de docs roda depois dele (não pode estar escrita nele). A folha do deploy 3 não muda: a contagem de scripts npm continua 26, e ela não fixa o número de conferências do navegador. O `sdk-icon.png` continua no `public/` até o responsável removê-lo; o passo 1 do roteiro do deploy 3 dá PARE enquanto o commit o trouxer. |
-| **Validacao humana** | Pendente: revisão do acabamento e do registro. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-15 (`e627fb3`, `bde0913`). |
+
+---
+
+### Redesenho: limpeza do sdk-icon.png e commit do deploy 3 — 2026-11-15
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | A limpeza aprovada na D-R4-2: o `frontend/public/sdk-icon.png` sai do repositório (nada do app o usa desde o R3), para o deploy 3 seguir com um commit sem ele. O registro da bateria completa, sozinha, do commit da limpeza e do anterior, só de docs. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `e500a39` (limpeza) e um commit só de docs (o registro no plano e esta entrada, com as aprovações). Sem push pela IA. |
+| **O que a IA alterou** | Nenhum código. A retirada do arquivo foi preparada pelo responsável (a trava de Segurança da Informação da estação barra a IA); a IA conferiu as referências, gravou o commit e rodou a bateria. |
+| **Dados pessoais** | Nenhum. |
+| **Validacao executada pela IA** | Antes do commit: no `src/` e no `index.html`, o nome só aparece num comentário do `BrandMark.jsx`; o `public/` fica com o `favicon.png` e o `apple-touch-icon.png`; o `vite.config` esvazia o `app/` no build (`emptyOutDir: true`). Baterias completas, sozinhas: `bde0913` 0 (26/26, 1092/1092); `e500a39` 0 (26/26, 1092/1092). |
+| **Limitacoes declaradas** | A bateria deste commit de docs roda depois dele (não pode estar escrita nele). O deploy 3 publica o commit deste registro, depois da bateria na estação (item 0 da folha). A folha não muda: 26 scripts npm, e o navegador com `falharam: 0`. |
+| **Validacao humana** | Pendente: revisão da limpeza e do registro. |
 
 ---
 
