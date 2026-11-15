@@ -302,8 +302,9 @@ $sortedRunbookQas = $runbookQas;
 sort($sortedRunbookQas);
 sort($repoQas);
 // [F10-1] Os roteiros dos deploys 1 e 2 ja foram executados e ficam como
-// foram. QA criado depois do deploy 2 fica nesta lista ate entrar no roteiro
-// do proximo deploy; QA novo fora dela continua reprovando aqui.
+// foram: esta lista so separa o que eles rodaram. Desde o deploy 3 (secao 15)
+// o roteiro do proximo deploy roda TODOS os QAs PHP do repositorio, sem
+// excecao: QA novo reprova la ate entrar no roteiro.
 $qasAfterDeploy2 = ['qa-pa-distribution', 'qa-paridade-escala'];
 assert_same($qasAfterDeploy2, array_values(array_intersect($qasAfterDeploy2, $repoQas)), 'QAs criados depois do deploy 2: cada um existe no repositorio');
 $repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2));
@@ -753,5 +754,118 @@ assert_same([0, 0, 0, 0, 0], [
     preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet2),
     preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet2)),
 ], 'folha do deploy 2: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
+
+// ----------------------------------------------------------------------------
+// 15. Deploy 3 (F10-1 sem efeito, redesenho R1 a R4d e limpeza do
+// sdk-icon.png): so codigo, sem migration. Desde 2026-11-14 o ensaio dele roda
+// TODOS os QAs PHP do repositorio: a lista dos QAs criados depois do deploy 2
+// deixa de ser excecao (aprovado no F10-1, 8.4); ela so separa o que os
+// roteiros ja executados dos deploys 1 e 2 rodaram.
+// ----------------------------------------------------------------------------
+$heading3 = '### Deploy 3 (F10-1 sem efeito em producao';
+$start3 = strpos($deployDoc, $heading3);
+$ends3 = $start3 === false ? [] : array_filter([strpos($deployDoc, "\n### ", $start3 + 1), strpos($deployDoc, "\n## ", $start3)], static fn ($pos): bool => $pos !== false);
+$runbook3 = $start3 === false ? '' : substr($deployDoc, $start3, ($ends3 === [] ? strlen($deployDoc) : min($ends3)) - $start3);
+$prose3 = (string)preg_replace('/\s+/', ' ', $runbook3);
+preg_match_all('/```(bash|powershell)\n(.*?)```/s', $runbook3, $blocks3);
+$commands3 = array_values(array_filter(explode("\n", implode("\n", $blocks3[2])), static fn (string $line): bool => trim($line) !== ''));
+$text3 = implode("\n", $commands3);
+$first3 = static function (string $needle) use ($commands3): int {
+    foreach ($commands3 as $i => $line) {
+        if (strpos($line, $needle) !== false) {
+            return $i;
+        }
+    }
+    return -1;
+};
+$all3 = static fn (string $needle): array => array_keys(array_filter($commands3, static fn (string $line): bool => strpos($line, $needle) !== false));
+assert_same([true, [], []], [$runbook3 !== '' && count($commands3) >= 20 && $blocks3[1] === array_fill(0, count($blocks3[1]), 'bash'), array_values(array_filter($commands3, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), array_values(array_filter($commands3, static fn (string $line): bool => preg_match('/\bsudo\b/', $line) === 1))], 'deploy 3: secao com os comandos Linux, um por linha, nenhum com sudo');
+assert_same([0, $envCheck], [$first3('R=OK; [ "$(id -u)" = 0 ]'), $commands3[0] ?? ''], 'deploy 3: o 1o comando e a conferencia do ambiente, igual a dos deploys 1 e 2');
+$prodLine3 = $first3('if [ "$H" = "cf73984b26197bafe492a3671c1a80468848b83e" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy3-commit');
+$record3 = $first3('| tee /var/backups/chronodesk/deploy3-commit');
+$fetch3 = array_keys(array_filter($commands3, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
+$check3 = $first3('git merge-base --is-ancestor HEAD "$D3"');
+$merge3 = $first3('git merge --ff-only "$D3"');
+assert_same(true, $prodLine3 === 1 && strpos($commands3[1], 'echo "PARE: HEAD de producao') !== false && strpos($commands3[1], 'echo "alteracoes locais: $(git status --porcelain | wc -l)"') !== false, 'deploy 3: producao no cf73984 (completo, o do deploy 2), gravado como ponto de volta, e alteracoes locais contadas');
+assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin feat\/employee-form-rhf-zod && K=\$\(git rev-parse origin\/feat\/employee-form-rhf-zod\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy3-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands3[$record3] ?? ''), 'deploy 3: fetch so do branch e grava so o commit validado na estacao');
+assert_same([[$record3], 0], [$fetch3, preg_match('/\bgit pull\b|(^|\s)(--force|-f)(\s|$)/m', $text3)], 'deploy 3: um fetch so (o da gravacao), sem pull, sem --force');
+assert_same(true, $check3 === $record3 + 1 && strpos($commands3[$check3], 'git cat-file -e "$D3^{commit}" && ') !== false && strpos($commands3[$check3], 'echo "migrations alteradas: $(git diff --name-only HEAD "$D3" -- migrations | wc -l)"') !== false && strpos($commands3[$check3], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D3" -- frontend/package-lock.json | wc -l)"') !== false && strpos($commands3[$check3], 'echo "sdk-icon.png no commit: $(git cat-file -e "$D3:frontend/public/sdk-icon.png" 2>/dev/null && echo presente || echo removido)"') !== false, 'deploy 3: cat-file, fast-forward, migrations, lockfile e o sdk-icon.png conferidos logo depois de gravar');
+assert_same(true, strpos($prose3, '`sdk-icon.png no commit: removido`') !== false && strpos($prose3, '**PARE** com qualquer `PARE`') !== false, 'deploy 3: o commit sem o sdk-icon.png e esperado no passo 1');
+assert_same([[$merge3], 0, 0], [array_values(array_filter($all3('git merge'), static fn (int $i): bool => strpos($commands3[$i], 'merge-base') === false)), preg_match('/git show "\$D3:migrations|migrations\/20\d{6}_|biz02_0/', $text3), preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|GRANT)\b/', implode("\n", array_filter($commands3, static fn (string $line): bool => strpos($line, 'mysql') !== false && strpos($line, 'mysqldump') === false)))], 'deploy 3: um merge so, nenhuma migration aplicada, nenhum comando de escrita no MySQL');
+assert_same(true, strpos($commands3[$merge3] ?? '', '[ "$(git rev-parse HEAD)" = "$D3" ] && echo "HEAD = deploy3-commit" || echo "PARE: ') !== false, 'deploy 3: HEAD conferido no comando do merge');
+// Ensaio com TODOS os QAs PHP do repositorio, inclusive os do F10-1.
+$tmpEnv3 = $first3('[ ! -e /tmp/.env ] && echo "/tmp/.env ausente: OK"');
+$archive3 = $first3('Q=$(mktemp -d /tmp/ensaio-deploy3-qa.XXXXXX)');
+$qaLoop3 = $first3('[ ! -e /tmp/.env ] && for q in ');
+$qaSweep3 = $first3('for Q in /tmp/ensaio-deploy3-qa.??????; do');
+preg_match('/for q in ([a-z0-9 -]+); do/', $commands3[$qaLoop3] ?? '', $qaList3);
+$runbookQas3 = explode(' ', trim($qaList3[1] ?? ''));
+sort($runbookQas3);
+$allRepoQas = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
+sort($allRepoQas);
+assert_same([true, $allRepoQas], [$check3 < $tmpEnv3 && $tmpEnv3 < $archive3 && $archive3 < $qaLoop3 && $qaLoop3 < $qaSweep3 && $qaSweep3 < $merge3, $runbookQas3], 'deploy 3: ensaio do codigo antes do merge, com TODOS os QAs PHP do repositorio (sem lista de excecao)');
+assert_same([true, true], [in_array('qa-pa-distribution', $runbookQas3, true), in_array('qa-paridade-escala', $runbookQas3, true)], 'deploy 3: os QAs do F10-1 no ensaio');
+assert_same(true, strpos($commands3[$archive3] ?? '', 'bash -o pipefail -c \'git archive "$D3" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands3[$qaLoop3] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && strpos($text3, 'qa-timezone.php --db') !== false && substr_count($text3, '--db') === 1, 'deploy 3: ensaio com pipefail, como www-data, e o --db so no qa-timezone do passo 7');
+assert_same([$archive3], array_keys(array_filter($commands3, static fn (string $line): bool => preg_match('/\b(chown|chmod)\b/', $line) === 1)), 'deploy 3: permissao so do diretorio do ensaio');
+// Espaco, backup, manutencao, copia do app/, merge, build e qa:bundle, recarga, health, fuso, fumaca, reabertura, polling e rollback.
+$space3 = $first3('for LIM in "/var/www/chronodesk:500"');
+$backup3 = $first3('B=/var/backups/chronodesk/deploy3-$(date +%Y%m%d-%H%M%S)');
+$maintOn3 = $first3('touch /var/www/chronodesk.maintenance');
+$appCopy3 = $first3('A=/var/backups/chronodesk/app-antes-deploy3; if test -e "$A"; then');
+$build3 = $first3('cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy3-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi');
+$bundle3 = $first3('cd /var/www/chronodesk/frontend && npm run -s qa:bundle; test -e ../app/sdk-icon.png && echo "PARE: sdk-icon.png ainda no build" || echo "sdk-icon.png fora do build"');
+$reloads3 = $all3('systemctl reload "php$(php -r');
+$health3 = $first3("-w 'health: %{http_code}\\n'");
+$tz3 = $first3('runuser -u www-data -- php scripts/qa-timezone.php --db');
+$smoke3 = $first3('bash scripts/smoke-deploy1.sh "$S"');
+$maintOff3 = $first3('rm -- /var/www/chronodesk.maintenance');
+$polling3 = $all3('bash scripts/medir-polling.sh');
+$checkout3 = $first3('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy3-commit)"');
+$appBack3 = $first3('A=/var/backups/chronodesk/app-antes-deploy3; X=/var/backups/chronodesk/app-deploy3-retirado-');
+assert_same(true, $qaSweep3 < $space3 && $space3 + 1 === $backup3 && $backup3 < $maintOn3 && $maintOn3 < $appCopy3 && $appCopy3 < $merge3 && $merge3 < $build3 && $build3 + 1 === $bundle3 && ($reloads3[0] ?? -1) === $bundle3 + 1 && $bundle3 < $health3 && $health3 < $tz3 && $tz3 < $smoke3 && $smoke3 < $maintOff3 && $maintOff3 < min($polling3 ?: [-1]) && max($polling3 ?: [PHP_INT_MAX]) < $checkout3 && $checkout3 + 1 === $appBack3 && ($reloads3[1] ?? -1) === $appBack3 + 1, 'deploy 3: espaco e backup, manutencao e copia do app/, merge, build e qa:bundle, recarga, health, fuso, fumaca, reabertura, polling e rollback, nesta ordem');
+assert_same(true, ($commands[$spaceLines[0]] ?? '') === $commands3[$space3] && strpos($commands3[$backup3] ?? '', "read -rsp 'Senha root do MySQL: ' P;") !== false && strpos($commands3[$backup3], '&& gzip -t "$B/database.sql.gz" && ') !== false && strpos($commands3[$backup3], 'sha256sum database.sql.gz estado.tar.gz > SHA256SUMS') !== false && preg_match('/unset P$/', rtrim($commands3[$backup3])) === 1, 'deploy 3: o mesmo espaco livre do deploy 1 e o backup com pipefail, gzip -t, SHA256SUMS e a senha apagada');
+assert_same(true, strpos($commands3[$appBack3] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all3('npm '), static fn (int $i): bool => $i >= $checkout3)) === 0, 'deploy 3: rollback volta o app/ da copia, sem npm');
+// Polling: os tres endpoints, depois da reabertura, 2 rodadas, sessao de gestao.
+assert_same(3, count($polling3), 'deploy 3: tres medicoes do polling');
+assert_same(true, strpos($commands3[$polling3[0]] ?? '', 'cd /var/www/chronodesk; bash scripts/medir-polling.sh') === 0 && strpos($commands3[$polling3[1]] ?? '', 'URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh') !== false && strpos($commands3[$polling3[2]] ?? '', 'URL=http://127.0.0.1/api/solicitacoes_pendentes.php bash scripts/medir-polling.sh') !== false, 'deploy 3: status.php, dashboard.php e o solicitacoes_pendentes.php do contador do menu');
+assert_same(true, strpos($prose3, '**alguns minutos depois da reabertura**') !== false && strpos($prose3, '**2 rodadas por endpoint, valendo a melhor**') !== false && strpos($prose3, 'A sessao e de **gestao**') !== false, 'deploy 3: polling alguns minutos depois da reabertura, 2 rodadas, sessao de gestao (aprovado em 2026-11-12)');
+// Prosa: o que vai, aviso a gestao, conferencia na tela e a bateria na estacao.
+assert_same(true, strpos($prose3, '**Nenhuma migration**') !== false && strpos($prose3, '**o lockfile nao mudou**') !== false && strpos($prose3, '**Sem efeito em producao**') !== false && strpos($prose3, '**O visual muda para todos**') !== false && strpos($runbook3, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy3 origin/feat/employee-form-rhf-zod;') !== false && strpos($runbook3, 'scripts\\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`') !== false, 'deploy 3: sem migration, lockfile, F10-1 sem efeito, o visual de todos e a bateria completa na estacao (item 0)');
+assert_same(true, strpos($prose3, '0b. **Aviso a gestao, na vespera**') !== false && strpos($prose3, '<data>') !== false && strpos($prose3, '<contato>') !== false, 'deploy 3: aviso a gestao com marcadores, sem valor real');
+foreach (['**Pausas:**', '**Visao operacional:**', '**Modo painel:**', '/app/dashboard?painel=1', '**Aprovacoes:**', '**Funcionarios:**', 'filtro "Almoco"', '**Tema escuro:**'] as $screen) {
+    assert_same(true, strpos($prose3, $screen) !== false, "deploy 3: conferencia na tela com {$screen}");
+}
+$outside3 = array_values(array_filter($commands3, static fn (string $line): bool => strpos($line, 'curl') !== false));
+assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text3), count(array_filter($outside3, static fn (string $line): bool => strpos($line, $serverNameRead) !== false)) === count($outside3)], 'deploy 3: ServerName do chronodesk.conf em todo curl, sem marcador e sem https');
+// Folha do deploy 3: os mesmos comandos, na mesma ordem, numerados.
+$sheet3 = $readOptional($root . '/docs/DEPLOY3_FOLHA_DO_DIA.md');
+[$runbook3All] = $fencedCommands($runbook3);
+[$sheet3All, $sheet3Blocks] = $fencedCommands($sheet3);
+assert_same([true, $runbook3All], [$sheet3 !== '' && count($runbook3All) === count($commands3), $sheet3All], 'folha do deploy 3: os mesmos comandos do roteiro, na mesma ordem');
+assert_same(count($sheet3All), $sheet3Blocks, 'folha do deploy 3: um comando por bloco');
+$sheet3Lines = explode("\n", $sheet3);
+$unmarked3 = [];
+foreach ($sheet3Lines as $i => $line) {
+    if (preg_match('/^```bash$/', $line) !== 1) {
+        continue;
+    }
+    $previous = '';
+    for ($j = $i - 1; $j >= 0 && $previous === ''; $j--) {
+        $previous = trim($sheet3Lines[$j]);
+    }
+    if (preg_match('/^- \[ \] \*\*\d+\.\*\* .*Esperado: .+ \*\*PARE se:\*\* .+/', $previous) !== 1) {
+        $unmarked3[] = $i + 1;
+    }
+}
+preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* \(/m', $sheet3, $sheet3Numbers);
+assert_same([[], range(1, count($sheet3All))], [$unmarked3, array_map('intval', $sheet3Numbers[1])], 'folha do deploy 3: cada comando com caixa, numero de 1 em diante, Esperado e PARE se');
+$sheet3NoLoopback = str_replace('127.0.0.1', '', $sheet3);
+assert_same([0, 0, 0, 0, 0], [
+    preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheet3NoLoopback),
+    preg_match('/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\./', $sheet3),
+    preg_match('/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(local|lan|corp|intra|internal|com|br|net|org)\b/i', $sheet3),
+    preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet3),
+    preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet3)),
+], 'folha do deploy 3: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
 
 echo "QA deploy runbook OK ({$checks} verificacoes)\n";
