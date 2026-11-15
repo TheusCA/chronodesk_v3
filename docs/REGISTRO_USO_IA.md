@@ -1507,6 +1507,20 @@ Base da afirmação:
 
 ---
 
+### Deploy 3: roteiro e folha do dia (F10-1 sem efeito, redesenho R1 a R4d e limpeza do sdk-icon.png) — 2026-11-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Roteiro e folha do deploy 3, pedidos ao fim do R4d: tudo desde o `cf73984` (deploy 2): o F10-1 (sem efeito em produção), o redesenho R1 a R4d e a limpeza do `sdk-icon.png`. Só código, sem migration; build sem `npm ci` (o lockfile não mudou; o comando faz o `npm ci` se mudar); os QAs novos no ensaio; o aviso curto à gestão; a medição do polling alguns minutos depois da reabertura, 2 rodadas, com o `solicitacoes_pendentes.php` do contador do menu numa sessão de gestão; a conferência na tela; o rollback pela cópia do `app/`. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: um commit só de docs (`DEPLOY_LINUX.md`, seção "Deploy 3"; `docs/DEPLOY3_FOLHA_DO_DIA.md`; esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | Só documentação. O roteiro segue o do deploy 2 (shell root sem `sudo`, conferência do ambiente, um `fetch` só, `cat-file`, fast-forward, ensaio em `/tmp` como `www-data` com os 18 QAs PHP, backup, manutenção, cópia do `app/`, `merge --ff-only`, recarga, health, fuso, fumaça, reabertura, polling e rollback) e acrescenta: a conferência de que o commit não traz o `sdk-icon.png`, o build condicionado ao lockfile, o `qa:bundle` no servidor (o único QA do frontend que roda lá: só lê o `app/`), a conferência na tela do redesenho e a terceira medição do polling. A folha tem os mesmos 28 comandos, na mesma ordem (conferido com `bash -n` em cada um). |
+| **Dados pessoais** | Nenhum. Sem senha, hostname, IP, nome ou login no roteiro e na folha; o `ServerName` é lido na hora; a senha do MySQL sem eco; o aviso à gestão com marcadores. |
+| **Validacao executada pela IA** | `qa-deploy-runbook.php`: OK (as travas dos deploys 1 e 2 continuam passando com a seção nova). Os 28 comandos com `bash -n` sem erro; roteiro e folha iguais. |
+| **Limitacoes declaradas** | Data, janela e quem acompanha: A DEFINIR. A trava própria do roteiro do deploy 3 no `qa-deploy-runbook.php` (que substitui a lista `$qasAfterDeploy2`, como aprovado no F10-1) fica para o commit seguinte, de teste. O deploy só segue com o commit que traz a remoção do `sdk-icon.png` (o passo 1 dá PARE se ele estiver presente). Os comandos não foram executados contra o servidor. |
+| **Validacao humana** | Pendente: revisão do roteiro e da folha. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

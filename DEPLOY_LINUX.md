@@ -4618,6 +4618,289 @@ dos deploys 1 e 2 depois de um ciclo estavel, so com aprovacao, listando
 antes so nome, modo, dono e tamanho (inclui a copia `env-antes-php-log-*`,
 pelo nome).
 
+### Deploy 3 (F10-1 sem efeito em producao, redesenho R1 a R4d e limpeza do sdk-icon.png; so codigo, sem migration)
+
+**O que vai** (tudo depois do `cf73984`, que esta no ar desde 12/11/2026):
+
+- **F10-1** (`968e9b1`, `665b219`): o motor puro de distribuicao de PA e o
+  script de paridade da escala mensal. **Sem efeito em producao**: nenhuma
+  tela, endpoint ou cron chama o motor; o script so roda a mao, com
+  arquivos do responsavel. Entram no ensaio os dois QAs dele
+  (`qa-pa-distribution` e `qa-paridade-escala`).
+- **Redesenho R1 a R4d** (`docs/design/PLANO_LOTES_R.md`): tokens, dois
+  temas e fontes auto-hospedadas (R1), primitivos (R2), casca (R3), Pausas
+  (R4a), Visao operacional e modo painel (R4b), Aprovacoes (R4c) e
+  Funcionarios (R4d). So apresentacao: nenhuma regra, API, permissao ou
+  texto de seguranca mudou. **O visual muda para todos**: vai junto o aviso
+  a gestao (passo 0b).
+- **Limpeza do `frontend/public/sdk-icon.png`**: o app deixou de usa-lo no
+  R3 (marca em texto). O `favicon.png` e o `apple-touch-icon.png` ficam.
+- Os commits de docs de cada lote.
+
+**Nenhuma migration** (o passo 1 confere) e **o lockfile nao mudou** desde o
+`cf73984` (o `package.json` ganhou so scripts `qa:*`): o build do passo 6 roda
+sem `npm ci`. Se o passo 1 mostrar `lockfile alterado: 1`, o mesmo comando do
+passo 6 faz o `npm ci` antes do build. O F8 e o F9 continuam fora: esperam a
+Lideranca e passam a ser o **deploy 4**, com roteiro proprio (a numeracao
+segue a ordem de execucao, como decidido em 2026-11-12).
+
+**Chamada nova no polling:** o contador do menu (R3) busca o
+`api/solicitacoes_pendentes.php` a cada 60 s, com a aba visivel, e a cada
+troca de tela, so nas sessoes de gestao (`operacao.approve`). O passo 10 mede
+o custo dele junto com o `status.php` e o `dashboard.php`.
+
+A folha do dia e `docs/DEPLOY3_FOLHA_DO_DIA.md`: os mesmos comandos, na
+mesma ordem. Mudou um, muda o outro no mesmo commit.
+
+**Data, janela e quem acompanha: A DEFINIR** com o responsavel. A janela
+fica com a manutencao de poucos minutos do deploy 2 (cerca de 3 min no dia).
+
+**Shell root, sem `sudo`**, como nos deploys 1 e 2: o operador abre o
+terminal da VM com `sudo -i` e roda todos os comandos nele, sem o prefixo
+`sudo`; o que roda como `www-data` usa `runuser -u www-data --`. O 1o
+comando e a conferencia do ambiente (a mesma dos deploys 1 e 2); **qualquer
+`BLOQUEADO` e PARE**. Terminal reaberto: `sudo -i` e a conferencia de novo;
+os comandos leem o commit e o `ServerName` de arquivos, nao de variaveis de
+um terminal anterior.
+
+**Sem valor real**: a senha do root do MySQL e lida sem eco (`read -rsp`) e
+apagada no fim do comando; o `ServerName` e lido do
+`/etc/apache2/sites-enabled/chronodesk.conf` na hora (nunca escrito aqui);
+as consultas devolvem so contagens. Todo `curl` usa `http://` com o
+`ServerName`, ou o loopback com o `Host`. Onde aparece `<commit validado na
+estacao>`, o hash completo anotado no item 0. Cada comando em **uma linha**.
+
+**Regras de parada:** qualquer linha com `PARE`, ou saida diferente do
+"Esperado": pare e envie so a contagem ou a mensagem. Nada de `git pull`; o
+unico `git fetch` e o do passo 1, so do branch.
+
+0. **Antes do dia, na estacao.** O responsavel publica o
+   `feat/employee-form-rhf-zod`. Depois, a bateria completa sobre o commit
+   do branch, sozinha (nada pesado em paralelo, nem outra bateria nem
+   capturas):
+   `git fetch origin; git worktree add --detach ..\chronodesk-deploy3 origin/feat/employee-form-rhf-zod; Set-Location ..\chronodesk-deploy3\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`.
+   Esperado: `Validacao local concluida com sucesso`, a linha
+   `frontend: 26 scripts npm rodados (...): 26 OK, 0 com falha` (lint,
+   typecheck, build e 23 `qa:*`), o roteiro de navegador com `falharam: 0`
+   e o hash completo no fim: anote como `<commit validado na estacao>`.
+   Qualquer falha: nao ha deploy com esse commit.
+
+0b. **Aviso a gestao, na vespera** (pelo canal de sempre; sem nome, sem
+   hostname, sem endereco): "Em <data>, entre <inicio> e <fim>, o portal
+   fica indisponivel por alguns minutos para uma atualizacao. Depois dela, o
+   visual muda para todos: tema claro por padrao (o escuro continua no
+   botao do topo), Pausas com os motivos a vista, a Visao operacional com
+   os disponiveis no topo e um modo painel para a tela da sala
+   (/app/dashboard?painel=1), Aprovacoes com um filtro por tipo e
+   Funcionarios com adicionar e editar num painel lateral. Nenhuma regra,
+   permissao ou dado muda. Duvidas: <contato>."
+
+**1. Conferencia do ambiente, commit validado e producao no `cf73984`.**
+
+```bash
+R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
+cd /var/www/chronodesk; install -d -o root -g root -m 700 /var/backups/chronodesk; H=$(git rev-parse HEAD); if [ "$H" = "cf73984b26197bafe492a3671c1a80468848b83e" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy3-commit >/dev/null; echo "HEAD de producao: cf73984 (OK, gravado em pre-deploy3-commit)"; else echo "PARE: HEAD de producao $(git rev-parse --short HEAD), nao o cf73984"; fi; echo "branch: $(git rev-parse --abbrev-ref HEAD)"; echo "alteracoes locais: $(git status --porcelain | wc -l)"; unset H
+cd /var/www/chronodesk; git fetch origin feat/employee-form-rhf-zod && K=$(git rev-parse origin/feat/employee-form-rhf-zod) && if [ "$K" = "<commit validado na estacao>" ]; then echo "$K" | tee /var/backups/chronodesk/deploy3-commit; else echo "PARE: origin/feat/employee-form-rhf-zod ($K) nao e o commit validado na estacao"; fi; unset K
+cd /var/www/chronodesk; D3=$(cat /var/backups/chronodesk/deploy3-commit); git cat-file -e "$D3^{commit}" && git cat-file -e "$D3:scripts/smoke-deploy1.sh" && git merge-base --is-ancestor HEAD "$D3" && echo "fast-forward OK: $(git rev-list --count HEAD.."$D3") commits a aplicar" || echo "PARE: deploy3-commit ausente, sem o smoke-deploy1.sh ou o HEAD nao e ancestral dele"; echo "migrations alteradas: $(git diff --name-only HEAD "$D3" -- migrations | wc -l)"; echo "lockfile alterado: $(git diff --name-only HEAD "$D3" -- frontend/package-lock.json | wc -l)"; echo "sdk-icon.png no commit: $(git cat-file -e "$D3:frontend/public/sdk-icon.png" 2>/dev/null && echo presente || echo removido)"; unset D3
+```
+
+   Esperado: `ambiente: OK`; `HEAD de producao: cf73984 (OK, ...)`,
+   `branch: codex/modernizacao-ui-backend`, `alteracoes locais: 0`; o hash
+   do commit validado gravado em `deploy3-commit`; `fast-forward OK` com o
+   numero de commits da entrega (anote), `migrations alteradas: 0`,
+   `lockfile alterado: 0` e `sdk-icon.png no commit: removido`. **PARE** com
+   qualquer `PARE`, alteracao local, migration alterada (este roteiro nao
+   aplica migration) ou outro HEAD (algo mudou em producao desde o deploy
+   2: traga o hash curto). `lockfile alterado: 1` nao e PARE: o passo 6
+   faz o `npm ci` (anote).
+
+**2. Ensaio do codigo do commit gravado**, como no deploy 2: o commit
+inteiro extraido em `/tmp`, dono `www-data`, e todos os QAs PHP do
+repositorio como `www-data`, agora com os dois do F10-1. Nenhum QA do
+ensaio toca o banco real (o `qa-timezone` roda sem `--db`); o unico QA
+contra o banco real e o `qa-timezone --db` do passo 7.
+
+```bash
+[ ! -e /tmp/.env ] && echo "/tmp/.env ausente: OK" || echo "PARE: existe /tmp/.env; o ensaio leria esse arquivo"
+cd /var/www/chronodesk; export D3=$(cat /var/backups/chronodesk/deploy3-commit); Q=$(mktemp -d /tmp/ensaio-deploy3-qa.XXXXXX); export Q; bash -o pipefail -c 'git archive "$D3" | tar -x -C "$Q"' && chown -R www-data: "$Q" && echo "extraido em $Q" || echo "PARE: falha ao extrair o deploy3-commit"
+find "$Q" -name '*.php' -not -path '*/node_modules/*' -exec runuser -u www-data -- php -l {} \; | grep -v '^No syntax errors' ; echo "fim do php -l"
+[ ! -e /tmp/.env ] && for q in qa-smoke qa-auth qa-timezone qa-overtime qa-schedule-history qa-schedule-legacy-output qa-presence-engine qa-absences qa-calendar-text qa-archive qa-presence-cutoff qa-pa-conflicts qa-operational-view qa-employee-lunch qa-pa-distribution qa-paridade-escala qa-security qa-deploy-runbook; do printf '%s: ' "$q"; runuser -u www-data -- php "$Q/scripts/$q.php" >/dev/null 2>&1 && echo OK || echo FALHOU; done
+for Q in /tmp/ensaio-deploy3-qa.??????; do [ -d "$Q" ] && rm -r -- "$Q" && echo "removido: $Q"; done; echo "ensaios restantes: $(ls -d /tmp/ensaio-deploy3-qa.?????? 2>/dev/null | wc -l)"; unset Q D3
+```
+
+   Esperado: `/tmp/.env ausente: OK`; `extraido em
+   /tmp/ensaio-deploy3-qa.<sufixo>`; nenhuma linha antes de
+   `fim do php -l`; os 18 QAs com `OK`; `removido: ...` e
+   `ensaios restantes: 0`. **PARE** com qualquer `FALHOU`: antes da limpeza,
+   rode o QA de novo sem o `>/dev/null` e envie so o nome e a ultima linha
+   (o deploy nao segue com esse commit).
+
+**3. Espaco livre e backup rapido**, com o portal no ar (os mesmos limites
+e o mesmo dump do deploy 2).
+
+```bash
+cd /var/www/chronodesk/frontend; NPMC=$(npm config get cache); test -e "$NPMC" || NPMC=$(dirname "$NPMC"); DROOT=$(docker info --format '{{.DockerRootDir}}'); ESP=OK; for LIM in "/var/www/chronodesk:500" "$NPMC:200" "/var/backups:100" "$DROOT:200" "/tmp:50" "/root:50"; do DIR=${LIM%:*}; MIN=${LIM##*:}; LIVRE=$(df -BM --output=avail "$DIR" | tail -n 1 | tr -dc '0-9'); if [ "${LIVRE:-0}" -ge "$MIN" ]; then echo "OK $DIR (disco $(df --output=target "$DIR" | tail -n 1)): $LIVRE MB livres, minimo $MIN"; else echo "BAIXO $DIR: ${LIVRE:-?} MB livres, minimo $MIN"; ESP=PARE; fi; done; [ "$ESP" = OK ] && echo "espaco livre: OK" || echo "PARE: espaco livre abaixo do minimo"; unset NPMC DROOT ESP LIM DIR MIN LIVRE
+B=/var/backups/chronodesk/deploy3-$(date +%Y%m%d-%H%M%S); export B; read -rsp 'Senha root do MySQL: ' P; echo; export P; install -d -o root -g root -m 700 "$B" && bash -o pipefail -c 'docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysqldump -uroot --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | gzip | tee "$B/database.sql.gz" > /dev/null' && gzip -t "$B/database.sql.gz" && tar -czf "$B/estado.tar.gz" -C /var/www/chronodesk --ignore-failed-read estado.json pausas.csv config_sistema.json funcionarios.json && sh -c 'cd "$1" && sha256sum database.sql.gz estado.tar.gz > SHA256SUMS' _ "$B" && echo "backup concluido: $B ($(du -sh "$B" | cut -f1))" || echo "PARE: backup falhou (sem ponto de restauracao, o deploy nao segue)"; unset P
+```
+
+   Esperado: seis linhas `OK` e `espaco livre: OK`; `backup concluido:
+   /var/backups/chronodesk/deploy3-<data> (<tamanho>)` (anote; o do deploy
+   2 tinha 52K). **PARE** com `BAIXO` (liberar espaco e da infraestrutura;
+   nada se apaga de improviso) ou backup que falhou.
+
+**4. Manutencao e copia do `app/`.** O build do passo 6 troca o `app/`
+enquanto os usuarios usam: com o arquivo-sinal, o portal responde 503 ate o
+passo 9. A copia do `app/` e o ponto de volta do passo 11, sem `npm`.
+
+```bash
+touch /var/www/chronodesk.maintenance; echo "arquivo de manutencao: $(test -e /var/www/chronodesk.maintenance && echo presente || echo AUSENTE)"
+cd /var/www/chronodesk; A=/var/backups/chronodesk/app-antes-deploy3; if test -e "$A"; then diff -rq app "$A" && echo "copia do app/ ja existe e e igual: $A" || echo "PARE: $A existe e e diferente do app/ atual"; else cp -a app "$A" && diff -rq app "$A" && echo "copia do app/: $A ($(du -sh "$A" | cut -f1); $(find "$A" -type f | wc -l) arquivos)" || echo "PARE: copia do app/ falhou"; fi; unset A
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora (manutencao): %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+```
+
+   Esperado: `arquivo de manutencao: presente`; `copia do app/: ...` (anote
+   o tamanho e os arquivos; no deploy 2, 868K e 28 arquivos);
+   `portal visto de fora (manutencao): 503`. Sem `503`: confira de uma
+   estacao, no navegador, que aparece "ChronoDesk temporariamente
+   indisponivel.". **PARE** com `AUSENTE`, copia que falhou, ou a estacao
+   vendo a tela do portal: tire o arquivo-sinal (comando do passo 9) e
+   avise.
+
+**5. `git merge --ff-only` do commit gravado** (sem `fetch`, sem `pull`) e o
+`HEAD` conferido:
+
+```bash
+cd /var/www/chronodesk; D3=$(cat /var/backups/chronodesk/deploy3-commit); git merge --ff-only "$D3"; [ "$(git rev-parse HEAD)" = "$D3" ] && echo "HEAD = deploy3-commit" || echo "PARE: HEAD diferente do deploy3-commit"; echo "alteracoes locais: $(git status --porcelain | wc -l)"; unset D3
+```
+
+   Esperado: o `merge` em fast-forward, `HEAD = deploy3-commit` e
+   `alteracoes locais: 0`. **PARE**: fique em manutencao, nada de `fetch`
+   nem `pull`; o codigo anterior volta pelo passo 11 so se o `HEAD` mudou.
+
+**6. Build do frontend e o QA do bundle.** Sem lockfile alterado, so o build;
+com ele, o `npm ci` antes (nunca `npm install`). Depois, o `qa:bundle`
+confere o build que vai ao ar: orcamento (JS de entrada, CSS de 70 KB,
+fontes) e as rotas. E o QA do frontend que roda no servidor (so le o
+`app/`, sem dependencia de desenvolvimento nem navegador); os outros 22
+`qa:*` e o roteiro do navegador rodam na estacao, no item 0.
+
+```bash
+cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy3-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi
+cd /var/www/chronodesk/frontend && npm run -s qa:bundle; test -e ../app/sdk-icon.png && echo "PARE: sdk-icon.png ainda no build" || echo "sdk-icon.png fora do build"
+```
+
+   Esperado: `lockfile sem mudanca: so o build` e o build sem erro (o do
+   deploy 2 levou 1,22 s); `Bundle frontend QA OK (...)` com o CSS abaixo de
+   70000 bytes; `sdk-icon.png fora do build`. **PARE** com as mesmas regras
+   do passo 6 do deploy 2: falha por falta de espaco (`ENOSPC`) ou de rede
+   (`ETIMEDOUT`, `ECONNRESET`, `ECONNREFUSED`, `EAI_AGAIN`, `ENOTFOUND`,
+   `E403`, `E404`, `E5xx`, `EINTEGRITY`): fique em manutencao, sem recarga,
+   e avise; resolvido, repita uma vez; senao, passo 11. `qa:bundle` com
+   falha ou outra falha no build: passo 11, com aprovacao.
+
+**7. Recarga, health, fuso e teste de fumaca**, ainda em manutencao (o
+loopback passa pela manutencao de proposito):
+
+```bash
+systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'health: %{http_code}\n' -H "Host: $S" http://127.0.0.1/api/health.php; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+cd /var/www/chronodesk; runuser -u www-data -- php scripts/qa-timezone.php --db
+cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then env PHPLOG=/var/log/chronodesk/php_error.log bash scripts/smoke-deploy1.sh "$S"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+```
+
+   Esperado: o mesmo do passo 7 do deploy 2: recarga sem saida;
+   `health: 200`; `QA timezone (banco real) OK`; o teste de fumaca com
+   `login: 200`, perfil `admin`, os quatro `GET` com `200`, a ausencia de
+   teste lancada (`201`) e cancelada (`200`), `logout: 200`, `linhas novas
+   no log do PHP, fora o login: 0` e `FUMACA OK`. **PARE** com qualquer
+   `PARE` ou codigo diferente: nao reabra; fique em manutencao e envie so a
+   saida. Ausencia de teste que ficou lancada: cancele pela tela. Senha
+   errada (`401`): uma nova tentativa. Outro codigo ou linha nova no log:
+   passo 11, com aprovacao.
+
+**8. Nada a conferir no banco.** O deploy 3 nao muda tabela, coluna nem
+dado (passo 1: `migrations alteradas: 0`). O F10-1 nao grava nada.
+
+**9. Reabertura e conferencia na tela.**
+
+```bash
+[ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+```
+
+   So com o passo 7 como esperado (`FUMACA OK`). Esperado:
+   `manutencao encerrada` e `portal visto de fora: 302`. **Na tela**, como
+   admin, de uma estacao (recarregue com Ctrl+F5 uma vez: o `index.html`
+   nao tem cache, os `assets/` mudam de nome):
+
+   - **Pausas:** os tres motivos a vista ("Escolha o motivo" no botao), a
+     lista "Equipe agora" com o filtro e as contagens, e "Derrubar pausa"
+     so nas linhas em pausa (sem clicar).
+   - **Visao operacional:** "Disponiveis agora" e N1/N2 no topo, "Pausas
+     em andamento", "Precisa de voce", a tabela "Situacao da equipe agora"
+     e os "Totais da operacao" no pe; o contador ao lado de "Aprovacoes e
+     admin" no menu, so com o numero.
+   - **Modo painel:** o botao "Modo painel" abre `/app/dashboard?painel=1`
+     sem o menu e sem acoes, com a fonte maior; "Sair do modo painel"
+     volta. A observacao de reuniao nao aparece no painel.
+   - **Aprovacoes:** o filtro por tipo com as contagens e um so "Aprovar"
+     destacado (sem aprovar nada).
+   - **Funcionarios:** a lista na primeira tela; o filtro "Almoco" com as
+     contagens e a coluna "Almoco"; escolher um horario mostra o filtro na
+     fileira de filtros ativos; "Adicionar funcionario" e "Editar" abrem o
+     painel lateral (feche sem salvar); o "Grupo Tools" aparece desabilitado.
+   - **Tema escuro:** o botao do topo troca para o escuro e de volta;
+     nenhuma tela some ou fica sem contraste.
+
+   **PARE** com `PARE`, outro codigo, ou tela em branco ou quebrada: avise
+   (o passo 11 volta o `app/` em segundos).
+
+**10. Medicao do polling**, **alguns minutos depois da reabertura** (a 1a
+rodada do deploy 2, logo depois, pegou todas as telas voltando juntas), com
+**2 rodadas por endpoint, valendo a melhor**, a mesma conta, sem
+`CONSULTAS`, `N=200`, aba fechada. A sessao e de **gestao**: o
+`solicitacoes_pendentes.php` responde `403` a tecnico. Base: deploy 2, 2a
+rodada (`status.php` p50 6,4 e p95 9,6 ms; `dashboard.php` p50 8,1 e p95
+14,6 ms); o `solicitacoes_pendentes.php` nao tem base (anote como base).
+
+```bash
+cd /var/www/chronodesk; bash scripts/medir-polling.sh
+cd /var/www/chronodesk; URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh
+cd /var/www/chronodesk; URL=http://127.0.0.1/api/solicitacoes_pendentes.php bash scripts/medir-polling.sh
+```
+
+   Rode cada comando duas vezes. Esperado: p50 e p95 de cada um (anote a
+   melhor rodada). **PARE se** o p95 do `status.php` ou do `dashboard.php`
+   passar de 50 ms **e** de 20% acima da base, ou o do
+   `solicitacoes_pendentes.php` passar de 50 ms: o deploy 3 nao muda o
+   motor; meca de novo e avise antes de qualquer reversao. Codigo diferente
+   de `200` no `solicitacoes_pendentes.php`: a sessao nao e de gestao (abra
+   uma de gestao e repita).
+
+**11. Rollback de codigo (so se preciso, com aprovacao do responsavel).**
+Quando usar: build ou `qa:bundle` que nao se resolve (passo 6), `health`
+diferente de `200`, `qa-timezone --db` com falha ou teste de fumaca com
+`PARE` ou linha nova no log (passo 7), ou tela quebrada no passo 9. Nao ha
+migration a desfazer. O `app/` volta da copia do passo 4, sem `npm`.
+
+```bash
+cd /var/www/chronodesk; git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy3-commit)" && echo "codigo anterior no ar: $(git rev-parse --short HEAD)"
+cd /var/www/chronodesk; A=/var/backups/chronodesk/app-antes-deploy3; X=/var/backups/chronodesk/app-deploy3-retirado-$(date +%Y%m%d-%H%M%S); if test -d "$A"; then { ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && echo "app/ anterior de volta (o build retirado esta em $X)" || echo "PARE: a volta do app/ falhou"; else echo "PARE: copia $A ausente; nada mudou no app/"; fi; unset A X
+systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+   Esperado: `codigo anterior no ar: cf73984`; `app/ anterior de volta
+   (...)` (nada e apagado); recarga sem saida. Depois, o `health` e o teste
+   de fumaca do passo 7 e a reabertura do passo 9. **PARE** com `PARE` no
+   `app/`: fique em manutencao e avise. Com o visual antigo de volta, a
+   gestao recebe um aviso curto de que a atualizacao foi desfeita.
+
+**Depois de um ciclo estavel, com o responsavel:** o push do commit
+validado para o `codex/modernizacao-ui-backend` (como depois dos deploys 1
+e 2, nunca `--force`) e, com aprovacao, a limpeza do que o deploy deixou em
+`/var/backups/chronodesk` (`deploy3-<data>`, com dados pessoais,
+`app-antes-deploy3`, `pre-deploy3-commit` e `deploy3-commit`; listar antes
+so nome, modo, dono e tamanho).
+
 ## HTTPS Interno
 
 Use HTTPS mesmo na rede interna, com certificado corporativo ou self-signed distribuido de forma controlada. Quando HTTPS estiver ativo:

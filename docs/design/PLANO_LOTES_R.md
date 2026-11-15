@@ -633,7 +633,7 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
   - foco no Nome; Esc, clique fora e o x pedem para fechar pela mesma guarda do formulário sujo;
   - descartar o adicionar limpa o rascunho; salvar com sucesso fecha o painel, e o foco volta a quem abriu (o aviso continua mostrando o ID gerado, D3);
   - as ações ficam no rodapé fixo do painel;
-  - a regra do perfil ("O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS...") e a descrição da edicão ficam com as mesmas palavras; sai o sobretítulo "Alteração auditada".
+  - a regra do perfil ("O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS...") e a descrição da edição ficam com as mesmas palavras; sai o sobretítulo "Alteração auditada".
 - **O filtro e a coluna de Almoço do deploy 2 ficam.**
 - **A fileira de filtros ativos no lugar do cartão "Filtros aplicados":**
   - cada filtro em uso (busca, equipe, perfil, situação diferente de "Ativos" e almoço), com o x de tirar;
