@@ -485,6 +485,8 @@ function EmployeesTab({
   const [lunch, setLunch] = useState('')
   const [pendingAction, setPendingAction] = useState(null)
   const [acting, setActing] = useState(false)
+  // [R4d] No celular, os filtros ficam atrás do botão "Filtros": a lista vem primeiro.
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const lunchChoices = useMemo(
     () => lunchOptions((resource.data?.funcionarios || []).filter((item) => matchesArchiveFilter(item, status))),
     [resource.data, status],
@@ -718,13 +720,17 @@ function EmployeesTab({
   return (
     <div className="space-y-5">
       {/* [R4d] A lista na primeira tela; adicionar abre o painel lateral (D-R0-6). */}
-      <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 sm:justify-end">
+        <button aria-controls="filtros-funcionarios" aria-expanded={filtersOpen} className="btn-secondary sm:hidden" data-filters-toggle="" onClick={() => setFiltersOpen((open) => !open)} type="button">
+          Filtros{activeFilters.length > 0 ? ` (${activeFilters.length})` : ''}
+        </button>
         <button className="btn-primary" data-employee-add="" onClick={(event) => openCreate(event.currentTarget)} type="button">
           <Icon className="h-4 w-4" name="users" /> Adicionar funcionário
         </button>
       </div>
 
       <div className="space-y-3">
+        <div className={filtersOpen ? undefined : 'hidden sm:block'} id="filtros-funcionarios">
         <FilterBar>
           <input className="field" placeholder="Buscar nome, login ou equipe" value={search} onChange={(event) => setSearch(event.target.value)} />
           <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select>
@@ -735,6 +741,7 @@ function EmployeesTab({
           <select aria-describedby="filtro-tools-ajuda" aria-label="Grupo Tools" className="field" data-tools-reserved="" disabled value=""><option value="">Grupo Tools (em breve)</option></select>
           <p className="field-help self-center xl:col-span-2" id="filtro-tools-ajuda">Grupo Tools: chega com o módulo de CHGs; ainda sem efeito.</p>
         </FilterBar>
+        </div>
         <div aria-label="Filtros ativos" className="flex min-h-10 flex-wrap items-center gap-2" data-active-filters="" role="group">
           {activeFilters.length === 0 && <p className="text-sm text-muted">Sem filtros: todos os cadastros ativos.</p>}
           {activeFilters.map(([key, label, clear]) => (

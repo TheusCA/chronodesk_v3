@@ -2830,6 +2830,15 @@ async function employeesR4d(page, port) {
   await page.click(`document.querySelector('[data-active-filters] [data-filter="almoco"]')`)
   await sleep(200)
   await expectEmployees('x do filtro de Almoco: sai da fileira e o select volta a "Todos os almocos"', { almoco: '', filtros: '', linhas: total })
+
+  // Celular: a lista na primeira tela; os filtros atras do botao "Filtros".
+  await goto(page, port, '/admin?tab=funcionarios', 390)
+  await page.waitFor(`!!document.querySelector('[data-filters-toggle]')`)
+  const searchVisible = () => page.evaluate(`!!document.querySelector('#filtros-funcionarios input')?.getClientRects().length`)
+  const firstCard = await page.evaluate(`Math.round(document.querySelector('[data-employee-list] [data-employee]').getBoundingClientRect().top)`)
+  report('Funcionarios, 390 px: o primeiro cadastro na primeira tela, filtros fechados', firstCard < 844 && !(await searchVisible()), JSON.stringify({ topo: firstCard }))
+  await page.click(`document.querySelector('[data-filters-toggle]')`)
+  report('Funcionarios, 390 px, "Filtros": abre os filtros (aria-expanded)', (await searchVisible()) && (await page.evaluate(`document.querySelector('[data-filters-toggle]').getAttribute('aria-expanded')`)) === 'true')
 }
 
 let chrome = null

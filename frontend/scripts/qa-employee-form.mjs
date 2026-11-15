@@ -607,6 +607,10 @@ const appliedFiltersOf = (markup) => (markup.match(/class="filter-chip" data-fil
   assert.ok(add > 0 && add < closed.indexOf('filter-bar') && closed.indexOf('filter-bar') < closed.indexOf('data-employee-list'), 'ordem: "Adicionar funcionário", os filtros, a lista')
   assert.match(closed, /<button class="btn-primary" data-employee-add="" type="button"><svg[\s\S]*?<\/svg> Adicionar funcionário<\/button>/u, '"Adicionar funcionário" é o botão principal da tela')
   assert.doesNotMatch(closed, /metric-card|Filtros aplicados|Funcionários visíveis nesta consulta/u, 'saem os 4 cartões de contagem')
+  // No celular, os filtros ficam atrás do botão "Filtros" (com a contagem dos ativos); de 640 px para cima, sempre à vista.
+  assert.match(closed, /<button aria-controls="filtros-funcionarios" aria-expanded="false" class="btn-secondary sm:hidden" data-filters-toggle="" type="button">Filtros<\/button>/u, 'celular: botão "Filtros", fechado')
+  assert.match(closed, /<div class="hidden sm:block" id="filtros-funcionarios"><section class="filter-bar">/u, 'celular: os filtros escondidos até abrir; de 640 px para cima, à vista')
+  assert.ok(renderEmployees(ADMIN_SESSION, { team: 'n1', lunch: '12:00-13:00' }).includes('data-filters-toggle="" type="button">Filtros<!-- --> (2)</button>') || renderEmployees(ADMIN_SESSION, { team: 'n1', lunch: '12:00-13:00' }).replaceAll('<!-- -->', '').includes('data-filters-toggle="" type="button">Filtros (2)</button>'), 'celular: o botão "Filtros" diz quantos estão em uso')
   assert.ok(plain(closed).includes('5 ativos no total · 1 com perfil Liderança na lista'), 'os números dos cartões que saíram ficam na linha da lista')
   // Fileira de filtros ativos.
   assert.deepEqual(chipsOf(closed), [], 'sem filtro: nenhum filtro ativo')
