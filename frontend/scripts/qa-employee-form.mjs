@@ -423,6 +423,7 @@ const plain = (html) => html.replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').tri
 const cardIds = (markup) => [...markup.matchAll(/data-employee="(\d+)"/gu)].map((match) => Number(match[1]))
 const cellOf = (row, index) => plain(row.split('<td')[index] ? '<td' + row.split('<td')[index] : '')
 
+const ROLE_TEXT = { tecnico: 'Técnico', gestor: 'Gestor', lideranca: 'Liderança', admin: 'Admin (legado)', somente_leitura: 'Somente leitura' }
 for (const [label, session, status, ids] of [
   ['admin, ativos', ADMIN_SESSION, undefined, [1, 2, 3, 4, 5]],
   ['admin, ativos e arquivados', ADMIN_SESSION, '', [1, 2, 3, 4, 5, 6, 7]],
@@ -437,7 +438,8 @@ for (const [label, session, status, ids] of [
     assert.ok(row, `17 (${label}): a linha ${id} continua na tabela`)
     assert.deepEqual(actionsOf(card), actionsOf(row), `17 (${label}): cartao ${id} com as mesmas acoes da linha`)
     const text = plain(card)
-    for (const expected of [item.nome, `ID ${id} · ${item.ad_login || 'Sem login AD'}`, item.access_role.replace('_', ' '), `${item.jornada_entrada} - ${item.jornada_saida}`]) {
+    // [R4d, acabamento] O perfil pelo rótulo do filtro ("Técnico"), não o valor cru ("tecnico").
+    for (const expected of [item.nome, `ID ${id} · ${item.ad_login || 'Sem login AD'}`, ROLE_TEXT[item.access_role], `${item.jornada_entrada} - ${item.jornada_saida}`]) {
       assert.ok(text.includes(expected), `17 (${label}): cartao ${id} com "${expected}"`)
     }
     for (const [index, what] of [[2, 'equipe'], [5, 'almoco'], [6, 'situacao'], [7, 'acoes ou aviso']]) {
@@ -643,6 +645,40 @@ const appliedFiltersOf = (markup) => (markup.match(/class="filter-chip" data-fil
   assert.match(tab, /initialFocusRef=\{createNameRef\}\s*onClose=\{closeCreate\}\s*returnFocusRef=\{createTriggerRef\}/u, 'adicionar: foco no Nome; Esc e clique fora pelo closeCreate; foco de volta ao botão')
   assert.match(tab, /notify\(employeeCreatedFeedback\(result\)\)\s*setCreateOpen\(false\)/u, 'adicionar com sucesso: fecha o painel (o aviso mostra o ID gerado)')
   assert.equal((tab.match(/onClick=\{closeCreate\} type="button">Cancelar<\/button>/gu) ?? []).length, 1, 'adicionar: o Cancelar pelo closeCreate')
+}
+
+// ---------------------------------------------------------------------------
+// [R4d, acabamento] Jornada e almoço em HH:MM e numa linha; perfil pelo rótulo.
+// ---------------------------------------------------------------------------
+{
+  const { scheduleText } = await import(pathToFileURL(join(srcRoot, 'lib', 'employeeLunch.ts')).href)
+  assert.deepEqual([
+    scheduleText({ jornada_entrada: '08:00:00', jornada_saida: '17:00:00' }),
+    scheduleText({ jornada_entrada: '08:00', jornada_saida: '17:00' }),
+    scheduleText({ jornada_entrada: ' 09:30:15 ', jornada_saida: '18:00' }),
+    scheduleText({ jornada_entrada: '', jornada_saida: '17:00' }),
+    scheduleText({ jornada_entrada: '25:00', jornada_saida: '17:00' }),
+  ], ['08:00 - 17:00', '08:00 - 17:00', '09:30 - 18:00', '', ''], 'jornada em HH:MM, com a normalização do almoço; sem horário válido, vazio')
+  const roles = ['tecnico', 'gestor', 'lideranca', 'admin', 'somente_leitura']
+  const list = roles.map((role, index) => employee(40 + index, `QA Perfil ${index}`, 'n1', role, { jornada_entrada: '08:00:00', jornada_saida: '17:00:00', almoco_inicio: '12:00:00', almoco_fim: '13:00:00' }))
+  list.push(employee(49, 'QA Sem Horario', 'n2', 'tecnico', { jornada_entrada: '', jornada_saida: '17:00' }))
+  const markup = renderEmployees(ADMIN_SESSION, { list })
+  roles.forEach((role, index) => {
+    const id = 40 + index
+    const row = rowOf(markup, id)
+    const card = cardOf(markup, id)
+    assert.equal(cellOf(row, 3), ROLE_TEXT[role], `perfil ${role}: o rótulo na linha`)
+    assert.ok(card.includes(`<span class="status-badge status-info">${ROLE_TEXT[role]}</span>`), `perfil ${role}: o rótulo no cartão`)
+    assert.deepEqual([cellOf(row, 4), cellOf(row, 5)], ['08:00 - 17:00', '12:00-13:00'], `cadastro ${id}: jornada e almoço em HH:MM na linha (o banco mandou com segundos)`)
+    assert.ok(card.includes('data-employee-schedule="">08:00 - 17:00</dd>') && card.includes('data-employee-lunch="">12:00-13:00</dd>'), `cadastro ${id}: jornada e almoço em HH:MM no cartão`)
+  })
+  assert.doesNotMatch(markup, /\d{2}:\d{2}:\d{2}/u, 'nenhum horário com segundos na lista nem nos cartões')
+  assert.equal(cellOf(rowOf(markup, 49), 4), '—', 'jornada sem horário válido: "—"')
+  // Numa linha: as células e os campos do cartão sem quebra.
+  const row = rowOf(markup, 40)
+  assert.equal((row.match(/<td class="whitespace-nowrap">/gu) ?? []).length, 2, 'jornada e almoço sem quebra de linha na tabela')
+  assert.ok(cardOf(markup, 40).includes('<dd class="whitespace-nowrap text-ink-2" data-employee-schedule="">') && cardOf(markup, 40).includes('<dd class="whitespace-nowrap text-ink-2" data-employee-lunch="">'), 'jornada e almoço sem quebra no cartão')
+  assert.doesNotMatch(adminSource, /\(item\.access_role \|\| 'tecnico'\)\.replace\('_', ' '\)/u, 'o perfil cru saiu da lista e do cartão')
 }
 
 console.log('Employee form RHF/Zod QA OK')

@@ -12,7 +12,7 @@ import { adjustmentTypeLabel } from '../lib/decisionConfirm'
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { archiveEffectsSummary, employeeArchiveState, matchesArchiveFilter } from '../lib/employeeArchive'
-import { keepLunchSelection, lunchKey, lunchOptions, matchesLunchFilter } from '../lib/employeeLunch'
+import { keepLunchSelection, lunchKey, lunchOptions, matchesLunchFilter, scheduleText } from '../lib/employeeLunch'
 import { employeeCreateSchema, employeeFormSchema } from '../lib/formSchemas'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
@@ -382,6 +382,12 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
 
 // [R4d] Rótulo do perfil na fileira de filtros ativos (os mesmos do filtro).
 const ROLE_LABELS = { tecnico: 'Técnico', gestor: 'Gestor', lideranca: 'Liderança', admin: 'Admin (legado)', somente_leitura: 'Somente leitura' }
+
+// [R4d, acabamento] O rótulo do perfil na lista e no cartão (o mesmo do filtro), nunca o valor cru.
+function roleLabel(value) {
+  const role = value || 'tecnico'
+  return ROLE_LABELS[role] ?? String(role).replace('_', ' ')
+}
 
 const archiveStateLabels = {
   ativo: ['Ativo', 'status-success'],
@@ -780,9 +786,9 @@ function EmployeesTab({
                 </div>
                 <dl className="grid grid-cols-2 gap-3 text-sm">
                   <div><dt className="text-xs text-muted">Equipe</dt><dd className="mt-1"><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></dd></div>
-                  <div><dt className="text-xs text-muted">Perfil</dt><dd className="mt-1"><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></dd></div>
-                  <div><dt className="text-xs text-muted">Jornada</dt><dd className="text-ink-2">{item.jornada_entrada} - {item.jornada_saida}</dd></div>
-                  <div><dt className="text-xs text-muted">Almoço</dt><dd className="text-ink-2" data-employee-lunch="">{lunchKey(item) || '—'}</dd></div>
+                  <div><dt className="text-xs text-muted">Perfil</dt><dd className="mt-1"><span className="status-badge status-info">{roleLabel(item.access_role)}</span></dd></div>
+                  <div><dt className="text-xs text-muted">Jornada</dt><dd className="whitespace-nowrap text-ink-2" data-employee-schedule="">{scheduleText(item) || '—'}</dd></div>
+                  <div><dt className="text-xs text-muted">Almoço</dt><dd className="whitespace-nowrap text-ink-2" data-employee-lunch="">{lunchKey(item) || '—'}</dd></div>
                 </dl>
                 <div className="border-t border-line pt-3">{rowActions(item)}</div>
                 {actionConfirmation(item)}
@@ -806,9 +812,10 @@ function EmployeesTab({
                     </div>
                   </td>
                   <td><span className="status-badge status-neutral">{teamLabel(item.equipe)}</span></td>
-                  <td><span className="status-badge status-info">{(item.access_role || 'tecnico').replace('_', ' ')}</span></td>
-                  <td>{item.jornada_entrada} - {item.jornada_saida}</td>
-                  <td>{lunchKey(item) || '—'}</td>
+                  <td><span className="status-badge status-info">{roleLabel(item.access_role)}</span></td>
+                  {/* [R4d, acabamento] Jornada e almoço numa linha só, em HH:MM. */}
+                  <td className="whitespace-nowrap">{scheduleText(item) || '—'}</td>
+                  <td className="whitespace-nowrap">{lunchKey(item) || '—'}</td>
                   <td><EmployeeStatusBadge item={item} /></td>
                   <td>{rowActions(item)}</td>
                 </tr>

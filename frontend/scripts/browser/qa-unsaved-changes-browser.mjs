@@ -2831,6 +2831,22 @@ async function employeesR4d(page, port) {
   await sleep(200)
   await expectEmployees('x do filtro de Almoco: sai da fileira e o select volta a "Todos os almocos"', { almoco: '', filtros: '', linhas: total })
 
+  // [Acabamento] Em 1280 px, jornada e almoco numa linha so e em HH:MM (o
+  // servidor simulado manda "08:00:00" para o 3o cadastro); perfil pelo rotulo.
+  await goto(page, port, '/admin?tab=funcionarios', 1280)
+  await page.waitFor(`!!document.querySelector('[data-employee-section] tbody tr')`)
+  const table = await page.evaluate(`(() => {
+    const rows = [...document.querySelectorAll('[data-employee-section] tbody tr')].filter((row) => row.cells.length === 7)
+    const lines = (cell) => Math.round(cell.getBoundingClientRect().height / parseFloat(getComputedStyle(cell).lineHeight || '20'))
+    const textLines = (cell) => { const range = document.createRange(); range.selectNodeContents(cell); return range.getClientRects().length }
+    return {
+      quebras: rows.flatMap((row) => [row.cells[3], row.cells[4]]).filter((cell) => textLines(cell) > 1).length,
+      segundos: /\\d{2}:\\d{2}:\\d{2}/.test(document.querySelector('[data-employee-section]').textContent),
+      perfis: [...new Set(rows.map((row) => row.cells[2].textContent.trim()))].join('|'),
+    }
+  })()`)
+  report('Funcionarios, 1280 px: jornada e almoco numa linha, em HH:MM, perfil pelo rotulo', table.quebras === 0 && !table.segundos && !/tecnico|somente_leitura/.test(table.perfis), JSON.stringify(table))
+
   // Celular: a lista na primeira tela; os filtros atras do botao "Filtros".
   await goto(page, port, '/admin?tab=funcionarios', 390)
   await page.waitFor(`!!document.querySelector('[data-filters-toggle]')`)

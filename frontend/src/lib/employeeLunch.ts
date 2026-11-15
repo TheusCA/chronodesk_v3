@@ -21,6 +21,20 @@ function hhmm(value: unknown): string | null {
   return match ? `${match[1]}:${match[2]}` : null
 }
 
+type EmployeeScheduleLike = {
+  jornada_entrada?: unknown
+  jornada_saida?: unknown
+}
+
+// [R4d, acabamento] Jornada da lista de Funcionários em HH:MM, com a mesma
+// normalização do almoço ("08:00:00" vira "08:00"); '' quando falta um
+// horário válido (a tela mostra "—").
+export function scheduleText(item: EmployeeScheduleLike): string {
+  const start = hhmm(item.jornada_entrada)
+  const end = hhmm(item.jornada_saida)
+  return start && end ? `${start} - ${end}` : ''
+}
+
 // "12:00-13:00"; '' quando o cadastro não tem os dois horários válidos.
 export function lunchKey(item: EmployeeLunchLike): string {
   const start = hhmm(item.almoco_inicio)
