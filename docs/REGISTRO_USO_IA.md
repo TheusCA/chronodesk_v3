@@ -1493,6 +1493,20 @@ Base da afirmação:
 
 ---
 
+### Redesenho R4d: Funcionários (lista primeiro e painel lateral) — 2026-11-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Último lote do R4 (`docs/design/PLANO_LOTES_R.md`, R4d; D-R0-6): Funcionários com a lista primeiro, adicionar e editar no painel lateral, o filtro e a coluna de Almoço do deploy 2 mantidos, a fileira de filtros ativos no lugar de "Filtros aplicados" e o lugar reservado para o grupo Tools (marca no cadastro e filtro, ainda sem efeito). Só apresentação: nenhuma regra, API, permissão ou texto de segurança mudou. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `c837dc5` (lista primeiro e painel lateral), `77c4940` (correção: a lista na primeira tela do celular) e um commit só de docs (execução do R4d no plano, capturas em `docs/design/capturas/r4d/`, esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `AdminPage.jsx` (aba Funcionários: painel de adicionar e de editar, fileira de filtros ativos, Tools reservado, botão "Filtros" no celular), `index.css` (filtro ativo, cabeçalho da tabela). QA: `qa:employee-form` e `qa:unsaved-changes`; blocos 4, 8, 22 e 26 no roteiro do navegador; o `capturar.mjs` abre o painel de adicionar. |
+| **Dados pessoais** | Nenhum nos testes e nas capturas (fictícios). O grupo Tools não guarda nada: a marca e o filtro são desabilitados e ficam fora do formulário enviado (o navegador confere o corpo do POST). |
+| **Validacao executada pela IA** | Bateria completa: na varredura final, sozinha, antes da revisão. Mutação: 11/11 no QA, 2/2 no navegador, correção 3/3. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. Navegador 1091/1091 na estação antes do commit. `gitleaks` sem achados. Expectativas que mudaram, com a justificativa, em `PLANO_LOTES_R.md` (Execução, R4d). |
+| **Limitacoes declaradas** | O grupo Tools é só o lugar reservado: o campo, a regra e o filtro de verdade chegam com o módulo de CHGs (P13), com desenho próprio. A sequência "adicionar e editar sujos ao mesmo tempo" deixou de existir (os painéis são modais). |
+| **Validacao humana** | Pendente: revisão única no fim do R4d e do roteiro do deploy 3. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

@@ -622,3 +622,75 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 **Capturas:**
 - **"Antes":** as do R3, `capturas/r3/admin-admin-*`.
 - **"Depois", no git:** `capturas/r4c/`: Aprovações em 1280 e 390 px e a Visão operacional em 1280 px (o ajuste 1 e o menu do ajuste 2), claro e escuro. São 6 arquivos, do build do `77c4940` (o código de Aprovações é o mesmo do `a900eef`).
+
+### R4d · Funcionários (14/11/2026)
+
+**Commits:** `c837dc5` (lista primeiro e painel lateral), `77c4940` (correção: a lista na primeira tela do celular) e um de docs. Sem push.
+
+**O que entrou (D-R0-6 e a correção do responsável de 13/11/2026, auditoria 3.5):**
+- **A lista na primeira tela:** o botão "Adicionar funcionário", os filtros e a lista. O formulário de adicionar sai da tela.
+- **Adicionar e Editar no painel lateral** (o `Drawer` do R2, sobre o `Dialog` do 17f):
+  - foco no Nome; Esc, clique fora e o x pedem para fechar pela mesma guarda do formulário sujo;
+  - descartar o adicionar limpa o rascunho; salvar com sucesso fecha o painel, e o foco volta a quem abriu (o aviso continua mostrando o ID gerado, D3);
+  - as ações ficam no rodapé fixo do painel;
+  - a regra do perfil ("O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS...") e a descrição da edicão ficam com as mesmas palavras; sai o sobretítulo "Alteração auditada".
+- **O filtro e a coluna de Almoço do deploy 2 ficam.**
+- **A fileira de filtros ativos no lugar do cartão "Filtros aplicados":**
+  - cada filtro em uso (busca, equipe, perfil, situação diferente de "Ativos" e almoço), com o x de tirar;
+  - "Limpar filtros" com mais de um; sem filtro, "Sem filtros: todos os cadastros ativos.".
+- **Saem os 4 cartões de contagem.** Os números de "Ativos" e "Liderança" ficam numa linha da lista ("N ativos no total · M com perfil Liderança na lista"); "Listados" é o "N resultado(s)" de sempre.
+- **O lugar reservado para o grupo Tools** (P13, módulo de CHGs), **ainda sem efeito:**
+  - um filtro desabilitado, "Grupo Tools (em breve)", com a ajuda "chega com o módulo de CHGs; ainda sem efeito";
+  - no cadastro (adicionar e editar), a marca desabilitada, depois do "Fora do Mapa PA";
+  - a marca fica fora do React Hook Form: nada vai ao servidor; o schema e o corpo enviado não mudam (o navegador confere o corpo do POST).
+- **No celular** (`77c4940`): os filtros ficam atrás do botão "Filtros", com a contagem dos que estão em uso; a fileira de filtros ativos continua à vista. Sem isso, os seis filtros empilhados ocupavam a primeira tela.
+- O cabeçalho da tabela não quebra mais no meio da palavra ("Equip/e" em 1280 px, com o menu de 272 px).
+
+**O que saiu da tela e onde ficou:**
+
+| Saiu | Onde ficou |
+|---|---|
+| Formulário "Adicionar funcionário" na tela | Painel lateral, pelo botão "Adicionar funcionário" |
+| Edição no diálogo central | Painel lateral |
+| Cartão "Filtros aplicados" | Fileira de filtros ativos (e a contagem no botão "Filtros" do celular) |
+| Cartões "Listados", "Ativos" e "Liderança" | "N resultado(s)" e a linha "N ativos no total · M com perfil Liderança na lista" |
+| Sobretítulos "Novo cadastro" e "Alteração auditada" | Saíram (D-R0-8); a descrição da edição, que fala da auditoria, fica |
+
+**QA:**
+- **`qa:employee-form`:**
+  - a contagem do filtro de Almoço passa a vir da fileira de filtros ativos;
+  - o adicionar é lido no painel;
+  - a seção nova do R4d: lista primeiro, a ordem da tela, a saída dos cartões, os números da linha, a fileira (cada filtro, o x com nome, "Limpar filtros", situação padrão sem filtro), o grupo Tools reservado (desabilitado, fora do React Hook Form e do schema), o painel de adicionar (a regra do perfil, o rodapé, a guarda, o foco e o sucesso fechando) e o botão "Filtros" do celular.
+- **`qa:unsaved-changes`:** a edição no painel lateral (o x do cabeçalho pelo `onClose`, o Cancelar do fim pelo `closeEdit`).
+- **Navegador:**
+  - **bloco 4**, de 112 para 114 conferências: o adicionar no painel (abrir com o foco no Nome, Esc limpo, guarda de aba, menu, voltar, Sair e recarregar, Esc e Cancelar sujos, o painel cobrindo a lista, erro do servidor, sucesso fechando o painel, o corpo sem `id` e sem nada do grupo Tools);
+  - **bloco 8:** o aviso do erro sai no painel, que é descartado antes de abrir o menu do celular;
+  - **bloco 22:** o atalho do celular com formulário sujo usa o de Ausências (o painel cobre a barra);
+  - **bloco 26 (novo, 5 conferências):** a lista na primeira tela em 1366 px, o filtro de Almoço na fileira e saindo pelo x, e, em 390 px, o primeiro cadastro na primeira tela com os filtros fechados e o botão "Filtros" abrindo.
+  - Total: 1091.
+
+**Expectativas que mudaram:**
+
+| QA | O que mudou | Por quê |
+|---|---|---|
+| Navegador, bloco 4 (adicionar) | O formulário é procurado no painel (`form[data-employee-create]`), aberto pelo botão; sucesso fecha o painel em vez de limpar o formulário na tela; o foco volta ao botão | O adicionar foi para o painel lateral (D-R0-6) |
+| Navegador, bloco 4 (editar) | O fechar do cabeçalho é o x "Fechar painel"; o foco nele é conferido pelo nome acessível (o estado lê o `aria-label` quando o botão não tem texto) | O `Drawer` do R2 fecha pelo x |
+| Navegador, bloco 4 ("os dois formulários") | Sai a sequência com o adicionar e a edição sujos ao mesmo tempo; entra a conferência de que, com o painel aberto, o mouse não alcança o Editar da lista | Os dois painéis são modais: um cobre a lista. As duas guardas continuam separadas no código (o `qa:unsaved-changes` confere) |
+| Navegador, blocos 8 e 22 | O 8 descarta o painel antes de abrir o menu; o 22 usa o formulário de Ausências | O formulário de adicionar saiu da tela |
+| `qa:employee-form` | A contagem dos filtros vem da fileira (antes, do cartão "Filtros aplicados"); o texto do cartão sai; o adicionar é lido no painel aberto; a contagem de `role="group"` passa a contar só as confirmações, pelo título | O cartão saiu; a fileira de filtros ativos também é um grupo |
+| `qa:unsaved-changes` | Painel lateral no lugar do diálogo central, sem o sobretítulo; um Cancelar (o do fim) e o x do painel | A edição foi para o painel lateral |
+
+**Validação:**
+- **Bateria completa:** na varredura final, sozinha, antes da revisão (`c837dc5` e `77c4940`).
+- **Mutação** com o `mut_guard.php`, cada mutante morto pela conferência certa:
+  - 11/11 no QA (formulário de adicionar aberto sem pedir; marca do grupo Tools no React Hook Form; filtro Tools habilitado; filtro ativo sem o botão com nome; situação padrão contando como filtro; almoço fora da fileira; sem "Limpar filtros"; fechar o adicionar sem a guarda; sucesso sem fechar o painel; sem a regra do perfil; os cartões de volta);
+  - 2/2 no navegador (fechar o adicionar sujo sem perguntar; o x do filtro de Almoço que não tira o filtro);
+  - correção `77c4940`: 3/3 (filtros sempre à vista no celular, no QA e no navegador; botão "Filtros" sem a contagem).
+- **Medição em 390 px,** nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais.
+- **Orçamento no `77c4940`:** JS de entrada 199 217 de 211 050 bytes, CSS 68 187 de 70 000, fontes 85 912 de 100 000.
+
+**Capturas:**
+- **"Antes":** as do R3, `capturas/r3/admin-admin-funcionarios-*`.
+- **"Depois", no git:** `capturas/r4d/`: Funcionários e o painel de adicionar aberto, 1280 e 390 px, claro e escuro. São 8 arquivos, do build do `77c4940`. O `capturar.mjs` abre o painel pelo marcador `#adicionar`, só no plano dos lotes R.
+
+**O R4 está completo** (R4a a R4d). O deploy do redesenho vai no deploy 3, junto com o F10-1 (sem efeito em produção) e a limpeza do `sdk-icon.png`: roteiro e folha no `DEPLOY_LINUX.md` e em `docs/DEPLOY3_FOLHA_DO_DIA.md`.
