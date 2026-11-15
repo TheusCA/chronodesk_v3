@@ -123,14 +123,25 @@ const PLAN_R = [
   ['tecnico', ['/pausas'], [1280, 390]],
   // [R4b] Modo painel da Visão operacional, também na tela fixa de 1920 px.
   ['admin', ['/dashboard?painel=1'], [1920, 1280, 390]],
+  // [R4d] Funcionários com o painel lateral de adicionar aberto.
+  ['admin', ['/admin?tab=funcionarios#adicionar'], [1280, 390]],
 ]
-const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel')
+const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar')
 
 // ---------------------------------------------------------------------------
+// [R4d] Ações antes da foto, pelo marcador no fim da rota (só no plano dos lotes R).
+const ACTIONS = {
+  '#adicionar': ["document.querySelector('[data-employee-add]').click()", "!!document.querySelector('[data-employee-create]')"],
+}
 async function shoot(page, url, width, height, file, ready) {
+  const marker = Object.keys(ACTIONS).find((key) => url.endsWith(key))
   await page.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 600 })
-  await page.send('Page.navigate', { url })
+  await page.send('Page.navigate', { url: marker ? url.slice(0, -marker.length) : url })
   await page.waitFor(ready, 10000)
+  if (marker) {
+    await page.evaluate(ACTIONS[marker][0])
+    await page.waitFor(ACTIONS[marker][1], 10000)
+  }
   await page.evaluate('document.fonts ? document.fonts.ready.then(() => true) : true')
   await sleep(900)
   const shot = await page.send('Page.captureScreenshot', { format: 'webp', quality: 72, captureBeyondViewport: false })

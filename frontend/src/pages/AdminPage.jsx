@@ -5,7 +5,7 @@ import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { useDecisionConfirm } from '../hooks/useDecisionConfirm'
 import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
 import { DecisionConfirmDialog } from '../components/ui/DecisionConfirmDialog'
-import { Dialog } from '../components/ui/Dialog'
+import { Drawer } from '../components/ui/Drawer'
 import { post } from '../lib/api'
 import { ACTION_FEEDBACK, employeeCreatedFeedback } from '../lib/actionFeedback'
 import { adjustmentTypeLabel } from '../lib/decisionConfirm'
@@ -21,7 +21,6 @@ import {
   FilterBar,
   FormSection,
   InlineAlert,
-  MetricCard,
   SectionHeader,
   TruncationNotice,
   UserAvatar,
@@ -306,14 +305,14 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-4 sm:grid-cols-2">
       {/* [pós-deploy 1, D3] O ID vem do banco: não há campo na criação; na edição, só leitura (texto). */}
       {editing && (
         <div className="label">ID
           <p className="field mt-2 text-ink-2" data-employee-id-readonly="">{form.id}</p>
         </div>
       )}
-      <label className="label xl:col-span-2">Nome
+      <label className="label sm:col-span-2">Nome
         <input aria-invalid={Boolean(errors.nome)} className="field mt-2" maxLength="100" minLength="3" required {...withFieldRef(register('nome'), nameRef)} />
         {errors.nome && <span className="mt-1 block text-xs text-danger">{errors.nome.message}</span>}
       </label>
@@ -357,7 +356,7 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
         {errors.almoco_fim && <span className="mt-1 block text-xs text-danger">{errors.almoco_fim.message}</span>}
       </label>
       {editing && (
-        <label className="check-row md:col-span-2">
+        <label className="check-row sm:col-span-2">
           <input disabled={!canEditOutsideMap} type="checkbox" {...register('fora_mapa_escala')} />
           <span>
             <strong>Fora do Mapa PA e da escala</strong>
@@ -368,9 +367,21 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
           </span>
         </label>
       )}
+      {/* [R4d] Lugar reservado para o grupo Tools (módulo de CHGs, P13): desabilitado e fora do
+          React Hook Form, então nada vai para o servidor. Vem depois do "Fora do Mapa PA". */}
+      <label className="check-row sm:col-span-2" data-tools-reserved="">
+        <input disabled type="checkbox" />
+        <span>
+          <strong>Grupo Tools</strong>
+          <small>Chega com o módulo de CHGs (lança e edita CHGs). Ainda sem efeito: o cadastro não guarda esta marca.</small>
+        </span>
+      </label>
     </div>
   )
 }
+
+// [R4d] Rótulo do perfil na fileira de filtros ativos (os mesmos do filtro).
+const ROLE_LABELS = { tecnico: 'Técnico', gestor: 'Gestor', lideranca: 'Liderança', admin: 'Admin (legado)', somente_leitura: 'Somente leitura' }
 
 const archiveStateLabels = {
   ativo: ['Ativo', 'status-success'],
@@ -460,6 +471,10 @@ function EmployeesTab({
   const editGuard = useUnsavedChangesGuard(Boolean(editForm) && editEmployeeDirty)
   const editNameRef = useRef(null)
   const editTriggerRef = useRef(null)
+  // [R4d] Adicionar no painel lateral: o rascunho só some com "Descartar".
+  const [createOpen, setCreateOpen] = useState(false)
+  const createNameRef = useRef(null)
+  const createTriggerRef = useRef(null)
   const [submitting, setSubmitting] = useState(false)
   const [search, setSearch] = useState('')
   const [team, setTeam] = useState('')
@@ -537,6 +552,19 @@ function EmployeesTab({
     editGuard.requestLeave(() => setEditForm(null))
   }
 
+  function openCreate(trigger) {
+    createTriggerRef.current = trigger
+    setCreateOpen(true)
+  }
+
+  // [R4d] Fechar o painel de adicionar sujo pergunta; descartar limpa o rascunho.
+  function closeCreate() {
+    createGuard.requestLeave(() => {
+      resetCreateEmployee(emptyEmployee)
+      setCreateOpen(false)
+    })
+  }
+
   function validateUnique(form, editing = false) {
     const employees = resource.data?.funcionarios || []
     const login = String(form.ad_login || '').trim().toLowerCase()
@@ -571,6 +599,7 @@ function EmployeesTab({
       (result) => {
         resetCreateEmployee(emptyEmployee)
         notify(employeeCreatedFeedback(result))
+        setCreateOpen(false)
       },
     )
     setSubmitting(false)
@@ -672,42 +701,62 @@ function EmployeesTab({
     )
   }
 
+  // [R4d] Fileira de filtros ativos (no lugar do cartão "Filtros aplicados"):
+  // cada filtro em uso, com o botão de tirar. Situação "Ativos" é o padrão e
+  // não conta como filtro.
+  const lunchSelected = keepLunchSelection(lunch, lunchChoices)
+  const activeFilters = [
+    search && ['busca', `Busca: ${search}`, () => setSearch('')],
+    team && ['equipe', `Equipe: ${teamLabel(team)}`, () => setTeam('')],
+    role && ['perfil', `Perfil: ${ROLE_LABELS[role] ?? role}`, () => setRole('')],
+    status !== 'ativos' && ['situacao', `Situação: ${status === 'arquivados' ? 'Arquivados' : 'Ativos e arquivados'}`, () => { setStatus('ativos'); setPendingAction(null) }],
+    lunchSelected && ['almoco', `Almoço: ${lunchSelected}`, () => setLunch('')],
+  ].filter(Boolean)
+  const activeCount = allEmployees.filter((item) => employeeArchiveState(item) === 'ativo').length
+  const leadershipCount = filtered.filter((item) => item.access_role === 'lideranca').length
+
   return (
     <div className="space-y-5">
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard detail="Funcionários visíveis nesta consulta" icon="users" label="Listados" value={filtered.length} />
-        <MetricCard detail="Ativos podem autenticar e operar" icon="shield" label="Ativos" tone="success" value={allEmployees.filter((item) => employeeArchiveState(item) === 'ativo').length} />
-        <MetricCard detail="Perfil Liderança (admin vem da lista AD_ADMIN_USERS)" icon="settings" label="Liderança" tone="warning" value={filtered.filter((item) => item.access_role === 'lideranca').length} />
-        <MetricCard detail="Filtragem por nome, login, equipe, perfil, situação e almoço" icon="chart" label="Filtros aplicados" value={[search, team, role, status !== 'ativos', keepLunchSelection(lunch, lunchChoices)].filter(Boolean).length} />
-      </section>
+      {/* [R4d] A lista na primeira tela; adicionar abre o painel lateral (D-R0-6). */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <button className="btn-primary" data-employee-add="" onClick={(event) => openCreate(event.currentTarget)} type="button">
+          <Icon className="h-4 w-4" name="users" /> Adicionar funcionário
+        </button>
+      </div>
 
-      <form onSubmit={handleCreateEmployeeSubmit(create)}>
-        <FormSection
-          description="O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS. A equipe não concede permissão. Revise login AD e jornada antes de salvar."
-          eyebrow="Novo cadastro"
-          title="Adicionar funcionário"
-        >
-        <EmployeeFields canPromote={canPromote} errors={createEmployeeErrors} form={createForm} register={registerCreateEmployee} setValue={setCreateEmployeeValue} />
-          <div className="form-actions">
-            <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Adicionando...' : 'Adicionar funcionário'}</button>
-          </div>
-        </FormSection>
-      </form>
-
-      <div className="space-y-4">
+      <div className="space-y-3">
         <FilterBar>
           <input className="field" placeholder="Buscar nome, login ou equipe" value={search} onChange={(event) => setSearch(event.target.value)} />
           <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select>
           <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="lideranca">Liderança</option><option value="admin">Admin (legado)</option><option value="somente_leitura">Somente leitura</option></select>
           <select aria-label="Situação do cadastro" className="field" value={status} onChange={(event) => { setStatus(event.target.value); setPendingAction(null) }}><option value="ativos">Ativos</option><option value="arquivados">Arquivados</option><option value="">Ativos e arquivados</option></select>
-          <select aria-label="Almoço" className="field" value={keepLunchSelection(lunch, lunchChoices)} onChange={(event) => setLunch(event.target.value)}><option value="">Todos os almoços</option>{lunchChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+          <select aria-label="Almoço" className="field" value={lunchSelected} onChange={(event) => setLunch(event.target.value)}><option value="">Todos os almoços</option>{lunchChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
+          {/* [R4d] Lugar reservado para o grupo Tools (módulo de CHGs, P13): ainda sem efeito, nada filtra nem é enviado. */}
+          <select aria-describedby="filtro-tools-ajuda" aria-label="Grupo Tools" className="field" data-tools-reserved="" disabled value=""><option value="">Grupo Tools (em breve)</option></select>
+          <p className="field-help self-center xl:col-span-2" id="filtro-tools-ajuda">Grupo Tools: chega com o módulo de CHGs; ainda sem efeito.</p>
         </FilterBar>
-        <section className="card">
+        <div aria-label="Filtros ativos" className="flex min-h-10 flex-wrap items-center gap-2" data-active-filters="" role="group">
+          {activeFilters.length === 0 && <p className="text-sm text-muted">Sem filtros: todos os cadastros ativos.</p>}
+          {activeFilters.map(([key, label, clear]) => (
+            <button aria-label={`Tirar o filtro ${label}`} className="filter-chip" data-filter={key} key={key} onClick={clear} type="button">
+              <span>{label}</span>
+              <Icon className="h-3.5 w-3.5" name="close" />
+            </button>
+          ))}
+          {activeFilters.length > 1 && (
+            <button className="btn-ghost btn-sm" onClick={() => { setSearch(''); setTeam(''); setRole(''); setStatus('ativos'); setLunch(''); setPendingAction(null) }} type="button">Limpar filtros</button>
+          )}
+        </div>
+      </div>
+
+      <section className="card" data-employee-section="">
           <SectionHeader
             description="Editar, arquivar e restaurar continuam restritos e auditados pelo backend. Arquivados ficam fora do painel, do Mapa PA e da escala; o histórico fica."
             meta={<span className="status-badge status-neutral">{filtered.length} resultado(s)</span>}
             title="Funcionários"
           />
+          {/* [R4d] Os números dos cartões que saíram: ativos no total e Liderança na lista (admin vem da lista AD_ADMIN_USERS). */}
+          <p className="mt-2 text-sm text-muted" data-employee-counts="">{activeCount} ativos no total · {leadershipCount} com perfil Liderança na lista</p>
           {/* [17] Abaixo de 1280 px, cartões: a tabela (min-w-[760px] da .data-table) rolava dentro do cartão e deixava Editar e Arquivar fora da tela. */}
           <div className="mt-5 grid items-start gap-3 md:grid-cols-2 xl:hidden" data-employee-list="">
             {filtered.map((item) => (
@@ -769,30 +818,44 @@ function EmployeesTab({
           </table>
           </div>
         {filtered.length === 0 && <p className="py-8 text-center text-sm text-muted">Nenhum funcionário corresponde aos filtros.</p>}
-        </section>
-      </div>
+      </section>
+
+      {createOpen && (
+        <Drawer
+          description="O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS. A equipe não concede permissão. Revise login AD e jornada antes de salvar."
+          initialFocusRef={createNameRef}
+          onClose={closeCreate}
+          returnFocusRef={createTriggerRef}
+          size="max-w-2xl"
+          title="Adicionar funcionário"
+        >
+          <form className="space-y-5" data-employee-create="" onSubmit={handleCreateEmployeeSubmit(create)}>
+            <EmployeeFields canPromote={canPromote} errors={createEmployeeErrors} form={createForm} nameRef={createNameRef} register={registerCreateEmployee} setValue={setCreateEmployeeValue} />
+            <div className="drawer-footer">
+              <button className="btn-secondary" disabled={submitting} onClick={closeCreate} type="button">Cancelar</button>
+              <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Adicionando...' : 'Adicionar funcionário'}</button>
+            </div>
+          </form>
+        </Drawer>
+      )}
 
       {editForm && (
-        <Dialog
+        <Drawer
           description="Dados atuais do CI carregados. Alterações de perfil são restritas a administradores e registradas em auditoria."
-          eyebrow="Alteração auditada"
-          headerAction={<button className="text-sm text-muted hover:text-ink" onClick={closeEdit} type="button">Cancelar</button>}
           initialFocusRef={editNameRef}
           onClose={closeEdit}
-          panelClassName="border-info-line"
           returnFocusRef={editTriggerRef}
-          size="max-w-5xl"
+          size="max-w-2xl"
           title="Editar funcionário"
-          titleClassName="text-xl"
         >
-          <form className="mt-5 space-y-5" onSubmit={handleEditEmployeeSubmit(update)}>
+          <form className="space-y-5" onSubmit={handleEditEmployeeSubmit(update)}>
             <EmployeeFields canEditOutsideMap={canEditOutsideMap} canPromote={canPromote} editing errors={editEmployeeErrors} form={editEmployeeForm} nameRef={editNameRef} register={registerEditEmployee} setValue={setEditEmployeeValue} />
-            <div className="flex justify-end gap-3">
+            <div className="drawer-footer">
               <button className="btn-secondary" disabled={submitting} onClick={closeEdit} type="button">Cancelar</button>
               <button className="btn-primary" disabled={submitting} type="submit">{submitting ? 'Salvando...' : 'Salvar alterações'}</button>
             </div>
           </form>
-        </Dialog>
+        </Drawer>
       )}
       <ConfirmDiscardDialog {...createGuard.dialogProps} />
       <ConfirmDiscardDialog {...editGuard.dialogProps} />

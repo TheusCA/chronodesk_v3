@@ -505,6 +505,11 @@
     @apply flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center;
   }
 
+  /* [R4d] Filtro ativo na fileira de Funcionários: o rótulo e o x de tirar. */
+  .filter-chip {
+    @apply inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line-strong bg-surface px-3 text-sm text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink;
+  }
+
   .detail-pill {
     @apply inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1 text-xs text-ink-2;
   }
@@ -631,6 +636,13 @@
   :root[data-panel-mode] {
     font-size: 137.5%;
   }
+}
+
+/* [R4d] Cabeçalho da lista de Funcionários sem quebrar no meio da palavra
+   ("Equip/e" em 1280 px, com o menu de 272 px). */
+[data-employee-section] .data-table th {
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 /* [R4c] O "Aprovar" do pedido em foco (ou do primeiro, sem nenhum em foco)

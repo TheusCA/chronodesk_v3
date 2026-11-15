@@ -407,6 +407,7 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
 
 // ---------------------------------------------------------------------------
 // 9. [17f, item 3] Funcionarios: editar (Dialog) e adicionar (formulario na tela).
+// [R4d] Os dois no painel lateral (o Drawer do R2, sobre o mesmo Dialog do 17f).
 // ---------------------------------------------------------------------------
 {
   const { AdminPage } = await importSrc('pages/AdminPage.jsx')
@@ -425,15 +426,16 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
     }
   }
   const closed = renderEmployees(null)
-  assert.ok(closed.includes('>Adicionar funcionário</h2>') || closed.includes('Adicionar funcionário'), 'Funcionarios: formulario de adicionar na tela')
+  assert.ok(closed.includes('data-employee-add') && !closed.includes('data-employee-create'), 'Funcionarios: o botao de adicionar na tela; o formulario so no painel (R4d)')
   assert.doesNotMatch(closed, /data-dialog-backdrop/, 'Funcionarios: sem edicao aberta, nenhum dialogo')
   const opened = renderEmployees({ id: 3, nome: 'Tecnico QA' })
   const panel = opened.slice(opened.indexOf('data-dialog-backdrop'))
   assert.match(opened, /<div class="fixed inset-0 z-\[60\][^"]*" data-dialog-backdrop="">/, 'Funcionarios: edicao no Dialog, acima dos modais')
-  assert.match(panel, /aria-modal="true" class="card relative my-auto w-full max-w-5xl border-info-line" role="dialog" tabindex="-1">/, 'Funcionarios: role="dialog", aria-modal, largura e borda de antes')
-  assert.ok(panel.includes('<p class="section-eyebrow">Alteração auditada</p>') && panel.includes('>Editar funcionário</h2>'), 'Funcionarios: eyebrow e titulo')
+  // [R4d] Painel lateral: o mesmo Dialog com placement="end"; sai o sobretitulo "Alteracao auditada" (D-R0-8).
+  assert.match(panel, /aria-modal="true" class="relative h-full w-full max-w-2xl overflow-y-auto border-l border-line bg-surface p-6 " role="dialog" tabindex="-1">/, 'Funcionarios: role="dialog", aria-modal, painel lateral')
+  assert.ok(panel.includes('>Editar funcionário</h2>') && !panel.includes('section-eyebrow'), 'Funcionarios: titulo, sem sobretitulo')
   assert.match(panel, /Dados atuais do CI carregados\./u, 'Funcionarios: descricao')
-  assert.equal((panel.match(/>Cancelar<\/button>/g) || []).length, 2, 'Funcionarios: Cancelar no cabecalho e no fim')
+  assert.ok((panel.match(/>Cancelar<\/button>/g) || []).length === 1 && panel.includes('aria-label="Fechar painel"'), 'Funcionarios: fechar do painel no cabecalho e Cancelar no fim (R4d)')
   assert.ok(panel.includes('>Salvar alterações</button>'), 'Funcionarios: botao de salvar')
   assert.ok(panel.includes('Fora do Mapa PA e da escala'), 'Funcionarios: campo so da edicao')
   assert.doesNotMatch(opened, /aria-label="Cancelar edição"|fixed inset-0 z-50/u, 'Funcionarios: sem o fundo antigo (botao que fechava no clique, sem perguntar)')
@@ -452,7 +454,9 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   assert.match(tabSource, /initialFocusRef=\{editNameRef\}\s*onClose=\{closeEdit\}/, 'Funcionarios: foco inicial no Nome; Esc e clique fora pelo closeEdit')
   assert.match(tabSource, /returnFocusRef=\{editTriggerRef\}/, 'Funcionarios: foco de volta a quem abriu')
   assert.match(tabSource, /nameRef=\{editNameRef\}/, 'Funcionarios: o Nome da edicao recebe o ref do foco inicial')
-  assert.equal((tabSource.match(/onClick=\{closeEdit\} type="button">Cancelar<\/button>/g) || []).length, 2, 'Funcionarios: os dois Cancelar pelo closeEdit (pergunta)')
+  // [R4d] O fechar do cabecalho e o do proprio painel (Drawer), pelo onClose={closeEdit}; o Cancelar do fim, pelo closeEdit.
+  assert.equal((tabSource.match(/onClick=\{closeEdit\} type="button">Cancelar<\/button>/g) || []).length, 1, 'Funcionarios: o Cancelar do fim pelo closeEdit (pergunta)')
+  assert.match(read('src/components/ui/Drawer.jsx'), /aria-label="Fechar painel" className="[^"]*" onClick=\{onClose\}/, 'Funcionarios: o fechar do cabecalho do painel chama o onClose (closeEdit)')
   assert.doesNotMatch(tabSource, /onClick=\{\(\) => setEditForm\(null\)\}/, 'Funcionarios: nenhum botao fecha a edicao direto sem perguntar')
   assert.match(tabSource, /<ConfirmDiscardDialog \{\.\.\.createGuard\.dialogProps\} \/>\s*<ConfirmDiscardDialog \{\.\.\.editGuard\.dialogProps\} \/>/, 'Funcionarios: um aviso de descarte para cada formulario')
   assert.match(tabSource, /null,\s*\(result\) => \{\s*resetCreateEmployee\(emptyEmployee\)/, 'Funcionarios: adicionar com sucesso limpa o formulario (deixa de estar sujo)')

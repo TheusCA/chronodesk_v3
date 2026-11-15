@@ -365,6 +365,8 @@ registerHooks({
           ["const [search, setSearch] = useState('')", "const [search, setSearch] = useState(globalThis.qaInitialSearch ?? '')"],
           ["const [team, setTeam] = useState('')", "const [team, setTeam] = useState(globalThis.qaInitialTeam ?? '')"],
           ["const [role, setRole] = useState('')", "const [role, setRole] = useState(globalThis.qaInitialRole ?? '')"],
+          // [R4d] O painel de adicionar aberto.
+          ['const [createOpen, setCreateOpen] = useState(false)', 'const [createOpen, setCreateOpen] = useState(globalThis.qaInitialCreateOpen ?? false)'],
         ]) {
           if (!source.includes(from)) throw new Error(`AdminPage sem o estado esperado pelo QA: ${from}`)
           source = source.replace(from, to)
@@ -395,15 +397,15 @@ const EMPLOYEES = [
 ]
 const ADMIN_SESSION = { role: 'admin', permissions: ['funcionarios.manage', 'perfis.promote', 'funcionarios.fora_mapa', 'funcionarios.restaurar', 'escalas.lideranca'], ci: { funcionario_id: 0, username: '' }, gestor: { username: 'admin.qa' } }
 const LEAD_SESSION = { role: 'lideranca', permissions: ['funcionarios.manage'], ci: { funcionario_id: 4, username: 'lider.qa' }, gestor: { username: '' } }
-function renderEmployees(session, { list = EMPLOYEES, pending = null, status, lunch, search, team, role } = {}) {
+function renderEmployees(session, { list = EMPLOYEES, pending = null, status, lunch, search, team, role, createOpen } = {}) {
   globalThis.qaResources = { 'listar_funcionarios.php': { sucesso: true, funcionarios: list } }
   globalThis.qaPendingAction = pending
   globalThis.qaInitialStatus = status
-  Object.assign(globalThis, { qaInitialLunch: lunch, qaInitialSearch: search, qaInitialTeam: team, qaInitialRole: role })
+  Object.assign(globalThis, { qaInitialLunch: lunch, qaInitialSearch: search, qaInitialTeam: team, qaInitialRole: role, qaInitialCreateOpen: createOpen })
   try {
     return renderToStaticMarkup(h(AdminPage, { session, search: '?tab=funcionarios', navigate: () => {}, notify: () => {}, refreshStatus: () => {} }))
   } finally {
-    for (const key of ['qaResources', 'qaPendingAction', 'qaInitialStatus', 'qaInitialLunch', 'qaInitialSearch', 'qaInitialTeam', 'qaInitialRole']) delete globalThis[key]
+    for (const key of ['qaResources', 'qaPendingAction', 'qaInitialStatus', 'qaInitialLunch', 'qaInitialSearch', 'qaInitialTeam', 'qaInitialRole', 'qaInitialCreateOpen']) delete globalThis[key]
   }
 }
 const cardOf = (markup, id) => {
@@ -456,7 +458,8 @@ for (const [label, session, status, ids] of [
 // Confirmacao aberta: no cartao do cadastro e na linha da tabela, so nele.
 for (const [kind, id, title, button] of [['archive', 1, 'Arquivar QA Um?', 'Confirmar arquivamento'], ['restore', 6, 'Restaurar QA Seis?', 'Confirmar restauração']]) {
   const markup = renderEmployees(ADMIN_SESSION, { status: '', pending: { id, kind, error: kind === 'restore' ? 'Recusado pelo servidor (QA).' : '' } })
-  assert.equal((markup.match(/role="group"/gu) ?? []).length, 2, `17: confirmacao (${kind}) no cartao e na linha da tabela, uma de cada`)
+  // [R4d] A fileira de filtros ativos tambem e role="group": conta so os grupos da confirmacao, pelo titulo.
+  assert.equal((markup.match(new RegExp(`aria-label="${title.replace('?', '\\?')}" class="space-y-3" role="group"`, 'gu')) ?? []).length, 2, `17: confirmacao (${kind}) no cartao e na linha da tabela, uma de cada`)
   assert.ok(cardOf(markup, id).includes(`aria-label="${title}"`) && cardOf(markup, id).includes(button), `17: confirmacao (${kind}) dentro do cartao ${id}`)
   assert.ok(cardIds(markup).filter((other) => other !== id).every((other) => !cardOf(markup, other).includes('role="group"')), `17: confirmacao (${kind}) so no cartao do cadastro`)
   if (kind === 'restore') assert.ok(cardOf(markup, id).includes('role="alert">Recusado pelo servidor (QA).'), '17: recusa do servidor dentro do cartao')
@@ -523,7 +526,8 @@ assert.deepEqual([keepLunchSelection('11:00-12:00', lunchOptions(ACTIVE_LUNCH)),
 
 const lunchSelectOf = (markup) => markup.match(/<select aria-label="Almoço" class="field">([\s\S]*?)<\/select>/u)?.[1] ?? ''
 const optionsOf = (markup) => [...lunchSelectOf(markup).matchAll(/<option value="([^"]*)"( selected="")?>([^<]*)<\/option>/gu)].map((match) => ({ value: match[1], selected: Boolean(match[2]), label: match[3] }))
-const appliedFiltersOf = (markup) => Number(plain(markup).match(/Filtros aplicados (\d+)/u)?.[1])
+// [R4d] O cartão "Filtros aplicados" saiu; a contagem vem da fileira de filtros ativos.
+const appliedFiltersOf = (markup) => (markup.match(/class="filter-chip" data-filter="/gu) ?? []).length
 {
   // Opcoes da situacao escolhida, com "Todos os almocos" primeiro.
   const active = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES })
@@ -531,11 +535,12 @@ const appliedFiltersOf = (markup) => Number(plain(markup).match(/Filtros aplicad
   const archived = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, status: 'arquivados' })
   assert.deepEqual(optionsOf(archived).map((option) => option.label), ['Todos os almoços', '12:00-13:00 (1)', '13:00-14:00 (1)'], 'almoco: nos arquivados, so os horarios dos arquivados')
   assert.deepEqual(optionsOf(renderEmployees(ADMIN_SESSION, { list: [] })).map((option) => option.label), ['Todos os almoços'], 'almoco: lista vazia so com "Todos os almocos"')
-  assert.equal(plain(active).includes('Filtragem por nome, login, equipe, perfil, situação e almoço'), true, 'almoco: o cartao "Filtros aplicados" fala do almoco')
+  // [R4d] No lugar do texto do cartão "Filtros aplicados", o filtro de almoço aparece na fileira de filtros ativos.
+  assert.ok(renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '11:00-12:00' }).includes('data-filter="almoco" type="button"><span>Almoço: 11:00-12:00</span>'), 'almoco: o filtro aparece na fileira de filtros ativos')
 
   // Filtro aplicado: so os cadastros do horario, e a contagem do cartao sobe.
   const picked = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '11:00-12:00' })
-  assert.deepEqual([cardIds(picked), optionsOf(picked).find((option) => option.selected)?.value, appliedFiltersOf(active), appliedFiltersOf(picked)], [[12, 14], '11:00-12:00', 0, 1], 'almoco: filtra pelo horario, marca o escolhido e entra em "Filtros aplicados"')
+  assert.deepEqual([cardIds(picked), optionsOf(picked).find((option) => option.selected)?.value, appliedFiltersOf(active), appliedFiltersOf(picked)], [[12, 14], '11:00-12:00', 0, 1], 'almoco: filtra pelo horario, marca o escolhido e entra nos filtros ativos')
   // Combina com equipe, perfil e busca.
   assert.deepEqual(cardIds(renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '11:00-12:00', team: 'n2' })), [14], 'almoco + equipe')
   assert.deepEqual(cardIds(renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, lunch: '11:00-12:00', role: 'gestor' })), [12], 'almoco + perfil')
@@ -581,10 +586,59 @@ const appliedFiltersOf = (markup) => Number(plain(markup).match(/Filtros aplicad
     employeeCreatedFeedback(null),
   ], ['Funcionário adicionado com o ID 334.', FEEDBACK.employeeCreated, FEEDBACK.employeeCreated, FEEDBACK.employeeCreated], 'D3: mensagem com o ID gerado; sem ID valido, a de sempre')
 
-  const markup = renderEmployees(ADMIN_SESSION)
-  const createForm = markup.slice(markup.indexOf('Adicionar funcionário'), markup.indexOf('>Funcionários</h2>'))
+  // [R4d] O formulário de adicionar fica no painel lateral, aberto pelo botão.
+  const markup = renderEmployees(ADMIN_SESSION, { createOpen: true })
+  const createForm = markup.slice(markup.indexOf('data-employee-create'), markup.indexOf('</form>', markup.indexOf('data-employee-create')))
   assert.equal(/<input[^>]*type="number"/u.test(createForm) || createForm.includes('data-employee-id-readonly'), false, 'D3: "Adicionar funcionario" sem campo ID')
   assert.ok(plain(createForm).includes('Nome'), 'D3: o formulario de criacao foi lido')
+}
+
+// ---------------------------------------------------------------------------
+// [R4d] Funcionários: lista primeiro, adicionar e editar no painel lateral,
+// fileira de filtros ativos no lugar de "Filtros aplicados", e o lugar
+// reservado para o grupo Tools (sem efeito).
+// ---------------------------------------------------------------------------
+{
+  const chipsOf = (markup) => [...markup.matchAll(/<button aria-label="Tirar o filtro ([^"]+)" class="filter-chip" data-filter="([a-z]+)" type="button"><span>([^<]+)<\/span>/gu)].map((match) => [match[2], match[3], match[1] === match[3]])
+  const closed = renderEmployees(ADMIN_SESSION)
+  // Lista primeiro: o botão de adicionar, os filtros e a lista; nenhum formulário aberto.
+  assert.ok(!closed.includes('data-employee-create') && !closed.includes('data-dialog-backdrop'), 'lista primeiro: sem o formulário de adicionar na tela')
+  const add = closed.indexOf('data-employee-add')
+  assert.ok(add > 0 && add < closed.indexOf('filter-bar') && closed.indexOf('filter-bar') < closed.indexOf('data-employee-list'), 'ordem: "Adicionar funcionário", os filtros, a lista')
+  assert.match(closed, /<button class="btn-primary" data-employee-add="" type="button"><svg[\s\S]*?<\/svg> Adicionar funcionário<\/button>/u, '"Adicionar funcionário" é o botão principal da tela')
+  assert.doesNotMatch(closed, /metric-card|Filtros aplicados|Funcionários visíveis nesta consulta/u, 'saem os 4 cartões de contagem')
+  assert.ok(plain(closed).includes('5 ativos no total · 1 com perfil Liderança na lista'), 'os números dos cartões que saíram ficam na linha da lista')
+  // Fileira de filtros ativos.
+  assert.deepEqual(chipsOf(closed), [], 'sem filtro: nenhum filtro ativo')
+  assert.ok(closed.includes('Sem filtros: todos os cadastros ativos.'), 'sem filtro: a fileira diz o que está na lista')
+  const many = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, team: 'n1', lunch: '12:00-13:00', status: '', search: 'qa', role: 'tecnico' })
+  assert.deepEqual(chipsOf(many), [['busca', 'Busca: qa', true], ['equipe', 'Equipe: N1', true], ['perfil', 'Perfil: Técnico', true], ['situacao', 'Situação: Ativos e arquivados', true], ['almoco', 'Almoço: 12:00-13:00', true]], 'cada filtro em uso na fileira, com o botão de tirar')
+  assert.ok(many.includes('>Limpar filtros</button>'), 'mais de um filtro: "Limpar filtros"')
+  const one = renderEmployees(ADMIN_SESSION, { list: LUNCH_EMPLOYEES, status: 'arquivados' })
+  assert.deepEqual(chipsOf(one), [['situacao', 'Situação: Arquivados', true]], 'situação diferente da padrão vira filtro ativo')
+  assert.ok(!one.includes('Limpar filtros'), 'um filtro só: sem "Limpar filtros"')
+  assert.match(closed, /<div aria-label="Filtros ativos" class="[^"]*" data-active-filters="" role="group">/u, 'fileira com nome')
+  // Grupo Tools: lugar reservado, desabilitado, sem efeito.
+  assert.match(closed, /<select aria-describedby="filtro-tools-ajuda" aria-label="Grupo Tools" class="field" data-tools-reserved="" disabled=""><option value="" selected="">Grupo Tools \(em breve\)<\/option><\/select>/u, 'filtro do grupo Tools reservado e desabilitado')
+  assert.ok(closed.includes('id="filtro-tools-ajuda">Grupo Tools: chega com o módulo de CHGs; ainda sem efeito.</p>'), 'filtro do grupo Tools com a ajuda')
+  const fieldsSource = adminSource.slice(adminSource.indexOf('function EmployeeFields('), adminSource.indexOf('const ROLE_LABELS'))
+  const tools = fieldsSource.slice(fieldsSource.indexOf('data-tools-reserved'), fieldsSource.indexOf('</label>', fieldsSource.indexOf('data-tools-reserved')))
+  assert.ok(tools.includes('<input disabled type="checkbox" />') && !tools.includes('register('), 'marca do grupo Tools no cadastro: desabilitada e fora do React Hook Form (nada vai ao servidor)')
+  assert.ok(fieldsSource.indexOf('fora_mapa_escala') < fieldsSource.indexOf('data-tools-reserved'), 'a marca do grupo Tools vem depois do "Fora do Mapa PA" (o primeiro checkbox da edição continua ele)')
+  assert.doesNotMatch(read('src/lib/formSchemas.ts'), /tools/iu, 'o schema do cadastro não conhece o grupo Tools (o corpo enviado não muda)')
+
+  // Adicionar no painel lateral.
+  const creating = renderEmployees(ADMIN_SESSION, { createOpen: true })
+  const drawer = creating.slice(creating.indexOf('data-dialog-backdrop'))
+  assert.match(creating, /<div class="fixed inset-0 z-\[60\] flex justify-end bg-black\/75" data-dialog-backdrop="">/u, 'adicionar: painel lateral (Dialog com placement="end")')
+  assert.ok(drawer.includes('>Adicionar funcionário</h2>') && drawer.includes('O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS. A equipe não concede permissão. Revise login AD e jornada antes de salvar.'), 'adicionar: título e a regra do perfil, com as mesmas palavras')
+  assert.match(drawer, /<form class="space-y-5" data-employee-create="">[\s\S]*<div class="drawer-footer"><button class="btn-secondary" type="button">Cancelar<\/button><button class="btn-primary" type="submit">Adicionar funcionário<\/button><\/div><\/form>/u, 'adicionar: Cancelar e salvar no rodapé fixo, dentro do formulário')
+  assert.ok(drawer.includes('aria-label="Fechar painel"') && drawer.includes('data-tools-reserved'), 'adicionar: fechar do painel e a marca reservada do grupo Tools')
+  const tab = adminSource.slice(adminSource.indexOf('function EmployeesTab('), adminSource.indexOf('function UsersTab('))
+  assert.match(tab, /function closeCreate\(\) \{\s*createGuard\.requestLeave\(\(\) => \{\s*resetCreateEmployee\(emptyEmployee\)\s*setCreateOpen\(false\)/u, 'adicionar: fechar sujo pergunta; descartar limpa o rascunho')
+  assert.match(tab, /initialFocusRef=\{createNameRef\}\s*onClose=\{closeCreate\}\s*returnFocusRef=\{createTriggerRef\}/u, 'adicionar: foco no Nome; Esc e clique fora pelo closeCreate; foco de volta ao botão')
+  assert.match(tab, /notify\(employeeCreatedFeedback\(result\)\)\s*setCreateOpen\(false\)/u, 'adicionar com sucesso: fecha o painel (o aviso mostra o ID gerado)')
+  assert.equal((tab.match(/onClick=\{closeCreate\} type="button">Cancelar<\/button>/gu) ?? []).length, 1, 'adicionar: o Cancelar pelo closeCreate')
 }
 
 console.log('Employee form RHF/Zod QA OK')
