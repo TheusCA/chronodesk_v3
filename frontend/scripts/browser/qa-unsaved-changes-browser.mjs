@@ -2544,6 +2544,21 @@ async function shellR3(page, port, mock) {
   report('Casca, item com o rótulo como nome e "5 pendentes" como descrição', ax.nome === 'Aprovações e admin' && ax.descricao === '5 pendentes', JSON.stringify(ax))
   await expectShell('1366 px: sem a barra de atalhos', { barra: false })
 
+  // [Ajuste 2] "Aprovações e admin" inteiro, sem reticências, ao lado do contador (1366 e 1280 px).
+  for (const width of [1366, 1280]) {
+    await goto(page, port, '/dashboard', width)
+    await page.waitFor(`!!document.querySelector('[data-nav-count]')`)
+    const label = await page.evaluate(`(() => {
+      const button = ${NAV_BUTTON('Aprovações e admin')}
+      const text = [...button.querySelectorAll('span')].find((span) => span.textContent === 'Aprovações e admin')
+      const badge = button.parentElement.querySelector('[data-nav-count]')
+      const t = text.getBoundingClientRect()
+      const b = badge.getBoundingClientRect()
+      return { cortado: text.scrollWidth > text.clientWidth + 1, reticencias: getComputedStyle(text).textOverflow === 'ellipsis', sobrepoe: t.right > b.left - 2 && t.top < b.bottom && t.bottom > b.top }
+    })()`)
+    report(`Casca, ${width} px: "Aprovações e admin" inteiro, sem reticências e sem encostar no contador`, !label.cortado && !label.reticencias && !label.sobrepoe, JSON.stringify(label))
+  }
+
   // Celular: barra com 4 atalhos de 48 px ou mais; o atual marcado; Menu abre a folha inteira.
   await goto(page, port, '/dashboard', 390)
   await expectShell('390 px: barra com Agora, Pausas, Escala e Menu, alvo de 48 px ou mais, Agora atual', { barra: true, atalhos: 'Agora|Pausas|Escala|Menu', atual: 'Agora', menor_alvo: (value) => value >= 48 })
@@ -2678,6 +2693,23 @@ async function dashboardR4b(page, port, mock) {
     const state = await page.evaluate(DASH_STATE)
     report(`Visao operacional, ${width} px: "Disponíveis agora" na primeira tela`, state.disponiveis_topo !== null && state.disponiveis_topo < state.altura, JSON.stringify({ topo: state.disponiveis_topo, altura: state.altura }))
     if (width > 1000) report('Visao operacional, 1366 px: "Precisa de você" na primeira tela', state.precisa_topo !== null && state.precisa_topo < state.altura, JSON.stringify({ topo: state.precisa_topo }))
+  }
+
+  // [Ajuste 1] Em 1280 px, com nomes longos, o nome fica numa linha (sem quebrar) e a lista nao rola de lado.
+  mock.setStatusEmployees({ n1: [{ id: 41, nome: 'Tecnico 41 Com Um Nome Bem Comprido Para Testar', equipe: 'n1', ativo: true, em_pausa: true, motivo_pausa: 'Café', inicio_pausa: '2026-10-28T09:20:00-03:00', duracao_limite_segundos: 1200, jornada_entrada: '08:00', jornada_saida: '17:00' }], n2: [{ id: 42, nome: 'Tecnico 42 Outro Nome Comprido', equipe: 'n2', ativo: true, em_pausa: true, motivo_pausa: 'Reunião', inicio_pausa: '2026-10-28T09:10:00-03:00', jornada_entrada: '08:00', jornada_saida: '17:00' }] })
+  try {
+    await goto(page, port, '/dashboard', 1280)
+    await page.waitFor(`document.querySelectorAll('[data-pause-name]').length >= 3`)
+    const names = await page.evaluate(`(() => {
+      const wrap = document.querySelector('[data-active-pauses] .table-wrap')
+      const lines = [...document.querySelectorAll('[data-pause-name]')].map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)))
+      const short = [...document.querySelectorAll('[data-pause-name]')].find((el) => el.textContent === 'Tecnico 01 Sobrenome')
+      return { linhas: Math.max(...lines), rola: wrap.scrollWidth > wrap.clientWidth + 1, inteiro_no_title: [...document.querySelectorAll('[data-pause-name]')].every((el) => el.title === el.textContent), nome_comum_inteiro: !!short && short.scrollWidth <= short.clientWidth }
+    })()`)
+    report('Visao operacional, 1280 px, nomes longos em pausa: o nome numa linha, sem rolagem lateral, inteiro no title', names.linhas === 1 && !names.rola && names.inteiro_no_title, JSON.stringify(names))
+    report('Visao operacional, 1280 px: um nome comum ("Tecnico 01 Sobrenome") aparece inteiro, sem reticências', names.nome_comum_inteiro, JSON.stringify(names))
+  } finally {
+    mock.setStatusEmployees(null)
   }
 
   // Modo painel pelo botao da tela.

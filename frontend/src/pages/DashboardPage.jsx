@@ -3,7 +3,6 @@ import { useResource } from '../hooks/useResource'
 import { parseDate } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { InlineAlert, SectionHeader, StatusDot } from '../components/ui/Primitives'
-import { Tag } from '../components/ui/Tag'
 import { Icon } from '../components/ui/Icon'
 import { hasPermission } from '../lib/roles'
 import { OPERATIONAL_SUMMARY_COLUMNS, serverClock, summaryCount } from '../lib/presenceLegend'
@@ -162,7 +161,6 @@ function ActivePauses({ pauses, livePauses, canForceEndBreak, loading, onForceEn
             <thead>
               <tr>
                 <th scope="col">Técnico</th>
-                <th scope="col">Motivo</th>
                 <th className="text-right" scope="col">Tempo</th>
                 {withActions && <th className="text-right" scope="col"><span className="sr-only">Ações</span></th>}
               </tr>
@@ -174,9 +172,11 @@ function ActivePauses({ pauses, livePauses, canForceEndBreak, loading, onForceEn
                 const sinceText = Number.isNaN(since.getTime()) ? null : new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(since)
                 return (
                   <tr data-overdue={timing.overdue ? '' : undefined} data-row="" data-state="paused" key={item.id}>
-                    <td data-col="name">
-                      <span className="block font-medium text-ink">{item.nome}</span>
-                      <small className="block text-xs text-muted">Equipe {String(item.equipe || '').toUpperCase()}{sinceText && <> · desde <span className="font-mono tabular-nums">{sinceText}</span></>}</small>
+                    {/* [Ajuste 1 do R4b] O nome numa linha só: a coluna ocupa o que sobra
+                        e o nome longo termina em reticências (inteiro no title). */}
+                    <td className="w-full max-w-0" data-col="name">
+                      <span className="block truncate font-medium text-ink" data-pause-name="" title={item.nome}>{item.nome}</span>
+                      <small className="block truncate text-xs text-muted">Equipe {String(item.equipe || '').toUpperCase()}{sinceText && <> · desde <span className="font-mono tabular-nums">{sinceText}</span></>}</small>
                       {/* [F7, DV11] Sem a chave (colega, para quem não é gestão), sem a observação.
                           No modo painel (tela fixa na sala, à vista de todos), nunca: só a gestão a vê. */}
                       {!panel && isMeeting(item.motivo_pausa) && 'observacao_reuniao' in item && (
@@ -185,10 +185,10 @@ function ActivePauses({ pauses, livePauses, canForceEndBreak, loading, onForceEn
                         </small>
                       )}
                     </td>
-                    <td className="w-px whitespace-nowrap" data-col="state"><Tag icon="pause" tone="presence-pause">{item.motivo_pausa}</Tag></td>
                     <td className="w-px whitespace-nowrap text-right" data-col="meta">
+                      {/* [Ajuste 1 do R4b] O motivo vai junto do tempo (como em Pausas): a coluna do nome ganha a largura. */}
                       <span className="pause-time">
-                        <span className={`font-mono font-medium tabular-nums ${panel ? 'text-2xl' : ''} ${timing.overdue ? 'text-danger' : 'text-ink'}`} data-pause-clock="">{clockDuration(timing.elapsed)}</span>
+                        <span><span className="text-muted" data-pause-reason="">{item.motivo_pausa}</span> <span className={`font-mono font-medium tabular-nums ${panel ? 'text-2xl' : ''} ${timing.overdue ? 'text-danger' : 'text-ink'}`} data-pause-clock="">{clockDuration(timing.elapsed)}</span></span>
                         <span className={`text-xs ${timing.overdue ? 'font-medium text-danger' : 'text-muted'}`}>{pauseTimingNote(timing)}</span>
                       </span>
                     </td>

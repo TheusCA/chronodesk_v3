@@ -165,7 +165,8 @@ export function PortalLayout({ session, path, navigate, onLogout, serverNow, chi
                 <span className={`grid h-6 w-6 place-items-center ${active ? 'text-ink' : 'text-muted'}`}>
                   <Icon name={item.icon} className="h-[17px] w-[17px]" />
                 </span>
-                {!compact && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+                {/* [Ajuste 2 do R3] Rótulo inteiro, sem reticências: quebra de linha se faltar largura. */}
+                {!compact && <span className="min-w-0 flex-1 break-words leading-5">{item.label}</span>}
               </button>
               {count && (
                 <span className={`nav-count ${compact ? 'nav-count-compact' : ''}`} data-nav-count="" id={countId}>
@@ -200,7 +201,7 @@ export function PortalLayout({ session, path, navigate, onLogout, serverNow, chi
   return (
     <div className="portal-tech-shell min-h-screen bg-bg">
       <a className="skip-link" href="#conteudo" onClick={skipToContent}>Ir para o conteúdo</a>
-      <aside className={`fixed inset-y-0 left-0 z-40 hidden border-r border-line bg-surface transition-[width] duration-200 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      <aside className={`fixed inset-y-0 left-0 z-40 hidden border-r border-line bg-surface transition-[width] duration-200 lg:flex lg:flex-col ${sidebarCollapsed ? 'w-20' : 'w-[17rem]'}`}>
         {navContent(sidebarCollapsed, true, 'nav-lateral')}
       </aside>
       {mobileOpen && (
@@ -216,7 +217,7 @@ export function PortalLayout({ session, path, navigate, onLogout, serverNow, chi
         </div>
       )}
 
-      <div className={`min-w-0 transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'}`}>
+      <div className={`min-w-0 transition-[padding] duration-200 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-[17rem]'}`}>
         <header className="sticky top-0 z-30 border-b border-line bg-bg">
           <div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
             <button className="rounded-lg border border-line bg-surface p-2.5 text-ink-2 lg:hidden" onClick={() => setMobileOpen(true)} type="button" aria-label="Abrir menu">
