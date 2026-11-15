@@ -1521,6 +1521,20 @@ Base da afirmação:
 
 ---
 
+### Redesenho: acabamento do R4d e baterias registradas — 2026-11-15
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | O acabamento da lista de Funcionários pedido na revisão de 15/11/2026 (jornada e almoço numa linha, horários em HH:MM com a normalização do filtro de Almoço, perfil pelo rótulo) e o registro das baterias completas, cada uma sozinha, dos commits desde o `5ab0326` que ainda não tinham o resultado escrito. Só apresentação: nenhuma regra, API, permissão ou texto de segurança mudou. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `e627fb3` (acabamento) e um commit só de docs (o registro no plano, as capturas do R4d refeitas e esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `employeeLunch.ts` (`scheduleText`, a jornada em HH:MM), `AdminPage.jsx` (jornada e almoço sem quebra e em HH:MM, perfil pelo rótulo na tabela e no cartão). QA: `qa:employee-form` e o bloco 26 do navegador. |
+| **Dados pessoais** | Nenhum. QA, navegador e capturas com dados fictícios. |
+| **Validacao executada pela IA** | Baterias completas, sozinhas: `f9790b5` 0 (25/25, 1079/1079); `a900eef` 0 (26/26, 1084/1084); `c837dc5` 0 (26/26, 1089/1089); `77c4940` 0 (26/26, 1091/1091); `906caa8`, `9d22316`, `9815213` e `48d27e1` 0 (26/26, 1091/1091); `e627fb3` 0 (26/26, 1092/1092). Mutação do acabamento: 8/8. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. `gitleaks` sem achados. |
+| **Limitacoes declaradas** | A bateria deste commit de docs roda depois dele (não pode estar escrita nele). A folha do deploy 3 não muda: a contagem de scripts npm continua 26, e ela não fixa o número de conferências do navegador. O `sdk-icon.png` continua no `public/` até o responsável removê-lo; o passo 1 do roteiro do deploy 3 dá PARE enquanto o commit o trouxer. |
+| **Validacao humana** | Pendente: revisão do acabamento e do registro. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

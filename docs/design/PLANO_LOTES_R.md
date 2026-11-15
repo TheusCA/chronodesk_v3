@@ -694,3 +694,39 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 - **"Depois", no git:** `capturas/r4d/`: Funcionários e o painel de adicionar aberto, 1280 e 390 px, claro e escuro. São 8 arquivos, do build do `77c4940`. O `capturar.mjs` abre o painel pelo marcador `#adicionar`, só no plano dos lotes R.
 
 **O R4 está completo** (R4a a R4d). O deploy do redesenho vai no deploy 3, junto com o F10-1 (sem efeito em produção) e a limpeza do `sdk-icon.png`: roteiro e folha no `DEPLOY_LINUX.md` e em `docs/DEPLOY3_FOLHA_DO_DIA.md`.
+
+### Revisão do R4c, do R4d e do roteiro do deploy 3; acabamento do R4d (15/11/2026)
+
+**Aprovados:** os ajustes do R3-R4b (`f9790b5`), o R4c (`a900eef`), o R4d (`c837dc5`, `77c4940`), os docs (`906caa8`, `9d22316`) e o roteiro e a folha do deploy 3 (`9815213`, `48d27e1`).
+
+**Acabamento da lista de Funcionários (`e627fb3`), pedido na revisão, só apresentação:**
+1. **Jornada e almoço numa linha só** em 1280 px, na tabela e no cartão (antes, "08:00 - / 17:00" e "12:00- / 13:00" quebravam).
+2. **Horários sempre em HH:MM** (um cadastro mostrava "08:00:00"), com a mesma normalização do filtro de Almoço: `scheduleText` no `employeeLunch.ts`, ao lado do `lunchKey`. Sem horário válido, "—".
+3. **Perfil pelo rótulo do filtro** ("Técnico", "Gestor", "Liderança", "Admin (legado)", "Somente leitura"), e não pelo valor cru ("tecnico").
+
+- **QA:** `qa:employee-form` confere:
+  - a jornada pura (segundos, espaços, horário inválido);
+  - os cinco perfis na linha e no cartão;
+  - HH:MM nos dois, nenhum horário com segundos e as células sem quebra.
+- **Navegador, bloco 26:** em 1280 px, jornada e almoço numa linha, sem segundos (o servidor simulado manda "08:00:00" para o 3º cadastro) e com o rótulo. Total 1092.
+- **Mutação:** 8/8, cada mutante morto pela conferência certa: sem o "sem quebra", no QA e no navegador; a jornada crua com segundos, no QA e no navegador; a jornada sem normalizar no `employeeLunch.ts`; o perfil cru na tabela, no QA e no navegador; o perfil cru no cartão.
+- **Expectativa que mudou:** a conferência 17 do `qa:employee-form` (o cartão com o texto da linha) passa a esperar o rótulo do perfil ("Técnico"), e não o valor cru, porque esse é o pedido.
+- **Capturas:** `capturas/r4d/` refeitas do build do `e627fb3` (Funcionários e o painel de adicionar, 1280 e 390 px, claro e escuro): 0 alvos abaixo de 40 px e 0 rolagens laterais em 390 px.
+
+**Baterias completas registradas** (`test-local.ps1 -SkipHttp -Browser`, cada uma **sozinha** no worktree de validação, sem nada em paralelo; saída, frontend e navegador):
+
+| Commit | O que é | Saída | Frontend (lint, typecheck, build e `qa:*`) | Navegador |
+|---|---|---|---|---|
+| `f9790b5` | Ajustes do R3-R4b (varredura final) | 0 | 25/25 | 1079/1079 |
+| `a900eef` | R4c (varredura final) | 0 | 26/26 | 1084/1084 |
+| `c837dc5` | R4d | 0 | 26/26 | 1089/1089 |
+| `77c4940` | R4d, correção do celular | 0 | 26/26 | 1091/1091 |
+| `906caa8` | Docs da revisão e do R4c | 0 | 26/26 | 1091/1091 |
+| `9d22316` | Docs do R4d | 0 | 26/26 | 1091/1091 |
+| `9815213` | Roteiro e folha do deploy 3 | 0 | 26/26 | 1091/1091 |
+| `48d27e1` | Trava do roteiro do deploy 3 | 0 | 26/26 | 1091/1091 |
+| `e627fb3` | Acabamento do R4d | 0 | 26/26 | 1092/1092 |
+
+As oito primeiras são da varredura final de 14/11/2026, rodada em sequência depois de todos os commits, sem nada em paralelo. O `906caa8` vem depois do `77c4940` no histórico, por isso já soma 1091. Este commit de docs tem a bateria rodada depois dele, com o resultado no estado da sessão.
+
+**Folha do deploy 3:** a contagem de scripts npm não mudou (26: lint, typecheck, build e 23 `qa:*`), e a folha não fixa o número de conferências do navegador (pede `falharam: 0`). Não muda.
