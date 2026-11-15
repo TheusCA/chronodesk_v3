@@ -277,7 +277,9 @@ const ruleOf = (className) => compiled.match(new RegExp(`(?:^|[\\n,])\\s*\\.${cl
   assert.match(critical, /Exportar planilha CSV[\s\S]*Importar planilha[\s\S]*Novo chamado/u, 'Chamados críticos: as ações ficam')
   const admin = read('src/pages/AdminPage.jsx')
   assert.doesNotMatch(admin, /title="Aprovações"|eyebrow="Central operacional"/u, 'Aprovações sem repetir o nome da aba')
-  assert.match(admin, /label="Total pendente"/u, 'Aprovações: o total continua no cartão "Total pendente"')
+  // [R4c] O total saiu do cartão "Total pendente" e foi para o filtro por tipo ("Todos N").
+  assert.match(admin, /\['todos', 'Todos'\]/u, 'Aprovações: o total continua no filtro ("Todos")')
+  assert.match(admin, /const counts = \{ todos: total,/u, 'Aprovações: "Todos" conta todos os pedidos')
 }
 
 console.log('QA da casca OK')

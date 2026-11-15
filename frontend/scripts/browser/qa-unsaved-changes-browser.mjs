@@ -2738,6 +2738,49 @@ async function dashboardR4b(page, port, mock) {
   await expectDash('390 px, painel: sem rolagem lateral', { rolagem_lateral: false, menu: false })
 }
 
+// 25. [R4c] Aprovacoes: um botao principal por vez (o pedido em foco), filtro
+// por tipo com a contagem, e a lista no celular sem rolagem lateral. As esperas
+// de 400 ms passam da transicao de cor do botao (150 ms).
+const APPROVALS_STATE = `(() => {
+  const action = getComputedStyle(document.documentElement).getPropertyValue('--action').trim().split(/\\s+/).join(', ')
+  const approve = [...document.querySelectorAll('main .btn-approve')].filter((b) => b.getClientRects().length)
+  const primary = approve.filter((b) => getComputedStyle(b).backgroundColor === 'rgb(' + action + ')')
+  return {
+    aprovar: approve.length,
+    principais: primary.length,
+    principal_no: primary[0] ? approve.indexOf(primary[0]) : null,
+    secoes: [...document.querySelectorAll('main h2.section-title')].map((h) => h.textContent).join('|'),
+    rolagem_lateral: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  }
+})()`
+
+async function approvalsR4c(page, port, mock) {
+  const expectApprovals = (label, expected) => expectState(page, `Aprovacoes, ${label}`, expected, APPROVALS_STATE)
+  mock.restoreDecisions()
+  await goto(page, port, '/admin?tab=aprovacoes', 1366)
+  await page.waitFor(`document.querySelectorAll('main .btn-approve').length >= 5`)
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+  await sleep(400)
+  await expectApprovals('1366 px, em repouso: um botão principal só, no primeiro pedido', { aprovar: 5, principais: 1, principal_no: 0 })
+  const third = await page.evaluate(`(() => { const r = [...document.querySelectorAll('main .approval-item')][2].getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2 } })()`)
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: third.x, y: third.y })
+  await sleep(400)
+  await expectApprovals('1366 px, mouse sobre o 3º pedido: o principal passa para ele, um só', { principais: 1, principal_no: 2 })
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+  await page.evaluate(`[...document.querySelectorAll('main .approval-item')][4].querySelector('button').focus()`)
+  await sleep(400)
+  await expectApprovals('1366 px, foco do teclado no 5º pedido: o principal é o dele, um só', { principais: 1, principal_no: 4 })
+  await page.evaluate('document.activeElement.blur()')
+  await page.click(`[...document.querySelectorAll('main [role="group"] button')].find((b) => b.textContent.startsWith('Horas extras'))`)
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 2, y: 2 })
+  await sleep(400)
+  await expectApprovals('filtro "Horas extras": só a seção dela, o principal no primeiro dela', { secoes: 'Horas extras pendentes', aprovar: 2, principais: 1, principal_no: 0 })
+  await goto(page, port, '/admin?tab=aprovacoes', 390)
+  await page.waitFor(`document.querySelectorAll('main .btn-approve').length >= 5`)
+  await expectApprovals('390 px: a lista sem rolagem lateral, um principal só', { rolagem_lateral: false, principais: 1 })
+  mock.restoreDecisions()
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2776,6 +2819,7 @@ try {
     [22, 'Casca: primeiro Tab, contador e atalhos do celular (R3)', () => shellR3(page, mock.port, mock)],
     [23, 'Pausas: iniciar em 2 acoes e lista com filtro (R4a)', () => pausesR4a(page, mock.port, mock)],
     [24, 'Visao operacional e modo painel (R4b)', () => dashboardR4b(page, mock.port, mock)],
+    [25, 'Aprovacoes: um botao principal por vez e filtro (R4c)', () => approvalsR4c(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

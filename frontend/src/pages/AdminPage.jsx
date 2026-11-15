@@ -16,8 +16,8 @@ import { keepLunchSelection, lunchKey, lunchOptions, matchesLunchFilter } from '
 import { employeeCreateSchema, employeeFormSchema } from '../lib/formSchemas'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
+import { Segmented } from '../components/ui/Segmented'
 import {
-  DetailPill,
   FilterBar,
   FormSection,
   InlineAlert,
@@ -62,15 +62,15 @@ function workflowStatusLabel(value) {
   }[value] || String(value || 'Não informado').replaceAll('_', ' ')
 }
 
+// [R4c] Aprovações: um botão principal por vez. "Aprovar" é secundário e
+// vira o principal só no pedido em foco (passando o mouse ou com o foco
+// dentro dele); sem nenhum em foco, o primeiro pedido da lista. As classes
+// ficam no index.css (approvals, approval-item, btn-approve).
 function ApprovalActions({ onApprove, onReject }) {
   return (
-    <div className="flex flex-wrap gap-2 lg:justify-end">
-      <button className="btn-primary btn-sm" onClick={onApprove} type="button">
-        <Icon className="h-4 w-4" name="shield" /> Aprovar
-      </button>
-      <button className="btn-danger btn-sm" onClick={onReject} type="button">
-        <Icon className="h-4 w-4" name="alert" /> Rejeitar
-      </button>
+    <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+      <button className="btn-secondary btn-sm btn-approve" onClick={onApprove} type="button">Aprovar</button>
+      <button className="btn-danger btn-sm" onClick={onReject} type="button">Rejeitar</button>
     </div>
   )
 }
@@ -79,18 +79,45 @@ function ApprovalSection({ title, count, titleRef = null, children }) {
   return (
     <section className="space-y-3">
       <SectionHeader
-        meta={<span className="status-badge status-warning">{count} pendente(s)</span>}
+        meta={<span className="text-sm text-muted">{count} pendente(s)</span>}
         title={title}
         titleRef={titleRef}
       />
-      {count === 0 ? <EmptyState title="Nenhuma aprovação pendente" description="Não há itens desta categoria para decisão agora." /> : children}
+      {count === 0 ? <EmptyState title="Nenhuma aprovação pendente" description="Não há itens desta categoria para decisão agora." /> : <ul className="card divide-y divide-line p-0">{children}</ul>}
     </section>
   )
 }
 
+// Um pedido da lista: quem, o que e quando numa linha densa; as ações à direita.
+function ApprovalItem({ first, name, team, details, note, created, actions }) {
+  return (
+    <li className="approval-item" data-first={first ? '' : undefined}>
+      <div className="min-w-0 flex-1">
+        <p className="flex flex-wrap items-baseline gap-x-2">
+          <strong className="font-medium text-ink">{name}</strong>
+          {team && <span className="text-sm text-muted">Equipe {team.toUpperCase()}</span>}
+        </p>
+        <p className="mt-0.5 text-sm text-ink-2">{details.filter(Boolean).join(' · ')}</p>
+        {note && <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted" title={note}>{note}</p>}
+        {created && <p className="mt-0.5 text-xs text-muted">Criado em {created}</p>}
+      </div>
+      {actions}
+    </li>
+  )
+}
+
+// Filtro por tipo: a contagem de cada um é o próprio botão do filtro.
+const APPROVAL_FILTERS = [
+  ['todos', 'Todos'],
+  ['pausas', 'Pausas e reuniões'],
+  ['horas', 'Horas extras'],
+  ['ajustes', 'Correção de ponto'],
+]
+
 function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
   const overtimeTitleRef = useRef(null)
   const adjustmentTitleRef = useRef(null)
+  const [kind, setKind] = useState('todos')
   const decision = useDecisionConfirm(notify, [refresh, refreshStatus])
 
   // Pausas e reuniões ficam sem confirmação, por decisão de 2026-10-29: a aprovação
@@ -110,16 +137,15 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
   const overtime = requests.data?.overtime || []
   const adjustments = requests.data?.time_adjustments || []
   const total = pauses.length + overtime.length + adjustments.length
+  const counts = { todos: total, pausas: pauses.length, horas: overtime.length, ajustes: adjustments.length }
+  const shows = (key) => kind === 'todos' || kind === key
+  // O primeiro pedido visível leva o botão principal quando nenhum está em foco.
+  const firstKind = ['pausas', 'horas', 'ajustes'].find((key) => shows(key) && counts[key] > 0)
 
   return (
-    <div className="space-y-6">
-      {/* [R3] Sem repetir "Aprovações" (a aba já diz); o total continua no cartão "Total pendente". */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard detail="Reuniões e pausas que aguardam decisão" icon="pause" label="Pausas/Reuniões" tone="warning" value={pauses.length} />
-        <MetricCard detail="Solicitações de horas adicionais" icon="timer" label="Horas extras" tone="warning" value={overtime.length} />
-        <MetricCard detail="Ajustes de marcação pendentes" icon="edit" label="Correção de ponto" tone="warning" value={adjustments.length} />
-        <MetricCard detail="Fila completa da central" icon="bell" label="Total pendente" tone={total > 0 ? 'warning' : 'success'} value={total} />
-      </section>
+    <div className="approvals space-y-6">
+      {/* [R3] Sem repetir "Aprovações" (a aba já diz). [R4c] O total e a contagem por tipo ficam no filtro. */}
+      <Segmented label="Filtrar por tipo" onChange={setKind} options={APPROVAL_FILTERS.map(([value, label]) => ({ value, label, count: counts[value] }))} value={kind} />
       <TruncationNotice limit={requests.data?.limit} truncated={requests.data?.overtime_truncated}>
         Há mais horas extras pendentes do que as exibidas. Decida as mais recentes ou filtre em Horas extras.
       </TruncationNotice>
@@ -130,78 +156,62 @@ function ApprovalsTab({ requests, refresh, refreshStatus, notify }) {
 
       {total > 0 && (
         <>
-      <ApprovalSection count={pauses.length} title="Pausas/Reuniões pendentes">
-        {pauses.map((request) => (
-          <article className="approval-card" key={`pause-${request.id}`}>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-3">
-                <UserAvatar name={request.nome} />
-                <h4 className="font-semibold text-ink">{request.nome}</h4>
-                <span className="status-badge status-neutral">Equipe {request.equipe?.toUpperCase()}</span>
-                <span className="status-badge status-warning">Pendente</span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <DetailPill label="Tipo" value={request.motivo} tone="warning" />
-                <DetailPill label="Solicitado" value={formatDateTime(request.solicitacao_timestamp)} />
-              </div>
-              <p className="mt-3 rounded-card border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-muted">{request.observacao || 'Sem observação.'}</p>
-            </div>
-            <ApprovalActions onApprove={() => decidePause(request.id, 'aprovar')} onReject={() => decidePause(request.id, 'rejeitar')} />
-          </article>
-        ))}
-      </ApprovalSection>
+          {shows('pausas') && (
+            <ApprovalSection count={pauses.length} title="Pausas/Reuniões pendentes">
+              {pauses.map((request, index) => (
+                <ApprovalItem
+                  actions={<ApprovalActions onApprove={() => decidePause(request.id, 'aprovar')} onReject={() => decidePause(request.id, 'rejeitar')} />}
+                  details={[request.motivo, `solicitado em ${formatDateTime(request.solicitacao_timestamp)}`]}
+                  first={firstKind === 'pausas' && index === 0}
+                  key={`pause-${request.id}`}
+                  name={request.nome}
+                  note={request.observacao || 'Sem observação.'}
+                  team={request.equipe}
+                />
+              ))}
+            </ApprovalSection>
+          )}
 
-      <ApprovalSection count={overtime.length} title="Horas extras pendentes" titleRef={overtimeTitleRef}>
-        {overtime.map((item) => (
-          <article className="approval-card" key={`overtime-${item.id}`}>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-3">
-                <UserAvatar name={item.employee_name} />
-                <h4 className="font-semibold text-ink">{item.employee_name}</h4>
-                <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
-                <span className="status-badge status-warning">{workflowStatusLabel(item.status)}</span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <DetailPill label="Data" value={item.work_date} />
-                <DetailPill label="Período" value={`${String(item.start_time).slice(0, 5)} - ${String(item.end_time).slice(0, 5)}`} />
-                <DetailPill label="Total" value={approvalMinutes(item.total_minutes)} tone="warning" />
-              </div>
-              <p className="mt-3 rounded-card border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-muted">{item.reason} - {item.justification}</p>
-              <p className="mt-2 text-xs text-muted">Criado em {formatDateTime(item.created_at)}</p>
-            </div>
-            <ApprovalActions onApprove={(event) => decision.ask('overtime', item, 'approved', event.currentTarget, overtimeTitleRef)} onReject={(event) => decision.ask('overtime', item, 'rejected', event.currentTarget, overtimeTitleRef)} />
-          </article>
-        ))}
-      </ApprovalSection>
+          {shows('horas') && (
+            <ApprovalSection count={overtime.length} title="Horas extras pendentes" titleRef={overtimeTitleRef}>
+              {overtime.map((item, index) => (
+                <ApprovalItem
+                  actions={<ApprovalActions onApprove={(event) => decision.ask('overtime', item, 'approved', event.currentTarget, overtimeTitleRef)} onReject={(event) => decision.ask('overtime', item, 'rejected', event.currentTarget, overtimeTitleRef)} />}
+                  created={formatDateTime(item.created_at)}
+                  details={[item.work_date, `${String(item.start_time).slice(0, 5)} - ${String(item.end_time).slice(0, 5)}`, `total ${approvalMinutes(item.total_minutes)}`, workflowStatusLabel(item.status)]}
+                  first={firstKind === 'horas' && index === 0}
+                  key={`overtime-${item.id}`}
+                  name={item.employee_name}
+                  note={`${item.reason} - ${item.justification}`}
+                  team={item.team}
+                />
+              ))}
+            </ApprovalSection>
+          )}
 
-      <ApprovalSection count={adjustments.length} title="Ajustes de ponto pendentes" titleRef={adjustmentTitleRef}>
-        {adjustments.map((item) => (
-          <article className="approval-card" key={`adjustment-${item.id}`}>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-3">
-                <UserAvatar name={item.employee_name} />
-                <h4 className="font-semibold text-ink">{item.employee_name}</h4>
-                <span className="status-badge status-neutral">Equipe {item.team?.toUpperCase()}</span>
-                <span className="status-badge status-warning">{workflowStatusLabel(item.status)}</span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <DetailPill label="Data" value={item.adjustment_date} />
-                <DetailPill label="Tipo" value={adjustmentTypeLabel(item.adjustment_type)} tone="warning" />
-                <DetailPill label="Horário correto" value={item.correct_time ? String(item.correct_time).slice(0, 5) : 'Sem horário'} />
-              </div>
-              <p className="mt-3 rounded-card border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-muted">{item.justification}</p>
-              <p className="mt-2 text-xs text-muted">Criado em {formatDateTime(item.created_at)}</p>
-            </div>
-            <ApprovalActions onApprove={(event) => decision.ask('adjustment', item, 'approved', event.currentTarget, adjustmentTitleRef)} onReject={(event) => decision.ask('adjustment', item, 'rejected', event.currentTarget, adjustmentTitleRef)} />
-          </article>
-        ))}
-      </ApprovalSection>
+          {shows('ajustes') && (
+            <ApprovalSection count={adjustments.length} title="Ajustes de ponto pendentes" titleRef={adjustmentTitleRef}>
+              {adjustments.map((item, index) => (
+                <ApprovalItem
+                  actions={<ApprovalActions onApprove={(event) => decision.ask('adjustment', item, 'approved', event.currentTarget, adjustmentTitleRef)} onReject={(event) => decision.ask('adjustment', item, 'rejected', event.currentTarget, adjustmentTitleRef)} />}
+                  created={formatDateTime(item.created_at)}
+                  details={[item.adjustment_date, adjustmentTypeLabel(item.adjustment_type), `horário correto ${item.correct_time ? String(item.correct_time).slice(0, 5) : 'sem horário'}`, workflowStatusLabel(item.status)]}
+                  first={firstKind === 'ajustes' && index === 0}
+                  key={`adjustment-${item.id}`}
+                  name={item.employee_name}
+                  note={item.justification}
+                  team={item.team}
+                />
+              ))}
+            </ApprovalSection>
+          )}
         </>
       )}
       <DecisionConfirmDialog {...decision.dialogProps} />
     </div>
   )
 }
+
 function SettingsTab({ resource, notify }) {
   const [form, setForm] = useState(null)
   useEffect(() => {

@@ -498,8 +498,11 @@
     @apply flex items-start gap-3 rounded-card border px-4 py-3;
   }
 
-  .approval-card {
-    @apply card flex flex-col justify-between gap-5 border-l-4 border-l-pause lg:flex-row lg:items-center;
+  /* [R4c] Aprovações: pedido em linha densa. "Aprovar" secundário; principal
+     só no pedido em foco (mouse ou foco dentro dele) e, sem nenhum em foco,
+     no primeiro da lista (data-first). Um botão principal por vez. */
+  .approval-item {
+    @apply flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center;
   }
 
   .detail-pill {
@@ -628,6 +631,15 @@
   :root[data-panel-mode] {
     font-size: 137.5%;
   }
+}
+
+/* [R4c] O "Aprovar" do pedido em foco (ou do primeiro, sem nenhum em foco)
+   vira o botão principal. Fora de @layer: vale sobre o btn-secondary. */
+.approvals .approval-item:is(:hover, :focus-within) .btn-approve,
+.approvals:not(:has(.approval-item:is(:hover, :focus-within))) .approval-item[data-first] .btn-approve {
+  border-color: rgb(var(--action));
+  background-color: rgb(var(--action));
+  color: rgb(var(--action-ink));
 }
 
 /* [R4a] Estouro: borda vermelha à esquerda da linha (além do "passou"
