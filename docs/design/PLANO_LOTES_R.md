@@ -1,6 +1,6 @@
 # Plano dos lotes do redesenho (R1 em diante)
 
-**Estado:** aprovado em 2026-11-13, com a direção A e as decisões D-R1-1 a D-R1-3 como recomendadas. R1 e R2 aprovados em 2026-11-14. R3, R4a e R4b em execução, nessa ordem, com uma parada para revisão no fim do R4b; o deploy do redesenho fica para depois do R4 completo. **Cada lote para para revisão.**
+**Estado:** aprovado em 2026-11-13, com a direção A e as decisões D-R1-1 a D-R1-3 como recomendadas. R1 e R2 aprovados em 2026-11-14; R3, R4a e R4b aprovados em 2026-11-14 (D-R4-1 a D-R4-3). R4c e R4d em execução, com uma parada para revisão no fim do R4d e do roteiro do deploy 3, que leva o redesenho. **Cada lote para para revisão.**
 
 ## Regras de todos os lotes R
 
@@ -557,3 +557,68 @@ Cada tela é um commit com as capturas antes e depois. Os QAs e os `data-*` dela
 - **O `capturar.mjs`** ganhou o modo painel no plano dos lotes R (`--plano=r`), com a largura de 1920 × 1080 só para ele; o plano do R0 e o protótipo ficam como estavam.
 
 **Para o deploy do redesenho (depois do R4 completo):** só frontend (`npm ci` e build), sem migration. O roteiro ganha: o aviso curto à gestão (o visual muda para todos), a medição do contador do menu (R3) e, se a sala for usar o modo painel, o endereço `/app/dashboard?painel=1` numa sessão que tenha acesso à Visão operacional.
+
+### Revisão do R3, do R4a e do R4b (14/11/2026)
+
+**Aprovados:** R3 (`8dec4a9`, `8348df8`, `2e7dc24`), R4a (`9711d2b`, `d16c9a8`, `906ae83`, `a584367`, `1f42666`) e R4b (`34f7de6`, `2da62d4`, `5ab0326`).
+
+**Decisões do responsável:**
+
+| # | Decisão | Registro |
+|---|---|---|
+| D-R4-1 | **Modo painel mostra os nomes** de quem está em pausa e de quem passou do limite | É a mesma informação que qualquer técnico já vê na tela de Pausas. LGPD, mínimo necessário: o painel não expõe nada além da tela de Pausas. A observação de reunião (DV11, só a gestão e o próprio) continua fora do painel (`2da62d4`) |
+| D-R4-2 | **Tirar o `sdk-icon.png` do `public/`** | Nada no app o usa desde o R3 (conferido: só docs, um comentário do `BrandMark.jsx` e os pacotes de revisão antigos, fora do git). O `favicon.png` e o `apple-touch-icon.png` ficam. A trava de Segurança da Informação da estação bloqueia `git rm` pela IA; a remoção é feita pelo responsável e o commit entra no deploy 3 |
+| D-R4-3 | **"Finalizar pausa" e "Derrubar pausa" ficam com o texto de hoje** | O protótipo dizia "Encerrar pausa" nos dois; fica como está |
+
+**Ajustes pedidos (`f9790b5`):**
+1. **Visão operacional, "Pausas em andamento":** em 1280 px o nome quebrava em duas linhas. O motivo foi para junto do tempo (como na tela de Pausas: "Café 23:59", embaixo "passou 3:59"), e a coluna "Motivo" saiu. A coluna do nome ocupa o que sobra, numa linha só; nome longo termina em reticências e aparece inteiro no `title`. Equipe e "desde" continuam embaixo.
+2. **Menu:** "Aprovações e admin" aparecia cortado ao lado do contador. A coluna do menu passou de 256 para 272 px, e o rótulo deixou de ter reticências (se faltar largura, quebra a linha). O texto do item não mudou.
+- **Navegador:** bloco 22, o item inteiro, sem reticências e sem encostar no contador, em 1366 e 1280 px; bloco 24, em 1280 px e com nomes longos, o nome numa linha, sem rolagem lateral, inteiro no `title`, e um nome comum sem reticências. Total 1079.
+
+### R4c · Aprovações (14/11/2026)
+
+**Commit:** `a900eef`, mais um de docs. Sem push.
+
+**O que entrou:**
+- **Lista densa** no lugar dos cartões: quem e a equipe numa linha; o que e quando na de baixo; a observação e o "Criado em"; as ações à direita.
+  - hora extra: data, período, total e situação;
+  - ajuste: data, tipo e horário correto;
+  - pausa ou reunião: motivo e quando foi pedida.
+- **Um botão principal por vez:** "Aprovar" é secundário e vira o principal só no pedido em foco (mouse ou foco do teclado dentro dele); sem nenhum em foco, o primeiro pedido visível. Antes, com cinco pedidos, eram cinco botões cheios.
+- **A contagem por tipo é o filtro** (Todos, Pausas e reuniões, Horas extras, Correção de ponto). Saem os 4 cartões de contagem; o total fica em "Todos".
+- **A confirmação do 17g fica** nas horas extras e nos ajustes; pausas e reuniões sem ela, como decidido em 2026-10-29. Os títulos das seções, o texto dos botões e os avisos de lista cortada ficam.
+- Em 1280 × 900, o primeiro pedido sobe de cerca de 500 px para cerca de 290 px do topo.
+
+**O que saiu da tela e onde ficou:**
+
+| Saiu | Onde ficou |
+|---|---|
+| Cartões "Pausas/Reuniões", "Horas extras", "Correção de ponto" e "Total pendente" | O filtro por tipo, com a contagem em cada botão ("Todos" é o total) |
+| Frases dos cartões ("Fila completa da central"...) | Saíram (apresentação, S9) |
+| Avatar, selo "Pendente" e pílulas de detalhe | O nome e a equipe na primeira linha; os detalhes numa linha só, com a situação escrita |
+
+**QA:**
+- **`qa:approvals` (novo; a bateria passa de 22 para 23 `qa:*`):** a aba desenhada de verdade. Confere o filtro com a contagem, a saída dos cartões, as seções e os botões de sempre, os detalhes numa linha, o primeiro pedido marcado (`data-first`), "Aprovar" secundário em todos e a regra de CSS do pedido em foco; o filtro mostrando só o tipo, os vazios, o aviso de lista cortada e a confirmação do 17g.
+- **Navegador, bloco 25 (novo, 5 conferências):** um principal só em repouso, com o mouse sobre o 3º pedido e com o foco do teclado no 5º; o filtro "Horas extras"; 390 px sem rolagem lateral. As esperas de 400 ms passam da transição de cor do botão (com 150 ms, a cor era lida no meio da transição). O bloco 11 (17g) passa sem mudança. Total 1084.
+
+**Expectativas que mudaram:**
+
+| QA | O que mudou | Por quê |
+|---|---|---|
+| `qa:unsaved-changes` | Contagem de `qa:*` de 22 para 23 | Entrou o `qa:approvals` |
+| `qa:shell` | O total de Aprovações é procurado no filtro ("Todos" e a soma), e não no cartão "Total pendente" | Os cartões de contagem saíram |
+
+**Validação:**
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`), no worktree:
+  - `f9790b5` (ajustes): saída 0, frontend 25/25, navegador 1079/1079;
+  - `a900eef`: saída 0, frontend 26/26, navegador 1084/1084.
+  - Nos primeiros segundos da bateria do `f9790b5`, o lint e o build da estação rodaram em paralelo. As duas são refeitas sozinhas na varredura final, antes da revisão.
+- **Mutação** com o `mut_guard.php`, cada mutante morto pela conferência certa:
+  - R4c: 8/8 no QA (todos os pedidos marcados como o primeiro; "Aprovar" principal fixo; CSS sem o pedido em foco; filtro sem a contagem ou que não filtra; horas extras sem a confirmação do 17g; seção com outro título; os cartões de volta) e 2/2 no navegador (principal sem acompanhar o mouse; "Aprovar" principal em todos);
+  - ajustes: 2/2 no navegador (nome quebrando em duas linhas; rótulo do menu com reticências de novo).
+- **Medição em 390 px,** nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais.
+- **Orçamento no `a900eef`:** JS de entrada 199 217 de 211 050 bytes, CSS 67 278 de 70 000, fontes 85 912 de 100 000. A primeira versão passava de 69 000 (o `.btn-approve` com `@apply btn` duplicava as regras do botão); ficou com o `btn-secondary` no botão e só a cor do principal em CSS.
+
+**Capturas:**
+- **"Antes":** as do R3, `capturas/r3/admin-admin-*`.
+- **"Depois", no git:** `capturas/r4c/`: Aprovações em 1280 e 390 px e a Visão operacional em 1280 px (o ajuste 1 e o menu do ajuste 2), claro e escuro. São 6 arquivos, do build do `77c4940` (o código de Aprovações é o mesmo do `a900eef`).

@@ -1479,6 +1479,20 @@ Base da afirmação:
 
 ---
 
+### Redesenho: revisão do R3-R4b (ajustes) e R4c, Aprovações — 2026-11-14
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Os dois ajustes pedidos na revisão do R3, do R4a e do R4b (nome inteiro em "Pausas em andamento" em 1280 px; "Aprovações e admin" sem reticências) e o R4c (`docs/design/PLANO_LOTES_R.md`): Aprovações com um botão principal por vez e o filtro por tipo. Registra as decisões D-R4-1 a D-R4-3 (nomes no modo painel, retirada do `sdk-icon.png`, textos de Finalizar e Derrubar pausa). Só apresentação: nenhuma regra, API, permissão ou texto de segurança mudou. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `f9790b5` (ajustes), `a900eef` (R4c) e um commit só de docs (revisão e execução do R4c no plano, capturas em `docs/design/capturas/r4c/`, esta entrada). Sem push pela IA. |
+| **O que a IA alterou** | `DashboardPage.jsx` (motivo junto do tempo; nome numa linha), `PortalLayout.jsx` (menu com 272 px; rótulo sem reticências), `AdminPage.jsx` (aba Aprovações em lista densa, filtro por tipo, "Aprovar" principal só no pedido em foco), `index.css`. QA novo `qa:approvals`; blocos 22 e 24 (ajustes) e 25 (R4c) no roteiro do navegador. |
+| **Dados pessoais** | Nenhum nos testes e nas capturas (fictícios). Modo painel: decisão D-R4-1 registrada (os nomes ficam, a mesma informação da tela de Pausas; a observação de reunião continua fora). |
+| **Validacao executada pela IA** | Bateria completa: `f9790b5` saída 0 (25/25, navegador 1079/1079); `a900eef` saída 0 (26/26, 1084/1084); as duas refeitas sozinhas na varredura final (o lint e o build da estação rodaram alguns segundos em paralelo com a primeira). Mutação: R4c 8/8 no QA e 2/2 no navegador; ajustes 2/2 no navegador. Em 390 px, nos dois temas: 0 alvos abaixo de 40 px e 0 rolagens laterais. `gitleaks` sem achados. |
+| **Limitacoes declaradas** | O `git rm` do `sdk-icon.png` foi bloqueado pela trava de Segurança da Informação da estação; a remoção fica com o responsável, e o roteiro do deploy 3 confere que o commit a traz. |
+| **Validacao humana** | Pendente: revisão única no fim do R4d e do roteiro do deploy 3. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
