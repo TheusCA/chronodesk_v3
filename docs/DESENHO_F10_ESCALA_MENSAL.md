@@ -721,3 +721,104 @@ São os números do ensaio da 4.3, agora pelo script do repositório. As 17 "mes
 - **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree):
   - `968e9b1`: saída 0, frontend 22/22, navegador 1029/1029;
   - `665b219` e o commit de docs: no resumo da entrega.
+
+### 8.6 Lote F10-2: times de rodízio, ciclo semana a semana e grupo da escala (2026-11-15)
+
+**Commits** (branch `feat/employee-form-rhf-zod`, sem push; o deploy 3 roda com o `cd0653b` e não leva nada daqui):
+
+| Commit | Conteúdo |
+|---|---|
+| `f346051` | Migration 021, rollback, verificação e linhas do ensaio; `qa-rotation-teams.php` (estrutura) na bateria; a trava separa a 021 e o QA novo dos deploys já escritos |
+| `4b714c7` | `CyclePattern`, `RotationTeamPlanner`, `RotationTeamService`, `api/portal/rotation_teams.php`; o 409 do membro no `OperationalService`; `grupo_escala` nos endpoints de funcionários; `scripts/plano-times-rodizio.php` |
+| `a740998` | Telas (Escala, painel do time, regra semana a semana, grupo na edição de funcionário), `qa:rotation-teams`, bloco 27 do navegador e o plano `f10` das capturas |
+| ``4e3d9ec`` | Roteiro e folha do deploy 4 (`DEPLOY_LINUX.md`, `docs/DEPLOY4_FOLHA_DO_DIA.md`) e a seção 16 da trava |
+| o de docs | Esta seção, as capturas e o `REGISTRO_USO_IA.md` |
+
+**Migration 021** (3.1, sem linha de dado alterada):
+- `portal_rotation_teams` (nome único, ativo, autoria);
+- `portal_rotation_team_versions` (padrão com vigência; CHECK no banco: lista de 2 a 20 posições `onsite`/`remote` por `JSON_SCHEMA_VALID`, âncora em dia útil e, no semana a semana, 1 a 4 semanas, 5 posições por semana e âncora na segunda; uma versão por time e data);
+- `portal_rotation_team_members` (pertença com vigência; uma aberta por pessoa pela coluna gerada `open_employee_id`, como o `uq_schedule_rule_open` da 011; um início por pessoa; fim nunca antes do início);
+- `portal_schedule_rules.rotation_team_id` (nulo, FK, índice) e `funcionarios.grupo_escala` (`comum` para todos).
+
+Toda FK com `ON DELETE RESTRICT`. O rollback para antes de alterar se existir cópia `*_bkp_021`, copia o que existe (do cadastro, só o ID e o grupo de quem não está no `comum`) e não apaga regra: as regras gravadas pelos times continuam válidas (6.5).
+
+**Ensaio da 021 no MySQL 8.0.46** (`scripts/ensaio-migration.sh` do repositório, contêiner local `mysql:8.0.46` no WSL da estação, autorizado pelo responsável em 2026-11-15; dados fictícios: 14 cadastros, 13 regras, 3 exceções; schema montado pelo `database_SECURED.sql` e as migrations na ordem). Só contagens e assinaturas:
+
+| Variante | Etapa | Resultado |
+|---|---|---|
+| (a) `f10_021` | estado inicial | `tabelas_021 = 0`, `colunas_021 = 0`, "021 ausente"; regras 13 (assinatura 2116700938), cadastros 14 (454325012) |
+| | migration 1ª e 2ª vez | OK e OK; `tabelas_021 = 3`, `colunas_021 = 2`, `restricoes_021 = 9`; times, versões, pertenças e regras de time em 0; 14 no grupo `comum`; assinaturas iguais |
+| | rollback 1ª vez | OK; `tabelas_021 = 0`, `copias_de_rollback_021 = 5`, "021 ausente"; assinaturas iguais |
+| | rollback 2ª vez | para de propósito (`ERROR 1644 ... rollback_021 abortado: ja existe copia *_bkp_021`); nada muda |
+| (b) `f10_021_rollback` | linhas do ensaio 1ª e 2ª vez | `times = 1`, `versoes = 1`, `pertencas_abertas = 1`, `regras_de_time = 1`, `membros_abertos_sem_regra_aberta_do_time = 0`, `regras_de_time_sem_membro = 0`, 1 cadastro `separado`; iguais na 2ª vez |
+| | rollback 1ª e 2ª vez | OK, 5 cópias, assinatura das regras igual à inicial; a 2ª para de propósito |
+
+As duas variantes terminaram com o banco de ensaio removido (saída 0). **Restrições linha a linha** num banco de rascunho: 28/28 (12 gravações válidas aceitas, 16 inválidas recusadas: nome repetido ou vazio, versão repetida, valor fora da lista, 1 e 21 posições, padrão que não é lista, âncora no sábado, semanal na terça, com 9 posições ou 5 semanas, time ou cadastro inexistente, segunda pertença aberta, início repetido, fim antes do início, regra com time inexistente, apagar time com versão e membro, grupo fora do ENUM). As cópias do rollback guardaram 1 time, 3 versões, 2 pertenças, 1 regra de time e 1 grupo; as 13 regras ficaram.
+
+**Serviço** (`RotationTeamService`, D-F10-5):
+- leitura para quem lê escalas, só com o ID do membro;
+- criar, renomear e desativar o time; versão nova ou correção da versão do mesmo início, com prévia (20 dias úteis, membros que mudam, bloqueados e arquivados);
+- incluir, mover e encerrar membros;
+- gravar exige `escalas.manage`; data passada, `escalas.retroativa`; L9 como na regra individual; a Liderança e o fora do Mapa não entram em time.
+- **O time é a fonte:** entrar, mudar de time e mudar o padrão gravam, na mesma transação, a regra `cycle` de cada membro dentro da pertença, pelo mesmo `planSave` da regra individual (o dono entra na comparação: a mesma regra de outro dono passa a ser do time). Sair não muda a regra. Travas na ordem time, colaboradores por ID.
+- Auditoria só com IDs: `TIME_RODIZIO_CRIADO`, `TIME_RODIZIO_VERSAO_ALTERADA` (WARNING: time, data, tamanho do padrão, membros afetados e os IDs), `TIME_RODIZIO_MEMBRO_ALTERADO`, mais `TIME_RODIZIO_ATUALIZADO` (nome e situação) e `TIME_RODIZIO_NEGADO` (perfil sem permissão).
+
+**Ciclo semana a semana e padrão explícito** (3.2): `cycle.weeks` (1 a 4 semanas de seg a sex, âncora na segunda) ou `cycle.pattern` (2 a 20 posições), para a regra individual e para o time; sem essas chaves, os blocos de antes, sem mudança. O FIXO CICLO intercalado passa a caber na API. `rule_config` ganha `weeks` só no semana a semana (o motor não lê; o rótulo vira "Ciclo 3 semanas, 9P/6R"); a prévia do F2B mostra o ciclo inteiro no semana a semana (até 20 dias) e os 10 de sempre nos demais.
+
+**409 da regra individual de membro** (3.1, aprovado na abertura do lote): gravar ou prever a regra numa data coberta por pertença, remover com pertença de hoje em diante e importar a linha de quem é membro hoje dão "Este técnico está no Time X; mude pelo time." Quem não é membro segue o caminho de antes.
+
+**Grupo da escala:** a lista de funcionários traz `grupo_escala` para a gestão; a edição (Liderança e admin, `funcionarios.manage`) grava só quando o campo vem, em comando próprio, com `FUNCIONARIO_GRUPO_ESCALA_ALTERADO` (só o ID).
+
+**Telas** (componentes do redesenho, sem classe CSS nova: CSS 68187 de 70000, igual): seção "Times de rodízio" na Escala presencial (gestão; Liderança e admin editam), painel do time no Drawer (versões, nova versão semana a semana, por lista de dias ou copiada de outro time deslocada em N dias úteis, salvar só depois da prévia do servidor; membros com vigência e histórico), a regra individual "Em blocos" ou "Semana a semana" (a data vai para a segunda) e o "Grupo da escala" na edição de funcionário. Membro aparece com o selo do time e "Muda pelo time", sem Editar nem Remover. Capturas antes e depois, claro e escuro, 1280 e 390 px, em `docs/design/capturas/f10-2/` (em 390 px: 0 alvos abaixo de 40 px e 0 rolagens laterais).
+
+#### 8.6.1 Plano de migração das regras de hoje (não roda em produção neste lote)
+
+**Objetivo:** cada técnico com a regra de RODÍZIO de hoje (ciclo de 3 posições com 1 remoto, cadastrada pela seção 7) vira membro do Time 1, 2 ou 3 sem mudar nenhum dia da escala.
+
+**Por que dá certo:** qualquer ciclo de 3 posições com 1 remoto, com qualquer âncora em dia útil, é uma das três fases do RODÍZIO da planilha (2.2). Com os times de padrão `[R,P,P]`, `[P,R,P]` e `[P,P,R]` e a âncora da planilha (01/10/2026), a regra que o time grava dá o mesmo dia a dia da regra de hoje.
+
+**Passos, depois de aprovados (pela tela, com a Liderança):**
+1. Escolher a data *X* da conversão (sugestão: o início de uma competência, depois do deploy 4).
+2. Rodar o plano, **só leitura**: `runuser -u www-data -- php scripts/plano-times-rodizio.php --a-partir=X` (transação READ ONLY, só contagens; `--detalhe` lista `employee_id`, motivo e time, nunca nome). Saída: técnicos por motivo (`convertivel`, `lideranca`, `fora_do_mapa`, `sem_regra`, `nao_e_ciclo`, `ciclo_invalido`, `ciclo_fora_do_rodizio`, `regra_individual_agendada_depois`, `sem_time_equivalente`), convertíveis por time e a prova pelo motor (dias comparados, iguais, diferentes). O script sai com 1 se algum dia mudar.
+3. Criar o Time 1, 2 e 3 com a versão a partir de *X* (ou antes), padrões `[R,P,P]`, `[P,R,P]`, `[P,P,R]` e âncora 01/10/2026 ("Copiar de outro time, deslocado em 1 e 2 dias úteis" faz o 2 e o 3 a partir do 1).
+4. Incluir cada convertível no time indicado, a partir de *X*. A regra de hoje encerra em *X* − 1 (histórico intacto) e a do time vale de *X* em diante, com o mesmo dia a dia.
+5. Conferir: a verificação da 021 (`membros_abertos_sem_regra_aberta_do_time = 0`) e o plano de novo (os mesmos convertíveis, 0 diferentes).
+
+Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL, FIXO CICLO, SEM HOME, FULL HOME e ciclos de outro tamanho.
+
+**Prova pelo motor** (dados fictícios; `RotationTeamPlanner::classifyForTeams` e `compareDays` sobre o `PresenceEngine` do repositório):
+- QA: cada data de início da seção 7 (Time 1 em 12/11 ou 09/11, Time 2 em 13/11 ou 10/11, Time 3 em 16/11 ou 11/11) vira o time certo com 0 dias diferentes em mais de 250 dias úteis; cada motivo de não conversão tem caso próprio.
+- No MySQL 8.0.46 local, o script pela linha de comando sobre a base fictícia (`--a-partir=2026-11-23`, horizonte de 730 dias): 13 técnicos ativos; 4 convertíveis (1 no Time 1, 2 no Time 2, 1 no Time 3); 4 `nao_e_ciclo`, 1 `ciclo_fora_do_rodizio`, 1 `regra_individual_agendada_depois`, 1 `sem_regra`, 1 `lideranca`, 1 `fora_do_mapa`; **2092 dias comparados, 2092 iguais, 0 diferentes**.
+
+#### 8.6.2 Os resultados de quem não vira membro não mudam
+
+- **No MySQL 8.0.46 local**, numa transação externa desfeita no fim (17/17, saídas não vazias: 541 linhas da escala, 12 pessoas no Calendário):
+  - (a) depois da migração pelo plano (os 4 convertíveis nos times): F2B (tela Escala), F5 (Calendário e relatório a partir do corte de 16/11/2026), F6 (Mapa PA) e F7 (período e resumo da operação) **idênticos para todos**, inclusive os membros e os totais; a regra individual de membro dá 409;
+  - (b) depois de mudar o padrão do Time 1: F2B e F5 idênticos para quem não é do Time 1; o membro segue o padrão novo, com o rótulo do semana a semana.
+- **Na bateria (banco simulado):** em 60 operações aleatórias de time (entrar, mover, mudar padrão, sair), as regras de quem não é membro ficam byte a byte iguais, e na pertença a regra é sempre a do time; no `qa-schedule-history`, quem não é membro grava e remove como antes. Os QAs do F2B, F5, F6 e F7 (`qa-schedule-history`, `qa-schedule-legacy-output`, `qa-presence-cutoff`, `qa-pa-conflicts`, `qa-operational-view`, `qa-presence-engine`) passam sem nenhuma expectativa mudada; as três que mudaram são deste lote (o filtro do formulário da regra e a contagem de `qa:*` no frontend; a matriz de perfis com o endpoint novo).
+
+#### 8.6.3 Decisões de implementação a aprovar
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D-F10-20 | O 409 do membro vale também na prévia, na remoção (pertença de hoje em diante) e na importação | Remover apagaria a regra agendada do time; a importação gravaria a regra individual |
+| D-F10-21 | Mudar o padrão vale só dentro da pertença; depois da saída, volta a regra que vigorava antes (com o mesmo dono) | "Sair do time não muda a regra" (3.1) continua verdade depois de uma versão nova |
+| D-F10-22 | Regra individual agendada dentro da pertença bloqueia (409 com a contagem); regra de outro time na faixa é substituída | O time não sobrescreve decisão individual sem registro; a de outro time é a pertença anterior |
+| D-F10-23 | Os dias sem regra dentro da pertença recebem a regra do time | A pertença cobre todos os dias dela (o planSave sozinho deixaria o buraco) |
+| D-F10-24 | "Encerrar" com data antes do início cancela a pertença futura e desfaz as regras dela (a anterior volta ao fim que tinha) | Desfazer um engano sem deixar regra de time sem membro |
+| D-F10-25 | Cadastro arquivado com pertença aberta: a versão nova o ignora e conta; o painel mostra "Arquivado" e a Liderança encerra | O arquivamento (F4, já em produção) não encerra a pertença. **Proposta:** encerrar a pertença no próprio arquivamento, num lote do F4 (muda a prévia do arquivar) |
+| D-F10-26 | `grupo_escala` na edição de funcionário (Liderança e admin), em comando próprio, auditado; quem está no `separado` pode ser membro de time (não é bloqueado) | O F10-3 usa o grupo; nenhuma regra do desenho bloqueia o separado no rodízio |
+| D-F10-27 | Desativar o time só sem membro aberto ou futuro; time desativado não recebe membro | Sem regra de time órfã |
+| D-F10-28 | O semana a semana guarda `weeks` no `rule_config` (o motor não lê) e a prévia mostra o ciclo inteiro (até 20 dias) | O rótulo "Ciclo 3 semanas" e a grade ao editar; os demais tipos ficam com a prévia de 10 dias |
+| D-F10-29 | Ciclo só presencial ou só remoto é recusado ("use Sempre presencial/remoto") | Mesmo tratamento do modo home do F2B |
+| D-F10-30 | "Copiar de outro time": o padrão rodado N dias úteis, com a mesma âncora; o semana a semana copiado vira lista de dias | Mesmo cálculo da 2.2 |
+| D-F10-31 | Ex-membro que corrige a regra no mesmo início dela mantém o `rotation_team_id` antigo (só a marcação; a escala é a gravada) | O UPDATE da regra individual não foi mudado, para não mexer nos QAs do F1/F2B; a verificação só olha membros abertos |
+
+#### 8.6.4 Validação
+
+- **Mutação** no worktree, com a trava `mut_guard.php`, cada mutante morto pela conferência certa:
+  - commit 1: 24/24 (migration, rollback, linhas do ensaio, verificação e travas);
+  - commit 2: 34/34 (serviço, planejador, padrão, 409 do membro, endpoint, grupo e plano); na 1ª rodada, 33/34 e 3 mortos por exceção não capturada: o caso "ciclo só presencial" entrou no QA do time e as três chamadas passaram a ter conferência própria (commit refeito antes da entrega: `5127cc1` virou `4b714c7`);
+  - commit 3: 23/23 (telas, schema, funções puras, bloco 27); na 1ª rodada, 21/23: a âncora padrão (o "hoje" do QA era segunda) e a largura das tabelas do painel em 1366 px ganharam conferência (`bbdc095` e `0ab3f17` viraram `a740998`);
+  - commit 4: 14/14 (roteiro, folha e a seção 16 da trava).
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree): `f346051`: saída 0, frontend 26/26, navegador 1092/1092; `4b714c7`: 0, 26/26, 1092/1092; `a740998`: 0, 27/27, 1112/1112 (repetida sozinha: na 1ª, um QA de 1 segundo rodou em paralelo por engano; as duas deram o mesmo número); `4e3d9ec`: 0, 27/27, 1112/1112. O commit de docs tem a bateria rodada depois dele, com o resultado no estado da sessão.

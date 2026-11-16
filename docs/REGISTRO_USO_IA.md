@@ -1549,6 +1549,20 @@ Base da afirmação:
 
 ---
 
+### F10-2: times de rodízio, ciclo semana a semana e grupo da escala (migration 021) — 2026-11-15
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Lote F10-2 do desenho do F10 (seções 3.1 e 3.2; D-F10-1 a D-F10-18 aprovadas): times de rodízio como cadastro (padrão e âncora por time com vigência, membros com vigência e histórico, sem perder o histórico da 011; a regra individual de membro dá 409), o `grupo_escala` e o editor de ciclo semana a semana (o FIXO CICLO intercalado passa a caber na API). O plano de migração das regras de hoje para os times, sem rodar em produção. O roteiro do deploy 4. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `f346051` (021), `4b714c7` (serviço, API, 409, grupo e plano), `a740998` (telas), ``4e3d9ec`` (roteiro e trava do deploy 4) e um commit de docs. Sem push pela IA (o deploy 3 roda com o `cd0653b`). |
+| **O que a IA alterou** | Migration 021, rollback, verificação e linhas do ensaio; `services/CyclePattern.php`, `RotationTeamPlanner.php`, `RotationTeamService.php`; `api/portal/rotation_teams.php`; `OperationalService` (padrão explícito, 409 do membro, rótulo e prévia do semana a semana); `ScheduleRulePlanner::planSave` (o dono na comparação, padrão de antes); `listar_funcionarios.php` e `atualizar_funcionario.php` (grupo); `scripts/plano-times-rodizio.php`; telas (`RotationTeams.jsx`, Escala e Funcionários); QAs (`qa-rotation-teams.php`, `qa:rotation-teams`, seção 7 do `qa-schedule-history`, grupo e matriz no `qa-security`, bloco 27 do navegador) e a trava do roteiro (seção 16). |
+| **Dados pessoais** | Nenhum. QA, ensaio, integração e capturas com dados fictícios ("Pessoa Teste NN", "Tecnico NN"). A auditoria nova grava só IDs; a leitura dos times devolve só o ID do membro; o plano imprime só contagens (com `--detalhe`, o ID, nunca o nome). |
+| **Validacao executada pela IA** | Ensaio da 021 no MySQL 8.0.46 local (contêiner no WSL, instalação autorizada pelo responsável), as duas variantes com saída 0 e as assinaturas iguais em todos os estados; restrições 28/28. Integração no MySQL local: F2B, F5, F6 e F7 idênticos depois da migração pelo plano e, para quem não é membro, depois de mudar o padrão (17/17); plano pela linha de comando: 4 convertíveis, 2092 dias, 0 diferentes. Mutação: 24/24, 34/34, 23/23 e 14/14 (roteiro, folha e a seção 16 da trava). Baterias completas sozinhas: `f346051`: saída 0, frontend 26/26, navegador 1092/1092; `4b714c7`: 0, 26/26, 1092/1092; `a740998`: 0, 27/27, 1112/1112 (repetida sozinha: na 1ª, um QA de 1 segundo rodou em paralelo por engano; as duas deram o mesmo número); `4e3d9ec`: 0, 27/27, 1112/1112. O commit de docs tem a bateria rodada depois dele, com o resultado no estado da sessão. `gitleaks` sem achados. |
+| **Limitacoes declaradas** | O ensaio e a integração rodaram no MySQL local com a base fictícia, não na cópia de produção (o passo 3 do roteiro do deploy 4 faz o ensaio no servidor). O arquivamento (F4) não encerra a pertença ao time (D-F10-25, proposta para um lote do F4). O plano de migração não foi rodado em produção. Decisões de implementação D-F10-20 a D-F10-31 a aprovar. Durante a bateria do `a740998` rodou, por engano, um QA de 1 segundo em paralelo: a bateria foi repetida sozinha e o número registrado é o da repetição. |
+| **Validacao humana** | Pendente: revisão única do lote F10-2. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
