@@ -70,6 +70,10 @@ echo "== PHP rotation teams QA =="
 # Times de rodizio e editor de ciclo (F10-2): migration 021, servico e plano; sem banco.
 php scripts/qa-rotation-teams.php
 
+echo "== PHP critico e hibrido QA =="
+# Equipes Critico e Hibrido (F9): migration 020 e regras; sem banco.
+php scripts/qa-critico-hibrido.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php

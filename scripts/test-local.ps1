@@ -190,6 +190,14 @@ if (!$phpExecutable) {
         Pass "QA dos times de rodizio concluido"
     }
 
+    # Sem banco: equipes Critico e Hibrido (F9): migration 020 e regras.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-critico-hibrido.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA das equipes Critico e Hibrido falhou"
+    } else {
+        Pass "QA das equipes Critico e Hibrido concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {
