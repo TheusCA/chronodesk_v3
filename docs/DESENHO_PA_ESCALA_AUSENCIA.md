@@ -5421,6 +5421,43 @@ Cada commit com a bateria completa sozinha e a mutação, como no F10-2.
 
 **Próximo passo:** revisão deste plano. Nenhum código do F9 antes da aprovação.
 
+#### 9.15.16 Execução do lote F9 (2026-11-16; aguarda revisão)
+
+Os cinco commits da 9.15.12, cada um com a bateria completa sozinha (`test-local.ps1 -SkipHttp -Browser` no worktree de validação) e a mutação no worktree próprio. Sem push (o do F9 só depois do aviso do fim do deploy 4).
+
+| # | Commit | Conteúdo | Bateria | Mutação |
+|---|---|---|---|---|
+| 1 | `3f96dc4` | Migration 020, rollback com guarda, verificação, linhas do ensaio, `qa-critico-hibrido` (estrutura) e as travas do roteiro do deploy 4 (`$migrationsAfterDeploy4`, `$qasAfterDeploy4`) | saída 0, 27/27, navegador 1112/1112 | 28/28 |
+| 2 | `ac34a36` | `PortalTeams` e `PauseRules` (funções puras), validadores do `security.php`, "Almoço" fora do Crítico (400 na API e recusa no gerenciador) | saída 0, 27/27, 1112/1112 | 31/31 |
+| 3 | `2a556e9` | Servidor: painel com as quatro equipes, almoço, `limite_segundos`, Métricas, motor (`lunch_source`, `shiftFor`), Visão operacional, hora extra, correção, plantão, escala, relatórios, ausências, Mapa PA, anexos, técnicos, rodízio só do grupo comum e grupo derivado no cadastro | saída 0, 27/27, 1112/1112 | 27/27 |
+| 4 | `d0f84fa` | Telas: lista única no frontend, Pausas (quatro equipes, selo do Crítico, "Almoço" só na sessão do Crítico, aviso de sem limite), Visão operacional (linhas Crítico e Híbrido), filtros e formulários; `qa:critico-hibrido`; bloco 28 no navegador; capturas antes e depois nos dois temas (`docs/design/capturas/f9`) | saída 0, 28/28, 1121/1121 | 23/23 |
+| 5 | `9829470` | Roteiro e folha do deploy 5 (38 comandos, `bash -n` em cada um) e a seção 17 do `qa-deploy-runbook` (433 verificações) | saída 0, 28/28, 1121/1121 | 14/14 |
+
+**Ensaio da 020 no MySQL 8.0.46 local** (o script do repositório, a origem `qa_f102`, com a 021): (a) migration 2x `OK`, `enums_com_critico_020 = 8`, `coluna_020 = 1`, `checks_ausencias = 2`; rollback 1x `OK` (`copias_de_rollback_020 = 1`, "020 ausente"); a 2ª vez para de propósito; assinaturas iguais nos cinco estados. (b) com um cadastro `critico` (no grupo `separado`) e um almoço gravado: `pausas_com_limite = 1`, `almoco_fora_do_critico = 0`, `almoco_com_alerta = 0`, `critico_ou_hibrido_no_grupo_comum = 0`; os dois rollbacks param (`ha linhas com equipe critico ou hibrido`). O 1º ensaio achou um defeito antes do commit: o parâmetro da nulidade (`VARCHAR(40)`) não cabia o comentário da coluna dos anexos (`ERROR 1406`); corrigido para `VARCHAR(120)`.
+
+**Integração no MySQL local** (`qa_f9` = `qa_f102` + 020, dados fictícios, tudo desfeito no fim): 15/15. O ENUM aceita `critico`; o N1 não lança "Almoço"; o Crítico lança; o almoço de 65 min excede o intervalo de 60; as pausas gravadas trazem `equipe = critico`, sem alerta, `limite_segundos = 3600` (almoço) e `1200` com o alerta de 15 min (café); as Métricas leem o limite gravado; a Visão operacional tem as linhas do Crítico e do Híbrido e o total = N1 + N2.
+
+**F2B, F5, F6 e F7 para N1 e N2:** sem mudança de resultado. Os QAs de antes passaram com expectativas só aditivas: as chaves `critico` e `hibrido` no resumo da Visão operacional e no `status.php`; o início da pausa em `pausas_atuais`; o técnico do Crítico com chave no `technicians` do motor; a consulta das regras com as duas equipes nos bancos simulados do Mapa PA e do corte; e, no `qa-absences`, a equipe desconhecida de exemplo (antes, `critico`).
+
+**Achados e correções durante o lote** (todos antes da entrega; nenhum commit enviado foi reescrito):
+- A bateria do commit 2 saiu com 1 (os 27 scripts npm e o navegador estavam OK): a normalização nova reconhecia `LIDERANÇA` (maiúscula acentuada), que hoje fica de fora de propósito (risco da 9.9), e a Visão operacional contava 2 na Liderança. Corrigido para tratar só o `Í` de CRÍTICO e HÍBRIDO, com o caso travado no QA; o commit foi refeito antes da entrega.
+- Mutantes vivos reforçaram os QAs: a coluna `limite_segundos` fora do IF (commit 1); `24:00` como hora (commit 2); a observação da reunião do Crítico por perfil (commit 3).
+- O `useLivePauses.js` é protegido por cinco QAs do frontend: ficou sem mudança, e a Visão operacional junta as quatro equipes a partir do `status`.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Proposta | Motivo |
+|---|---|---|
+| D-F9-19 | A Q-F9 do deploy é a própria verificação da 020, rodada antes dela no banco real (cadastros por equipe, ativos com equipe desconhecida, pausas por motivo, linhas com equipe nova, assinaturas com o total de ausências) | Nenhuma consulta digitada no MySQL (a trava do roteiro proíbe); o arquivo vem do commit gravado |
+| D-F9-20 | O CSV de reserva das pausas (sem banco) fica no formato de antes, sem o limite | O cabeçalho antigo continua valendo nas Métricas pelo CSV; sem o limite gravado, a configuração atual (como as pausas antigas) |
+| D-F9-21 | `LIDERANÇA` em maiúscula acentuada continua não reconhecida | Comportamento de antes (risco registrado na 9.9); a Visão operacional não muda |
+| D-F9-22 | Rótulo curto nas listas e tabelas: N1, N2 e LIDERANCA como antes; Crítico e Híbrido com acento | Telas e CSV de N1 e N2 iguais; o servidor faz o mesmo nos relatórios |
+| D-F9-23 | Na Visão operacional, Crítico e Híbrido só na tabela "Situação da equipe agora" (com a Liderança, fora dos totais); os cartões do topo continuam N1 e N2 | O topo é o grupo comum; menos mudança de leiaute |
+| D-F9-24 | Sem pausa, o `duracao_limite_segundos` do `status.php` continua o do café | É o que a tela usa para a dica "até N min" do café; igual a antes |
+| D-F9-25 | Mudar a equipe de Crítico ou Híbrido para N1 ou N2 não volta o grupo para `comum` sozinho | A gestão escolhe o grupo na mesma tela (o campo vem marcado) |
+
+**Pendências:** revisão do lote; AD-F9-1 a AD-F9-5 com a Liderança (o lote usa as respostas padrão); o deploy 4 e, depois, o deploy 5 (data, janela e quem acompanha: A DEFINIR); o push do F9 só depois do aviso do fim do deploy 4; o lote do F4 da D-F10-25 (depois).
+
 ---
 
 ## 10. Riscos e pendências
@@ -5513,7 +5550,7 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 | Lote proposto | Conteúdo | Depende de |
 |---|---|---|
 | F8 — Almoço por contrato | 11.1: migration 018, tabela de contratos e tela de durações (só admin), cadastro, validação, auditoria | Decisões de 11.1 tomadas em 2026-10-06; **lista de contratos e durações e resposta sobre o motivo (Liderança): sem elas, a 018 não é escrita** |
-| F9 — Equipes Crítico e Híbrido | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration **020** (enums e `pausas.limite_segundos`; a 019 é a data de corte do F5). **Plano na 9.15 (2026-11-16)**, com o Híbrido como equipe própria (D-F10-1) | F2 (aprovado em 2026-10-06); F8 só para o limite do almoço: sem ele, o caminho da DL17 (D-F9-16); pendências da Liderança (AD-F9-1 a AD-F9-5) |
+| F9 — Equipes Crítico e Híbrido | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration **020** (enums e `pausas.limite_segundos`; a 019 é a data de corte do F5). **Plano na 9.15 (2026-11-16)**, com o Híbrido como equipe própria (D-F10-1); **lote executado em 2026-11-16** (`3f96dc4`, `ac34a36`, `2a556e9`, `d0f84fa`, `9829470`; 9.15.16), aguarda revisão | F2 (aprovado em 2026-10-06); F8 só para o limite do almoço: sem ele, o caminho da DL17 (D-F9-16); pendências da Liderança (AD-F9-1 a AD-F9-5) |
 | SEC-07b — Texto livre no calendário (decisão de 2026-10-07) | `calendar.php` sem o texto livre de hora extra, correção de ponto, plantão e motivo de pausa para quem não é gestão nem o próprio colaborador (seção 9.4) | Logo depois do F3, antes do F4. **Implementado e aprovado em 2026-10-09** (seção 9.5; `oncall.php` junto, D3) |
 
 O item c) já está no F4. **Ordem decidida em 2026-10-06:** F2B agora; F3 a F7 na ordem do desenho; F8 assim que a Liderança mandar contratos e a resposta sobre o motivo; F9 depois do F8.

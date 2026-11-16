@@ -1592,6 +1592,20 @@ Base da afirmação:
 
 ---
 
+### F9: equipes Crítico e Híbrido e o almoço do Crítico (lote, commits 1 a 5) — 2026-11-16
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Implementar o lote F9 aprovado (desenho principal, 9.15, com a D-F9-6/16 revista e a D-F10-19 (c)): migration 020, regras puras, servidor, telas e o roteiro do deploy 5 com a trava. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `3f96dc4` (020), `ac34a36` (regras), `2a556e9` (servidor), `d0f84fa` (telas), `9829470` (roteiro do deploy 5) e o commit de docs deste registro. Sem push pela IA (o do F9 espera o fim do deploy 4). |
+| **O que a IA alterou** | Migration 020 com rollback, verificação e linhas do ensaio; `services/PortalTeams.php` e `services/PauseRules.php`; `security.php`, `classes/GerenciadorPausas.php`, `classes/Funcionario.php`, `services/Presence*.php`, `OperationalService`, `AbsenceService`, `PaMapService`, `ShiftAttachmentService`, `RotationTeamService`, APIs de pausa, painel, técnicos e cadastro; `frontend/src/lib/teams.ts`, `pauseTimer.ts`, Pausas, Visão operacional, filtros e formulários; QAs (`qa-critico-hibrido.php` e `.mjs`, bloco 28 do navegador) e expectativas aditivas em QAs de antes; `DEPLOY_LINUX.md` (deploy 5), `docs/DEPLOY5_FOLHA_DO_DIA.md`, seção 17 do `qa-deploy-runbook`; capturas em `docs/design/capturas/f9`; desenho 9.15.16 e 11.4. |
+| **Dados pessoais** | Nenhum. Ensaio, integração e capturas com dados fictícios no MySQL 8.0.46 local e no servidor simulado. A planilha da escala crítica não foi lida. |
+| **Validacao executada pela IA** | Bateria completa sozinha em cada commit (o do commit 5 no resumo da entrega) e mutação (28/28, 31/31, 27/27, 23/23, 14/14); ensaio da 020 nas duas variantes; integração 15/15; `bash -n` nos 38 comandos da folha; lint, typecheck e build (CSS 68187 bytes). |
+| **Limitacoes declaradas** | O ensaio no servidor é o passo 3 do deploy 5; o tempo da cópia da `portal_absences` em produção só se sabe pela Q-F9. As capturas do "antes" saíram do build do worktree do deploy 4 (o frontend do commit 3 é o mesmo). Entre os commits, durante a bateria, rodei poucos comandos leves (edição de arquivo e `php -l`). |
+| **Validacao humana** | Pendente: revisão única do lote, com D-F9-19 a D-F9-25 (9.15.16). |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
