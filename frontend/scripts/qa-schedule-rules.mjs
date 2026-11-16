@@ -105,7 +105,8 @@ assert.doesNotMatch(operationalPage, /filter\(\(item\) => !item\.effective_until
 // F1 (P12, L9): Liderança com regra fixa, cadastro fora do Mapa PA e da escala.
 const adminPage = readFrontend('src/pages/AdminPage.jsx')
 const formSchemas = readFrontend('src/lib/formSchemas.ts')
-assert.match(operationalPage, /const ruleEmployees = allEmployees\.filter\(\(employee\) => !isLeadershipTeam\(employee\.equipe\)\)/, 'Regra de escala nao oferece cadastro da Lideranca')
+// [F10-2] Nem membro de time de rodizio (a regra dele muda pelo time; o servidor da 409).
+assert.match(operationalPage, /const ruleEmployees = allEmployees\.filter\(\(employee\) => !isLeadershipTeam\(employee\.equipe\) && !teamOf\.has\(Number\(employee\.id\)\)\)/, 'Regra de escala nao oferece cadastro da Lideranca nem membro de time de rodizio')
 assert.match(operationalPage, /hasPermission\(session, 'escalas\.lideranca'\) \? allEmployees : ruleEmployees/, 'Excecao de lider so para quem tem escalas.lideranca (L9)')
 // F3 (commit 6): as opcoes vem de EXCEPTION_TYPE_OPTIONS (P7); o filtro do lider continua.
 assert.match(operationalPage, /EXCEPTION_TYPE_OPTIONS\.filter\(\(option\) => !\(exceptionIsLeadership && option\.value === 'remote'\)\)/, 'Excecao remota nao e oferecida para lider')

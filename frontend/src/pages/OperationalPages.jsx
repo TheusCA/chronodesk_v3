@@ -11,6 +11,10 @@ import { ConfirmActionDialog } from '../components/ui/ConfirmActionDialog'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { PartialMarker, PresenceBadge } from '../components/ui/Presence'
+import { Segmented } from '../components/ui/Segmented'
+import { Tag } from '../components/ui/Tag'
+import { RotationTeamsSection, WeeklyCycleEditor } from './RotationTeams'
+import { defaultWeek, isMonday, nextMonday, patternToWeeks, teamByEmployee } from '../lib/rotationTeams'
 import { useResource } from '../hooks/useResource'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
 import { api, apiUrl, post, postForm } from '../lib/api'
@@ -122,6 +126,9 @@ function emptyScheduleRule(effectiveFrom = today) {
     cycle_onsite_days: '2',
     cycle_remote_days: '1',
     cycle_starts_with: 'onsite',
+    // [F10-2] Ciclo em blocos (o de antes) ou semana a semana (desenho do F10, 3.2).
+    cycle_mode: 'blocks',
+    cycle_weeks: [defaultWeek()],
   }
 }
 
@@ -148,7 +155,10 @@ function buildRulePayload(data, action) {
       payload.weekdays = data.weekdays
     }
   }
-  if (ruleType === 'cycle') {
+  if (ruleType === 'cycle' && data.cycle_mode === 'weekly') {
+    // [F10-2] Semana a semana: as semanas e a segunda-feira inicial; o servidor monta o pattern.
+    payload.cycle = { weeks: data.cycle_weeks, anchor_date: data.effective_from }
+  } else if (ruleType === 'cycle') {
     payload.cycle = {
       onsite_days: Number(data.cycle_onsite_days),
       remote_days: Number(data.cycle_remote_days),
@@ -293,6 +303,9 @@ export function SchedulePage({ session, notify }) {
   const canRemoveRule = hasPermission(session, 'escalas.manage')
   const canRetroactiveRule = hasPermission(session, 'escalas.retroativa')
   const employees = useEmployees()
+  // [F10-2] Times de rodízio: a gestão lê; quem é membro tem a regra pelo time.
+  const rotation = useResource('portal/rotation_teams.php', { enabled: canManage })
+  const teamOf = teamByEmployee(rotation.data?.teams, rotation.data?.today || today)
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '' })
   const resource = useResource(`portal/schedules.php${queryString(filters)}`)
   const {
@@ -346,7 +359,7 @@ export function SchedulePage({ session, notify }) {
   // Fora do Mapa PA e da escala: sem regra nem exceção (P12).
   const allEmployees = (employees.data?.funcionarios || []).filter((employee) => employee.fora_mapa_escala !== true)
   // Regra: só N1 e N2. Exceção de líder: só admin (L9), nunca remota.
-  const ruleEmployees = allEmployees.filter((employee) => !isLeadershipTeam(employee.equipe))
+  const ruleEmployees = allEmployees.filter((employee) => !isLeadershipTeam(employee.equipe) && !teamOf.has(Number(employee.id)))
   const exceptionEmployees = hasPermission(session, 'escalas.lideranca') ? allEmployees : ruleEmployees
   const exceptionIsLeadership = isLeadershipTeam(allEmployees.find((employee) => String(employee.id) === String(exceptionSelection.employee_id))?.equipe)
   // A exceção gravada vem do GET da tela quando ele cobre a escolha (período e
@@ -493,6 +506,7 @@ export function SchedulePage({ session, notify }) {
     const config = item.config || {}
     const pattern = Array.isArray(config.pattern) ? config.pattern : []
     const homeMode = item.rule_type === 'fixed_weekdays' && config.input_mode === 'home'
+    const weeks = item.rule_type === 'cycle' ? patternToWeeks(pattern, config.weeks) : null
     setRulePreview(null)
     resetRule({
       ...emptyScheduleRule(),
@@ -505,6 +519,8 @@ export function SchedulePage({ session, notify }) {
       cycle_onsite_days: pattern.length ? String(pattern.filter((value) => value === 'onsite').length) : '2',
       cycle_remote_days: pattern.length ? String(pattern.filter((value) => value === 'remote').length) : '1',
       cycle_starts_with: pattern[0] === 'remote' ? 'remote' : 'onsite',
+      cycle_mode: weeks ? 'weekly' : 'blocks',
+      cycle_weeks: weeks || [defaultWeek()],
     })
   }
 
@@ -617,7 +633,13 @@ export function SchedulePage({ session, notify }) {
   const activeRules = (resource.data?.rules || []).filter((item) => item.is_current || item.is_future)
 
   function ruleBadge(item) {
-    return <span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span>
+    const team = teamOf.get(Number(item.employee_id))
+    return (
+      <span className="flex flex-wrap gap-2">
+        <span className={`status-badge ${scheduleRuleTone(item.rule_type)}`}>{item.rule_label || scheduleRuleLabel(item.rule_type, item.weekdays || [])}</span>
+        {team && <Tag tone="neutral">{team}</Tag>}
+      </span>
+    )
   }
 
   function ruleValidity(item) {
@@ -631,10 +653,12 @@ export function SchedulePage({ session, notify }) {
 
   function ruleActions(item) {
     if (item.implicit) return <span>Regra fixa da Liderança; exceções só pelo admin</span>
+    const team = teamOf.get(Number(item.employee_id))
     return (
       <div className="flex flex-wrap gap-2">
-        {canManage && <button className="table-action" onClick={() => ruleGuard.requestLeave(() => editRule(item))} type="button">Editar</button>}
-        {canRemoveRule ? <button className="table-action text-danger" onClick={(event) => askRemoveRule(item, event.currentTarget)} type="button">Remover regra</button> : <span>Restrito a admin</span>}
+        {team && <span data-rule-team="">Muda pelo {team} (Times de rodízio)</span>}
+        {canManage && !team && <button className="table-action" onClick={() => ruleGuard.requestLeave(() => editRule(item))} type="button">Editar</button>}
+        {!team && (canRemoveRule ? <button className="table-action text-danger" onClick={(event) => askRemoveRule(item, event.currentTarget)} type="button">Remover regra</button> : <span>Restrito a admin</span>)}
         <button aria-expanded={String(historyEmployee?.id) === String(item.employee_id)} className="table-action" onClick={(event) => toggleHistory(item, event.currentTarget)} type="button">Histórico</button>
       </div>
     )
@@ -715,6 +739,24 @@ export function SchedulePage({ session, notify }) {
               </div>
             )}
             {rule.rule_type === 'cycle' && (
+              <Segmented
+                label="Montar o ciclo"
+                onChange={(mode) => {
+                  setRuleValue('cycle_mode', mode, { shouldDirty: true })
+                  // Semana a semana começa numa segunda: a data vai para a próxima segunda.
+                  if (mode === 'weekly' && !isMonday(rule.effective_from)) setRuleValue('effective_from', nextMonday(rule.effective_from), { shouldDirty: true })
+                }}
+                options={[{ value: 'blocks', label: 'Em blocos' }, { value: 'weekly', label: 'Semana a semana' }]}
+                value={rule.cycle_mode}
+              />
+            )}
+            {rule.rule_type === 'cycle' && rule.cycle_mode === 'weekly' && (
+              <div className="space-y-3 rounded-lg border border-line bg-surface-2 p-3">
+                <WeeklyCycleEditor onChange={(weeks) => { setRuleValue('cycle_weeks', weeks, { shouldDirty: true }); clearRuleErrors('cycle_weeks') }} weeks={rule.cycle_weeks || [defaultWeek()]} />
+                {ruleErrors.cycle_weeks && <span className="block text-xs text-danger">{ruleErrors.cycle_weeks.message}</span>}
+              </div>
+            )}
+            {rule.rule_type === 'cycle' && rule.cycle_mode !== 'weekly' && (
               <div className="space-y-3 rounded-lg border border-line bg-surface-2 p-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="label">Dias presenciais
@@ -734,11 +776,11 @@ export function SchedulePage({ session, notify }) {
                 <p className="text-xs text-muted">Conta só dias úteis (segunda a sexta); feriado conta como dia útil. Até 20 dias no ciclo.</p>
               </div>
             )}
-            <label className="label">{rule.rule_type === 'cycle' ? 'Data inicial do ciclo' : 'Início da vigência'}
+            <label className="label">{rule.rule_type === 'cycle' ? (rule.cycle_mode === 'weekly' ? 'Data inicial do ciclo (segunda-feira)' : 'Data inicial do ciclo') : 'Início da vigência'}
               <input aria-invalid={Boolean(ruleErrors.effective_from)} className="field mt-2" min={canRetroactiveRule ? undefined : today} required type="date" {...registerRule('effective_from')} />
               {ruleErrors.effective_from && <span className="mt-1 block text-xs text-danger">{ruleErrors.effective_from.message}</span>}
               <span className="mt-1 block text-xs text-muted">
-                {rule.rule_type === 'cycle' ? 'Precisa ser dia útil; o ciclo vale a partir dela. ' : ''}
+                {rule.rule_type === 'cycle' ? (rule.cycle_mode === 'weekly' ? 'Segunda-feira da semana 1; o ciclo vale a partir dela. ' : 'Precisa ser dia útil; o ciclo vale a partir dela. ') : ''}
                 A regra vigente termina na véspera e o histórico fica guardado.
                 {canRetroactiveRule ? ' Data anterior a hoje reescreve o histórico e fica auditada.' : ' Data anterior a hoje: só administradores e Liderança.'}
               </span>
@@ -808,6 +850,9 @@ export function SchedulePage({ session, notify }) {
             )}
           </section>
         </div>
+      )}
+      {canManage && (
+        <RotationTeamsSection employees={employees.data?.funcionarios} notify={notify} onChanged={() => { resource.refresh(); history.refresh() }} resource={rotation} session={session} />
       )}
       <OperationalShell resource={resource}>
         {activeRules.length > 0 && (

@@ -94,7 +94,13 @@ function refineEmployeeHours(value: EmployeeHours, ctx: z.RefinementCtx): void {
 }
 
 // Edição: o ID do cadastro (só leitura na tela) vai junto e é validado.
-export const employeeFormSchema = z.object({ id: employeeIdSchema, ...employeeFieldsShape }).superRefine(refineEmployeeHours)
+// [F10-2] Grupo da escala (comum ou separado, desenho do F10 3.1 e 3.8): só na
+// edição; ausente (lista sem a coluna) não vai para o servidor, que mantém o gravado.
+export const employeeFormSchema = z.object({
+  id: employeeIdSchema,
+  ...employeeFieldsShape,
+  grupo_escala: z.enum(['comum', 'separado'], { error: 'Grupo da escala inválido.' }).optional(),
+}).superRefine(refineEmployeeHours)
 
 // Criação: sem ID; um 'id' que chegue aqui é descartado pelo Zod (chave desconhecida).
 export const employeeCreateSchema = z.object(employeeFieldsShape).superRefine(refineEmployeeHours)
@@ -128,6 +134,9 @@ export const scheduleRuleSchema = z.object({
   cycle_onsite_days: z.string().default('2'),
   cycle_remote_days: z.string().default('1'),
   cycle_starts_with: z.enum(['onsite', 'remote'], { error: 'Informe se o ciclo comeca por dia presencial ou remoto.' }).default('onsite'),
+  // [F10-2] Ciclo semana a semana (desenho do F10, 3.2): 1 a 4 semanas de seg a sex.
+  cycle_mode: z.enum(['blocks', 'weekly'], { error: 'Modo do ciclo invalido.' }).default('blocks'),
+  cycle_weeks: z.array(z.array(z.enum(['onsite', 'remote']))).default([]),
 }).superRefine((value, ctx) => {
   if (value.rule_type === 'fixed_weekdays' && value.input_mode === 'onsite' && value.weekdays.length === 0) {
     ctx.addIssue({
@@ -152,7 +161,21 @@ export const scheduleRuleSchema = z.object({
       })
     }
   }
-  if (value.rule_type === 'cycle') {
+  if (value.rule_type === 'cycle' && value.cycle_mode === 'weekly') {
+    // Espelha CyclePattern::fromPayload (o servidor valida de novo).
+    const weeks = value.cycle_weeks
+    const pattern = weeks.flat()
+    if (weeks.length < 1 || weeks.length > 4 || weeks.some((week) => week.length !== 5)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cycle_weeks'], message: 'O ciclo semana a semana tem de 1 a 4 semanas, de segunda a sexta.' })
+    } else if (!pattern.includes('remote')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cycle_weeks'], message: 'Ciclo sem nenhum dia remoto: use a regra "Sempre presencial".' })
+    } else if (!pattern.includes('onsite')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['cycle_weeks'], message: 'Ciclo sem nenhum dia presencial: use a regra "Sempre remoto".' })
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value.effective_from) && new Date(`${value.effective_from}T12:00:00Z`).getUTCDay() !== 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['effective_from'], message: 'No ciclo semana a semana, a data inicial precisa ser uma segunda-feira.' })
+    }
+  } else if (value.rule_type === 'cycle') {
     const onsite = cycleDays(value.cycle_onsite_days)
     const remote = cycleDays(value.cycle_remote_days)
     if (onsite === null) {

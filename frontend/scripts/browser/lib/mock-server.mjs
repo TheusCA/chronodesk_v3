@@ -91,12 +91,68 @@ const pausedStatus = () => ({ ...GET['status.php'], n1: [...(pausedEmployee ? [{
 export const PA_ASSIGNMENT = { id: 7, pa_number: '1726', employee_id: 1, employee_name: NAMES[0], team: TEAMS[0], schedule_rule_label: 'Sempre presencial', source: 'assignment', valid_from: '2026-10-01', valid_until: '2026-12-31', notes: 'Observacao do vinculo', presence: { status: 'onsite', situacao: 'presencial', categoria: null, detalhe: null, parcial: null } }
 // [17f] Outro vinculo no mesmo PA (remoto no dia, sem fim e sem observacao): "Editar outro vinculo" com o formulario sujo.
 export const PA_OTHER_ASSIGNMENT = { id: 8, pa_number: '1726', employee_id: 3, employee_name: NAMES[2], team: TEAMS[2], schedule_rule_label: 'Ciclo 2 e 1', source: 'assignment', valid_from: '2026-09-01', valid_until: null, notes: null, presence: { status: 'remote', situacao: 'remoto', categoria: null, detalhe: null, parcial: null } }
+// [F10-2] Times de rodizio: o Time 1 com padrao e sem membros (os blocos antigos
+// da Escala continuam com "Editar" em todas as regras); POST muda o estado.
+const rotationVersion = (id, effective_from, pattern, anchor_date, weeks = null) => {
+  const onsite = pattern.filter((value) => value === 'onsite').length
+  const counts = `${onsite}P/${pattern.length - onsite}R`
+  return { id, team_id: 1, effective_from, pattern, anchor_date, weeks, label: weeks ? `Ciclo ${weeks} ${weeks === 1 ? 'semana' : 'semanas'}, ${counts}` : `Ciclo ${counts}` }
+}
+let rotationTeams = []
+const restoreRotationTeams = () => {
+  const version = rotationVersion(1, '2026-10-01', ['remote', 'onsite', 'onsite'], '2026-10-01')
+  rotationTeams = [{ id: 1, name: 'Time 1', active: true, current_version: version, versions: [version], members: [] }]
+}
+restoreRotationTeams()
+const rotationPreview = (body) => {
+  const pattern = body?.cycle?.weeks ? body.cycle.weeks.flat() : body?.cycle?.pattern ?? []
+  const days = []
+  for (let date = new Date(`${body?.effective_from}T12:00:00Z`), position = 0; days.length < 20 && pattern.length; date.setUTCDate(date.getUTCDate() + 1)) {
+    if (date.getUTCDay() === 0 || date.getUTCDay() === 6) continue
+    days.push({ date: date.toISOString().slice(0, 10), presence_type: pattern[position++ % pattern.length] })
+  }
+  return days
+}
+function rotationResponse(body) {
+  const team = rotationTeams.find((item) => item.id === Number(body?.team_id))
+  if (body?.action === 'preview_version') {
+    return [200, { sucesso: true, team_id: team?.id, effective_from: body.effective_from, label: 'Previa de teste', replaces: false, retroactive: false, members_changed: team?.members.length ?? 0, members_blocked: 0, members_inactive: 0, preview: rotationPreview(body) }]
+  }
+  if (body?.action === 'save_version' && team) {
+    const pattern = body.cycle.weeks ? body.cycle.weeks.flat() : body.cycle.pattern
+    const version = rotationVersion(team.versions.length + 1, body.effective_from, pattern, body.cycle.anchor_date, body.cycle.weeks?.length ?? null)
+    team.versions = [...team.versions, version]
+    team.current_version = version
+    return [200, { sucesso: true, mensagem: 'Padrão do time salvo.', version_id: version.id, members_affected: team.members.length, members_changed: team.members.length, rules_written: team.members.length }]
+  }
+  if (body?.action === 'add_member' && team) {
+    const member = { id: 100 + team.members.length, employee_id: Number(body.employee_id), valid_from: body.valid_from, valid_until: null, employee_active: true, is_current: body.valid_from <= DAY }
+    team.members = [...team.members, member]
+    return [200, { sucesso: true, mensagem: 'Técnico incluído no time.', member_id: member.id, rules_written: 1 }]
+  }
+  if (body?.action === 'end_member') {
+    for (const item of rotationTeams) item.members = item.members.map((member) => (member.id === Number(body.member_id) ? { ...member, valid_until: body.valid_until } : member))
+    return [200, { sucesso: true, mensagem: 'Saída do time registrada.', member_id: Number(body.member_id), cancelled: false }]
+  }
+  if (body?.action === 'save_team') {
+    if (team) {
+      team.name = body.name
+      team.active = body.active !== false
+      return [200, { sucesso: true, mensagem: 'Time salvo.', team_id: team.id, created: false, version: null }]
+    }
+    const id = rotationTeams.length + 1
+    const version = body.version ? rotationVersion(1, body.version.effective_from, body.version.cycle.weeks ? body.version.cycle.weeks.flat() : body.version.cycle.pattern, body.version.cycle.anchor_date, body.version.cycle.weeks?.length ?? null) : null
+    rotationTeams = [...rotationTeams, { id, name: body.name, active: true, current_version: version, versions: version ? [{ ...version, team_id: id }] : [], members: [] }]
+    return [200, { sucesso: true, mensagem: 'Time criado.', team_id: id, created: true, version: null }]
+  }
+  return [400, { sucesso: false, mensagem: 'Ação de time de rodízio inválida.' }]
+}
 const summaryValue = { overtime_approved_minutes: 120, overtime_pending_minutes: 60, adjustments: 2, oncall: 1, onsite_days: 10, remote_days: 8 }
 
 const GET = {
   'session.php': { sucesso: true, csrf_token: 'teste', role: 'admin', permissions: ADMIN_PERMISSIONS, ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' }, gestor: { autenticado: true, admin: true, username: 'admin.qa', role: 'admin' } },
   // Cadastros variados de proposito: abrir e fechar sem mexer nao pode contar como sujo.
-  'listar_funcionarios.php': { sucesso: true, funcionarios: each((nome, id, equipe) => ({ id, nome, equipe, ativo: true, jornada_entrada: id === 3 ? '08:00:00' : '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ad_login: id === 3 ? null : `tecnico.${id}`, access_role: id === 4 ? 'somente_leitura' : 'tecnico', arquivado_em: null, fora_mapa_escala: id === 2 })) },
+  'listar_funcionarios.php': { sucesso: true, funcionarios: each((nome, id, equipe) => ({ id, nome, equipe, ativo: true, jornada_entrada: id === 3 ? '08:00:00' : '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ad_login: id === 3 ? null : `tecnico.${id}`, access_role: id === 4 ? 'somente_leitura' : 'tecnico', arquivado_em: null, fora_mapa_escala: id === 2, grupo_escala: id === 4 ? 'separado' : 'comum' })) },
   'portal/absences.php': { sucesso: true, limit: 200, truncated: false, items: each((employee_name, id, team) => ({ id, employee_id: id, employee_name, team, ...absencePeriods[id - 1], category: 'folga', status: 'approved', retroactive: 0 })) },
   'portal/oncall.php': { sucesso: true, items: [] },
   'portal/reports.php': { sucesso: true, summary: { overtime_approved_minutes: 0, overtime_pending_minutes: 0, adjustments_count: 0, oncall_count: 0, onsite_days: 0, remote_days: 0, pending: 0, rejected: 0, sync_errors: 0 }, by_employee: { [NAMES[0]]: summaryValue }, by_team: { N1: summaryValue } },
@@ -202,6 +258,10 @@ function apiResponse(method, key, search, body) {
     if (body.valid_until && body.valid_from && body.valid_until < body.valid_from) return [400, { sucesso: false, mensagem: PA_END_BEFORE_START }]
     return [200, { sucesso: true, id: body.id || 99, warnings: [], conflicts: [], conflicts_more: 0 }]
   }
+  if (key === 'portal/rotation_teams.php') {
+    if (method === 'GET') return [200, { sucesso: true, today: DAY, teams: rotationTeams }]
+    return rotationResponse(body)
+  }
   if (key === 'logout.php') return [200, { sucesso: true, csrf_token: 'teste' }]
   if (method === 'POST') return [200, { sucesso: true, mensagem: 'ok' }]
   return [200, GET[key] ?? { sucesso: true, items: [] }]
@@ -215,7 +275,7 @@ const ADMIN_SESSION = GET['session.php']
 // [R4a] Sessao de tecnico (CI), para iniciar a propria pausa na tela de Pausas.
 const TECHNICIAN_SESSION = { sucesso: true, csrf_token: 'teste', role: 'tecnico', permissions: ['portal.read', 'pausas.use'], ci: { autenticado: true, funcionario_id: 3, nome: NAMES[2], username: 'tecnico.3' }, gestor: { autenticado: false, admin: false, username: '', role: null } }
 
-// Sobe o servidor numa porta livre; devolve { port, requests, useLeadershipSession, useAdminSession, useTechnicianSession, restoreRules, keepOnlyRule, decideElsewhere, refuseDecision, restoreDecisions, setDecisionDelay, setPausedEmployee, refuseForceEnd, restoreDocuments, removeDocumentElsewhere, refuseDocument, restorePaAssignments, refusePaRemove, setScheduleExceptions, scheduleExceptions, refuseScheduleLookup, close }.
+// Sobe o servidor numa porta livre; devolve { port, requests, restoreRotationTeams, useLeadershipSession, useAdminSession, useTechnicianSession, restoreRules, keepOnlyRule, decideElsewhere, refuseDecision, restoreDecisions, setDecisionDelay, setPausedEmployee, refuseForceEnd, restoreDocuments, removeDocumentElsewhere, refuseDocument, restorePaAssignments, refusePaRemove, setScheduleExceptions, scheduleExceptions, refuseScheduleLookup, close }.
 // setDecisionDelay tambem atrasa derrubar pausa e remover documento (DD3).
 export function startMockServer(appDir) {
   const requests = []
@@ -246,7 +306,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, restoreRotationTeams, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

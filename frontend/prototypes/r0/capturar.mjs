@@ -19,6 +19,11 @@
 //                         técnico, em 1280 e 390 px; sem isso, o plano do R0
 //   --medir               em 390 px, conta alvos de toque abaixo de 40 px e
 //                         rolagem lateral em cada tela (sai 1 se houver)
+// [F10-2] --plano=f10     a tela Escala (com os times de rodízio, o painel do
+//                         time e a regra semana a semana) e a edição de
+//                         funcionário (grupo da escala), em 1280 e 390 px
+//   --app=<pasta>         fotografa outro build (o "antes" de um lote); sem
+//                         isso, ../app
 import { createServer, request } from 'node:http'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, extname, join, normalize, resolve } from 'node:path'
@@ -32,6 +37,7 @@ const option = (name) => process.argv.find((arg) => arg.startsWith(`--${name}=`)
 const [mode, outArg] = positional
 const theme = option('tema')
 const planName = option('plano')
+const appOption = option('app')
 const measureApp = process.argv.includes('--medir')
 if (theme !== null && !['claro', 'escuro'].includes(theme)) { console.error('--tema=claro|escuro'); process.exit(2) }
 if (!['antes', 'depois', 'verificar'].includes(mode) || (mode !== 'verificar' && !outArg)) {
@@ -126,12 +132,20 @@ const PLAN_R = [
   // [R4d] Funcionários com o painel lateral de adicionar aberto.
   ['admin', ['/admin?tab=funcionarios#adicionar'], [1280, 390]],
 ]
-const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar')
+// [F10-2] Times de rodízio (Liderança edita) e o grupo da escala no cadastro.
+const PLAN_F10 = [
+  ['lideranca', ['/escala-presencial', '/escala-presencial#time', '/escala-presencial#semanal', '/admin?tab=funcionarios#editar'], [1280, 390]],
+]
+const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar').replace('#time', '-time').replace('#semanal', '-semanal').replace('#editar', '-editar')
 
 // ---------------------------------------------------------------------------
 // [R4d] Ações antes da foto, pelo marcador no fim da rota (só no plano dos lotes R).
 const ACTIONS = {
   '#adicionar': ["document.querySelector('[data-employee-add]').click()", "!!document.querySelector('[data-employee-create]')"],
+  // [F10-2] Ações tolerantes: no "antes" o painel novo não existe e a foto sai sem ele.
+  '#time': ["document.querySelector('[data-team-open]')?.click()", "!!document.querySelector('[data-team-drawer]')", true],
+  '#semanal': ["(() => { const select = document.querySelector('select[name=\"rule_type\"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'cycle'); select.dispatchEvent(new Event('change', { bubbles: true })); setTimeout(() => [...document.querySelectorAll('main form button')].find((b) => b.textContent.trim() === 'Semana a semana')?.click(), 200) })()", "(() => { const editor = document.querySelector('main form [data-weekly-editor]'); editor?.scrollIntoView({ block: 'center' }); return !!editor })()", true],
+  '#editar': ["[...document.querySelectorAll('main button')].find((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')?.click()", "!!document.querySelector('[role=dialog] form')"],
 }
 async function shoot(page, url, width, height, file, ready) {
   const marker = Object.keys(ACTIONS).find((key) => url.endsWith(key))
@@ -140,7 +154,8 @@ async function shoot(page, url, width, height, file, ready) {
   await page.waitFor(ready, 10000)
   if (marker) {
     await page.evaluate(ACTIONS[marker][0])
-    await page.waitFor(ACTIONS[marker][1], 10000)
+    const optional = ACTIONS[marker][2] === true
+    await page.waitFor(ACTIONS[marker][1], optional ? 2500 : 10000).catch((error) => { if (!optional) throw error })
   }
   await page.evaluate('document.fonts ? document.fonts.ready.then(() => true) : true')
   await sleep(900)
@@ -149,7 +164,7 @@ async function shoot(page, url, width, height, file, ready) {
 }
 
 async function before() {
-  const appDir = resolve(here, '../../../app')
+  const appDir = appOption ? resolve(appOption) : resolve(here, '../../../app')
   if (!existsSync(join(appDir, 'index.html'))) throw new Error('falta o build em ../app (npm run build)')
   const mock = await startMockServer(appDir)
   let profile = 'admin'
@@ -177,7 +192,7 @@ async function before() {
   let total = 0
   let problems = 0
   try {
-    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : PLAN) {
+    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : PLAN) {
       profile = who
       for (const width of widths) {
         const height = HEIGHTS.get(width)

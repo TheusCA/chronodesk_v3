@@ -367,6 +367,17 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
           </span>
         </label>
       )}
+      {/* [F10-2] Grupo da escala: comum (o rodízio da planilha) ou separado
+          (Híbrido e Crítico até o F9). Só na edição e só se a lista trouxe o campo. */}
+      {editing && ['comum', 'separado'].includes(form.grupo_escala) && (
+        <label className="label sm:col-span-2" data-employee-group="">Grupo da escala
+          <select className="field mt-2" {...register('grupo_escala')}>
+            <option value="comum">Comum (rodízio da escala mensal)</option>
+            <option value="separado">Separado (Híbrido e Crítico)</option>
+          </select>
+          <span className="mt-1 block text-xs text-muted">Separado fica fora da distribuição de PA do grupo comum. Não muda a regra de escala.</span>
+        </label>
+      )}
       {/* [R4d] Lugar reservado para o grupo Tools (módulo de CHGs, P13): desabilitado e fora do
           React Hook Form, então nada vai para o servidor. Vem depois do "Fora do Mapa PA". */}
       <label className="check-row sm:col-span-2" data-tools-reserved="">
@@ -546,6 +557,7 @@ function EmployeesTab({
       access_role: item.access_role || 'tecnico',
       fora_mapa_escala: item.fora_mapa_escala === true,
       equipe: normalizeTeam(item.equipe),
+      grupo_escala: ['comum', 'separado'].includes(item.grupo_escala) ? item.grupo_escala : undefined,
     }
     setEditForm(nextForm)
     resetEditEmployee(nextForm)

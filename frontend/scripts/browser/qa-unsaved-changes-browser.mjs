@@ -2857,6 +2857,131 @@ async function employeesR4d(page, port) {
   report('Funcionarios, 390 px, "Filtros": abre os filtros (aria-expanded)', (await searchVisible()) && (await page.evaluate(`document.querySelector('[data-filters-toggle]').getAttribute('aria-expanded')`)) === 'true')
 }
 
+// 27. [F10-2] Times de rodizio e ciclo semana a semana (desenho do F10, 3.1 e
+// 3.2): o painel do time no Drawer, a grade semana x dia, salvar so depois da
+// previa do servidor e o corpo de cada gravacao; o membro incluido sai do
+// formulario da regra e fica sem "Editar"; a regra individual semana a semana;
+// em 390 px, sem rolagem lateral e com alvos de 40 px.
+async function rotationTeamsF102(page, port, mock) {
+  mock.restoreRotationTeams()
+  mock.restoreRules()
+  const lastBody = (action) => mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/rotation_teams.php' && r.body?.action === action).at(-1)?.body ?? null
+  const DRAWER = `document.querySelector('[data-team-drawer="1"]')`
+  const VERSION = `${DRAWER}.querySelector('[data-version-form]')`
+  const setInput = async (expression, value) => {
+    await page.evaluate(`(() => { const field = ${expression}; const select = field instanceof HTMLSelectElement; Object.getOwnPropertyDescriptor(select ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(field, ${JSON.stringify(value)}); field.dispatchEvent(new Event(select ? 'change' : 'input', { bubbles: true })) })()`)
+    await sleep(150)
+  }
+  const P = 'onsite'
+  const R = 'remote'
+  await goto(page, port, '/escala-presencial', 1366)
+  await page.waitFor(`!!document.querySelector('[data-rotation-teams] [data-team-open="1"]')`)
+  report('Times de rodizio: a secao na tela Escala, com o Time 1 e o padrao vigente', await page.evaluate(`/Time 1\\s*Ciclo 2P\\/1R/.test(document.querySelector('[data-rotation-teams] tbody').textContent)`))
+  await page.click(`document.querySelector('[data-team-open="1"]')`)
+  await page.waitFor(`!!${DRAWER}`)
+  report('Times de rodizio, 1366 px: as tabelas do painel cabem nele, sem rolagem lateral', await page.evaluate(`[...${DRAWER}.querySelectorAll('.table-wrap')].length > 0 && [...${DRAWER}.querySelectorAll('.table-wrap')].every((wrap) => wrap.scrollWidth <= wrap.clientWidth + 1)`))
+  report('Times de rodizio, Abrir: o painel do time no Drawer (dialogo modal com titulo)', await page.evaluate(`${DRAWER}.closest('[role="dialog"]')?.getAttribute('aria-modal') === 'true' && ${DRAWER}.closest('[role="dialog"]').querySelector('h2').textContent.trim() === 'Time 1'`))
+  await page.click(`[...${VERSION}.querySelectorAll('button')].find((b) => b.textContent.trim() === '2 semanas')`)
+  await page.click(`${VERSION}.querySelector('[data-week="1"] [data-day="qua"]')`)
+  const dates = `${VERSION}.querySelectorAll('input[type="date"]')`
+  await setInput(`${dates}[0]`, '2026-11-02')
+  await setInput(`${dates}[1]`, '2026-11-02')
+  const grid = await page.evaluate(`[...${VERSION}.querySelectorAll('[data-week] [data-day]')].map((b) => b.dataset.value === 'onsite' ? 'P' : 'R').join('')`)
+  report('Times de rodizio: 2 semanas, quarta da semana 1 trocada para home', grid === 'PPRPRPPPPR', grid)
+  report('Times de rodizio: "Salvar padrao" travado antes da previa', await page.evaluate(`[...${VERSION}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Salvar padrão').disabled`))
+  await page.click(`[...${VERSION}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Ver prévia')`)
+  await page.waitFor(`!!${VERSION}.querySelector('[data-version-preview]')`)
+  const preview = lastBody('preview_version')
+  report('Times de rodizio, previa: o corpo com o time, o inicio e as semanas (o servidor monta o padrao)', JSON.stringify(preview?.cycle) === JSON.stringify({ weeks: [[P, P, R, P, R], [P, P, P, P, R]], anchor_date: '2026-11-02' }) && preview?.team_id === 1 && preview?.effective_from === '2026-11-02', JSON.stringify(preview))
+  report('Times de rodizio, previa: 20 dias uteis do servidor', await page.evaluate(`${VERSION}.querySelectorAll('[data-version-preview] .status-badge').length === 20`))
+  await page.click(`[...${VERSION}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Salvar padrão' && !b.disabled)`)
+  await page.waitFor(`/Ciclo 2 semanas, 7P\/3R/.test(${DRAWER}.textContent)`, 3000).catch(() => null)
+  await sleep(200)
+  const saved = lastBody('save_version')
+  report('Times de rodizio, salvar: o mesmo corpo da previa', JSON.stringify(saved?.cycle) === JSON.stringify(preview?.cycle) && saved?.effective_from === '2026-11-02', JSON.stringify(saved))
+  report('Times de rodizio, salvar: a versao nova na tabela do padrao', await page.evaluate(`/Ciclo 2 semanas, 7P\\/3R/.test(${DRAWER}.textContent)`))
+  await setInput(`${DRAWER}.querySelector('[data-member-add] select')`, '1')
+  await setInput(`${DRAWER}.querySelector('[data-member-add] input[type="date"]')`, '2026-10-28')
+  await page.click(`[...${DRAWER}.querySelectorAll('[data-member-add] button')].find((b) => b.textContent.trim() === 'Incluir no time')`)
+  await sleep(500)
+  const added = lastBody('add_member')
+  report('Times de rodizio, incluir: o corpo com o time, o tecnico e a data', added?.team_id === 1 && added?.employee_id === 1 && added?.valid_from === '2026-10-28', JSON.stringify(added))
+  report('Times de rodizio, incluir: o tecnico na tabela de membros', await page.evaluate(`/Tecnico 01 Sobrenome/.test(${DRAWER}.querySelector('[data-team-members]').textContent)`))
+  await page.click(`document.querySelector('[aria-label="Fechar painel"]')`)
+  await sleep(300)
+
+  // Novo time copiado do Time 1 (o padrao vigente e o semana a semana salvo acima,
+  // P P H P H / P P P P H), deslocado em 1 dia util: o ultimo dia vai para o inicio.
+  await page.click(`document.querySelector('[data-team-new]')`)
+  await page.waitFor(`!!document.querySelector('[data-team-drawer="novo"]')`)
+  const NEW = `document.querySelector('[data-team-drawer="novo"]')`
+  await setInput(`${NEW}.querySelector('input:not([type])') || ${NEW}.querySelector('input[maxlength="60"]')`, 'Time 2')
+  await page.click(`[...${NEW}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Copiar de outro time')`)
+  await setInput(`${NEW}.querySelector('[data-version-form] select')`, '1')
+  await setInput(`${NEW}.querySelector('[data-version-form] input[type="number"]')`, '1')
+  const copied = await page.evaluate(`${NEW}.querySelector('[data-version-result]').textContent.trim()`)
+  report('Times de rodizio, novo time copiado do Time 1 deslocado em 1 dia util: H P P H P H P P P P', copied === 'Resultado: H P P H P H P P P P · Ciclo 7P/3R', copied)
+  await page.click(`[...${NEW}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Criar time')`)
+  await sleep(500)
+  const created = lastBody('save_team')
+  report('Times de rodizio, criar: o nome e a 1a versao com o padrao deslocado e a ancora do Time 1', created?.name === 'Time 2' && JSON.stringify(created?.version?.cycle) === JSON.stringify({ pattern: [R, P, P, R, P, R, P, P, P, P], anchor_date: '2026-11-02' }), JSON.stringify(created))
+  report('Times de rodizio, criar: o painel fecha e o Time 2 entra na tabela', await page.evaluate(`!document.querySelector('[data-team-drawer="novo"]') && /Time 2/.test(document.querySelector('[data-rotation-teams] tbody').textContent)`))
+  const member = await page.evaluate(`(() => {
+    const row = [...document.querySelectorAll('main [data-rule]')].find((el) => el.textContent.includes('Tecnico 01 Sobrenome')) || [...document.querySelectorAll('main tbody tr')].find((el) => el.textContent.includes('Tecnico 01 Sobrenome') && el.textContent.includes('Vigente'))
+    const select = ${RULE_SELECT('employee_id')}
+    return { pelo_time: !!row && /Muda pelo Time 1/.test(row.textContent), editar: !!row && [...row.querySelectorAll('button')].some((b) => b.textContent.trim() === 'Editar'), no_formulario: [...select.options].some((o) => o.value === '1') }
+  })()`)
+  report('Escala: o membro com "Muda pelo Time 1", sem "Editar", e fora do formulario da regra', member.pelo_time && !member.editar && !member.no_formulario, JSON.stringify(member))
+
+  // Regra individual semana a semana: o modo e o corpo da previa.
+  const openedDate = await page.evaluate(`${RULE_FORM}.querySelector('input[type="date"]').value`)
+  await setInput(RULE_SELECT('employee_id'), '3')
+  await setInput(RULE_SELECT('rule_type'), 'cycle')
+  await page.click(`[...${RULE_FORM}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Semana a semana')`)
+  await page.click(`${RULE_FORM}.querySelector('[data-week="1"] [data-day="seg"]')`)
+  await setInput(`${RULE_FORM}.querySelector('input[type="date"]')`, '2026-11-02')
+  report('Escala, regra semana a semana: o rotulo da data pede a segunda-feira', await page.evaluate(`/Data inicial do ciclo \\(segunda-feira\\)/.test(${RULE_FORM}.textContent)`))
+  await page.click(`[...${RULE_FORM}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Ver prévia')`)
+  await sleep(400)
+  const rulePreview = mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/schedules.php' && r.body?.action === 'rule_preview').at(-1)?.body
+  report('Escala, regra semana a semana: a previa leva as semanas e a segunda inicial', JSON.stringify(rulePreview?.cycle) === JSON.stringify({ weeks: [[R, P, P, P, R]], anchor_date: '2026-11-02' }), JSON.stringify(rulePreview?.cycle))
+  // Desfaz tudo (o dia, o modo, a data, o tipo e o colaborador): o formulario volta limpo.
+  await page.click(`${RULE_FORM}.querySelector('[data-week="1"] [data-day="seg"]')`)
+  await page.click(`[...${RULE_FORM}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Em blocos')`)
+  await setInput(`${RULE_FORM}.querySelector('input[type="date"]')`, openedDate)
+  await setInput(RULE_SELECT('rule_type'), 'undefined')
+  await setInput(RULE_SELECT('employee_id'), '')
+  report('Escala, regra semana a semana desfeita: o formulario volta limpo (sem aviso ao sair)', (await page.evaluate(`(getEventListeners(window).beforeunload || []).length`)) === 0)
+
+  // 390 px: o painel sem rolagem lateral e os dias com alvo de 40 px.
+  await goto(page, port, '/escala-presencial', 390)
+  await page.waitFor(`!!document.querySelector('[data-team-open="1"]')`)
+  await page.click(`document.querySelector('[data-team-open="1"]')`)
+  await page.waitFor(`!!${DRAWER}`)
+  const phone = await page.evaluate(`(() => {
+    const dialog = ${DRAWER}.closest('[role="dialog"]')
+    const days = [...dialog.querySelectorAll('[data-week] [data-day]')]
+    return { lateral: document.documentElement.scrollWidth > innerWidth || dialog.scrollWidth > dialog.clientWidth + 1, pequenos: days.filter((b) => b.getBoundingClientRect().height < 40).length, dias: days.length }
+  })()`)
+  report('Times de rodizio, 390 px: sem rolagem lateral e os dias com alvo de 40 px', !phone.lateral && phone.pequenos === 0 && phone.dias >= 5, JSON.stringify(phone))
+  await page.click(`document.querySelector('[aria-label="Fechar painel"]')`)
+  await sleep(200)
+
+  // Cadastro: o grupo da escala na edicao e no corpo do salvar.
+  await goto(page, port, '/admin?tab=funcionarios', 1366)
+  await page.click(`[...document.querySelectorAll('main button')].find((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')`)
+  await page.waitFor(`!!document.querySelector('[data-employee-group] select')`)
+  const group = await page.evaluate(`document.querySelector('[data-employee-group] select').value`)
+  await setInput(`document.querySelector('[data-employee-group] select')`, 'separado')
+  const updates = mock.requests.filter((r) => r.method === 'POST' && r.key === 'atualizar_funcionario.php').length
+  await page.click(`[...document.querySelectorAll('[role="dialog"] button[type="submit"]')].at(-1)`)
+  await sleep(500)
+  const update = mock.requests.filter((r) => r.method === 'POST' && r.key === 'atualizar_funcionario.php')
+  report('Cadastro: o grupo da escala abre com o gravado e vai no corpo do salvar', group === 'comum' && update.length === updates + 1 && update.at(-1).body?.grupo_escala === 'separado', JSON.stringify({ group, enviado: update.at(-1)?.body?.grupo_escala }))
+  mock.restoreRotationTeams()
+  mock.restoreRules()
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -2897,6 +3022,7 @@ try {
     [24, 'Visao operacional e modo painel (R4b)', () => dashboardR4b(page, mock.port, mock)],
     [25, 'Aprovacoes: um botao principal por vez e filtro (R4c)', () => approvalsR4c(page, mock.port, mock)],
     [26, 'Funcionarios: lista primeiro e filtros ativos (R4d)', () => employeesR4d(page, mock.port)],
+    [27, 'Times de rodizio e ciclo semana a semana (F10-2)', () => rotationTeamsF102(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue
