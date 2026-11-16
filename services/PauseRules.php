@@ -135,9 +135,71 @@ final class PauseRules {
         return $team === PortalTeams::CRITICAL ? 'pausa' : 'cadastro';
     }
 
-    /** Reuniao precisa de aprovacao: so o N2 nao precisa (D-F9-9). */
+    /**
+     * Reuniao precisa de aprovacao: so o N1 (e equipe desconhecida). N2,
+     * Critico e Hibrido sem aprovacao (D-F9-9 revista, AD-F9-2).
+     */
     public static function meetingNeedsApproval(?string $team): bool {
-        return $team !== PortalTeams::N2;
+        return !in_array($team, [PortalTeams::N2, PortalTeams::CRITICAL, PortalTeams::HYBRID], true);
+    }
+
+    /**
+     * [AD-F9-1] Equipes com a regra de pelo menos 1 disponivel no lugar do
+     * limite simultaneo fixo: Critico e Hibrido (N1 e N2 nao mudam).
+     */
+    public static function usesAvailabilityRule(?string $team): bool {
+        return in_array($team, [PortalTeams::CRITICAL, PortalTeams::HYBRID], true);
+    }
+
+    /** Dentro da jornada do dia: inicio <= agora < fim (HH:MM ou HH:MM:SS). */
+    public static function inShift(mixed $start, mixed $end, string $time): bool {
+        $from = self::clockSeconds($start);
+        $to = self::clockSeconds($end);
+        $now = self::clockSeconds($time);
+        return $from !== null && $to !== null && $now !== null && $now >= $from && $now < $to;
+    }
+
+    /**
+     * Situacao da equipe (9.15.17). $members: id => ['in_shift' => bool,
+     * 'paused' => bool, 'absent' => bool]. No turno = na jornada e sem ausencia;
+     * disponivel = no turno e fora de pausa (almoco incluido).
+     */
+    public static function teamAvailability(array $members): array {
+        $onShift = 0;
+        $available = 0;
+        foreach ($members as $member) {
+            if (($member['in_shift'] ?? false) === true && ($member['absent'] ?? false) !== true) {
+                $onShift++;
+                if (($member['paused'] ?? false) !== true) {
+                    $available++;
+                }
+            }
+        }
+        return ['no_turno' => $onShift, 'disponiveis' => $available, 'sem_disponivel' => $onShift > 0 && $available === 0];
+    }
+
+    /**
+     * Pode iniciar a pausa? Sobra pelo menos 1 disponivel sem quem pede, ou
+     * quem pede e a unica pessoa da equipe no turno (liberada, com destaque).
+     * Devolve ['allowed' => bool, 'alone' => bool].
+     */
+    public static function availabilityDecision(array $members, int $requesterId): array {
+        $others = $members;
+        unset($others[$requesterId]);
+        $situation = self::teamAvailability($others);
+        if ($situation['disponiveis'] >= 1) {
+            return ['allowed' => true, 'alone' => false];
+        }
+        $alone = $situation['no_turno'] === 0;
+        return ['allowed' => $alone, 'alone' => $alone];
+    }
+
+    public static function availabilityMessage(?string $team): string {
+        return 'Precisa ficar pelo menos 1 disponível no ' . PortalTeams::label($team) . '.';
+    }
+
+    public static function noneAvailableLabel(?string $team): string {
+        return PortalTeams::label($team) . ' sem ninguém disponível';
     }
 
     private static function clockSeconds(mixed $value): ?int {

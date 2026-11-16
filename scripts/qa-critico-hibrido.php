@@ -8,7 +8,8 @@ declare(strict_types=1);
 // 1. estrutura da migration 020, do rollback, das linhas do ensaio e da
 //    consulta de verificacao;
 // 2. regras puras: a lista unica de equipes (PortalTeams), os motivos e o
-//    limite da pausa por motivo e equipe (PauseRules) e os validadores.
+//    limite da pausa por motivo e equipe (PauseRules) e os validadores; a
+//    regra de pelo menos 1 disponivel do Critico e do Hibrido (AD-F9-1).
 // 3. servidor: painel com as quatro equipes, pausa de almoco do Critico,
 //    limite gravado, Metricas, motor (almoco pela pausa, jornada do dia) e
 //    cadastro (grupo da escala derivado), com estado e historico em
@@ -281,7 +282,36 @@ assert_same(['cadastro', 'cadastro', 'pausa', 'cadastro', 'cadastro', 'cadastro'
 
 // Totais e reuniao.
 assert_same([true, true, true, false], array_map([PauseRules::class, 'countsInTotals'], ['Café', 'Pessoal', 'Reunião', 'Almoço']), 'totais e medias: o almoco fica fora');
-assert_same([true, false, true, true, true, true], array_map([PauseRules::class, 'meetingNeedsApproval'], ['n1', 'n2', 'critico', 'hibrido', 'lideranca', null]), 'reuniao sem aprovacao so no N2 (D-F9-9)');
+assert_same([true, false, false, false, true, true], array_map([PauseRules::class, 'meetingNeedsApproval'], ['n1', 'n2', 'critico', 'hibrido', 'lideranca', null]), 'reuniao sem aprovacao no N2, no Critico e no Hibrido (D-F9-9 revista, AD-F9-2)');
+
+// Regra de pelo menos 1 disponivel (AD-F9-1, 9.15.17): so Critico e Hibrido.
+assert_same([false, false, true, true, false, false], array_map([PauseRules::class, 'usesAvailabilityRule'], ['n1', 'n2', 'critico', 'hibrido', 'lideranca', null]), 'regra de disponibilidade so no Critico e no Hibrido (N1 e N2 nao mudam)');
+foreach ([
+    ['08:00', '17:00', '08:00', true], ['08:00', '17:00', '16:59', true], ['08:00', '17:00', '17:00', false], ['08:00', '17:00', '07:59', false],
+    ['07:00:00', '17:00:00', '12:00', true], ['10:30', '20:30', '20:29', true], ['10:30', '20:30', '10:29', false], ['17:00', '08:00', '20:00', false], ['', '17:00', '10:00', false],
+] as [$start, $end, $time, $expected]) {
+    assert_same($expected, PauseRules::inShift($start, $end, $time), "na jornada: {$start}-{$end} as {$time}");
+}
+$member = static fn (bool $inShift, bool $paused = false, bool $absent = false): array => ['in_shift' => $inShift, 'paused' => $paused, 'absent' => $absent];
+$availabilityCases = [
+    // [membros, quem pede, permitido, sozinho, situacao da equipe antes (no_turno, disponiveis, sem_disponivel)]
+    'dois disponiveis' => [[1 => $member(true), 2 => $member(true)], 1, true, false, [2, 2, false]],
+    'o outro em pausa' => [[1 => $member(true), 2 => $member(true, true)], 1, false, false, [2, 1, false]],
+    'o outro em pausa (tres)' => [[1 => $member(true), 2 => $member(true, true), 3 => $member(true)], 1, true, false, [3, 2, false]],
+    'o outro fora da jornada' => [[1 => $member(true), 2 => $member(false)], 1, true, true, [1, 1, false]],
+    'o outro ausente' => [[1 => $member(true), 2 => $member(true, false, true)], 1, true, true, [1, 1, false]],
+    'o outro ausente e em pausa' => [[1 => $member(true), 2 => $member(true, true, true)], 1, true, true, [1, 1, false]],
+    'sozinho na equipe' => [[1 => $member(true)], 1, true, true, [1, 1, false]],
+    'os outros em pausa, um fora' => [[1 => $member(true), 2 => $member(true, true), 3 => $member(false)], 1, false, false, [2, 1, false]],
+    'quem pede fora da jornada' => [[1 => $member(false), 2 => $member(true)], 1, true, false, [1, 1, false]],
+    'todos em pausa' => [[1 => $member(true, true), 2 => $member(true, true)], 1, false, false, [2, 0, true]],
+];
+foreach ($availabilityCases as $label => [$members, $requester, $allowed, $alone, [$onShift, $available, $none]]) {
+    assert_same(['allowed' => $allowed, 'alone' => $alone], PauseRules::availabilityDecision($members, $requester), "disponibilidade: {$label}");
+    assert_same(['no_turno' => $onShift, 'disponiveis' => $available, 'sem_disponivel' => $none], PauseRules::teamAvailability($members), "situacao da equipe: {$label}");
+}
+assert_same(['no_turno' => 0, 'disponiveis' => 0, 'sem_disponivel' => false], PauseRules::teamAvailability([]), 'equipe vazia: sem destaque');
+assert_same(['Precisa ficar pelo menos 1 disponível no Crítico.', 'Precisa ficar pelo menos 1 disponível no Híbrido.', 'Crítico sem ninguém disponível', 'Híbrido sem ninguém disponível'], [PauseRules::availabilityMessage('critico'), PauseRules::availabilityMessage('hibrido'), PauseRules::noneAvailableLabel('critico'), PauseRules::noneAvailableLabel('hibrido')], 'mensagens da regra (AD-F9-1)');
 
 // "Almoço" fora do Critico: 400 na API e recusa no gerenciador, pela equipe do cadastro (nunca a do cliente).
 $startApi = (string)file_get_contents($root . '/api/iniciar_pausa.php');
