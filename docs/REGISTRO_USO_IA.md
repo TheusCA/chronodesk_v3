@@ -1573,7 +1573,22 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. O ensaio do rascunho e a Q-F9 rodaram no MySQL local com dados fictícios; a Q-F9 só conta. |
 | **Validacao executada pela IA** | Levantamento por leitura do código e do `information_schema` (oito tabelas com ENUM de equipe; 14 listas fixas no servidor e 13 arquivos no frontend). Rascunho da 020 (fora do git) ensaiado no MySQL 8.0.46 local: sete tabelas e a coluna nova com `INSTANT`; `portal_absences` só com `COPY` (tem `CHECK`); 020 2x sem erro; `critico` recusado antes e aceito depois; rollback para com linha `critico`, volta sem ela e para na 2ª vez. Q-F9 com saída 0 antes e depois. |
 | **Limitacoes declaradas** | O ensaio foi do rascunho, com a base fictícia: o da 020 de verdade é o commit 1 do F9, e o do servidor, o passo 4 do deploy. As respostas da Liderança (AD-F9-1 a AD-F9-5) e a D-F10-19 seguem pendentes; o plano usa as respostas padrão até lá. |
-| **Validacao humana** | Pendente: revisão do plano. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-16 (`85283b3`), com D-F9-1 a D-F9-18 como propostas, exceto a D-F9-6 e a D-F9-16, revistas (até o F8, o limite do almoço do Crítico é o intervalo de almoço do próprio cadastro, gravado em `limite_segundos`; sem intervalo válido, sem limite com aviso; com o F8, o contrato prevalece), e a D-F10-19 decidida: opção (c), PA fixo por pessoa pelo Mapa PA. A 9.15 foi atualizada no commit seguinte. |
+
+---
+
+### Deploy 3 executado em produção — 2026-11-16
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar a execução do deploy 3 (F10-1 sem efeito em produção, redesenho R1 a R4d e limpeza do `sdk-icon.png`; só código, sem migration) só com números. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: um commit só de docs (`DEPLOY_LINUX.md`, registro no fim do roteiro do deploy 3; esta entrada). Push autorizado pelo responsável em 2026-11-16, sem `--force`: o `cd0653b` para o `codex/modernizacao-ui-backend` e este branch. |
+| **Quem executou** | O responsável, no servidor, pela `docs/DEPLOY3_FOLHA_DO_DIA.md`, em 16/11/2026, sem nenhum PARE, com a manutenção das 10:30 às 10:33. A IA não tem acesso ao servidor. |
+| **Registro da execução (só números)** | 37 commits; migrations 0; lockfile 0; `sdk-icon.png` removido; `php -l` limpo; 18/18 QAs OK. Espaço mínimo livre: `/tmp` 448 MB, `/` 575 MB, `/var` 3241 MB. Backup de 52K; cópia do `app/` com 892K e 28 arquivos. Build em 1,43 s; `qa:bundle` OK (JS de entrada 199217, CSS 68187, fontes 85912). Health 200, `qa-timezone --db` OK, `FUMACA OK` (log sem linha nova, 1 login), reabertura 302. Polling, 1 rodada logo depois da reabertura (dentro do critério): `status.php` p50 9,2 / p95 18,2 ms; `dashboard.php` p50 7,4 / p95 12,2 ms; `solicitacoes_pendentes.php` p50 4,9 / p95 7,2 ms (nova base). Rollback não usado. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md`: registro da execução no fim do roteiro do deploy 3 (sem comando novo; a folha não mudou). |
+| **Pendente com o responsável** | A limpeza dos backups e da cópia `app-antes-deploy3`, só com aprovação. O `docs/SCHEDULE_FORM_RHF_ZOD - Copia.md` (fora do git) é uma cópia idêntica do `docs/SCHEDULE_FORM_RHF_ZOD.md` (mesmo tamanho, diff vazio) e não entra em commit. |
+| **Validacao executada pela IA** | Nenhuma no servidor. A medição do polling foi 1 rodada logo depois da reabertura, e não 2 rodadas alguns minutos depois, como a folha pedia: registrado como foi. |
+| **Limitacoes declaradas** | Os números são os enviados pelo responsável; a IA não os conferiu no servidor. |
 
 ---
 

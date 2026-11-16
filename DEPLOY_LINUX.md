@@ -4901,6 +4901,37 @@ e 2, nunca `--force`) e, com aprovacao, a limpeza do que o deploy deixou em
 `app-antes-deploy3`, `pre-deploy3-commit` e `deploy3-commit`; listar antes
 so nome, modo, dono e tamanho).
 
+#### Registro da execucao do deploy 3 (16/11/2026, no `cd0653b`)
+
+Executado pela `docs/DEPLOY3_FOLHA_DO_DIA.md`, sem nenhum PARE, com a
+manutencao das 10:30 as 10:33. So numeros, pela numeracao da folha:
+
+- **0 (estacao):** o `cd0653b`, onde a bateria completa ja tinha rodado
+  sozinha (saida 0, navegador com `falharam: 0`).
+- **1:** ambiente OK; fast-forward com 37 commits; migrations alteradas 0;
+  lockfile alterado 0; o `sdk-icon.png` fora do commit.
+- **2:** `php -l` limpo; os 18 QAs PHP OK.
+- **3:** espaco livre OK, com a menor folga em `/tmp` (448 MB), `/` (575 MB)
+  e `/var` (3241 MB); backup de 52K.
+- **4:** copia do `app/` com 892K e 28 arquivos.
+- **5 e 6:** `merge --ff-only`; build em 1,43 s, sem `npm ci` (lockfile sem
+  mudanca); `qa:bundle` OK, com o JS de entrada em 199217 bytes, o CSS em
+  68187 e as fontes em 85912.
+- **7:** health 200; `qa-timezone --db` OK; `FUMACA OK`, sem linha nova no
+  log e com 1 login.
+- **9:** reabertura com 302.
+- **10:** 1 rodada por endpoint, logo depois da reabertura (a folha pedia
+  alguns minutos depois e 2 rodadas; dentro do criterio mesmo assim):
+  `status.php` p50 9,2 e p95 18,2 ms; `dashboard.php` p50 7,4 e p95 12,2 ms;
+  `solicitacoes_pendentes.php` p50 4,9 e p95 7,2 ms (primeira medicao deste
+  endpoint: vira a base).
+- **11:** rollback nao usado.
+
+**Pendente, so com aprovacao:** a limpeza dos backups e da copia
+`app-antes-deploy3` (listar antes so nome, modo, dono e tamanho). O push do
+`cd0653b` para o `codex/modernizacao-ui-backend` foi autorizado pelo
+responsavel em 16/11/2026.
+
 ### Deploy 4 (F10-2: times de rodizio, ciclo semana a semana e grupo da escala; migration 021)
 
 **O que vai** (tudo depois do `cd0653b`, o commit do deploy 3):
