@@ -5216,8 +5216,8 @@ A 1ª rodada do `status.php` coincidiu com todas as telas voltando ao mesmo temp
 |---|---|---|
 | Cadastro (`funcionarios.equipe`) | `n1`, `n2`, `lideranca` | Mais `critico` e `hibrido` (D-F9-1). Uma lista só no servidor (`portal_teams()`), usada por toda validação; o frontend recebe a lista com os rótulos |
 | Painel (`status.php`, Pausas) | Chaves `n1` e `n2`; outras somem | Chaves `critico` e `hibrido` novas (aditivo, D-F9-3). Pausas mostra as quatro seções; o Crítico com destaque (11.3) |
-| Limite simultâneo | Por equipe, um valor | Continua por equipe (cada equipe conta as suas); o valor do Crítico e do Híbrido é o mesmo até a Liderança responder (AD-F9-1) |
-| Reunião | Sem aprovação só no N2 | Com aprovação no Crítico e no Híbrido, como no N1, até a resposta (AD-F9-2; D-F9-9) |
+| Limite simultâneo | Por equipe, um valor | N1 e N2 como hoje. **Crítico e Híbrido (AD-F9-1, respondida em 2026-11-16): sem limite fixo; "sempre pelo menos 1 disponível na equipe"**, com toda pausa contando, inclusive o almoço e a reunião (9.15.17) |
+| Reunião | Sem aprovação só no N2 | **Sem aprovação também no Crítico e no Híbrido (AD-F9-2)**, sujeita à regra de pelo menos 1 disponível; N1 como hoje |
 | Visão operacional (F7) | Linhas N1, N2 e Total (N1 + N2); Liderança à parte (D10) | Linhas Crítico e Híbrido próprias; o **Total continua N1 + N2** (o grupo comum, comparável com o histórico; D-F9-10); Liderança como hoje |
 | Escala (regra e exceção) | Regras só de N1 e N2 na tela; exceção também da Liderança | Regra individual e exceção para Crítico e Híbrido; **times de rodízio só N1 e N2** (o rodízio é do grupo comum; D-F9-11) |
 | Grupo comum dos PAs (F10) | `grupo_escala` à mão; separado = Híbrido e Crítico até o F9 | **Derivado:** comum = equipe N1 ou N2 **e** `grupo_escala = comum`. Mudar a equipe para Crítico ou Híbrido grava `separado` na mesma transação, e voltar ao `comum` com essas equipes dá 400 (D-F9-12) |
@@ -5233,7 +5233,7 @@ A 1ª rodada do `status.php` coincidiu com todas as telas voltando ao mesmo temp
 #### 9.15.4 Pausa "Almoço" do Crítico
 
 - **Quem:** só a equipe `critico`. `validate_motivo_pausa($motivo, $equipe)` aceita "Almoço" só com a equipe do **cadastro** (sessão e banco, nunca do cliente), conferido de novo no `GerenciadorPausas::iniciar_pausa`. Técnico de outra equipe com "Almoço": 400 (11.3, tratamento 4). A tela mostra a opção só para a sessão do Crítico (conveniência, não controle).
-- **Limite simultâneo:** o almoço **não** conta (proposta da 11.3; confirmação na AD-F9-1). Se a Liderança decidir que conta, a regra de hoje vira duas: limite simultâneo e limite de tempo (D-F9-5).
+- **Disponibilidade (AD-F9-1, respondida):** o almoço **conta**, como qualquer pausa, na regra de pelo menos 1 disponível do Crítico (9.15.17). Os alertas de 15 e 20 min continuam fora do almoço (D-F9-5 revista).
 - **Limite de tempo (D-F9-6, revista):** com o F8 no ar, a duração do contrato do técnico prevalece. **Até lá, a duração do intervalo de almoço do próprio cadastro** (`almoco_fim - almoco_inicio`, em segundos). Intervalo válido = fim depois do início, no mesmo dia; sem isso, **sem limite automático, com aviso** na tela ("Almoço sem intervalo válido no cadastro: sem limite automático"; o caminho da DL17). O `status.php` manda `duracao_limite_segundos` com esse limite, ou 0 sem intervalo válido; a tela passa a tratar o 0 do almoço como sem limite (hoje o 0 vira 20 min) e mostra "Tempo excedido" acima do limite, como no café. Os alertas de 15 e 20 min continuam fora do almoço.
 - **Alertas de 15 e 20 min:** sempre 0 no almoço (eles são do café; 11.3, tratamento 1).
 - **Ao finalizar:** grava o motivo "Almoço" e o limite aplicado em `pausas.limite_segundos` (9.15.5).
@@ -5254,9 +5254,9 @@ O motor lê a jornada do cadastro, igual todo dia. A escala crítica separada po
 - no QA, os casos que a fonte nova terá de cumprir (jornada do dia diferente da do cadastro; dia sem jornada = fora do expediente);
 - a leitura da planilha e a tabela de jornadas por dia ficam para um lote depois das respostas (AD-F9-3).
 
-**Limitação conhecida:** jornada que cruza a meia-noite não é suportada pelo motor (pendência da seção 10). Se o Crítico tiver turno noturno, é um lote próprio antes da leitura da planilha.
+**AD-F9-3 respondida (2026-11-16):** 2 pessoas 100% presenciais; abertura home das 07:00 às 17:00; fechamento home das 10:30 às 20:30; mais 1 home no horário normal. **Nenhum turno passa da meia-noite** (a limitação do motor não se aplica). Os **papéis rodam** entre as pessoas (por semana ou por mês). No F9, jornada e presença de cada um seguem o cadastro e a regra individual (D-F9-11), e a gestão atualiza pela tela quando o papel roda. O lote próprio "rodízio de papéis do Crítico" (papéis com jornada e tipo de presença, rodízio com âncora e troca manual, alimentando a função da jornada do dia, sem planilha externa) tem só o plano, depois do F9 (9.16).
 
-#### 9.15.7 Assentos do Crítico e do Híbrido no inventário de PA (D-F10-19: opção (c), decidida em 2026-11-16)
+#### 9.15.7 Assentos do Crítico e do Híbrido no inventário de PA (D-F10-19 revista em 2026-11-16: Crítico na (b), Híbrido na (c))
 
 | Opção | Como fica | Efeito |
 |---|---|---|
@@ -5264,7 +5264,7 @@ O motor lê a jornada do cadastro, igual todo dia. A escala crítica separada po
 | (b) Assentos pelo número de presenciais do dia da equipe (a base tem 2 presenciais do Crítico por dia e 1 PA) | N assentos reservados por equipe, configuráveis | A capacidade do grupo comum cai em N; mais fiel à base, mais assentos parados em dia de pouca gente |
 | (c) Sem reserva: assento fixo por pessoa (vínculo do Mapa PA, como hoje) | Cada pessoa do Crítico e do Híbrido com o seu PA fixo | Sem mudança no inventário; o assento fica parado quando a pessoa não vem (o "pode emprestar" do F10-3 resolve) |
 
-**Decisão do responsável (2026-11-16): opção (c)**, PA fixo por pessoa pelo Mapa PA, sem reserva por equipe agora; pode ser revista no F10-3. O F9 deixa o Mapa PA aceitar vínculo de Crítico e Híbrido, e o inventário do F10-3 não ganha reserva por equipe.
+**D-F10-19 revista pelo responsável (2026-11-16):** com os papéis do Crítico rodando, o assento fixo por pessoa não serve. **O Crítico tem 2 PAs reservados por equipe (opção (b), N = 2, configurável)**, no F10-3. **O Híbrido fica com a opção (c)** por enquanto. No F9, nada muda no inventário (o Mapa PA só aceita o vínculo das duas equipes).
 
 #### 9.15.8 Migration 020 (desenho e ensaio do rascunho)
 
@@ -5337,12 +5337,12 @@ Na base fictícia do MySQL local, a consulta inteira rodou com saída 0 (antes e
 
 | # | Pergunta | O que muda |
 |---|---|---|
-| AD-F9-1 | Limite de pausas simultâneas do Crítico e do Híbrido; o almoço entra nele? | Sem resposta: o mesmo valor de hoje, por equipe; o almoço fora. Valor próprio: configuração por equipe (mais um campo nas Configurações). Almoço dentro: a regra de limite vira duas (D-F9-5) |
-| AD-F9-2 | Reunião do Crítico e do Híbrido precisa de aprovação? | Sem resposta: com aprovação (como o N1). "Não": como o N2 |
-| AD-F9-3 | Escala crítica: qual planilha, jornada por dia ou por semana, turno que cruza a meia-noite? | Decide o lote da leitura (depois do F9) e se antes vem o lote da meia-noite (9.15.6) |
-| AD-F9-4 | O Híbrido almoça pelo cadastro ou lança a pausa, como o Crítico? | Sem resposta: pelo cadastro. "Pausa": o Híbrido entra no `lunch_source = pausa` e no motivo "Almoço" |
+| AD-F9-1 | Limite de pausas simultâneas do Crítico e do Híbrido; o almoço entra nele? | **Respondida (2026-11-16):** sem limite fixo; sempre pelo menos 1 disponível na equipe; toda pausa conta, inclusive o almoço e a reunião; 409 ao deixar 0; exceção de quem está sozinho no turno, com destaque (9.15.17) |
+| AD-F9-2 | Reunião do Crítico e do Híbrido precisa de aprovação? | **Respondida:** liberada, sem aprovação, sujeita à mesma regra |
+| AD-F9-3 | Escala crítica: qual planilha, jornada por dia ou por semana, turno que cruza a meia-noite? | **Respondida:** 2 presenciais, abertura home 07:00-17:00, fechamento home 10:30-20:30, 1 home no horário normal; nenhum turno passa da meia-noite; papéis rodam (semana ou mês). No F9, cadastro e regra individual; plano do lote de rodízio de papéis depois (9.16) |
+| AD-F9-4 | O Híbrido almoça pelo cadastro ou lança a pausa, como o Crítico? | **Respondida:** pelo horário do cadastro (normalmente 18:00, editável pela tela). Conferido: a validação do cadastro aceita (só exige início antes do fim) e o filtro "Almoço" sai dos cadastros (QA no lote) |
 | AD-F9-5 | Quem é do Crítico e quem é do Híbrido | **Não vai para o git nem para o chat.** A gestão marca a equipe de cada cadastro pela tela, depois do deploy |
-| D-F10-19 | Assentos (9.15.7) | **Decidida em 2026-11-16: opção (c)**, PA fixo por pessoa pelo Mapa PA (pode ser revista no F10-3) |
+| D-F10-19 | Assentos (9.15.7) | **Revista em 2026-11-16:** Crítico com 2 PAs reservados por equipe (opção (b), N = 2, configurável) no F10-3; Híbrido na (c) por enquanto; nada muda no F9 |
 
 #### 9.15.11 Decisões de implementação (a aprovar)
 
@@ -5352,11 +5352,11 @@ Na base fictícia do MySQL local, a consulta inteira rodou com saída 0 (antes e
 | D-F9-2 | Uma lista de equipes no servidor (`portal_teams()`), com rótulo e marca de "grupo comum"; toda validação e todo filtro usam ela | Hoje são 14 listas fixas espalhadas; equipe nova esquecida num lugar some em silêncio |
 | D-F9-3 | `status.php` com as chaves `critico` e `hibrido` novas, sem mudar as de hoje | Aditivo: telas e clientes que só leem `n1` e `n2` continuam iguais |
 | D-F9-4 | ENUM nas oito tabelas; `portal_pa_map` legada sem mudança | A legada sai na limpeza das tabelas antigas (seção 10) |
-| D-F9-5 | Almoço fora do limite simultâneo e dos alertas com a regra de hoje (sem dividir a função), até a AD-F9-1 | Fora dos dois, uma função basta (11.3, tratamento 1) |
+| D-F9-5 | **Revista (2026-11-16):** N1 e N2 com o limite simultâneo de hoje (sem Pessoal, Reunião e Almoço); no Crítico e no Híbrido, a regra de pelo menos 1 disponível, com toda pausa contando, inclusive o almoço; os alertas de 15 e 20 min continuam fora do almoço | AD-F9-1 |
 | D-F9-6 | **Revista e aprovada (2026-11-16):** até o F8, o limite do almoço é o intervalo do cadastro (`almoco_fim - almoco_inicio`); sem intervalo válido, `duracao_limite_segundos` 0 e a tela mostra "sem limite automático" (só para o almoço; o 0 dos outros motivos continua como hoje) | O cadastro já tem o intervalo de cada pessoa; DL17 só no caso sem intervalo válido |
 | D-F9-7 | `limite_segundos` gravado em toda pausa com limite (café e almoço), e as Métricas passam a usá-lo; as antigas ficam com a configuração atual | A 11.3 previa só o almoço; com o café junto, mudar a configuração não reescreve o passado |
 | D-F9-8 | `lunch_source = pausa` só para o Crítico | 11.3; o Híbrido pela AD-F9-4 |
-| D-F9-9 | Reunião com aprovação no Crítico e no Híbrido até a AD-F9-2 | O padrão mais restrito; hoje só o N2 é sem aprovação |
+| D-F9-9 | **Revista (2026-11-16):** reunião sem aprovação no N2, no Crítico e no Híbrido; no Crítico e no Híbrido, sujeita à regra de pelo menos 1 disponível | AD-F9-2 |
 | D-F9-10 | Visão operacional: Total = N1 + N2; Crítico e Híbrido em linhas próprias | O Total segue comparável com o que a gestão já acompanha |
 | D-F9-11 | Regra individual e exceção para Crítico e Híbrido; times de rodízio só N1 e N2 | O rodízio é do grupo comum (planilha) |
 | D-F9-12 | Grupo comum derivado da equipe; mudar para Crítico ou Híbrido grava `separado` na mesma transação; `comum` com essas equipes dá 400 | Um dado só decide, sem divergência entre equipe e grupo |
@@ -5459,6 +5459,28 @@ Os cinco commits da 9.15.12, cada um com a bateria completa sozinha (`test-local
 **Pendências:** revisão do lote; AD-F9-1 a AD-F9-5 com a Liderança (o lote usa as respostas padrão); o deploy 4 e, depois, o deploy 5 (data, janela e quem acompanha: A DEFINIR); o push do F9 só depois do aviso do fim do deploy 4; o lote do F4 da D-F10-25 (depois).
 
 ---
+
+#### 9.15.17 Regra de pelo menos 1 disponível (Crítico e Híbrido; AD-F9-1 e AD-F9-2, 2026-11-16)
+
+As respostas chegaram depois da entrega do lote (`3f96dc4` a `50443c2`, sem push). Como nenhum commit entregue é reescrito, entram em commits novos por cima: este de docs, as regras puras, o servidor, as telas e o registro.
+
+- **Disponível** = dentro da jornada do dia (a função única da 9.15.6; por enquanto, a do cadastro), fora de pausa (almoço incluído) e sem ausência lançada ativa agora (a mesma regra do motor: dia inteiro, "a partir de" e intervalo; exceção de ausência antiga).
+- **No turno** = dentro da jornada do dia e sem ausência ativa.
+- **Iniciar pausa** (qualquer motivo, inclusive almoço e reunião) no Crítico ou no Híbrido: liberada se, sem quem pede, sobra pelo menos 1 disponível na equipe. Se não sobra: **409** "Precisa ficar pelo menos 1 disponível no Crítico." (ou "no Híbrido"), **exceto** quando quem pede é a única pessoa da equipe no turno naquele momento: aí a pausa é liberada.
+- **Destaque:** a equipe com alguém no turno e ninguém disponível aparece no painel (Pausas) e na Visão operacional com selo e texto "Crítico sem ninguém disponível" (ou "Híbrido ..."), não só pela cor.
+- **Reunião** no Crítico e no Híbrido: sem aprovação, entra direto em pausa, sujeita à mesma regra.
+- **Concorrência:** a checagem roda dentro da mesma trava do estado das pausas (`with_pause_state_lock`) usada pelo limite de hoje: dois pedidos ao mesmo tempo são serializados, e o segundo vê o primeiro em pausa.
+- **N1 e N2 não mudam** (o limite simultâneo por equipe continua).
+- **Ausências:** lidas do banco só quando a equipe da pausa é Crítico ou Híbrido (e, no `status.php`, só se houver alguém dessas equipes): sem cadastro dessas equipes, nenhuma consulta a mais no polling.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Proposta | Motivo |
+|---|---|---|
+| D-F9-26 | Banco indisponível na hora de ler as ausências: conta como ninguém ausente (a pausa segue pela jornada e pelas pausas), com registro no log | Não travar as pausas da equipe por uma falha de leitura; o pior caso é contar um ausente como disponível |
+| D-F9-27 | "Jornada do dia" vale todos os dias (a do cadastro, sem olhar a escala nem o fim de semana) | A definição da Liderança é por jornada; quando o rodízio de papéis existir, a função única passa a dizer a jornada de cada dia |
+| D-F9-28 | O destaque vem do servidor: `disponibilidade_equipes` no `status.php` e no `dashboard.php` (aditivo), com `no_turno`, `disponiveis` e `sem_disponivel` por equipe | A tela não recalcula a regra; a mesma conta do 409 |
+| D-F9-29 | Na reunião do Crítico e do Híbrido, o campo de contexto continua obrigatório, e o botão diz "Iniciar reunião" | A observação continua só da gestão e do próprio (DV11); sem aprovação, o pedido vira início |
 
 ## 10. Riscos e pendências
 
