@@ -232,7 +232,8 @@ foreach ($expected as $dateTime => [$n1, $n2, $leaders]) {
     $summary = $summaryAt($dateTime, $pausesCoffeeMeeting);
     assert_identity($summary, $dateTime);
     assert_same([$n1, $n2, $leaders], [counts($summary['n1']), counts($summary['n2']), counts($summary['lideranca'])], "contadores as {$dateTime}");
-    assert_same(['n1', 'n2', 'lideranca', 'total'], array_keys($summary), "{$dateTime}: N1, N2, Lideranca e total");
+    // [F9, D-F9-10] Critico e Hibrido em linhas proprias (aditivo), fora do total.
+    assert_same(['n1', 'n2', 'lideranca', 'critico', 'hibrido', 'total'], array_keys($summary), "{$dateTime}: N1, N2, Lideranca, Critico, Hibrido e total");
 }
 // Criterio de aceite do requisito: ausencia "a partir de 14:00" sai dos disponiveis so as 14:00.
 assert_same([3, 2], [$summaryAt('2026-10-05 13:59', [])['n2']['disponiveis'], $summaryAt('2026-10-05 14:00', [])['n2']['disponiveis']], 'aceite: sai dos disponiveis as 14:00, nao antes');
@@ -254,6 +255,8 @@ assert_same([[1, 1, 0, 0, 0, 0, 0], 0], [counts($summary['n1']), $summary['total
 $summary = $summaryAt('2026-10-05 10:30', []);
 assert_same([7, 1, 4], [$summary['total']['escalados'] + $summary['total']['sem_escala'], $summary['lideranca']['escalados'], $summary['n2']['escalados']], 'so 1 a 6, 11 e 13 contam; a Lideranca so com o 6 (10 e 12, rotulos que o PHP nao reconhece, ficam fora: comportamento atual, risco registrado na 9.9)');
 assert_same([2, 2], [$summary['n2']['ausentes'], $summary['n2']['disponiveis']], 'ausencia pendente nao conta: o 13 segue disponivel');
+// [F9, D-F9-10] O 9 (Critico) na linha propria, fora do total (o grupo comum e N1 + N2).
+assert_same([1, 1, 0, 7], [$summary['critico']['escalados'], $summary['critico']['disponiveis'], $summary['hibrido']['escalados'], $summary['total']['escalados'] + $summary['total']['sem_escala']], 'Critico em linha propria, fora do total');
 // Lideranca separada: nunca entra no total.
 $pdo = operational_db();
 $pdo->employees = [employee_row(6, 'lideranca')];
@@ -276,10 +279,11 @@ foreach ([1 => 'n1', 2 => 'n1', 6 => 'lideranca'] as $id => $team) {
 }
 assert_same(null, $manager->pausas_atuais(), 'GerenciadorPausas: antes de carregar, pausas indisponiveis');
 $manager->carregar_estado();
-assert_same([1 => ['em_pausa' => false, 'motivo' => null], 2 => ['em_pausa' => false, 'motivo' => null], 6 => ['em_pausa' => false, 'motivo' => null]], $manager->pausas_atuais(), 'GerenciadorPausas: sem arquivo de estado, ninguem em pausa (lido)');
-file_put_contents(ESTADO_JSON, '{"funcionarios": {"1": {"em_pausa": true, "motivo_pausa": "Café", "inicio_pausa": "' . date('c') . '"}, "6": {"em_pausa": true, "motivo_pausa": "Reunião"}}}');
+assert_same([1 => ['em_pausa' => false, 'motivo' => null, 'inicio' => null], 2 => ['em_pausa' => false, 'motivo' => null, 'inicio' => null], 6 => ['em_pausa' => false, 'motivo' => null, 'inicio' => null]], $manager->pausas_atuais(), 'GerenciadorPausas: sem arquivo de estado, ninguem em pausa (lido; [F9] com o inicio)');
+$pauseStart = date('c');
+file_put_contents(ESTADO_JSON, '{"funcionarios": {"1": {"em_pausa": true, "motivo_pausa": "Café", "inicio_pausa": "' . $pauseStart . '"}, "6": {"em_pausa": true, "motivo_pausa": "Reunião"}}}');
 $manager->carregar_estado();
-assert_same([1 => ['em_pausa' => true, 'motivo' => 'Café'], 2 => ['em_pausa' => false, 'motivo' => null], 6 => ['em_pausa' => true, 'motivo' => 'Reunião']], $manager->pausas_atuais(), 'GerenciadorPausas: pausas do estado lido');
+assert_same([1 => ['em_pausa' => true, 'motivo' => 'Café', 'inicio' => (new DateTime($pauseStart))->format('H:i')], 2 => ['em_pausa' => false, 'motivo' => null, 'inicio' => null], 6 => ['em_pausa' => true, 'motivo' => 'Reunião', 'inicio' => null]], $manager->pausas_atuais(), 'GerenciadorPausas: pausas do estado lido ([F9] com o inicio)');
 file_put_contents(ESTADO_JSON, '{"funcionarios": ');
 $manager->carregar_estado();
 assert_same(null, $manager->pausas_atuais(), 'GerenciadorPausas: estado ilegivel nao vira "nenhuma pausa" (DV6)');

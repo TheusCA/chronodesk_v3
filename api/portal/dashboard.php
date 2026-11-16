@@ -12,7 +12,8 @@ global $gerenciador;
 // [F7, DV11] Observacao de reuniao dos outros tecnicos so para a gestao,
 // inclusive no active_pauses.
 $status = GerenciadorPausas::status_para_o_perfil($gerenciador->obter_status(), $actor);
-$funcionarios = array_merge($status['n1'] ?? [], $status['n2'] ?? []);
+// [F9] Todas as equipes de tecnico (N1, N2, Critico e Hibrido).
+$funcionarios = array_merge(...array_map(static fn (string $team): array => $status[$team] ?? [], PortalTeams::WORK_TEAMS));
 $pausas_ativas = count(array_filter($funcionarios, static fn($item) => !empty($item['em_pausa'])));
 $pendentes = count(array_filter(
     $funcionarios,

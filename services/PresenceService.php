@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/PresenceEngine.php';
 require_once __DIR__ . '/PresenceRepository.php';
+require_once __DIR__ . '/PortalTeams.php';
 require_once __DIR__ . '/OperationalService.php';
 
 /**
@@ -16,7 +17,7 @@ require_once __DIR__ . '/OperationalService.php';
  */
 final class PresenceService {
     public const MAX_DAYS = 93;
-    private const TEAMS = ['n1', 'n2', 'lideranca'];
+    private const TEAMS = PortalTeams::ALL;
 
     private PresenceRepository $repository;
 
@@ -85,6 +86,7 @@ final class PresenceService {
                 $exception = $exceptions[$id . ':' . $dateKey] ?? null;
                 $showCategory = $seesAllCategories || ($viewerEmployeeId > 0 && $viewerEmployeeId === $id);
                 $dayAbsences = self::absencesForDay($dateKey, $exception, $absences[$id] ?? [], $showCategory);
+                $employee = PresenceRepository::shiftFor($employee, $dateKey);
                 $presence = $dateKey === $today
                     ? PresenceEngine::nowPresence($employee, $now, $rules[$id] ?? [], $exception, $dayAbsences, $pauseState === null ? null : self::pause($pauseState[$id] ?? null))
                     : PresenceEngine::dayPresence($employee, $dateKey, $rules[$id] ?? [], $exception, $dayAbsences);
@@ -121,7 +123,7 @@ final class PresenceService {
         $exceptions = $this->repository->exceptionsByDay($today, $today);
         $absences = $this->repository->absencesByEmployee($today, $today);
 
-        foreach (['n1', 'n2'] as $team) {
+        foreach (PortalTeams::WORK_TEAMS as $team) {
             foreach ($status[$team] ?? [] as $index => $item) {
                 $id = (int)($item['id'] ?? 0);
                 $employee = $employees[$id] ?? null;
@@ -130,13 +132,18 @@ final class PresenceService {
                     continue;
                 }
                 $exception = $exceptions[$id . ':' . $today] ?? null;
+                $start = is_string($item['inicio_pausa'] ?? null) ? date_create_immutable($item['inicio_pausa']) : false;
                 $presence = PresenceEngine::nowPresence(
-                    $employee,
+                    PresenceRepository::shiftFor($employee, $today),
                     $now,
                     $rules[$id] ?? [],
                     $exception,
                     self::absencesForDay($today, $exception, $absences[$id] ?? []),
-                    ['em_pausa' => ($item['em_pausa'] ?? false) === true, 'motivo' => $item['motivo_pausa'] ?? null]
+                    [
+                        'em_pausa' => ($item['em_pausa'] ?? false) === true,
+                        'motivo' => $item['motivo_pausa'] ?? null,
+                        'inicio' => $start instanceof DateTimeImmutable ? $start->setTimezone($now->getTimezone())->format('H:i') : null,
+                    ]
                 );
                 $status[$team][$index]['presenca'] = [
                     'situacao' => $presence['situacao'],
@@ -152,18 +159,20 @@ final class PresenceService {
      * [F7] Contadores da Visao Operacional (secoes 4.5 e 5.7) no instante
      * $now, pelo summarize: N1, N2 e Lideranca, e o total = N1 + N2 (a
      * Lideranca fica separada e fora do total, D10). $pauses: ver nowPresences.
+     * [F9, D-F9-10] Critico e Hibrido em linhas proprias, tambem fora do total
+     * (o grupo comum).
      */
     public function operationalSummary(DateTimeImmutable $now, ?array $pauses): array {
-        $byTeam = ['n1' => [], 'n2' => [], 'lideranca' => []];
+        $byTeam = array_fill_keys(PortalTeams::ALL, []);
         foreach ($this->nowPresences($now, $pauses) as $row) {
             $byTeam[$row['team']][] = $row['presence'];
         }
-        return [
-            'n1' => PresenceEngine::summarize($byTeam['n1']),
-            'n2' => PresenceEngine::summarize($byTeam['n2']),
-            'lideranca' => PresenceEngine::summarize($byTeam['lideranca']),
-            'total' => PresenceEngine::summarize(array_merge($byTeam['n1'], $byTeam['n2'])),
-        ];
+        $summary = [];
+        foreach (PortalTeams::ALL as $team) {
+            $summary[$team] = PresenceEngine::summarize($byTeam[$team]);
+        }
+        $common = array_merge(...array_map(static fn (string $team): array => $byTeam[$team], PortalTeams::COMMON_GROUP));
+        return $summary + ['total' => PresenceEngine::summarize($common)];
     }
 
     /**
@@ -222,7 +231,7 @@ final class PresenceService {
             $presences[$id] = [
                 'team' => $employee['team'],
                 'presence' => PresenceEngine::nowPresence(
-                    $employee,
+                    PresenceRepository::shiftFor($employee, $today),
                     $now,
                     $rules[$id] ?? [],
                     $exception,
@@ -294,9 +303,12 @@ final class PresenceService {
     }
 
     private static function pause($entry): array {
+        $start = is_array($entry) && is_string($entry['inicio_pausa'] ?? null) ? date_create_immutable($entry['inicio_pausa']) : false;
         return [
             'em_pausa' => is_array($entry) && ($entry['em_pausa'] ?? false) === true,
             'motivo' => is_array($entry) ? ($entry['motivo_pausa'] ?? null) : null,
+            // [F9, 11.3] Inicio da pausa (HH:MM, no fuso do PHP) para o detalhe do almoco do Critico.
+            'inicio' => $start instanceof DateTimeImmutable ? $start->setTimezone(new DateTimeZone(date_default_timezone_get()))->format('H:i') : null,
         ];
     }
 

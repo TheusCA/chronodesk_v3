@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/PortalTeams.php';
 require_once __DIR__ . '/SharePointSyncService.php';
 require_once __DIR__ . '/ScheduleRulePlanner.php';
 require_once __DIR__ . '/PresenceEngine.php';
@@ -572,7 +573,11 @@ final class RotationTeamService {
         if ($employee['team'] === 'lideranca') {
             throw new DomainException('A Liderança tem escala fixa presencial: não entra em time de rodízio.');
         }
-        if (!in_array($employee['team'], ['n1', 'n2'], true)) {
+        if ($employee['team'] === PortalTeams::CRITICAL || $employee['team'] === PortalTeams::HYBRID) {
+            // [F9, D-F9-11] O rodizio e do grupo comum (N1 e N2), como na planilha.
+            throw new DomainException('Crítico e Híbrido ficam fora dos times de rodízio: o rodízio é do grupo comum (N1 e N2).');
+        }
+        if (!PortalTeams::inCommonGroup($employee['team'])) {
             throw new InvalidArgumentException('Colaborador não encontrado ou inativo.');
         }
         if ((int)$employee['fora_mapa_escala'] === 1) {

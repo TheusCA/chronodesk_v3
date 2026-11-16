@@ -82,7 +82,6 @@ class GerenciadorPausas {
             return ["sucesso" => false, "codigo" => "motivo_da_equipe", "mensagem" => PauseRules::LUNCH_ONLY_CRITICAL_MESSAGE];
         }
 
-
         if ($this->pausa_conta_para_limite($motivo)) {
             $pausas_ativas_equipe = 0;
             foreach ($this->funcionarios as $f) {
@@ -208,13 +207,10 @@ class GerenciadorPausas {
         $fim_pausa = new DateTime();
         $duracao_real = $fim_pausa->getTimestamp() - $funcionario->inicio_pausa->getTimestamp();
 
-        // Verificar se a pausa atingiu os limites de alerta
-        $LIMITE_ALERTA_15MIN = 15 * 60;
-        $LIMITE_ALERTA_20MIN = 20 * 60;
-
-        $aplica_limite_tempo = $this->pausa_conta_para_limite($funcionario->motivo_pausa);
-        $alerta_15min = $aplica_limite_tempo && $duracao_real >= $LIMITE_ALERTA_15MIN;
-        $alerta_20min = $aplica_limite_tempo && $duracao_real >= $LIMITE_ALERTA_20MIN;
+        // Alertas de 15 e 20 min (so o que conta no limite; nunca o almoco) e o
+        // limite aplicado, gravado na pausa (F9, D-F9-7).
+        [$alerta_15min, $alerta_20min] = PauseRules::alerts($funcionario->motivo_pausa, $duracao_real);
+        $limite_segundos = $this->limite_aplicado_segundos($funcionario);
 
         $persistido = false;
 
@@ -223,11 +219,11 @@ class GerenciadorPausas {
             try {
                 $sql = "INSERT INTO pausas (
                     id_funcionario, nome_funcionario, equipe, inicio_pausa, fim_pausa, 
-                    duracao_segundos, motivo_pausa, alerta_15min, alerta_20min, 
+                    duracao_segundos, motivo_pausa, alerta_15min, alerta_20min, limite_segundos,
                     status_aprovacao, observacao_reuniao
                 ) VALUES (
-                    :id_funcionario, :nome_funcionario, :equipe, :inicio_pausa, :fim_pausa, 
-                    :duracao_segundos, :motivo_pausa, :alerta_15min, :alerta_20min, 
+                    :id_funcionario, :nome_funcionario, :equipe, :inicio_pausa, :fim_pausa,
+                    :duracao_segundos, :motivo_pausa, :alerta_15min, :alerta_20min, :limite_segundos,
                     :status_aprovacao, :observacao_reuniao
                 )";
                 
@@ -243,6 +239,7 @@ class GerenciadorPausas {
                     ':motivo_pausa' => $funcionario->motivo_pausa,
                     ':alerta_15min' => $alerta_15min ? 1 : 0,
                     ':alerta_20min' => $alerta_20min ? 1 : 0,
+                    ':limite_segundos' => $limite_segundos,
                     ':status_aprovacao' => $funcionario->status_aprovacao,
                     ':observacao_reuniao' => $observacaoHistorico
                 ]);
@@ -301,8 +298,9 @@ class GerenciadorPausas {
         $hora = $fim_pausa->format('H:i:s');
         $mensagem = "{$funcionario->nome} finalizou a pausa às {$hora}. Duração: {$duracao_real} segundos.";
 
-        if ($aplica_limite_tempo && $duracao_real > $this->duracao_pausa_minutos * 60) {
-            $mensagem .= " (Excedeu o tempo limite de {$this->duracao_pausa_minutos} minutos!)";
+        if (PauseRules::exceeded($detalhes['motivo_pausa'], $duracao_real, $limite_segundos, (int)$this->duracao_pausa_minutos)) {
+            $minutos_limite = intdiv((int)$limite_segundos, 60);
+            $mensagem .= " (Excedeu o tempo limite de {$minutos_limite} minutos!)";
         }
 
         if ($alerta_20min) {
@@ -359,9 +357,9 @@ class GerenciadorPausas {
 
     public function obter_status() {
         $serverNow = new DateTime();
-        $status = [
-            "n1" => [],
-            "n2" => [],
+        // [F9, D-F9-3] Uma chave por equipe de tecnico (n1, n2, critico e
+        // hibrido), aditivo: as chaves n1 e n2 continuam iguais.
+        $status = array_fill_keys(PortalTeams::WORK_TEAMS, []) + [
             "server_now" => $serverNow->format('c'),
             "poll_interval_seconds" => 15,
         ];
@@ -373,10 +371,10 @@ class GerenciadorPausas {
                 continue;
             }
             $status_disp = $funcionario->status_disponibilidade();
-            
-            // Garantir que a equipe existe e está no formato correto
-            $equipe = isset($funcionario->equipe) ? strtolower($funcionario->equipe) : 'n1';
-            if ($equipe !== 'n1' && $equipe !== 'n2') {
+
+            // Equipe de tecnico pela lista unica; Lideranca e desconhecida ficam fora.
+            $equipe = isset($funcionario->equipe) ? PortalTeams::normalize($funcionario->equipe) : PortalTeams::N1;
+            if (!PortalTeams::isWorkTeam($equipe)) {
                 continue;
             }
             $info_funcionario = [
@@ -387,9 +385,8 @@ class GerenciadorPausas {
                 "tempo_pausa" => 0,
                 "elapsed_seconds" => 0,
                 "inicio_pausa" => $funcionario->inicio_pausa ? $funcionario->inicio_pausa->format('c') : null,
-                "duracao_limite_segundos" => $this->pausa_conta_para_limite($funcionario->motivo_pausa)
-                    ? $this->duracao_pausa_minutos * 60
-                    : 0,
+                // [F9] 0 = sem limite (Pessoal, Reuniao e o almoco sem intervalo valido).
+                "duracao_limite_segundos" => $this->limite_aplicado_segundos($funcionario) ?? 0,
                 "motivo_pausa" => $funcionario->motivo_pausa,
                 "status_aprovacao" => $funcionario->status_aprovacao,
                 "solicitacao_timestamp" => $funcionario->solicitacao_timestamp ? $funcionario->solicitacao_timestamp->format('c') : null,
@@ -425,7 +422,7 @@ class GerenciadorPausas {
             return $status;
         }
         $proprio = (int)($viewer['employee_id'] ?? 0);
-        foreach (['n1', 'n2'] as $equipe) {
+        foreach (PortalTeams::WORK_TEAMS as $equipe) {
             foreach ($status[$equipe] ?? [] as $indice => $item) {
                 if ($proprio <= 0 || (int)($item['id'] ?? 0) !== $proprio) {
                     unset($status[$equipe][$indice]['observacao_reuniao']);
@@ -478,7 +475,7 @@ class GerenciadorPausas {
             try {
                 $pausas = db_keyset_iterate(function (?array $ultima, int $pagina): array {
                     $sql = "SELECT id, id_funcionario, nome_funcionario, equipe, inicio_pausa, fim_pausa,
-                                   duracao_segundos, motivo_pausa, alerta_15min, alerta_20min,
+                                   duracao_segundos, motivo_pausa, alerta_15min, alerta_20min, limite_segundos,
                                    status_aprovacao, observacao_reuniao
                             FROM pausas";
                     $params = [];
@@ -512,7 +509,7 @@ class GerenciadorPausas {
             $metricas["limite_registros"] = $limit;
             $stmt = $this->pdo->prepare(
                 "SELECT id_funcionario, nome_funcionario, equipe, inicio_pausa, fim_pausa,
-                        duracao_segundos, motivo_pausa, alerta_15min, alerta_20min,
+                        duracao_segundos, motivo_pausa, alerta_15min, alerta_20min, limite_segundos,
                         status_aprovacao, observacao_reuniao
                  FROM pausas
                  ORDER BY inicio_pausa DESC
@@ -567,6 +564,10 @@ class GerenciadorPausas {
         $observacao_reuniao = $data['observacao_reuniao'] ?? '';
 
         $func_key = "{$nome_func} (ID: {$id_func})";
+        // [F9, D-F9-7] Excedeu pelo limite gravado na pausa; as antigas (sem
+        // limite gravado), pela configuracao atual; o almoco sem limite, nunca.
+        $limite_gravado = $data['limite_segundos'] ?? null;
+        $excedeu = PauseRules::exceeded($motivo, $duracao, $limite_gravado, (int)$this->duracao_pausa_minutos);
 
         // Adicionar dados detalhados
         $pausa_detalhada = [
@@ -581,8 +582,8 @@ class GerenciadorPausas {
             'alerta_20min' => $alerta_20min,
             'status_aprovacao' => $status_aprovacao,
             'observacao_reuniao' => $observacao_reuniao,
-            'excedeu_limite' => $this->pausa_conta_para_limite($motivo)
-                && $duracao > $this->duracao_pausa_minutos * 60
+            'excedeu_limite' => $excedeu,
+            'limite_segundos' => $limite_gravado === null || $limite_gravado === '' ? null : (int)$limite_gravado,
         ];
         if ($ao_detalhar !== null) {
             $ao_detalhar($pausa_detalhada);
@@ -590,24 +591,28 @@ class GerenciadorPausas {
             $metricas["pausas_detalhadas"][] = $pausa_detalhada;
         }
 
-        // Métricas por funcionário
-        if (!isset($metricas["total_pausas_funcionario"][$func_key])) {
-            $metricas["total_pausas_funcionario"][$func_key] = 0;
-            $metricas["duracao_total_funcionario"][$func_key] = 0;
-        }
-        $metricas["total_pausas_funcionario"][$func_key]++;
-        $metricas["duracao_total_funcionario"][$func_key] += $duracao;
+        // [F9, 11.3 tratamento 3] O almoco do Critico fica fora dos totais e
+        // medias por funcionario e por equipe; continua em "por motivo".
+        if (PauseRules::countsInTotals($motivo)) {
+            // Métricas por funcionário
+            if (!isset($metricas["total_pausas_funcionario"][$func_key])) {
+                $metricas["total_pausas_funcionario"][$func_key] = 0;
+                $metricas["duracao_total_funcionario"][$func_key] = 0;
+            }
+            $metricas["total_pausas_funcionario"][$func_key]++;
+            $metricas["duracao_total_funcionario"][$func_key] += $duracao;
 
-        // Métricas por equipe
-        if (!isset($metricas["total_pausas_equipe"][$equipe_func])) {
-            $metricas["total_pausas_equipe"][$equipe_func] = 0;
-            $metricas["duracao_total_equipe"][$equipe_func] = 0;
+            // Métricas por equipe
+            if (!isset($metricas["total_pausas_equipe"][$equipe_func])) {
+                $metricas["total_pausas_equipe"][$equipe_func] = 0;
+                $metricas["duracao_total_equipe"][$equipe_func] = 0;
+            }
+            $metricas["total_pausas_equipe"][$equipe_func]++;
+            $metricas["duracao_total_equipe"][$equipe_func] += $duracao;
         }
-        $metricas["total_pausas_equipe"][$equipe_func]++;
-        $metricas["duracao_total_equipe"][$equipe_func] += $duracao;
 
         // Pausas excedidas
-        if ($this->pausa_conta_para_limite($motivo) && $duracao > $this->duracao_pausa_minutos * 60) {
+        if ($excedeu) {
             if (!isset($metricas["pausas_excedidas"][$func_key])) {
                 $metricas["pausas_excedidas"][$func_key] = 0;
             }
@@ -725,9 +730,29 @@ class GerenciadorPausas {
         }
         $pausas = [];
         foreach ($this->funcionarios as $id => $func) {
-            $pausas[(int)$id] = ['em_pausa' => $func->em_pausa === true, 'motivo' => $func->motivo_pausa];
+            $pausas[(int)$id] = [
+                'em_pausa' => $func->em_pausa === true,
+                'motivo' => $func->motivo_pausa,
+                // [F9, 11.3] Inicio (HH:MM) para o detalhe do almoco do Critico.
+                'inicio' => $func->em_pausa === true && $func->inicio_pausa ? $func->inicio_pausa->format('H:i') : null,
+            ];
         }
         return $pausas;
+    }
+
+    /**
+     * [F9, D-F9-6 e D-F9-16 revistas] Limite de tempo aplicado a pausa do
+     * cadastro, em segundos (null = sem limite): cafe pela configuracao; almoco
+     * do Critico pelo intervalo de almoco do cadastro ate o F8 (contrato);
+     * Pessoal e Reuniao sem limite.
+     */
+    private function limite_aplicado_segundos($funcionario): ?int {
+        return PauseRules::appliedLimitSeconds(
+            $funcionario->motivo_pausa,
+            (int)$this->duracao_pausa_minutos,
+            PauseRules::lunchIntervalSeconds($funcionario->almoco_inicio ?? null, $funcionario->almoco_fim ?? null),
+            null
+        );
     }
 
     private function pausa_conta_para_limite($motivo): bool {

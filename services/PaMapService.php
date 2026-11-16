@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/PortalTeams.php';
 require_once __DIR__ . '/OperationalService.php';
 
 final class PaMapService {
@@ -843,8 +844,9 @@ final class PaMapService {
         if (($value === null || $value === '') && $nullable) {
             return null;
         }
-        $team = strtolower(trim((string)$value));
-        if (!in_array($team, ['n1', 'n2', 'lideranca'], true)) {
+        // [F9] Vinculo de qualquer equipe de cadastro (Critico e Hibrido com PA fixo, D-F10-19 opcao c).
+        $team = PortalTeams::normalize(is_scalar($value) ? (string)$value : null);
+        if ($team === null) {
             throw new InvalidArgumentException('Equipe inválida.');
         }
         return $team;
@@ -863,7 +865,7 @@ final class PaMapService {
             'í' => 'i',
             'ê' => 'e',
         ]);
-        if ($team === 'n1' || $team === 'n2') {
+        if (in_array($team, ['n1', 'n2', 'critico', 'hibrido'], true)) {
             return $team;
         }
         if (in_array($team, ['lideranca', 'lider', 'leadership', 'na', 'n_a', 'nao_se_aplica', 'não_se_aplica', 'sem_equipe'], true)) {

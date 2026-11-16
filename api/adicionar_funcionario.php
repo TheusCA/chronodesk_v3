@@ -46,7 +46,7 @@ if ($nome === false) {
 }
 
 if ($equipe === null) {
-    json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2 ou Liderança.'], 400);
+    json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2, Liderança, Crítico ou Híbrido.'], 400);
 }
 
 if ($access_role === null) {
@@ -139,6 +139,11 @@ try {
         $faixa = '1 a ' . FUNCIONARIO_ID_MAX;
         audit_log('FUNCIONARIO_ID_FORA_DA_FAIXA', "Criacao desfeita: o banco gerou o ID {$id}, fora da faixa aceita ({$faixa})", 'WARNING');
         json_response(['sucesso' => false, 'mensagem' => "O banco gerou o ID {$id}, fora da faixa aceita ({$faixa}). Nada foi gravado. Avise o administrador do sistema."], 409);
+    }
+    // [F9, D-F9-12] Crítico e Híbrido entram no grupo 'separado' (a 021 grava
+    // 'comum' por padrao), na mesma transacao.
+    if (PortalTeams::scheduleGroupFor($equipe, null) === 'separado') {
+        $pdo->prepare("UPDATE funcionarios SET grupo_escala = 'separado' WHERE id = :id")->execute([':id' => $id]);
     }
     $pdo->commit();
 

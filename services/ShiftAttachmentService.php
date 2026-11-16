@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/PortalTeams.php';
 
 final class ShiftAttachmentService {
     public const MAX_FILE_BYTES = 10485760;
@@ -38,7 +39,8 @@ final class ShiftAttachmentService {
     }
 
     /** [SEC-08] Equipes de anexo; NULL no banco = todas as equipes. */
-    public const TEAMS = ['n1', 'n2', 'lideranca'];
+    // [F9, D-F9-14] Anexo para qualquer equipe de cadastro, pela lista unica.
+    public const TEAMS = PortalTeams::ALL;
 
     /**
      * [SEC-08] O que o ator ve: gestao (gestor, Lideranca, admin) ve todos;

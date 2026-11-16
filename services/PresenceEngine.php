@@ -145,7 +145,13 @@ final class PresenceEngine {
         $workEnd = self::time($employee['work_end'] ?? null);
         $lunchStart = self::time($employee['lunch_start'] ?? null);
         $lunchEnd = self::time($employee['lunch_end'] ?? null);
-        $inLunch = $lunchStart !== null && $lunchEnd !== null && $time >= $lunchStart && $time < $lunchEnd;
+        // [F9, 11.3] Almoco pela pausa (Critico): o intervalo do cadastro nao
+        // gera 'almoco'; a pausa "Almoço" em andamento gera (origem 'pausa').
+        $lunchByPause = ($employee['lunch_source'] ?? 'cadastro') === 'pausa';
+        $pausedForLunch = $lunchByPause && ($pause['em_pausa'] ?? false) === true && ($pause['motivo'] ?? null) === 'Almoço';
+        $inLunch = $lunchByPause
+            ? $pausedForLunch
+            : $lunchStart !== null && $lunchEnd !== null && $time >= $lunchStart && $time < $lunchEnd;
         $isActive = static fn (array $absence): bool => self::absenceActive($absence, $time, $workEnd);
         $items = self::absenceItems($absences, $isActive);
 
@@ -163,6 +169,10 @@ final class PresenceEngine {
         }
         if ($workStart !== null && $workEnd !== null && ($time < $workStart || $time >= $workEnd)) {
             return self::result('fora_expediente', 'expediente', 'Expediente ' . $workStart . '–' . $workEnd, $schedule, $items, $inLunch);
+        }
+        if ($pausedForLunch) {
+            $since = self::time($pause['inicio'] ?? null);
+            return self::result('almoco', 'pausa', $since !== null ? 'Almoço desde ' . $since : 'Almoço', $schedule, $items, true);
         }
         if (($pause['em_pausa'] ?? false) === true) {
             $reason = trim((string)($pause['motivo'] ?? ''));

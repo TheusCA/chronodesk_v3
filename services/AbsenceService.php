@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/PortalTeams.php';
 require_once __DIR__ . '/AbsenceRules.php';
 
 /**
@@ -23,7 +24,8 @@ require_once __DIR__ . '/AbsenceRules.php';
  */
 final class AbsenceService {
     public const LIST_LIMIT = 500;
-    private const TEAMS = ['n1', 'n2', 'lideranca'];
+    // [F9] Todas as equipes de cadastro, pela lista unica (Critico e Hibrido incluidos).
+    private const TEAMS = PortalTeams::ALL;
     private const STATUS_FILTERS = ['approved', 'cancelled', 'all'];
 
     private PDO $pdo;

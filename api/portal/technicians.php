@@ -26,16 +26,15 @@ $seesRole = in_array('funcionarios.manage', portal_permissions_for_role($role), 
 
 $items = [];
 foreach ($gerenciador->getFuncionarios() as $funcionario) {
-    if (
-        !($funcionario->ativo ?? true)
-        || !in_array(strtolower((string)$funcionario->equipe), ['n1', 'n2'], true)
-    ) {
+    // [F9] Equipes de tecnico pela lista unica (N1, N2, Critico e Hibrido).
+    $equipe = PortalTeams::normalize($funcionario->equipe);
+    if (!($funcionario->ativo ?? true) || !PortalTeams::isWorkTeam($equipe)) {
         continue;
     }
     $item = [
         'id' => (int)$funcionario->id,
         'name' => $funcionario->nome,
-        'team' => strtoupper($funcionario->equipe),
+        'team' => PortalTeams::label($equipe),
     ];
     if ($seesRole) {
         $item['role'] = ucfirst(str_replace('_', ' ', $funcionario->access_role ?? 'tecnico'));

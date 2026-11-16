@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/PortalTeams.php';
 require_once __DIR__ . '/SharePointSyncService.php';
 require_once __DIR__ . '/ScheduleRulePlanner.php';
 require_once __DIR__ . '/PresenceEngine.php';
@@ -1124,19 +1125,19 @@ final class OperationalService {
                 continue;
             }
             $name = $row['employee_name'];
-            $rowTeam = strtoupper($row['team']);
+            $rowTeam = self::teamLabel($row['team']);
             $byEmployee[$name][$key] = ($byEmployee[$name][$key] ?? 0) + (int)$row['total_minutes'];
             $byTeam[$rowTeam][$key] = ($byTeam[$rowTeam][$key] ?? 0) + (int)$row['total_minutes'];
         }
         $overtimeTotals = self::overtimeTotals($overtime);
         foreach ($adjustments as $row) {
             $byEmployee[$row['employee_name']]['adjustments'] = ($byEmployee[$row['employee_name']]['adjustments'] ?? 0) + 1;
-            $key = strtoupper($row['team']);
+            $key = self::teamLabel($row['team']);
             $byTeam[$key]['adjustments'] = ($byTeam[$key]['adjustments'] ?? 0) + 1;
         }
         foreach ($oncall as $row) {
             $byEmployee[$row['employee_name']]['oncall'] = ($byEmployee[$row['employee_name']]['oncall'] ?? 0) + 1;
-            $key = strtoupper($row['team']);
+            $key = self::teamLabel($row['team']);
             $byTeam[$key]['oncall'] = ($byTeam[$key]['oncall'] ?? 0) + 1;
         }
         foreach ($schedule as $row) {
@@ -1145,7 +1146,7 @@ final class OperationalService {
             }
             $key = $row['presence_type'] === 'onsite' ? 'onsite_days' : 'remote_days';
             $byEmployee[$row['employee_name']][$key] = ($byEmployee[$row['employee_name']][$key] ?? 0) + 1;
-            $teamKey = strtoupper($row['team']);
+            $teamKey = self::teamLabel($row['team']);
             $byTeam[$teamKey][$key] = ($byTeam[$teamKey][$key] ?? 0) + 1;
         }
         // [F5, D5] So na parte do motor: ausencia de dia inteiro e sem escala
@@ -1157,7 +1158,7 @@ final class OperationalService {
                 continue;
             }
             $byEmployee[$row['employee_name']][$key] = ($byEmployee[$row['employee_name']][$key] ?? 0) + 1;
-            $teamKey = strtoupper($row['team']);
+            $teamKey = self::teamLabel($row['team']);
             $byTeam[$teamKey][$key] = ($byTeam[$teamKey][$key] ?? 0) + 1;
         }
 
@@ -1216,16 +1217,16 @@ final class OperationalService {
             $this->csvRow($handle, ['aviso', '', '', $report['cutoff']['date'], PresenceCutoff::splitNotice($report['cutoff']['date']), '']);
         }
         foreach ($report['overtime'] as $row) {
-            $this->csvRow($handle, ['hora_extra', $row['employee_name'], strtoupper($row['team']), $row['work_date'], $row['total_minutes'] . ' min - ' . $row['reason'], $row['status']]);
+            $this->csvRow($handle, ['hora_extra', $row['employee_name'], self::teamLabel($row['team']), $row['work_date'], $row['total_minutes'] . ' min - ' . $row['reason'], $row['status']]);
         }
         foreach ($report['time_adjustments'] as $row) {
-            $this->csvRow($handle, ['ajuste_ponto', $row['employee_name'], strtoupper($row['team']), $row['adjustment_date'], $row['adjustment_type'] . ' - ' . $row['justification'], $row['status']]);
+            $this->csvRow($handle, ['ajuste_ponto', $row['employee_name'], self::teamLabel($row['team']), $row['adjustment_date'], $row['adjustment_type'] . ' - ' . $row['justification'], $row['status']]);
         }
         foreach ($report['oncall'] as $row) {
-            $this->csvRow($handle, ['plantao', $row['employee_name'], strtoupper($row['team']), $row['starts_on'], $row['shift_type'], $row['status']]);
+            $this->csvRow($handle, ['plantao', $row['employee_name'], self::teamLabel($row['team']), $row['starts_on'], $row['shift_type'], $row['status']]);
         }
         foreach ($report['schedule'] as $row) {
-            $this->csvRow($handle, ['escala', $row['employee_name'], strtoupper($row['team']), $row['date'], $row['label'], $row['presence_type']]);
+            $this->csvRow($handle, ['escala', $row['employee_name'], self::teamLabel($row['team']), $row['date'], $row['label'], $row['presence_type']]);
         }
         fclose($handle);
     }
@@ -1314,7 +1315,7 @@ final class OperationalService {
             $this->csvRow($handle, [
                 '',
                 $row['employee_name'],
-                strtoupper($row['team']),
+                self::teamLabel($row['team']),
                 $row['adjustment_date'],
                 $this->adjustmentTypeLabel($row['adjustment_type']),
                 $row['recorded_time'] ? substr((string)$row['recorded_time'], 0, 5) : '',
@@ -1496,9 +1497,12 @@ final class OperationalService {
 
     private function employee($id): array {
         $employee = $this->activeEmployeeRow($this->positiveInt($id));
-        if (!$employee || !in_array($employee['team'], ['n1', 'n2'], true)) {
+        // [F9, D-F9-13] Hora extra, correcao e plantao: as equipes de tecnico.
+        $team = $employee ? PortalTeams::normalize((string)$employee['team']) : null;
+        if (!$employee || !PortalTeams::isWorkTeam($team)) {
             throw new InvalidArgumentException('Colaborador nao encontrado ou inativo.');
         }
+        $employee['team'] = $team;
         return $employee;
     }
 
@@ -1702,7 +1706,7 @@ final class OperationalService {
                 JOIN funcionarios f ON f.id = r.employee_id AND '
                 . ($withArchived ? '(f.ativo = 1 OR f.arquivado_em IS NOT NULL)' : 'f.ativo = 1')
                 . ($excludeOutsideMap ? ' AND f.fora_mapa_escala = 0' : '') . '
-                WHERE LOWER(f.equipe) IN ("n1", "n2")';
+                WHERE LOWER(f.equipe) IN ("n1", "n2", "critico", "hibrido")';
         $params = [];
         if ($periodFrom !== null) {
             $sql .= ' AND (r.effective_until IS NULL
@@ -2801,12 +2805,22 @@ final class OperationalService {
         return $this->presenceCutoff;
     }
 
+    /**
+     * [F9] Rotulo da equipe nos relatorios e no CSV: os de antes (N1, N2,
+     * LIDERANCA) sem mudanca; Critico e Hibrido com o rotulo da lista unica.
+     */
+    private static function teamLabel($team): string {
+        $team = (string)$team;
+        return in_array($team, [PortalTeams::CRITICAL, PortalTeams::HYBRID], true) ? PortalTeams::label($team) : strtoupper($team);
+    }
+
     private function team($value, bool $nullable = false): ?string {
         if (($value === null || $value === '') && $nullable) {
             return null;
         }
-        $team = strtolower(trim((string)$value));
-        if (!in_array($team, ['n1', 'n2'], true)) {
+        // [F9] Filtro e lancamento por equipe de tecnico (N1, N2, Critico e Hibrido).
+        $team = PortalTeams::normalize(is_scalar($value) ? (string)$value : null);
+        if (!PortalTeams::isWorkTeam($team)) {
             throw new InvalidArgumentException('Equipe invalida.');
         }
         return $team;

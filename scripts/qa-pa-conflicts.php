@@ -151,12 +151,12 @@ final class QaPaStatement extends PDOStatement {
         $visible = static fn (array $employee, bool $withArchived): bool => (int)$employee['ativo'] === 1 || ($withArchived && $employee['arquivado_em'] !== null);
         $activeOnly = static fn (string $table): bool => strpos($sql, " AND EXISTS (SELECT 1 FROM funcionarios f WHERE f.id = {$table}.employee_id AND f.ativo = 1) ORDER BY") !== false;
         // Motor: regras (com o arquivado), excecoes, ausencias com categoria e cadastros.
-        $rulesPrefix = 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type, r.rule_config, r.effective_from, r.effective_until, r.created_by, r.updated_by, r.created_at, r.updated_at FROM portal_schedule_rules r JOIN funcionarios f ON f.id = r.employee_id AND (f.ativo = 1 OR f.arquivado_em IS NOT NULL) AND f.fora_mapa_escala = 0 WHERE LOWER(f.equipe) IN ("n1", "n2")';
+        $rulesPrefix = 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type, r.rule_config, r.effective_from, r.effective_until, r.created_by, r.updated_by, r.created_at, r.updated_at FROM portal_schedule_rules r JOIN funcionarios f ON f.id = r.employee_id AND (f.ativo = 1 OR f.arquivado_em IS NOT NULL) AND f.fora_mapa_escala = 0 WHERE LOWER(f.equipe) IN ("n1", "n2", "critico", "hibrido")';
         if (strpos($sql, $rulesPrefix) === 0) {
             foreach ($db->rules as $id => $rule) {
                 $employee = $db->employees[$rule['employee_id']];
                 $team = strtolower($employee['equipe']);
-                if (!$visible($employee, true) || !in_array($team, ['n1', 'n2'], true) || $employee['fora_mapa_escala'] === 1
+                if (!$visible($employee, true) || !in_array($team, ['n1', 'n2', 'critico', 'hibrido'], true) || $employee['fora_mapa_escala'] === 1
                     || (isset($params[':period_from']) && $rule['effective_until'] !== null && $rule['effective_until'] < $params[':period_from'])) {
                     continue;
                 }

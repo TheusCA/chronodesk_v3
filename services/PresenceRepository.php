@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/PauseRules.php';
+
 /**
  * Carga em lote para o motor de presenca (Parte B, F2; desenho, secao 4.6).
  *
@@ -35,18 +37,30 @@ final class PresenceRepository {
         $stmt->execute($params);
         $employees = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $team = validate_funcionario_equipe((string)$row['equipe']);
             $employees[] = [
                 'id' => (int)$row['id'],
                 'name' => (string)$row['nome'],
-                'team' => validate_funcionario_equipe((string)$row['equipe']),
+                'team' => $team,
                 'work_start' => $row['jornada_entrada'],
                 'work_end' => $row['jornada_saida'],
                 'lunch_start' => $row['almoco_inicio'],
                 'lunch_end' => $row['almoco_fim'],
+                // [F9, 11.3] Critico: o almoco vem da pausa "Almoço", nao do intervalo do cadastro.
+                'lunch_source' => PauseRules::lunchSource($team),
                 'outside_map' => (int)$row['fora_mapa_escala'] === 1,
             ];
         }
         return $employees;
+    }
+
+    /**
+     * [F9, 9.15.6] Jornada do dia: a unica fonte que o motor le. Hoje devolve
+     * a do cadastro para todos; a escala critica (lote depois do F9, AD-F9-3)
+     * entra aqui, sem mudar o motor. Funcao pura sobre o cadastro carregado.
+     */
+    public static function shiftFor(array $employee, string $date): array {
+        return $employee;
     }
 
     /** Regras que cruzam [de, ate], agrupadas por colaborador. */

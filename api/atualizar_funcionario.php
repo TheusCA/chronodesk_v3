@@ -64,7 +64,16 @@ if ($nome === false) {
 }
 
 if ($equipe === null) {
-    json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2 ou Liderança.'], 400);
+    json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2, Liderança, Crítico ou Híbrido.'], 400);
+}
+// [F9, D-F9-12] Crítico e Híbrido ficam sempre no grupo 'separado': gravado
+// na mesma transacao da equipe; 'comum' com essas equipes da 400.
+if (PortalTeams::scheduleGroupFor($equipe, $grupo_escala_sent ? $grupo_escala : null) === null) {
+    json_response(['sucesso' => false, 'mensagem' => PORTAL_SEPARATE_GROUP_MESSAGE], 400);
+}
+if (!PortalTeams::inCommonGroup($equipe) && $equipe !== PortalTeams::LEADERSHIP) {
+    $grupo_escala_sent = true;
+    $grupo_escala = 'separado';
 }
 
 if ($access_role_sent && $access_role === null) {

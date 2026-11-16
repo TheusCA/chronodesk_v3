@@ -352,11 +352,11 @@ final class QaCutoffStatement extends PDOStatement {
             if (!$withArchived && strpos($rest, 'f.ativo = 1 ') !== 0) {
                 throw new PDOException('SQLSTATE[HY000]: banco simulado: filtro de cadastro nao previsto');
             }
-            $outsideMap = strpos($rest, ' AND f.fora_mapa_escala = 0 WHERE LOWER(f.equipe) IN ("n1", "n2")') !== false;
+            $outsideMap = strpos($rest, ' AND f.fora_mapa_escala = 0 WHERE LOWER(f.equipe) IN ("n1", "n2", "critico", "hibrido")') !== false;
             foreach ($db->rules as $rule) {
                 $employee = $db->employees[$rule['employee_id']];
                 $team = strtolower($employee['equipe']);
-                if (!$visible($employee, $withArchived) || !in_array($team, ['n1', 'n2'], true)
+                if (!$visible($employee, $withArchived) || !in_array($team, ['n1', 'n2', 'critico', 'hibrido'], true)
                     || ($outsideMap && $employee['fora_mapa_escala'] === 1)
                     || (isset($params[':team']) && $team !== $params[':team'])
                     || !$matchesEmployee($rule['employee_id'])

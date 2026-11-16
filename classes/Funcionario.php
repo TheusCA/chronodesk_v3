@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/../services/PauseRules.php';
+
 class Funcionario {
     public $id;
     public $nome;
@@ -70,8 +72,8 @@ class Funcionario {
         }
         
         // Verificar se está no horário de almoço (considerar como indisponível durante almoço)
-        $no_almoco = ($hora_str >= $this->almoco_inicio && $hora_str < $this->almoco_fim);
-        
+        $no_almoco = $this->almoco_pelo_cadastro() && ($hora_str >= $this->almoco_inicio && $hora_str < $this->almoco_fim);
+
         if ($no_almoco) {
             return false; // No horário de almoço (indisponível para pausas)
         }
@@ -98,6 +100,14 @@ class Funcionario {
     }
 
     /**
+     * [F9, 11.3] O intervalo do cadastro vale como almoco, exceto no Critico,
+     * que lanca a pausa "Almoço" (D-F9-8).
+     */
+    private function almoco_pelo_cadastro(): bool {
+        return PauseRules::lunchSource(PortalTeams::normalize($this->equipe)) === 'cadastro';
+    }
+
+    /**
      * Retorna o status de disponibilidade como texto
      */
     public function status_disponibilidade() {
@@ -116,7 +126,7 @@ class Funcionario {
                 return ['status' => 'antes_jornada', 'label' => 'Antes da jornada', 'cor' => '#f59e0b'];
             } elseif ($hora_str >= $this->jornada_saida) {
                 return ['status' => 'apos_jornada', 'label' => 'Após a jornada', 'cor' => '#f59e0b'];
-            } elseif ($hora_str >= $this->almoco_inicio && $hora_str < $this->almoco_fim) {
+            } elseif ($this->almoco_pelo_cadastro() && $hora_str >= $this->almoco_inicio && $hora_str < $this->almoco_fim) {
                 return ['status' => 'almoco', 'label' => 'Horário de almoço', 'cor' => '#ef4444'];
             } else {
                 return ['status' => 'indisponivel', 'label' => 'Indisponível', 'cor' => '#999'];

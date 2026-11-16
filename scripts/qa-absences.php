@@ -59,7 +59,8 @@ const QA_EMPLOYEES = [
     3 => ['nome' => 'Lider C', 'equipe' => 'Liderança', 'access_role' => 'lideranca', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00', 'ativo' => 1],
     5 => ['nome' => 'Tecnico E', 'equipe' => 'n1', 'access_role' => 'tecnico', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00', 'ativo' => 0],
     6 => ['nome' => 'Tecnico F', 'equipe' => 'n1', 'access_role' => 'lideranca', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00', 'ativo' => 1],
-    7 => ['nome' => 'Tecnico G', 'equipe' => 'critico', 'access_role' => 'tecnico', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00', 'ativo' => 1],
+    // [F9] Equipe desconhecida (antes do F9, 'critico' fazia este papel; agora e equipe valida).
+    7 => ['nome' => 'Tecnico G', 'equipe' => 'supervisao', 'access_role' => 'tecnico', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00', 'ativo' => 1],
     8 => ['nome' => 'Tecnico H', 'equipe' => 'n2', 'access_role' => 'tecnico', 'jornada_entrada' => null, 'jornada_saida' => null, 'ativo' => 1],
 ];
 
