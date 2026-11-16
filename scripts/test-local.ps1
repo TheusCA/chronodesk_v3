@@ -182,6 +182,14 @@ if (!$phpExecutable) {
         Pass "QA da paridade da escala concluido"
     }
 
+    # Sem banco: times de rodizio e editor de ciclo (F10-2): migration 021, servico e plano.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-rotation-teams.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA dos times de rodizio falhou"
+    } else {
+        Pass "QA dos times de rodizio concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {

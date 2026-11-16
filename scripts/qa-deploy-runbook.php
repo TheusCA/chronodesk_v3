@@ -244,9 +244,15 @@ foreach ($applyLines as $file => $i) {
 // esquema.
 $repoMigrations = array_values(array_filter(array_map('basename', glob($root . '/migrations/2026*.sql') ?: []), static fn (string $name): bool => substr($name, 0, 8) >= '20261001' && strpos($name, '_registrar_corte') === false));
 sort($repoMigrations);
+// [F10-2] Migrations posteriores ao deploy 1: cada uma tem o roteiro do seu
+// deploy e a trava dele (a 021 vai no deploy 4, secao 16). Migration nova
+// fora desta lista reprova ate o roteiro decidir.
+$migrationsAfterDeploy1 = ['20261115_021_rotation_teams.sql'];
+assert_same($migrationsAfterDeploy1, array_values(array_intersect($migrationsAfterDeploy1, $repoMigrations)), 'migrations posteriores ao deploy 1: cada uma existe no repositorio');
+$repoMigrations = array_values(array_diff($repoMigrations, $migrationsAfterDeploy1));
 $expectedSorted = $deploy1Migrations;
 sort($expectedSorted);
-assert_same($expectedSorted, $repoMigrations, 'repositorio: as migrations da Parte B sao as do deploy 1 (nova migration exige o roteiro)');
+assert_same($expectedSorted, $repoMigrations, 'repositorio: as migrations da Parte B sao as do deploy 1 mais as da lista posterior (nova migration exige o roteiro)');
 assert_same(0, preg_match('/_(013|018|020)_/', str_replace("grep -cE '_(013|018|020)_'", '', $text)), 'roteiro unico: nenhum comando com a 013, a 018 ou a 020');
 assert_same(true, $first("grep -cE '_(013|018|020)_'") > $catFileLine && $first("grep -cE '_(013|018|020)_'") < $firstMigrationArchive, 'roteiro unico: conferencia de que o commit nao traz 013, 018 nem 020');
 assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; export D1=\$\(cat \/var\/backups\/chronodesk\/deploy1-commit\); E=\$\(mktemp -d \/root\/ensaio-deploy1\.XXXXXX\); export E; bash -o pipefail -c \'git archive "\$D1" migrations \| tar -x -C "\$E"\' && echo "extraido em \$E" \|\| echo "PARE: [^"]+"$/', $commands[$firstMigrationArchive] ?? ''), 'roteiro unico: no dia, so as migrations extraidas do commit gravado (sem script de ensaio), com pipefail');
@@ -307,7 +313,11 @@ sort($repoQas);
 // excecao: QA novo reprova la ate entrar no roteiro.
 $qasAfterDeploy2 = ['qa-pa-distribution', 'qa-paridade-escala'];
 assert_same($qasAfterDeploy2, array_values(array_intersect($qasAfterDeploy2, $repoQas)), 'QAs criados depois do deploy 2: cada um existe no repositorio');
-$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2));
+// [F10-2] O deploy 3 roda com o cd0653b e fica como foi: os QAs criados
+// depois dele vao no roteiro do deploy 4 (secao 16), que roda todos.
+$qasAfterDeploy3 = ['qa-rotation-teams'];
+assert_same($qasAfterDeploy3, array_values(array_intersect($qasAfterDeploy3, $repoQas)), 'QAs criados depois do deploy 3: cada um existe no repositorio');
+$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2, $qasAfterDeploy3));
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');
 // [pos-deploy 1, C1c] O 7m varre pelo padrao do mktemp, nao pelo $E: um
 // sudo -i novo no meio do dia perde a variavel (achado do dia do deploy 1).
@@ -803,6 +813,8 @@ $runbookQas3 = explode(' ', trim($qaList3[1] ?? ''));
 sort($runbookQas3);
 $allRepoQas = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
 sort($allRepoQas);
+// [F10-2] Sem os QAs criados depois do deploy 3 (lista na secao 5).
+$allRepoQas = array_values(array_diff($allRepoQas, $qasAfterDeploy3));
 assert_same([true, $allRepoQas], [$check3 < $tmpEnv3 && $tmpEnv3 < $archive3 && $archive3 < $qaLoop3 && $qaLoop3 < $qaSweep3 && $qaSweep3 < $merge3, $runbookQas3], 'deploy 3: ensaio do codigo antes do merge, com TODOS os QAs PHP do repositorio (sem lista de excecao)');
 assert_same([true, true], [in_array('qa-pa-distribution', $runbookQas3, true), in_array('qa-paridade-escala', $runbookQas3, true)], 'deploy 3: os QAs do F10-1 no ensaio');
 assert_same(true, strpos($commands3[$archive3] ?? '', 'bash -o pipefail -c \'git archive "$D3" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands3[$qaLoop3] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && strpos($text3, 'qa-timezone.php --db') !== false && substr_count($text3, '--db') === 1, 'deploy 3: ensaio com pipefail, como www-data, e o --db so no qa-timezone do passo 7');

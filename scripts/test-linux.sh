@@ -66,6 +66,10 @@ echo "== PHP schedule parity QA =="
 # Script de paridade da escala mensal (F10-1): xlsx sintetico, so contagens; sem banco.
 php scripts/qa-paridade-escala.php
 
+echo "== PHP rotation teams QA =="
+# Times de rodizio e editor de ciclo (F10-2): migration 021, servico e plano; sem banco.
+php scripts/qa-rotation-teams.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php
