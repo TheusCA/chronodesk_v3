@@ -3,6 +3,8 @@ require_once __DIR__ . '/Funcionario.php';
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../services/PauseRules.php';
+require_once __DIR__ . '/../services/PresenceEngine.php';
+require_once __DIR__ . '/../services/PresenceRepository.php';
 
 class GerenciadorPausas {
     private $funcionarios;
@@ -10,6 +12,8 @@ class GerenciadorPausas {
     private $duracao_pausa_minutos;
     private $pdo;
     private $estado_pausas_lido = false;
+    // [AD-F9-1] Relogio fixo so para os QAs (null = agora).
+    private $relogio_fixo = null;
 
     public function __construct($limite_pausa_por_equipe = 2, $duracao_pausa_minutos = 20) {
         $this->funcionarios = [];
@@ -82,7 +86,15 @@ class GerenciadorPausas {
             return ["sucesso" => false, "codigo" => "motivo_da_equipe", "mensagem" => PauseRules::LUNCH_ONLY_CRITICAL_MESSAGE];
         }
 
-        if ($this->pausa_conta_para_limite($motivo)) {
+        // [AD-F9-1, 9.15.17] Critico e Hibrido: pelo menos 1 disponivel na
+        // equipe (toda pausa conta); N1 e N2: o limite simultaneo de hoje.
+        $equipe_pausa = PortalTeams::normalize($funcionario->equipe);
+        if (PauseRules::usesAvailabilityRule($equipe_pausa)) {
+            $recusa = $this->recusa_por_disponibilidade($funcionario);
+            if ($recusa !== null) {
+                return $recusa;
+            }
+        } elseif ($this->pausa_conta_para_limite($motivo)) {
             $pausas_ativas_equipe = 0;
             foreach ($this->funcionarios as $f) {
                 if ($f->equipe == $funcionario->equipe && $f->em_pausa) {
@@ -125,7 +137,16 @@ class GerenciadorPausas {
             return ["sucesso" => false, "mensagem" => "{$funcionario->nome} já possui uma pausa ativa ou solicitação pendente."];
         }
 
-        if ($this->equipe_normalizada($funcionario->equipe) === 'n2') {
+        // [AD-F9-2] Reuniao sem aprovacao no N2, no Critico e no Hibrido; nas
+        // duas ultimas, sujeita a regra de pelo menos 1 disponivel.
+        $equipe_pausa = PortalTeams::normalize($funcionario->equipe);
+        if ($this->equipe_normalizada($funcionario->equipe) === 'n2' || PauseRules::usesAvailabilityRule($equipe_pausa)) {
+            if (PauseRules::usesAvailabilityRule($equipe_pausa)) {
+                $recusa = $this->recusa_por_disponibilidade($funcionario);
+                if ($recusa !== null) {
+                    return $recusa;
+                }
+            }
             $funcionario->em_pausa = true;
             $funcionario->inicio_pausa = new DateTime();
             $funcionario->motivo_pausa = $motivo;
@@ -407,6 +428,9 @@ class GerenciadorPausas {
 
             $status[$equipe][] = $info_funcionario;
         }
+
+        // [AD-F9-1, D-F9-28] Destaque "sem ninguem disponivel" (aditivo).
+        $status["disponibilidade_equipes"] = $this->disponibilidade_equipes($this->relogio_fixo ?? DateTimeImmutable::createFromMutable($serverNow));
 
         return $status;
     }
@@ -753,6 +777,112 @@ class GerenciadorPausas {
             PauseRules::lunchIntervalSeconds($funcionario->almoco_inicio ?? null, $funcionario->almoco_fim ?? null),
             null
         );
+    }
+
+    /** [AD-F9-1] Para os QAs: fixa o "agora" da regra de disponibilidade. */
+    public function usar_relogio(?DateTimeImmutable $agora): void {
+        $this->relogio_fixo = $agora;
+    }
+
+    private function agora(): DateTimeImmutable {
+        return $this->relogio_fixo ?? new DateTimeImmutable('now');
+    }
+
+    /**
+     * [AD-F9-1, 9.15.17] Recusa (409 na API) se a pausa deixaria a equipe sem
+     * ninguem disponivel, exceto quem esta sozinho no turno. Roda dentro da
+     * trava do estado das pausas (with_pause_state_lock), como o limite de hoje.
+     */
+    private function recusa_por_disponibilidade($funcionario): ?array {
+        $equipe = PortalTeams::normalize($funcionario->equipe);
+        $decisao = PauseRules::availabilityDecision($this->membros_disponibilidade($equipe, $this->agora()), (int)$funcionario->id);
+        if ($decisao['allowed']) {
+            return null;
+        }
+        return ["sucesso" => false, "codigo" => "equipe_sem_disponivel", "mensagem" => PauseRules::availabilityMessage($equipe)];
+    }
+
+    /**
+     * [AD-F9-1] Membros ativos da equipe: id => na jornada do dia (a funcao
+     * unica da 9.15.6), em pausa (almoco incluido) e com ausencia ativa agora.
+     */
+    private function membros_disponibilidade(string $equipe, DateTimeImmutable $agora): array {
+        $membros = array_filter($this->funcionarios, static fn ($f): bool => ($f->ativo ?? true) && PortalTeams::normalize($f->equipe) === $equipe);
+        $ausentes = $this->ausentes_agora($membros, $agora);
+        $dia = $agora->format('Y-m-d');
+        $hora = $agora->format('H:i');
+        $situacao = [];
+        foreach ($membros as $f) {
+            $jornada = PresenceRepository::shiftFor(['work_start' => $f->jornada_entrada, 'work_end' => $f->jornada_saida], $dia);
+            $situacao[(int)$f->id] = [
+                'in_shift' => PauseRules::inShift($jornada['work_start'], $jornada['work_end'], $hora),
+                'paused' => $f->em_pausa === true,
+                'absent' => isset($ausentes[(int)$f->id]),
+            ];
+        }
+        return $situacao;
+    }
+
+    /**
+     * [AD-F9-1] Quem tem ausencia lancada ativa agora (id => true), pela regra
+     * do motor (dia inteiro, "a partir de", intervalo e excecao antiga). Sem
+     * banco ou com falha: ninguem, com registro no log (D-F9-26).
+     */
+    private function ausentes_agora(array $membros, DateTimeImmutable $agora): array {
+        if ($membros === []) {
+            return [];
+        }
+        if (!$this->pdo) {
+            error_log('[PAUSA] Ausencias indisponiveis (sem banco) para a regra de disponibilidade.');
+            return [];
+        }
+        $dia = $agora->format('Y-m-d');
+        try {
+            $repositorio = new PresenceRepository($this->pdo);
+            $excecoes = $repositorio->exceptionsByDay($dia, $dia);
+            $ausencias = $repositorio->absencesByEmployee($dia, $dia);
+        } catch (Throwable $e) {
+            error_log('[PAUSA] Ausencias indisponiveis para a regra de disponibilidade: ' . get_class($e));
+            return [];
+        }
+        $ausentes = [];
+        foreach ($membros as $f) {
+            $id = (int)$f->id;
+            $itens = [];
+            if (in_array($excecoes[$id . ':' . $dia]['exception_type'] ?? null, PresenceEngine::ABSENCE_EXCEPTIONS, true)) {
+                $itens[] = ['origem' => 'excecao', 'period_type' => 'full_day'];
+            }
+            foreach ($ausencias[$id] ?? [] as $linha) {
+                if ($linha['starts_on'] <= $dia && $linha['ends_on'] >= $dia) {
+                    $itens[] = ['origem' => 'ausencia', 'period_type' => $linha['period_type'], 'start_time' => $linha['start_time'], 'end_time' => $linha['end_time']];
+                }
+            }
+            if ($itens === []) {
+                continue;
+            }
+            $colaborador = PresenceRepository::shiftFor(['id' => $id, 'work_start' => $f->jornada_entrada, 'work_end' => $f->jornada_saida], $dia);
+            if (PresenceEngine::nowPresence($colaborador, $agora, [], null, $itens, null)['situacao'] === 'ausente') {
+                $ausentes[$id] = true;
+            }
+        }
+        return $ausentes;
+    }
+
+    /**
+     * [AD-F9-1, D-F9-28] Situacao do Critico e do Hibrido para o destaque
+     * "sem ninguem disponivel": so as equipes com cadastro (sem cadastro,
+     * nenhuma consulta a mais no polling).
+     */
+    public function disponibilidade_equipes(?DateTimeImmutable $agora = null): array {
+        $agora = $agora ?? $this->agora();
+        $situacao = [];
+        foreach ([PortalTeams::CRITICAL, PortalTeams::HYBRID] as $equipe) {
+            $membros = $this->membros_disponibilidade($equipe, $agora);
+            if ($membros !== []) {
+                $situacao[$equipe] = PauseRules::teamAvailability($membros);
+            }
+        }
+        return $situacao;
     }
 
     private function pausa_conta_para_limite($motivo): bool {

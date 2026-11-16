@@ -69,6 +69,8 @@ json_response([
         'pausas_disponiveis' => $pausas !== null,
     ],
     'critical_incidents' => $criticalSummary,
+    // [AD-F9-1, D-F9-28] Critico e Hibrido sem ninguem disponivel (destaque).
+    'disponibilidade_equipes' => $status['disponibilidade_equipes'] ?? [],
     'active_pauses' => array_values(array_filter(
         $funcionarios,
         static fn($item) => !empty($item['em_pausa'])

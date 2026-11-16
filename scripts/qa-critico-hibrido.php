@@ -359,7 +359,7 @@ $newManager = static function (int $limit = 2, int $minutes = 20) use ($qaWriteS
 // Painel (D-F9-3): uma chave por equipe de tecnico; Lideranca e desconhecida fora.
 $manager = $newManager();
 $status = $manager->obter_status();
-assert_same(['n1', 'n2', 'critico', 'hibrido', 'server_now', 'poll_interval_seconds'], array_keys($status), 'status: chaves n1, n2, critico e hibrido (aditivo)');
+assert_same(['n1', 'n2', 'critico', 'hibrido', 'server_now', 'poll_interval_seconds', 'disponibilidade_equipes'], array_keys($status), 'status: chaves n1, n2, critico e hibrido e a disponibilidade das equipes (aditivo)');
 assert_same([[41], [42], [43, 44, 48, 49], [45]], [array_column($status['n1'], 'id'), array_column($status['n2'], 'id'), array_column($status['critico'], 'id'), array_column($status['hibrido'], 'id')], 'status: cada tecnico na sua equipe; Lideranca e equipe desconhecida fora');
 assert_same(['critico', 'critico'], [$status['critico'][0]['equipe'], $status['critico'][3]['equipe']], 'status: equipe normalizada (Crítico vira critico)');
 
@@ -370,17 +370,24 @@ assert_same([false, false], [array_key_exists('observacao_reuniao', $filtered['c
 $own = GerenciadorPausas::status_para_o_perfil($withNote, ['role' => 'tecnico', 'employee_id' => 43]);
 assert_same(['texto', false], [$own['critico'][0]['observacao_reuniao'] ?? null, array_key_exists('observacao_reuniao', $own['hibrido'][0])], 'status: o proprio ve a sua observacao');
 
-// "Almoço": so o Critico; fora do limite simultaneo; limite do intervalo do cadastro.
+// "Almoço": so o Critico. [AD-F9-1, 9.15.17] Critico e Hibrido: pelo menos 1
+// disponivel na equipe, toda pausa contando (almoco incluido); N1 e N2 com o
+// limite simultaneo de hoje.
 $manager = $newManager(1);
+$manager->usar_relogio(new DateTimeImmutable('2026-11-16 10:00:00'));
 $refused = $manager->iniciar_pausa(41, 'Almoço');
 assert_same([false, 'motivo_da_equipe', PauseRules::LUNCH_ONLY_CRITICAL_MESSAGE], [$refused['sucesso'], $refused['codigo'] ?? null, $refused['mensagem']], 'iniciar_pausa: Almoço no N1 recusado');
 assert_same(false, $manager->iniciar_pausa(45, 'Almoço')['sucesso'], 'iniciar_pausa: Almoço no Hibrido recusado (AD-F9-4: pelo cadastro)');
 assert_same(true, $manager->iniciar_pausa(43, 'Almoço')['sucesso'], 'iniciar_pausa: Almoço no Critico aceito');
-assert_same(true, $manager->iniciar_pausa(44, 'Café')['sucesso'], 'limite 1 por equipe: o almoco nao ocupa a vaga do cafe (D-F9-5)');
-$coffeeRefused = $manager->iniciar_pausa(48, 'Café');
-assert_same([false, true], [$coffeeRefused['sucesso'], strpos($coffeeRefused['mensagem'], 'Limite de pausas simultâneas') === 0], 'limite 1 por equipe: o 2o cafe do Critico recusado');
-assert_same(true, $manager->iniciar_pausa(48, 'Almoço')['sucesso'], 'almoco sem limite simultaneo: o 2o almoco do Critico aceito');
-assert_same(true, $manager->iniciar_pausa(41, 'Café')['sucesso'], 'limite por equipe: o cafe do N1 nao conta com o Critico');
+assert_same(true, $manager->iniciar_pausa(44, 'Café')['sucesso'], 'Critico: sem limite fixo, o 2o em pausa com 2 disponiveis (AD-F9-1)');
+assert_same(true, $manager->iniciar_pausa(48, 'Almoço')['sucesso'], 'Critico: o 3o em pausa, sobra o 49');
+$lastRefused = $manager->iniciar_pausa(49, 'Café');
+assert_same([false, 'equipe_sem_disponivel', 'Precisa ficar pelo menos 1 disponível no Crítico.'], [$lastRefused['sucesso'], $lastRefused['codigo'] ?? null, $lastRefused['mensagem']], 'Critico: a pausa que deixaria 0 disponivel recusada (409 na API), com a mensagem');
+assert_same(false, $manager->getFuncionario(49)->em_pausa, 'Critico: recusada, nada muda no estado');
+assert_same(true, $manager->iniciar_pausa(41, 'Café')['sucesso'], 'N1 com o limite de hoje: o cafe do N1 nao conta com o Critico');
+assert_same([['no_turno' => 4, 'disponiveis' => 1, 'sem_disponivel' => false], ['no_turno' => 1, 'disponiveis' => 1, 'sem_disponivel' => false]], [$manager->obter_status()['disponibilidade_equipes']['critico'], $manager->obter_status()['disponibilidade_equipes']['hibrido']], 'status: a situacao do Critico (1 disponivel de 4) e do Hibrido');
+assert_same(true, $manager->iniciar_pausa(45, 'Café')['sucesso'], 'Hibrido: quem esta sozinho no turno pode pausar (excecao)');
+assert_same(['no_turno' => 1, 'disponiveis' => 0, 'sem_disponivel' => true], $manager->obter_status()['disponibilidade_equipes']['hibrido'], 'status: Hibrido sem ninguem disponivel (destaque)');
 $status = $manager->obter_status();
 $byId = [];
 foreach (['n1', 'n2', 'critico', 'hibrido'] as $team) {
@@ -389,6 +396,34 @@ foreach (['n1', 'n2', 'critico', 'hibrido'] as $team) {
     }
 }
 assert_same([3600, 1200, 0, 1200, 1200], [$byId[43]['duracao_limite_segundos'], $byId[44]['duracao_limite_segundos'], $byId[48]['duracao_limite_segundos'], $byId[41]['duracao_limite_segundos'], $byId[42]['duracao_limite_segundos']], 'status: almoco pelo intervalo do cadastro (3600), cafe pela configuracao (1200), almoco sem intervalo valido 0 (sem limite); sem pausa, a configuracao, como antes');
+
+// Jornada do dia: quem esta fora dela nao conta como disponivel nem no turno.
+$manager = $newManager();
+$manager->usar_relogio(new DateTimeImmutable('2026-11-16 10:00:00'));
+$manager->getFuncionario(49)->jornada_entrada = '13:00';
+$manager->getFuncionario(49)->jornada_saida = '20:00';
+assert_same([true, true], [$manager->iniciar_pausa(43, 'Café')['sucesso'], $manager->iniciar_pausa(44, 'Café')['sucesso']], 'jornada: dois em pausa, sobra o 48 no turno');
+assert_same(false, $manager->iniciar_pausa(48, 'Café')['sucesso'], 'jornada: o 49 fora da jornada nao segura a equipe; o 48 nao pode sair');
+$manager->usar_relogio(new DateTimeImmutable('2026-11-16 13:00:00'));
+assert_same(true, $manager->iniciar_pausa(48, 'Café')['sucesso'], 'jornada: as 13:00 o 49 entra no turno e o 48 pode sair');
+// Inativo (arquivado) nao conta como disponivel.
+$manager = $newManager();
+$manager->usar_relogio(new DateTimeImmutable('2026-11-16 10:00:00'));
+$manager->getFuncionario(49)->ativo = false;
+assert_same([true, true, false], [$manager->iniciar_pausa(43, 'Café')['sucesso'], $manager->iniciar_pausa(44, 'Café')['sucesso'], $manager->iniciar_pausa(48, 'Café')['sucesso']], 'inativo: o 49 arquivado nao segura a equipe; o 48 nao pode sair');
+// Reuniao: sem aprovacao no Critico e no Hibrido, sujeita a regra; N1 como hoje.
+$manager = $newManager();
+$manager->usar_relogio(new DateTimeImmutable('2026-11-16 10:00:00'));
+$meeting = $manager->solicitar_pausa(43, 'Reunião', 'Pauta de teste');
+assert_same([true, false, true, 'aprovado'], [$meeting['sucesso'], $meeting['approval_required'] ?? null, $manager->getFuncionario(43)->em_pausa, $manager->getFuncionario(43)->status_aprovacao], 'Critico: reuniao sem aprovacao, ja em pausa (AD-F9-2)');
+$manager->iniciar_pausa(44, 'Café');
+$manager->iniciar_pausa(48, 'Almoço');
+$meetingRefused = $manager->solicitar_pausa(49, 'Reunião', 'Pauta de teste');
+assert_same([false, 'equipe_sem_disponivel', false, null], [$meetingRefused['sucesso'], $meetingRefused['codigo'] ?? null, $manager->getFuncionario(49)->em_pausa, $manager->getFuncionario(49)->status_aprovacao], 'Critico: a reuniao que deixaria 0 disponivel recusada, sem pedido pendente');
+$hybridMeeting = $manager->solicitar_pausa(45, 'Reunião', 'Pauta de teste');
+assert_same([true, true], [$hybridMeeting['sucesso'], $manager->getFuncionario(45)->em_pausa], 'Hibrido: reuniao sem aprovacao; sozinho no turno, liberada');
+$n1Meeting = $manager->solicitar_pausa(41, 'Reunião', 'Pauta de teste');
+assert_same([true, false, 'pendente'], [$n1Meeting['sucesso'], $manager->getFuncionario(41)->em_pausa, $manager->getFuncionario(41)->status_aprovacao], 'N1: reuniao continua com aprovacao');
 
 // Finalizar (sem banco: historico no CSV de reserva): sem alerta no almoco; excedeu pelo limite aplicado.
 $manager = $newManager();
@@ -407,6 +442,9 @@ $manager->getFuncionario(48)->inicio_pausa = new DateTime('-200 minutes');
 $finished = $manager->finalizar_pausa(48);
 assert_same([true, false], [$finished['sucesso'], strpos($finished['mensagem'], 'Excedeu') !== false], 'finalizar: almoco sem intervalo valido nunca excede (DL17)');
 $managerSource = (string)file_get_contents($root . '/classes/GerenciadorPausas.php');
+assert_same(1, preg_match('/if \(PauseRules::usesAvailabilityRule\(\$equipe_pausa\)\) \{\s+\$recusa = \$this->recusa_por_disponibilidade\(\$funcionario\);\s+if \(\$recusa !== null\) \{\s+return \$recusa;\s+\}\s+\} elseif \(\$this->pausa_conta_para_limite\(\$motivo\)\) \{/', $managerSource), 'iniciar_pausa: Critico e Hibrido pela regra de disponibilidade; N1 e N2 pelo limite de hoje');
+assert_same(true, strpos((string)file_get_contents($root . '/api/iniciar_pausa.php'), 'with_pause_state_lock(') !== false && strpos((string)file_get_contents($root . '/api/solicitar_pausa_com_aprovacao.php'), 'with_pause_state_lock(') !== false, 'a checagem roda dentro da trava do estado das pausas (iniciar e reuniao)');
+assert_same(1, substr_count((string)file_get_contents($root . '/api/portal/dashboard.php'), "'disponibilidade_equipes' => \$status['disponibilidade_equipes'] ?? [],"), 'dashboard.php: a disponibilidade das equipes do status (D-F9-28)');
 assert_same([1, 1], [preg_match('/alerta_20min, limite_segundos,\s+status_aprovacao, observacao_reuniao\s+\) VALUES \(/', $managerSource), substr_count($managerSource, "':limite_segundos' => \$limite_segundos,")], 'finalizar: grava o limite aplicado em pausas.limite_segundos (D-F9-7)');
 assert_same(3, substr_count($managerSource, 'alerta_15min, alerta_20min, limite_segundos,'), 'o INSERT e as duas leituras das Metricas trazem o limite gravado');
 
@@ -489,6 +527,13 @@ foreach ($sourceChecks as $file => $needles) {
         assert_same(1, substr_count($source, $needle), "{$file}: {$needle}");
     }
 }
+// [AD-F9-4] O Hibrido almoca pelo cadastro (normalmente 18:00): o cadastro so
+// exige inicio antes do fim, sem prender o almoco a uma faixa nem a jornada.
+foreach (['api/atualizar_funcionario.php', 'api/adicionar_funcionario.php'] as $employeeEndpoint) {
+    $endpointSource = (string)file_get_contents($root . '/' . $employeeEndpoint);
+    assert_same([1, 0], [substr_count($endpointSource, 'if ($almoco_inicio >= $almoco_fim) {'), preg_match('/\$almoco_(inicio|fim)\s*[<>]=?\s*(\$jornada|\'1[0-9]:|\'2[0-3]:)/', $endpointSource)], "{$employeeEndpoint}: almoco as 18:00 aceito (so inicio antes do fim)");
+}
+assert_same(['18:00', '19:00'], [normalizar_hora_funcionario('18:00'), normalizar_hora_funcionario('19:00:00')], 'cadastro: 18:00 e 19:00 sao horarios validos');
 $update = (string)file_get_contents($root . '/api/atualizar_funcionario.php');
 assert_same(true, strpos($update, 'PortalTeams::scheduleGroupFor($equipe') < strpos($update, '$pdo->beginTransaction();') && strpos($update, "\$grupo_escala = 'separado';") < strpos($update, "if (\$grupo_escala_sent) {\n        \$grupoStmt"), 'atualizar_funcionario: grupo derivado antes da transacao, gravado nela com a equipe (D-F9-12)');
 $add = (string)file_get_contents($root . '/api/adicionar_funcionario.php');
