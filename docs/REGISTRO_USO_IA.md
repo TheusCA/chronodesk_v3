@@ -1559,7 +1559,21 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. QA, ensaio, integração e capturas com dados fictícios ("Pessoa Teste NN", "Tecnico NN"). A auditoria nova grava só IDs; a leitura dos times devolve só o ID do membro; o plano imprime só contagens (com `--detalhe`, o ID, nunca o nome). |
 | **Validacao executada pela IA** | Ensaio da 021 no MySQL 8.0.46 local (contêiner no WSL, instalação autorizada pelo responsável), as duas variantes com saída 0 e as assinaturas iguais em todos os estados; restrições 28/28. Integração no MySQL local: F2B, F5, F6 e F7 idênticos depois da migração pelo plano e, para quem não é membro, depois de mudar o padrão (17/17); plano pela linha de comando: 4 convertíveis, 2092 dias, 0 diferentes. Mutação: 24/24, 34/34, 23/23 e 14/14 (roteiro, folha e a seção 16 da trava). Baterias completas sozinhas: `f346051`: saída 0, frontend 26/26, navegador 1092/1092; `4b714c7`: 0, 26/26, 1092/1092; `a740998`: 0, 27/27, 1112/1112 (repetida sozinha: na 1ª, um QA de 1 segundo rodou em paralelo por engano; as duas deram o mesmo número); `4e3d9ec`: 0, 27/27, 1112/1112. O commit de docs tem a bateria rodada depois dele, com o resultado no estado da sessão. `gitleaks` sem achados. |
 | **Limitacoes declaradas** | O ensaio e a integração rodaram no MySQL local com a base fictícia, não na cópia de produção (o passo 3 do roteiro do deploy 4 faz o ensaio no servidor). O arquivamento (F4) não encerra a pertença ao time (D-F10-25, proposta para um lote do F4). O plano de migração não foi rodado em produção. Decisões de implementação D-F10-20 a D-F10-31 a aprovar. Durante a bateria do `a740998` rodou, por engano, um QA de 1 segundo em paralelo: a bateria foi repetida sozinha e o número registrado é o da repetição. |
-| **Validacao humana** | Pendente: revisão única do lote F10-2. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-16 (`f346051`, `4b714c7`, `a740998`, `4e3d9ec`, `1ed2abb`), com D-F10-20 a D-F10-31 como propostas, inclusive a proposta da D-F10-25 (encerrar a pertença no próprio arquivamento, num lote próprio do F4, depois). Sem push até o fim do deploy 3. |
+
+---
+
+### F9: plano das equipes Crítico e Híbrido (só docs) — 2026-11-16
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Plano do F9 no desenho principal (seção 9.15, sobre a 11.3, a 11.4 e a DL17): as equipes `critico` e `hibrido` (D-F10-1) em todo lugar que hoje só aceita N1, N2 e Liderança; a pausa "Almoço" do Crítico (limite pelo contrato do F8 ou, até lá, sem limite com aviso); `pausas.limite_segundos`; a costura para a jornada da escala crítica; as opções de assento (D-F10-19); a migration 020 com o ensaio do rascunho; a Q-F9; decisões D-F9-1 a D-F9-18; lotes, riscos, LGPD e o esboço do deploy 5. **Nenhum código.** |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: um commit só de docs. Sem push pela IA. |
+| **O que a IA alterou** | `docs/DESENHO_PA_ESCALA_AUSENCIA.md` (9.15, a linha do F9 na 11.4 e a DL17) e esta entrada, com a aprovação do F10-2. |
+| **Dados pessoais** | Nenhum. O ensaio do rascunho e a Q-F9 rodaram no MySQL local com dados fictícios; a Q-F9 só conta. |
+| **Validacao executada pela IA** | Levantamento por leitura do código e do `information_schema` (oito tabelas com ENUM de equipe; 14 listas fixas no servidor e 13 arquivos no frontend). Rascunho da 020 (fora do git) ensaiado no MySQL 8.0.46 local: sete tabelas e a coluna nova com `INSTANT`; `portal_absences` só com `COPY` (tem `CHECK`); 020 2x sem erro; `critico` recusado antes e aceito depois; rollback para com linha `critico`, volta sem ela e para na 2ª vez. Q-F9 com saída 0 antes e depois. |
+| **Limitacoes declaradas** | O ensaio foi do rascunho, com a base fictícia: o da 020 de verdade é o commit 1 do F9, e o do servidor, o passo 4 do deploy. As respostas da Liderança (AD-F9-1 a AD-F9-5) e a D-F10-19 seguem pendentes; o plano usa as respostas padrão até lá. |
+| **Validacao humana** | Pendente: revisão do plano. |
 
 ---
 
