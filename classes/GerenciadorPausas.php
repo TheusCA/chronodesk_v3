@@ -2,6 +2,7 @@
 require_once __DIR__ . '/Funcionario.php';
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../services/PauseRules.php';
 
 class GerenciadorPausas {
     private $funcionarios;
@@ -74,6 +75,13 @@ class GerenciadorPausas {
         if ($motivo === "Reunião") {
             return ["sucesso" => false, "mensagem" => "Pausas de reunião devem ser solicitadas para aprovação."];
         }
+
+        // [F9, 11.3] Motivo conferido com a equipe do cadastro (nunca a do
+        // cliente): "Almoço" so no Critico.
+        if (validate_motivo_pausa($motivo, $funcionario->equipe) === null) {
+            return ["sucesso" => false, "codigo" => "motivo_da_equipe", "mensagem" => PauseRules::LUNCH_ONLY_CRITICAL_MESSAGE];
+        }
+
 
         if ($this->pausa_conta_para_limite($motivo)) {
             $pausas_ativas_equipe = 0;
@@ -726,10 +734,12 @@ class GerenciadorPausas {
         return self::motivo_conta_para_limite($motivo);
     }
 
-    /** Motivo que conta no limite de tempo e nos alertas de 15/20 min (Pessoal e Reunião nao contam). */
+    /**
+     * Motivo que conta no limite simultaneo da equipe e nos alertas de 15/20
+     * min (Pessoal, Reunião e, no F9, o Almoço do Crítico nao contam; D-F9-5).
+     */
     public static function motivo_conta_para_limite($motivo): bool {
-        $motivo = strtolower((string)$motivo);
-        return !($motivo === 'pessoal' || strpos($motivo, 'reuni') === 0);
+        return PauseRules::countsForTeamLimit($motivo);
     }
 
     private function equipe_normalizada($equipe): string {

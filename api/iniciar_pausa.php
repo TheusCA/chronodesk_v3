@@ -33,6 +33,12 @@ if ($motivo === 'Reunião') {
     json_response(["sucesso" => false, "mensagem" => "Reuniões devem ser enviadas pelo fluxo de solicitação e aprovação."], 400);
 }
 
+// [F9, 11.3] "Almoço" so para a equipe Critico, pela equipe do cadastro.
+$cadastro = $gerenciador->getFuncionario($funcionario_id);
+if ($cadastro !== null && validate_motivo_pausa($motivo, $cadastro->equipe) === null) {
+    json_response(["sucesso" => false, "mensagem" => PauseRules::LUNCH_ONLY_CRITICAL_MESSAGE], 400);
+}
+
 exigir_autenticacao_ci_pausa($data, $funcionario_id, 'iniciar_pausa');
 
 $resultado = with_pause_state_lock(function () use ($gerenciador, $funcionario_id, $motivo) {

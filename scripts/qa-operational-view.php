@@ -294,7 +294,8 @@ $pauses = [1 => ['em_pausa' => true, 'motivo' => 'Texto livre antigo'], 2 => ['e
 $presenceFor = static fn(array $viewer, string $dateTime = '2026-10-05 10:30', ?array $statePauses = null): array
     => (new PresenceService(operational_db()))->technicianPresence(at($dateTime), $statePauses ?? $pauses, $viewer);
 $gestor = $presenceFor(['role' => 'gestor', 'employee_id' => null]);
-assert_same([1, 2, 3, 4, 5, 6, 11, 13], (static function (array $ids): array { sort($ids); return $ids; })(array_keys($gestor)), 'technicians: so N1, N2 e Lideranca do motor (fora do Mapa, arquivado e equipe desconhecida sem chave)');
+// [F9] O 9 (Critico) passa a ser equipe reconhecida: entra com chave.
+assert_same([1, 2, 3, 4, 5, 6, 9, 11, 13], (static function (array $ids): array { sort($ids); return $ids; })(array_keys($gestor)), 'technicians: N1, N2, Lideranca e Critico do motor (fora do Mapa, arquivado e equipe desconhecida sem chave)');
 assert_same(['situacao' => 'pausa', 'origem' => 'pausa', 'detalhe' => 'Texto livre antigo'], $gestor[1], 'DV10: gestao ve o motivo fora da lista');
 assert_same(['situacao' => 'presencial', 'origem' => 'regra_escala', 'detalhe' => 'Presencial (sempre presencial) · Ausente a partir de 14:00', 'parcial' => 'a partir de 14:00', 'categoria' => 'Compromisso'], $gestor[4], 'P9: gestao ve parcial e categoria do marcador');
 assert_same(['situacao' => 'ausente', 'origem' => 'ausencia', 'detalhe' => 'Ausente 10:00–11:00', 'categoria' => 'Férias'], $gestor[11], 'P9: ausente agora com a categoria da parcial ativa, sem parcial');

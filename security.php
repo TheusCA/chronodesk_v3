@@ -12,6 +12,10 @@
  * - VULN-022: Validação de Content-Type
  */
 
+// [F9] Lista única de equipes e regras da pausa por motivo e equipe.
+require_once __DIR__ . '/services/PortalTeams.php';
+require_once __DIR__ . '/services/PauseRules.php';
+
 // Nonce global para CSP (gerado por requisição)
 $GLOBALS['csp_nonce'] = base64_encode(random_bytes(16));
 
@@ -129,22 +133,20 @@ function validate_time($time) {
     return preg_match('/^([01]\d|2[0-3]):([0-5]\d)$/', $time) === 1;
 }
 
+/** [F9, D-F9-12] Recusa do grupo 'comum' para Crítico e Híbrido. */
+const PORTAL_SEPARATE_GROUP_MESSAGE = 'Crítico e Híbrido ficam no grupo separado da escala: não podem ir para o grupo comum.';
+
+/** Equipe de técnico (painel e pausas): N1, N2, Crítico e Híbrido (F9). */
 function validate_equipe($equipe) {
-    return in_array($equipe, ['n1', 'n2'], true);
+    return PortalTeams::isWorkTeam(is_string($equipe) ? $equipe : null);
 }
 
+/**
+ * Equipe do cadastro normalizada (N1, N2, Liderança, Crítico e Híbrido, com
+ * os apelidos legados da Liderança e os acentuados; D-F9-1), ou null.
+ */
 function validate_funcionario_equipe($equipe) {
-    $equipe = strtolower(trim((string)$equipe));
-    $legacy = [
-        'na' => 'lideranca',
-        'não se aplica' => 'lideranca',
-        'nao se aplica' => 'lideranca',
-        'nao_se_aplica' => 'lideranca',
-        'sem_equipe' => 'lideranca',
-        'liderança' => 'lideranca',
-    ];
-    $equipe = $legacy[$equipe] ?? $equipe;
-    return in_array($equipe, ['n1', 'n2', 'lideranca'], true) ? $equipe : null;
+    return PortalTeams::normalize($equipe);
 }
 
 function validate_access_role($role) {
@@ -162,11 +164,16 @@ function validate_nome($nome, $min_length = 3, $max_length = 100) {
 }
 
 /**
- * [VULN-019] Valida motivo de pausa contra lista permitida
+ * [VULN-019] Valida motivo de pausa contra lista permitida.
+ * [F9] Sem equipe: a lista fechada inteira (Café, Pessoal, Reunião e Almoço),
+ * para mostrar o motivo gravado. Com a equipe do cadastro: só os motivos
+ * dela ("Almoço" só no Crítico; equipe desconhecida, só os comuns).
  */
-function validate_motivo_pausa($motivo) {
-    $motivos_validos = ['Café', 'Pessoal', 'Reunião'];
-    return in_array($motivo, $motivos_validos, true) ? $motivo : null;
+function validate_motivo_pausa($motivo, $equipe = null) {
+    if ($equipe === null) {
+        return PauseRules::validReason($motivo);
+    }
+    return PauseRules::validReason($motivo, PortalTeams::normalize($equipe), true);
 }
 
 // ============================================
@@ -1063,7 +1070,7 @@ function portal_viewer_scope(PDO $pdo, array $actor): array {
     $stmt = $pdo->prepare('SELECT equipe FROM funcionarios WHERE id = :id AND ativo = 1 LIMIT 1');
     $stmt->execute([':id' => $employee_id]);
     $team = validate_funcionario_equipe((string)$stmt->fetchColumn());
-    return ['all' => false, 'team' => in_array($team, ['n1', 'n2', 'lideranca'], true) ? $team : null];
+    return ['all' => false, 'team' => $team];
 }
 
 /**
