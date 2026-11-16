@@ -2783,7 +2783,7 @@ O que cada número decide: `almoco_fora_da_jornada` maior que 0 é cadastro que 
 | DL14 | A verificação conta `almoco_diferente_da_duracao` para pegar fim mudado por fora da aplicação | O fim é materializado; a contagem mostra desvio sem precisar de tarefa agendada |
 | DL15 | Sem carga em lote de quem é de qual contrato; a gestão marca pela tela | O vínculo pessoa-contrato não vai para o git nem para o chat |
 | DL16 | **Pode andar antes das respostas:** só o commit 1 (regra pura, sem banco, sem durações). Os commits 2 a 6 esperam AD1 e AD2 | Adianta o que não depende da Liderança sem escrever a 018; se a resposta mudar o modelo (AD1, segunda e terceira linhas), o commit 1 é revisto |
-| DL17 | Ordem F8 → F9 mantida. Se a Liderança demorar, o responsável decide se o F9 anda antes, com o alerta do almoço do Crítico em "sem contrato: sem limite automático, com aviso" (11.3, tratamento 1) | Hoje o F9 depende do F8 só pela duração; o caminho sem contrato já está descrito  **2026-11-16:** o plano do F9 (9.15) propõe esse caminho (D-F9-16), a aprovar |
+| DL17 | Ordem F8 → F9 mantida. Se a Liderança demorar, o responsável decide se o F9 anda antes, com o alerta do almoço do Crítico em "sem contrato: sem limite automático, com aviso" (11.3, tratamento 1) | Hoje o F9 depende do F8 só pela duração; o caminho sem contrato já está descrito. **2026-11-16 (aprovado):** o F9 anda antes do F8; até o contrato, o limite é o intervalo do cadastro, e o "sem limite, com aviso" fica só para quem não tem intervalo válido (D-F9-16 revista) |
 
 #### 9.10.5 Commits planejados (um de entrega cada, com o commit de docs e parada para revisão)
 
@@ -5183,7 +5183,9 @@ A 1ª rodada do `status.php` coincidiu com todas as telas voltando ao mesmo temp
 
 ### 9.15 F9 — Equipes Crítico e Híbrido: plano (2026-11-16; só docs, nenhum código)
 
-**Base:** os requisitos da 11.3 (Crítico) e o encaixe da 11.4 (F9 com a migration 020); a DL17 (ordem F8 → F9, reavaliada pelo responsável); a D-F10-1 do desenho do F10 (o Híbrido, torre "HB", vira equipe própria, aprovada em 2026-11-13); a D-F10-19 (assentos do Crítico, com o responsável); a 021 do F10-2 (`funcionarios.grupo_escala`); o F8 parado em AD1 e AD2 (9.10). **Nenhum código deste plano é escrito antes da aprovação.**
+**Aprovado pelo responsável em 2026-11-16 (`85283b3`)**, com D-F9-1 a D-F9-18 como propostas, exceto a D-F9-6 e a D-F9-16, revistas: até o F8, o limite do almoço do Crítico é o intervalo de almoço do próprio cadastro (`almoco_fim - almoco_inicio`, em segundos), gravado em `pausas.limite_segundos` ao finalizar; sem intervalo válido, sem limite automático, com aviso (o caminho da DL17); com o F8, o contrato prevalece, sem migration. A D-F10-19 foi decidida: opção (c) da 9.15.7. O texto abaixo já está com as duas mudanças.
+
+**Base:** os requisitos da 11.3 (Crítico) e o encaixe da 11.4 (F9 com a migration 020); a DL17 (ordem F8 → F9, reavaliada pelo responsável); a D-F10-1 do desenho do F10 (o Híbrido, torre "HB", vira equipe própria, aprovada em 2026-11-13); a D-F10-19 (assentos do Crítico; decidida em 2026-11-16, opção (c)); a 021 do F10-2 (`funcionarios.grupo_escala`); o F8 parado em AD1 e AD2 (9.10). **Nenhum código deste plano é escrito antes da aprovação.**
 
 #### 9.15.1 Fatos lidos no código (2026-11-16)
 
@@ -5232,18 +5234,18 @@ A 1ª rodada do `status.php` coincidiu com todas as telas voltando ao mesmo temp
 
 - **Quem:** só a equipe `critico`. `validate_motivo_pausa($motivo, $equipe)` aceita "Almoço" só com a equipe do **cadastro** (sessão e banco, nunca do cliente), conferido de novo no `GerenciadorPausas::iniciar_pausa`. Técnico de outra equipe com "Almoço": 400 (11.3, tratamento 4). A tela mostra a opção só para a sessão do Crítico (conveniência, não controle).
 - **Limite simultâneo:** o almoço **não** conta (proposta da 11.3; confirmação na AD-F9-1). Se a Liderança decidir que conta, a regra de hoje vira duas: limite simultâneo e limite de tempo (D-F9-5).
-- **Limite de tempo:** com o F8 no ar, a duração do contrato do técnico; **até lá, pela DL17: sem limite automático, com aviso** na tela ("Almoço sem duração cadastrada: sem limite automático"). O `status.php` manda `duracao_limite_segundos` = duração do contrato, ou 0 sem contrato; a tela passa a tratar o 0 do almoço como sem limite (hoje o 0 vira 20 min; D-F9-6).
+- **Limite de tempo (D-F9-6, revista):** com o F8 no ar, a duração do contrato do técnico prevalece. **Até lá, a duração do intervalo de almoço do próprio cadastro** (`almoco_fim - almoco_inicio`, em segundos). Intervalo válido = fim depois do início, no mesmo dia; sem isso, **sem limite automático, com aviso** na tela ("Almoço sem intervalo válido no cadastro: sem limite automático"; o caminho da DL17). O `status.php` manda `duracao_limite_segundos` com esse limite, ou 0 sem intervalo válido; a tela passa a tratar o 0 do almoço como sem limite (hoje o 0 vira 20 min) e mostra "Tempo excedido" acima do limite, como no café. Os alertas de 15 e 20 min continuam fora do almoço.
 - **Alertas de 15 e 20 min:** sempre 0 no almoço (eles são do café; 11.3, tratamento 1).
 - **Ao finalizar:** grava o motivo "Almoço" e o limite aplicado em `pausas.limite_segundos` (9.15.5).
 - **Calendário:** o evento de pausa mostra "Almoço" (a leitura passa a aceitar o motivo; hoje viraria "Pausa"); o técnico de outra equipe vê o evento como hoje vê os outros motivos (lista fechada, sem texto livre; SEC-07b).
-- **Métricas:** o almoço sai do total e da média por funcionário e por equipe e das contagens de alerta, e continua em "por motivo" (quantidade e duração) e no ZIP e no CSV, com o motivo (11.3, tratamento 3). "Excedeu" do almoço só com `limite_segundos` gravado; sem contrato, nunca excede.
+- **Métricas:** o almoço sai do total e da média por funcionário e por equipe e das contagens de alerta, e continua em "por motivo" (quantidade e duração) e no ZIP e no CSV, com o motivo (11.3, tratamento 3). "Excedeu" do almoço só com `limite_segundos` gravado; sem intervalo válido no cadastro (e sem contrato), nunca excede.
 - **Motor (P2):** o colaborador ganha `lunch_source` (`cadastro` ou `pausa`, pela equipe, no repositório). Com `pausa`, o intervalo do cadastro não gera `almoco`, e a pausa "Almoço" em andamento vira `situacao = almoco`, `origem = pausa`, detalhe com o início (11.3). A soma da 4.5 e a precedência da 4.3 não mudam. O Híbrido fica com o almoço do cadastro até a Liderança dizer outra coisa (AD-F9-4).
 
 #### 9.15.5 `pausas.limite_segundos` (migration 020)
 
-**O que resolve:** hoje o "excedeu" e o `pausas_excedidas` usam a configuração **atual** de minutos; quando a gestão muda de 20 para 25 min, as pausas antigas deixam de ter excedido. Com o limite aplicado gravado na própria pausa, o histórico fica fixo, e o almoço do Crítico pode ter limite por contrato (que muda por pessoa e no tempo).
+**O que resolve:** hoje o "excedeu" e o `pausas_excedidas` usam a configuração **atual** de minutos; quando a gestão muda de 20 para 25 min, as pausas antigas deixam de ter excedido. Com o limite aplicado gravado na própria pausa, o histórico fica fixo, e o almoço do Crítico pode ter limite por pessoa (o intervalo do cadastro hoje, o contrato com o F8), que muda no tempo sem reescrever as pausas antigas.
 
-**Proposta (D-F9-7):** gravar o limite em toda pausa que tem limite ao finalizar: o café com os minutos da configuração daquele momento; o almoço com a duração do contrato (ou `NULL`, sem contrato); Pessoal e Reunião com `NULL`. As Métricas usam `limite_segundos` quando a pausa tem, e a configuração atual nas pausas antigas (sem a coluna preenchida). Nenhuma pausa antiga é recalculada. Coluna `INT UNSIGNED NULL`, sem padrão.
+**Proposta (D-F9-7):** gravar o limite em toda pausa que tem limite ao finalizar: o café com os minutos da configuração daquele momento; o almoço com a duração do contrato (F8) ou, até lá, a do intervalo do cadastro naquele momento (`NULL` sem intervalo válido); Pessoal e Reunião com `NULL`. As Métricas usam `limite_segundos` quando a pausa tem, e a configuração atual nas pausas antigas (sem a coluna preenchida). Nenhuma pausa antiga é recalculada. Coluna `INT UNSIGNED NULL`, sem padrão.
 
 #### 9.15.6 Jornada do Crítico vinda da escala crítica (preparação, sem ler a planilha)
 
@@ -5254,7 +5256,7 @@ O motor lê a jornada do cadastro, igual todo dia. A escala crítica separada po
 
 **Limitação conhecida:** jornada que cruza a meia-noite não é suportada pelo motor (pendência da seção 10). Se o Crítico tiver turno noturno, é um lote próprio antes da leitura da planilha.
 
-#### 9.15.7 Assentos do Crítico e do Híbrido no inventário de PA (D-F10-19 com o responsável)
+#### 9.15.7 Assentos do Crítico e do Híbrido no inventário de PA (D-F10-19: opção (c), decidida em 2026-11-16)
 
 | Opção | Como fica | Efeito |
 |---|---|---|
@@ -5262,7 +5264,7 @@ O motor lê a jornada do cadastro, igual todo dia. A escala crítica separada po
 | (b) Assentos pelo número de presenciais do dia da equipe (a base tem 2 presenciais do Crítico por dia e 1 PA) | N assentos reservados por equipe, configuráveis | A capacidade do grupo comum cai em N; mais fiel à base, mais assentos parados em dia de pouca gente |
 | (c) Sem reserva: assento fixo por pessoa (vínculo do Mapa PA, como hoje) | Cada pessoa do Crítico e do Híbrido com o seu PA fixo | Sem mudança no inventário; o assento fica parado quando a pessoa não vem (o "pode emprestar" do F10-3 resolve) |
 
-O F9 só deixa o Mapa PA aceitar vínculo de Crítico e Híbrido; o assento em si é do F10-3, depois da escolha.
+**Decisão do responsável (2026-11-16): opção (c)**, PA fixo por pessoa pelo Mapa PA, sem reserva por equipe agora; pode ser revista no F10-3. O F9 deixa o Mapa PA aceitar vínculo de Crítico e Híbrido, e o inventário do F10-3 não ganha reserva por equipe.
 
 #### 9.15.8 Migration 020 (desenho e ensaio do rascunho)
 
@@ -5340,7 +5342,7 @@ Na base fictícia do MySQL local, a consulta inteira rodou com saída 0 (antes e
 | AD-F9-3 | Escala crítica: qual planilha, jornada por dia ou por semana, turno que cruza a meia-noite? | Decide o lote da leitura (depois do F9) e se antes vem o lote da meia-noite (9.15.6) |
 | AD-F9-4 | O Híbrido almoça pelo cadastro ou lança a pausa, como o Crítico? | Sem resposta: pelo cadastro. "Pausa": o Híbrido entra no `lunch_source = pausa` e no motivo "Almoço" |
 | AD-F9-5 | Quem é do Crítico e quem é do Híbrido | **Não vai para o git nem para o chat.** A gestão marca a equipe de cada cadastro pela tela, depois do deploy |
-| D-F10-19 | Assentos (9.15.7) | Responsável |
+| D-F10-19 | Assentos (9.15.7) | **Decidida em 2026-11-16: opção (c)**, PA fixo por pessoa pelo Mapa PA (pode ser revista no F10-3) |
 
 #### 9.15.11 Decisões de implementação (a aprovar)
 
@@ -5351,7 +5353,7 @@ Na base fictícia do MySQL local, a consulta inteira rodou com saída 0 (antes e
 | D-F9-3 | `status.php` com as chaves `critico` e `hibrido` novas, sem mudar as de hoje | Aditivo: telas e clientes que só leem `n1` e `n2` continuam iguais |
 | D-F9-4 | ENUM nas oito tabelas; `portal_pa_map` legada sem mudança | A legada sai na limpeza das tabelas antigas (seção 10) |
 | D-F9-5 | Almoço fora do limite simultâneo e dos alertas com a regra de hoje (sem dividir a função), até a AD-F9-1 | Fora dos dois, uma função basta (11.3, tratamento 1) |
-| D-F9-6 | Almoço sem contrato: `duracao_limite_segundos` 0 e a tela mostra "sem limite automático" (só para o almoço; o 0 dos outros motivos continua como hoje) | DL17; hoje o 0 vira 20 min |
+| D-F9-6 | **Revista e aprovada (2026-11-16):** até o F8, o limite do almoço é o intervalo do cadastro (`almoco_fim - almoco_inicio`); sem intervalo válido, `duracao_limite_segundos` 0 e a tela mostra "sem limite automático" (só para o almoço; o 0 dos outros motivos continua como hoje) | O cadastro já tem o intervalo de cada pessoa; DL17 só no caso sem intervalo válido |
 | D-F9-7 | `limite_segundos` gravado em toda pausa com limite (café e almoço), e as Métricas passam a usá-lo; as antigas ficam com a configuração atual | A 11.3 previa só o almoço; com o café junto, mudar a configuração não reescreve o passado |
 | D-F9-8 | `lunch_source = pausa` só para o Crítico | 11.3; o Híbrido pela AD-F9-4 |
 | D-F9-9 | Reunião com aprovação no Crítico e no Híbrido até a AD-F9-2 | O padrão mais restrito; hoje só o N2 é sem aprovação |
@@ -5361,7 +5363,7 @@ Na base fictícia do MySQL local, a consulta inteira rodou com saída 0 (antes e
 | D-F9-13 | Hora extra, correção de ponto e plantão aceitam Crítico e Híbrido | Hoje dariam 400 ("Colaborador não encontrado") para um técnico de equipe nova |
 | D-F9-14 | Avisos e anexos de escala por equipe valem para as equipes novas | O técnico do Crítico vê o que é dele e de todos, como os outros |
 | D-F9-15 | Rollback da 020 para com qualquer linha `critico` ou `hibrido`; voltar exige mudar esses cadastros pela tela (nada é trocado por script) | Estreitar o ENUM perderia dado (ensaio: `ERROR 1265` sem a guarda) |
-| D-F9-16 | O F9 anda antes do F8 (caminho da DL17): o almoço do Crítico sem limite automático até o contrato existir; quando o F8 entrar, o limite passa a ser a duração do contrato, sem migration nova | A Liderança não respondeu AD1 e AD2; o F9 não depende da 018 |
+| D-F9-16 | **Revista e aprovada (2026-11-16):** o F9 anda antes do F8; o limite do almoço do Crítico vem do intervalo do cadastro até o contrato existir (sem intervalo válido: o caminho da DL17); quando o F8 entrar, a duração do contrato prevalece, sem migration nova | A Liderança não respondeu AD1 e AD2; o F9 não depende da 018 |
 | D-F9-17 | A jornada do dia numa função única do repositório (9.15.6), sem fonte nova | Prepara a escala crítica sem mudar resultado hoje |
 | D-F9-18 | Destaque do Crítico no painel por selo e rótulo (tom de aviso), nunca só por cor | Contraste AA e texto além da cor (R1) |
 
@@ -5370,9 +5372,9 @@ Na base fictícia do MySQL local, a consulta inteira rodou com saída 0 (antes e
 | # | Conteúdo | Testes |
 |---|---|---|
 | 1 | Migration 020, rollback com guarda, verificação, linhas do ensaio (com uma linha `critico` para a variante do rollback que para) e QA estrutural; ensaio no MySQL 8.0.46 do WSL | QA estrutural novo; ensaio com os números; mutação |
-| 2 | Regras puras: `portal_teams()`, `validate_funcionario_equipe`, `validate_motivo_pausa($motivo, $equipe)`, regra do limite e do alerta por motivo e equipe, limite aplicado (contrato ou sem limite), grupo comum derivado | QA em tabela (equipe x motivo x contrato); mutação |
+| 2 | Regras puras: `portal_teams()`, `validate_funcionario_equipe`, `validate_motivo_pausa($motivo, $equipe)`, regra do limite e do alerta por motivo e equipe, limite aplicado (contrato, intervalo do cadastro ou sem limite), grupo comum derivado | QA em tabela (equipe x motivo x intervalo do cadastro); mutação |
 | 3 | Servidor: `status.php` e `GerenciadorPausas` (chaves novas, almoço, `limite_segundos`, Métricas), motor (`lunch_source`, jornada do dia), `PresenceService`, `OperationalService` (escala, hora extra, correção, plantão, relatórios e CSV), `AbsenceService`, `PaMapService`, anexos, avisos, `technicians.php`, cadastro (grupo derivado) | `qa-presence-engine`, `qa-operational-view`, `qa-schedule-history`, `qa-absences`, `qa-pa-conflicts`, `qa-security` (e2e por perfil e o 400 do almoço fora do Crítico), F2B/F5/F6/F7 sem mudança de expectativa para N1 e N2; integração no MySQL local; mutação |
-| 4 | Frontend: as quatro equipes nos formulários, filtros e rótulos; Pausas com as seções novas e o "Almoço" só para a sessão do Crítico, com o aviso de sem limite; Visão operacional com as linhas; Métricas e Calendário; capturas antes e depois nos dois temas | `qa:*` novos e atualizados; bloco novo no roteiro de navegador; mutação |
+| 4 | Frontend: as quatro equipes nos formulários, filtros e rótulos; Pausas com as seções novas e o "Almoço" só para a sessão do Crítico, com o limite do intervalo ou o aviso de sem limite; Visão operacional com as linhas; Métricas e Calendário; capturas antes e depois nos dois temas | `qa:*` novos e atualizados; bloco novo no roteiro de navegador; mutação |
 | 5 | Roteiro e folha do deploy, trava do roteiro | Seção nova no `qa-deploy-runbook`; mutação |
 
 Cada commit com a bateria completa sozinha e a mutação, como no F10-2.
@@ -5384,7 +5386,7 @@ Cada commit com a bateria completa sozinha e a mutação, como no F10-2.
 | A `portal_absences` é copiada na 020 (bloqueia escrita durante a cópia) | Manutenção ligada; a Q-F9 conta as ausências antes; no ensaio, 500 linhas em menos de 1 s |
 | Equipe nova esquecida numa lista fixa: o técnico some em silêncio (como some do painel hoje) | D-F9-2 (uma lista só) e um QA que procura listas fixas de equipe no código |
 | Rollback de código com cadastros do Crítico: o código anterior esconde esses técnicos do painel | Rollback só com aprovação; antes, a gestão volta esses cadastros para N1/N2 pela tela (D-F9-15) |
-| O almoço do Crítico sem limite até o F8 | Aviso na tela (DL17); a duração entra sem migration quando o F8 chegar |
+| O intervalo do cadastro pode estar desatualizado e virar o limite do almoço | É o mesmo dado que o motor já usa para o almoço de todos; sem intervalo válido, sem limite com aviso (DL17); o contrato do F8 prevalece sem migration |
 | Clientes abertos com a tela antiga não mostram as seções novas | Mesmo tratamento dos deploys anteriores (Ctrl+F5 na conferência); o `status.php` é aditivo |
 | Turno noturno do Crítico | Fora do F9 (9.15.6); AD-F9-3 decide |
 | Divergência entre equipe e grupo da escala | D-F9-12 (grupo derivado); a verificação conta Crítico ou Híbrido no `comum` (0 esperado) |
