@@ -51,6 +51,13 @@ $fora_mapa_input = array_key_exists('fora_mapa_escala', $data) ? $data['fora_map
 if ($fora_mapa_input !== null && !in_array($fora_mapa_input, [true, false, 0, 1, '0', '1'], true)) {
     json_response(['sucesso' => false, 'mensagem' => 'Valor inválido para "Fora do Mapa PA e da escala".'], 400);
 }
+// [F10-2] Grupo da escala (desenho do F10, 3.1 e 3.8): opcional; ausente
+// mantem o gravado e nao gera comando nenhum (o UPDATE de antes nao muda).
+$grupo_escala_sent = array_key_exists('grupo_escala', $data);
+$grupo_escala = $grupo_escala_sent ? $data['grupo_escala'] : null;
+if ($grupo_escala_sent && !in_array($grupo_escala, ['comum', 'separado'], true)) {
+    json_response(['sucesso' => false, 'mensagem' => 'Grupo da escala inválido: use comum ou separado.'], 400);
+}
 
 if ($nome === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Nome inválido. Use de 3 a 100 caracteres válidos.'], 400);
@@ -206,6 +213,17 @@ try {
         ':almoco_fim' => formatar_hora_mysql($almoco_fim, '13:00:00'),
         ':fora_mapa_escala' => $newForaMapa ? 1 : 0,
     ]);
+    // [F10-2] Grupo da escala so quando enviado, em comandos proprios.
+    $currentGrupo = null;
+    if ($grupo_escala_sent) {
+        $grupoStmt = $pdo->prepare('SELECT grupo_escala FROM funcionarios WHERE id = :id FOR UPDATE');
+        $grupoStmt->execute([':id' => $funcionario_id]);
+        $currentGrupo = (string)$grupoStmt->fetchColumn();
+        if ($currentGrupo !== $grupo_escala) {
+            $pdo->prepare('UPDATE funcionarios SET grupo_escala = :grupo_escala WHERE id = :id')
+                ->execute([':grupo_escala' => $grupo_escala, ':id' => $funcionario_id]);
+        }
+    }
     $pdo->commit();
 
     if ($stmt->rowCount() === 0 && !$gerenciador->getFuncionario($funcionario_id)) {
@@ -225,6 +243,13 @@ if (($resultado['sucesso'] ?? false) === true) {
     audit_log('FUNCIONARIO_ATUALIZADO', "Funcionario '{$nome}' atualizado (ID: {$funcionario_id}, equipe: {$equipe}, perfil: {$access_role})", 'WARNING');
     if ((string)$currentRole !== $access_role) {
         audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Perfil do funcionario ID {$funcionario_id} alterado de {$currentRole} para {$access_role} por {$actor_role}", 'CRITICAL');
+    }
+    if ($grupo_escala_sent && $currentGrupo !== $grupo_escala) {
+        audit_log(
+            'FUNCIONARIO_GRUPO_ESCALA_ALTERADO',
+            "Grupo da escala do funcionario ID {$funcionario_id} alterado de {$currentGrupo} para {$grupo_escala} por {$actor_role}",
+            'WARNING'
+        );
     }
     if ($currentForaMapa !== $newForaMapa) {
         audit_log(

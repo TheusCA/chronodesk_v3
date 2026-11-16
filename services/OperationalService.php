@@ -4,6 +4,7 @@ require_once __DIR__ . '/SharePointSyncService.php';
 require_once __DIR__ . '/ScheduleRulePlanner.php';
 require_once __DIR__ . '/PresenceEngine.php';
 require_once __DIR__ . '/PresenceCutoff.php';
+require_once __DIR__ . '/CyclePattern.php';
 
 final class OperationalService {
     public const MAX_IMPORT_ROWS = 500;
@@ -36,6 +37,8 @@ final class OperationalService {
     /** [P7] Ausencia nao e excecao de escala (F3; desenho, secao 9.4). */
     public const ABSENCE_EXCEPTION_MESSAGE = 'Folga, falta, férias e afastamento não são exceção de escala: lance na tela Ausências.';
     public const OUTSIDE_MAP_MESSAGE = 'Cadastro marcado como fora do Mapa PA e da escala: não recebe regra nem exceção de escala.';
+    /** [F10-2] Regra individual de membro de time de rodizio (desenho do F10, 3.1). */
+    public const ROTATION_MEMBER_MESSAGE = 'Este técnico está no %s; mude pelo time.';
     public const LEADERSHIP_IMPORT_WARNING = 'Linha ignorada: a Liderança tem escala fixa presencial, sem regra a importar.';
     /**
      * [F5, D11] Rotulos com acento no caminho do motor (tela Escala; relatorio
@@ -441,7 +444,9 @@ final class OperationalService {
                 'preview' => $this->rulePreviewDays(
                     $request['employee'],
                     ScheduleRulePlanner::applyPlan($request['rules'], $plan, $newRule),
-                    $request['effective_from']
+                    $request['effective_from'],
+                    // [F10-2] Semana a semana: o ciclo inteiro (ate 4 semanas); os demais, 2 semanas.
+                    max(self::RULE_PREVIEW_DAYS, CyclePattern::WEEK_DAYS * (int)($request['weeks'] ?? 0))
                 ),
             ];
         });
@@ -472,12 +477,14 @@ final class OperationalService {
             throw new PortalForbiddenException('Somente administradores e Liderança gravam regra com início retroativo.');
         }
         $this->lockScheduleEmployee($employee, true);
+        $this->assertNotRotationMember((int)$employee['id'], $effectiveFrom, false);
         return [
             'employee' => $employee,
             'rule_type' => $rule,
             'rule_config' => $definition['config'],
             'weekdays' => $definition['weekdays'],
             'pattern' => $definition['pattern'],
+            'weeks' => $definition['weeks'] ?? null,
             'effective_from' => $effectiveFrom,
             'rules' => $this->employeeScheduleRules((int)$employee['id']),
         ];
@@ -576,6 +583,7 @@ final class OperationalService {
             $employee = $this->scheduleEmployee($employeeId);
             $this->assertScheduleChangeAllowed($employee, $actorRole);
             $this->lockScheduleEmployee($employee);
+            $this->assertNotRotationMember((int)$employee['id'], $this->today(), true);
             $rules = $this->employeeScheduleRules((int)$employee['id']);
             $plan = ScheduleRulePlanner::planRemove($rules, $this->today());
             if ($plan['close'] === null && $plan['delete'] === []) {
@@ -737,6 +745,8 @@ final class OperationalService {
         $rows = self::validateScheduleImportRows($rows);
         $result = [];
         $seen = [];
+        // [F10-2] Membro de time de rodizio hoje: a regra vem do time (uma consulta so).
+        $members = $this->rotationMembersAt($this->today());
         foreach ($rows as $index => $row) {
             $employee = $this->findEmployeeForImport($row);
             $rule = $this->normalizeRule((string)($row['regra'] ?? $row['rule_type'] ?? ''));
@@ -761,6 +771,9 @@ final class OperationalService {
             }
             if (!$ignored && $employee && (int)($employee['fora_mapa_escala'] ?? 0) === 1) {
                 $errors[] = 'Cadastro fora do Mapa PA e da escala.';
+            }
+            if (!$ignored && $employee && isset($members[(int)$employee['id']])) {
+                $errors[] = sprintf(self::ROTATION_MEMBER_MESSAGE, $members[(int)$employee['id']]);
             }
             if ($employee && isset($seen[$employee['id']])) {
                 $errors[] = 'Colaborador duplicado no arquivo.';
@@ -1578,6 +1591,44 @@ final class OperationalService {
         }
     }
 
+    /**
+     * [F10-2] Regra individual de membro de time de rodizio: 409 (desenho do
+     * F10, 3.1). $fromDateOn false: pertenca que cobre a data (gravar a regra a
+     * partir dela); true: pertenca de hoje em diante (remover apaga as regras
+     * agendadas, inclusive as do time). Leitura com trava, depois da trava do
+     * colaborador: ve a pertenca gravada por uma transacao que esperou por ela.
+     */
+    private function assertNotRotationMember(int $employeeId, string $date, bool $fromDateOn): void {
+        $stmt = $this->pdo->prepare(
+            'SELECT t.name FROM portal_rotation_team_members m
+             JOIN portal_rotation_teams t ON t.id = m.team_id
+             WHERE m.employee_id = :employee_id'
+             . ($fromDateOn ? '' : ' AND m.valid_from <= :date_from')
+             . ' AND (m.valid_until IS NULL OR m.valid_until >= :date_until)
+             ORDER BY m.valid_from LIMIT 1 FOR UPDATE'
+        );
+        $stmt->execute([':employee_id' => $employeeId, ':date_until' => $date] + ($fromDateOn ? [] : [':date_from' => $date]));
+        $team = $stmt->fetchColumn();
+        if ($team !== false) {
+            throw new DomainException(sprintf(self::ROTATION_MEMBER_MESSAGE, $team));
+        }
+    }
+
+    /** [F10-2] Membros de time de rodizio na data: employee_id => nome do time. */
+    private function rotationMembersAt(string $date): array {
+        $stmt = $this->pdo->prepare(
+            'SELECT m.employee_id, t.name FROM portal_rotation_team_members m
+             JOIN portal_rotation_teams t ON t.id = m.team_id
+             WHERE m.valid_from <= :date_from AND (m.valid_until IS NULL OR m.valid_until >= :date_until)'
+        );
+        $stmt->execute([':date_from' => $date, ':date_until' => $date]);
+        $members = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $members[(int)$row['employee_id']] = (string)$row['name'];
+        }
+        return $members;
+    }
+
     /** [L9] Escala de Liderança, ou de cadastro Liderança/admin, só pelo admin. */
     private function assertScheduleChangeAllowed(array $employee, string $actorRole): void {
         $denied = schedule_change_denied($actorRole, $employee['team'] ?? null, $employee['access_role'] ?? null);
@@ -2104,9 +2155,9 @@ final class OperationalService {
      * motor sobre o historico ja com a regra nova (sem excecoes: a previa e
      * da regra). Com regra agendada depois, os dias dela saem com o rotulo dela.
      */
-    private function rulePreviewDays(array $employee, array $rules, string $from): array {
+    private function rulePreviewDays(array $employee, array $rules, string $from, int $count = self::RULE_PREVIEW_DAYS): array {
         $days = [];
-        for ($date = $from; count($days) < self::RULE_PREVIEW_DAYS; $date = ScheduleRulePlanner::addDays($date, 1)) {
+        for ($date = $from; count($days) < $count; $date = ScheduleRulePlanner::addDays($date, 1)) {
             if (!PresenceEngine::isBusinessDay($date)) {
                 continue;
             }
@@ -2305,6 +2356,18 @@ final class OperationalService {
             if (!is_array($cycle)) {
                 throw new InvalidArgumentException('Informe a configuracao do ciclo.');
             }
+            // [F10-2] Padrao explicito ou semana a semana (desenho do F10, 3.2);
+            // sem as chaves novas, os blocos de antes, sem mudanca.
+            if (CyclePattern::isExplicit($cycle)) {
+                $parsed = CyclePattern::fromPayload($cycle);
+                return [
+                    'config' => CyclePattern::config($parsed['pattern'], $parsed['anchor_date'], $parsed['weeks']),
+                    'weekdays' => [],
+                    'pattern' => $parsed['pattern'],
+                    'weeks' => $parsed['weeks'],
+                    'effective_from' => $parsed['anchor_date'],
+                ];
+            }
             $onsite = self::cycleDays($cycle['onsite_days'] ?? null, 'Dias presenciais do ciclo');
             $remote = self::cycleDays($cycle['remote_days'] ?? null, 'Dias remotos do ciclo');
             if ($onsite + $remote > self::CYCLE_MAX_DAYS) {
@@ -2393,7 +2456,8 @@ final class OperationalService {
         }
         if ($rule === 'cycle') {
             $cycle = PresenceEngine::cycleConfig($config ?? []);
-            return $cycle === null ? 'Ciclo com configuração inválida' : ucfirst(PresenceEngine::cycleLabel($cycle['pattern']));
+            // [F10-2] Semana a semana: "Ciclo 3 semanas, 9P/6R"; os demais, como antes.
+            return $cycle === null ? 'Ciclo com configuração inválida' : CyclePattern::label($cycle['pattern'], CyclePattern::weeksFromConfig($config));
         }
         return match ($rule) {
             'even_days' => 'Dias pares',

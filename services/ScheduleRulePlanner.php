@@ -59,8 +59,13 @@ final class ScheduleRulePlanner {
      * atualizada ou igual), effective_from, effective_until (da linha gravada),
      * close (null ou ['id', 'effective_until', 'previous_until']), previous (a
      * regra que vigorava em $from) e retroactive ($from antes de hoje).
+     *
+     * [F10-2] $sameOwner false: a regra que vigora em $from e de outro dono
+     * (individual ou de outro time de rodizio); mesmo tipo e configuracao nao
+     * contam como "igual" e a gravacao segue (atualiza ou encerra e insere),
+     * para a linha passar a ser do time. Padrao true: o comportamento de antes.
      */
-    public static function planSave(array $rules, string $from, string $ruleType, ?string $ruleConfig, string $today): array {
+    public static function planSave(array $rules, string $from, string $ruleType, ?string $ruleConfig, string $today, bool $sameOwner = true): array {
         $cover = self::ruleAt($rules, $from);
         $plan = [
             'action' => 'insert',
@@ -71,7 +76,7 @@ final class ScheduleRulePlanner {
             'previous' => $cover,
             'retroactive' => $from < $today,
         ];
-        if ($cover !== null && self::sameRule($cover, $ruleType, $ruleConfig)) {
+        if ($sameOwner && $cover !== null && self::sameRule($cover, $ruleType, $ruleConfig)) {
             return ['action' => 'unchanged', 'target_id' => (int)$cover['id'], 'effective_until' => $cover['effective_until']] + $plan;
         }
         if ($cover !== null && $cover['effective_from'] === $from) {

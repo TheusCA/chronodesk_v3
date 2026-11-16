@@ -40,7 +40,7 @@ final class QaChildPdo extends PDO {
         if (trim($query) === 'SELECT 1 FROM audit_log LIMIT 1') {
             return new QaChildStatement($this, 'SELECT 1 FROM audit_log LIMIT 1');
         }
-        if (trim($query) === 'SELECT id, fora_mapa_escala FROM funcionarios' || trim($query) === 'SELECT id, arquivado_em FROM funcionarios WHERE ativo = 0') {
+        if (in_array(trim($query), ['SELECT id, fora_mapa_escala FROM funcionarios', 'SELECT id, arquivado_em FROM funcionarios WHERE ativo = 0', 'SELECT id, grupo_escala FROM funcionarios'], true)) {
             $statement = new QaChildStatement($this, trim($query));
             $statement->execute();
             return $statement;
@@ -197,6 +197,23 @@ final class QaChildStatement extends PDOStatement {
                 if ((int)($row['ativo'] ?? 1) === 0) {
                     $this->rows[] = ['id' => (int)$id, 'arquivado_em' => $row['arquivado_em'] ?? null];
                 }
+            }
+            return true;
+        }
+        // [F10-2] Grupo da escala: leitura travada, gravacao no log e lista.
+        if ($this->sql === 'SELECT grupo_escala FROM funcionarios WHERE id = :id FOR UPDATE') {
+            $row = $byId($this->pdo, $params[':id'] ?? 0);
+            $this->rows = $row ? [['grupo_escala' => (string)($row['grupo_escala'] ?? 'comum')]] : [];
+            return true;
+        }
+        if ($this->sql === 'UPDATE funcionarios SET grupo_escala = :grupo_escala WHERE id = :id') {
+            error_log('[QA_WRITE] UPDATE funcionarios SET grupo_escala id=' . $params[':id'] . ' grupo=' . $params[':grupo_escala']);
+            return true;
+        }
+        if ($this->sql === 'SELECT id, grupo_escala FROM funcionarios') {
+            $this->rows = [];
+            foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                $this->rows[] = ['id' => (int)$id, 'grupo_escala' => (string)($row['grupo_escala'] ?? 'comum')];
             }
             return true;
         }
@@ -1769,6 +1786,15 @@ $matrix = [
     // [F2B] Previa com as mesmas permissoes do "rule" (aprovacao de 2026-10-07).
     'api/portal/schedules.php POST rule_preview' => [['content_type' => $json, 'body' => '{"action":"rule_preview"}'], $expect['GESTAO']],
     'api/portal/schedules.php POST remove_rule' => [['content_type' => $json, 'body' => '{"action":"remove_rule"}'], $expect['ADMIN_LIDERANCA']],
+    // [F10-2] Times de rodizio: leitura como a das escalas; toda gravacao e a
+    // previa com escalas.manage (D-F10-5: Lideranca e admin).
+    'api/portal/rotation_teams.php GET' => [[], $expect['TODOS']],
+    'api/portal/rotation_teams.php POST save_team' => [['content_type' => $json, 'body' => '{"action":"save_team"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/rotation_teams.php POST save_version' => [['content_type' => $json, 'body' => '{"action":"save_version"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/rotation_teams.php POST preview_version' => [['content_type' => $json, 'body' => '{"action":"preview_version"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/rotation_teams.php POST add_member' => [['content_type' => $json, 'body' => '{"action":"add_member"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/rotation_teams.php POST move_member' => [['content_type' => $json, 'body' => '{"action":"move_member"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/rotation_teams.php POST end_member' => [['content_type' => $json, 'body' => '{"action":"end_member"}'], $expect['ADMIN_LIDERANCA']],
     // F2: presenca para qualquer perfil autenticado (desenho, secao 3.2).
     'api/portal/presence.php GET' => [[], $expect['TODOS']],
     'api/portal/sdk_responsibles.php GET' => [[], $expect['TODOS']],
@@ -2024,6 +2050,24 @@ foreach ([
     assert_same(true, strpos($result['log'], $write) !== false, "funcionario {$case}: gravacao esperada ({$write})");
     assert_same(true, strpos($result['log'], $audit) !== false, "funcionario {$case}: auditoria '{$audit}'");
 }
+// [F10-2] Grupo da escala: opcional; ausente nao gera comando do grupo; valor
+// fora da lista da 400 sem gravar; troca grava em comando proprio e audita.
+$grupoDb = QA_DB;
+$grupoDb['funcionarios']['1']['grupo_escala'] = 'comum';
+$grupoCases = qa_run_endpoints($qaDir, [
+    'separado' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'grupo_escala' => 'separado']), $grupoDb),
+    'mesmo_grupo' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'grupo_escala' => 'comum']), $grupoDb),
+    'invalido' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'grupo_escala' => 'outro']), $grupoDb),
+    'ausente' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva']), $grupoDb),
+    'lista_gestor' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => $manager, 'db' => $grupoDb],
+    'lista_tecnico' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => qa_ci_session(1, 'joao.silva', 'tecnico'), 'db' => $grupoDb],
+]);
+assert_same([200, true, true], [$grupoCases['separado']['status'], strpos($grupoCases['separado']['log'], '[QA_WRITE] UPDATE funcionarios SET grupo_escala id=1 grupo=separado') !== false, strpos($grupoCases['separado']['log'], '[QA_AUDIT] FUNCIONARIO_GRUPO_ESCALA_ALTERADO [WARNING]: Grupo da escala do funcionario ID 1 alterado de comum para separado por admin') !== false], 'grupo da escala: troca grava em comando proprio e audita so com o ID');
+assert_same([200, false, false], [$grupoCases['mesmo_grupo']['status'], strpos($grupoCases['mesmo_grupo']['log'], 'SET grupo_escala') !== false, strpos($grupoCases['mesmo_grupo']['log'], 'GRUPO_ESCALA_ALTERADO') !== false], 'grupo da escala: o mesmo grupo nao grava nem audita');
+assert_same([400, true, false], [$grupoCases['invalido']['status'], strpos($grupoCases['invalido']['body'], 'Grupo da escala inválido') !== false, preg_match('/\[QA_WRITE\] (UPDATE |INSERT INTO funcionarios id=banco)/', $grupoCases['invalido']['log']) === 1], 'grupo da escala: valor fora da lista da 400 e nada gravado');
+assert_same([200, false, true], [$grupoCases['ausente']['status'], strpos($grupoCases['ausente']['log'], 'grupo_escala') !== false, strpos($grupoCases['ausente']['log'], '[QA_WRITE] UPDATE funcionarios SET nome = :nome') !== false], 'grupo da escala: ausente mantem o gravado sem comando do grupo (o UPDATE de antes nao muda)');
+assert_same([true, false], [strpos($grupoCases['lista_gestor']['body'], '"grupo_escala":"comum"') !== false, strpos($grupoCases['lista_tecnico']['body'], 'grupo_escala') !== false], 'grupo da escala: a lista mostra o grupo para a gestao, nao para o tecnico');
+
 // Criar tecnico ou tecnico na equipe Lideranca nao gera evento de perfil (QA 5).
 foreach (['lid_cria_tecnico', 'admin_lideranca_tecnico', 'login_tecnico'] as $case) {
     assert_same(false, strpos($employeeCases[$case]['log'], 'FUNCIONARIO_PERFIL_ALTERADO') !== false, "funcionario {$case}: sem evento de perfil");

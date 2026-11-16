@@ -70,6 +70,8 @@ final class QaSchedulePdo extends PDO {
     public array $exceptions = [];
     public array $paAssignments = [];
     public array $absences = [];
+    /** [F10-2] Pertencas a times de rodizio (employee_id, team, valid_from, valid_until). */
+    public array $rotationMembers = [];
     public array $sync = [];
     public array $audits = [];
     public array $events = [];
@@ -261,6 +263,23 @@ final class QaScheduleStatement extends PDOStatement {
             $rules = $db->rules;
             $this->matchRule($rules, $params, static fn (array $rule): ?array => null);
             $db->writeRules(array_filter($rules));
+            return true;
+        }
+        // [F10-2] Pertenca a time de rodizio: cobre a data (gravar) ou de hoje em diante (remover).
+        if (preg_match('/^SELECT t\.name FROM portal_rotation_team_members m JOIN portal_rotation_teams t ON t\.id = m\.team_id WHERE m\.employee_id = :employee_id( AND m\.valid_from <= :date_from)? AND \(m\.valid_until IS NULL OR m\.valid_until >= :date_until\) ORDER BY m\.valid_from LIMIT 1 FOR UPDATE$/', $sql, $match)) {
+            $found = array_values(array_filter($db->rotationMembers, static fn (array $m): bool => $m['employee_id'] === (int)$params[':employee_id']
+                && (!isset($match[1]) || $m['valid_from'] <= $params[':date_from'])
+                && ($m['valid_until'] === null || $m['valid_until'] >= $params[':date_until'])));
+            usort($found, static fn (array $a, array $b): int => strcmp($a['valid_from'], $b['valid_from']));
+            $this->rows = $found === [] ? [] : [['name' => $found[0]['team']]];
+            return true;
+        }
+        if ($sql === 'SELECT m.employee_id, t.name FROM portal_rotation_team_members m JOIN portal_rotation_teams t ON t.id = m.team_id WHERE m.valid_from <= :date_from AND (m.valid_until IS NULL OR m.valid_until >= :date_until)') {
+            foreach ($db->rotationMembers as $m) {
+                if ($m['valid_from'] <= $params[':date_from'] && ($m['valid_until'] === null || $m['valid_until'] >= $params[':date_until'])) {
+                    $this->rows[] = ['employee_id' => $m['employee_id'], 'name' => $m['team']];
+                }
+            }
             return true;
         }
         // Excecoes: upsert por colaborador e data, e leitura do id.
@@ -1177,5 +1196,90 @@ assert_same(1, count($notePdo->exceptions), 'uma linha so por colaborador e data
 // Data nova, outro colaborador: o ausente nao herda observacao de ninguem.
 assert_same('ok', qa_outcome(fn () => $noteService->saveScheduleException(['employee_id' => 2, 'exception_date' => '2026-10-07', 'exception_type' => 'onsite'], 'qa', 'gestor')), 'outro colaborador na mesma data sem note: grava');
 assert_same(['onsite', null], array_values(array_intersect_key($notePdo->exceptions['2:2026-10-07'] ?? [], ['exception_type' => 0, 'note' => 0])), 'outro colaborador na mesma data sem note: sem observacao');
+
+// ----------------------------------------------------------------------------
+// 7. F10-2: padrao explicito e semana a semana, rotulo, previa e o 409 do
+//    membro de time de rodizio (desenho do F10, 3.1 e 3.2)
+// ----------------------------------------------------------------------------
+$weekly = static fn (array $weeks, string $anchor = '2026-10-05'): array => ['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['weeks' => $weeks, 'anchor_date' => $anchor]];
+$wk = static fn (string $days): array => array_map(static fn (string $d): string => $d === 'P' ? 'onsite' : 'remote', str_split($days));
+// FIXO CICLO intercalado de 2 semanas (home na qua e na sex da 1a; na seg da 2a): nao cabia em blocos.
+$pdo = qa_schedule_db([qa_rule(10, 'even_days', '2026-09-01', null)]);
+$service = new OperationalService($pdo, $today);
+$saved = null;
+assert_same('ok', qa_outcome(function () use (&$saved, $service, $weekly, $wk): void {
+    $saved = $service->saveScheduleRule($weekly([$wk('PPRPR'), $wk('RPPPP')]), 'qa', 'gestor');
+}), 'F10-2: o servidor aceita o ciclo semana a semana (cycle.weeks)');
+$row = $pdo->rules[$saved['id']];
+assert_same(['cycle', '{"pattern":["onsite","onsite","remote","onsite","remote","remote","onsite","onsite","onsite","onsite"],"anchor_date":"2026-10-05","business_days_only":true,"weeks":2}', '2026-10-05'],
+    [$row['rule_type'], $row['rule_config'], $row['effective_from']], 'F10-2: semana a semana grava o pattern de 5 x N, a ancora na segunda e weeks; inicio = ancora');
+$view = $service->scheduleData(['from' => '2026-10-05', 'to' => '2026-10-23', 'employee_id' => '1']);
+assert_same('05P 06P 07R 08P 09R 12R 13P 14P 15P 16P 19P 20P 21R 22P 23R', $letters($view['generated']), 'F10-2: o motor le o intercalado (semana 1, semana 2, semana 1)');
+assert_same(['Ciclo 2 semanas, 7P/3R'], array_values(array_unique(array_column($view['rules'], 'rule_label'))), 'F10-2: rotulo "Ciclo 2 semanas, 7P/3R" na regra');
+$again = $service->saveScheduleRule($weekly([$wk('PPRPR'), $wk('RPPPP')]), 'qa', 'gestor');
+assert_same(true, $again['unchanged'], 'F10-2: salvar de novo o mesmo semana a semana nao cria historico');
+$preview = $service->previewScheduleRule($weekly([$wk('PPRPR'), $wk('RPPPP'), $wk('PRPPP'), $wk('PPPPR')]), 'gestor');
+assert_same([20, 'Ciclo 4 semanas, 15P/5R'], [count($preview['preview']), $preview['rule_label']], 'F10-2: previa do semana a semana mostra o ciclo inteiro (4 semanas = 20 dias uteis)');
+$preview = $service->previewScheduleRule($weekly([$wk('PPRPR')]), 'gestor');
+assert_same(10, count($preview['preview']), 'F10-2: 1 semana fica nas 2 semanas de sempre');
+assert_same(10, count($service->previewScheduleRule($cycle(), 'gestor')['preview']), 'F10-2: ciclo em blocos com a previa de antes (10 dias)');
+// Padrao livre (lista explicita) e as recusas.
+$saved = $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['pattern' => ['onsite', 'remote', 'remote', 'onsite'], 'anchor_date' => '2026-10-07']], 'qa', 'gestor');
+assert_same('{"pattern":["onsite","remote","remote","onsite"],"anchor_date":"2026-10-07","business_days_only":true}', $pdo->rules[$saved['id']]['rule_config'], 'F10-2: padrao explicito sem weeks, ancora em dia util qualquer');
+assert_same('Ciclo 2P/2R', $service->scheduleData(['from' => '2026-10-07', 'to' => '2026-10-07', 'employee_id' => '1'])['generated'][0]['rule_label'], 'F10-2: rotulo do padrao livre igual ao dos blocos');
+$pdo = qa_schedule_db();
+$service = new OperationalService($pdo, $today);
+foreach ([
+    ['semana a semana na terca', $weekly([$wk('PPRPR')], '2026-10-06'), '400: No ciclo semana a semana, a data inicial precisa ser uma segunda-feira.'],
+    ['5 semanas', $weekly(array_fill(0, 5, $wk('PPRPR'))), '400: O ciclo semana a semana tem de 1 a 4 semanas.'],
+    ['nenhuma semana', $weekly([]), '400: O ciclo semana a semana tem de 1 a 4 semanas.'],
+    ['semana com 4 dias', $weekly([['onsite', 'onsite', 'remote', 'onsite']]), '400: Semana 1 do ciclo: informe os 5 dias, de segunda a sexta.'],
+    ['valor fora da lista', $weekly([['onsite', 'onsite', 'home', 'onsite', 'onsite']]), '400: Cada dia do ciclo é presencial (onsite) ou remoto (remote).'],
+    ['so presencial', $weekly([$wk('PPPPP')]), '400: Ciclo sem nenhum dia remoto: use a regra "Sempre presencial".'],
+    ['so remoto', ['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['pattern' => ['remote', 'remote'], 'anchor_date' => '2026-10-05']], '400: Ciclo sem nenhum dia presencial: use a regra "Sempre remoto".'],
+    ['padrao de 1 dia', ['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['pattern' => ['remote'], 'anchor_date' => '2026-10-05']], '400: O padrão do ciclo tem de 2 a 20 dias úteis.'],
+    ['padrao de 21 dias', ['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['pattern' => array_merge(['remote'], array_fill(0, 20, 'onsite')), 'anchor_date' => '2026-10-05']], '400: O padrão do ciclo tem de 2 a 20 dias úteis.'],
+    ['padrao que nao e lista', ['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['pattern' => ['a' => 'remote', 'b' => 'onsite'], 'anchor_date' => '2026-10-05']], '400: O padrão do ciclo tem de 2 a 20 dias úteis.'],
+    ['padrao com ancora no sabado', ['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['pattern' => ['remote', 'onsite'], 'anchor_date' => '2026-10-10']], '400: A data inicial do ciclo precisa ser dia útil (segunda a sexta).'],
+    ['padrao e semanas juntos', ['employee_id' => 1, 'rule_type' => 'cycle', 'cycle' => ['pattern' => ['remote', 'onsite'], 'weeks' => [$wk('PPRPR')], 'anchor_date' => '2026-10-05']], '400: Informe o ciclo por padrão ou por semanas, não pelos dois.'],
+    ['data invalida', $weekly([$wk('PPRPR')], '2026-02-30'), '400: Data inicial do ciclo inválida.'],
+    ['semana a semana passado pelo gestor', $weekly([$wk('PPRPR')], '2026-09-28'), '403: Somente administradores e Liderança gravam regra com início retroativo.'],
+] as [$label, $payload, $expected]) {
+    assert_same($expected, qa_outcome(fn () => $service->saveScheduleRule($payload, 'qa', 'gestor')), "F10-2: {$label}");
+}
+assert_same([], $pdo->rules, 'F10-2: nada gravado nas recusas');
+
+// 409 do membro: gravar, prever e remover a regra individual; importar.
+$pdo = qa_schedule_db([qa_rule(10, 'cycle', '2026-10-05', null, '{"pattern":["remote","onsite","onsite"],"anchor_date":"2026-10-05","business_days_only":true}')]);
+$pdo->rotationMembers = [['employee_id' => 1, 'team' => 'Time 1', 'valid_from' => '2026-10-05', 'valid_until' => null]];
+$service = new OperationalService($pdo, $today);
+$memberMessage = '409: ' . sprintf(OperationalService::ROTATION_MEMBER_MESSAGE, 'Time 1');
+assert_same('409: Este técnico está no Time 1; mude pelo time.', $memberMessage, 'F10-2: a mensagem do desenho');
+$snapshot = [$pdo->rules, $pdo->sync, $pdo->audits];
+assert_same($memberMessage, qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite', 'effective_from' => '2026-10-12'], 'qa', 'admin')), 'F10-2: regra individual de membro 409 (ate o admin)');
+assert_same($memberMessage, qa_outcome(fn () => $service->previewScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite', 'effective_from' => '2026-10-12'], 'admin')), 'F10-2: previa da regra individual de membro 409');
+assert_same($memberMessage, qa_outcome(fn () => $service->removeScheduleRule(1, 'qa', 'admin')), 'F10-2: remover a regra de membro 409');
+assert_same($snapshot, [$pdo->rules, $pdo->sync, $pdo->audits], 'F10-2: nada gravado nos 409 do membro');
+$lockAt = array_search(QA_LOCK_SQL, $pdo->events, true);
+$memberAt = key(array_filter($pdo->events, static fn (string $sql): bool => strpos($sql, 'SELECT t.name FROM portal_rotation_team_members m') === 0));
+assert_same(true, $lockAt !== false && $memberAt !== null && $lockAt < $memberAt, 'F10-2: a pertenca e lida depois da trava do colaborador');
+$preview = $service->previewScheduleImport([['login_ad' => 'qa.tecnico1', 'regra' => 'presencial']]);
+assert_same([false, ['Este técnico está no Time 1; mude pelo time.']], [$preview['rows'][0]['valid'], $preview['rows'][0]['errors']], 'F10-2: importacao recusa a linha do membro');
+// Pertenca encerrada antes da data: a regra individual volta a valer; agendada depois: a regra individual vale ate ela.
+$pdo->rotationMembers = [['employee_id' => 1, 'team' => 'Time 1', 'valid_from' => '2026-10-05', 'valid_until' => '2026-10-09']];
+assert_same('ok', qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite', 'effective_from' => '2026-10-12'], 'qa', 'gestor')), 'F10-2: ex-membro (pertenca encerrada antes) grava regra individual');
+assert_same($memberMessage, qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'always_remote', 'effective_from' => '2026-10-09'], 'qa', 'lideranca')), 'F10-2: data dentro da pertenca encerrada continua 409');
+$pdo = qa_schedule_db();
+$pdo->rotationMembers = [['employee_id' => 1, 'team' => 'Time 2', 'valid_from' => '2026-11-02', 'valid_until' => null]];
+$service = new OperationalService($pdo, $today);
+assert_same('ok', qa_outcome(fn () => $service->saveScheduleRule(['employee_id' => 1, 'rule_type' => 'always_onsite', 'effective_from' => '2026-10-12'], 'qa', 'gestor')), 'F10-2: regra individual antes de uma pertenca agendada');
+assert_same('409: Este técnico está no Time 2; mude pelo time.', qa_outcome(fn () => $service->removeScheduleRule(1, 'qa', 'admin')), 'F10-2: remover com pertenca agendada 409 (apagaria a regra do time)');
+// Quem nao e membro: o mesmo caminho de antes, sem nenhuma diferenca.
+$pdo = qa_schedule_db([qa_rule(10, 'even_days', '2026-09-01', null)]);
+$pdo->rotationMembers = [['employee_id' => 2, 'team' => 'Time 3', 'valid_from' => '2026-10-01', 'valid_until' => null]];
+$service = new OperationalService($pdo, $today);
+$saved = $service->saveScheduleRule($cycle(), 'qa', 'gestor');
+assert_same(['{"pattern":["remote","onsite","onsite"],"anchor_date":"2026-10-05","business_days_only":true}', 10, '2026-10-04'], [$pdo->rules[$saved['id']]['rule_config'], $saved['closed_rule_id'], $saved['closed_until']], 'F10-2: nao membro grava o ciclo em blocos como antes');
+assert_same(1, $service->removeScheduleRule(1, 'qa', 'admin'), 'F10-2: nao membro remove como antes');
 
 echo "QA schedule history OK\n";

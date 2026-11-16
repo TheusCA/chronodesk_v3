@@ -29,6 +29,21 @@ if (portal_role_is_manager(current_portal_role())) {
     }
 }
 
+// [F10-2] Grupo da escala para a gestao (cadastro). Sem a coluna (migration
+// 021 ainda nao aplicada), o campo fica de fora e a lista continua.
+$grupo_escala = null;
+if (portal_role_is_manager(current_portal_role())) {
+    try {
+        $grupo_escala = [];
+        foreach (get_db_connection()->query('SELECT id, grupo_escala FROM funcionarios')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $grupo_escala[(int)$row['id']] = (string)$row['grupo_escala'];
+        }
+    } catch (Throwable $e) {
+        error_log('[FUNCIONARIO] grupo_escala indisponivel: ' . get_class($e));
+        $grupo_escala = null;
+    }
+}
+
 // [F4] Data do arquivamento (so a data, sem o autor) para quem gerencia
 // funcionarios: a tela separa o arquivado do inativo antigo, sem data, que
 // ainda pode ser arquivado (D5). Sem a coluna (migration 014 ainda nao
@@ -67,6 +82,9 @@ if ($gerenciador) {
         ];
         if (is_array($fora_mapa)) {
             $item['fora_mapa_escala'] = $fora_mapa[(int)$f->id] ?? false;
+        }
+        if (is_array($grupo_escala)) {
+            $item['grupo_escala'] = $grupo_escala[(int)$f->id] ?? 'comum';
         }
         if (is_array($arquivado_em)) {
             $item['arquivado_em'] = $ativo ? null : ($arquivado_em[(int)$f->id] ?? null);
