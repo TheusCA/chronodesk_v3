@@ -43,6 +43,7 @@ import {
   minutesLabel,
   queryString,
 } from '../lib/operational'
+import { teamShort, WORK_TEAMS } from '../lib/teams'
 
 const today = localDate()
 const currentCompetency = competencyFor()
@@ -216,7 +217,7 @@ function isLeadershipTeam(team) {
 }
 
 function teamLabel(team) {
-  return isLeadershipTeam(team) ? 'Liderança' : String(team || '').toUpperCase()
+  return isLeadershipTeam(team) ? 'Liderança' : teamShort(team || '')
 }
 
 function EmployeeSelect({ employees, value, onChange, disabled = false }) {
@@ -224,7 +225,7 @@ function EmployeeSelect({ employees, value, onChange, disabled = false }) {
     <select className="field mt-2" disabled={disabled} required value={value} onChange={onChange}>
       <option value="">Selecione</option>
       {(employees || []).map((employee) => (
-        <option key={employee.id} value={employee.id}>{employee.nome} - {employee.equipe.toUpperCase()}</option>
+        <option key={employee.id} value={employee.id}>{employee.nome} - {teamShort(employee.equipe)}</option>
       ))}
     </select>
   )
@@ -256,7 +257,7 @@ function PeriodFilters({ filters, setFilters, extra = null }) {
     <FilterBar>
       <label className="label">Início<input className="field mt-2" type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
       <label className="label">Fim<input className="field mt-2" min={filters.from} type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
-      <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
+      <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option>{WORK_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
       {extra}
     </FilterBar>
   )
@@ -1046,7 +1047,7 @@ function WorkflowPage({ kind, session, notify }) {
     return rows.map((item) => (
       <tr key={item.id}>
         <td>{formatDate(overtime ? item.work_date : item.adjustment_date)}</td>
-        <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>Equipe {item.team.toUpperCase()}</small></div></div></td>
+        <td><div className="flex min-w-0 items-start gap-3"><UserAvatar name={item.employee_name} /><div><strong>{item.employee_name}</strong><small>Equipe {teamShort(item.team)}</small></div></div></td>
         <td>{detailContent(item)}</td>
         <td><Status value={item.status} /></td>
         <td>{decisionContent(item)}</td>
@@ -1063,7 +1064,7 @@ function WorkflowPage({ kind, session, notify }) {
             <UserAvatar name={item.employee_name} />
             <div className="min-w-0">
               <strong className="block font-semibold text-ink-2">{item.employee_name}</strong>
-              <span className="block text-xs text-muted">Equipe {item.team.toUpperCase()}</span>
+              <span className="block text-xs text-muted">Equipe {teamShort(item.team)}</span>
               <span className="block text-xs text-muted">Data: {formatDate(overtime ? item.work_date : item.adjustment_date)}</span>
             </div>
           </div>
@@ -1226,7 +1227,7 @@ export function OncallPage({ session, notify }) {
       <OperationalShell resource={resource}>
         {(resource.data?.items || []).length === 0 ? <EmptyState title="Nenhum plantão no período" description="Ajuste os filtros ou cadastre um novo plantão para esta competência." /> : (
           <section className="card table-wrap">
-            <table className="data-table"><thead><tr><th>Período</th><th>Colaborador</th><th>Horário</th><th>Tipo</th><th>Status</th></tr></thead><tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDate(item.starts_on)} a {formatDate(item.ends_on)}</td><td><strong>{item.employee_name}</strong><small>{item.team.toUpperCase()}</small></td><td>{item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}</td><td>{item.shift_type}</td><td><Status value={item.status} /></td></tr>)}</tbody></table>
+            <table className="data-table"><thead><tr><th>Período</th><th>Colaborador</th><th>Horário</th><th>Tipo</th><th>Status</th></tr></thead><tbody>{resource.data.items.map((item) => <tr key={item.id}><td>{formatDate(item.starts_on)} a {formatDate(item.ends_on)}</td><td><strong>{item.employee_name}</strong><small>{teamShort(item.team)}</small></td><td>{item.start_time.slice(0, 5)} - {item.end_time.slice(0, 5)}</td><td>{item.shift_type}</td><td><Status value={item.status} /></td></tr>)}</tbody></table>
           </section>
         )}
       </OperationalShell>
@@ -1303,8 +1304,7 @@ export function OperationalReportsPage() {
         <label className="label">Equipe
           <select aria-invalid={Boolean(errors.team)} className="field mt-2" {...register('team')}>
             <option value="">Todas</option>
-            <option value="n1">N1</option>
-            <option value="n2">N2</option>
+            {WORK_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
           {errors.team && <span className="mt-1 block text-xs text-danger">{errors.team.message}</span>}
         </label>
@@ -1312,7 +1312,7 @@ export function OperationalReportsPage() {
           <select aria-invalid={Boolean(errors.employee_id)} className="field mt-2" {...register('employee_id')}>
             <option value="">Selecione</option>
             {(employees.data?.funcionarios || []).map((employee) => (
-              <option key={employee.id} value={employee.id}>{employee.nome} - {employee.equipe.toUpperCase()}</option>
+              <option key={employee.id} value={employee.id}>{employee.nome} - {teamShort(employee.equipe)}</option>
             ))}
           </select>
           {errors.employee_id && <span className="mt-1 block text-xs text-danger">{errors.employee_id.message}</span>}

@@ -6,7 +6,8 @@ import { Tag } from '../components/ui/Tag'
 import { EmptyState } from '../components/ui/States'
 import { hasPermission } from '../lib/roles'
 import { nowLegendItem } from '../lib/presenceLegend'
-import { clockDuration, isMeeting, pauseLimitSeconds, pauseTiming, pauseTimingNote } from '../lib/pauseTimer'
+import { clockDuration, isLunch, isMeeting, lunchIntervalSeconds, LUNCH_NO_LIMIT_NOTE, LUNCH_REASON, pauseLimitSeconds, pauseTiming, pauseTimingNote } from '../lib/pauseTimer'
+import { isCriticalTeam, WORK_TEAMS } from '../lib/teams'
 
 // [R4a] Os três motivos ficam visíveis (D-R0-5): escolher e confirmar com um
 // botão que diz o que vai acontecer. Dois toques, no lugar de três.
@@ -15,6 +16,8 @@ const REASONS = [
   { value: 'Pessoal', action: 'Iniciar pausa pessoal' },
   { value: 'Reunião', action: 'Pedir aprovação da reunião' },
 ]
+// [F9, 11.3] "Almoço" só na sessão do Crítico (a recusa fica no servidor).
+const LUNCH = { value: LUNCH_REASON, action: 'Iniciar almoço' }
 // Regra das pausas, com as mesmas palavras de antes (D-R0-8).
 const PAUSE_RULE = 'Café usa limite próprio; reunião segue o fluxo de aprovação configurado.'
 
@@ -86,6 +89,7 @@ function ActivePause({ current, elapsed, loading, onFinish }) {
       <p className={`text-sm ${timing.overdue ? 'font-medium text-danger' : 'text-muted'}`}>
         {timing.limit > 0 ? `${pauseTimingNote(timing)} · limite de ${Math.round(timing.limit / 60)} min` : 'Timer ativo sem limite automático'}
       </p>
+      {isLunch(current.motivo_pausa) && timing.limit === 0 && <InlineAlert tone="warning">{LUNCH_NO_LIMIT_NOTE}</InlineAlert>}
       {isMeeting(current.motivo_pausa) && (
         <p className="line-clamp-3 rounded-md border border-line bg-surface-2 px-3 py-2 text-sm leading-6 text-ink-2" title={current.observacao_reuniao || 'Sem observação informada'}>
           {current.observacao_reuniao || 'Sem observação informada'}
@@ -101,15 +105,19 @@ function ActivePause({ current, elapsed, loading, onFinish }) {
 function StartPause({ current, loading, onStart, onRequest }) {
   const [reason, setReason] = useState('')
   const [observation, setObservation] = useState('')
-  const chosen = REASONS.find((item) => item.value === reason) ?? null
+  const reasons = isCriticalTeam(current?.equipe) ? [...REASONS, LUNCH] : REASONS
+  const chosen = reasons.find((item) => item.value === reason) ?? null
   const meeting = reason === 'Reunião'
   // Limite do café pela configuração que o servidor manda (sem pausa, o
   // status.php traz o limite de quem conta no tempo).
   const coffeeLimit = current && !current.em_pausa ? pauseLimitSeconds({ motivo_pausa: 'Café', duracao_limite_segundos: current.duracao_limite_segundos }) : 0
+  // [F9, D-F9-6] Almoço do Crítico: até o F8, o intervalo do próprio cadastro.
+  const lunchLimit = lunchIntervalSeconds(current?.almoco_inicio, current?.almoco_fim)
   const hints = {
     'Café': coffeeLimit > 0 ? `até ${Math.round(coffeeLimit / 60)} min` : 'com limite de tempo',
     'Pessoal': 'sem limite de tempo',
     'Reunião': 'com aprovação',
+    [LUNCH_REASON]: lunchLimit !== null ? `até ${Math.round(lunchLimit / 60)} min` : 'sem limite automático',
   }
 
   async function submit(event) {
@@ -126,7 +134,7 @@ function StartPause({ current, loading, onStart, onRequest }) {
     <form className="space-y-4" data-own-pause="start" onSubmit={submit}>
       <fieldset className="space-y-2">
         <legend className="mb-2 text-sm font-medium text-ink-2">Motivo</legend>
-        {REASONS.map((item) => (
+        {reasons.map((item) => (
           <label className="pause-choice" key={item.value}>
             <input checked={reason === item.value} name="motivo_pausa" onChange={() => setReason(item.value)} required type="radio" value={item.value} />
             <span className="font-medium text-ink">{item.value}</span>
@@ -134,6 +142,7 @@ function StartPause({ current, loading, onStart, onRequest }) {
           </label>
         ))}
       </fieldset>
+      {reason === LUNCH_REASON && lunchLimit === null && <InlineAlert tone="warning">{LUNCH_NO_LIMIT_NOTE}</InlineAlert>}
       {meeting && (
         <label className="label">
           Contexto da reunião
@@ -246,6 +255,8 @@ function TeamPanel({ teams, livePauses, canForceEndBreak, loading, onForceEndBre
                 <tr className="team-group">
                   <th colSpan={columns} scope="colgroup">
                     Equipe {title} · {items.filter((item) => operatorState(item)[0] === 'available').length} de {items.length} disponíveis
+                    {/* [F9, D-F9-18] Destaque do Crítico por selo e rótulo, nunca só pela cor. */}
+                    {isCriticalTeam(title) && <> <Tag tone="warning">Equipe crítica</Tag></>}
                   </th>
                 </tr>
                 {rows.map((item) => <TeamRow canForceEndBreak={canForceEndBreak} elapsedFor={livePauses.elapsedFor} item={item} key={item.id} loading={loading} onForceEndBreak={onForceEndBreak} />)}
@@ -259,10 +270,11 @@ function TeamPanel({ teams, livePauses, canForceEndBreak, loading, onForceEndBre
 }
 
 export function PausasPage({ session, status, livePauses, loading, onStart, onRequest, onFinish, onForceEndBreak }) {
-  const employees = useMemo(() => [...(status.n1 || []), ...(status.n2 || [])], [status])
+  // [F9] As quatro equipes de técnico (N1, N2, Crítico e Híbrido).
+  const employees = useMemo(() => WORK_TEAMS.flatMap((team) => status[team.value] || []), [status])
   const current = employees.find((item) => Number(item.id) === Number(session.ci.funcionario_id))
   const canForceEndBreak = hasPermission(session, 'pausas.force_end')
-  const teams = [['N1', status.n1 || []], ['N2', status.n2 || []]]
+  const teams = WORK_TEAMS.map((team) => [team.label, status[team.value] || []])
 
   return (
     <div className="space-y-6">

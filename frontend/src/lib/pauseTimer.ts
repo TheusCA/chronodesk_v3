@@ -19,11 +19,36 @@ export function isMeeting(motivo: unknown): boolean {
   return String(motivo ?? '').toLowerCase().startsWith('reuni')
 }
 
+// [F9] Pausa "Almoço" do Crítico (desenho principal, 9.15.4).
+export const LUNCH_REASON = 'Almoço'
+// Aviso da DL17: sem intervalo válido no cadastro (e sem contrato), sem limite.
+export const LUNCH_NO_LIMIT_NOTE = 'Almoço sem intervalo válido no cadastro: sem limite automático.'
+export function isLunch(motivo: unknown): boolean {
+  return motivo === LUNCH_REASON
+}
+
 // Limite em segundos; 0 = sem limite.
+// [F9, D-F9-6] No almoço, o limite vem do servidor (intervalo do cadastro ou,
+// com o F8, o contrato); 0 = sem intervalo válido: sem limite automático, sem
+// os 20 min de padrão.
 export function pauseLimitSeconds(item: PauseLike): number {
   if (pauseHasNoLimit(item?.motivo_pausa)) return 0
   const limit = Number(item?.duracao_limite_segundos)
+  if (isLunch(item?.motivo_pausa)) return Number.isFinite(limit) && limit > 0 ? limit : 0
   return Number.isFinite(limit) && limit > 0 ? limit : DEFAULT_LIMIT_SECONDS
+}
+
+// [F9] Duração do intervalo de almoço do cadastro ("HH:MM"), em segundos;
+// null sem intervalo válido (fim depois do início, no mesmo dia). A mesma
+// regra do PauseRules::lunchIntervalSeconds.
+export function lunchIntervalSeconds(start: unknown, end: unknown): number | null {
+  const seconds = (value: unknown): number | null => {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/u.exec(String(value ?? ''))
+    return match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0) : null
+  }
+  const from = seconds(start)
+  const to = seconds(end)
+  return from === null || to === null || to <= from ? null : to - from
 }
 
 export type PauseTiming = {

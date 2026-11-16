@@ -8,6 +8,7 @@ import { localDate, queryString } from '../lib/operational'
 import { post } from '../lib/api'
 import { engineEventFullText, engineEventName, hasPartialMarker, isEngineScheduleEvent, originLabel, partialTime, presenceLegendItem, situationLabel } from '../lib/presenceLegend'
 import { isManagerRole } from '../lib/roles'
+import { teamShort, WORK_TEAMS } from '../lib/teams'
 
 const typeLabels = {
   manual: 'Evento',
@@ -228,11 +229,11 @@ export function CalendarPage({ session, notify }) {
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <select aria-label="Filtrar por equipe" className="field" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}>
-            <option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option>
+            <option value="">Todas as equipes</option>{WORK_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
           <select aria-label="Filtrar por colaborador" className="field" value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })}>
             <option value="">Todos os colaboradores</option>
-            {(employees.data?.funcionarios || []).map((employee) => <option key={employee.id} value={employee.id}>{employee.nome} - {employee.equipe.toUpperCase()}</option>)}
+            {(employees.data?.funcionarios || []).map((employee) => <option key={employee.id} value={employee.id}>{employee.nome} - {teamShort(employee.equipe)}</option>)}
           </select>
           <select aria-label="Filtrar por tipo de evento" className="field" value={filters.type} onChange={(event) => setFilters({ ...filters, type: event.target.value })}>
             <option value="">Todos os eventos</option>
@@ -251,7 +252,7 @@ export function CalendarPage({ session, notify }) {
             <label className="label xl:col-span-2">Título<input className="field mt-2" maxLength="160" required value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
             <label className="label">Início<input className="field mt-2" required type="datetime-local" value={form.starts_at} onChange={(event) => setForm({ ...form, starts_at: event.target.value })} /></label>
             <label className="label">Fim<input className="field mt-2" type="datetime-local" value={form.ends_at} onChange={(event) => setForm({ ...form, ends_at: event.target.value })} /></label>
-            <label className="label">Equipe<select className="field mt-2" value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option></select></label>
+            <label className="label">Equipe<select className="field mt-2" value={form.team} onChange={(event) => setForm({ ...form, team: event.target.value })}><option value="">Todas</option>{WORK_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
             <label className="label xl:col-span-3">Descrição<input className="field mt-2" maxLength="1000" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
           </div>
           <div className="flex gap-2"><button className="btn-primary" type="submit">Cadastrar</button><button className="btn-secondary" onClick={() => setShowForm(false)} type="button">Cancelar</button></div>

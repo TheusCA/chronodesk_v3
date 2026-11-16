@@ -38,7 +38,7 @@ const employeeTimeSchema = z.string({ error: 'Informe o horário.' })
 
 export const reportFiltersSchema = z.object({
   competency: z.string().min(1, 'Informe a competencia.').regex(/^\d{4}-\d{2}$/, 'Competencia invalida.'),
-  team: z.enum(['', 'n1', 'n2']).default(''),
+  team: z.enum(['', 'n1', 'n2', 'critico', 'hibrido']).default(''),
   employee_id: z.string().default(''),
 })
 
@@ -57,7 +57,7 @@ const employeeFieldsShape = {
       .max(100, 'Login AD deve ter no máximo 100 caracteres.')
       .regex(/^[a-z0-9._@-]*$/i, 'Login AD contém caracteres inválidos.'),
   ),
-  equipe: z.enum(['n1', 'n2', 'lideranca'], {
+  equipe: z.enum(['n1', 'n2', 'lideranca', 'critico', 'hibrido'], {
     error: 'Equipe inválida.',
   }),
   // Lote 5b: admin vem da allowlist AD_ADMIN_USERS e não é gravado no cadastro.

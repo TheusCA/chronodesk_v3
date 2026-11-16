@@ -2982,6 +2982,62 @@ async function rotationTeamsF102(page, port, mock) {
   mock.restoreRules()
 }
 
+// 28. [F9] Equipes Critico e Hibrido (desenho principal, 9.15): o tecnico do
+// Critico ve "Almoço" (com o limite do intervalo do cadastro) e o POST leva o
+// motivo; as quatro equipes na lista, com o selo do Critico; o tecnico do N1
+// nao ve "Almoço"; a Visao operacional com as linhas Critico e Hibrido fora do
+// total; em 390 px, sem rolagem lateral.
+async function teamsF9(page, port, mock) {
+  const posts = (key) => mock.requests.filter((r) => r.method === 'POST' && r.key === key)
+  const worker = (id, equipe, extra = {}) => ({ id, nome: `Tecnico ${id} F9`, equipe, ativo: true, em_pausa: false, motivo_pausa: null, duracao_limite_segundos: 1200, jornada_entrada: '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', ...extra })
+  const statusWith = (ownTeam) => ({ n1: [worker(51, 'n1'), ...(ownTeam === 'n1' ? [worker(3, 'n1')] : [])], n2: [worker(52, 'n2')], critico: [worker(53, 'critico'), ...(ownTeam === 'critico' ? [worker(3, 'critico')] : [])], hibrido: [worker(54, 'hibrido')] })
+  const OWN = `document.querySelector('[data-own-pause="start"]')`
+  mock.restoreDecisions()
+  mock.useTechnicianSession()
+  try {
+    mock.setStatusEmployees(statusWith('critico'))
+    for (const width of [1366, 390]) {
+      await goto(page, port, '/pausas', width)
+      await page.waitFor(`!!${OWN} && [...${OWN}.querySelectorAll('input[name="motivo_pausa"]')].length === 4`)
+      const state = await page.evaluate(`(() => ({
+        motivos: [...${OWN}.querySelectorAll('input[name="motivo_pausa"]')].map((i) => i.value).join('|'),
+        dica: [...${OWN}.querySelectorAll('label')].find((l) => l.querySelector('input')?.value === 'Almoço')?.querySelector('small')?.textContent.trim(),
+        equipes: [...document.querySelectorAll('tbody[data-team]')].map((t) => t.dataset.team).join('|'),
+        selo: [...document.querySelectorAll('tbody[data-team]')].filter((t) => /Equipe crítica/.test(t.textContent)).map((t) => t.dataset.team).join('|'),
+        lateral: document.documentElement.scrollWidth > innerWidth,
+      }))()`)
+      report(`F9, Pausas, ${width} px, tecnico do Critico: os quatro motivos, "Almoço" com o limite do intervalo`, state.motivos === 'Café|Pessoal|Reunião|Almoço' && state.dica === 'até 60 min', JSON.stringify(state))
+      report(`F9, Pausas, ${width} px: as quatro equipes, o selo so no Critico, sem rolagem lateral`, state.equipes === 'N1|N2|Crítico|Híbrido' && state.selo === 'Crítico' && !state.lateral, JSON.stringify(state))
+      const before = posts('iniciar_pausa.php').length
+      await page.click(CHOICE('Almoço'))
+      await page.waitFor(`${OWN}.querySelector('button[type="submit"]').textContent.trim() === 'Iniciar almoço'`)
+      await page.click(`${OWN}.querySelector('button[type="submit"]')`)
+      const started = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'iniciar_pausa.php', mock.requests.length - 5)
+      report(`F9, Pausas, ${width} px: um POST de iniciar_pausa com "Almoço" e o tecnico da sessao`, posts('iniciar_pausa.php').length === before + 1 && started?.body?.motivo_pausa === 'Almoço' && Number(started?.body?.funcionario_id) === 3, JSON.stringify(started?.body))
+    }
+    mock.setStatusEmployees(statusWith('n1'))
+    await goto(page, port, '/pausas', 1366)
+    await page.waitFor(`!!${OWN} && [...${OWN}.querySelectorAll('input[name="motivo_pausa"]')].length > 0`)
+    const n1 = await page.evaluate(`[...${OWN}.querySelectorAll('input[name="motivo_pausa"]')].map((i) => i.value).join('|')`)
+    report('F9, Pausas: o tecnico do N1 nao ve "Almoço"', n1 === 'Café|Pessoal|Reunião', n1)
+  } finally {
+    mock.setStatusEmployees(null)
+    mock.useAdminSession()
+  }
+  await goto(page, port, '/dashboard', 1366)
+  await page.waitFor(`!!document.querySelector('[data-summary-table] table')`)
+  const rows = await page.evaluate(`(() => {
+    const bodies = [...document.querySelectorAll('[data-summary-table] table tbody')]
+    const labels = (body) => [...body.querySelectorAll('th[scope="row"]')].map((th) => th.childNodes[0].textContent.trim())
+    return { total: labels(bodies[0]).join('|'), aparte: labels(bodies[1]).join('|') }
+  })()`)
+  report('F9, Visao operacional, 1366 px: Critico e Hibrido fora do total, com a Lideranca', rows.total === 'N1|N2|Total' && rows.aparte === 'Crítico|Híbrido|Liderança', JSON.stringify(rows))
+  await goto(page, port, '/dashboard', 390)
+  await page.waitFor(`!!document.querySelector('[data-summary-table] [data-team="critico"]')`)
+  const phone = await page.evaluate(`({ lateral: document.documentElement.scrollWidth > innerWidth, cartoes: [...document.querySelectorAll('[data-summary-table] [data-team]')].map((el) => el.dataset.team).join('|') })`)
+  report('F9, Visao operacional, 390 px: os seis cartoes, sem rolagem lateral', !phone.lateral && phone.cartoes === 'n1|n2|total|critico|hibrido|lideranca', JSON.stringify(phone))
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -3023,6 +3079,7 @@ try {
     [25, 'Aprovacoes: um botao principal por vez e filtro (R4c)', () => approvalsR4c(page, mock.port, mock)],
     [26, 'Funcionarios: lista primeiro e filtros ativos (R4d)', () => employeesR4d(page, mock.port)],
     [27, 'Times de rodizio e ciclo semana a semana (F10-2)', () => rotationTeamsF102(page, mock.port, mock)],
+    [28, 'Equipes Critico e Hibrido e o almoco do Critico (F9)', () => teamsF9(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

@@ -27,6 +27,7 @@ import {
   toggleDay,
   weeksToPattern,
 } from '../lib/rotationTeams'
+import { COMMON_GROUP } from '../lib/teams'
 
 const WEEK_DAY_NAMES = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta']
 const VERSION_MODES = [
@@ -236,7 +237,7 @@ function MembersPanel({ team, teams, employees, today, canManage, canRetroactive
   const members = showHistory ? (history.data?.teams || []).find((item) => item.id === team.id)?.members || [] : team.members
   const byId = new Map((employees || []).map((employee) => [Number(employee.id), employee]))
   const busyIds = new Set(teams.flatMap((item) => item.members.map((member) => Number(member.employee_id))))
-  const eligible = (employees || []).filter((employee) => ['n1', 'n2'].includes(String(employee.equipe).toLowerCase()) && employee.fora_mapa_escala !== true && employee.ativo !== false && !busyIds.has(Number(employee.id)))
+  const eligible = (employees || []).filter((employee) => COMMON_GROUP.includes(String(employee.equipe).toLowerCase()) && employee.fora_mapa_escala !== true && employee.ativo !== false && !busyIds.has(Number(employee.id)))
 
   async function submit(body, done) {
     setBusy(true)

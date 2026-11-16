@@ -22,6 +22,10 @@
 // [F10-2] --plano=f10     a tela Escala (com os times de rodízio, o painel do
 //                         time e a regra semana a semana) e a edição de
 //                         funcionário (grupo da escala), em 1280 e 390 px
+// [F9] --plano=f9       Pausas do técnico do Crítico (com o almoço escolhido),
+//                         a lista com as quatro equipes, a Visão operacional
+//                         (linhas Crítico e Híbrido) e a edição de funcionário,
+//                         em 1280 e 390 px
 //   --app=<pasta>         fotografa outro build (o "antes" de um lote); sem
 //                         isso, ../app
 import { createServer, request } from 'node:http'
@@ -65,6 +69,8 @@ const SESSIONS = {
   gestor: manager('gestor', GESTOR, 'gestor.exemplo'),
   lideranca: manager('lideranca', LIDERANCA, 'lideranca.exemplo'),
   admin: manager('admin', ADMIN, 'admin.exemplo'),
+  // [F9] Técnico do Crítico (o 17 do plano f9).
+  tecnico_critico: { sucesso: true, csrf_token: 'teste', role: 'tecnico', permissions: ['portal.read', 'pausas.use'], ci: { autenticado: true, funcionario_id: 17, nome: 'Técnico 17 Exemplo', username: 'tecnico.17', role: 'tecnico' }, gestor: { autenticado: false, admin: false, username: '', role: null } },
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +94,11 @@ const person = (index) => {
 }
 const TEAM = Array.from({ length: 16 }, (_, index) => person(index))
 const STATUS = { n1: TEAM.filter((item) => item.equipe === 'n1'), n2: TEAM.filter((item) => item.equipe === 'n2'), server_now: SERVER_NOW, presenca_disponivel: true }
+// [F9] Plano f9: o Crítico (o técnico 17 é o da sessão, com o intervalo de almoço do
+// cadastro 12:00 às 13:00; o 18 em almoço pela pausa) e o Híbrido, fictícios.
+const f9Person = (id, equipe, situacao, pause = null) => ({ ...person(0), id, nome: `Técnico ${id} Exemplo`, equipe, em_pausa: Boolean(pause), motivo_pausa: pause ? pause[0] : null, inicio_pausa: pause ? `2026-10-28T${pause[1]}:00-03:00` : null, almoco_inicio: '12:00', almoco_fim: '13:00', duracao_limite_segundos: pause && pause[0] === 'Almoço' ? 3600 : 1200, presenca: { situacao, origem: pause ? 'pausa' : 'regra_escala', detalhe: pause && pause[0] === 'Almoço' ? `Almoço desde ${pause[1]}` : '' } })
+const F9_TEAMS = { critico: [f9Person(17, 'critico', 'presencial'), f9Person(18, 'critico', 'almoco', ['Almoço', '10:05'])], hibrido: [f9Person(19, 'hibrido', 'remoto'), f9Person(20, 'hibrido', 'presencial')] }
+if (planName === 'f9') Object.assign(STATUS, F9_TEAMS)
 const count = (items) => {
   const out = { escalados: 0, disponiveis: 0, em_pausa: 0, almoco: 0, ausentes: 0, fora_expediente: 0, sem_escala: 0 }
   for (const item of items) {
@@ -108,6 +119,7 @@ const DASHBOARD = {
   presence_meta: { disponivel: true, pausas_disponiveis: true },
   presence_summary: { n1: count(STATUS.n1), n2: count(STATUS.n2), total: count(TEAM), lideranca: { escalados: 2, disponiveis: 2, em_pausa: 0, almoco: 0, ausentes: 0, fora_expediente: 0, sem_escala: 0 } },
 }
+if (planName === 'f9') Object.assign(DASHBOARD.presence_summary, { critico: count(F9_TEAMS.critico), hibrido: count(F9_TEAMS.hibrido) })
 
 // ---------------------------------------------------------------------------
 // Rotas por perfil
@@ -136,7 +148,12 @@ const PLAN_R = [
 const PLAN_F10 = [
   ['lideranca', ['/escala-presencial', '/escala-presencial#time', '/escala-presencial#semanal', '/admin?tab=funcionarios#editar'], [1280, 390]],
 ]
-const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar').replace('#time', '-time').replace('#semanal', '-semanal').replace('#editar', '-editar')
+// [F9] Pausas do técnico do Crítico (sessão do técnico 17), a Visão operacional e a edição.
+const PLAN_F9 = [
+  ['tecnico_critico', ['/pausas', '/pausas#almoco'], [1280, 390]],
+  ['admin', ['/dashboard', '/admin?tab=funcionarios#editar'], [1280, 390]],
+]
+const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar').replace('#time', '-time').replace('#semanal', '-semanal').replace('#editar', '-editar').replace('#almoco', '-almoco')
 
 // ---------------------------------------------------------------------------
 // [R4d] Ações antes da foto, pelo marcador no fim da rota (só no plano dos lotes R).
@@ -145,6 +162,8 @@ const ACTIONS = {
   // [F10-2] Ações tolerantes: no "antes" o painel novo não existe e a foto sai sem ele.
   '#time': ["document.querySelector('[data-team-open]')?.click()", "!!document.querySelector('[data-team-drawer]')", true],
   '#semanal': ["(() => { const select = document.querySelector('select[name=\"rule_type\"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'cycle'); select.dispatchEvent(new Event('change', { bubbles: true })); setTimeout(() => [...document.querySelectorAll('main form button')].find((b) => b.textContent.trim() === 'Semana a semana')?.click(), 200) })()", "(() => { const editor = document.querySelector('main form [data-weekly-editor]'); editor?.scrollIntoView({ block: 'center' }); return !!editor })()", true],
+  // [F9] Almoço escolhido (tolerante: no "antes" a opção não existe).
+  '#almoco': ["document.querySelector('[data-own-pause=\"start\"] input[value=\"Almoço\"]')?.click()", "!!document.querySelector('[data-own-pause=\"start\"] input[value=\"Almoço\"]:checked')", true],
   '#editar': ["[...document.querySelectorAll('main button')].find((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')?.click()", "!!document.querySelector('[role=dialog] form')"],
 }
 async function shoot(page, url, width, height, file, ready) {
@@ -192,7 +211,7 @@ async function before() {
   let total = 0
   let problems = 0
   try {
-    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : PLAN) {
+    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : planName === 'f9' ? PLAN_F9 : PLAN) {
       profile = who
       for (const width of widths) {
         const height = HEIGHTS.get(width)

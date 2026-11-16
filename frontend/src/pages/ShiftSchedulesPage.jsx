@@ -7,6 +7,7 @@ import { apiUrl, postForm } from '../lib/api'
 import { ACTION_FEEDBACK } from '../lib/actionFeedback'
 import { formatDateTime } from '../lib/format'
 import { localDate, queryString } from '../lib/operational'
+import { ALL_TEAMS } from '../lib/teams'
 
 const accepted = ['.png', '.jpg', '.jpeg', '.pdf', '.csv', '.xls', '.xlsx']
 const allowedFormats = 'PNG, JPG, JPEG, PDF, CSV, XLS ou XLSX'
@@ -52,7 +53,7 @@ function attachmentLabel(extension) {
 
 // SEC-08: anexo sem equipe e de todas as equipes.
 function teamLabel(team) {
-  return { n1: 'N1', n2: 'N2', lideranca: 'Liderança' }[team] || 'Todas as equipes'
+  return { n1: 'N1', n2: 'N2', lideranca: 'Liderança', critico: 'Crítico', hibrido: 'Híbrido' }[team] || 'Todas as equipes'
 }
 
 function UploadPreview({ file, previewUrl, imageFailed, onImageError }) {
@@ -181,9 +182,7 @@ function UploadShift({ limits, onClose, onUploaded }) {
           <label className="label">Equipe que verá *
             <select className="field mt-2" required value={metadata.team} onChange={(event) => setMetadata({ ...metadata, team: event.target.value })}>
               <option value="">Selecione</option>
-              <option value="n1">N1</option>
-              <option value="n2">N2</option>
-              <option value="lideranca">Liderança</option>
+              {ALL_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
               <option value="todas">Todas as equipes</option>
             </select>
           </label>

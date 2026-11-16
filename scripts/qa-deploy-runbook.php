@@ -979,7 +979,9 @@ assert_same(true, strpos($prose4, 'alguns minutos depois da reabertura, 2 rodada
 $outside4 = array_values(array_filter($commands4, static fn (string $line): bool => strpos($line, 'curl') !== false));
 assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text4), count(array_filter($outside4, static fn (string $line): bool => strpos($line, $serverNameRead) !== false)) === count($outside4)], 'deploy 4: ServerName do chronodesk.conf em todo curl, sem marcador e sem https');
 // Prosa: a bateria da estacao com a contagem certa de scripts npm, a escala de ninguem muda, o plano nao roda.
-$frontendCount = 3 + count(array_filter(array_keys(json_decode($readOptional($root . '/frontend/package.json'), true)['scripts'] ?? []), static fn (string $name): bool => strpos($name, 'qa:') === 0));
+// [F9] O deploy 4 roda com o commit validado na estacao (5a2494c), que tinha
+// 27 scripts npm; os qa:* criados depois dele nao mudam a folha do deploy 4.
+$frontendCount = 27;
 assert_same(true, strpos($runbook4, "`frontend: {$frontendCount} scripts npm rodados (...): {$frontendCount} OK, 0 com falha`") !== false && strpos($runbook4, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy4 origin/feat/employee-form-rhf-zod;') !== false, 'deploy 4: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
 assert_same(true, strpos($prose4, '**Ninguem e membro de time depois do deploy**') !== false && strpos($prose4, 'o plano de migracao (so leitura) nao roda neste deploy') !== false && strpos($prose4, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false, 'deploy 4: ninguem vira membro, o plano de migracao fica para depois e o aviso com marcadores');
 foreach (['**Escala presencial:**', '**Regra por colaborador:**', '"Semana a semana"', '**Funcionarios:**', 'Grupo da escala: Comum'] as $screen) {

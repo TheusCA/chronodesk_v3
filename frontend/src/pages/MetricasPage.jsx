@@ -4,6 +4,7 @@ import { apiUrl } from '../lib/api'
 import { formatDateTime, formatDuration, parseDate } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { FilterBar, MetricCard, SectionHeader } from '../components/ui/Primitives'
+import { teamShort, WORK_TEAMS } from '../lib/teams'
 
 function periodStart(period) {
   const now = new Date()
@@ -103,7 +104,7 @@ export function MetricasPage() {
     const reasons = {}
     completedRows.forEach((row) => {
       employees[row.nome_funcionario] = (employees[row.nome_funcionario] || 0) + Number(row.duracao_segundos || 0)
-      teams[row.equipe?.toUpperCase()] = (teams[row.equipe?.toUpperCase()] || 0) + 1
+      teams[teamShort(row.equipe)] = (teams[teamShort(row.equipe)] || 0) + 1
       reasons[row.motivo_pausa] = (reasons[row.motivo_pausa] || 0) + 1
     })
     const topEmployee = Object.entries(employees).sort((a, b) => b[1] - a[1])[0]
@@ -148,7 +149,7 @@ export function MetricasPage() {
           <select className="field" value={filters.period} onChange={(event) => setFilters({ ...filters, period: event.target.value })}>
             <option value="today">Hoje</option><option value="7d">Últimos 7 dias</option><option value="30d">Últimos 30 dias</option><option value="month">Mês atual</option><option value="custom">Intervalo personalizado</option><option value="all">Todo o histórico</option>
           </select>
-          <select className="field" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option></select>
+          <select className="field" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas as equipes</option>{WORK_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="field" value={filters.employee} onChange={(event) => setFilters({ ...filters, employee: event.target.value })}><option value="">Todos os colaboradores</option>{employees.map((name) => <option key={name}>{name}</option>)}</select>
           <select className="field" value={filters.reason} onChange={(event) => setFilters({ ...filters, reason: event.target.value })}><option value="">Todos os motivos</option>{reasons.map((reason) => <option key={reason}>{reason}</option>)}</select>
           <select className="field" value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}><option value="">Todos os status</option><option value="within">Dentro do tempo</option><option value="exceeded">Excedidas</option><option value="pendente">Pendentes</option><option value="aprovado">Aprovadas</option><option value="rejeitado">Rejeitadas</option></select>
@@ -196,7 +197,7 @@ export function MetricasPage() {
                 <tr key={`${row.id_funcionario}-${row.inicio_pausa}-${index}`}>
                   <td>{formatDateTime(row.inicio_pausa)}</td>
                   <td><strong>{row.nome_funcionario}</strong></td>
-                  <td>{row.equipe?.toUpperCase()}</td>
+                  <td>{teamShort(row.equipe)}</td>
                   <td>{row.motivo_pausa}</td>
                   <td>{row.is_request ? '—' : formatDuration(row.duracao_segundos)}</td>
                   <td>

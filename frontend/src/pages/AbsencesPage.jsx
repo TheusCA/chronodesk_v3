@@ -18,6 +18,7 @@ import {
 import { focusPageTitleIfLost } from '../lib/dialogFocus'
 import { localDate, queryString } from '../lib/operational'
 import { canSeeAbsenceDetails, hasPermission, isManagerRole } from '../lib/roles'
+import { ALL_TEAMS, teamShort } from '../lib/teams'
 
 // [F3, RF-04] Ausências (docs/DESENHO_PA_ESCALA_AUSENCIA.md, 5.4 e 9.4).
 // A tela só antecipa as regras do servidor; quem decide é portal/absences.php
@@ -42,7 +43,7 @@ function isLeadershipTeam(team) {
 }
 
 function teamLabel(team) {
-  return isLeadershipTeam(team) ? 'Liderança' : String(team || '').toUpperCase()
+  return isLeadershipTeam(team) ? 'Liderança' : teamShort(team || '')
 }
 
 const hhmm = (value) => String(value || '').slice(0, 5)
@@ -290,7 +291,7 @@ export function AbsencesPage({ session, notify }) {
         <label className="label">Até<input className="field mt-2" min={filters.from} type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
         {seesAllDetails && (
           <>
-            <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select></label>
+            <label className="label">Equipe<select className="field mt-2" value={filters.team} onChange={(event) => setFilters({ ...filters, team: event.target.value })}><option value="">Todas</option>{ALL_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
             <label className="label">Técnico<select className="field mt-2" value={filters.employee_id} onChange={(event) => setFilters({ ...filters, employee_id: event.target.value })}>
               <option value="">Todos</option>
               {allEmployees.map((employee) => <option key={employee.id} value={employee.id}>{employee.nome} - {teamLabel(employee.equipe)}</option>)}

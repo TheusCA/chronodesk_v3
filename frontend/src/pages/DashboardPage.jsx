@@ -6,7 +6,8 @@ import { InlineAlert, SectionHeader, StatusDot } from '../components/ui/Primitiv
 import { Icon } from '../components/ui/Icon'
 import { hasPermission } from '../lib/roles'
 import { OPERATIONAL_SUMMARY_COLUMNS, serverClock, summaryCount } from '../lib/presenceLegend'
-import { clockDuration, isMeeting, pauseTiming, pauseTimingNote } from '../lib/pauseTimer'
+import { clockDuration, isLunch, isMeeting, pauseTiming, pauseTimingNote } from '../lib/pauseTimer'
+import { teamShort, WORK_TEAMS } from '../lib/teams'
 
 // [R4b] Os totais do dashboard.php, numa lista compacta no pé da tela (saem os
 // 8 cartões iguais). Os rótulos são os de antes; o número vem do servidor.
@@ -47,7 +48,9 @@ function updatedLabel(status, serverNow) {
 // [F7] Linhas da tabela da 5.7: N1, N2 e o total N1 + N2; a Liderança fica
 // à parte e fora do total (D10). Rótulo e nota em linhas separadas.
 const TEAM_ROWS = [['n1', 'N1'], ['n2', 'N2'], ['total', 'Total', 'N1 + N2']]
-const LEADERSHIP_ROW = ['lideranca', 'Liderança', 'fora dos totais']
+// [F9, D-F9-10] Crítico e Híbrido em linhas próprias, fora do total (o grupo
+// comum é N1 + N2), junto da Liderança.
+const SEPARATE_ROWS = [['critico', 'Crítico', 'fora dos totais'], ['hibrido', 'Híbrido', 'fora dos totais'], ['lideranca', 'Liderança', 'fora dos totais']]
 
 // [Ajuste A1] Cabeçalho que quebra em duas linhas quando falta largura: o
 // ícone fica preso à primeira palavra e o resto vai para a linha de baixo.
@@ -142,13 +145,15 @@ function NowTeam({ data, team, title, panel }) {
 function ActivePauses({ pauses, livePauses, canForceEndBreak, loading, onForceEndBreak, navigate, panel }) {
   const coffee = pauses.filter((item) => String(item.motivo_pausa || '').toLowerCase() === 'café').length
   const meetings = pauses.filter((item) => isMeeting(item.motivo_pausa)).length
+  // [F9] Almoço do Crítico: só aparece no resumo quando há (o texto de antes não muda).
+  const lunches = pauses.filter((item) => isLunch(item.motivo_pausa)).length
   const withActions = canForceEndBreak && !panel
   return (
     <section aria-labelledby="pausas-andamento" className="card overflow-hidden p-0" data-active-pauses="">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
         <div>
           <h2 className="text-lg font-semibold text-ink" id="pausas-andamento">Pausas em andamento</h2>
-          <p className="text-sm text-muted" data-pause-types="">{pauses.length} em andamento · Café {coffee} · Reunião {meetings}</p>
+          <p className="text-sm text-muted" data-pause-types="">{pauses.length} em andamento · Café {coffee} · Reunião {meetings}{lunches > 0 && <> · Almoço {lunches}</>}</p>
         </div>
         {!panel && <button className="btn-ghost" onClick={() => navigate('/pausas')} type="button"><Icon className="h-4 w-4" name="pause" /> Abrir pausas</button>}
       </div>
@@ -176,7 +181,7 @@ function ActivePauses({ pauses, livePauses, canForceEndBreak, loading, onForceEn
                         e o nome longo termina em reticências (inteiro no title). */}
                     <td className="w-full max-w-0" data-col="name">
                       <span className="block truncate font-medium text-ink" data-pause-name="" title={item.nome}>{item.nome}</span>
-                      <small className="block truncate text-xs text-muted">Equipe {String(item.equipe || '').toUpperCase()}{sinceText && <> · desde <span className="font-mono tabular-nums">{sinceText}</span></>}</small>
+                      <small className="block truncate text-xs text-muted">Equipe {teamShort(item.equipe)}{sinceText && <> · desde <span className="font-mono tabular-nums">{sinceText}</span></>}</small>
                       {/* [F7, DV11] Sem a chave (colega, para quem não é gestão), sem a observação.
                           No modo painel (tela fixa na sala, à vista de todos), nunca: só a gestão a vê. */}
                       {!panel && isMeeting(item.motivo_pausa) && 'observacao_reuniao' in item && (
@@ -286,7 +291,7 @@ function OperationalSummary({ data }) {
       />
       <div className="mt-5 xl:hidden">
         <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">{TEAM_ROWS.map((team) => card(team))}</div>
-        <div className="mt-3 grid gap-3 border-t-2 border-line pt-3 sm:grid-cols-2 md:grid-cols-3">{card(LEADERSHIP_ROW)}</div>
+        <div className="mt-3 grid gap-3 border-t-2 border-line pt-3 sm:grid-cols-2 md:grid-cols-3">{SEPARATE_ROWS.map((team) => card(team))}</div>
       </div>
       <div className="table-wrap mt-5 hidden xl:block">
         <table className="data-table">
@@ -299,7 +304,7 @@ function OperationalSummary({ data }) {
             </tr>
           </thead>
           <tbody>{TEAM_ROWS.map((team) => row(team))}</tbody>
-          <tbody>{row(LEADERSHIP_ROW, 'border-t-2 border-line')}</tbody>
+          <tbody>{SEPARATE_ROWS.map((team, index) => row(team, index === 0 ? 'border-t-2 border-line' : ''))}</tbody>
         </table>
       </div>
       {/* [Ajuste A3] Tabela toda em zero por falta de escala (fim de semana, feriado ou sem regra), não por falha. */}
@@ -329,8 +334,10 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
 
   const data = resource.data
   const { presence, pausesAvailable, count } = presenceOf(data)
-  const activePauses = livePauses.employees.filter((item) => item.em_pausa)
-  const pendingPauses = livePauses.employees.filter((item) => item.status_aprovacao === 'pendente').length
+  // [F9] As quatro equipes de técnico do status.php (o useLivePauses junta só N1 e N2).
+  const liveEmployees = WORK_TEAMS.flatMap((team) => livePauses.status?.[team.value] || [])
+  const activePauses = liveEmployees.filter((item) => item.em_pausa)
+  const pendingPauses = liveEmployees.filter((item) => item.status_aprovacao === 'pendente').length
   // [F7] Disponíveis pelo resumo do servidor; sem presença, "—" (DV5).
   const availableCis = count('total', 'disponiveis')
   const summary = {

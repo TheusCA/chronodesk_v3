@@ -86,7 +86,7 @@ let paRemoveRefusal = null
 // colaborador da consulta, como o servidor) e a recusa da consulta.
 let scheduleExceptions = []
 let scheduleLookupRefusal = null
-const pausedStatus = () => ({ ...GET['status.php'], n1: [...(pausedEmployee ? [{ id: 1, nome: NAMES[0], equipe: 'n1', ativo: true, em_pausa: true, motivo_pausa: 'Café', inicio_pausa: `${DAY}T09:55:00-03:00`, elapsed_seconds: 300, jornada_entrada: '08:00', jornada_saida: '17:00' }] : []), ...(extraStatus?.n1 ?? [])], n2: extraStatus?.n2 ?? [] })
+const pausedStatus = () => ({ ...GET['status.php'], n1: [...(pausedEmployee ? [{ id: 1, nome: NAMES[0], equipe: 'n1', ativo: true, em_pausa: true, motivo_pausa: 'Café', inicio_pausa: `${DAY}T09:55:00-03:00`, elapsed_seconds: 300, jornada_entrada: '08:00', jornada_saida: '17:00' }] : []), ...(extraStatus?.n1 ?? [])], n2: extraStatus?.n2 ?? [], critico: extraStatus?.critico ?? [], hibrido: extraStatus?.hibrido ?? [] })
 // [9.12.1, II3] Um vinculo de PA com fim da validade: o formulario carrega o fim na edicao.
 export const PA_ASSIGNMENT = { id: 7, pa_number: '1726', employee_id: 1, employee_name: NAMES[0], team: TEAMS[0], schedule_rule_label: 'Sempre presencial', source: 'assignment', valid_from: '2026-10-01', valid_until: '2026-12-31', notes: 'Observacao do vinculo', presence: { status: 'onsite', situacao: 'presencial', categoria: null, detalhe: null, parcial: null } }
 // [17f] Outro vinculo no mesmo PA (remoto no dia, sem fim e sem observacao): "Editar outro vinculo" com o formulario sujo.

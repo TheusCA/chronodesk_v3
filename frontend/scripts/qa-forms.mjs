@@ -79,7 +79,9 @@ assert.match(schemaSource, /export const reportFiltersSchema = z\.object\(\{/, '
 assert.match(schemaSource, /export const employeeFormSchema = z\.object\(\{/, 'Schema de funcionario deve existir')
 assert.match(schemaSource, /export const scheduleRuleSchema = z\.object\(\{/, 'Schema de regra de escala deve existir')
 assert.match(schemaSource, /competency:\s*z\.string\(\)\.min\(1/, 'Schema deve validar competencia obrigatoria')
-assert.match(schemaSource, /team:\s*z\.enum\(\['', 'n1', 'n2'\]\)\.default\(''\)/, 'Schema deve validar equipe permitida')
+// [F9] Filtros com as quatro equipes de tecnico; cadastro com as cinco equipes.
+assert.match(schemaSource, /team:\s*z\.enum\(\['', 'n1', 'n2', 'critico', 'hibrido'\]\)\.default\(''\)/, 'Schema deve validar equipe permitida')
+assert.match(schemaSource, /equipe:\s*z\.enum\(\['n1', 'n2', 'lideranca', 'critico', 'hibrido'\]/, 'Schema do cadastro deve aceitar Critico e Hibrido')
 assert.match(schemaSource, /employee_id:\s*z\.string\(\)\.default\(''\)/, 'Schema deve manter employee_id opcional')
 
 assert.match(reportsPageSource, /useForm\(\{[\s\S]*defaultValues:\s*filters/, 'Relatorios deve controlar filtros com React Hook Form')

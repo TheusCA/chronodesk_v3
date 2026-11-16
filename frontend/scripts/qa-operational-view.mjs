@@ -152,6 +152,9 @@ const SUMMARY = {
   n1: group(11, 4, 2, 1, 3, 1, 21),
   n2: group(12, 7, 1, 2, 0, 2, 22),
   lideranca: group(5, 5, 0, 0, 0, 0, 23),
+  // [F9] Critico e Hibrido em linhas proprias, fora do total.
+  critico: group(3, 1, 0, 1, 0, 1, 24),
+  hibrido: group(2, 2, 0, 0, 0, 0, 25),
   total: group(23, 11, 3, 3, 3, 3, 43),
 }
 const dashboardData = (extra = {}) => ({
@@ -217,6 +220,9 @@ const teamAvailable = (markup, team) => markup.match(new RegExp(`data-team-now="
   assert.equal(bodies.length, 3, 'Liderança num bloco à parte da tabela (N1, N2 e Total num, Liderança no outro)')
   assert.match(bodies[1], /N1[\s\S]*N2[\s\S]*>Total<small/u, 'N1, N2 e Total juntos')
   assert.ok(!bodies[1].includes('Liderança') && bodies[2].includes('Liderança'), 'Liderança fora do bloco do total')
+  // [F9, D-F9-10] Crítico e Híbrido em linhas próprias, no bloco à parte, fora do total.
+  assert.deepEqual([rowValues(section, 'Crítico'), rowValues(section, 'Híbrido')], [expectedRow('critico'), expectedRow('hibrido')], 'F9: linhas Crítico e Híbrido pelo presence_summary')
+  assert.ok(['Crítico', 'Híbrido'].every((label) => !bodies[1].includes(label) && bodies[2].includes(`scope="row">${label}<small class="font-normal normal-case tracking-normal">fora dos totais</small></th>`)), 'F9: Crítico e Híbrido fora do bloco do total, com a nota')
   // [17d] Cartões por equipe abaixo de 1280 px, com os mesmos números da tabela.
   for (const team of ['n1', 'n2', 'total', 'lideranca']) {
     assert.deepEqual(cardValues(section, team), expectedRow(team), `17d: cartão ${team} com os números da tabela, na ordem das colunas`)
@@ -233,7 +239,9 @@ const teamAvailable = (markup, team) => markup.match(new RegExp(`data-team-now="
   assert.ok(cardsStart > 0 && cardsStart < section.indexOf('<table'), '17d: cartões só abaixo de 1280 px (xl:hidden), antes da tabela')
   assert.ok(['n1', 'n2', 'total'].every((team) => section.indexOf(`data-team="${team}"`) < divider) && section.indexOf('data-team="lideranca"') > divider, '17d: Liderança num bloco à parte, depois de N1, N2 e Total')
   assert.ok(section.includes('<div class="table-wrap mt-5 hidden xl:block">'), '17d: a tabela só de 1280 px para cima (hidden xl:block)')
-  assert.equal((section.match(/data-team="/gu) ?? []).length, 4, '17d: quatro cartões')
+  // [F9, D-F9-10] Critico e Hibrido no bloco a parte, com a Lideranca, fora dos totais.
+  assert.equal((section.match(/data-team="/gu) ?? []).length, 6, '17d: seis cartões (N1, N2, Total; Crítico, Híbrido e Liderança à parte)')
+  assert.ok(['critico', 'hibrido'].every((team) => section.indexOf(`data-team="${team}"`) > divider), 'F9: Crítico e Híbrido no bloco à parte, fora do total')
   assert.equal((section.match(/<div class="(?:mt-3 )?grid gap-3 (?:border-t-2 border-line pt-3 )?sm:grid-cols-2 md:grid-cols-3">/gu) ?? []).length, 2, '17d: uma coluna no celular, duas de 640 px e três de 768 px, nos dois blocos (a Liderança com a largura dos outros)')
   // Cabeçalho: cada coluna com o ícone, a cor e o rótulo da legenda.
   const head = section.slice(section.indexOf('<thead>'), section.indexOf('</thead>'))
@@ -257,9 +265,9 @@ const teamAvailable = (markup, team) => markup.match(new RegExp(`data-team-now="
   assert.ok(headers.every((header) => header.startsWith('class="!px-2 text-center"')), 'A1: cabeçalhos com !px-2')
   assert.ok(head.includes('<th class="!px-3" scope="col">Equipe</th>'), 'A1: coluna Equipe com !px-3')
   const cells = section.slice(section.indexOf('<tbody')).match(/<td class="[^"]*"/gu) ?? []
-  assert.equal(cells.length, 4 * OPERATIONAL_SUMMARY_COLUMNS.length, 'A1: uma célula por coluna nas quatro linhas')
+  assert.equal(cells.length, 6 * OPERATIONAL_SUMMARY_COLUMNS.length, 'A1: uma célula por coluna nas seis linhas ([F9] com Crítico e Híbrido)')
   assert.ok(cells.every((cell) => cell === '<td class="!px-2 text-center"'), 'A1: células com !px-2')
-  assert.equal((section.match(/<th class="whitespace-nowrap !px-3 text-left" scope="row">/gu) ?? []).length, 4, 'A1: rótulos das linhas com !px-3')
+  assert.equal((section.match(/<th class="whitespace-nowrap !px-3 text-left" scope="row">/gu) ?? []).length, 6, 'A1: rótulos das seis linhas com !px-3 ([F9] com Crítico e Híbrido)')
   assert.deepEqual(OPERATIONAL_SUMMARY_COLUMNS.map((column) => textOf(headers[OPERATIONAL_SUMMARY_COLUMNS.indexOf(column)])), ['Escalados', 'Disponíveis', 'Em pausa', 'Almoço', 'Ausentes', 'Fora do expediente', 'Sem escala'], 'rótulos das colunas')
   assert.ok(section.includes('Ausentes: somente ausências lançadas; pausas não entram.'), 'nota dos ausentes')
   assert.ok(section.includes('Situação às 10:32'), 'hora do servidor (server_now), sem o fuso do navegador')

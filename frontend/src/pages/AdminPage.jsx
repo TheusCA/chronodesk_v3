@@ -25,6 +25,7 @@ import {
   TruncationNotice,
   UserAvatar,
 } from '../components/ui/Primitives'
+import { ALL_TEAMS, teamShort } from '../lib/teams'
 
 const tabs = [
   ['aprovacoes', 'Aprovações'],
@@ -94,7 +95,7 @@ function ApprovalItem({ first, name, team, details, note, created, actions }) {
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-baseline gap-x-2">
           <strong className="font-medium text-ink">{name}</strong>
-          {team && <span className="text-sm text-muted">Equipe {team.toUpperCase()}</span>}
+          {team && <span className="text-sm text-muted">Equipe {teamShort(team)}</span>}
         </p>
         <p className="mt-0.5 text-sm text-ink-2">{details.filter(Boolean).join(' · ')}</p>
         {note && <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted" title={note}>{note}</p>}
@@ -266,11 +267,16 @@ const emptyEmployee = {
   jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', fora_mapa_escala: false,
 }
 
+// [F9, D-F9-12] Equipes que ficam sempre no grupo separado da escala.
+const SEPARATE_GROUP_TEAMS = ['critico', 'hibrido']
+
 function teamLabel(value) {
   const normalized = normalizeTeamValue(value)
   return {
     n1: 'N1',
     n2: 'N2',
+    critico: 'Crítico',
+    hibrido: 'Híbrido',
     na: 'Liderança',
     lideranca: 'Liderança',
     'nao se aplica': 'Liderança',
@@ -302,6 +308,8 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
 
   function updateTeam(team) {
     setValue('equipe', team, { shouldDirty: true })
+    // [F9, D-F9-12] Crítico e Híbrido ficam sempre no grupo separado.
+    if (SEPARATE_GROUP_TEAMS.includes(team) && ['comum', 'separado'].includes(form.grupo_escala)) setValue('grupo_escala', 'separado', { shouldDirty: true })
   }
 
   return (
@@ -323,9 +331,7 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
       <label className="label">Equipe operacional
         <input type="hidden" {...register('equipe')} />
         <select className="field mt-2" value={normalizeTeam(form.equipe)} onChange={(event) => updateTeam(event.target.value)}>
-          <option value="n1">N1</option>
-          <option value="n2">N2</option>
-          <option value="lideranca">Liderança</option>
+          {ALL_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
         </select>
       </label>
       <label className="label">Perfil de acesso
@@ -372,9 +378,10 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
       {editing && ['comum', 'separado'].includes(form.grupo_escala) && (
         <label className="label sm:col-span-2" data-employee-group="">Grupo da escala
           <select className="field mt-2" {...register('grupo_escala')}>
-            <option value="comum">Comum (rodízio da escala mensal)</option>
+            <option disabled={SEPARATE_GROUP_TEAMS.includes(normalizeTeam(form.equipe))} value="comum">Comum (rodízio da escala mensal)</option>
             <option value="separado">Separado (Híbrido e Crítico)</option>
           </select>
+          {SEPARATE_GROUP_TEAMS.includes(normalizeTeam(form.equipe)) && <span className="mt-1 block text-xs text-muted" data-group-locked="">Crítico e Híbrido ficam sempre no grupo separado.</span>}
           <span className="mt-1 block text-xs text-muted">Separado fica fora da distribuição de PA do grupo comum. Não muda a regra de escala.</span>
         </label>
       )}
@@ -751,7 +758,7 @@ function EmployeesTab({
         <div className={filtersOpen ? undefined : 'hidden sm:block'} id="filtros-funcionarios">
         <FilterBar>
           <input className="field" placeholder="Buscar nome, login ou equipe" value={search} onChange={(event) => setSearch(event.target.value)} />
-          <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option><option value="n1">N1</option><option value="n2">N2</option><option value="lideranca">Liderança</option></select>
+          <select className="field" value={team} onChange={(event) => setTeam(event.target.value)}><option value="">Todas as equipes</option>{ALL_TEAMS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
           <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="lideranca">Liderança</option><option value="admin">Admin (legado)</option><option value="somente_leitura">Somente leitura</option></select>
           <select aria-label="Situação do cadastro" className="field" value={status} onChange={(event) => { setStatus(event.target.value); setPendingAction(null) }}><option value="ativos">Ativos</option><option value="arquivados">Arquivados</option><option value="">Ativos e arquivados</option></select>
           <select aria-label="Almoço" className="field" value={lunchSelected} onChange={(event) => setLunch(event.target.value)}><option value="">Todos os almoços</option>{lunchChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
