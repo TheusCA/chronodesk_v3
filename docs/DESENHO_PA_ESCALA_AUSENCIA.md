@@ -5602,7 +5602,42 @@ Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a b
 - **Desempenho do polling**: o papel do dia em lote, numa consulta, só quando há alguém do Crítico.
 - **LGPD**: a ordem das pessoas é lista de IDs; nomes não vão para o git, para o chat nem para a auditoria; a nota da troca é de lista fechada.
 
-**Próximo passo:** revisão deste plano junto com o lote F9 (ou depois dele). Nenhum código antes da aprovação.
+**Próximo passo (do plano):** revisão junto com o lote F9. Aprovado em 2026-11-17; execução na 9.16.9.
+
+#### 9.16.9 Execução do lote (2026-11-17)
+
+**Revisão de 2026-11-17:** plano aprovado com as respostas padrão de AD-PC-1 a AD-PC-4. Lote executado sobre o `bc158f3` (docs dos ajustes do F9), com parada única no fim. Sem push.
+
+| Commit | Conteúdo | Bateria | Mutação |
+|---|---|---|---|
+| `01d50e2` | Migration 024, rollback, verificação, linhas do ensaio e QA estrutural (`qa-critical-roles.php`, seção 1); a trava passa a separar as migrations e os QAs posteriores ao deploy 5 | 28 OK, 1131/1131 | 17/17 |
+| `33a8942` | Regras puras (`CriticalRolePlanner`): período, posição, papel do dia, vagos, prévia de 8 semanas, validações | 28 OK, 1131/1131 | 22/22 |
+| `2681f91` | Servidor: `CriticalRoleService`, `api/portal/critical_roles.php`, `shiftFor` e o motor com a origem `papel`, o papel do dia em lote, a Visão operacional com os papéis vagos, o 409 da troca de equipe, a matriz de segurança | 28 OK, 1131/1131 | 29/29 |
+| `99da9bd` | Telas: seção "Papéis do Crítico" na Escala com o painel (papéis, rodízio com prévia obrigatória, trocas), o alerta na Visão operacional, `qa:critical-roles`, bloco 30 do navegador, capturas | 29 OK, 1139/1139 | 20/20 |
+| `df001a1` | Roteiro e folha do deploy 6 e a seção 18 da trava | 29 OK, 1139/1139 | 11/11 |
+
+**Achados na mutação, antes da entrega:** a 1ª versão dos commits (`f47ffb7`, `aac7192`, `2da9864`, `5afae6a`, `98122c0`; baterias com saída 0) deixou **3 mutantes vivos**: (1) a verificação da 024 conferida por prefixo do nome da coluna (`trocas_sobrepostas_x` passava), agora pelo nome exato; (2) os papéis vagos da Visão operacional só conferidos pela leitura do código, agora por comportamento (`operationalView` contra o banco simulado: pessoa arquivada na posição e papel sem pessoa ficam vagos, menos o coberto por troca; sábado, nenhum); (3) o rodízio novo levando quem saiu do Crítico, agora no bloco 30 do navegador (o rodízio vigente do servidor simulado com uma pessoa que saiu; o corpo do salvar vai sem ela). Os cinco commits foram refeitos com as mesmas mensagens, e as baterias, repetidas. Nenhum tinha sido entregue.
+
+**Ensaio da 024 no MySQL 8.0.46 local** (cópia `ensaio_`, como no roteiro): variante (a), a migration duas vezes (`tabelas_024 = 3`, `checks_024 = 6`), o rollback (`copias_de_rollback_024 = 3`) e o 2º rollback parando de propósito, com as assinaturas de cadastros e regras iguais às de antes; variante (b), com as linhas do ensaio: `papeis = 2`, `rodizios = 1`, `trocas = 1` e todas as contagens de problema em 0. Na (b), a assinatura de cadastros muda porque as linhas marcam um N2 da cópia como Crítico (descrito no roteiro e na folha).
+
+**Integração no MySQL local** (`qa_pc` = `qa_f9` com a 024, dados fictícios, transação desfeita): 18/18. **Navegador:** blocos 24, 27, 28 e 30, 52/52. **Orçamento:** CSS 68333 de 70000; JS de entrada 199825. **Trava do roteiro:** 473 verificações; folha do deploy 6 com 38 comandos (`bash -n` em todos).
+
+**Deploy:** o lote vai no **deploy 6** (`DEPLOY_LINUX.md`, "Deploy 6"; `docs/DEPLOY6_FOLHA_DO_DIA.md`), depois do deploy 5. O roteiro usa o marcador `<commit do deploy 5>`, trocado pelo hash no dia. O F8 (018) passa a ser o deploy 7 ou posterior.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Proposta | Motivo |
+|---|---|---|
+| D-PC-6 | Pessoas e papéis em número diferente são aceitos: pessoa sem papel na posição fica pelo cadastro, papel sem pessoa fica vago (alerta). A 9.16.4 ("número de pessoas igual ao de papéis") fica substituída | Resposta padrão da AD-PC-2 |
+| D-PC-7 | A coluna da troca pontual chama `reason`, em lista fechada (`troca`, `cobertura`, `outro`), no lugar do `note` da 9.16.3 | Sem texto livre (LGPD); o nome diz o que guarda |
+| D-PC-8 | Salvar um rodízio com pessoa arquivada ou fora do Crítico: 409. Arquivar não é bloqueado: o rodízio vigente ganha o aviso "Rodízio com quem saiu do Crítico" e o papel dela fica vago até a versão nova. Mudar a equipe de quem está no rodízio vigente ou futuro: 409 | Arquivar é RF-07 (F4) e não deve depender do rodízio; a troca de equipe segue o F10-2 |
+| D-PC-9 | A prévia mostra só os dias em que algum papel muda (e o 1º dia) | 8 semanas de dias úteis numa tabela ficariam longas, sobretudo no celular |
+| D-PC-10 | O papel de hoje e os vagos de hoje vêm calculados do servidor | Uma regra só (a do motor); a tela não repete o cálculo |
+| D-PC-11 | Feriado conta como dia útil também para o papel (como a D-F9-30) | O motor não tem cadastro de feriados (D2, D-F10-4) |
+| D-PC-12 | Troca pontual de até 31 dias; mais que isso, versão do rodízio | Troca longa esconde o rodízio; o limite está no banco (`CHECK`) e no serviço |
+| D-PC-13 | A conferência de data retroativa (`escalas.retroativa`) fica no serviço, sem teste de 403 | Hoje todo perfil com `escalas.manage` tem `escalas.retroativa`: o 403 não é alcançável; a regra vale se a matriz mudar |
+
+**Próximo passo:** revisão do lote. O push espera o aviso do fim do deploy 4, e o do lote 9.16 espera o deploy 5 (D-F9-31).
 
 ---
 

@@ -1664,6 +1664,21 @@ Base da afirmação:
 
 ---
 
+### Lote 9.16: rodízio de papéis do Crítico (migration 024) — 2026-11-17
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Executar o plano 9.16 aprovado (AD-PC-1 a AD-PC-4 com as respostas padrão): papéis do Crítico com jornada e presença, rodízio por semana ou mês com vigência, trocas pontuais pela Liderança e pelo admin, o papel do dia como a jornada do dia no motor e o alerta de papel vago na Visão operacional. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `01d50e2`, `33a8942`, `2681f91`, `99da9bd`, `df001a1` e o commit de docs com esta entrada. Sem push pela IA (o push espera o aviso do fim do deploy 4; o do lote, o deploy 5). |
+| **O que a IA alterou** | Migration 024 com rollback, verificação e linhas do ensaio; `CriticalRolePlanner`, `CriticalRoleService`, `api/portal/critical_roles.php`; `PresenceRepository`, `PresenceEngine`, `PresenceService` e `GerenciadorPausas` (o papel do dia); `atualizar_funcionario.php` (409 da troca de equipe); `dashboard.php` (papéis vagos); telas (`CriticalRoles.jsx`, `criticalRoles.ts`, Escala e Visão operacional); QAs (`qa-critical-roles.php`, `qa:critical-roles`, bloco 30, matriz de segurança); capturas; roteiro e folha do deploy 6 e a trava; desenho (9.16.9). |
+| **Dados pessoais** | Nenhum no git. Rodízio e trocas guardam só IDs; a auditoria leva só IDs; a troca não tem texto livre. QA, ensaio e integração com dados fictícios; a verificação só conta. |
+| **Validacao executada pela IA** | Baterias completas sozinhas nos cinco commits (28 OK com 1131/1131 nos três primeiros, 29 OK com 1139/1139 nos dois últimos; saída 0 em todos). Mutação por commit: 99/99 mutantes mortos (17, 22, 29, 20 e 11), o original OK em todos. Ensaio da 024 no MySQL 8.0.46 local nas duas variantes; integração `qa_pc` 18/18; navegador (blocos 24, 27, 28 e 30) 52/52; trava do roteiro com 473 verificações. |
+| **Achados** | (1) A 1ª versão dos cinco commits deixou 3 mutantes vivos (verificação conferida por prefixo, papéis vagos sem teste de comportamento, rodízio novo com quem saiu sem teste): QAs reforçados e commits refeitos antes da entrega (9.16.9). (2) Dois scripts de mutação tinham fim de linha CRLF dentro de textos de várias linhas e não aplicavam o mutante; corrigidos e repetidos. (3) **Segredo local exposto:** um erro do PHP numa integração (banco ainda não criado) imprimiu na saída da ferramenta o começo da senha de root do MySQL **local de ensaio** do WSL (não é de produção nem de homologação). Recomendado trocar essa senha; desde então as integrações rodam com `zend.exception_ignore_args=1`. Fora do escopo, para avaliar: o `db_connect` do `db.php` não marca o parâmetro da senha como sensível (`#[\SensitiveParameter]`), então um rastreamento de pilha pode mostrá-la. |
+| **Decisões (a aprovar)** | D-PC-6 a D-PC-13 (9.16.9). |
+| **Validacao humana** | Pendente: revisão. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
