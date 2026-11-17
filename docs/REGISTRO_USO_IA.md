@@ -1606,6 +1606,20 @@ Base da afirmação:
 
 ---
 
+### F9: respostas da Liderança (AD-F9-1 a AD-F9-4) aplicadas ao lote — 2026-11-16
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Aplicar as respostas da Liderança ao lote F9 já entregue (sem push): Crítico e Híbrido com "sempre pelo menos 1 disponível" no lugar do limite fixo, toda pausa contando; reunião sem aprovação nas duas equipes; destaque "sem ninguém disponível"; N1 e N2 sem mudança; conferir o almoço do Híbrido às 18:00; D-F10-19 e a escala do Crítico revistas no desenho. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `fddf841` (desenho), `919bcfd` (regras), `c885e6a` (servidor), `1800098` (telas) e o commit de docs deste registro. Commits novos por cima: nenhum commit entregue foi reescrito. Sem push pela IA. |
+| **O que a IA alterou** | Desenho 9.15 (respostas, 9.15.17 e 9.15.18); `services/PauseRules.php`; `classes/GerenciadorPausas.php`; `api/portal/dashboard.php`; `frontend/src/lib/teams.ts`, Pausas e Visão operacional; QAs (`qa-critico-hibrido` PHP e `.mjs`, bloco 28 do navegador); capturas do F9. |
+| **Dados pessoais** | Nenhum. Integração com dados fictícios no MySQL local, em transação desfeita. |
+| **Validacao executada pela IA** | Bateria completa sozinha em cada commit (a do servidor repetida depois de uma falha instável no bloco 13 do navegador, com o bloco repetido 3x antes) e mutação (11/11, 11/11, 9/9); integração 8/8. |
+| **Limitacoes declaradas** | Banco indisponível na hora da pausa conta como ninguém ausente (D-F9-26); a jornada do dia vale todos os dias até o rodízio de papéis (D-F9-27). |
+| **Validacao humana** | Pendente: revisão única do lote F9 com estas mudanças (D-F9-19 a D-F9-29). |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

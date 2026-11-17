@@ -5458,8 +5458,6 @@ Os cinco commits da 9.15.12, cada um com a bateria completa sozinha (`test-local
 
 **Pendências:** revisão do lote; AD-F9-1 a AD-F9-5 com a Liderança (o lote usa as respostas padrão); o deploy 4 e, depois, o deploy 5 (data, janela e quem acompanha: A DEFINIR); o push do F9 só depois do aviso do fim do deploy 4; o lote do F4 da D-F10-25 (depois).
 
----
-
 #### 9.15.17 Regra de pelo menos 1 disponível (Crítico e Híbrido; AD-F9-1 e AD-F9-2, 2026-11-16)
 
 As respostas chegaram depois da entrega do lote (`3f96dc4` a `50443c2`, sem push). Como nenhum commit entregue é reescrito, entram em commits novos por cima: este de docs, as regras puras, o servidor, as telas e o registro.
@@ -5481,6 +5479,27 @@ As respostas chegaram depois da entrega do lote (`3f96dc4` a `50443c2`, sem push
 | D-F9-27 | "Jornada do dia" vale todos os dias (a do cadastro, sem olhar a escala nem o fim de semana) | A definição da Liderança é por jornada; quando o rodízio de papéis existir, a função única passa a dizer a jornada de cada dia |
 | D-F9-28 | O destaque vem do servidor: `disponibilidade_equipes` no `status.php` e no `dashboard.php` (aditivo), com `no_turno`, `disponiveis` e `sem_disponivel` por equipe | A tela não recalcula a regra; a mesma conta do 409 |
 | D-F9-29 | Na reunião do Crítico e do Híbrido, o campo de contexto continua obrigatório, e o botão diz "Iniciar reunião" | A observação continua só da gestão e do próprio (DV11); sem aprovação, o pedido vira início |
+
+#### 9.15.18 Execução das respostas da Liderança (2026-11-16; aguarda revisão com o lote)
+
+Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a bateria completa sozinha e a mutação. Sem push.
+
+| Commit | Conteúdo | Bateria | Mutação |
+|---|---|---|---|
+| `fddf841` | 9.15 com AD-F9-1 a AD-F9-4, D-F9-5 e D-F9-9 revistas, D-F10-19 revista e a 9.15.17 | saída 0, 28/28, 1121/1121 | — |
+| `919bcfd` | Regras puras: equipes com a regra, na jornada, situação da equipe e a decisão (sobra 1 disponível, ou quem pede está sozinho no turno); reunião sem aprovação no Crítico e no Híbrido | saída 0, 28/28, 1121/1121 | 11/11 |
+| `c885e6a` | Servidor: a regra no `iniciar_pausa` e na reunião (dentro da trava do estado), ausências pelo motor, `disponibilidade_equipes` no `status.php` e no `dashboard.php`; trava do AD-F9-4 | 1ª: saída 1 (bloco 13 do navegador, "derrubar pausa" em 390 px, 4 falhas, execução interrompida; o commit não mexe no frontend); o bloco 13 repetido 3x: 179/179; 2ª completa: saída 0, 28/28, 1121/1121 | 11/11 |
+| `1800098` | Telas: reunião "sem aprovação" e "Iniciar reunião" no Crítico e no Híbrido; o aviso e o selo "sem ninguém disponível" em Pausas e na Visão operacional; o almoço do Híbrido às 18:00 no formulário e no filtro; bloco 28 e capturas com o destaque | saída 0, 28/28, 1123/1123 | 9/9 |
+
+**Integração no MySQL local** (`qa_f9`, ausências reais em transação desfeita): 8/8. Sem ausência, o 3º do Crítico é recusado; com ausência de dia inteiro, o ausente sai do turno; com o outro em ausência de intervalo ativa, quem pede fica sozinho no turno e é liberado, e o status mostra "sem ninguém disponível"; às 11:00, fim do intervalo, o colega volta a contar. A integração do lote continua 15/15.
+
+**Achados:** um mutante equivalente nas regras (a condição "início antes do fim" da jornada era redundante e saiu do código); um mutante vivo no servidor (cadastro inativo segurando a equipe) virou teste; e, ao montar o commit das telas, o script de final de linha da estação corrompeu três capturas `.webp` (binárias). As capturas foram refeitas, as 32 conferidas como WebP válidas, e o commit refeito antes da entrega; o script passou a pular binários.
+
+**AD-F9-4:** nada a corrigir. O cadastro só exige o início do almoço antes do fim (sem faixa nem jornada), e as opções do filtro "Almoço" saem dos próprios cadastros: o almoço do Híbrido às 18:00 é aceito na tela e no servidor (QA nos dois).
+
+**Roteiro do deploy 5:** sem mudança (ninguém é do Crítico ou do Híbrido no dia do deploy; a trava continua 433).
+
+---
 
 ## 10. Riscos e pendências
 
@@ -5572,7 +5591,7 @@ Respostas da Liderança aos pedidos do item 2, registradas como requisito. **Sem
 | Lote proposto | Conteúdo | Depende de |
 |---|---|---|
 | F8 — Almoço por contrato | 11.1: migration 018, tabela de contratos e tela de durações (só admin), cadastro, validação, auditoria | Decisões de 11.1 tomadas em 2026-10-06; **lista de contratos e durações e resposta sobre o motivo (Liderança): sem elas, a 018 não é escrita** |
-| F9 — Equipes Crítico e Híbrido | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration **020** (enums e `pausas.limite_segundos`; a 019 é a data de corte do F5). **Plano na 9.15 (2026-11-16)**, com o Híbrido como equipe própria (D-F10-1); **lote executado em 2026-11-16** (`3f96dc4`, `ac34a36`, `2a556e9`, `d0f84fa`, `9829470`; 9.15.16), aguarda revisão | F2 (aprovado em 2026-10-06); F8 só para o limite do almoço: sem ele, o caminho da DL17 (D-F9-16); pendências da Liderança (AD-F9-1 a AD-F9-5) |
+| F9 — Equipes Crítico e Híbrido | 11.3: equipe, painel, motivo "Almoço", limite, alertas, métricas, motor (`lunch_source`), migration **020** (enums e `pausas.limite_segundos`; a 019 é a data de corte do F5). **Plano na 9.15 (2026-11-16)**, com o Híbrido como equipe própria (D-F10-1); **lote executado em 2026-11-16** (`3f96dc4`, `ac34a36`, `2a556e9`, `d0f84fa`, `9829470`; 9.15.16), aguarda revisão; respostas da Liderança aplicadas por cima (`fddf841`, `919bcfd`, `c885e6a`, `1800098`; 9.15.17 e 9.15.18) | F2 (aprovado em 2026-10-06); F8 só para o limite do almoço: sem ele, o caminho da DL17 (D-F9-16); pendências da Liderança (AD-F9-1 a AD-F9-5) |
 | SEC-07b — Texto livre no calendário (decisão de 2026-10-07) | `calendar.php` sem o texto livre de hora extra, correção de ponto, plantão e motivo de pausa para quem não é gestão nem o próprio colaborador (seção 9.4) | Logo depois do F3, antes do F4. **Implementado e aprovado em 2026-10-09** (seção 9.5; `oncall.php` junto, D3) |
 
 O item c) já está no F4. **Ordem decidida em 2026-10-06:** F2B agora; F3 a F7 na ordem do desenho; F8 assim que a Liderança mandar contratos e a resposta sobre o motivo; F9 depois do F8.
