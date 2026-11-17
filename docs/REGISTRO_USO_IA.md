@@ -1602,7 +1602,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. Ensaio, integração e capturas com dados fictícios no MySQL 8.0.46 local e no servidor simulado. A planilha da escala crítica não foi lida. |
 | **Validacao executada pela IA** | Bateria completa sozinha em cada commit (o do commit 5 no resumo da entrega) e mutação (28/28, 31/31, 27/27, 23/23, 14/14); ensaio da 020 nas duas variantes; integração 15/15; `bash -n` nos 38 comandos da folha; lint, typecheck e build (CSS 68187 bytes). |
 | **Limitacoes declaradas** | O ensaio no servidor é o passo 3 do deploy 5; o tempo da cópia da `portal_absences` em produção só se sabe pela Q-F9. As capturas do "antes" saíram do build do worktree do deploy 4 (o frontend do commit 3 é o mesmo). Entre os commits, durante a bateria, rodei poucos comandos leves (edição de arquivo e `php -l`). |
-| **Validacao humana** | Pendente: revisão única do lote, com D-F9-19 a D-F9-25 (9.15.16). |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-17, com as respostas da Liderança: D-F9-19 a D-F9-25 como propostas, exceto a D-F9-25, revista (9.15.19). |
 
 ---
 
@@ -1616,7 +1616,7 @@ Base da afirmação:
 | **Dados pessoais** | Nenhum. Integração com dados fictícios no MySQL local, em transação desfeita. |
 | **Validacao executada pela IA** | Bateria completa sozinha em cada commit (a do servidor repetida depois de uma falha instável no bloco 13 do navegador, com o bloco repetido 3x antes) e mutação (11/11, 11/11, 9/9); integração 8/8. |
 | **Limitacoes declaradas** | Banco indisponível na hora da pausa conta como ninguém ausente (D-F9-26); a jornada do dia vale todos os dias até o rodízio de papéis (D-F9-27). |
-| **Validacao humana** | Pendente: revisão única do lote F9 com estas mudanças (D-F9-19 a D-F9-29). |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-17 (`fddf841` a `6d4c148`), com D-F9-26 a D-F9-29 como propostas, exceto a D-F9-27, revista (9.15.19). |
 
 ---
 
@@ -1629,7 +1629,7 @@ Base da afirmação:
 | **O que a IA alterou** | `docs/DESENHO_PA_ESCALA_AUSENCIA.md` (9.16) e esta entrada. |
 | **Dados pessoais** | Nenhum. A ordem das pessoas no rodízio é lista de IDs; os papéis são cadastrados pela tela. |
 | **Limitacoes declaradas** | Migration 024 só desenhada (sem ensaio); AD-PC-1 a AD-PC-4 com a Liderança. |
-| **Validacao humana** | Pendente: revisão do plano. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-17, com as respostas padrão de AD-PC-1 a AD-PC-4 (9.16.5). |
 
 ---
 
@@ -1645,7 +1645,7 @@ Base da afirmação:
 | **Validacao executada pela IA** | Leitura dos SVG antes de usar (só formas, `<style>` interno e metadados C2PA; sem script nem referência externa); PNG e ICO conferidos (64, 180, 512; ICO com 16, 32 e 48). Bateria completa sozinha no `2ace053` (saída 0, 28/28, navegador 1130/1130) e mutação 13/13; orçamento: JS de entrada 199825 de 211050, CSS 68277 de 70000; `bash -n` nos 39 comandos da folha. |
 | **Decisões (a aprovar)** | O ponto da marca usa o `pause-line` da situação "Em pausa" (o `pause` do texto daria contraste de 2,4:1 no claro e 1,4:1 no escuro contra a placa); a placa usa o token `action` como preenchimento (num SVG o "fundo" é o fill). A página 503 é texto puro (`ErrorDocument`), sem ícone. A CSP do portal só vale nas respostas `.html`: o `<style>` interno do `favicon.svg` funciona, e o `img-src 'self'` cobre os ícones. |
 | **Limitacoes declaradas** | O `Content-Type` do `.svg` e do `.ico` em produção depende do `mime.types` do servidor: conferido no passo 10 do deploy 5, sem mudar o Apache no dia. O ícone da aba não aparece nas capturas (sem aba no modo sem janela); o bloco 29 confere os links e os tipos. |
-| **Validacao humana** | Pendente: revisão. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-17 (`2ace053`, `e2b6051`), inclusive o ponto da marca no `pause-line`. |
 
 ---
 
@@ -1660,7 +1660,7 @@ Base da afirmação:
 | **Validacao executada pela IA** | Baterias completas sozinhas: `ad3f365` (saída 0, 28/28, navegador 1130/1130); `f1efc45` (saída 0, 28/28, 1131/1131). Mutação: 11/11 e 9/9 (três no navegador; um conferido à mão: o bloco 27 falha pela asserção da D-F9-25). Integração no MySQL 8.0.46 local (`qa_f9`, transação desfeita): 8/8 da D-F9-27 e 8/8 da AD-F9-1. A trava do roteiro continua com 435 verificações (a folha do deploy 5 não mudou). |
 | **Achados** | A 1ª versão do commit da D-F9-27 deixou 2 mutantes vivos (leitura das ausências lançadas sem cobertura no QA): o QA ganhou o banco simulado com ausências e três casos, e os dois commits foram refeitos antes da entrega (`c5b991a` e `368136c` viraram `ad3f365` e `f1efc45`). Durante a 1ª bateria do `368136c` a IA rodou um build e um QA na cópia principal, fora da regra de bateria sozinha; essa bateria foi descartada, e as que valem (`ad3f365` e `f1efc45`) rodaram sozinhas. |
 | **Decisões (a aprovar)** | D-F9-30 (feriado conta como dia útil até o motor ter cadastro de feriados) e D-F9-31 (o deploy 5 roda com o commit de docs destes ajustes, antes do lote 9.16). |
-| **Validacao humana** | Pendente: revisão, junto com o lote 9.16. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-17 (`ad3f365`, `f1efc45`, `bc158f3`), com a D-F9-30 na opção (a) (cadastro de feriados num lote próprio, com plano, depois do deploy 6) e a D-F9-31: no aviso do fim do deploy 4, push só até o `bc158f3`, sem `--force`; o lote 9.16 sobe depois do deploy 5 (9.16.10). |
 
 ---
 
@@ -1675,7 +1675,7 @@ Base da afirmação:
 | **Validacao executada pela IA** | Baterias completas sozinhas nos cinco commits (28 OK com 1131/1131 nos três primeiros, 29 OK com 1139/1139 nos dois últimos; saída 0 em todos). Mutação por commit: 99/99 mutantes mortos (17, 22, 29, 20 e 11), o original OK em todos. Ensaio da 024 no MySQL 8.0.46 local nas duas variantes; integração `qa_pc` 18/18; navegador (blocos 24, 27, 28 e 30) 52/52; trava do roteiro com 473 verificações. |
 | **Achados** | (1) A 1ª versão dos cinco commits deixou 3 mutantes vivos (verificação conferida por prefixo, papéis vagos sem teste de comportamento, rodízio novo com quem saiu sem teste): QAs reforçados e commits refeitos antes da entrega (9.16.9). (2) Dois scripts de mutação tinham fim de linha CRLF dentro de textos de várias linhas e não aplicavam o mutante; corrigidos e repetidos. (3) **Segredo local exposto:** um erro do PHP numa integração (banco ainda não criado) imprimiu na saída da ferramenta o começo da senha de root do MySQL **local de ensaio** do WSL (não é de produção nem de homologação). Recomendado trocar essa senha; desde então as integrações rodam com `zend.exception_ignore_args=1`. Fora do escopo, para avaliar: o `db_connect` do `db.php` não marca o parâmetro da senha como sensível (`#[\SensitiveParameter]`), então um rastreamento de pilha pode mostrá-la. |
 | **Decisões (a aprovar)** | D-PC-6 a D-PC-13 (9.16.9). |
-| **Validacao humana** | Pendente: revisão. |
+| **Validacao humana** | Aprovado pelo responsável em 2026-11-17 (`01d50e2` a `4e224f9`), com D-PC-6 a D-PC-13 como propostas. A senha do MySQL local de ensaio é trocada na estação (ou o contêiner é removido), fora do repositório (9.16.10). |
 
 ---
 

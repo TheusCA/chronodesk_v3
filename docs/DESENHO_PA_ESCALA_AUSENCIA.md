@@ -5520,7 +5520,7 @@ Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a b
 
 **Integração no MySQL local** (`qa_f9`, dados fictícios, transação desfeita): 8/8 da D-F9-27 (sexta 20/11 com 3 no turno; sábado sem ninguém; sábado com plantão e presencial: 2 no turno e o 2º recusado; domingo com férias) e a da AD-F9-1 de novo, 8/8. A verificação da 020 no `qa_f9`: `n1_n2_ativos_no_grupo_separado = 0`, e 2 com dois cadastros do N1 no `separado` numa transação desfeita.
 
-**Decisões (a aprovar):**
+**Decisões (aprovadas em 2026-11-17, 9.16.10):**
 
 | # | Proposta | Motivo |
 |---|---|---|
@@ -5624,7 +5624,7 @@ Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a b
 
 **Deploy:** o lote vai no **deploy 6** (`DEPLOY_LINUX.md`, "Deploy 6"; `docs/DEPLOY6_FOLHA_DO_DIA.md`), depois do deploy 5. O roteiro usa o marcador `<commit do deploy 5>`, trocado pelo hash no dia. O F8 (018) passa a ser o deploy 7 ou posterior.
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-11-17, 9.16.10):**
 
 | # | Proposta | Motivo |
 |---|---|---|
@@ -5637,7 +5637,23 @@ Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a b
 | D-PC-12 | Troca pontual de até 31 dias; mais que isso, versão do rodízio | Troca longa esconde o rodízio; o limite está no banco (`CHECK`) e no serviço |
 | D-PC-13 | A conferência de data retroativa (`escalas.retroativa`) fica no serviço, sem teste de 403 | Hoje todo perfil com `escalas.manage` tem `escalas.retroativa`: o 403 não é alcançável; a regra vale se a matriz mudar |
 
-**Próximo passo:** revisão do lote. O push espera o aviso do fim do deploy 4, e o do lote 9.16 espera o deploy 5 (D-F9-31).
+**Próximo passo (da execução):** revisão do lote. Aprovado em 2026-11-17 (9.16.10).
+
+#### 9.16.10 Aprovações de 2026-11-17
+
+**Revisão do responsável (2026-11-17):**
+
+- **Ícone novo** (`2ace053`, `e2b6051`): aprovado, inclusive o ponto da marca no `pause-line`.
+- **Lote F9 com as respostas da Liderança** (`fddf841` a `6d4c148`): aprovado, com D-F9-19 a D-F9-29 como propostas, exceto a D-F9-27 e a D-F9-25, revistas (9.15.19).
+- **Os dois ajustes** (`ad3f365`, `f1efc45`, docs `bc158f3`): aprovados, com a **D-F9-30** (opção (a): feriado conta como dia útil até existir um cadastro de feriados) e a **D-F9-31** (o deploy 5 roda com o `bc158f3`).
+- **Plano 9.16** (`6d4c148`): aprovado com as respostas padrão de AD-PC-1 a AD-PC-4 (9.16.5).
+- **Lote 9.16** (`01d50e2` a `4e224f9`): aprovado, com D-PC-6 a D-PC-13 como propostas (a D-PC-11 na mesma opção (a) da D-F9-30).
+
+**Push (D-F9-31):** no aviso do fim do deploy 4, o branch sobe só até o `bc158f3` (`git push origin bc158f3:feat/employee-form-rhf-zod`, sem `--force`), porque o comando 3 da folha do deploy 5 confere a origem contra o commit validado. O lote 9.16 sobe depois do deploy 5.
+
+**Cadastro de feriados:** lote próprio, com plano, depois do deploy 6. Até lá, o `PresenceEngine::isBusinessDay` só olha o dia da semana, e a linha "feriado" do `qa-critico-hibrido.php` muda junto com ele (o rodízio de papéis usa a mesma função, D-PC-11).
+
+**Fora do repositório:** a senha de root do MySQL local de ensaio (exposta em parte numa saída de ferramenta, 9.16.9 e registro) é trocada na estação, ou o contêiner é parado e removido quando não for mais usado; nada disso vai para o git. Os backups do servidor do deploy 3 são limpos pelo responsável, pela folha, depois do deploy 4.
 
 ---
 
