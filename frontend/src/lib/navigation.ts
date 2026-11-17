@@ -15,6 +15,8 @@ export type NavigationRoute = {
   label: string
   icon: string
   permission?: Permission
+  // [9.17] Módulo ligado por interruptor do servidor (session.modulos).
+  module?: 'chg'
 }
 
 export type NavigationItem = NavigationSection | NavigationRoute
@@ -41,6 +43,7 @@ export const navigation: NavigationItem[] = [
   { path: '/correcao-ponto', label: 'Correção de ponto', icon: 'edit' },
   { path: '/avisos', label: 'Avisos', icon: 'bell' },
   { path: '/chamados-criticos', label: 'Chamados críticos', icon: 'alert' },
+  { path: '/chg', label: 'Controle de CHG', icon: 'file', module: 'chg' },
   { section: 'Conhecimento e plataforma' },
   { path: '/documentacao', label: 'Documentação', icon: 'book' },
   { path: '/relatorios', label: 'Relatórios', icon: 'file', permission: 'relatorios.read' },
@@ -65,6 +68,7 @@ export const pageMetadata: PageMetadata = {
   '/sobreavisos': ['Sobreavisos', 'Cobertura de sobreaviso ativa e planejada.'],
   '/mapa-pa': ['Mapa de PA', 'Alocação visual de posições físicas por data.'],
   '/chamados-criticos': ['Chamados críticos', 'War rooms, impacto, mitigação e resolução de crises.'],
+  '/chg': ['Controle de CHG', 'Atualizações por CHG: comitê, preparação, execução, validação e encerramento.'],
   '/documentacao': ['Documentação', 'WIs, IOPs, runbooks e checklists.'],
   '/relatorios': ['Relatórios', 'Relatórios operacionais e auditoria.'],
   '/configuracoes': ['Configurações', 'Preferências e informações de segurança.'],

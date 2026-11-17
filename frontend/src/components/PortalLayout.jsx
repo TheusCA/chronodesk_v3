@@ -147,6 +147,7 @@ export function PortalLayout({ session, path, navigate, onLogout, serverNow, chi
             return <p className="px-3 pb-1.5 pt-4 text-xs font-medium text-muted first:pt-1" key={`${item.section}-${index}`}>{item.section}</p>
           }
           if (item.permission && !permissions.has(item.permission)) return null
+          if (item.module && session.modulos?.[item.module] !== true) return null
           const active = path === item.path
           // O número fica fora do botão: o nome do item continua só o rótulo
           // (o roteiro de navegador acha o item pelo texto) e o leitor de tela

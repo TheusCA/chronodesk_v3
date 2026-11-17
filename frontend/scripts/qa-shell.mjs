@@ -197,7 +197,8 @@ assert.equal(pendingApprovalsLabel({ solicitacoes: 'x', overtime: 2 }), null, 'c
   const current = nav.match(/<button aria-current="page"[^>]*>([\s\S]*?)<\/button>/gu) ?? []
   assert.equal(current.length, 1, 'um item atual')
   assert.ok(current[0].includes('sidebar-link-active') && text(current[0]) === 'Visão operacional', 'item atual com a barra (sidebar-link-active) e aria-current')
-  const routes = navigation.filter((entry) => entry.path && (!entry.permission || MANAGER.includes(entry.permission)))
+  // [9.17] Módulo atrás de interruptor (session.modulos) fica fora sem o módulo ligado.
+  const routes = navigation.filter((entry) => entry.path && !entry.module && (!entry.permission || MANAGER.includes(entry.permission)))
   assert.equal((nav.match(/<button /gu) ?? []).length, routes.length, 'um botão por rota permitida')
   for (const entry of navigation.filter((item) => item.section)) assert.ok(nav.includes(`>${entry.section}</p>`), `grupo "${entry.section}" em caixa normal`)
 }

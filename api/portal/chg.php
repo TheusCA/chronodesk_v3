@@ -32,6 +32,15 @@ try {
             }
             json_response(['sucesso' => true, 'base' => $service->duplicateBase($id)]);
         }
+        // ?tabela=ID: a tabela do card para copiar (HTML com as cores do v5.2 e
+        // texto com tabulacao), montada aqui; a tela so copia.
+        if (isset($_GET['tabela'])) {
+            $id = filter_var($_GET['tabela'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+            if ($id === false) {
+                throw new InvalidArgumentException('Card inválido.');
+            }
+            json_response(['sucesso' => true] + $service->copyTable($id));
+        }
         json_response(['sucesso' => true] + $service->board($canManage, ChgAccess::canImport($role)));
     }
     $data = portal_json_input();

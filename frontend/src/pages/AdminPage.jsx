@@ -264,7 +264,7 @@ function SettingsTab({ resource, notify }) {
 
 const emptyEmployee = {
   nome: '', ad_login: '', equipe: 'n1', access_role: 'tecnico', jornada_entrada: '08:00',
-  jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', fora_mapa_escala: false,
+  jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', fora_mapa_escala: false, grupo_tools: false,
 }
 
 // [F9, D-F9-12] Equipes que ficam sempre no grupo separado da escala.
@@ -304,6 +304,8 @@ function withFieldRef(field, fieldRef) {
 function EmployeeFields({ form, register, setValue, errors = {}, editing = false, canPromote = false, canEditOutsideMap = false, nameRef = null }) {
   function updateRole(role) {
     setValue('access_role', role, { shouldDirty: true })
+    // [9.17, D-CHG-14] Somente leitura sai do grupo Tools.
+    if (role === 'somente_leitura' && form.grupo_tools === true) setValue('grupo_tools', false, { shouldDirty: true })
   }
 
   function updateTeam(team) {
@@ -388,15 +390,18 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
           <span className="mt-1 block text-xs text-muted">Separado fica fora da distribuição de PA do grupo comum. Não muda a regra de escala.</span>
         </label>
       )}
-      {/* [R4d] Lugar reservado para o grupo Tools (módulo de CHGs, P13): desabilitado e fora do
-          React Hook Form, então nada vai para o servidor. Vem depois do "Fora do Mapa PA". */}
-      <label className="check-row sm:col-span-2" data-tools-reserved="">
-        <input disabled type="checkbox" />
-        <span>
-          <strong>Grupo Tools</strong>
-          <small>Chega com o módulo de CHGs (lança e edita CHGs). Ainda sem efeito: o cadastro não guarda esta marca.</small>
-        </span>
-      </label>
+      {/* [9.17, D-CHG-13] Grupo Tools: separado da equipe e do perfil; dá a
+          permissão de alterar o Controle de CHG. Vem depois do "Fora do Mapa PA".
+          Somente leitura nunca entra (D-CHG-14); na edição, só se a lista trouxe o campo. */}
+      {(!editing || typeof form.grupo_tools === 'boolean') && (
+        <label className="check-row sm:col-span-2" data-tools="">
+          <input disabled={form.access_role === 'somente_leitura'} type="checkbox" {...register('grupo_tools')} />
+          <span>
+            <strong>Grupo Tools</strong>
+            <small>{form.access_role === 'somente_leitura' ? 'O perfil somente leitura não entra no grupo Tools.' : 'Lança e edita o Controle de CHG, além do que o perfil já permite.'}</small>
+          </span>
+        </label>
+      )}
     </div>
   )
 }
@@ -510,6 +515,8 @@ function EmployeesTab({
   const [status, setStatus] = useState('ativos')
   // Pós-deploy 1 (9.14.3): filtro de almoço; as opções saem dos cadastros da situação escolhida.
   const [lunch, setLunch] = useState('')
+  // [9.17] Filtro do grupo Tools: '', 'sim' ou 'nao'.
+  const [tools, setTools] = useState('')
   const [pendingAction, setPendingAction] = useState(null)
   const [acting, setActing] = useState(false)
   // [R4d] No celular, os filtros ficam atrás do botão "Filtros": a lista vem primeiro.
@@ -531,8 +538,9 @@ function EmployeesTab({
       && (!role || item.access_role === role)
       && matchesArchiveFilter(item, status)
       && matchesLunchFilter(item, keepLunchSelection(lunch, lunchChoices))
+      && (!tools || (tools === 'sim') === (item.grupo_tools === true))
     ))
-  }, [lunch, lunchChoices, resource.data, role, search, status, team])
+  }, [lunch, lunchChoices, resource.data, role, search, status, team, tools])
   const allEmployees = resource.data?.funcionarios || []
 
   if (resource.loading) return <LoadingState />
@@ -568,6 +576,7 @@ function EmployeesTab({
       fora_mapa_escala: item.fora_mapa_escala === true,
       equipe: normalizeTeam(item.equipe),
       grupo_escala: ['comum', 'separado'].includes(item.grupo_escala) ? item.grupo_escala : undefined,
+      grupo_tools: typeof item.grupo_tools === 'boolean' ? item.grupo_tools : undefined,
     }
     setEditForm(nextForm)
     resetEditEmployee(nextForm)
@@ -741,6 +750,7 @@ function EmployeesTab({
     role && ['perfil', `Perfil: ${ROLE_LABELS[role] ?? role}`, () => setRole('')],
     status !== 'ativos' && ['situacao', `Situação: ${status === 'arquivados' ? 'Arquivados' : 'Ativos e arquivados'}`, () => { setStatus('ativos'); setPendingAction(null) }],
     lunchSelected && ['almoco', `Almoço: ${lunchSelected}`, () => setLunch('')],
+    tools && ['tools', tools === 'sim' ? 'No grupo Tools' : 'Fora do grupo Tools', () => setTools('')],
   ].filter(Boolean)
   const activeCount = allEmployees.filter((item) => employeeArchiveState(item) === 'ativo').length
   const leadershipCount = filtered.filter((item) => item.access_role === 'lideranca').length
@@ -765,9 +775,9 @@ function EmployeesTab({
           <select className="field" value={role} onChange={(event) => setRole(event.target.value)}><option value="">Todos os perfis</option><option value="tecnico">Técnico</option><option value="gestor">Gestor</option><option value="lideranca">Liderança</option><option value="admin">Admin (legado)</option><option value="somente_leitura">Somente leitura</option></select>
           <select aria-label="Situação do cadastro" className="field" value={status} onChange={(event) => { setStatus(event.target.value); setPendingAction(null) }}><option value="ativos">Ativos</option><option value="arquivados">Arquivados</option><option value="">Ativos e arquivados</option></select>
           <select aria-label="Almoço" className="field" value={lunchSelected} onChange={(event) => setLunch(event.target.value)}><option value="">Todos os almoços</option>{lunchChoices.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>
-          {/* [R4d] Lugar reservado para o grupo Tools (módulo de CHGs, P13): ainda sem efeito, nada filtra nem é enviado. */}
-          <select aria-describedby="filtro-tools-ajuda" aria-label="Grupo Tools" className="field" data-tools-reserved="" disabled value=""><option value="">Grupo Tools (em breve)</option></select>
-          <p className="field-help self-center xl:col-span-2" id="filtro-tools-ajuda">Grupo Tools: chega com o módulo de CHGs; ainda sem efeito.</p>
+          {/* [9.17] Grupo Tools (D-CHG-13): quem altera o Controle de CHG além da Liderança e do admin. */}
+          <select aria-describedby="filtro-tools-ajuda" aria-label="Grupo Tools" className="field" data-tools-filter="" value={tools} onChange={(event) => setTools(event.target.value)}><option value="">Grupo Tools: todos</option><option value="sim">No grupo Tools</option><option value="nao">Fora do grupo Tools</option></select>
+          <p className="field-help self-center xl:col-span-2" id="filtro-tools-ajuda">Grupo Tools: altera o Controle de CHG, além do que o perfil permite.</p>
         </FilterBar>
         </div>
         <div aria-label="Filtros ativos" className="flex min-h-10 flex-wrap items-center gap-2" data-active-filters="" role="group">
@@ -779,7 +789,7 @@ function EmployeesTab({
             </button>
           ))}
           {activeFilters.length > 1 && (
-            <button className="btn-ghost btn-sm" onClick={() => { setSearch(''); setTeam(''); setRole(''); setStatus('ativos'); setLunch(''); setPendingAction(null) }} type="button">Limpar filtros</button>
+            <button className="btn-ghost btn-sm" onClick={() => { setSearch(''); setTeam(''); setRole(''); setStatus('ativos'); setLunch(''); setTools(''); setPendingAction(null) }} type="button">Limpar filtros</button>
           )}
         </div>
       </div>

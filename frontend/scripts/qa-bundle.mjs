@@ -128,10 +128,21 @@ assert.ok(entryJs, 'Orçamento: index.html do build com o JS de entrada')
 const assets = readdirSync(join(appRoot, 'assets'))
 const sizeOf = (name) => statSync(join(appRoot, 'assets', name)).size
 const sumOf = (pattern) => assets.filter((name) => pattern.test(name)).reduce((total, name) => total + sizeOf(name), 0)
-const measured = { entryJs: sizeOf(entryJs), css: sumOf(/\.css$/), fonts: sumOf(/\.woff2$/) }
-for (const [key, limit] of Object.entries(BUDGET)) {
+// [9.17, D-CHG-26] O CSS da rota do Controle de CHG (src/pages/chg/chg.css,
+// importado só pela página) sai num arquivo à parte, com limite próprio; o
+// CSS do resto do portal continua com o limite de 70 KB.
+const chgCss = assets.filter((name) => /^ChgPage-[\w-]+\.css$/.test(name))
+assert.equal(chgCss.length, 1, 'Orçamento: o CSS do Controle de CHG num arquivo só, da rota')
+const measured = {
+  entryJs: sizeOf(entryJs),
+  css: assets.filter((name) => /\.css$/.test(name) && !chgCss.includes(name)).reduce((total, name) => total + sizeOf(name), 0),
+  fonts: sumOf(/\.woff2$/),
+  chgCss: sizeOf(chgCss[0]),
+}
+for (const [key, limit] of Object.entries({ ...BUDGET, chgCss: 25_000 })) {
   assert.ok(measured[key] <= limit, `Orçamento do build: ${key} com ${measured[key]} bytes (limite ${limit})`)
 }
+assert.doesNotMatch(readFileSync(join(appRoot, 'assets', entryJs), 'utf8'), /chg-kpi|chg-board/, 'Orçamento: as classes do Controle de CHG fora do JS de entrada')
 assert.ok(measured.fonts > 0, 'Orçamento: as fontes do portal estão no build')
 assert.deepEqual(assets.filter((name) => /\.(woff|ttf|otf|eot)$/.test(name)), [], 'Fontes só em woff2')
 
@@ -159,4 +170,4 @@ assert.doesNotMatch(svgIcon, /<script|href=|xlink:|@import|url\(|on[a-z]+=/i, 'M
 const ico = readFileSync(join(appRoot, 'favicon.ico'))
 assert.deepEqual([ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4), [0, 1, 2].map((i) => ico[6 + 16 * i])], [0, 1, 3, [16, 32, 48]], 'Marca: favicon.ico com 16, 32 e 48 px')
 
-console.log(`Bundle frontend QA OK (JS de entrada ${measured.entryJs} de ${BUDGET.entryJs} bytes, CSS ${measured.css} de ${BUDGET.css}, fontes ${measured.fonts} de ${BUDGET.fonts})`)
+console.log(`Bundle frontend QA OK (JS de entrada ${measured.entryJs} de ${BUDGET.entryJs} bytes, CSS ${measured.css} de ${BUDGET.css}, CSS do CHG ${measured.chgCss} de 25000, fontes ${measured.fonts} de ${BUDGET.fonts})`)

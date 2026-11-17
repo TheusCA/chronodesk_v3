@@ -32,6 +32,7 @@ const SchedulePage = lazyPage(() => import('./pages/OperationalPages'), 'Schedul
 const TimeCorrectionPage = lazyPage(() => import('./pages/OperationalPages'), 'TimeCorrectionPage')
 const PausasPage = lazyPage(() => import('./pages/PausasPage'), 'PausasPage')
 const TechniciansPage = lazyPage(() => import('./pages/TechniciansPage'), 'TechniciansPage')
+const ChgPage = lazyPage(() => import('./pages/ChgPage'), 'ChgPage')
 
 // [EE5] Ajuda do campo de justificativa de derrubar pausa (vai para a auditoria).
 const FORCE_END_NOTE_HELP = 'Não inclua informações pessoais ou de saúde.'
@@ -39,6 +40,7 @@ const FORCE_END_NOTE_HELP = 'Não inclua informações pessoais ou de saúde.'
 const emptySession = {
   role: null,
   permissions: [],
+  modulos: {},
   ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' },
   gestor: { autenticado: false, admin: false, username: '', role: null },
 }
@@ -109,6 +111,7 @@ export default function App() {
     setSession({
       role: data.role,
       permissions: data.permissions || [],
+      modulos: data.modulos || {},
       ci: data.ci,
       gestor: data.gestor,
     })
@@ -164,7 +167,8 @@ export default function App() {
 
   const permissions = useMemo(() => new Set(session.permissions), [session.permissions])
   const route = navigation.find((item) => item.path === router.path)
-  const allowed = !route?.permission || permissions.has(route.permission)
+  // [9.17] Módulo desligado (session.modulos): a rota não existe para a tela.
+  const allowed = (!route?.permission || permissions.has(route.permission)) && (!route?.module || session.modulos?.[route.module] === true)
   const funcionarioId = session.ci.funcionario_id
   // [R4b] Modo painel da Visão operacional (/app/dashboard?painel=1): a tela
   // fixa, sem a casca. Mesma permissão e mesmos dados da tela normal.
@@ -247,6 +251,8 @@ export default function App() {
     content = <TimeCorrectionPage session={session} notify={notify} />
   } else if (router.path === '/plantonistas') {
     content = <OncallPage session={session} notify={notify} />
+  } else if (router.path === '/chg') {
+    content = <ChgPage notify={notify} />
   } else if (router.path === '/chamados-criticos') {
     content = <CriticalIncidentsPage session={session} notify={notify} />
   } else if (router.path === '/relatorios') {

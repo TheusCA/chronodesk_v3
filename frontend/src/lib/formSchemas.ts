@@ -71,6 +71,9 @@ const employeeFieldsShape = {
   // F4 (D4): ativo não é campo do formulário; arquivar e restaurar são ações da linha.
   // F1 (P12): só admin altera; os demais reenviam o valor atual.
   fora_mapa_escala: z.boolean({ error: 'Valor inválido para "Fora do Mapa PA e da escala".' }).default(false),
+  // [9.17, D-CHG-13] Grupo Tools: ausente (lista sem o campo) não vai para o
+  // servidor, que mantém o gravado; somente leitura nunca entra (D-CHG-14).
+  grupo_tools: z.boolean({ error: 'Valor inválido para o grupo Tools.' }).optional(),
 }
 
 type EmployeeHours = { jornada_entrada: string; jornada_saida: string; almoco_inicio: string; almoco_fim: string }

@@ -128,6 +128,32 @@ final class ChgTable {
         return $rows;
     }
 
+    /**
+     * HTML para colar em e-mail, Teams e Excel (tableHTML do v5.2): estilo em
+     * linha (e o que esses programas entendem), valores escapados e links so
+     * http(s). A tela so copia este texto para a area de transferencia; ele
+     * nunca entra no DOM do portal.
+     */
+    public static function html(array $rows): string {
+        $esc = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $border = 'border:1px solid #9BB7C4;';
+        $cell = 'padding:3px 8px;font-family:Verdana,Geneva,Tahoma,sans-serif;font-size:10pt;color:#000;vertical-align:top;' . $border;
+        $body = '';
+        foreach ($rows as $row) {
+            if ($row['section']) {
+                $body .= '<tr><td colspan="2" style="' . $cell . 'background:' . ($row['rollback'] ? '#F7DFF0' : '#DDEBF7') . ';color:' . ($row['rollback'] ? '#863873' : '#1F4E78') . ';font-weight:700">' . $esc($row['k']) . '</td></tr>';
+                continue;
+            }
+            $color = $row['color'] !== null && preg_match('/^[0-9A-F]{6}$/i', $row['color']) === 1 ? 'font-weight:700;color:#' . $row['color'] . ';' : '';
+            $bold = $row['bold'] ? 'font-weight:700;' : '';
+            $value = $row['link'] && $row['v'] !== '' && ChgRules::validLink($row['v'])
+                ? '<a href="' . $esc($row['v']) . '" style="color:#0563C1">' . $esc($row['v']) . '</a>'
+                : $esc($row['v']);
+            $body .= '<tr><td style="' . $cell . $bold . 'width:200px">' . $esc($row['k']) . '</td><td style="' . $cell . $bold . $color . '">' . str_replace("\n", '<br>', $value) . '</td></tr>';
+        }
+        return '<table style="border-collapse:collapse;' . $border . '"><thead><tr><th colspan="2" style="' . $cell . 'background:#215967;color:#fff;font-weight:700;text-align:center;min-width:580px">Dados</th></tr></thead><tbody>' . $body . '</tbody></table>';
+    }
+
     /** Texto com tabulacao (tableText do v5.2), para colar em qualquer lugar. */
     public static function text(array $rows): string {
         $lines = ['Dados'];

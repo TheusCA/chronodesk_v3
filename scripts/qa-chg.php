@@ -604,6 +604,28 @@ assert_same(['548235', 'BF8F00', null], [
 ], 'tabela do card: as cores de status do v5.2');
 assert_same("Dados\nSolicitante\t=HYPERLINK(\"https://x.teste\")", implode("\n", array_slice(explode("\n", ChgTable::text($card['tabela'])), 0, 2)), 'texto da tabela com tabulacao');
 
+// Tabela para copiar (HTML com as cores do v5.2), montada no servidor.
+$htmlRows = [
+    ['k' => 'Solicitante', 'v' => '<b>x</b>"', 'section' => false, 'rollback' => false, 'bold' => false, 'color' => null, 'link' => false],
+    ['k' => 'Link', 'v' => 'javascript:alert(1)', 'section' => false, 'rollback' => false, 'bold' => false, 'color' => null, 'link' => true],
+    ['k' => 'Planilha', 'v' => 'https://planilha.teste/1?a=1&b=2', 'section' => false, 'rollback' => false, 'bold' => false, 'color' => null, 'link' => true],
+    ['k' => 'Rollback', 'v' => '', 'section' => true, 'rollback' => true, 'bold' => true, 'color' => null, 'link' => false],
+    ['k' => 'Status', 'v' => 'Erro', 'section' => false, 'rollback' => false, 'bold' => false, 'color' => 'C00000', 'link' => false],
+    ['k' => 'Cor', 'v' => 'x', 'section' => false, 'rollback' => false, 'bold' => false, 'color' => 'red;x:y', 'link' => false],
+];
+$copyHtml = ChgTable::html($htmlRows);
+assert_same([true, false, false, true, true, true, false], [
+    str_contains($copyHtml, '&lt;b&gt;x&lt;/b&gt;&quot;'), str_contains($copyHtml, '<b>x'), str_contains($copyHtml, 'href="javascript'),
+    str_contains($copyHtml, '<a href="https://planilha.teste/1?a=1&amp;b=2" style="color:#0563C1">'), str_contains($copyHtml, 'background:#F7DFF0'),
+    str_contains($copyHtml, 'font-weight:700;color:#C00000;'), str_contains($copyHtml, 'red;x:y'),
+], 'tabela para copiar: valores escapados, link so http(s), cores do v5.2 e cor fora do formato ignorada');
+$stale = $card;
+$stale['view']['stage'] = 'cancel';
+assert_same($card['view']['stage'], $service2->present($stale, new DateTimeImmutable('2026-11-17 12:00:00'))['view']['stage'], 'apresentar: a view e sempre recalculada (um card ja apresentado nao guarda a etapa velha)');
+$copied = $service2->copyTable($card['id']);
+assert_same(['Dados', 'Solicitante' . "\t" . '=HYPERLINK("https://x.teste")', true], [...array_slice(explode("\n", $copied['texto']), 0, 2), str_contains($copied['html'], '=HYPERLINK(&quot;https://x.teste&quot;)')], 'copiar: o servidor devolve o texto e o HTML do card');
+$expectError(static fn () => $service2->copyTable(99), 'InvalidArgumentException', 'Card inexistente.', 'copiar: card inexistente');
+
 $bytes = ChgExport::xlsx([$card, $card]);
 // Le o ZIP sem compressao: cada entrada com o CRC certo.
 $entries = [];

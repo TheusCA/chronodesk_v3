@@ -1267,7 +1267,9 @@ assert_same(true, strpos($prose6, 'alguns minutos depois da reabertura, 2 rodada
 $outside6 = array_values(array_filter($commands6, static fn (string $line): bool => strpos($line, 'curl') !== false));
 assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text6), count(array_filter($outside6, static fn (string $line): bool => strpos($line, $serverNameRead) !== false)) === count($outside6)], 'deploy 6: ServerName do chronodesk.conf em todo curl, sem marcador e sem https');
 // Prosa: a bateria da estacao com a contagem atual de scripts npm; sem papel, nada muda.
-$frontendCount6 = 3 + count(array_filter(array_keys(json_decode($readOptional($root . '/frontend/package.json'), true)['scripts'] ?? []), static fn (string $name): bool => strpos($name, 'qa:') === 0));
+// [9.17] O deploy 6 roda com o commit do 9.16 (29 scripts npm); o qa:chg vem
+// depois, no deploy 7.
+$frontendCount6 = 29;
 assert_same(true, strpos($runbook6, "`frontend: {$frontendCount6} scripts npm rodados (...): {$frontendCount6} OK, 0 com falha`") !== false && strpos($runbook6, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy6 origin/feat/employee-form-rhf-zod;') !== false, 'deploy 6: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
 assert_same(true, strpos($prose6, '**Sem papel e sem rodizio, nada muda**') !== false && strpos($prose6, 'nenhuma tabela existente e alterada') !== false && strpos($prose6, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false, 'deploy 6: sem papel nada muda, a 024 so cria tabelas e o aviso com marcadores');
 assert_same(true, strpos($prose6, '(`trocas_sobrepostas`, `trocas_fora_do_critico`,') !== false && strpos($prose6, 'o 1o rollback `OK` (`copias_de_rollback_024 = 3`) e o 2o para de proposito') !== false, 'deploy 6: as contagens de problema em 0 na variante (b), e o 2o rollback para');

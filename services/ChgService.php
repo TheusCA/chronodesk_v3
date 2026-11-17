@@ -86,10 +86,21 @@ final class ChgService {
     public function present(array $card, ?DateTimeImmutable $now = null): array {
         $card = ChgRules::card($card);
         $card['qtd_pas'] = array_sum(array_map(static fn (array $c): int => (int)($c['pas'] ?? 0), $card['carteiras'] ?? []));
-        $card += ['view' => ChgRules::view($card, $now ?? $this->now())];
+        // Sempre recalculada (um card ja apresentado que volte aqui nao guarda a view velha).
+        $card['view'] = ChgRules::view($card, $now ?? $this->now());
         // A tabela para copiar (e-mail, Teams, Excel) sai pronta do servidor.
         $card['tabela'] = ChgTable::rows($card);
         return $card;
+    }
+
+    /** Tabela do card para copiar: HTML (cores do v5.2) e texto com tabulacao. */
+    public function copyTable(int $id): array {
+        $card = $this->store->cards($id)[0] ?? null;
+        if ($card === null) {
+            throw new InvalidArgumentException('Card inexistente.');
+        }
+        $rows = $this->present($card)['tabela'];
+        return ['html' => ChgTable::html($rows), 'texto' => ChgTable::text($rows)];
     }
 
     /** Base do "Duplicar" (o formulario abre com ela; nada e gravado). */

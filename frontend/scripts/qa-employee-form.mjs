@@ -624,14 +624,15 @@ const appliedFiltersOf = (markup) => (markup.match(/class="filter-chip" data-fil
   assert.deepEqual(chipsOf(one), [['situacao', 'Situação: Arquivados', true]], 'situação diferente da padrão vira filtro ativo')
   assert.ok(!one.includes('Limpar filtros'), 'um filtro só: sem "Limpar filtros"')
   assert.match(closed, /<div aria-label="Filtros ativos" class="[^"]*" data-active-filters="" role="group">/u, 'fileira com nome')
-  // Grupo Tools: lugar reservado, desabilitado, sem efeito.
-  assert.match(closed, /<select aria-describedby="filtro-tools-ajuda" aria-label="Grupo Tools" class="field" data-tools-reserved="" disabled=""><option value="" selected="">Grupo Tools \(em breve\)<\/option><\/select>/u, 'filtro do grupo Tools reservado e desabilitado')
-  assert.ok(closed.includes('id="filtro-tools-ajuda">Grupo Tools: chega com o módulo de CHGs; ainda sem efeito.</p>'), 'filtro do grupo Tools com a ajuda')
+  // [9.17] Grupo Tools: filtro ativo (todos, no grupo, fora) e a marca no cadastro (D-CHG-13).
+  assert.match(closed, /<select aria-describedby="filtro-tools-ajuda" aria-label="Grupo Tools" class="field" data-tools-filter=""><option value="" selected="">Grupo Tools: todos<\/option><option value="sim">No grupo Tools<\/option><option value="nao">Fora do grupo Tools<\/option><\/select>/u, 'filtro do grupo Tools ativo')
+  assert.ok(closed.includes('id="filtro-tools-ajuda">Grupo Tools: altera o Controle de CHG, além do que o perfil permite.</p>'), 'filtro do grupo Tools com a ajuda')
   const fieldsSource = adminSource.slice(adminSource.indexOf('function EmployeeFields('), adminSource.indexOf('const ROLE_LABELS'))
-  const tools = fieldsSource.slice(fieldsSource.indexOf('data-tools-reserved'), fieldsSource.indexOf('</label>', fieldsSource.indexOf('data-tools-reserved')))
-  assert.ok(tools.includes('<input disabled type="checkbox" />') && !tools.includes('register('), 'marca do grupo Tools no cadastro: desabilitada e fora do React Hook Form (nada vai ao servidor)')
-  assert.ok(fieldsSource.indexOf('fora_mapa_escala') < fieldsSource.indexOf('data-tools-reserved'), 'a marca do grupo Tools vem depois do "Fora do Mapa PA" (o primeiro checkbox da edição continua ele)')
-  assert.doesNotMatch(read('src/lib/formSchemas.ts'), /tools/iu, 'o schema do cadastro não conhece o grupo Tools (o corpo enviado não muda)')
+  const tools = fieldsSource.slice(fieldsSource.indexOf('data-tools=""'), fieldsSource.indexOf('</label>', fieldsSource.indexOf('data-tools=""')))
+  assert.ok(tools.includes("<input disabled={form.access_role === 'somente_leitura'} type=\"checkbox\" {...register('grupo_tools')} />"), 'marca do grupo Tools no cadastro: no React Hook Form, desligada para o somente leitura (D-CHG-14)')
+  assert.ok(fieldsSource.indexOf('fora_mapa_escala') < fieldsSource.indexOf('data-tools=""'), 'a marca do grupo Tools vem depois do "Fora do Mapa PA" (o primeiro checkbox da edição continua ele)')
+  assert.ok(fieldsSource.includes("if (role === 'somente_leitura' && form.grupo_tools === true) setValue('grupo_tools', false, { shouldDirty: true })"), 'virar somente leitura tira o grupo Tools no formulário')
+  assert.match(read('src/lib/formSchemas.ts'), /grupo_tools: z\.boolean\(\{ error: 'Valor inválido para o grupo Tools\.' \}\)\.optional\(\),/u, 'schema: grupo Tools opcional (ausente, o servidor mantém o gravado)')
 
   // Adicionar no painel lateral.
   const creating = renderEmployees(ADMIN_SESSION, { createOpen: true })
@@ -639,7 +640,7 @@ const appliedFiltersOf = (markup) => (markup.match(/class="filter-chip" data-fil
   assert.match(creating, /<div class="fixed inset-0 z-\[60\] flex justify-end bg-black\/75" data-dialog-backdrop="">/u, 'adicionar: painel lateral (Dialog com placement="end")')
   assert.ok(drawer.includes('>Adicionar funcionário</h2>') && drawer.includes('O perfil de acesso vem deste cadastro; admin vem só da lista AD_ADMIN_USERS. A equipe não concede permissão. Revise login AD e jornada antes de salvar.'), 'adicionar: título e a regra do perfil, com as mesmas palavras')
   assert.match(drawer, /<form class="space-y-5" data-employee-create="">[\s\S]*<div class="drawer-footer"><button class="btn-secondary" type="button">Cancelar<\/button><button class="btn-primary" type="submit">Adicionar funcionário<\/button><\/div><\/form>/u, 'adicionar: Cancelar e salvar no rodapé fixo, dentro do formulário')
-  assert.ok(drawer.includes('aria-label="Fechar painel"') && drawer.includes('data-tools-reserved'), 'adicionar: fechar do painel e a marca reservada do grupo Tools')
+  assert.ok(drawer.includes('aria-label="Fechar painel"') && drawer.includes('data-tools=""'), 'adicionar: fechar do painel e a marca do grupo Tools')
   const tab = adminSource.slice(adminSource.indexOf('function EmployeesTab('), adminSource.indexOf('function UsersTab('))
   assert.match(tab, /function closeCreate\(\) \{\s*createGuard\.requestLeave\(\(\) => \{\s*resetCreateEmployee\(emptyEmployee\)\s*setCreateOpen\(false\)/u, 'adicionar: fechar sujo pergunta; descartar limpa o rascunho')
   assert.match(tab, /initialFocusRef=\{createNameRef\}\s*onClose=\{closeCreate\}\s*returnFocusRef=\{createTriggerRef\}/u, 'adicionar: foco no Nome; Esc e clique fora pelo closeCreate; foco de volta ao botão')

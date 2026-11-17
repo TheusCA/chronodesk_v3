@@ -2,9 +2,13 @@
 // Servidor simulado para os roteiros de navegador (frontend/scripts/browser).
 // Serve o build do frontend em /app e responde a API com DADOS FICTICIOS
 // (nomes "Tecnico NN", "Carteira A", "CC 1234"). Nenhum dado real.
+import { execFileSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import { extname, join, normalize } from 'node:path'
+import { dirname, extname, join, normalize } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
 
 const ADMIN_PERMISSIONS = ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end', 'escalas.retroativa', 'ausencias.retroativa', 'admin.manage', 'configuracoes.manage', 'integracoes.manage', 'usuarios_locais.manage', 'perfis.promote', 'escalas.lideranca', 'funcionarios.fora_mapa', 'funcionarios.restaurar']
 const NAMES = ['Tecnico 01 Sobrenome', 'Tecnico 02 Com Um Nome Bem Comprido', 'Tecnico 03 Sobrenome', 'Tecnico 04 Sobrenome']
@@ -206,6 +210,46 @@ function rotationResponse(body) {
   }
   return [400, { sucesso: false, mensagem: 'Ação de time de rodízio inválida.' }]
 }
+// [9.17] Controle de CHG: desligado por padrao (os outros blocos nao veem o
+// menu). useChg({ on, canManage }) liga; os cards e o mover sao montados pelo
+// PHP do projeto (ChgService::present e ChgRules::moveChanges no agora do
+// DAY), entao a tela recebe o que o servidor devolveria. Dados ficticios.
+let chgOn = false
+let chgCanManage = false
+let chgCards = null
+const CHG_NOW = `${DAY} 12:00:00`
+const chgBase = {
+  solicitante: 'Solicitante Teste 01', tipo: 'padrao', versao: 'Versao Teste 01', versao_anterior: '', descricao: 'Descricao teste', link_planilha: 'https://planilha.teste/1',
+  sugestao_at: '2026-10-29 20:00:00', service_status: 'aprovado', carteiras: [{ codigo: '9001', nome: 'Carteira Teste 01', pas: 12 }], locais: ['Local Teste 01'],
+  chg_numero: 'CHG0000001', chg_status: 'aprovada', tecnico_id: 1, tecnico_nome: NAMES[0], tecnico_nome_legado: null, created_at: `${DAY} 08:00:00.000`, updated_at: `${DAY} 08:00:00.000`, row_version: 1,
+  plans: [{ implantacao: 'CTASK0000001', backup: 'N/A', rollback: 'CTASK0000002', task_impl: 'pendente', task_bkp: 'pendente', task_roll: 'pendente' }], rollback: null,
+}
+const chgFixtures = () => [
+  { id: 1, ...chgBase, sd_inicio: '2026-10-29 20:00:00', sd_fim: '2026-10-30 20:00:00', attempts: [{ attempt_no: 1, patch_status: null, reagendando: false, registered_at: null, endpoints: [] }] },
+  { id: 2, ...chgBase, chg_numero: null, chg_status: null, tecnico_id: null, tecnico_nome: null, sd_inicio: '2026-10-30 20:00:00', sd_fim: '2026-10-31 20:00:00', attempts: [{ attempt_no: 1, patch_status: null, reagendando: false, registered_at: null, endpoints: [] }] },
+  { id: 3, ...chgBase, sd_inicio: `${DAY} 08:00:00`, sd_fim: '2026-10-29 08:00:00', attempts: [{ attempt_no: 1, patch_status: null, reagendando: false, registered_at: null, endpoints: [{ url: 'https://endpoint.teste/3', start_at: `${DAY} 09:00:00`, start_date: null }] }] },
+  { id: 4, ...chgBase, sd_inicio: '2026-10-27 08:00:00', sd_fim: '2026-10-28 08:00:00', attempts: [{ attempt_no: 1, patch_status: 'parcial', reagendando: false, registered_at: null, endpoints: [{ url: 'https://endpoint.teste/4', start_at: '2026-10-27 09:00:00', start_date: null }] }] },
+]
+function chgPhp(script, input) {
+  const code = `require 'security.php'; require 'services/ChgService.php'; $s = (new ReflectionClass('ChgService'))->newInstanceWithoutConstructor(); $now = new DateTimeImmutable('${CHG_NOW}'); $in = json_decode(stream_get_contents(STDIN), true); ${script}`
+  return JSON.parse(execFileSync(process.env.PHP_BIN || 'php', ['-r', code], { cwd: projectRoot, encoding: 'utf8', input: JSON.stringify(input), stdio: ['pipe', 'pipe', 'ignore'] }))
+}
+const chgPresent = (cards) => chgPhp('echo json_encode(array_map(fn ($c) => $s->present($c, $now), $in));', cards)
+function chgResponse(method, body) {
+  if (!chgOn) return [404, { sucesso: false, mensagem: 'Recurso não encontrado.' }]
+  chgCards ??= chgPresent(chgFixtures())
+  if (method === 'GET') return [200, { sucesso: true, now: CHG_NOW, cards: chgCards, catalogos: { carteiras: [{ id: 1, codigo: '9001', nome: 'Carteira Teste 01', ativo: true }], locais: [{ id: 1, nome: 'Local Teste 01', ativo: true }] }, tecnicos: each((nome, id) => ({ id, nome })), can_manage: chgCanManage, can_import: false }]
+  if (!chgCanManage) return [403, { sucesso: false, mensagem: 'Somente administradores, Liderança e o grupo Tools alteram o Controle de CHG.' }]
+  const card = chgCards.find((item) => item.id === Number(body?.id))
+  if (body?.action === 'move' && card) {
+    if (Number(body.row_version) !== card.row_version) return [409, { sucesso: false, mensagem: 'Alguém alterou este card; recarregue.' }]
+    const moved = chgPhp("$c = ChgRules::card($in['card']); $ch = ChgRules::moveChanges($c, $in['stage'], $now) ?? []; $c = $ch + $c; $c['row_version']++; echo json_encode($s->present($c, $now));", { card, stage: body.stage })
+    chgCards = chgCards.map((item) => (item.id === card.id ? moved : item))
+    return [200, { sucesso: true, card: moved }]
+  }
+  return [200, { sucesso: true, mensagem: 'ok', card }]
+}
+
 const summaryValue = { overtime_approved_minutes: 120, overtime_pending_minutes: 60, adjustments: 2, oncall: 1, onsite_days: 10, remote_days: 8 }
 
 const GET = {
@@ -227,6 +271,8 @@ const GET = {
 
 function apiResponse(method, key, search, body) {
   if (key === 'status.php' && method === 'GET') return [200, pausedStatus()]
+  if (key === 'portal/chg.php') return chgResponse(method, body)
+  if (key === 'session.php' && method === 'GET' && chgOn) return [200, { ...GET[key], modulos: { chg: true } }]
   if (key === 'portal/admin_force_end_break.php' && method === 'POST') {
     if (forceEndRefusal) return forceEndRefusal
     if (!pausedEmployee) return [409, { sucesso: false, mensagem: NOT_PAUSED }]
@@ -377,7 +423,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

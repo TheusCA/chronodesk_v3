@@ -1,0 +1,186 @@
+// [9.17] Controle de CHG (desenho principal, 9.17). Funções puras de
+// src/lib/chg.ts e as telas desenhadas de verdade (JSX transpilado pelo
+// TypeScript do projeto e react-dom/server), com os cards montados pelo
+// próprio servidor (ChgService::present, chamado pelo PHP): a etapa, os selos
+// e a tabela vêm do servidor, como na tela. Sem rede. Confere:
+// 1. funções puras: filtros, ordem, KPIs, painel, máscara, links, texto da tabela, preferências;
+// 2. card por etapa, com e sem permissão (somente leitura: nenhum editor);
+// 3. formulário: forma do corpo e as recusas;
+// 4. regras do redesenho: sem atributo style, classes do módulo no CSS da rota,
+//    links com noopener, menu atrás do interruptor.
+import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { registerHooks } from 'node:module'
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import ts from 'typescript'
+
+const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
+const projectRoot = join(frontendRoot, '..')
+const srcRoot = join(frontendRoot, 'src')
+const srcUrl = pathToFileURL(srcRoot).href + '/'
+const read = (path) => readFileSync(join(frontendRoot, path), 'utf8')
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if ((specifier.startsWith('./') || specifier.startsWith('../')) && !/\.[cm]?[jt]sx?$|\.css$/u.test(specifier) && context.parentURL?.startsWith(srcUrl)) {
+      for (const extension of ['.ts', '.tsx', '.js', '.jsx']) {
+        const candidate = new URL(specifier + extension, context.parentURL)
+        if (existsSync(fileURLToPath(candidate))) return nextResolve(candidate.href, context)
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    const path = url.split('?')[0]
+    if (path.startsWith(srcUrl) && path.endsWith('.css')) return { format: 'module', source: 'export default {}', shortCircuit: true }
+    if (path.startsWith(srcUrl) && /\.(jsx|tsx|ts)$/u.test(path)) {
+      const source = readFileSync(fileURLToPath(path), 'utf8')
+      const output = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 }, fileName: fileURLToPath(path) }).outputText
+      return { format: 'module', source: output, shortCircuit: true }
+    }
+    return nextLoad(url, context)
+  },
+})
+
+const lib = await import(pathToFileURL(join(srcRoot, 'lib', 'chg.ts')).href)
+const { createElement: h } = await import('react')
+const { renderToStaticMarkup } = await import('react-dom/server')
+const { ChgCard } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'ChgCard.jsx')).href)
+const { formFromCard, payloadFromForm } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'chgFormModel.js')).href)
+const { ChgDashboard, ChgList } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'ChgViews.jsx')).href)
+const text = (html) => html.replace(/<!-- -->/gu, '').replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim()
+let checks = 0
+const check = (fn) => { fn(); checks++ }
+
+// Cards montados pelo servidor (ChgService::present no agora 2026-11-17 12:00).
+const base = {
+  solicitante: 'Solicitante Teste 01', tipo: 'padrao', versao: '\\\\servidor\\setups\\Versao Teste 01', versao_anterior: '', descricao: 'Descricao teste',
+  link_planilha: 'https://planilha.teste/1', sugestao_at: '2026-11-18 20:00:00', service_status: 'aprovado',
+  carteiras: [{ codigo: '9001', nome: 'Carteira Teste 01', pas: 12 }, { codigo: null, nome: 'Carteira Teste 02', pas: 3 }], locais: ['Local Teste 01'],
+  chg_numero: 'CHG0000001', chg_status: 'aprovada', tecnico_id: 7, tecnico_nome: 'Tecnico 07', tecnico_nome_legado: null,
+  created_at: '2026-11-10 10:00:00.000', updated_at: '2026-11-10 10:00:00.000', row_version: 3,
+  plans: [{ implantacao: 'CTASK0000001', backup: 'N/A', rollback: 'CTASK0000002', task_impl: 'pendente', task_bkp: 'pendente', task_roll: 'pendente' }],
+}
+const ep = (url, at = null, date = null) => ({ url, start_at: at, start_date: date })
+const att = (n, status = null, reag = false, endpoints = [], registered = null) => ({ attempt_no: n, patch_status: status, reagendando: reag, registered_at: registered, endpoints })
+const FIXTURES = [
+  { id: 1, ...base, sd_inicio: '2026-11-18 20:00:00', sd_fim: '2026-11-19 20:00:00', attempts: [att(1)], rollback: null },
+  { id: 2, ...base, chg_numero: null, chg_status: null, tecnico_id: null, tecnico_nome: null, sd_inicio: '2026-11-18 20:00:00', sd_fim: '2026-11-19 20:00:00', attempts: [att(1)], rollback: null },
+  { id: 3, ...base, sd_inicio: '2026-11-17 08:00:00', sd_fim: '2026-11-18 08:00:00', attempts: [att(1, 'erro', false, [ep('https://endpoint.teste/1', '2026-11-17 07:00:00')], '2026-11-17 09:00:00.000'), att(2, null, true, [ep('https://endpoint.teste/2', '2026-11-17 11:00:00')])], rollback: { id: 1, url: 'https://endpoint.teste/rb', start_at: '2026-11-17 11:30:00', started_at: '2026-11-17 11:30:00', status: 'em_andamento', plan_position: 0 } },
+  { id: 4, ...base, sd_inicio: '2026-11-16 08:00:00', sd_fim: '2026-11-17 08:00:00', attempts: [att(1, 'parcial', false, [ep('https://endpoint.teste/4', '2026-11-16 09:00:00')])], rollback: null },
+  { id: 5, ...base, concluida: true, concluida_em: '2026-11-15 10:00:00.000', sd_inicio: '2026-11-14 08:00:00', sd_fim: '2026-11-15 08:00:00', attempts: [att(1, 'sucesso')], rollback: null },
+  { id: 6, ...base, service_status: 'cancelado', sd_inicio: '2026-11-20 08:00:00', sd_fim: '2026-11-21 08:00:00', attempts: [att(1)], rollback: null },
+  { id: 7, ...base, tecnico_id: null, tecnico_nome: null, sd_inicio: '2026-11-17 08:00:00', sd_fim: '2026-11-17 11:00:00', attempts: [att(1)], rollback: null, stage_manual: null },
+  { id: 8, ...base, sd_inicio: '2026-11-18 20:00:00', sd_fim: '2026-11-19 20:00:00', attempts: [att(1)], rollback: null, stage_manual: 'prep', stage_manual_auto: 'comite' },
+]
+const php = process.env.PHP_BIN || 'php'
+const code = "require 'security.php'; require 'services/ChgService.php'; $s = (new ReflectionClass('ChgService'))->newInstanceWithoutConstructor(); $now = new DateTimeImmutable('2026-11-17 12:00:00'); echo json_encode(array_map(fn ($c) => $s->present($c, $now), json_decode(stream_get_contents(STDIN), true)));"
+let cards
+try {
+  cards = JSON.parse(execFileSync(php, ['-r', code], { cwd: projectRoot, encoding: 'utf8', input: JSON.stringify(FIXTURES), stdio: ['pipe', 'pipe', 'ignore'] }))
+} catch (error) {
+  throw new Error(`PHP indisponível para montar os cards do servidor: ${error.message}`)
+}
+const byId = Object.fromEntries(cards.map((c) => [c.id, c]))
+check(() => assert.deepEqual(cards.map((c) => c.view.stage), ['comite', 'comite', 'exec', 'valid', 'done', 'cancel', 'exec', 'prep'], 'servidor: as etapas dos cards de teste'))
+
+// 1. Funções puras.
+const all = { ...lib.EMPTY_FILTERS, fechadas: true }
+check(() => assert.deepEqual(lib.filterCards(cards, lib.EMPTY_FILTERS).map((c) => c.id), [1, 2, 3, 4, 7, 8], 'filtro padrão: concluídas e canceladas escondidas'))
+check(() => assert.deepEqual(lib.filterCards(cards, { ...all, chg: 'sem' }).map((c) => c.id), [2], 'filtro CHG: sem CHG'))
+check(() => assert.deepEqual(lib.filterCards(cards, { ...all, tecnico: lib.NO_TECH }).map((c) => c.id), [2, 7], 'filtro técnico: sem técnico'))
+check(() => assert.deepEqual(lib.filterCards(cards, { ...all, tecnico: '7' }).length, 6, 'filtro técnico: por ID'))
+check(() => assert.deepEqual(lib.filterCards(cards, { ...all, q: 'endpoint.teste/rb' }).map((c) => c.id), [3], 'busca: inclui o link do rollback'))
+check(() => assert.deepEqual(lib.filterCards(cards, { ...all, q: 'carteira teste 02' }).length, 8, 'busca: carteiras sem diferença de caixa'))
+check(() => assert.deepEqual(lib.filterCards(cards, { ...all, de: '2026-11-18', ate: '2026-11-18' }).map((c) => c.id), [1, 2, 8], 'janela de/até pelo início do SD (ou a sugestão)'))
+check(() => assert.deepEqual([...cards].sort(lib.sortByWindow).map((c) => c.id), [5, 4, 7, 3, 1, 2, 8, 6], 'ordem da janela: início, fim e criação'))
+const cancelledToday = { ...byId[6], sd_inicio: '2026-11-17 08:00:00', sd_fim: '2026-11-18 08:00:00' }
+check(() => assert.equal(Object.fromEntries(lib.kpis([...lib.filterCards(cards, all), cancelledToday], '2026-11-17 12:00:00').map((x) => [x.key, x.value])).hoje, 3, 'Janelas hoje: cancelada fora, mesmo com a janela hoje (v5.2)'))
+const doneNoTech = { ...byId[5], id: 9, tecnico_id: null, tecnico_nome: null }
+check(() => assert.deepEqual(lib.dashboard([...lib.filterCards(cards, all), doneNoTech], true).unassigned.map((c) => c.id), [7, 2], 'painel com concluídas: concluída sem técnico não entra em "Sem técnico"'))
+const k = Object.fromEntries(lib.kpis(lib.filterCards(cards, lib.EMPTY_FILTERS), '2026-11-17 12:00:00').map((x) => [x.key, x]))
+check(() => assert.deepEqual([k.andamento.value, k.comite.value, k.comite.detail, k.exec.value, k.exec.detail, k.rollback.detail, k.hoje.value, k.hoje.detail], [6, 2, '1 sem CHG · 1 aprovadas', 2, '1 sem técnico', '1 em andamento', 3, 'Janela ativa hoje, 45 PAs'], 'KPIs do v5.2 sobre a lista filtrada, com a data do servidor'))
+const dash = lib.dashboard(lib.filterCards(cards, lib.EMPTY_FILTERS), false)
+check(() => assert.deepEqual([dash.keys, dash.rows.map((r) => [r.name, r.total, r.pas]), dash.unassigned.map((c) => c.id)], [['comite', 'prep', 'exec', 'valid'], [['Tecnico 07', 4, 60], ['', 2, 30]], [7, 2]], 'painel por técnico: grupos, PAs ativas e "Sem técnico" pela janela'))
+check(() => assert.deepEqual([lib.toMask('2026-11-17 08:05:00'), lib.toMask(null, '2026-11-17'), lib.toMask('')], ['17/11/2026 08:05', '17/11/2026 --:--', ''], 'máscara a partir do servidor (só data = --:--)'))
+check(() => assert.deepEqual([lib.maskDigits('171120260805'), lib.maskDigits('17a11'), lib.maskDigits('1711202608051234')], ['17/11/2026 08:05', '17/11', '17/11/2026 08:05'], 'máscara enquanto digita'))
+check(() => assert.deepEqual([
+  lib.parseMask('17/11/2026 08:05'), lib.parseMask('17/11/2026 0805'), lib.parseMask('17/11/2026'), lib.parseMask('17/11/2026', true), lib.parseMask('17/11/2026 --:--', true),
+  lib.parseMask('31/02/2026 10:00'), lib.parseMask('17/11/2026 24:00'), lib.parseMask('2026-11-17 10:00'),
+], ['2026-11-17 08:05', '2026-11-17 08:05', null, '2026-11-17', '2026-11-17', null, null, null], 'leitura da máscara: data real, hora válida, só data quando permitido'))
+check(() => assert.deepEqual(['https://a.teste/x', 'http://a.teste', 'javascript:alert(1)', 'data:text/html,x', 'www.a.teste', '\\\\srv\\pasta', 'https://', 'https://a b.teste', 'https://a.teste/\nx', 'ftp://a.teste'].map(lib.safeLink), ['https://a.teste/x', 'http://a.teste', null, null, null, null, null, null, null, null], 'link seguro: só http(s) com host (D-CHG-22)'))
+check(() => assert.deepEqual([lib.plus24h('2026-11-30 22:00'), lib.plus24h('x')], ['2026-12-01 22:00', ''], 'fim automático: início + 24 h'))
+const rows = [{ k: 'Solicitante', v: '<b>x</b>"', section: false, rollback: false, bold: false, color: null, link: false }, { k: 'Link', v: 'javascript:alert(1)', section: false, rollback: false, bold: false, color: null, link: true }, { k: 'Rollback', v: '', section: true, rollback: true, bold: true, color: null, link: false }, { k: 'Status', v: 'Erro', section: false, rollback: false, bold: false, color: 'C00000', link: false }]
+check(() => assert.equal(lib.tableText(rows), 'Dados\nSolicitante\t<b>x</b>"\nLink\tjavascript:alert(1)\nRollback\nStatus\tErro', 'texto da tabela com tabulação'))
+check(() => assert.equal(lib.tableText(byId[3].tabela).split('\n')[1], 'Solicitante\tSolicitante Teste 01', 'tabela do servidor vira texto'))
+const store = new Map()
+const fakeStorage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) }
+lib.savePrefs(fakeStorage, { ...lib.EMPTY_FILTERS, tecnico: '7', fechadas: true, q: 'segredo' })
+check(() => assert.deepEqual([lib.loadPrefs(fakeStorage), JSON.parse(store.get('chronodesk_chg_prefs'))], [{ tecnico: '7', fechadas: true }, { tecnico: '7', fechadas: true }], 'preferências por pessoa: só técnico e "mostrar concluídas"'))
+const broken = { getItem: () => { throw new Error('bloqueado') }, setItem: () => { throw new Error('cota') } }
+check(() => assert.deepEqual([lib.loadPrefs(broken), lib.savePrefs(broken, lib.EMPTY_FILTERS), lib.loadPrefs({ getItem: () => '{x' }), lib.loadPrefs(null)], [{}, undefined, {}, {}], 'preferências: armazenamento bloqueado ou corrompido não quebra a tela'))
+
+// 2. Card por etapa, com e sem permissão.
+const noop = () => Promise.resolve(null)
+const render = (card, canManage) => renderToStaticMarkup(h(ChgCard, { card, canManage, technicians: [{ id: 7, nome: 'Tecnico 07' }, { id: 8, nome: 'Tecnico 08' }], onAct: noop, onCopy: noop, onCopyTable: noop, onConfirm: noop, onEdit: noop, onDuplicate: noop, onInvalid: noop, drag: canManage ? { start: () => {} } : null }))
+const editors = /<(input|select|textarea)\b|Mover para|Concluir execução|Reabrir execução|\+ Novo|Movido manualmente|aria-label="(Editar|Duplicar|Arquivar)"/u
+for (const card of cards) {
+  const readonly = render(card, false)
+  check(() => assert.doesNotMatch(readonly, editors, `somente leitura (card ${card.id}, ${card.view.stage}): nenhum editor, mover, concluir nem arquivar`))
+  check(() => assert.ok(readonly.includes('aria-label="Copiar tabela"') && readonly.includes('draggable="false"'), `somente leitura (card ${card.id}): copiar liberado; arrastar não`))
+}
+const comite = render(byId[1], true)
+check(() => assert.ok(['Nº da CHG', 'Status da CHG', 'Técnico responsável', 'Aprovação Service', 'Planos da CHG · Plano 1', 'CHG aprovada. Inicia preparação 18/11 16h00 (faltam 28h00).', 'aria-label="Mover para outra coluna"', 'draggable="true"'].every((s) => comite.includes(s)), 'Comitê: CHG, status, planos, técnico, aprovação Service e o aviso do servidor'))
+const exec = render(byId[3], true)
+check(() => assert.ok(exec.includes('<progress aria-label="Percentual do SLA" max="100" value="17">') && exec.includes('Rollback · Em andamento') && exec.includes('↶ Rollback · endpoint e início') && exec.includes('class="chg-tick chg-at-0 chg-tc-0 chg-tick-past"'), 'Execução: barra de SLA com marcas em 5 %, rollback primeiro no carrossel'))
+check(() => assert.ok(text(exec).includes('restam 20h00') && text(exec).includes('Rollback (Em andamento) iniciado 17/11 11h30'), 'Execução: "restam" e as linhas da tentativa atual, do servidor'))
+const late = render(byId[7], true)
+check(() => assert.ok(late.includes('Janela encerrada') && late.includes('chg-card-late') && late.includes('encerrado há 1h00'), 'Execução com o fim no passado: Janela encerrada'))
+const valid = render(byId[4], true)
+check(() => assert.ok(valid.includes('Tasks para encerramento · Plano 1') && valid.includes('data-chg-finish="4"') && valid.includes('Status do patch') && !valid.includes('Link do endpoint 1'), 'Validação: endpoints só consulta, status do patch editável, tasks e Concluir'))
+const done = render(byId[5], true)
+check(() => assert.ok(done.includes('Reabrir execução') && !done.includes('data-chg-finish') && !/<input[^>]*CTASK/u.test(done), 'Concluída: planos só para consulta e Reabrir'))
+const manual = render(byId[8], true)
+check(() => assert.ok(manual.includes('Movido manualmente ↺') && manual.includes('voltar à etapa automática (Aguardando Comitê)'), 'manual: selo com a volta ao automático'))
+check(() => assert.ok(render(byId[2], true).includes('Aguardando CHG') && render(byId[6], true).includes('Cancelado'), 'selos: Aguardando CHG e Cancelado'))
+check(() => assert.ok(/<a aria-label="Abrir Planilha PAs" class="chg-icon-btn" href="https:\/\/planilha\.teste\/1" rel="noopener noreferrer" target="_blank"/u.test(comite), 'link da planilha: noopener noreferrer, nova aba'))
+check(() => assert.ok(comite.includes('Versao Teste 01') && !/href="\\\\/u.test(comite), 'caminho UNC da versão é texto, nunca link'))
+check(() => assert.ok(/Carteiras impactadas · 2: 9001 - Carteira Teste 01/u.test(text(comite)) && comite.includes('<details class="chg-details">'), 'carteiras expansíveis (details)'))
+
+// 3. Formulário.
+const form = formFromCard(byId[2])
+check(() => assert.deepEqual([form.sugestao, form.inicio, form.fim, form.carteiras[1].sem_codigo, form.tecnico_id], ['18/11/2026 20:00', '18/11/2026 20:00', '19/11/2026 20:00', true, ''], 'formulário a partir do card: máscaras e "sem código"'))
+const [payload] = payloadFromForm({ ...form, chg_numero: 'chg9', carteiras: [...form.carteiras, { codigo: '', nome: 'Carteira Teste 03', sem_codigo: true, pas: '' }] })
+check(() => assert.deepEqual([payload.sugestao_at, payload.sd_inicio, payload.chg_numero, payload.carteiras.map((c) => [c.codigo, c.sem_codigo, c.pas]), payload.tecnico_id], ['2026-11-18 20:00', '2026-11-18 20:00', 'CHG9', [['9001', false, 12], ['', true, 3], ['', true, null]], null], 'corpo do formulário: datas do servidor, número em maiúsculas, carteiras e PAs'))
+const refuse = (patch) => payloadFromForm({ ...form, ...patch })[1]
+check(() => assert.deepEqual([
+  refuse({ solicitante: ' ' }), refuse({ sugestao: '' }), refuse({ fim: '18/11/2026 19:00' }), refuse({ chg_numero: '', chg_status: 'aprovada' }),
+  refuse({ locais: ['A', 'a'] }), refuse({ locais: ['A', ''] }), refuse({ carteiras: [{ codigo: '', nome: 'X', sem_codigo: false, pas: '' }] }),
+], ['Informe o solicitante.', 'Informe a data sugestão (dd/mm/aaaa hh:mm).', 'O fim do Service Desk não pode ser antes do início.', 'Informe o número da CHG antes de marcá-la como aprovada.', 'O local a foi informado mais de uma vez.', 'Informe o local 2 ou remova a linha vazia.', "Na carteira 1, informe o código ou marque 'Sem código'."], 'formulário: as recusas do v5.2 antes de enviar (o servidor valida de novo)'))
+
+// Lista e painel.
+check(() => assert.ok(renderToStaticMarkup(h(ChgList, { cards })).includes('Lista de atualizações'), 'lista'))
+const dashHtml = renderToStaticMarkup(h(ChgDashboard, { cards: lib.filterCards(cards, lib.EMPTY_FILTERS), withDone: false, onOpen: () => {} }))
+check(() => assert.ok(dashHtml.includes('Sem técnico atribuído') && /class="chg-seg chg-tone-exec chg-w-\d+"/u.test(dashHtml) && !dashHtml.includes('style='), 'painel: barras em classes de 5 %, "Sem técnico" clicável'))
+
+// 4. Regras do redesenho e do módulo.
+const chgFiles = ['src/pages/ChgPage.jsx', 'src/pages/chg/ChgCard.jsx', 'src/pages/chg/ChgForm.jsx', 'src/pages/chg/ChgViews.jsx']
+const sources = chgFiles.map(read).join('\n')
+check(() => assert.doesNotMatch(sources, /\bstyle=\{/u, 'sem atributo style no módulo'))
+check(() => assert.doesNotMatch(sources, /dangerouslySetInnerHTML|innerHTML/u, 'nada de HTML montado entra no DOM (a tabela copiada vai só para a área de transferência)'))
+check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('await api(`${ENDPOINT}?tabela=${card.id}`)') && !/tableHtml/u.test(read('src/lib/chg.ts')), 'tabela para copiar montada pelo servidor (sem cor solta no frontend)'))
+const css = read('src/pages/chg/chg.css')
+const rendered = [comite, exec, late, valid, done, manual, dashHtml].join('\n')
+const used = new Set([...rendered.matchAll(/class="([^"]+)"/gu)].flatMap((m) => m[1].split(/\s+/u)).filter((c) => c.startsWith('chg-')))
+const missing = [...used].filter((c) => !new RegExp(`\\.${c}\\b`, 'u').test(css))
+check(() => assert.deepEqual(missing, [], 'toda classe chg- desenhada existe no CSS da rota'))
+check(() => assert.ok([0, 5, 50, 95, 100].every((n) => css.includes(`.chg-at-${n} {`)) && [5, 50, 100].every((n) => css.includes(`.chg-w-${n} {`)), 'posições e larguras de 5 em 5 % no CSS'))
+check(() => assert.ok(css.includes(":root[data-theme='dark'] {") && css.includes("@media (prefers-color-scheme: dark) {\n  :root:not([data-theme='light']) {"), 'tokens do módulo nos dois temas'))
+check(() => assert.ok(read('src/pages/ChgPage.jsx').includes("import './chg/chg.css'") && !read('src/index.css').includes('chg-'), 'CSS do módulo só na rota (D-CHG-26)'))
+check(() => assert.ok(read('src/lib/navigation.ts').includes("{ path: '/chg', label: 'Controle de CHG', icon: 'file', module: 'chg' },") && read('src/components/PortalLayout.jsx').includes('if (item.module && session.modulos?.[item.module] !== true) return null') && read('src/App.jsx').includes("(!route?.module || session.modulos?.[route.module] === true)"), 'menu e rota atrás do interruptor (session.modulos.chg)'))
+check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('useResource(ENDPOINT, { intervalMs: REFRESH_MS })') && read('src/pages/ChgPage.jsx').includes('const REFRESH_MS = 30_000'), 'atualiza a cada 30 s (e ao voltar o foco, pelo useResource)'))
+check(() => assert.ok(read('src/pages/chg/ChgForm.jsx').includes('useUnsavedChangesGuard(dirty)') && read('src/pages/chg/ChgForm.jsx').includes('<ConfirmDiscardDialog {...dialogProps} />'), 'formulário com a guarda de alteração não salva'))
+check(() => assert.ok(existsSync(join(projectRoot, 'api', 'portal', 'chg.php')) && readdirSync(join(srcRoot, 'pages', 'chg')).sort().join(',') === 'ChgCard.jsx,ChgForm.jsx,ChgViews.jsx,chg.css,chgFormModel.js', 'arquivos do módulo'))
+
+console.log(`QA do Controle de CHG (frontend) OK (${checks} conferências)`)

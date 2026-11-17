@@ -284,6 +284,9 @@ assert.match(read('tailwind.config.js'), /content: \['\.\/index\.html', '\.\/src
   for (const entry of sourceEntries) {
     for (const attribute of entry.text.matchAll(/className=\{`([^`]*)`\}/g)) {
       for (const match of attribute[1].matchAll(/(?:^|\s)([a-z][a-z0-9]*(?:-[a-z0-9]+)*)-\$\{([^}]*)\}/g)) {
+        // [9.17] As classes chg-* ficam no CSS da rota (src/pages/chg/chg.css),
+        // conferidas pelo qa:chg contra as telas desenhadas.
+        if (match[1].startsWith('chg-')) continue
         const index = attribute.index + 'className={`'.length + match.index
         const variants = templated.get(match[1]) ?? new Set()
         for (const variant of variantsOf(entry, index, match[2])) variants.add(variant)

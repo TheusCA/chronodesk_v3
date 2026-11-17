@@ -636,7 +636,8 @@ async function employees(page, port, mock) {
   {
     const created = mock.requests.filter((r) => r.method === 'POST' && r.key === 'adicionar_funcionario.php').at(-1)
     report('adicionar (D3): corpo sem id', !!created && !('id' in (created.body ?? {})), JSON.stringify(Object.keys(created?.body ?? {})))
-    report('adicionar (R4d): o corpo nao leva nada do grupo Tools', !!created && !Object.keys(created.body ?? {}).some((key) => /tools/iu.test(key)), JSON.stringify(Object.keys(created?.body ?? {})))
+    // [9.17] O grupo Tools agora vale: o corpo leva grupo_tools (desmarcado por padrao).
+    report('adicionar (9.17): o corpo leva o grupo Tools desmarcado por padrao', !!created && created.body?.grupo_tools === false, JSON.stringify(Object.keys(created?.body ?? {})))
     report('adicionar (D3): o aviso mostra o ID gerado pelo servidor', await page.evaluate(`document.body.textContent.includes('Funcionário adicionado com o ID 334.')`))
   }
   await page.evaluate(`${NAV_BUTTON('Calendário')}.click()`); await sleep(300)
@@ -2813,7 +2814,7 @@ const EMPLOYEES_STATE = `(() => {
     filtros: [...document.querySelectorAll('[data-active-filters] .filter-chip')].map((b) => b.textContent.trim()).join('|'),
     almoco: lunch?.value ?? null,
     linhas: [...document.querySelectorAll('[data-employee-list] [data-employee]')].length,
-    tools_desabilitado: document.querySelector('select[data-tools-reserved]')?.disabled ?? null,
+    tools_desabilitado: document.querySelector('select[data-tools-filter]')?.disabled ?? null,
   }
 })()`
 
@@ -2821,7 +2822,7 @@ async function employeesR4d(page, port) {
   const expectEmployees = (label, expected) => expectState(page, `Funcionarios, ${label}`, expected, EMPLOYEES_STATE)
   await goto(page, port, '/admin?tab=funcionarios', 1366)
   await page.waitFor(`!!document.querySelector('[data-employee-add]')`)
-  await expectEmployees('1366 px: a lista na primeira tela, sem formulario aberto, sem filtro, Tools desabilitado', { editar_na_tela: true, formulario_na_tela: false, filtros: '', tools_desabilitado: true })
+  await expectEmployees('1366 px: a lista na primeira tela, sem formulario aberto, sem filtro, filtro do Tools ativo (9.17)', { editar_na_tela: true, formulario_na_tela: false, filtros: '', tools_desabilitado: false })
   const total = (await page.evaluate(EMPLOYEES_STATE)).linhas
   const option = await page.evaluate(`[...document.querySelector('select[aria-label="Almoço"]').options].find((o) => o.value)?.value ?? ''`)
   await page.evaluate(`(() => { const select = document.querySelector('select[aria-label="Almoço"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, ${JSON.stringify(option)}); select.dispatchEvent(new Event('change', { bubbles: true })) })()`)
@@ -2830,6 +2831,13 @@ async function employeesR4d(page, port) {
   await page.click(`document.querySelector('[data-active-filters] [data-filter="almoco"]')`)
   await sleep(200)
   await expectEmployees('x do filtro de Almoco: sai da fileira e o select volta a "Todos os almocos"', { almoco: '', filtros: '', linhas: total })
+  // [9.17] Filtro do grupo Tools: o servidor simulado nao tem ninguem no Tools.
+  await page.evaluate(`(() => { const select = document.querySelector('select[data-tools-filter]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'sim'); select.dispatchEvent(new Event('change', { bubbles: true })) })()`)
+  await sleep(200)
+  await expectEmployees('filtro do grupo Tools ("No grupo Tools"): filtra a lista e aparece na fileira', { filtros: 'No grupo Tools', linhas: 0 })
+  await page.click(`document.querySelector('[data-active-filters] [data-filter="tools"]')`)
+  await sleep(200)
+  await expectEmployees('x do filtro do grupo Tools: a lista volta inteira', { filtros: '', linhas: total })
 
   // [Acabamento] Em 1280 px, jornada e almoco numa linha so e em HH:MM (o
   // servidor simulado manda "08:00:00" para o 3o cadastro); perfil pelo rotulo.
@@ -3199,6 +3207,86 @@ async function brandIcons(page, port) {
   report('Marca: a placa muda de cor entre os dois temas', new Set(seen).size === 2, JSON.stringify(seen))
 }
 
+// [9.17] Controle de CHG: menu so com o interruptor; somente leitura x grupo
+// Tools (can_manage do servidor); mover pelo select (o corpo leva a versao);
+// formulario com a guarda; 390 px sem rolagem lateral; alvos de 40 px; nada
+// com atributo style; os dois temas.
+const CHG_STATE = `(() => {
+  const page = document.querySelector('[data-chg-page]')
+  const cards = page ? [...page.querySelectorAll('[data-chg-card]')] : []
+  const visible = (el) => el.offsetParent !== null
+  const targets = page ? [...page.querySelectorAll('button, select, a.chg-icon-btn, [data-chg-card] input')].filter(visible).map((el) => Math.round(el.getBoundingClientRect().height)) : []
+  return {
+    menu: [...document.querySelectorAll('nav[aria-label="Módulos do portal"] button')].some((b) => b.textContent.trim() === 'Controle de CHG'),
+    pagina: !!page,
+    negado: document.body.textContent.includes('Acesso não autorizado'),
+    cards: cards.length,
+    editores: page ? page.querySelectorAll('[data-chg-card] input, [data-chg-card] select, [data-chg-move], [data-chg-edit], [data-chg-new]').length : 0,
+    copiar: page ? page.querySelectorAll('[data-chg-copy-table]').length : 0,
+    arrastaveis: cards.filter((c) => c.getAttribute('draggable') === 'true').length,
+    somente_leitura: !!document.querySelector('[data-chg-readonly]'),
+    com_style: page ? page.querySelectorAll('[style]').length : -1,
+    lateral: document.documentElement.scrollWidth > innerWidth,
+    menor_alvo: targets.length ? Math.min(...targets) : 0,
+    etapa_1: document.querySelector('[data-chg-card="1"]')?.dataset.chgStage ?? null,
+    kpis: page ? page.querySelectorAll('[data-chg-kpi]').length : 0,
+  }
+})()`
+
+async function chg917(page, port, mock) {
+  const expectChg = (label, expected) => expectState(page, `Controle de CHG, ${label}`, expected, CHG_STATE)
+  try {
+    mock.useTechnicianSession()
+    mock.useChg({ on: false })
+    await goto(page, port, '/chg', 1366)
+    await page.waitFor(`document.body.textContent.includes('Acesso não autorizado')`)
+    await expectChg('desligado: sem menu e a rota negada', { menu: false, pagina: false, negado: true })
+
+    mock.useChg({ on: true, canManage: false })
+    for (const width of [1366, 390]) {
+      await goto(page, port, '/chg', width)
+      await page.waitFor(`document.querySelectorAll('[data-chg-card]').length > 0`)
+      await expectChg(`somente leitura em ${width} px: sem editor, sem mover nem arrastar; copiar liberado; sem rolagem lateral`, { pagina: true, editores: 0, arrastaveis: 0, somente_leitura: true, copiar: (n) => n >= 3, com_style: 0, lateral: false, kpis: 6, menor_alvo: (h) => h >= 40 })
+    }
+    await goto(page, port, '/chg', 1366)
+    await page.waitFor(`document.querySelectorAll('[data-chg-card]').length > 0`)
+    await expectChg('ligado: o menu aparece', { menu: true })
+
+    mock.useChg({ on: true, canManage: true })
+    for (const width of [1366, 390]) {
+      await goto(page, port, '/chg', width)
+      await page.waitFor(`!!document.querySelector('[data-chg-move]')`)
+      await expectChg(`grupo Tools em ${width} px: editores, mover e arrastar; sem rolagem lateral; alvos de 40 px`, { editores: (n) => n > 5, arrastaveis: (n) => n >= 3, somente_leitura: false, com_style: 0, lateral: false, menor_alvo: (h) => h >= 40, etapa_1: 'comite' })
+    }
+    await goto(page, port, '/chg', 1366)
+    await page.waitFor(`!!document.querySelector('[data-chg-move="1"]')`)
+    await page.evaluate(`(() => { const select = document.querySelector('[data-chg-move="1"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'prep'); select.dispatchEvent(new Event('change', { bubbles: true })) })()`)
+    await page.waitFor(`document.querySelector('[data-chg-card="1"]')?.dataset.chgStage === 'prep'`)
+    const moved = mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/chg.php' && r.body?.action === 'move').at(-1)
+    report('Controle de CHG: "Mover para" pelo select manda acao, id, versao e etapa; a etapa nova vem do servidor (Movido manualmente)', moved?.body?.id === 1 && moved?.body?.row_version === 1 && moved?.body?.stage === 'prep' && await page.evaluate(`!!document.querySelector('[data-chg-auto="1"]')`), JSON.stringify(moved?.body))
+
+    await page.click(`document.querySelector('[data-chg-new]')`)
+    await page.waitFor(`!!document.querySelector('[data-chg-form]')`)
+    await page.evaluate(`(() => { const field = document.querySelector('[data-chg-form] input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(field, 'Solicitante Teste 02'); field.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+    await sleep(150)
+    await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+    await sleep(250)
+    report('Controle de CHG: formulario sujo pergunta antes de fechar (Esc)', await page.evaluate(`!!document.querySelector('[role="alertdialog"]') && !!document.querySelector('[data-chg-form]')`))
+    await page.click(`${button('Descartar alterações')} || ${button('Sair sem salvar')} || [...document.querySelectorAll('[role="alertdialog"] button')].at(-1)`)
+    await sleep(250)
+    report('Controle de CHG: descartar fecha o formulario', await page.evaluate(`!document.querySelector('[data-chg-form]')`))
+
+    await page.evaluate(`document.documentElement.dataset.theme = 'dark'`)
+    await sleep(150)
+    await expectChg('tema escuro: a tela continua sem style e sem rolagem lateral', { pagina: true, com_style: 0, lateral: false })
+    await page.evaluate(`document.documentElement.removeAttribute('data-theme')`)
+  } finally {
+    mock.useChg({ on: false })
+    mock.useAdminSession()
+  }
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -3243,6 +3331,7 @@ try {
     [28, 'Equipes Critico e Hibrido e o almoco do Critico (F9)', () => teamsF9(page, mock.port, mock)],
     [29, 'Icones da aba e marca do topo nos dois temas (marca)', () => brandIcons(page, mock.port)],
     [30, 'Papeis do Critico: hoje, previa, rodizio e troca (9.16)', () => criticalRoles916(page, mock.port, mock)],
+    [31, 'Controle de CHG: somente leitura x Tools, mover e formulario (9.17)', () => chg917(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

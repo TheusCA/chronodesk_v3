@@ -30,6 +30,9 @@
 // [9.16] --plano=pc      a tela Escala com os Papéis do Crítico (seção e
 //                         painel) e a Visão operacional com o papel vago, em
 //                         1280 e 390 px
+// [9.17] --plano=chg     o Controle de CHG (Liderança com edição e o
+//                         técnico só leitura, Quadro e o formulário) e a
+//                         edição de funcionário (grupo Tools), em 1280 e 390 px
 //   --app=<pasta>         fotografa outro build (o "antes" de um lote); sem
 //                         isso, ../app
 import { createServer, request } from 'node:http'
@@ -163,6 +166,11 @@ const PLAN_MARCA = [
   ['admin', ['/dashboard'], [1280, 390]],
 ]
 // [9.16] Papéis do Crítico (Liderança edita) e o alerta de papel vago.
+// [9.17] Controle de CHG: a Liderança edita; o técnico (fora do Tools) só lê.
+const PLAN_CHG = [
+  ['lideranca', ['/chg', '/chg#novo', '/admin?tab=funcionarios#editar'], [1280, 390]],
+  ['tecnico', ['/chg'], [1280, 390]],
+]
 const PLAN_PC = [
   ['lideranca', ['/escala-presencial#papeis', '/escala-presencial#papeis-painel', '/dashboard'], [1280, 390]],
 ]
@@ -171,7 +179,7 @@ const PLAN_F9 = [
   ['tecnico_critico', ['/pausas', '/pausas#almoco'], [1280, 390]],
   ['admin', ['/dashboard', '/admin?tab=funcionarios#editar'], [1280, 390]],
 ]
-const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar').replace('#time', '-time').replace('#semanal', '-semanal').replace('#editar', '-editar').replace('#almoco', '-almoco').replace('#papeis-painel', '-papeis-painel').replace('#papeis', '-papeis')
+const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar').replace('#time', '-time').replace('#semanal', '-semanal').replace('#editar', '-editar').replace('#almoco', '-almoco').replace('#papeis-painel', '-papeis-painel').replace('#papeis', '-papeis').replace('#novo', '-novo')
 
 // ---------------------------------------------------------------------------
 // [R4d] Ações antes da foto, pelo marcador no fim da rota (só no plano dos lotes R).
@@ -185,6 +193,7 @@ const ACTIONS = {
   // [9.16] Seção dos papéis à vista e o painel aberto (tolerantes: no "antes" não existem).
   '#papeis': ["document.querySelector('[data-critical-roles]')?.scrollIntoView({ block: 'start' })", "!!document.querySelector('[data-critical-roles] table')", true],
   '#papeis-painel': ["document.querySelector('[data-critical-open]')?.click()", "!!document.querySelector('[data-critical-drawer]')", true],
+  '#novo': ["document.querySelector('[data-chg-new]')?.click()", "!!document.querySelector('[data-chg-form]')"],
   '#editar': ["[...document.querySelectorAll('main button')].find((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')?.click()", "!!document.querySelector('[role=dialog] form')"],
 }
 async function shoot(page, url, width, height, file, ready) {
@@ -209,8 +218,10 @@ async function before() {
   const mock = await startMockServer(appDir)
   // [9.16] Os técnicos 1 e 3 no Crítico, com o rodízio de papéis do servidor simulado.
   if (planName === 'pc') mock.useCriticalTeam(true)
+  // [9.17] O módulo ligado na sessão; o servidor simulado devolve can_manage por perfil.
+  if (planName === 'chg') mock.useChg({ on: true, canManage: true })
   let profile = 'admin'
-  const overrides = { 'session.php': () => SESSIONS[profile], 'status.php': () => STATUS, 'portal/dashboard.php': () => DASHBOARD }
+  const overrides = { 'session.php': () => (planName === 'chg' ? { ...SESSIONS[profile], modulos: { chg: true } } : SESSIONS[profile]), 'status.php': () => STATUS, 'portal/dashboard.php': () => DASHBOARD }
   const proxy = createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
     const key = url.pathname.startsWith('/api/') ? url.pathname.slice(5) : null
@@ -234,8 +245,9 @@ async function before() {
   let total = 0
   let problems = 0
   try {
-    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : planName === 'f9' ? PLAN_F9 : planName === 'marca' ? PLAN_MARCA : planName === 'pc' ? PLAN_PC : PLAN) {
+    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : planName === 'f9' ? PLAN_F9 : planName === 'marca' ? PLAN_MARCA : planName === 'pc' ? PLAN_PC : planName === 'chg' ? PLAN_CHG : PLAN) {
       profile = who
+      if (planName === 'chg') mock.useChg({ on: true, canManage: who !== 'tecnico' })
       for (const width of widths) {
         const height = HEIGHTS.get(width)
         for (const route of routes) {
