@@ -206,6 +206,14 @@ if (!$phpExecutable) {
         Pass "QA do rodizio de papeis do Critico concluido"
     }
 
+    # Sem banco: Controle de CHG no portal (9.17): migration 025.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-chg.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do Controle de CHG falhou"
+    } else {
+        Pass "QA do Controle de CHG concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {

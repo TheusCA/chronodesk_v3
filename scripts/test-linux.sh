@@ -78,6 +78,10 @@ echo "== PHP critical roles QA =="
 # Rodizio de papeis do Critico (9.16): migration 024, regras, motor e servico; sem banco.
 php scripts/qa-critical-roles.php
 
+echo "== PHP CHG QA =="
+# Controle de CHG no portal (9.17): migration 025; sem banco.
+php scripts/qa-chg.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php
