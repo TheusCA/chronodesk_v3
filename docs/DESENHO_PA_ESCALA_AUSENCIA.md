@@ -5454,7 +5454,7 @@ Os cinco commits da 9.15.12, cada um com a bateria completa sozinha (`test-local
 | D-F9-22 | Rótulo curto nas listas e tabelas: N1, N2 e LIDERANCA como antes; Crítico e Híbrido com acento | Telas e CSV de N1 e N2 iguais; o servidor faz o mesmo nos relatórios |
 | D-F9-23 | Na Visão operacional, Crítico e Híbrido só na tabela "Situação da equipe agora" (com a Liderança, fora dos totais); os cartões do topo continuam N1 e N2 | O topo é o grupo comum; menos mudança de leiaute |
 | D-F9-24 | Sem pausa, o `duracao_limite_segundos` do `status.php` continua o do café | É o que a tela usa para a dica "até N min" do café; igual a antes |
-| D-F9-25 | Mudar a equipe de Crítico ou Híbrido para N1 ou N2 não volta o grupo para `comum` sozinho | A gestão escolhe o grupo na mesma tela (o campo vem marcado) |
+| D-F9-25 | ~~Mudar a equipe de Crítico ou Híbrido para N1 ou N2 não volta o grupo para `comum` sozinho~~ **Revista em 2026-11-17 (9.15.19):** o grupo passa a vir marcado `comum`, e a gestão pode mudar antes de salvar | A gestão escolhe o grupo na mesma tela (o campo vem marcado) |
 
 **Pendências:** revisão do lote; AD-F9-1 a AD-F9-5 com a Liderança (o lote usa as respostas padrão); o deploy 4 e, depois, o deploy 5 (data, janela e quem acompanha: A DEFINIR); o push do F9 só depois do aviso do fim do deploy 4; o lote do F4 da D-F10-25 (depois).
 
@@ -5476,7 +5476,7 @@ As respostas chegaram depois da entrega do lote (`3f96dc4` a `50443c2`, sem push
 | # | Proposta | Motivo |
 |---|---|---|
 | D-F9-26 | Banco indisponível na hora de ler as ausências: conta como ninguém ausente (a pausa segue pela jornada e pelas pausas), com registro no log | Não travar as pausas da equipe por uma falha de leitura; o pior caso é contar um ausente como disponível |
-| D-F9-27 | "Jornada do dia" vale todos os dias (a do cadastro, sem olhar a escala nem o fim de semana) | A definição da Liderança é por jornada; quando o rodízio de papéis existir, a função única passa a dizer a jornada de cada dia |
+| D-F9-27 | ~~"Jornada do dia" vale todos os dias (a do cadastro, sem olhar a escala nem o fim de semana)~~ **Revista em 2026-11-17 (9.15.19):** só em dia útil ou com exceção de escala por data | A definição da Liderança é por jornada; quando o rodízio de papéis existir, a função única passa a dizer a jornada de cada dia |
 | D-F9-28 | O destaque vem do servidor: `disponibilidade_equipes` no `status.php` e no `dashboard.php` (aditivo), com `no_turno`, `disponiveis` e `sem_disponivel` por equipe | A tela não recalcula a regra; a mesma conta do 409 |
 | D-F9-29 | Na reunião do Crítico e do Híbrido, o campo de contexto continua obrigatório, e o botão diz "Iniciar reunião" | A observação continua só da gestão e do próprio (DV11); sem aprovação, o pedido vira início |
 
@@ -5499,9 +5499,37 @@ Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a b
 
 **Roteiro do deploy 5:** sem mudança (ninguém é do Crítico ou do Híbrido no dia do deploy; a trava continua 433).
 
+#### 9.15.19 Revisão do lote F9 e os dois ajustes (2026-11-17)
+
+**Revisão de 2026-11-17:** o lote F9 com as respostas da Liderança (`fddf841` a `6d4c148`) foi **aprovado**, com D-F9-19 a D-F9-29 como propostas, exceto a D-F9-27 e a D-F9-25, revistas. O plano 9.16 foi aprovado com as respostas padrão de AD-PC-1 a AD-PC-4 (9.16.5). Ordem dada: os dois ajustes, o ícone novo (no deploy 5: já feito em `2ace053` e `e2b6051`, porque o deploy 4 estava validado no `5a2494c`) e o lote 9.16, com parada única no fim. Sem push até o aviso do fim do deploy 4.
+
+**D-F9-27 revista:** a jornada do dia (função única da 9.15.6) só vale em dia útil (`PresenceEngine::isBusinessDay`) ou quando a pessoa tem exceção de escala por data. Fora disso, a pessoa não está no turno: não conta na regra de pelo menos 1 disponível nem no destaque.
+- `PresenceEngine::hasShiftOn(data, exceção)`: dia útil ou exceção de **trabalho** (remoto, presencial, treinamento, plantão), na mesma ordem da escala do dia. Exceção de ausência não dá turno (a pessoa já ficaria ausente).
+- O gerenciador lê as exceções e as ausências do dia numa leitura só; sem banco, nenhuma exceção (fim de semana fora do turno), com registro no log.
+- **O motor não tem cadastro de feriados** (D2 e D-F10-4: feriado conta como dia útil). O feriado, então, conta como dia útil também aqui. A linha "feriado" da tabela do QA trava isso e muda junto quando o `isBusinessDay` ganhar os feriados (D-F9-30, a aprovar).
+- QA em tabela: dia útil, sábado, domingo, feriado (20/11), sábado com plantão, sábado com presencial, sábado e segunda com exceção de ausência e as ausências lançadas (férias de dia inteiro, ausência que já terminou, intervalo ativo).
+
+**D-F9-25 revista:** no formulário de Funcionários, trocar a equipe de Crítico ou Híbrido para N1 ou N2 marca o "Grupo da escala" como `comum`; a gestão ainda pode mudar antes de salvar (o servidor grava o que vier). Entre N1 e N2, e de Liderança, o grupo fica como está. A verificação da 020 ganha `n1_n2_ativos_no_grupo_separado`, só a contagem, sem valor esperado. A trava do roteiro continua com 435 verificações: **a folha do deploy 5 não mudou**.
+
+| Commit | Conteúdo | Bateria | Mutação |
+|---|---|---|---|
+| `ad3f365` | D-F9-27 revista: `hasShiftOn`, leitura do dia no gerenciador e a tabela do QA | saída 0, 28/28, navegador 1130/1130 | 11/11 |
+| `f1efc45` | D-F9-25 revista: o grupo `comum` no formulário, a contagem na verificação da 020, QA e bloco 27 do navegador | saída 0, 28/28, 1131/1131 | 9/9 |
+
+**Achado na mutação, antes da entrega:** a 1ª versão do commit da D-F9-27 (`c5b991a`, bateria saída 0, 28/28, 1130/1130) deixou **2 mutantes vivos**, os dois na leitura das ausências lançadas: o banco simulado do QA não tinha ausência (só a integração no MySQL cobria). O banco simulado passou a ler ausências e a tabela ganhou três casos; o commit foi refeito como `ad3f365`, o da D-F9-25 reaplicado por cima como `f1efc45` (antes `368136c`), e as duas baterias repetidas. Nenhum dos dois tinha sido entregue.
+
+**Integração no MySQL local** (`qa_f9`, dados fictícios, transação desfeita): 8/8 da D-F9-27 (sexta 20/11 com 3 no turno; sábado sem ninguém; sábado com plantão e presencial: 2 no turno e o 2º recusado; domingo com férias) e a da AD-F9-1 de novo, 8/8. A verificação da 020 no `qa_f9`: `n1_n2_ativos_no_grupo_separado = 0`, e 2 com dois cadastros do N1 no `separado` numa transação desfeita.
+
+**Decisões (a aprovar):**
+
+| # | Proposta | Motivo |
+|---|---|---|
+| D-F9-30 | Feriado conta como dia útil na regra de pelo menos 1 disponível enquanto o motor não tiver cadastro de feriados | O pedido cita "os feriados do motor", que ainda não existem (D2, D-F10-4); a regra usa a mesma função do motor (`isBusinessDay`), então muda junto quando o cadastro existir |
+| D-F9-31 | O deploy 5 roda com o commit de docs destes ajustes, não com a ponta do branch | Depois deles vem o lote 9.16 (a 024): o passo 1 do deploy 5 daria PARE (outra migration na lista). O push do 9.16 espera o fim do deploy 5, ou o item 0 do deploy 5 aponta o hash |
+
 ---
 
-### 9.16 Rodízio de papéis do Crítico: plano (2026-11-16; só docs, nenhum código)
+### 9.16 Rodízio de papéis do Crítico: plano (2026-11-16; só docs, nenhum código; aprovado em 2026-11-17)
 
 **Base:** AD-F9-3, respondida em 2026-11-16 (9.15.6): o Crítico tem **2 pessoas 100% presenciais**, **abertura home das 07:00 às 17:00**, **fechamento home das 10:30 às 20:30** e **mais 1 home no horário normal**; nenhum turno passa da meia-noite; **os papéis rodam** entre as pessoas, por semana ou por mês. No F9, a jornada e a presença de cada um seguem o cadastro e a regra individual, e a gestão atualiza pela tela quando o papel roda. Este lote tira essa atualização manual: o papel do dia dá a jornada e o tipo de presença, pela função única da jornada do dia (`PresenceRepository::shiftFor`, 9.15.6). **Sem planilha externa.** Reaproveita do F10-2 o padrão de versões com vigência, a trava por colaborador, a prévia antes de salvar, a auditoria só com IDs e as permissões D-F10-5. **Nenhum código antes da aprovação.**
 
@@ -5542,10 +5570,10 @@ Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a b
 
 | # | Pergunta | Sem resposta |
 |---|---|---|
-| AD-PC-1 | Rodízio por mês: mês do calendário ou blocos de 4 semanas? | Mês do calendário |
-| AD-PC-2 | Pessoa a mais (férias longas, cobertura) ou a menos que os papéis: quem fica sem papel, ou que papel fica vago? | Papel vago aparece na Visão operacional como alerta; pessoa a mais fica no cadastro |
-| AD-PC-3 | Troca pontual: só a gestão, ou o técnico pede e a gestão aprova? | Só a gestão (Liderança e admin) |
-| AD-PC-4 | Fim de semana e feriado: algum papel trabalha? | Não; como hoje, só por exceção por data |
+| AD-PC-1 | Rodízio por mês: mês do calendário ou blocos de 4 semanas? | Mês do calendário. **Respondida em 2026-11-17: mês do calendário** |
+| AD-PC-2 | Pessoa a mais (férias longas, cobertura) ou a menos que os papéis: quem fica sem papel, ou que papel fica vago? | Papel vago aparece na Visão operacional como alerta; pessoa a mais fica no cadastro. **Respondida em 2026-11-17: a resposta padrão** |
+| AD-PC-3 | Troca pontual: só a gestão, ou o técnico pede e a gestão aprova? | Só a gestão (Liderança e admin). **Respondida em 2026-11-17: Liderança e admin** |
+| AD-PC-4 | Fim de semana e feriado: algum papel trabalha? | Não; como hoje, só por exceção por data. **Respondida em 2026-11-17: a resposta padrão** |
 
 #### 9.16.6 Decisões de implementação (a aprovar)
 

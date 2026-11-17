@@ -1649,6 +1649,21 @@ Base da afirmação:
 
 ---
 
+### Lote F9 aprovado e os dois ajustes (D-F9-27 e D-F9-25 revistas) — 2026-11-17
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar a aprovação do lote F9 (com as respostas da Liderança) e do plano 9.16, e executar as duas decisões revistas: a jornada do dia só em dia útil ou com exceção de escala por data (D-F9-27) e o grupo da escala `comum` ao sair do Crítico ou do Híbrido no formulário, com a contagem de N1 e N2 no `separado` na verificação da 020 (D-F9-25). |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `ad3f365` (D-F9-27), `f1efc45` (D-F9-25) e o commit de docs com esta entrada. Sem push pela IA (o push espera o aviso do fim do deploy 4). |
+| **O que a IA alterou** | `PresenceEngine::hasShiftOn`, `GerenciadorPausas` (leitura do dia), `AdminPage.jsx` (grupo `comum`), a verificação da 020, os QAs (`qa-critico-hibrido.php` com a tabela de dias e o banco simulado com exceções e ausências; `qa:critico-hibrido`; bloco 27 do navegador) e o desenho (9.15.19, D-F9-25 e D-F9-27 revistas, AD-PC-1 a AD-PC-4 respondidas). |
+| **Dados pessoais** | Nenhum. QA e integração com dados fictícios; a verificação da 020 só conta. |
+| **Validacao executada pela IA** | Baterias completas sozinhas: `ad3f365` (saída 0, 28/28, navegador 1130/1130); `f1efc45` (saída 0, 28/28, 1131/1131). Mutação: 11/11 e 9/9 (três no navegador; um conferido à mão: o bloco 27 falha pela asserção da D-F9-25). Integração no MySQL 8.0.46 local (`qa_f9`, transação desfeita): 8/8 da D-F9-27 e 8/8 da AD-F9-1. A trava do roteiro continua com 435 verificações (a folha do deploy 5 não mudou). |
+| **Achados** | A 1ª versão do commit da D-F9-27 deixou 2 mutantes vivos (leitura das ausências lançadas sem cobertura no QA): o QA ganhou o banco simulado com ausências e três casos, e os dois commits foram refeitos antes da entrega (`c5b991a` e `368136c` viraram `ad3f365` e `f1efc45`). Durante a 1ª bateria do `368136c` a IA rodou um build e um QA na cópia principal, fora da regra de bateria sozinha; essa bateria foi descartada, e as que valem (`ad3f365` e `f1efc45`) rodaram sozinhas. |
+| **Decisões (a aprovar)** | D-F9-30 (feriado conta como dia útil até o motor ter cadastro de feriados) e D-F9-31 (o deploy 5 roda com o commit de docs destes ajustes, antes do lote 9.16). |
+| **Validacao humana** | Pendente: revisão, junto com o lote 9.16. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
