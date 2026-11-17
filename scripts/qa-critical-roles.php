@@ -85,4 +85,72 @@ foreach (['tabelas_024', 'checks_024', 'copias_de_rollback_024', 'papeis', 'pape
 }
 assert_same(2, preg_match_all('/BIT_XOR\(CRC32\(CONCAT_WS\(/', $check), 'verificacao 024: assinaturas de cadastros e regras (a 024 nao muda linha)');
 
+// ----------------------------------------------------------------------------
+// 2. Regras puras (CriticalRolePlanner)
+// ----------------------------------------------------------------------------
+require_once $root . '/services/CriticalRolePlanner.php';
+
+$role = static fn (int $id, string $name, string $type, string $start, string $end, bool $active = true): array => [$id => ['id' => $id, 'name' => $name, 'presence_type' => $type, 'work_start' => $start, 'work_end' => $end, 'active' => $active, 'sort_order' => $id]];
+$roles = $role(1, 'Presencial A', 'onsite', '08:00', '17:00') + $role(2, 'Presencial B', 'onsite', '08:00', '17:00') + $role(3, 'Abertura home', 'remote', '07:00', '17:00')
+    + $role(4, 'Fechamento home', 'remote', '10:30', '20:30') + $role(5, 'Home normal', 'remote', '08:00', '17:00');
+$week = ['id' => 1, 'effective_from' => '2026-11-16', 'period' => 'week', 'anchor_date' => '2026-11-16', 'roles' => [1, 2, 3, 4, 5], 'employees' => [11, 12, 13, 14, 15]];
+
+assert_same([true, false, true, false, false], [CriticalRolePlanner::validAnchor('week', '2026-11-16'), CriticalRolePlanner::validAnchor('week', '2026-11-17'), CriticalRolePlanner::validAnchor('month', '2026-12-01'), CriticalRolePlanner::validAnchor('month', '2026-12-02'), CriticalRolePlanner::validAnchor('dia', '2026-11-16')], 'ancora: segunda no semanal, dia 1 no mensal (AD-PC-1), periodo desconhecido recusado');
+assert_same([0, 0, 1, -1, -1, 2], [
+    CriticalRolePlanner::periodIndex('week', '2026-11-16', '2026-11-16'),
+    CriticalRolePlanner::periodIndex('week', '2026-11-16', '2026-11-22'),
+    CriticalRolePlanner::periodIndex('week', '2026-11-16', '2026-11-23'),
+    CriticalRolePlanner::periodIndex('week', '2026-11-16', '2026-11-15'),
+    CriticalRolePlanner::periodIndex('week', '2026-11-16', '2026-11-09'),
+    CriticalRolePlanner::periodIndex('week', '2026-11-16', '2026-11-30'),
+], 'periodo semanal: a semana conta da segunda; antes da ancora, negativo');
+assert_same([0, 0, 1, 12, -1], [
+    CriticalRolePlanner::periodIndex('month', '2026-11-01', '2026-11-30'),
+    CriticalRolePlanner::periodIndex('month', '2026-11-01', '2026-11-01'),
+    CriticalRolePlanner::periodIndex('month', '2026-11-01', '2026-12-01'),
+    CriticalRolePlanner::periodIndex('month', '2026-11-01', '2027-11-15'),
+    CriticalRolePlanner::periodIndex('month', '2026-11-01', '2026-10-31'),
+], 'periodo mensal: mes do calendario (AD-PC-1), atravessa o ano');
+assert_same([1, 2, 5, 3, 4], [
+    CriticalRolePlanner::rotationRoleId($week, 11, '2026-11-18'),
+    CriticalRolePlanner::rotationRoleId($week, 11, '2026-11-25'),
+    CriticalRolePlanner::rotationRoleId($week, 11, '2026-11-11'),
+    CriticalRolePlanner::rotationRoleId($week, 12, '2026-11-25'),
+    CriticalRolePlanner::rotationRoleId($week, 12, '2026-11-30'),
+], 'rodizio: no periodo k, a pessoa i fica com o papel (i + k) mod n; antes da ancora, para tras');
+assert_same(null, CriticalRolePlanner::rotationRoleId($week, 99, '2026-11-18'), 'rodizio: quem nao esta na lista fica sem papel');
+
+// Pessoa a mais e papel a mais (AD-PC-2).
+$extraPerson = ['roles' => [1, 3], 'employees' => [11, 12, 13]] + $week;
+assert_same([[1, 3, null], [3, null, 1], [null, 1, 3]], array_map(static fn (string $d): array => [CriticalRolePlanner::rotationRoleId($extraPerson, 11, $d), CriticalRolePlanner::rotationRoleId($extraPerson, 12, $d), CriticalRolePlanner::rotationRoleId($extraPerson, 13, $d)], ['2026-11-16', '2026-11-23', '2026-11-30']), 'pessoa a mais: cada semana uma fica sem papel (pelo cadastro), em rodizio');
+$extraRole = ['roles' => [1, 3, 4], 'employees' => [11, 12]] + $week;
+assert_same([[4], [1], [3]], array_map(static fn (string $d): array => CriticalRolePlanner::vacantRoleIds([$extraRole], [], $d, [11, 12]), ['2026-11-16', '2026-11-23', '2026-11-30']), 'papel a mais: um papel vago por semana, em rodizio (alerta)');
+assert_same([], CriticalRolePlanner::vacantRoleIds([$extraRole], [], '2026-11-21', [11, 12]), 'papel vago: fim de semana nao tem papel (AD-PC-4)');
+assert_same([2], CriticalRolePlanner::vacantRoleIds([$week], [], '2026-11-16', [11, 13, 14, 15]), 'papel vago: pessoa arquivada ou fora do Critico deixa o papel dela vago');
+$override = ['id' => 7, 'employee_id' => 11, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-19', 'role_id' => 4, 'reason' => 'troca'];
+assert_same([1], CriticalRolePlanner::vacantRoleIds([$week], [$override], '2026-11-18', [11, 12, 13, 14, 15]), 'papel vago: quem troca deixa o papel do rodizio vago se ninguem cobre');
+assert_same([], CriticalRolePlanner::vacantRoleIds([$week], [$override, ['employee_id' => 14, 'role_id' => 1] + $override], '2026-11-18', [11, 12, 13, 14, 15]), 'papel vago: troca que cobre o papel o tira dos vagos');
+
+// Papel do dia: dia util, troca vence, vigencia.
+$day = static fn (int $id, string $date, array $rotations = [], array $overrides = []): ?array => CriticalRolePlanner::dayRole($id, $date, $rotations, $overrides, $roles);
+assert_same(['Presencial A', 'rodizio'], [($r = $day(11, '2026-11-18', [$week]))['name'], $r['source']], 'papel do dia: o do rodizio vigente');
+assert_same([null, null], [$day(11, '2026-11-21', [$week]), $day(11, '2026-11-22', [$week])], 'papel do dia: sabado e domingo sem papel (AD-PC-4)');
+assert_same(['Fechamento home', 'troca'], [($r = $day(11, '2026-11-18', [$week], [$override]))['name'], $r['source']], 'papel do dia: a troca pontual vence o rodizio');
+assert_same(['Fechamento home', 'troca'], [($r = $day(11, '2026-11-18', [], [$override]))['name'], $r['source']], 'papel do dia: troca vale mesmo sem rodizio');
+assert_same('Presencial A', $day(11, '2026-11-20', [$week], [$override])['name'], 'papel do dia: depois da troca, o rodizio');
+assert_same(null, $day(11, '2026-11-13', [$week]), 'papel do dia: antes da vigencia do rodizio, sem papel (cadastro)');
+$next = ['id' => 2, 'effective_from' => '2026-12-01', 'period' => 'month', 'anchor_date' => '2026-12-01', 'roles' => [5], 'employees' => [11]];
+assert_same(['Presencial A', 'Home normal'], [$day(11, '2026-11-18', [$next, $week])['name'], $day(11, '2026-12-01', [$week, $next])['name']], 'papel do dia: a versao de maior inicio ate a data vale (o passado nao muda)');
+assert_same(null, CriticalRolePlanner::dayRole(11, '2026-11-18', [$week], [], [2 => $roles[2]]), 'papel do dia: papel inexistente no cadastro fica sem papel');
+
+// Previa: 8 semanas de dias uteis, papel por pessoa e vagos.
+$preview = CriticalRolePlanner::preview($extraRole, [11, 12]);
+assert_same([40, '2026-11-16', '2027-01-08', ['11' => 1, '12' => 3], [4]], [count($preview), $preview[0]['date'], $preview[39]['date'], $preview[0]['roles'], $preview[0]['vacant']], 'previa: 40 dias uteis em 8 semanas, com o papel de cada pessoa e os vagos');
+
+assert_same([true, false, false, false, false], [CriticalRolePlanner::validShift('07:00', '17:00'), CriticalRolePlanner::validShift('17:00', '07:00'), CriticalRolePlanner::validShift('08:00', '08:00'), CriticalRolePlanner::validShift('24:00', '25:00'), CriticalRolePlanner::validShift('7:00', '17:00')], 'jornada do papel: HH:MM, inicio antes do fim, sem cruzar a meia-noite');
+assert_same([[3, 1], null, null, null, null, [5]], [CriticalRolePlanner::idList([3, '1']), CriticalRolePlanner::idList([1, 1]), CriticalRolePlanner::idList([]), CriticalRolePlanner::idList(range(1, 21)), CriticalRolePlanner::idList([0]), CriticalRolePlanner::idList(['5'])], 'listas do rodizio: 1 a 20 IDs positivos, sem repetir');
+assert_same(['Abertura home 07:00–17:00', 'X 06:30–16:30'], [CriticalRolePlanner::label($roles[3]), CriticalRolePlanner::label(['name' => 'X', 'work_start' => '06:30:00', 'work_end' => '16:30:00'])], 'rotulo do papel: nome e jornada em HH:MM (tambem a hora do banco)');
+assert_same(['id' => 9, 'name' => 'X', 'presence_type' => 'remote', 'work_start' => '07:00', 'work_end' => '17:00', 'active' => true, 'sort_order' => 2], CriticalRolePlanner::roleView(['id' => '9', 'name' => 'X', 'presence_type' => 'remote', 'work_start' => '07:00:00', 'work_end' => '17:00:00', 'active' => '1', 'sort_order' => '2']), 'linha do papel: horas em HH:MM e tipos');
+assert_same([3, 1], CriticalRolePlanner::rotationView(['id' => 1, 'effective_from' => '2026-11-16', 'period' => 'week', 'anchor_date' => '2026-11-16', 'roles' => '[3, 1]', 'employees' => '[11]'])['roles'], 'linha do rodizio: listas lidas do JSON, na ordem');
+
 fwrite(STDOUT, 'QA do rodizio de papeis do Critico: ' . $GLOBALS['qa_checks'] . " verificacoes OK\n");
