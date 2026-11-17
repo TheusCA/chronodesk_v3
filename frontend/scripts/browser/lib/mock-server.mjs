@@ -104,6 +104,65 @@ const restoreRotationTeams = () => {
   rotationTeams = [{ id: 1, name: 'Time 1', active: true, current_version: version, versions: [version], members: [] }]
 }
 restoreRotationTeams()
+
+// [9.16] Papeis do Critico: os tecnicos 1 e 3 passam ao Critico so com
+// useCriticalTeam(true) (os outros blocos continuam com N1 e N2); o POST muda o
+// estado como o servidor (sem a regra: a previa vem pronta, em ordem).
+// restoreCriticalRoles(true): o rodizio vigente tambem com o tecnico 2, que
+// nao e do Critico (quem saiu), como o servidor devolve (invalid_people).
+let criticalTeam = false
+let criticalRoles = null
+let vacantCriticalRoles = null
+const restoreCriticalRoles = (withLeftPerson = false) => {
+  criticalRoles = {
+    today: DAY,
+    roles: [
+      { id: 1, name: 'Presencial A', presence_type: 'onsite', work_start: '08:00', work_end: '17:00', active: true, sort_order: 1 },
+      { id: 2, name: 'Abertura home', presence_type: 'remote', work_start: '07:00', work_end: '17:00', active: true, sort_order: 2 },
+    ],
+    rotations: [{ id: 1, effective_from: '2026-10-26', period: 'week', anchor_date: '2026-10-26', roles: [1, 2], employees: withLeftPerson ? [1, 3, 2] : [1, 3], is_current: true, invalid_people: withLeftPerson ? 1 : 0 }],
+    overrides: [],
+    today_roles: { 1: { role_id: 1, source: 'rodizio' }, 3: { role_id: 2, source: 'rodizio' } },
+    vacant_today: [],
+    reasons: ['troca', 'cobertura', 'outro'],
+  }
+}
+restoreCriticalRoles()
+function criticalRolesResponse(body) {
+  const action = body?.action
+  if (action === 'save_role') {
+    const id = Number(body.role_id) || criticalRoles.roles.length + 1
+    const role = { id, name: body.name, presence_type: body.presence_type, work_start: body.work_start, work_end: body.work_end, active: body.active !== false, sort_order: Number(body.sort_order) || 0 }
+    criticalRoles.roles = [...criticalRoles.roles.filter((item) => item.id !== id), role]
+    return [200, { sucesso: true, mensagem: body.role_id ? 'Papel salvo.' : 'Papel criado.', role_id: id, created: !body.role_id }]
+  }
+  if (action === 'preview_rotation') {
+    const people = body.employees ?? []
+    const roles = body.roles ?? []
+    const size = Math.max(people.length, roles.length)
+    const preview = [0, 1].map((week) => ({
+      date: week === 0 ? body.effective_from : '2026-11-09',
+      roles: Object.fromEntries(people.map((id, index) => [String(id), roles[(index + week) % size] ?? null])),
+      vacant: [],
+    }))
+    return [200, { sucesso: true, effective_from: body.effective_from, replaces: false, retroactive: false, extra_people: Math.max(0, people.length - roles.length), vacant_roles: Math.max(0, roles.length - people.length), preview }]
+  }
+  if (action === 'save_rotation') {
+    const id = criticalRoles.rotations.length + 1
+    criticalRoles.rotations = [...criticalRoles.rotations.map((item) => ({ ...item, is_current: false })), { id, effective_from: body.effective_from, period: body.period, anchor_date: body.anchor_date, roles: body.roles, employees: body.employees, is_current: true, invalid_people: 0 }]
+    return [200, { sucesso: true, mensagem: 'Rodízio de papéis salvo.', rotation_id: id, replaced: false }]
+  }
+  if (action === 'add_override') {
+    const id = 100 + criticalRoles.overrides.length
+    criticalRoles.overrides = [...criticalRoles.overrides, { id, employee_id: body.employee_id, starts_on: body.starts_on, ends_on: body.ends_on, role_id: body.role_id, reason: body.reason }]
+    return [200, { sucesso: true, mensagem: 'Troca de papel registrada.', override_id: id }]
+  }
+  if (action === 'remove_override') {
+    criticalRoles.overrides = criticalRoles.overrides.filter((item) => item.id !== Number(body.override_id))
+    return [200, { sucesso: true, mensagem: 'Troca de papel removida.', override_id: Number(body.override_id) }]
+  }
+  return [400, { sucesso: false, mensagem: 'Ação de papel do Crítico inválida.' }]
+}
 const rotationPreview = (body) => {
   const pattern = body?.cycle?.weeks ? body.cycle.weeks.flat() : body?.cycle?.pattern ?? []
   const days = []
@@ -258,6 +317,16 @@ function apiResponse(method, key, search, body) {
     if (body.valid_until && body.valid_from && body.valid_until < body.valid_from) return [400, { sucesso: false, mensagem: PA_END_BEFORE_START }]
     return [200, { sucesso: true, id: body.id || 99, warnings: [], conflicts: [], conflicts_more: 0 }]
   }
+  if (key === 'portal/critical_roles.php') {
+    if (method === 'GET') return [200, { sucesso: true, ...criticalRoles }]
+    return criticalRolesResponse(body)
+  }
+  if (key === 'listar_funcionarios.php' && method === 'GET' && criticalTeam) {
+    return [200, { ...GET[key], funcionarios: GET[key].funcionarios.map((employee) => (employee.id === 1 || employee.id === 3 ? { ...employee, equipe: 'critico', grupo_escala: 'separado' } : employee)) }]
+  }
+  if (key === 'portal/dashboard.php' && method === 'GET' && vacantCriticalRoles) {
+    return [200, { ...(GET[key] ?? { sucesso: true }), papeis_vagos_critico: vacantCriticalRoles }]
+  }
   if (key === 'portal/rotation_teams.php') {
     if (method === 'GET') return [200, { sucesso: true, today: DAY, teams: rotationTeams }]
     return rotationResponse(body)
@@ -275,7 +344,7 @@ const ADMIN_SESSION = GET['session.php']
 // [R4a] Sessao de tecnico (CI), para iniciar a propria pausa na tela de Pausas.
 const TECHNICIAN_SESSION = { sucesso: true, csrf_token: 'teste', role: 'tecnico', permissions: ['portal.read', 'pausas.use'], ci: { autenticado: true, funcionario_id: 3, nome: NAMES[2], username: 'tecnico.3' }, gestor: { autenticado: false, admin: false, username: '', role: null } }
 
-// Sobe o servidor numa porta livre; devolve { port, requests, restoreRotationTeams, useLeadershipSession, useAdminSession, useTechnicianSession, restoreRules, keepOnlyRule, decideElsewhere, refuseDecision, restoreDecisions, setDecisionDelay, setPausedEmployee, refuseForceEnd, restoreDocuments, removeDocumentElsewhere, refuseDocument, restorePaAssignments, refusePaRemove, setScheduleExceptions, scheduleExceptions, refuseScheduleLookup, close }.
+// Sobe o servidor numa porta livre; devolve { port, requests, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam, setVacantCriticalRoles, useLeadershipSession, useAdminSession, useTechnicianSession, restoreRules, keepOnlyRule, decideElsewhere, refuseDecision, restoreDecisions, setDecisionDelay, setPausedEmployee, refuseForceEnd, restoreDocuments, removeDocumentElsewhere, refuseDocument, restorePaAssignments, refusePaRemove, setScheduleExceptions, scheduleExceptions, refuseScheduleLookup, close }.
 // setDecisionDelay tambem atrasa derrubar pausa e remover documento (DD3).
 export function startMockServer(appDir) {
   const requests = []
@@ -308,7 +377,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, restoreRotationTeams, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

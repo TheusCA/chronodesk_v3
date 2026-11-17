@@ -27,6 +27,9 @@
 //                         (linhas Crítico e Híbrido) e a edição de funcionário,
 //                         em 1280 e 390 px
 // [Marca] --plano=marca   o login e o topo da casca, em 1280 e 390 px
+// [9.16] --plano=pc      a tela Escala com os Papéis do Crítico (seção e
+//                         painel) e a Visão operacional com o papel vago, em
+//                         1280 e 390 px
 //   --app=<pasta>         fotografa outro build (o "antes" de um lote); sem
 //                         isso, ../app
 import { createServer, request } from 'node:http'
@@ -124,6 +127,8 @@ const DASHBOARD = {
 }
 if (planName === 'f9') Object.assign(DASHBOARD.presence_summary, { critico: count(F9_TEAMS.critico), hibrido: count(F9_TEAMS.hibrido) })
 if (planName === 'f9') DASHBOARD.disponibilidade_equipes = F9_AVAILABILITY
+// [9.16] Papel vago no Crítico hoje (alerta da Visão operacional, AD-PC-2).
+if (planName === 'pc') DASHBOARD.papeis_vagos_critico = [{ id: 2, label: 'Abertura home 07:00–17:00' }]
 
 // ---------------------------------------------------------------------------
 // Rotas por perfil
@@ -157,12 +162,16 @@ const PLAN_MARCA = [
   ['anonimo', ['/'], [1280, 390]],
   ['admin', ['/dashboard'], [1280, 390]],
 ]
+// [9.16] Papéis do Crítico (Liderança edita) e o alerta de papel vago.
+const PLAN_PC = [
+  ['lideranca', ['/escala-presencial#papeis', '/escala-presencial#papeis-painel', '/dashboard'], [1280, 390]],
+]
 // [F9] Pausas do técnico do Crítico (sessão do técnico 17), a Visão operacional e a edição.
 const PLAN_F9 = [
   ['tecnico_critico', ['/pausas', '/pausas#almoco'], [1280, 390]],
   ['admin', ['/dashboard', '/admin?tab=funcionarios#editar'], [1280, 390]],
 ]
-const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar').replace('#time', '-time').replace('#semanal', '-semanal').replace('#editar', '-editar').replace('#almoco', '-almoco')
+const slug = (route) => route === '/' ? 'login' : route.replace(/^\//, '').replace('?tab=', '-').replace('?painel=1', '-painel').replace('#adicionar', '-adicionar').replace('#time', '-time').replace('#semanal', '-semanal').replace('#editar', '-editar').replace('#almoco', '-almoco').replace('#papeis-painel', '-papeis-painel').replace('#papeis', '-papeis')
 
 // ---------------------------------------------------------------------------
 // [R4d] Ações antes da foto, pelo marcador no fim da rota (só no plano dos lotes R).
@@ -173,6 +182,9 @@ const ACTIONS = {
   '#semanal': ["(() => { const select = document.querySelector('select[name=\"rule_type\"]'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'cycle'); select.dispatchEvent(new Event('change', { bubbles: true })); setTimeout(() => [...document.querySelectorAll('main form button')].find((b) => b.textContent.trim() === 'Semana a semana')?.click(), 200) })()", "(() => { const editor = document.querySelector('main form [data-weekly-editor]'); editor?.scrollIntoView({ block: 'center' }); return !!editor })()", true],
   // [F9] Almoço escolhido (tolerante: no "antes" a opção não existe).
   '#almoco': ["document.querySelector('[data-own-pause=\"start\"] input[value=\"Almoço\"]')?.click()", "!!document.querySelector('[data-own-pause=\"start\"] input[value=\"Almoço\"]:checked')", true],
+  // [9.16] Seção dos papéis à vista e o painel aberto (tolerantes: no "antes" não existem).
+  '#papeis': ["document.querySelector('[data-critical-roles]')?.scrollIntoView({ block: 'start' })", "!!document.querySelector('[data-critical-roles] table')", true],
+  '#papeis-painel': ["document.querySelector('[data-critical-open]')?.click()", "!!document.querySelector('[data-critical-drawer]')", true],
   '#editar': ["[...document.querySelectorAll('main button')].find((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')?.click()", "!!document.querySelector('[role=dialog] form')"],
 }
 async function shoot(page, url, width, height, file, ready) {
@@ -195,6 +207,8 @@ async function before() {
   const appDir = appOption ? resolve(appOption) : resolve(here, '../../../app')
   if (!existsSync(join(appDir, 'index.html'))) throw new Error('falta o build em ../app (npm run build)')
   const mock = await startMockServer(appDir)
+  // [9.16] Os técnicos 1 e 3 no Crítico, com o rodízio de papéis do servidor simulado.
+  if (planName === 'pc') mock.useCriticalTeam(true)
   let profile = 'admin'
   const overrides = { 'session.php': () => SESSIONS[profile], 'status.php': () => STATUS, 'portal/dashboard.php': () => DASHBOARD }
   const proxy = createServer((req, res) => {
@@ -220,7 +234,7 @@ async function before() {
   let total = 0
   let problems = 0
   try {
-    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : planName === 'f9' ? PLAN_F9 : planName === 'marca' ? PLAN_MARCA : PLAN) {
+    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : planName === 'f9' ? PLAN_F9 : planName === 'marca' ? PLAN_MARCA : planName === 'pc' ? PLAN_PC : PLAN) {
       profile = who
       for (const width of widths) {
         const height = HEIGHTS.get(width)

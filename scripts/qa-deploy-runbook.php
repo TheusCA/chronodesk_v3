@@ -1118,8 +1118,10 @@ assert_same(3, count($polling5), 'deploy 5: tres medicoes do polling (status.php
 assert_same(true, strpos($prose5, 'alguns minutos depois da reabertura, 2 rodadas por endpoint, valendo a melhor, sessao de gestao') !== false, 'deploy 5: polling alguns minutos depois da reabertura, 2 rodadas, sessao de gestao');
 $outside5 = array_values(array_filter($commands5, static fn (string $line): bool => strpos($line, 'curl') !== false));
 assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text5), count(array_filter($outside5, static fn (string $line): bool => strpos($line, $serverNameRead) !== false)) === count($outside5)], 'deploy 5: ServerName do chronodesk.conf em todo curl, sem marcador e sem https');
-// Prosa: a bateria da estacao com a contagem atual de scripts npm, ninguem muda de equipe, a copia das ausencias.
-$frontendCount5 = 3 + count(array_filter(array_keys(json_decode($readOptional($root . '/frontend/package.json'), true)['scripts'] ?? []), static fn (string $name): bool => strpos($name, 'qa:') === 0));
+// Prosa: a bateria da estacao com a contagem de scripts npm, ninguem muda de equipe, a copia das ausencias.
+// [9.16] O deploy 5 roda com o commit validado na estacao, que tinha 28 scripts
+// npm; os qa:* criados depois dele (qa:critical-roles) nao mudam a folha do deploy 5.
+$frontendCount5 = 28;
 assert_same(true, strpos($runbook5, "`frontend: {$frontendCount5} scripts npm rodados (...): {$frontendCount5} OK, 0 com falha`") !== false && strpos($runbook5, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy5 origin/feat/employee-form-rhf-zod;') !== false, 'deploy 5: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
 assert_same(true, strpos($prose5, '**Ninguem muda de equipe no deploy**') !== false && strpos($prose5, '`portal_absences` e **copiada**') !== false && strpos($prose5, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false && strpos($prose5, '(AD-F9-5)') !== false, 'deploy 5: ninguem muda de equipe, a copia das ausencias com a manutencao ligada e o aviso com marcadores');
 assert_same(true, strpos($prose5, '**PARE** com `ativos_equipe_desconhecida` maior que 0') !== false && strpos($prose5, 'os **dois** rollbacks param de proposito') !== false, 'deploy 5: a Q-F9 para com cadastro de equipe desconhecida; na variante (b), os dois rollbacks param');

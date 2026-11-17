@@ -384,6 +384,10 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
       {noneAvailableLabels(livePauses.status?.disponibilidade_equipes ?? data?.disponibilidade_equipes).map((label) => (
         <InlineAlert key={label} title={label} tone="danger"><span data-none-available="">Quem está no turno está em pausa ou almoço.</span></InlineAlert>
       ))}
+      {/* [9.16, AD-PC-2] Papel do rodízio do Crítico sem ninguém hoje. */}
+      {(data?.papeis_vagos_critico || []).length > 0 && (
+        <InlineAlert title="Papel vago no Crítico hoje" tone="warning"><span data-vacant-roles="">{data.papeis_vagos_critico.map((role) => role.label).join(', ')}</span></InlineAlert>
+      )}
       {presence !== null && !pausesAvailable && (
         <InlineAlert tone="warning" title="Pausas indisponíveis">
           O estado das pausas não pôde ser lido: Em pausa aparece como "—", e quem está em pausa conta pela escala até a leitura voltar.

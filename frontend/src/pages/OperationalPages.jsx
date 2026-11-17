@@ -14,6 +14,7 @@ import { PartialMarker, PresenceBadge } from '../components/ui/Presence'
 import { Segmented } from '../components/ui/Segmented'
 import { Tag } from '../components/ui/Tag'
 import { RotationTeamsSection, WeeklyCycleEditor } from './RotationTeams'
+import { CriticalRolesSection } from './CriticalRoles'
 import { defaultWeek, isMonday, nextMonday, patternToWeeks, teamByEmployee } from '../lib/rotationTeams'
 import { useResource } from '../hooks/useResource'
 import { useUnsavedChangesGuard } from '../hooks/useUnsavedChangesGuard'
@@ -306,6 +307,8 @@ export function SchedulePage({ session, notify }) {
   const employees = useEmployees()
   // [F10-2] Times de rodízio: a gestão lê; quem é membro tem a regra pelo time.
   const rotation = useResource('portal/rotation_teams.php', { enabled: canManage })
+  // [9.16] Papéis do Crítico: a gestão lê; Liderança e admin gravam.
+  const criticalRoles = useResource('portal/critical_roles.php', { enabled: canManage })
   const teamOf = teamByEmployee(rotation.data?.teams, rotation.data?.today || today)
   const [filters, setFilters] = useState({ from: currentCompetency.start, to: currentCompetency.end, team: '', employee_id: '' })
   const resource = useResource(`portal/schedules.php${queryString(filters)}`)
@@ -854,6 +857,9 @@ export function SchedulePage({ session, notify }) {
       )}
       {canManage && (
         <RotationTeamsSection employees={employees.data?.funcionarios} notify={notify} onChanged={() => { resource.refresh(); history.refresh() }} resource={rotation} session={session} />
+      )}
+      {canManage && (
+        <CriticalRolesSection employees={employees.data?.funcionarios} notify={notify} resource={criticalRoles} session={session} />
       )}
       <OperationalShell resource={resource}>
         {activeRules.length > 0 && (

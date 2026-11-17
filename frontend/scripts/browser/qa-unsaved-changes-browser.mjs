@@ -3074,6 +3074,70 @@ async function teamsF9(page, port, mock) {
   report('F9, Visao operacional, 390 px: os seis cartoes, sem rolagem lateral', !phone.lateral && phone.cartoes === 'n1|n2|total|critico|hibrido|lideranca', JSON.stringify(phone))
 }
 
+// 30. [9.16] Papéis do Crítico na tela Escala: o papel de hoje por pessoa; o
+// painel com a prévia obrigatória antes de salvar o rodízio (o corpo leva as
+// pessoas e os papéis na ordem); a troca pontual com o motivo da lista
+// fechada; em 390 px, sem rolagem lateral; e o alerta de papel vago na Visão
+// operacional (AD-PC-2).
+async function criticalRoles916(page, port, mock) {
+  const posts = (action) => mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/critical_roles.php' && r.body?.action === action)
+  const setInput = async (expression, value) => {
+    await page.evaluate(`(() => { const field = ${expression}; const select = field instanceof HTMLSelectElement; Object.getOwnPropertyDescriptor(select ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(field, ${JSON.stringify(value)}); field.dispatchEvent(new Event(select ? 'change' : 'input', { bubbles: true })) })()`)
+    await sleep(150)
+  }
+  const DRAWER = `document.querySelector('[data-critical-drawer]')`
+  mock.restoreCriticalRoles(true)
+  mock.useCriticalTeam(true)
+  try {
+    for (const width of [1366, 390]) {
+      await goto(page, port, '/escala-presencial', width)
+      await page.waitFor(`!!document.querySelector('[data-critical-roles] table')`)
+      const state = await page.evaluate(`(() => ({ texto: document.querySelector('[data-critical-roles]').textContent.replace(/\\s+/g, ' '), lateral: document.documentElement.scrollWidth > innerWidth }))()`)
+      report(`Papeis do Critico, ${width} px: o papel de hoje de cada pessoa do Critico, sem rolagem lateral`, /Tecnico 01 Sobrenome.*Presencial A 08:00–17:00/.test(state.texto) && /Tecnico 03 Sobrenome.*Abertura home 07:00–17:00/.test(state.texto) && !/Tecnico 02/.test(state.texto) && !state.lateral, JSON.stringify(state))
+    }
+    await page.click(`document.querySelector('[data-critical-open]')`)
+    await page.waitFor(`!!${DRAWER}`)
+    const drawer = await page.evaluate(`(() => {
+      const dialog = ${DRAWER}.closest('[role="dialog"]')
+      return { lateral: document.documentElement.scrollWidth > innerWidth || dialog.scrollWidth > dialog.clientWidth + 1, salvar: document.querySelector('[data-rotation-save]').disabled, pessoas: [...document.querySelectorAll('[data-ordered-picker="pessoas"] [data-picked]')].map((li) => li.dataset.picked).join(',') }
+    })()`)
+    report('Papeis do Critico, 390 px: painel sem rolagem lateral; salvar o rodizio desligado antes da previa; pessoas do rodizio vigente na ordem, sem quem saiu do Critico', !drawer.lateral && drawer.salvar && drawer.pessoas === '1,3', JSON.stringify(drawer))
+    const previewsBefore = posts('preview_rotation').length
+    await page.click(`document.querySelector('[data-rotation-preview-run]')`)
+    await page.waitFor(`!!document.querySelector('[data-rotation-preview] table') && !document.querySelector('[data-rotation-save]').disabled`)
+    report('Papeis do Critico: a previa vem do servidor e libera o salvar', posts('preview_rotation').length === previewsBefore + 1)
+    const savesBefore = posts('save_rotation').length
+    await page.click(`document.querySelector('[data-rotation-save]')`)
+    await sleep(500)
+    const saved = posts('save_rotation').at(-1)
+    report('Papeis do Critico: o corpo do salvar leva periodo, ancora, pessoas (sem quem saiu do Critico) e papeis na ordem', posts('save_rotation').length === savesBefore + 1 && saved.body.period === 'week' && saved.body.anchor_date === '2026-10-26' && JSON.stringify(saved.body.employees) === '[1,3]' && JSON.stringify(saved.body.roles) === '[1,2]', JSON.stringify(saved?.body))
+    await page.waitFor(`!!document.querySelector('[data-override-form] select')`)
+    await setInput(`document.querySelectorAll('[data-override-form] select')[0]`, '3')
+    await setInput(`document.querySelectorAll('[data-override-form] select')[1]`, '1')
+    await page.click(`[...document.querySelectorAll('[data-override-form] button')].find((b) => b.textContent.trim() === 'Registrar troca')`)
+    await page.waitFor(`!!document.querySelector('[data-override-remove]')`)
+    const added = posts('add_override').at(-1)
+    report('Papeis do Critico: a troca pontual vai com pessoa, papel, datas e o motivo da lista fechada, e aparece na lista', added?.body?.employee_id === 3 && added?.body?.role_id === 1 && added?.body?.reason === 'troca' && added?.body?.starts_on === '2026-10-28', JSON.stringify(added?.body))
+    await page.click(`document.querySelector('[data-override-remove]')`)
+    await page.waitFor(`!document.querySelector('[data-override-remove]')`)
+    report('Papeis do Critico: remover a troca', posts('remove_override').length >= 1)
+    await page.click(`document.querySelector('[aria-label="Fechar painel"]')`)
+    await sleep(200)
+  } finally {
+    mock.useCriticalTeam(false)
+    mock.restoreCriticalRoles()
+  }
+  mock.setVacantCriticalRoles([{ id: 2, label: 'Abertura home 07:00–17:00' }])
+  try {
+    await goto(page, port, '/dashboard', 1366)
+    await page.waitFor(`!!document.querySelector('[data-vacant-roles]')`)
+    const vacant = await page.evaluate(`document.querySelector('[data-vacant-roles]').closest('[class*="inline-alert"]').textContent.replace(/\\s+/g, ' ').trim()`)
+    report('Visao operacional: alerta "Papel vago no Crítico hoje" com o rotulo do servidor (AD-PC-2)', /^Papel vago no Crítico hoje\s*Abertura home 07:00–17:00$/.test(vacant), vacant)
+  } finally {
+    mock.setVacantCriticalRoles(null)
+  }
+}
+
 // 29. [Marca] Os ícones da aba e a marca do topo: os <link rel=icon> e o
 // apple-touch-icon respondem 200 com o tipo de imagem certo; a marca do topo
 // (SVG inline) aparece e segue o tema (placa no token do botão principal,
@@ -3178,6 +3242,7 @@ try {
     [27, 'Times de rodizio e ciclo semana a semana (F10-2)', () => rotationTeamsF102(page, mock.port, mock)],
     [28, 'Equipes Critico e Hibrido e o almoco do Critico (F9)', () => teamsF9(page, mock.port, mock)],
     [29, 'Icones da aba e marca do topo nos dois temas (marca)', () => brandIcons(page, mock.port)],
+    [30, 'Papeis do Critico: hoje, previa, rodizio e troca (9.16)', () => criticalRoles916(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue
