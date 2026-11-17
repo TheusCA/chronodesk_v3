@@ -248,6 +248,14 @@ final class PresenceEngine {
         return self::isoWeekday($date) <= 5;
     }
 
+    /**
+     * [D-F9-27 revista] Dia com jornada: dia util ou excecao de trabalho por
+     * data (o sabado de plantao), como na escala do dia (scheduleForDay).
+     */
+    public static function hasShiftOn(string $date, ?array $exception): bool {
+        return isset(self::WORK_EXCEPTIONS[(string)($exception['exception_type'] ?? '')]) || self::isBusinessDay($date);
+    }
+
     /** Ciclo valido ou null: pattern de 2 a 20 posicoes onsite/remote e ancora em dia util. */
     public static function cycleConfig(array $config): ?array {
         $pattern = $config['pattern'] ?? null;

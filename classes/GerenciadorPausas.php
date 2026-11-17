@@ -803,69 +803,67 @@ class GerenciadorPausas {
     }
 
     /**
-     * [AD-F9-1] Membros ativos da equipe: id => na jornada do dia (a funcao
-     * unica da 9.15.6), em pausa (almoco incluido) e com ausencia ativa agora.
+     * [AD-F9-1] Membros ativos da equipe: id => no turno (D-F9-27 revista: dia
+     * util ou excecao de trabalho por data, e dentro da jornada do dia, a
+     * funcao unica da 9.15.6), em pausa (almoco incluido) e com ausencia ativa.
      */
     private function membros_disponibilidade(string $equipe, DateTimeImmutable $agora): array {
         $membros = array_filter($this->funcionarios, static fn ($f): bool => ($f->ativo ?? true) && PortalTeams::normalize($f->equipe) === $equipe);
-        $ausentes = $this->ausentes_agora($membros, $agora);
         $dia = $agora->format('Y-m-d');
         $hora = $agora->format('H:i');
+        [$excecoes, $ausencias] = $this->excecoes_e_ausencias_do_dia($membros, $dia);
         $situacao = [];
         foreach ($membros as $f) {
-            $jornada = PresenceRepository::shiftFor(['work_start' => $f->jornada_entrada, 'work_end' => $f->jornada_saida], $dia);
-            $situacao[(int)$f->id] = [
-                'in_shift' => PauseRules::inShift($jornada['work_start'], $jornada['work_end'], $hora),
+            $id = (int)$f->id;
+            $excecao = $excecoes[$id . ':' . $dia] ?? null;
+            $jornada = PresenceRepository::shiftFor(['id' => $id, 'work_start' => $f->jornada_entrada, 'work_end' => $f->jornada_saida], $dia);
+            $situacao[$id] = [
+                'in_shift' => PresenceEngine::hasShiftOn($dia, $excecao) && PauseRules::inShift($jornada['work_start'], $jornada['work_end'], $hora),
                 'paused' => $f->em_pausa === true,
-                'absent' => isset($ausentes[(int)$f->id]),
+                'absent' => self::ausente_agora($jornada, $agora, $excecao, $ausencias[$id] ?? []),
             ];
         }
         return $situacao;
     }
 
     /**
-     * [AD-F9-1] Quem tem ausencia lancada ativa agora (id => true), pela regra
-     * do motor (dia inteiro, "a partir de", intervalo e excecao antiga). Sem
-     * banco ou com falha: ninguem, com registro no log (D-F9-26).
+     * [AD-F9-1] Excecoes por data e ausencias aprovadas do dia (uma leitura de
+     * cada). Sem banco ou com falha: nenhuma, com registro no log (D-F9-26);
+     * sem excecao, fim de semana fica fora do turno (D-F9-27 revista).
      */
-    private function ausentes_agora(array $membros, DateTimeImmutable $agora): array {
+    private function excecoes_e_ausencias_do_dia(array $membros, string $dia): array {
         if ($membros === []) {
-            return [];
+            return [[], []];
         }
         if (!$this->pdo) {
-            error_log('[PAUSA] Ausencias indisponiveis (sem banco) para a regra de disponibilidade.');
-            return [];
+            error_log('[PAUSA] Excecoes e ausencias indisponiveis (sem banco) para a regra de disponibilidade.');
+            return [[], []];
         }
-        $dia = $agora->format('Y-m-d');
         try {
             $repositorio = new PresenceRepository($this->pdo);
-            $excecoes = $repositorio->exceptionsByDay($dia, $dia);
-            $ausencias = $repositorio->absencesByEmployee($dia, $dia);
+            return [$repositorio->exceptionsByDay($dia, $dia), $repositorio->absencesByEmployee($dia, $dia)];
         } catch (Throwable $e) {
-            error_log('[PAUSA] Ausencias indisponiveis para a regra de disponibilidade: ' . get_class($e));
-            return [];
+            error_log('[PAUSA] Excecoes e ausencias indisponiveis para a regra de disponibilidade: ' . get_class($e));
+            return [[], []];
         }
-        $ausentes = [];
-        foreach ($membros as $f) {
-            $id = (int)$f->id;
-            $itens = [];
-            if (in_array($excecoes[$id . ':' . $dia]['exception_type'] ?? null, PresenceEngine::ABSENCE_EXCEPTIONS, true)) {
-                $itens[] = ['origem' => 'excecao', 'period_type' => 'full_day'];
-            }
-            foreach ($ausencias[$id] ?? [] as $linha) {
-                if ($linha['starts_on'] <= $dia && $linha['ends_on'] >= $dia) {
-                    $itens[] = ['origem' => 'ausencia', 'period_type' => $linha['period_type'], 'start_time' => $linha['start_time'], 'end_time' => $linha['end_time']];
-                }
-            }
-            if ($itens === []) {
-                continue;
-            }
-            $colaborador = PresenceRepository::shiftFor(['id' => $id, 'work_start' => $f->jornada_entrada, 'work_end' => $f->jornada_saida], $dia);
-            if (PresenceEngine::nowPresence($colaborador, $agora, [], null, $itens, null)['situacao'] === 'ausente') {
-                $ausentes[$id] = true;
+    }
+
+    /**
+     * [AD-F9-1] Ausencia lancada ativa agora, pela regra do motor (dia inteiro,
+     * "a partir de", intervalo e excecao antiga de ausencia).
+     */
+    private static function ausente_agora(array $jornada, DateTimeImmutable $agora, ?array $excecao, array $ausencias): bool {
+        $dia = $agora->format('Y-m-d');
+        $itens = [];
+        if (in_array($excecao['exception_type'] ?? null, PresenceEngine::ABSENCE_EXCEPTIONS, true)) {
+            $itens[] = ['origem' => 'excecao', 'period_type' => 'full_day'];
+        }
+        foreach ($ausencias as $linha) {
+            if ($linha['starts_on'] <= $dia && $linha['ends_on'] >= $dia) {
+                $itens[] = ['origem' => 'ausencia', 'period_type' => $linha['period_type'], 'start_time' => $linha['start_time'], 'end_time' => $linha['end_time']];
             }
         }
-        return $ausentes;
+        return $itens !== [] && PresenceEngine::nowPresence($jornada, $agora, [], null, $itens, null)['situacao'] === 'ausente';
     }
 
     /**

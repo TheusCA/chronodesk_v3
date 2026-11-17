@@ -66,6 +66,54 @@ function get_db_connection() {
     return $GLOBALS['qa_pdo'];
 }
 
+/** Banco simulado so com as leituras do dia da regra de disponibilidade (excecoes e ausencias). */
+final class QaF9Pdo extends PDO {
+    /** @var list<array{0:int,1:string,2:string}> [employee_id, exception_date, exception_type] */
+    public array $exceptions = [];
+    /** @var list<array{0:int,1:string,2:string,3:string,4:?string,5:?string}> [employee_id, starts_on, ends_on, period_type, start_time, end_time] */
+    public array $absences = [];
+
+    public function __construct() {
+    }
+
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaF9Statement($this, (string)preg_replace('/\s+/', ' ', trim($query)));
+    }
+}
+
+final class QaF9Statement extends PDOStatement {
+    private array $rows = [];
+
+    public function __construct(private QaF9Pdo $pdo, private string $sql) {
+    }
+
+    public function execute(?array $params = null): bool {
+        if (str_starts_with($this->sql, 'SELECT employee_id, exception_date, exception_type FROM portal_schedule_exceptions WHERE exception_date BETWEEN :date_from AND :date_to')) {
+            $this->rows = [];
+            foreach ($this->pdo->exceptions as [$id, $date, $type]) {
+                if ($date >= $params[':date_from'] && $date <= $params[':date_to']) {
+                    $this->rows[] = ['employee_id' => $id, 'exception_date' => $date, 'exception_type' => $type];
+                }
+            }
+            return true;
+        }
+        if (str_starts_with($this->sql, 'SELECT id, employee_id, starts_on, ends_on, period_type, start_time, end_time, category FROM portal_absences')) {
+            $this->rows = [];
+            foreach ($this->pdo->absences as $index => [$id, $from, $to, $type, $start, $end]) {
+                if ($from <= $params[':date_to'] && $to >= $params[':date_from']) {
+                    $this->rows[] = ['id' => $index + 1, 'employee_id' => $id, 'starts_on' => $from, 'ends_on' => $to, 'period_type' => $type, 'start_time' => $start, 'end_time' => $end, 'category' => 'folga'];
+                }
+            }
+            return true;
+        }
+        throw new RuntimeException('QaF9Pdo: consulta inesperada: ' . substr($this->sql, 0, 80));
+    }
+
+    public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
+        return $this->rows;
+    }
+}
+
 $root = dirname(__DIR__);
 $position =static fn (string $sql, string $needle): int => ($found = strpos($sql, $needle)) === false ? -1 : $found;
 
@@ -424,6 +472,50 @@ $hybridMeeting = $manager->solicitar_pausa(45, 'Reunião', 'Pauta de teste');
 assert_same([true, true], [$hybridMeeting['sucesso'], $manager->getFuncionario(45)->em_pausa], 'Hibrido: reuniao sem aprovacao; sozinho no turno, liberada');
 $n1Meeting = $manager->solicitar_pausa(41, 'Reunião', 'Pauta de teste');
 assert_same([true, false, 'pendente'], [$n1Meeting['sucesso'], $manager->getFuncionario(41)->em_pausa, $manager->getFuncionario(41)->status_aprovacao], 'N1: reuniao continua com aprovacao');
+
+// [D-F9-27 revista] No turno so em dia util (PresenceEngine::isBusinessDay)
+// ou com excecao de trabalho por data para a pessoa. Banco simulado com as
+// excecoes do dia; o 49 (Critico) e o 45 (Hibrido) sao os casos da tabela.
+$GLOBALS['qa_pdo'] = new QaF9Pdo();
+$turno = static function (string $when, array $exceptions, array $absences = []): array {
+    $GLOBALS['qa_pdo']->exceptions = $exceptions;
+    $GLOBALS['qa_pdo']->absences = $absences;
+    $manager = $GLOBALS['qa_new_manager']();
+    $manager->usar_relogio(new DateTimeImmutable($when));
+    $situation = $manager->obter_status()['disponibilidade_equipes'];
+    $results = [];
+    foreach ([43, 44, 48, 49] as $id) {
+        $result = $manager->iniciar_pausa($id, 'Café');
+        $results[] = $result['sucesso'] ? 'ok' : ($result['codigo'] ?? 'erro');
+    }
+    return [$situation['critico']['no_turno'], $situation['hibrido']['no_turno'], implode(' ', $results), $manager->obter_status()['disponibilidade_equipes']['critico']['sem_disponivel']];
+};
+$GLOBALS['qa_new_manager'] = $newManager;
+foreach ([
+    // [caso, agora, excecoes do dia, no turno Critico, no turno Hibrido, o cafe de 43, 44, 48 e 49 nessa ordem, destaque do Critico]
+    ['dia util (segunda)', '2026-11-16 10:00:00', [], 4, 1, 'ok ok ok equipe_sem_disponivel', false],
+    ['sabado', '2026-11-21 10:00:00', [], 0, 0, 'ok ok ok ok', false],
+    ['domingo', '2026-11-22 10:00:00', [], 0, 0, 'ok ok ok ok', false],
+    // O motor ainda nao tem cadastro de feriados (D2, D-F10-4: feriado conta
+    // como dia util); quando tiver, o isBusinessDay muda e esta linha tambem.
+    ['feriado (20/11, sexta)', '2026-11-20 10:00:00', [], 4, 1, 'ok ok ok equipe_sem_disponivel', false],
+    ['sabado com excecao de plantao do 49 e remoto do 45', '2026-11-21 10:00:00', [[49, '2026-11-21', 'oncall'], [45, '2026-11-21', 'remote']], 1, 1, 'ok ok ok ok', true],
+    ['sabado com excecao presencial do 48 e do 49', '2026-11-21 10:00:00', [[48, '2026-11-21', 'onsite'], [49, '2026-11-21', 'onsite']], 2, 0, 'ok ok ok equipe_sem_disponivel', false],
+    ['sabado com excecao de ausencia do 49', '2026-11-21 10:00:00', [[49, '2026-11-21', 'vacation']], 0, 0, 'ok ok ok ok', false],
+    ['segunda com excecao de ausencia do 49', '2026-11-16 10:00:00', [[49, '2026-11-16', 'day_off']], 3, 1, 'ok ok equipe_sem_disponivel ok', false],
+] as [$case, $when, $exceptions, $critical, $hybrid, $pauses, $highlight]) {
+    assert_same([$critical, $hybrid, $pauses, $highlight], $turno($when, $exceptions), 'no turno (D-F9-27 revista): ' . $case);
+}
+// Ausencias lancadas (aprovadas), pela regra do motor: dia inteiro, vigencia e intervalo.
+foreach ([
+    ['segunda com ferias lancadas do 49 (dia inteiro)', [[49, '2026-11-16', '2026-11-20', 'full_day', null, null]], 3, 'ok ok equipe_sem_disponivel ok'],
+    ['segunda com ausencia do 49 que acabou na sexta', [[49, '2026-11-09', '2026-11-13', 'full_day', null, null]], 4, 'ok ok ok equipe_sem_disponivel'],
+    ['segunda com intervalo do 48 das 09:00 as 11:00', [[48, '2026-11-16', '2026-11-16', 'interval', '09:00:00', '11:00:00']], 3, 'ok ok ok equipe_sem_disponivel'],
+] as [$case, $absences, $critical, $pauses]) {
+    assert_same([$critical, 1, $pauses, false], $turno('2026-11-16 10:00:00', [], $absences), 'no turno, ausencia lancada: ' . $case);
+}
+assert_same([true, false, true, true, false], [PresenceEngine::hasShiftOn('2026-11-16', null), PresenceEngine::hasShiftOn('2026-11-21', null), PresenceEngine::hasShiftOn('2026-11-21', ['exception_type' => 'training']), PresenceEngine::hasShiftOn('2026-11-22', ['exception_type' => 'remote']), PresenceEngine::hasShiftOn('2026-11-22', ['exception_type' => 'leave'])], 'hasShiftOn: dia util ou excecao de trabalho; excecao de ausencia nao da turno');
+$GLOBALS['qa_pdo'] = null;
 
 // Finalizar (sem banco: historico no CSV de reserva): sem alerta no almoco; excedeu pelo limite aplicado.
 $manager = $newManager();
