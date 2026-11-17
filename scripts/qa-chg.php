@@ -6,7 +6,10 @@ declare(strict_types=1);
 //
 // Sem banco:
 // 1. estrutura da migration 025, do rollback, das linhas do ensaio e da
-//    consulta de verificacao.
+//    consulta de verificacao;
+// 2. regras puras (ChgRules), em tabela: etapa automatica e com o manual
+//    (igual ao v5.2), mover, concluir, tentativas de patch, duplicar, links e
+//    os rotulos prontos (selo, aviso, barra de SLA).
 // As consultas SQL rodam em MySQL no ensaio (scripts/ensaio-migration.sh) e na
 // integracao do lote. Dados so ficticios.
 //
@@ -120,5 +123,210 @@ foreach (['tabelas_025', 'checks_025', 'copias_de_rollback_025', 'grupo_tools', 
     assert_same(1, preg_match('/\bAS ' . $column . '\b/', $check), "verificacao 025: conta {$column} (nome exato da coluna)");
 }
 assert_same(1, preg_match_all('/BIT_XOR\(CRC32\(CONCAT_WS\(/', $check), 'verificacao 025: assinatura dos cadastros (a 025 nao muda linha)');
+
+// ----------------------------------------------------------------------------
+// 2. Regras puras (ChgRules): etapa, movimento, conclusao, tentativas, links
+// ----------------------------------------------------------------------------
+require_once $root . '/services/ChgRules.php';
+
+$now = new DateTimeImmutable('2026-11-17 12:00:00');
+$ep = static fn (string $url, ?string $at = null, ?string $date = null): array => ['url' => $url, 'start_at' => $at, 'start_date' => $date];
+$attempt = static fn (int $n, ?string $status = null, bool $reag = false, array $endpoints = [], ?string $registered = null): array => ['attempt_no' => $n, 'patch_status' => $status, 'reagendando' => $reag, 'registered_at' => $registered, 'endpoints' => $endpoints];
+$approved = ['chg_numero' => 'CHG0000001', 'chg_status' => 'aprovada', 'service_status' => 'aprovado', 'tecnico_id' => 7];
+$c = static fn (array $over = []): array => ChgRules::card(array_merge($approved, $over));
+
+// autoStage (igual ao v5.2), em tabela: [rotulo, card, esperado]
+$autoCases = [
+    ['rollback com sucesso vai a Validacao mesmo com o patch em Erro', ['rollback' => ['status' => 'sucesso'], 'attempts' => [$attempt(1, 'erro')]], 'valid'],
+    ['rollback em andamento fica em Execucao', ['rollback' => ['status' => 'em_andamento']], 'exec'],
+    ['rollback com erro fica em Execucao', ['rollback' => ['status' => 'erro']], 'exec'],
+    ['rollback vale ate sem CHG', ['chg_numero' => null, 'chg_status' => null, 'rollback' => ['status' => 'em_andamento']], 'exec'],
+    ['sem numero de CHG: Comite', ['chg_numero' => null, 'chg_status' => null, 'sd_inicio' => '2026-11-17 08:00:00'], 'comite'],
+    ['CHG pendente: Comite', ['chg_status' => 'pendente', 'sd_inicio' => '2026-11-17 08:00:00'], 'comite'],
+    ['numero so com espacos: Comite', ['chg_numero' => '   ', 'sd_inicio' => '2026-11-17 08:00:00'], 'comite'],
+    ['patch Sucesso: Validacao', ['attempts' => [$attempt(1, 'sucesso')]], 'valid'],
+    ['patch Parcial: Validacao', ['attempts' => [$attempt(1, 'parcial')]], 'valid'],
+    ['patch Erro: Preparacao', ['attempts' => [$attempt(1, 'erro')], 'sd_inicio' => '2026-11-17 08:00:00'], 'prep'],
+    ['reagendando com o novo patch no futuro: Preparacao', ['sd_inicio' => '2026-11-17 08:00:00', 'attempts' => [$attempt(1, 'erro', false, [], '2026-11-17 09:00:00.000'), $attempt(2, null, true, [$ep('', '2026-11-17 13:00:00')])]], 'prep'],
+    ['reagendando a partir do inicio do novo patch: Execucao', ['attempts' => [$attempt(1), $attempt(2, null, true, [$ep('', '2026-11-17 12:00:00')])]], 'exec'],
+    ['reagendando: vale o menor inicio dos endpoints', ['attempts' => [$attempt(1), $attempt(2, null, true, [$ep('', '2026-11-17 18:00:00'), $ep('', '2026-11-17 11:59:00')])]], 'exec'],
+    ['reagendando so com a data (horario pendente): Preparacao', ['sd_inicio' => '2026-11-17 08:00:00', 'attempts' => [$attempt(1), $attempt(2, null, true, [$ep('', null, '2026-11-17')])]], 'prep'],
+    ['sem inicio do SD: Preparacao', ['sd_inicio' => null], 'prep'],
+    ['agora no inicio: Execucao', ['sd_inicio' => '2026-11-17 12:00:00'], 'exec'],
+    ['inicio no passado: Execucao', ['sd_inicio' => '2026-11-16 20:00:00'], 'exec'],
+    ['exatamente 4 h antes: Preparacao', ['sd_inicio' => '2026-11-17 16:00:00'], 'prep'],
+    ['4 h e 1 min antes: Comite', ['sd_inicio' => '2026-11-17 16:01:00'], 'comite'],
+    ['inicio amanha: Comite', ['sd_inicio' => '2026-11-18 20:00:00'], 'comite'],
+];
+foreach ($autoCases as [$label, $over, $expected]) {
+    assert_same($expected, ChgRules::autoStage($c($over), $now), "autoStage: {$label}");
+}
+
+// stageOf: cancelamento, conclusao e a combinacao manual x automatico do v5.2.
+$stageCases = [
+    ['aprovacao Service cancelada', ['service_status' => 'cancelado', 'concluida' => true], 'cancel'],
+    ['CHG cancelada', ['chg_status' => 'cancelada', 'concluida' => true], 'cancel'],
+    ['concluida', ['concluida' => true, 'sd_inicio' => '2026-11-17 08:00:00'], 'done'],
+    ['manual a frente da base: fica no manual', ['sd_inicio' => '2026-11-18 20:00:00', 'stage_manual' => 'prep', 'stage_manual_auto' => 'comite'], 'prep'],
+    ['manual a frente: o automatico que passa dele vale', ['sd_inicio' => '2026-11-17 08:00:00', 'stage_manual' => 'prep', 'stage_manual_auto' => 'comite'], 'exec'],
+    ['manual dois passos a frente, automatico entre os dois', ['sd_inicio' => '2026-11-17 15:00:00', 'stage_manual' => 'exec', 'stage_manual_auto' => 'comite'], 'exec'],
+    ['manual atras da base, automatico ainda na base: manual', ['sd_inicio' => '2026-11-17 15:00:00', 'stage_manual' => 'comite', 'stage_manual_auto' => 'prep'], 'comite'],
+    ['manual atras da base, automatico mudou: automatico', ['sd_inicio' => '2026-11-17 08:00:00', 'stage_manual' => 'comite', 'stage_manual_auto' => 'prep'], 'exec'],
+    ['manual desconhecido: automatico', ['sd_inicio' => '2026-11-17 08:00:00', 'stage_manual' => 'triagem', 'stage_manual_auto' => 'comite'], 'exec'],
+    ['base desconhecida: compara com o automatico', ['sd_inicio' => '2026-11-18 20:00:00', 'stage_manual' => 'valid', 'stage_manual_auto' => 'x'], 'valid'],
+];
+foreach ($stageCases as [$label, $over, $expected]) {
+    assert_same($expected, ChgRules::stageOf($c($over), $now), "stageOf: {$label}");
+}
+assert_same([true, false, false], [
+    ChgRules::isManual($c(['sd_inicio' => '2026-11-18 20:00:00', 'stage_manual' => 'prep', 'stage_manual_auto' => 'comite']), $now),
+    ChgRules::isManual($c(['sd_inicio' => '2026-11-17 15:00:00', 'stage_manual' => 'prep', 'stage_manual_auto' => 'comite']), $now),
+    ChgRules::isManual($c(['sd_inicio' => '2026-11-18 20:00:00', 'stage_manual' => 'prep', 'stage_manual_auto' => 'comite', 'concluida' => true]), $now),
+], 'isManual: so quando a etapa vem do manual e difere da automatica (e nunca concluida)');
+assert_same([true, false, false], [
+    ChgRules::waitingWindow($c(['sd_inicio' => '2026-11-18 20:00:00']), $now),
+    ChgRules::waitingWindow($c(['sd_inicio' => '2026-11-18 20:00:00', 'chg_status' => 'pendente']), $now),
+    ChgRules::waitingWindow($c(['sd_inicio' => '2026-11-17 15:00:00']), $now),
+], 'waitingWindow: CHG aprovada ainda no Comite');
+assert_same([true, false, false], [
+    ChgRules::isLate($c(['sd_inicio' => '2026-11-16 08:00:00', 'sd_fim' => '2026-11-17 11:59:00']), $now),
+    ChgRules::isLate($c(['sd_inicio' => '2026-11-16 08:00:00', 'sd_fim' => '2026-11-17 12:00:00']), $now),
+    ChgRules::isLate($c(['sd_inicio' => '2026-11-16 08:00:00', 'sd_fim' => '2026-11-17 11:00:00', 'attempts' => [$attempt(1, 'sucesso')]]), $now),
+], 'isLate: Janela encerrada so em Execucao com o fim no passado');
+
+// Conclusao (finishBlocker) e tasks necessarias.
+$plans = [
+    ['implantacao' => 'CTASK0000001', 'backup' => 'N/A', 'rollback' => 'na', 'task_impl' => 'fechada', 'task_bkp' => 'pendente', 'task_roll' => 'pendente'],
+    ['implantacao' => 'CTASK0000002', 'backup' => 'CTASK0000003', 'rollback' => '', 'task_impl' => 'pendente', 'task_bkp' => 'pendente', 'task_roll' => 'pendente'],
+];
+assert_same([true, false, false, false, true], [ChgRules::taskNeeded('CTASK1'), ChgRules::taskNeeded('N/A'), ChgRules::taskNeeded(' na '), ChgRules::taskNeeded(''), ChgRules::taskNeeded('NAO')], 'task necessaria: plano preenchido e diferente de N/A');
+assert_same(['Task de Implantação (Plano 2)', 'Task de Backup (Plano 2)'], ChgRules::openTasks($c(['plans' => $plans])), 'tasks abertas: so as necessarias, com o plano');
+$finishCases = [
+    ['rollback em andamento', ['rollback' => ['status' => 'em_andamento'], 'plans' => [ChgRules::emptyPlan()]], 'Finalize o rollback com Sucesso antes de concluir.'],
+    ['rollback com erro', ['rollback' => ['status' => 'erro']], 'Finalize o rollback com Sucesso antes de concluir.'],
+    ['sem tecnico', ['tecnico_id' => null], 'Informe o técnico responsável antes de concluir.'],
+    ['tecnico so do historico vale', ['tecnico_id' => null, 'tecnico_nome_legado' => 'Tecnico 01'], null],
+    ['duas tasks abertas', ['plans' => $plans], 'Feche antes de concluir: Task de Implantação (Plano 2) e Task de Backup (Plano 2).'],
+    ['tres tasks abertas', ['plans' => [$plans[1], ['implantacao' => 'X1'] + ChgRules::emptyPlan()]], 'Feche antes de concluir: Task de Implantação (Plano 1), Task de Backup (Plano 1) e Task de Implantação (Plano 2).'],
+    ['uma task aberta', ['plans' => [['implantacao' => 'X1'] + ChgRules::emptyPlan()]], 'Feche antes de concluir: Task de Implantação (Plano 1).'],
+    ['rollback com sucesso e tudo fechado', ['rollback' => ['status' => 'sucesso'], 'plans' => [$plans[0]]], null],
+];
+foreach ($finishCases as [$label, $over, $expected]) {
+    assert_same($expected, ChgRules::finishBlocker($c($over)), "concluir: {$label}");
+}
+
+// Mover (moveTo do v5.2).
+$future = ['sd_inicio' => '2026-11-18 20:00:00'];
+assert_same(['concluida' => true, 'concluida_em' => '2026-11-17 12:00:00.000', 'service_status' => 'aprovado', 'chg_status' => 'pendente'], ChgRules::moveChanges($c(['service_status' => 'cancelado', 'chg_status' => 'cancelada']), 'done', $now), 'mover para Concluidas: conclui e desfaz o cancelamento (CHG com numero volta a Pendente)');
+assert_same(['concluida' => true, 'concluida_em' => '2026-11-17 12:00:00.000', 'chg_status' => null], ChgRules::moveChanges($c(['chg_numero' => '', 'chg_status' => 'cancelada']), 'done', $now), 'mover para Concluidas: CHG cancelada sem numero fica sem status');
+assert_same(['service_status' => 'cancelado'], ChgRules::moveChanges($c($future), 'cancel', $now), 'mover para Canceladas: aprovacao Service = Cancelado');
+assert_same(['concluida' => false, 'stage_manual' => 'prep', 'stage_manual_auto' => 'comite'], ChgRules::moveChanges($c($future), 'prep', $now), 'mover para outra coluna: grava o manual e a base automatica');
+assert_same(['concluida' => false, 'service_status' => 'aguardando', 'stage_manual' => null, 'stage_manual_auto' => null], ChgRules::moveChanges($c($future + ['service_status' => 'cancelado']), 'comite', $now), 'mover de Canceladas para a coluna automatica: desfaz o cancelamento e limpa o manual');
+assert_same(['concluida' => false, 'stage_manual' => null, 'stage_manual_auto' => null], ChgRules::moveChanges($c($future + ['concluida' => true]), 'comite', $now), 'reabrir pelo movimento: volta ao automatico');
+assert_same(null, ChgRules::moveChanges($c($future), 'comite', $now), 'mover para a coluna atual: nada muda');
+try {
+    ChgRules::moveChanges($c(), 'arquivo', $now);
+    assert_same('excecao', 'nenhuma', 'mover para etapa desconhecida e recusado');
+} catch (InvalidArgumentException $e) {
+    assert_same('Etapa inválida.', $e->getMessage(), 'mover para etapa desconhecida e recusado');
+}
+$withRollback = $c(['rollback' => ['status' => 'sucesso'], 'attempts' => [$attempt(1, 'erro')]]);
+assert_same(['stage_manual' => 'valid', 'stage_manual_auto' => 'prep'], ChgRules::keepStageChanges($withRollback, array_merge($withRollback, ['rollback' => null]), $now), 'excluir o rollback mantem a etapa (grava o manual)');
+assert_same(['stage_manual' => null, 'stage_manual_auto' => null], ChgRules::keepStageChanges($c(['rollback' => ['status' => 'erro'], 'sd_inicio' => '2026-11-17 08:00:00']), $c(['sd_inicio' => '2026-11-17 08:00:00']), $now), 'excluir o rollback na etapa automatica limpa o manual');
+assert_same([], ChgRules::keepStageChanges($c(['concluida' => true]), $c(), $now), 'excluir o rollback de card concluido nao mexe na etapa');
+
+// Tentativas de patch.
+$two = $c(['attempts' => [$attempt(1, 'erro', false, [$ep('https://e.teste/1', '2026-11-17 09:00:00')], '2026-11-17 10:00:00.000'), $attempt(2, 'erro', true, [$ep(''), $ep('https://e.teste/2', '2026-11-17 11:00:00'), $ep('', null, '2026-11-17')])]]);
+$after = ChgRules::newPatchAttempts($two, $now);
+assert_same([3, [1, 2, 3], [null, null, '2026-11-17 12:00:00.000'], [true, true, null]], [count($after), array_column($after, 'attempt_no'), [$after[2]['registered_at'], $after[0]['registered_at'] === '2026-11-17 10:00:00.000' ? null : 'x', $after[1]['registered_at']], [$after[1]['reagendando'], $after[2]['reagendando'], $after[2]['patch_status']]], 'novo patch: a atual vai ao historico com a data de registro e abre a 3a, reagendando');
+assert_same([[$ep('https://e.teste/2', '2026-11-17 11:00:00'), $ep('', null, '2026-11-17')], [$ep('', null, '2026-11-17')]], [$after[1]['endpoints'], $after[2]['endpoints']], 'novo patch: so os endpoints preenchidos vao ao historico; a nova abre com so a data de hoje');
+try {
+    ChgRules::newPatchAttempts($c(['attempts' => array_map(static fn (int $n): array => $attempt($n), range(1, 50))]), $now);
+    assert_same('excecao', 'nenhuma', 'novo patch: limite de 50 tentativas');
+} catch (DomainException $e) {
+    assert_same('Limite de 50 tentativas de patch neste card.', $e->getMessage(), 'novo patch: limite de 50 tentativas');
+}
+$deleted = ChgRules::deleteAttempt(['attempts' => $after], 3);
+assert_same([[1, 2], null, true], [array_column($deleted, 'attempt_no'), $deleted[1]['registered_at'], $deleted[1]['reagendando']], 'excluir a tentativa atual: a anterior volta a ser a atual');
+$deleted = ChgRules::deleteAttempt(['attempts' => $after], 1);
+assert_same([[1, 2], '2026-11-17 12:00:00.000', null], [array_column($deleted, 'attempt_no'), $deleted[0]['registered_at'], $deleted[1]['registered_at']], 'excluir do historico: renumera e a atual continua');
+assert_same([['attempt_no' => 1, 'patch_status' => null, 'reagendando' => false, 'registered_at' => null, 'endpoints' => []]], ChgRules::deleteAttempt($c(['attempts' => [$attempt(1, 'erro', true, [$ep('https://e.teste/1')])]]), 1), 'excluir a unica tentativa: volta vazia');
+try {
+    ChgRules::deleteAttempt($two, 3);
+    assert_same('excecao', 'nenhuma', 'excluir tentativa inexistente');
+} catch (InvalidArgumentException $e) {
+    assert_same('Tentativa inexistente.', $e->getMessage(), 'excluir tentativa inexistente');
+}
+
+// Duplicar.
+$dup = ChgRules::duplicateBase(['id' => 9, 'row_version' => 4, 'legacy_id' => 'a1', 'solicitante' => 'Solicitante Teste 01', 'concluida_em' => 'x'] + $c(['plans' => $plans, 'rollback' => ['status' => 'sucesso'], 'concluida' => true, 'stage_manual' => 'prep', 'stage_manual_auto' => 'comite', 'attempts' => $two['attempts']]));
+assert_same([false, false, false, null, null, null, 'aguardando', false, null, null, null, 1, [], $plans, 'Solicitante Teste 01'], [
+    isset($dup['id']), isset($dup['row_version']), isset($dup['legacy_id']), $dup['chg_numero'], $dup['chg_status'], $dup['tecnico_id'], $dup['service_status'],
+    $dup['concluida'], $dup['stage_manual'], $dup['stage_manual_auto'], $dup['rollback'], count($dup['attempts']), $dup['attempts'][0]['endpoints'], $dup['plans'], $dup['solicitante'],
+], 'duplicar: sem CHG, tecnico, endpoints, rollback, historico, status e etapa; os planos ficam (v5.2)');
+
+// Links (D-CHG-22), numero da CHG e fim automatico.
+$linkCases = [
+    ['', true], ['https://endpoint.teste/a?b=1', true], ['http://endpoint.teste', true], ['HTTPS://ENDPOINT.TESTE', true],
+    ['javascript:alert(1)', false], ['JavaScript:alert(1)', false], ['data:text/html;base64,AAAA', false], ['vbscript:x', false], ['file:///c:/x', false],
+    ['www.endpoint.teste', false], ['endpoint.teste/x', false], ['https://', false], ['https:///caminho', false], ['https://a b.teste', false],
+    ["https://endpoint.teste\n", false], ['ftp://endpoint.teste', false], ['\\\\servidor\\pasta', false], ['https://' . str_repeat('a', 2041), false],
+];
+foreach ($linkCases as [$url, $expected]) {
+    assert_same($expected, ChgRules::validLink($url), 'link: ' . var_export(substr($url, 0, 40), true));
+}
+assert_same(['CHG0000001', null, null], [ChgRules::chgNumber(' chg0000001 '), ChgRules::chgNumber('   '), ChgRules::chgNumber(null)], 'numero da CHG: maiusculas, vazio = sem numero');
+assert_same('2026-11-18 20:30:00', ChgRules::autoEnd('2026-11-17 20:30:00'), 'fim do SD automatico: inicio + 24 h');
+
+// Rotulos prontos (o servidor calcula; a tela so mostra).
+assert_same(['2h05', '45 min', 'agora', 'agora'], [
+    ChgRules::untilLabel(new DateTimeImmutable('2026-11-17 14:05:30'), $now),
+    ChgRules::untilLabel(new DateTimeImmutable('2026-11-17 12:45:00'), $now),
+    ChgRules::untilLabel($now, $now),
+    ChgRules::untilLabel(new DateTimeImmutable('2026-11-17 11:00:00'), $now),
+], 'rotulo "faltam": h e min, ou agora');
+$badgeCases = [
+    [['chg_numero' => null, 'chg_status' => null, 'sd_inicio' => '2026-11-18 20:00:00'], ['text' => 'Aguardando CHG', 'tone' => 'amber']],
+    [['chg_status' => 'pendente', 'sd_inicio' => '2026-11-18 20:00:00'], ['text' => 'Aguardando aprovação', 'tone' => 'violet']],
+    [['sd_inicio' => '2026-11-18 20:00:00'], ['text' => 'CHG aprovada', 'tone' => 'green']],
+    [['sd_inicio' => '2026-11-17 14:05:00'], ['text' => 'Inicia em 2h05', 'tone' => 'blue']],
+    [['sd_inicio' => null], ['text' => 'Sem início definido', 'tone' => 'blue']],
+    [['attempts' => [$attempt(1, 'erro')]], ['text' => 'Patch com erro · reagendar', 'tone' => 'red']],
+    [['sd_inicio' => '2026-11-17 08:00:00', 'attempts' => [$attempt(1), $attempt(2, null, true, [$ep('', null, '2026-11-17')])]], ['text' => 'Novo patch · horário pendente', 'tone' => 'blue']],
+    [['sd_inicio' => '2026-11-17 08:00:00', 'attempts' => [$attempt(1), $attempt(2, null, true, [$ep('', '2026-11-17 12:30:00')])]], ['text' => 'Novo patch inicia em 30 min', 'tone' => 'blue']],
+    [['rollback' => ['status' => 'em_andamento']], ['text' => 'Rollback · Em andamento', 'tone' => 'pink']],
+    [['sd_inicio' => '2026-11-16 08:00:00', 'sd_fim' => '2026-11-17 08:00:00'], ['text' => 'Janela encerrada', 'tone' => 'red']],
+    [['sd_inicio' => '2026-11-17 08:00:00', 'sd_fim' => '2026-11-18 08:00:00'], ['text' => 'Em execução', 'tone' => 'cyan']],
+    [['attempts' => [$attempt(1, 'parcial')]], ['text' => 'Validando TASKs', 'tone' => 'blue']],
+    [['concluida' => true], ['text' => 'Concluída', 'tone' => 'green']],
+    [['service_status' => 'cancelado'], ['text' => 'Cancelado', 'tone' => 'red']],
+];
+foreach ($badgeCases as $k => [$over, $expected]) {
+    assert_same($expected, ChgRules::badge($c($over), $now), 'selo do card, caso ' . ($k + 1) . ': ' . $expected['text']);
+}
+assert_same(['CHG aprovada. Inicia preparação 18/11 16h00 (faltam 28h00).', null], [ChgRules::waitingNote($c(['sd_inicio' => '2026-11-18 20:00:00']), $now), ChgRules::waitingNote($c(['sd_inicio' => '2026-11-17 15:00:00']), $now)], 'aviso do Comite: quando entra em preparacao');
+$sla = ChgRules::slaBar($c([
+    'sd_inicio' => '2026-11-17 06:00:00', 'sd_fim' => '2026-11-18 06:00:00',
+    'attempts' => [$attempt(1, 'erro', false, [$ep('https://e.teste/1', '2026-11-17 07:00:00')], '2026-11-17 08:00:00.000'), $attempt(2, null, true, [$ep('https://e.teste/2', '2026-11-17 13:00:00'), $ep('', '2026-11-17 10:00:00')])],
+    'rollback' => ['status' => 'em_andamento', 'start_at' => '2026-11-17 11:00:00'],
+]), $now);
+assert_same([25, 'restam 18h00'], [$sla['percent'], $sla['left']], 'barra de SLA: percentual e "restam"');
+assert_same([
+    ['step' => 5, 'color' => 0, 'state' => 'past', 'label' => 'Patch: 17/11 07h00, 4% do SLA (Erro)'],
+    ['step' => 15, 'color' => 1, 'state' => 'now', 'label' => '2º Patch 2: 17/11 10h00, 17% do SLA'],
+    ['step' => 20, 'color' => 'pink', 'state' => 'now', 'label' => 'Rollback (Em andamento): 17/11 11h00, 21% do SLA'],
+    ['step' => 30, 'color' => 0, 'state' => 'future', 'label' => '2º Patch 1: 17/11 13h00, 29% do SLA'],
+], $sla['ticks'], 'barra de SLA: marcas em passos de 5 %, historico, rollback e futuro');
+assert_same(['Rollback (Em andamento) iniciado 17/11 11h00', '2º Patch 2 iniciado 17/11 10h00', '2º Patch 1 inicia 17/11 13h00'], array_column($sla['lines'], 'text'), 'barra de SLA: linhas da tentativa atual, o rollback primeiro');
+assert_same(['encerrado há 1h30', null], [ChgRules::slaBar($c(['sd_inicio' => '2026-11-16 10:30:00', 'sd_fim' => '2026-11-17 10:30:00']), $now)['left'], ChgRules::slaBar($c(['sd_inicio' => '2026-11-17 10:00:00', 'sd_fim' => '2026-11-17 10:00:00']), $now)], 'barra de SLA: "encerrado ha" e sem barra com fim igual ao inicio');
+$view = ChgRules::view($approved + ['sd_inicio' => '2026-11-18 20:00:00', 'sd_fim' => '2026-11-19 20:00:00', 'stage_manual' => 'prep', 'stage_manual_auto' => 'comite'], $now);
+assert_same(['prep', 'comite', true, false, false, '2026-11-18 16:00:00', null, [], false], [$view['stage'], $view['auto_stage'], $view['is_manual'], $view['late'], $view['waiting_window'], $view['prep_at'], $view['sla'], $view['open_tasks'], $view['can_new_patch']], 'view: etapa, automatica, manual, prep_at e sem barra fora da Execucao');
+
+assert_same([true, false, true, false], [
+    ChgRules::view($approved + ['sd_inicio' => '2026-11-17 08:00:00'], $now)['can_new_patch'],
+    ChgRules::view($approved + ['sd_inicio' => '2026-11-17 08:00:00', 'rollback' => ['status' => 'em_andamento']], $now)['can_new_patch'],
+    ChgRules::view($approved + ['attempts' => [$attempt(1, 'erro')]], $now)['can_new_patch'],
+    ChgRules::view($approved + ['attempts' => [$attempt(1, 'erro')], 'rollback' => ['status' => 'sucesso']], $now)['can_new_patch'],
+], 'view: "+ Novo patch" em Execucao ou com patch em Erro, nunca com rollback ativo');
 
 echo 'QA do Controle de CHG OK (' . $GLOBALS['qa_checks'] . " conferencias)\n";
