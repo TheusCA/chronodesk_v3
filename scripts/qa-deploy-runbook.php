@@ -1113,6 +1113,11 @@ $frontendCount5 = 3 + count(array_filter(array_keys(json_decode($readOptional($r
 assert_same(true, strpos($runbook5, "`frontend: {$frontendCount5} scripts npm rodados (...): {$frontendCount5} OK, 0 com falha`") !== false && strpos($runbook5, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy5 origin/feat/employee-form-rhf-zod;') !== false, 'deploy 5: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
 assert_same(true, strpos($prose5, '**Ninguem muda de equipe no deploy**') !== false && strpos($prose5, '`portal_absences` e **copiada**') !== false && strpos($prose5, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false && strpos($prose5, '(AD-F9-5)') !== false, 'deploy 5: ninguem muda de equipe, a copia das ausencias com a manutencao ligada e o aviso com marcadores');
 assert_same(true, strpos($prose5, '**PARE** com `ativos_equipe_desconhecida` maior que 0') !== false && strpos($prose5, 'os **dois** rollbacks param de proposito') !== false, 'deploy 5: a Q-F9 para com cadastro de equipe desconhecida; na variante (b), os dois rollbacks param');
+// [Marca] O icone novo: o Content-Type dos tres icones depois da reabertura (com
+// nosniff, tipo errado = icone quebrado) e a conferencia na aba e no topo.
+$icons5 = $first5('for F in favicon.svg favicon.ico apple-touch-icon.png; do');
+assert_same(true, $icons5 === $maintOff5 + 1 && $icons5 < min($polling5 ?: [-1]) && strpos($commands5[$icons5] ?? '', "curl -s -o /dev/null -w '%{http_code} %{content_type}\\n' -H \"Host: \$S\" \"http://127.0.0.1/app/\$F?v=2\"") !== false && strpos($prose5, '`favicon.svg: 200 image/svg+xml`') !== false && strpos($prose5, 'nada muda no Apache durante o deploy') !== false, 'deploy 5: o tipo dos icones logo depois da reabertura, so o Content-Type, sem mudar o Apache');
+assert_same(true, strpos($prose5, '**Icone novo do Portal SDK**') !== false && strpos($prose5, '**Icone:** o icone novo na aba e no topo, nos dois temas (Ctrl+F5).') !== false, 'deploy 5: o icone no que vai e na conferencia de tela');
 foreach (['**Visao operacional:**', '**Funcionarios:**', '**Pausas:**', 'sem a opcao "Almoço"'] as $screen) {
     assert_same(true, strpos($prose5, $screen) !== false, "deploy 5: conferencia na tela com {$screen}");
 }

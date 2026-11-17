@@ -2,7 +2,7 @@
 
 Gerada do roteiro "Deploy 5 (F9: equipes Critico e Hibrido e o almoco do Critico; migration 020)" do `DEPLOY_LINUX.md`: os mesmos comandos, na mesma ordem. O roteiro e a referencia: o detalhe de cada esperado esta la. Mudou o roteiro, muda esta folha no mesmo commit.
 
-**O que vai:** a migration 020 (`critico` e `hibrido` no ENUM de equipe de oito tabelas e `pausas.limite_segundos`; nenhuma linha muda; a `portal_absences` e copiada) e o codigo do F9 (as equipes Critico e Hibrido no cadastro, no painel, na Visao operacional e nos filtros; a pausa "Almoço" so do Critico, com o limite do intervalo do cadastro; o limite aplicado gravado em cada pausa). Ninguem muda de equipe no deploy: a gestao marca os cadastros pela tela depois. O lockfile nao mudou desde o `5a2494c`: so o build. **Pre-requisito:** o deploy 4 executado com o `5a2494c`.
+**O que vai:** a migration 020 (`critico` e `hibrido` no ENUM de equipe de oito tabelas e `pausas.limite_segundos`; nenhuma linha muda; a `portal_absences` e copiada) e o codigo do F9 (as equipes Critico e Hibrido no cadastro, no painel, na Visao operacional e nos filtros; a pausa "Almoço" so do Critico, com o limite do intervalo do cadastro; o limite aplicado gravado em cada pausa) e o icone novo do Portal SDK (favicon e marca do topo). Ninguem muda de equipe no deploy: a gestao marca os cadastros pela tela depois. O lockfile nao mudou desde o `5a2494c`: so o build. **Pre-requisito:** o deploy 4 executado com o `5a2494c`.
 
 **Data, janela e quem acompanha: A DEFINIR.**
 
@@ -169,7 +169,7 @@ cd /var/www/chronodesk; D5=$(cat /var/backups/chronodesk/deploy5-commit); git me
 cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy5-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi
 ```
 
-- [ ] **24.** (7) Esperado: `Bundle frontend QA OK (...)` com o CSS abaixo de 70000 bytes (68187 no F9). **PARE se:** falha do `qa:bundle`: rollback, com aprovacao.
+- [ ] **24.** (7) Esperado: `Bundle frontend QA OK (...)` com o CSS abaixo de 70000 bytes (68277 com o F9 e o icone novo), os quatro icones no build. **PARE se:** falha do `qa:bundle`: rollback, com aprovacao.
 
 ```bash
 cd /var/www/chronodesk/frontend && npm run -s qa:bundle
@@ -209,29 +209,35 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261116_020_teams_critico_hibrido_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D5
 ```
 
-## 10. Reabertura e conferencia na tela
+## 10. Reabertura, tipo dos icones e conferencia na tela
 
-- [ ] **30.** (10) Esperado: so com os comandos 26 a 28 como esperado. `manutencao encerrada` e `portal visto de fora: 302`. Na tela, como admin (Ctrl+F5), sem salvar: **Visao operacional** com as linhas Critico e Hibrido no bloco de baixo, com a Lideranca, em zero, e o Total como antes; **Funcionarios**, "Editar", com Critico e Hibrido na equipe (feche sem salvar) e no filtro; **Pausas** com N1 e N2 como antes e sem "Almoço". **PARE se:** `PARE`, outro codigo, ou tela em branco ou quebrada: avise.
+- [ ] **30.** (10) Esperado: so com os comandos 26 a 28 como esperado. `manutencao encerrada` e `portal visto de fora: 302`. Na tela, como admin (Ctrl+F5), sem salvar: **Visao operacional** com as linhas Critico e Hibrido no bloco de baixo, com a Lideranca, em zero, e o Total como antes; **Funcionarios**, "Editar", com Critico e Hibrido na equipe (feche sem salvar) e no filtro; **Pausas** com N1 e N2 como antes e sem "Almoço"; o **icone novo** na aba e no topo, nos dois temas (Ctrl+F5). **PARE se:** `PARE`, outro codigo, ou tela em branco ou quebrada: avise.
 
 ```bash
 [ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
+- [ ] **31.** (10, icones) Esperado: `favicon.svg: 200 image/svg+xml`, `favicon.ico: 200 image/vnd.microsoft.icon` (ou `image/x-icon`), `apple-touch-icon.png: 200 image/png`. **PARE se:** `text/html`, `text/plain` ou `application/octet-stream` num icone (com `nosniff`, ele aparece quebrado): anote e avise; nada muda no Apache durante o deploy.
+
+```bash
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for F in favicon.svg favicon.ico apple-touch-icon.png; do printf '%s: ' "$F"; curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H "Host: $S" "http://127.0.0.1/app/$F?v=2"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S F
+```
+
 ## 11. Medicao do polling (alguns minutos depois da reabertura; 2 rodadas por endpoint, valendo a melhor; sessao de gestao)
 
-- [ ] **31.** (11) Esperado: p50 e p95 do `status.php`, na melhor de 2 rodadas (anote). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima da base do deploy 4: meca de novo e avise.
+- [ ] **32.** (11) Esperado: p50 e p95 do `status.php`, na melhor de 2 rodadas (anote). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima da base do deploy 4: meca de novo e avise.
 
 ```bash
 cd /var/www/chronodesk; bash scripts/medir-polling.sh
 ```
 
-- [ ] **32.** (11) Esperado: p50 e p95 do `dashboard.php`, na melhor de 2 rodadas (anote). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima da base do deploy 4: meca de novo e avise.
+- [ ] **33.** (11) Esperado: p50 e p95 do `dashboard.php`, na melhor de 2 rodadas (anote). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima da base do deploy 4: meca de novo e avise.
 
 ```bash
 cd /var/www/chronodesk; URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh
 ```
 
-- [ ] **33.** (11) Esperado: p50 e p95 do `solicitacoes_pendentes.php`, na melhor de 2 rodadas (anote). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima da base do deploy 4: meca de novo e avise.
+- [ ] **34.** (11) Esperado: p50 e p95 do `solicitacoes_pendentes.php`, na melhor de 2 rodadas (anote). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima da base do deploy 4: meca de novo e avise.
 
 ```bash
 cd /var/www/chronodesk; URL=http://127.0.0.1/api/solicitacoes_pendentes.php bash scripts/medir-polling.sh
@@ -239,19 +245,19 @@ cd /var/www/chronodesk; URL=http://127.0.0.1/api/solicitacoes_pendentes.php bash
 
 ## 12. Rollback de codigo (so se preciso, com aprovacao do responsavel)
 
-- [ ] **34.** (12) Esperado: antes, cadastros ja marcados como Critico ou Hibrido de volta para N1 ou N2 pela tela. `codigo anterior no ar: 5a2494c`. **PARE se:** sem a mensagem.
+- [ ] **35.** (12) Esperado: antes, cadastros ja marcados como Critico ou Hibrido de volta para N1 ou N2 pela tela. `codigo anterior no ar: 5a2494c`. **PARE se:** sem a mensagem.
 
 ```bash
 cd /var/www/chronodesk; git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy5-commit)" && echo "codigo anterior no ar: $(git rev-parse --short HEAD)"
 ```
 
-- [ ] **35.** (12) Esperado: `app/ anterior de volta (o build retirado esta em ...)`. **PARE se:** `PARE: ...`: fique em manutencao e avise.
+- [ ] **36.** (12) Esperado: `app/ anterior de volta (o build retirado esta em ...)`. **PARE se:** `PARE: ...`: fique em manutencao e avise.
 
 ```bash
 cd /var/www/chronodesk; A=/var/backups/chronodesk/app-antes-deploy5; X=/var/backups/chronodesk/app-deploy5-retirado-$(date +%Y%m%d-%H%M%S); if test -d "$A"; then { ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && echo "app/ anterior de volta (o build retirado esta em $X)" || echo "PARE: a volta do app/ falhou"; else echo "PARE: copia $A ausente; nada mudou no app/"; fi; unset A X
 ```
 
-- [ ] **36.** (12) Esperado: nenhuma saida. Depois: comandos 26 a 28 e a reabertura (30). **PARE se:** erro na recarga.
+- [ ] **37.** (12) Esperado: nenhuma saida. Depois: comandos 26 a 28 e a reabertura (30). **PARE se:** erro na recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
@@ -259,13 +265,13 @@ systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-f
 
 ## 13. Rollback da 020 (so depois do 12 e so com aprovacao)
 
-- [ ] **37.** (13, so com aprovacao) Esperado: pede a senha. `rollback da 020 aplicado` (so com o codigo do deploy 4 no ar). **PARE se:** `PARE: o codigo no ar nao e o do deploy 4 ...` ou `rollback_020 abortado: ha linhas com equipe critico ou hibrido` (volte os cadastros pela tela antes): avise.
+- [ ] **38.** (13, so com aprovacao) Esperado: pede a senha. `rollback da 020 aplicado` (so com o codigo do deploy 4 no ar). **PARE se:** `PARE: o codigo no ar nao e o do deploy 4 ...` ou `rollback_020 abortado: ha linhas com equipe critico ou hibrido` (volte os cadastros pela tela antes): avise.
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy5-commit)" ] && git cat-file -e "$D5:migrations/rollback/20261116_020_teams_critico_hibrido_down.sql" && bash -o pipefail -c 'git show "$D5:migrations/rollback/20261116_020_teams_critico_hibrido_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 020 aplicado" || echo "PARE: o codigo no ar nao e o do deploy 4 ou o rollback da 020 falhou"; unset P D5
 ```
 
-- [ ] **38.** (13) Esperado: `enums_com_critico_020 = 0`, `coluna_020 = 0`, `copias_de_rollback_020 = 1`, "020 ausente". **PARE se:** outro numero: avise.
+- [ ] **39.** (13) Esperado: `enums_com_critico_020 = 0`, `coluna_020 = 0`, `copias_de_rollback_020 = 1`, "020 ausente". **PARE se:** outro numero: avise.
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261116_020_teams_critico_hibrido_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D5

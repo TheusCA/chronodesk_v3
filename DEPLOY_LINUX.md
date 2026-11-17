@@ -5227,6 +5227,11 @@ depois os times e as entradas pela tela.
   aviso); o limite aplicado gravado em cada pausa; o almoco fora dos totais
   das Metricas. **Ninguem muda de equipe no deploy**: a gestao marca os
   cadastros do Critico e do Hibrido pela tela, depois (AD-F9-5).
+- **Icone novo do Portal SDK** (commit proprio, depois do lote F9): `favicon.svg`
+  e `favicon.ico` novos e `favicon.png` e `apple-touch-icon.png` trocados no
+  `public/`; os links com `?v=2` no `index.html` e nas paginas PHP; a marca
+  do topo em SVG inline nas cores do tema. Com `nosniff`, icone servido com
+  tipo errado aparece quebrado: o passo 10 confere o `Content-Type`.
 - O roteiro e a trava deste deploy e os commits de docs.
 
 **O lockfile nao mudou** desde o `5a2494c` (o `package.json` ganhou so o
@@ -5408,8 +5413,8 @@ cd /var/www/chronodesk/frontend && npm run -s qa:bundle
 
    Esperado: o `merge` em fast-forward, `HEAD = deploy5-commit` e
    `alteracoes locais: 0`; `lockfile sem mudanca: so o build` e o build sem
-   erro; `Bundle frontend QA OK (...)` com o CSS abaixo de 70000 bytes (o F9
-   nao acrescentou CSS: 68187). **PARE** com as mesmas regras dos passos 5
+   erro; `Bundle frontend QA OK (...)` com o CSS abaixo de 70000 bytes (68277
+   com o F9 e o icone novo), os quatro icones no build e o `sdk-icon.png` fora. **PARE** com as mesmas regras dos passos 5
    e 6 do deploy 3.
 
 **8. Recarga, health, fuso e teste de fumaca**, ainda em manutencao:
@@ -5438,10 +5443,17 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
 
 ```bash
 [ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for F in favicon.svg favicon.ico apple-touch-icon.png; do printf '%s: ' "$F"; curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H "Host: $S" "http://127.0.0.1/app/$F?v=2"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S F
 ```
 
    So com o passo 8 como esperado. Esperado: `manutencao encerrada` e
-   `portal visto de fora: 302`. **Na tela**, como admin (Ctrl+F5 uma vez),
+   `portal visto de fora: 302`; os icones com o tipo de imagem (so o
+   `Content-Type`, pelo `mime.types` do servidor): `favicon.svg: 200
+   image/svg+xml`, `favicon.ico: 200 image/vnd.microsoft.icon` (ou
+   `image/x-icon`) e `apple-touch-icon.png: 200 image/png`. **PARE** com
+   `text/html`, `text/plain` ou `application/octet-stream` num icone (com
+   `nosniff`, ele aparece quebrado): anote e avise; nada muda no Apache
+   durante o deploy. **Na tela**, como admin (Ctrl+F5 uma vez),
    **sem salvar nada**:
 
    - **Visao operacional:** na tabela "Situacao da equipe agora", as linhas
@@ -5451,6 +5463,7 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
      operacional" (feche sem salvar); o filtro de equipe tambem.
    - **Pausas:** as secoes N1 e N2 como antes; sem a opcao "Almoço" para
      quem nao e do Critico.
+   - **Icone:** o icone novo na aba e no topo, nos dois temas (Ctrl+F5).
 
    **PARE** com `PARE`, outro codigo, ou tela em branco ou quebrada: avise.
 

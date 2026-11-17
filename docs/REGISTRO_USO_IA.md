@@ -1633,6 +1633,22 @@ Base da afirmação:
 
 ---
 
+### Ícone novo do Portal SDK (favicon e marca do topo) — 2026-11-16
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Trocar o ícone (aba e marca do topo) pelos arquivos finais feitos fora do repositório (`_referencias/icone/`, fora do git): mostrador de timer, pausa e o ponto âmbar da situação "Em pausa". |
+| **Em qual deploy** | A bateria do deploy 4 já tinha rodado e validado o `5a2494c` quando o pedido chegou: o commit validado não foi mexido, e o ícone entra no **deploy 5**, depois do lote F9. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `2ace053` (ícone) e o commit do roteiro do deploy 5 com esta entrada. Sem push pela IA. |
+| **O que a IA alterou** | `frontend/public/` (`favicon.svg` e `favicon.ico` novos; `favicon.png` e `apple-touch-icon.png` trocados); `docs/design/marca/` (fontes e nota); `frontend/index.html` e as páginas PHP que ainda servem HTML (os três links com `?v=2`); `BrandMark.jsx` (SVG inline pelos tokens); servidor simulado do navegador (entrega os arquivos de `app/` como o Apache); QAs (`qa:bundle`, `qa:shell`, bloco 29); capturas; roteiro e folha do deploy 5 (o `Content-Type` dos ícones e a conferência na tela) e a trava. |
+| **Dados pessoais** | Nenhum. |
+| **Validacao executada pela IA** | Leitura dos SVG antes de usar (só formas, `<style>` interno e metadados C2PA; sem script nem referência externa); PNG e ICO conferidos (64, 180, 512; ICO com 16, 32 e 48). Bateria completa sozinha no `2ace053` (saída 0, 28/28, navegador 1130/1130) e mutação 13/13; orçamento: JS de entrada 199825 de 211050, CSS 68277 de 70000; `bash -n` nos 39 comandos da folha. |
+| **Decisões (a aprovar)** | O ponto da marca usa o `pause-line` da situação "Em pausa" (o `pause` do texto daria contraste de 2,4:1 no claro e 1,4:1 no escuro contra a placa); a placa usa o token `action` como preenchimento (num SVG o "fundo" é o fill). A página 503 é texto puro (`ErrorDocument`), sem ícone. A CSP do portal só vale nas respostas `.html`: o `<style>` interno do `favicon.svg` funciona, e o `img-src 'self'` cobre os ícones. |
+| **Limitacoes declaradas** | O `Content-Type` do `.svg` e do `.ico` em produção depende do `mime.types` do servidor: conferido no passo 10 do deploy 5, sem mudar o Apache no dia. O ícone da aba não aparece nas capturas (sem aba no modo sem janela); o bloco 29 confere os links e os tipos. |
+| **Validacao humana** | Pendente: revisão. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.
