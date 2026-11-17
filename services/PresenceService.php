@@ -73,6 +73,7 @@ final class PresenceService {
         $rules = $this->repository->rulesByEmployee($from, $to, $employeeId);
         $exceptions = $this->repository->exceptionsByDay($from, $to, $employeeId);
         $absences = $this->repository->absencesByEmployee($from, $to, $employeeId);
+        $roleDays = PresenceRepository::criticalRoleDays($this->repository->criticalRoleContext($employees, $from, $to), $from, $to);
         $seesAllCategories = portal_role_is_manager($viewer['role'] ?? null);
         $viewerEmployeeId = (int)($viewer['employee_id'] ?? 0);
 
@@ -86,7 +87,7 @@ final class PresenceService {
                 $exception = $exceptions[$id . ':' . $dateKey] ?? null;
                 $showCategory = $seesAllCategories || ($viewerEmployeeId > 0 && $viewerEmployeeId === $id);
                 $dayAbsences = self::absencesForDay($dateKey, $exception, $absences[$id] ?? [], $showCategory);
-                $employee = PresenceRepository::shiftFor($employee, $dateKey);
+                $employee = PresenceRepository::shiftFor($employee, $dateKey, $roleDays[$id . ':' . $dateKey] ?? null);
                 $presence = $dateKey === $today
                     ? PresenceEngine::nowPresence($employee, $now, $rules[$id] ?? [], $exception, $dayAbsences, $pauseState === null ? null : self::pause($pauseState[$id] ?? null))
                     : PresenceEngine::dayPresence($employee, $dateKey, $rules[$id] ?? [], $exception, $dayAbsences);
@@ -122,6 +123,7 @@ final class PresenceService {
         $rules = $this->repository->rulesByEmployee($today, $today);
         $exceptions = $this->repository->exceptionsByDay($today, $today);
         $absences = $this->repository->absencesByEmployee($today, $today);
+        $roleDays = PresenceRepository::criticalRoleDays($this->repository->criticalRoleContext(array_values($employees), $today, $today), $today, $today);
 
         foreach (PortalTeams::WORK_TEAMS as $team) {
             foreach ($status[$team] ?? [] as $index => $item) {
@@ -134,7 +136,7 @@ final class PresenceService {
                 $exception = $exceptions[$id . ':' . $today] ?? null;
                 $start = is_string($item['inicio_pausa'] ?? null) ? date_create_immutable($item['inicio_pausa']) : false;
                 $presence = PresenceEngine::nowPresence(
-                    PresenceRepository::shiftFor($employee, $today),
+                    PresenceRepository::shiftFor($employee, $today, $roleDays[$id . ':' . $today] ?? null),
                     $now,
                     $rules[$id] ?? [],
                     $exception,
@@ -163,8 +165,18 @@ final class PresenceService {
      * (o grupo comum).
      */
     public function operationalSummary(DateTimeImmutable $now, ?array $pauses): array {
+        return $this->operationalView($now, $pauses)['summary'];
+    }
+
+    /**
+     * [9.16, AD-PC-2] Os contadores do operationalSummary e os papeis vagos do
+     * Critico agora (rotulo "Abertura home 07:00–17:00"), na mesma carga: sem
+     * cadastro do Critico, nenhuma consulta a mais e nenhum papel vago.
+     */
+    public function operationalView(DateTimeImmutable $now, ?array $pauses): array {
         $byTeam = array_fill_keys(PortalTeams::ALL, []);
-        foreach ($this->nowPresences($now, $pauses) as $row) {
+        $context = null;
+        foreach ($this->nowPresences($now, $pauses, $context) as $row) {
             $byTeam[$row['team']][] = $row['presence'];
         }
         $summary = [];
@@ -172,7 +184,16 @@ final class PresenceService {
             $summary[$team] = PresenceEngine::summarize($byTeam[$team]);
         }
         $common = array_merge(...array_map(static fn (string $team): array => $byTeam[$team], PortalTeams::COMMON_GROUP));
-        return $summary + ['total' => PresenceEngine::summarize($common)];
+        $vacant = [];
+        if ($context !== null) {
+            $today = $now->format('Y-m-d');
+            foreach (CriticalRolePlanner::vacantRoleIds($context['rotations'], $context['overrides'], $today, $context['employee_ids']) as $roleId) {
+                if (isset($context['roles'][$roleId])) {
+                    $vacant[] = ['id' => $roleId, 'label' => CriticalRolePlanner::label($context['roles'][$roleId])];
+                }
+            }
+        }
+        return ['summary' => $summary + ['total' => PresenceEngine::summarize($common)], 'papeis_vagos' => $vacant];
     }
 
     /**
@@ -215,12 +236,15 @@ final class PresenceService {
      * com o estado de pausas ilegivel (DV6): ai ninguem conta em pausa, e quem
      * chama avisa. A categoria entra no motor so para a P9 do technicians.php.
      */
-    private function nowPresences(DateTimeImmutable $now, ?array $pauses): array {
+    private function nowPresences(DateTimeImmutable $now, ?array $pauses, ?array &$context = null): array {
         $today = $now->format('Y-m-d');
         $employees = $this->repository->employees();
         $rules = $this->repository->rulesByEmployee($today, $today);
         $exceptions = $this->repository->exceptionsByDay($today, $today);
         $absences = $this->repository->absencesByEmployee($today, $today);
+        $mapped = array_values(array_filter($employees, static fn (array $employee): bool => !$employee['outside_map'] && $employee['team'] !== null));
+        $context = $this->repository->criticalRoleContext($mapped, $today, $today);
+        $roleDays = PresenceRepository::criticalRoleDays($context, $today, $today);
         $presences = [];
         foreach ($employees as $employee) {
             if ($employee['outside_map'] || $employee['team'] === null) {
@@ -231,7 +255,7 @@ final class PresenceService {
             $presences[$id] = [
                 'team' => $employee['team'],
                 'presence' => PresenceEngine::nowPresence(
-                    PresenceRepository::shiftFor($employee, $today),
+                    PresenceRepository::shiftFor($employee, $today, $roleDays[$id . ':' . $today] ?? null),
                     $now,
                     $rules[$id] ?? [],
                     $exception,

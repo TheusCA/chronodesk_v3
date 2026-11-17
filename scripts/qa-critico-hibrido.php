@@ -79,6 +79,12 @@ final class QaF9Pdo extends PDO {
     public function prepare(string $query, array $options = []): PDOStatement|false {
         return new QaF9Statement($this, (string)preg_replace('/\s+/', ' ', trim($query)));
     }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
+        $statement = $this->prepare($query);
+        $statement->execute();
+        return $statement;
+    }
 }
 
 final class QaF9Statement extends PDOStatement {
@@ -95,6 +101,11 @@ final class QaF9Statement extends PDOStatement {
                     $this->rows[] = ['employee_id' => $id, 'exception_date' => $date, 'exception_type' => $type];
                 }
             }
+            return true;
+        }
+        // [9.16] Papeis do Critico: nenhum papel cadastrado (a jornada fica a do cadastro).
+        if (str_contains($this->sql, ' FROM portal_critical_')) {
+            $this->rows = [];
             return true;
         }
         if (str_starts_with($this->sql, 'SELECT id, employee_id, starts_on, ends_on, period_type, start_time, end_time, category FROM portal_absences')) {
@@ -592,11 +603,11 @@ foreach ($cases as [$team, $time, $pause, [$situation, $origin, $detail]]) {
 assert_same('ausente', $presence('critico', '12:30', $lunchPause, [['origem' => 'ausencia', 'period_type' => 'full_day']])['situacao'], 'motor: ausencia vence o almoco pela pausa (4.3)');
 assert_same(1, PresenceEngine::summarize([$presence('critico', '12:30', $lunchPause), $presence('critico', '12:30')])['almoco'], 'motor: o almoco pela pausa conta em "almoco" na soma (4.5)');
 $repositorySource = (string)file_get_contents($root . '/services/PresenceRepository.php');
-assert_same([1, 1], [substr_count($repositorySource, "'lunch_source' => PauseRules::lunchSource(\$team),"), preg_match('/public static function shiftFor\(array \$employee, string \$date\): array \{\s+return \$employee;\s+\}/', $repositorySource)], 'repositorio: fonte do almoco pela equipe e a jornada do dia numa funcao unica (hoje, a do cadastro)');
-assert_same(['x' => 1], PresenceRepository::shiftFor(['x' => 1], '2026-11-16'), 'jornada do dia: hoje, o cadastro sem mudanca (9.15.6)');
+assert_same([1, 1], [substr_count($repositorySource, "'lunch_source' => PauseRules::lunchSource(\$team),"), preg_match('/public static function shiftFor\(array \$employee, string \$date, \?array \$role = null\): array \{\s+if \(\$role === null\) \{\s+return \$employee;\s+\}/', $repositorySource)], 'repositorio: fonte do almoco pela equipe e a jornada do dia numa funcao unica (sem papel do Critico, a do cadastro; 9.16)');
+assert_same(['x' => 1], PresenceRepository::shiftFor(['x' => 1], '2026-11-16'), 'jornada do dia: sem papel, o cadastro sem mudanca (9.15.6)');
 $serviceSource = (string)file_get_contents($root . '/services/PresenceService.php');
 assert_same(3, substr_count($serviceSource, 'PresenceRepository::shiftFor('), 'presenca: periodo, status e Visao operacional pedem a jornada do dia');
-assert_same(1, preg_match('/\$common = array_merge\(\.\.\.array_map\(static fn \(string \$team\): array => \$byTeam\[\$team\], PortalTeams::COMMON_GROUP\)\);\s+return \$summary \+ \[\'total\' => PresenceEngine::summarize\(\$common\)\];/', $serviceSource), 'Visao operacional: total = grupo comum (N1 + N2), Critico e Hibrido em linhas proprias (D-F9-10)');
+assert_same(1, preg_match('/\$common = array_merge\(\.\.\.array_map\(static fn \(string \$team\): array => \$byTeam\[\$team\], PortalTeams::COMMON_GROUP\)\);.*?return \[\'summary\' => \$summary \+ \[\'total\' => PresenceEngine::summarize\(\$common\)\], \'papeis_vagos\' => \$vacant\];/s', $serviceSource), 'Visao operacional: total = grupo comum (N1 + N2), Critico e Hibrido em linhas proprias (D-F9-10); com os papeis vagos do Critico (9.16)');
 
 // Disponibilidade do cadastro: o Critico nao fica "Horario de almoco" pelo intervalo.
 $n1 = new Funcionario(51, 'Tecnico 51', 'n1', '08:00', '17:00', '12:00', '13:00', true);

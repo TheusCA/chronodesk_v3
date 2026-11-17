@@ -1795,6 +1795,13 @@ $matrix = [
     'api/portal/rotation_teams.php POST add_member' => [['content_type' => $json, 'body' => '{"action":"add_member"}'], $expect['ADMIN_LIDERANCA']],
     'api/portal/rotation_teams.php POST move_member' => [['content_type' => $json, 'body' => '{"action":"move_member"}'], $expect['ADMIN_LIDERANCA']],
     'api/portal/rotation_teams.php POST end_member' => [['content_type' => $json, 'body' => '{"action":"end_member"}'], $expect['ADMIN_LIDERANCA']],
+    // [9.16] Rodizio de papeis do Critico: leitura como a dos times; gravacao so Lideranca e admin (AD-PC-3).
+    'api/portal/critical_roles.php GET' => [[], $expect['TODOS']],
+    'api/portal/critical_roles.php POST save_role' => [['content_type' => $json, 'body' => '{"action":"save_role"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/critical_roles.php POST preview_rotation' => [['content_type' => $json, 'body' => '{"action":"preview_rotation"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/critical_roles.php POST save_rotation' => [['content_type' => $json, 'body' => '{"action":"save_rotation"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/critical_roles.php POST add_override' => [['content_type' => $json, 'body' => '{"action":"add_override"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/critical_roles.php POST remove_override' => [['content_type' => $json, 'body' => '{"action":"remove_override"}'], $expect['ADMIN_LIDERANCA']],
     // F2: presenca para qualquer perfil autenticado (desenho, secao 3.2).
     'api/portal/presence.php GET' => [[], $expect['TODOS']],
     'api/portal/sdk_responsibles.php GET' => [[], $expect['TODOS']],

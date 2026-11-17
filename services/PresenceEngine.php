@@ -45,6 +45,7 @@ final class PresenceEngine {
         'training' => 'exceção: treinamento',
         'oncall' => 'exceção: plantão',
     ];
+    private const ROLE_PRESENCE = ['onsite' => 'presencial', 'remote' => 'remoto'];
     private const WEEKDAY_KEYS = [1 => 'mon', 2 => 'tue', 3 => 'wed', 4 => 'thu', 5 => 'fri'];
     private const WEEKDAY_LABELS = ['mon' => 'seg', 'tue' => 'ter', 'wed' => 'qua', 'thu' => 'qui', 'fri' => 'sex'];
     private const SITUATION_LABELS = ['presencial' => 'Presencial', 'remoto' => 'Remoto'];
@@ -55,7 +56,7 @@ final class PresenceEngine {
      * para todos (P3). A Lideranca tem escala implicita presencial (P12).
      *
      * Devolve ['situacao' => 'presencial'|'remoto'|'sem_escala'|'dia_nao_util',
-     *          'fonte' => 'excecao'|'implicita'|'regra'|'nenhuma',
+     *          'fonte' => 'excecao'|'implicita'|'papel'|'regra'|'nenhuma',
      *          'rule_type' => ?string, 'rule_label' => string].
      */
     public static function scheduleForDay(array $employee, string $date, array $rules, ?array $exception): array {
@@ -68,6 +69,13 @@ final class PresenceEngine {
         }
         if (($employee['team'] ?? null) === 'lideranca') {
             return self::schedule('presencial', 'implicita', 'always_onsite', 'regra fixa');
+        }
+        // [9.16] Papel do Critico no dia (troca pontual ou rodizio, pela jornada
+        // do dia): vence a regra individual; excecao e ausencia continuam antes.
+        $role = $employee['critical_role'] ?? null;
+        if (is_array($role) && isset(self::ROLE_PRESENCE[$role['presence_type'] ?? ''])) {
+            $label = 'papel: ' . $role['name'] . ' ' . substr((string)$role['work_start'], 0, 5) . '–' . substr((string)$role['work_end'], 0, 5);
+            return self::schedule(self::ROLE_PRESENCE[$role['presence_type']], 'papel', null, $label);
         }
         $rule = ScheduleRulePlanner::ruleAt($rules, $date);
         if ($rule === null) {

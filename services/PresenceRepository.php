@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/PauseRules.php';
+require_once __DIR__ . '/CriticalRolePlanner.php';
 
 /**
  * Carga em lote para o motor de presenca (Parte B, F2; desenho, secao 4.6).
@@ -55,12 +56,68 @@ final class PresenceRepository {
     }
 
     /**
-     * [F9, 9.15.6] Jornada do dia: a unica fonte que o motor le. Hoje devolve
-     * a do cadastro para todos; a escala critica (lote depois do F9, AD-F9-3)
-     * entra aqui, sem mudar o motor. Funcao pura sobre o cadastro carregado.
+     * [F9, 9.15.6] Jornada do dia: a unica fonte que o motor le. Sem papel do
+     * dia, a do cadastro; [9.16] com papel do Critico (troca pontual ou
+     * rodizio, de criticalRoleDays), a jornada do papel e o papel, que o motor
+     * le como a escala do dia (origem 'papel'). Funcao pura sobre o cadastro
+     * carregado.
      */
-    public static function shiftFor(array $employee, string $date): array {
-        return $employee;
+    public static function shiftFor(array $employee, string $date, ?array $role = null): array {
+        if ($role === null) {
+            return $employee;
+        }
+        return ['work_start' => $role['work_start'], 'work_end' => $role['work_end'], 'critical_role' => $role] + $employee;
+    }
+
+    /**
+     * [9.16, D-PC-4] Papeis, rodizios e trocas que cruzam [de, ate], em tres
+     * consultas, so quando ha cadastro do Critico em $employees (lista com
+     * 'id' e 'team' normalizada): sem Critico, nenhuma consulta. Falha de
+     * leitura: null (sem papel; a jornada fica a do cadastro), com log.
+     */
+    public function criticalRoleContext(array $employees, string $from, string $to): ?array {
+        $ids = [];
+        foreach ($employees as $employee) {
+            if (($employee['team'] ?? null) === PortalTeams::CRITICAL) {
+                $ids[] = (int)$employee['id'];
+            }
+        }
+        if ($ids === []) {
+            return null;
+        }
+        try {
+            $roles = [];
+            foreach ($this->pdo->query('SELECT id, name, presence_type, work_start, work_end, active, sort_order FROM portal_critical_roles ORDER BY sort_order, id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $roles[(int)$row['id']] = CriticalRolePlanner::roleView($row);
+            }
+            $stmt = $this->pdo->prepare('SELECT id, effective_from, period, anchor_date, roles, employees FROM portal_critical_role_rotations WHERE effective_from <= :date_to ORDER BY effective_from');
+            $stmt->execute([':date_to' => $to]);
+            $rotations = array_map([CriticalRolePlanner::class, 'rotationView'], $stmt->fetchAll(PDO::FETCH_ASSOC));
+            $stmt = $this->pdo->prepare('SELECT id, employee_id, starts_on, ends_on, role_id, reason FROM portal_critical_role_overrides WHERE starts_on <= :date_to AND ends_on >= :date_from ORDER BY employee_id, starts_on');
+            $stmt->execute([':date_from' => $from, ':date_to' => $to]);
+            $overrides = array_map([CriticalRolePlanner::class, 'overrideView'], $stmt->fetchAll(PDO::FETCH_ASSOC));
+        } catch (PDOException $e) {
+            error_log('[PRESENCA] Papeis do Critico indisponiveis; jornada pelo cadastro: ' . get_class($e));
+            return null;
+        }
+        return ['employee_ids' => $ids, 'roles' => $roles, 'rotations' => $rotations, 'overrides' => $overrides];
+    }
+
+    /** Papel do dia por "employee_id:data" (so quem tem papel), a partir do contexto. */
+    public static function criticalRoleDays(?array $context, string $from, string $to): array {
+        if ($context === null) {
+            return [];
+        }
+        $days = [];
+        for ($date = $from; $date <= $to; $date = ScheduleRulePlanner::addDays($date, 1)) {
+            foreach ($context['employee_ids'] as $id) {
+                $role = CriticalRolePlanner::dayRole($id, $date, $context['rotations'], $context['overrides'], $context['roles']);
+                if ($role !== null) {
+                    $days[$id . ':' . $date] = $role;
+                }
+            }
+        }
+        return $days;
     }
 
     /** Regras que cruzam [de, ate], agrupadas por colaborador. */

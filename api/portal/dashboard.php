@@ -41,9 +41,13 @@ try {
 $now = new DateTimeImmutable('now');
 $pausas = $gerenciador->pausas_atuais();
 $presenceSummary = null;
+$papeisVagos = [];
 if (PresenceService::statusPresenceEnabled()) {
     try {
-        $presenceSummary = (new PresenceService(get_db_connection()))->operationalSummary($now, $pausas);
+        // [9.16, AD-PC-2] Na mesma carga, os papeis vagos do Critico agora.
+        $operationalView = (new PresenceService(get_db_connection()))->operationalView($now, $pausas);
+        $presenceSummary = $operationalView['summary'];
+        $papeisVagos = $operationalView['papeis_vagos'];
     } catch (Throwable $error) {
         error_log('[PRESENCE] Resumo de presenca indisponivel no dashboard: ' . get_class($error));
     }
@@ -71,6 +75,8 @@ json_response([
     'critical_incidents' => $criticalSummary,
     // [AD-F9-1, D-F9-28] Critico e Hibrido sem ninguem disponivel (destaque).
     'disponibilidade_equipes' => $status['disponibilidade_equipes'] ?? [],
+    // [9.16, AD-PC-2] Papel do rodizio do Critico sem ninguem hoje (alerta).
+    'papeis_vagos_critico' => $papeisVagos,
     'active_pauses' => array_values(array_filter(
         $funcionarios,
         static fn($item) => !empty($item['em_pausa'])

@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../services/CriticalRoleService.php';
 
 // [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
 $actor_role = require_portal_auth();
@@ -196,6 +197,16 @@ try {
             'WARNING'
         );
         json_response(['sucesso' => false, 'mensagem' => $foraDenied[1]], $foraDenied[0]);
+    }
+    // [9.16.4] Quem esta no rodizio de papeis vigente ou num futuro so sai do
+    // Critico depois de uma versao nova sem ele (409; nada e trocado por script).
+    $equipeAtual = PortalTeams::normalize((string)($gerenciador->getFuncionario($funcionario_id)->equipe ?? ''));
+    if ($equipeAtual === PortalTeams::CRITICAL && $equipe !== PortalTeams::CRITICAL) {
+        $papelDenied = (new CriticalRoleService($pdo))->teamChangeDenied($funcionario_id, $equipeAtual, (string)$equipe);
+        if ($papelDenied !== null) {
+            $pdo->rollBack();
+            json_response(['sucesso' => false, 'mensagem' => $papelDenied], 409);
+        }
     }
     $stmt = $pdo->prepare(
         "UPDATE funcionarios

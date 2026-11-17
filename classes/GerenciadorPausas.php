@@ -805,18 +805,19 @@ class GerenciadorPausas {
     /**
      * [AD-F9-1] Membros ativos da equipe: id => no turno (D-F9-27 revista: dia
      * util ou excecao de trabalho por data, e dentro da jornada do dia, a
-     * funcao unica da 9.15.6), em pausa (almoco incluido) e com ausencia ativa.
+     * funcao unica da 9.15.6, com o papel do Critico da 9.16), em pausa
+     * (almoco incluido) e com ausencia ativa.
      */
     private function membros_disponibilidade(string $equipe, DateTimeImmutable $agora): array {
         $membros = array_filter($this->funcionarios, static fn ($f): bool => ($f->ativo ?? true) && PortalTeams::normalize($f->equipe) === $equipe);
         $dia = $agora->format('Y-m-d');
         $hora = $agora->format('H:i');
-        [$excecoes, $ausencias] = $this->excecoes_e_ausencias_do_dia($membros, $dia);
+        [$excecoes, $ausencias, $papeis] = $this->leituras_do_dia($membros, $dia);
         $situacao = [];
         foreach ($membros as $f) {
             $id = (int)$f->id;
             $excecao = $excecoes[$id . ':' . $dia] ?? null;
-            $jornada = PresenceRepository::shiftFor(['id' => $id, 'work_start' => $f->jornada_entrada, 'work_end' => $f->jornada_saida], $dia);
+            $jornada = PresenceRepository::shiftFor(['id' => $id, 'work_start' => $f->jornada_entrada, 'work_end' => $f->jornada_saida], $dia, $papeis[$id . ':' . $dia] ?? null);
             $situacao[$id] = [
                 'in_shift' => PresenceEngine::hasShiftOn($dia, $excecao) && PauseRules::inShift($jornada['work_start'], $jornada['work_end'], $hora),
                 'paused' => $f->em_pausa === true,
@@ -827,24 +828,28 @@ class GerenciadorPausas {
     }
 
     /**
-     * [AD-F9-1] Excecoes por data e ausencias aprovadas do dia (uma leitura de
-     * cada). Sem banco ou com falha: nenhuma, com registro no log (D-F9-26);
-     * sem excecao, fim de semana fica fora do turno (D-F9-27 revista).
+     * [AD-F9-1] Excecoes por data, ausencias aprovadas e [9.16] papeis do
+     * Critico do dia (uma leitura de cada; papeis so com cadastro do Critico).
+     * Sem banco ou com falha: nenhum, com registro no log (D-F9-26); sem
+     * excecao, fim de semana fica fora do turno (D-F9-27 revista); sem papel,
+     * a jornada do cadastro.
      */
-    private function excecoes_e_ausencias_do_dia(array $membros, string $dia): array {
+    private function leituras_do_dia(array $membros, string $dia): array {
         if ($membros === []) {
-            return [[], []];
+            return [[], [], []];
         }
         if (!$this->pdo) {
             error_log('[PAUSA] Excecoes e ausencias indisponiveis (sem banco) para a regra de disponibilidade.');
-            return [[], []];
+            return [[], [], []];
         }
         try {
             $repositorio = new PresenceRepository($this->pdo);
-            return [$repositorio->exceptionsByDay($dia, $dia), $repositorio->absencesByEmployee($dia, $dia)];
+            $cadastros = array_map(static fn ($f): array => ['id' => (int)$f->id, 'team' => PortalTeams::normalize($f->equipe)], array_values($membros));
+            $papeis = PresenceRepository::criticalRoleDays($repositorio->criticalRoleContext($cadastros, $dia, $dia), $dia, $dia);
+            return [$repositorio->exceptionsByDay($dia, $dia), $repositorio->absencesByEmployee($dia, $dia), $papeis];
         } catch (Throwable $e) {
             error_log('[PAUSA] Excecoes e ausencias indisponiveis para a regra de disponibilidade: ' . get_class($e));
-            return [[], []];
+            return [[], [], []];
         }
     }
 
