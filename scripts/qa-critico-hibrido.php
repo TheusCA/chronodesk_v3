@@ -206,9 +206,11 @@ assert_same(0, preg_match('/\b(NOW|CURDATE|CURRENT_DATE|CURRENT_TIMESTAMP|SYSDAT
 assert_same(0, preg_match('/limite_segundos|grupo_escala/', $checkWithoutPrepared), 'verificacao 020: as consultas da coluna nova e do grupo so dentro do IF (rodam so com elas presentes)');
 assert_same([1, 1], [preg_match_all("/IF\\(\\s*@tem_020 = 1,/", $check), preg_match_all("/IF\\(\\s*@tem_grupo = 1,/", $check)], "verificacao 020: limite so com a coluna, grupo so com a 021, senao 'ausente'");
 assert_same(3, preg_match_all('/BIT_XOR\(CRC32\(CONCAT_WS\(/', $check), 'verificacao 020: assinaturas das pausas, ausencias e regras (colunas anteriores a 020)');
-foreach (['enums_com_critico_020', 'enum_legado_pa_map_com_critico', 'coluna_020', 'checks_ausencias', 'copias_de_rollback_020', 'ativos_equipe_desconhecida', 'almoco_fora_do_critico', 'almoco_com_alerta', 'pausas_com_limite', 'limite_em_motivo_sem_limite', 'critico_ou_hibrido_no_grupo_comum'] as $column) {
+foreach (['enums_com_critico_020', 'enum_legado_pa_map_com_critico', 'coluna_020', 'checks_ausencias', 'copias_de_rollback_020', 'ativos_equipe_desconhecida', 'almoco_fora_do_critico', 'almoco_com_alerta', 'pausas_com_limite', 'limite_em_motivo_sem_limite', 'critico_ou_hibrido_no_grupo_comum', 'n1_n2_ativos_no_grupo_separado'] as $column) {
     assert_same(true, strpos($check, "AS {$column}") !== false, "verificacao 020: conta {$column}");
 }
+
+assert_same(1, substr_count($check, "WHERE ativo = 1 AND LOWER(TRIM(equipe)) IN (''n1'', ''n2'') AND grupo_escala = ''separado'') AS n1_n2_ativos_no_grupo_separado'"), 'verificacao 020: N1 e N2 ativos no grupo separado, so a contagem (D-F9-25 revista)');
 
 // ----------------------------------------------------------------------------
 // 2. Regras puras: equipes (PortalTeams) e pausa por motivo e equipe (PauseRules)

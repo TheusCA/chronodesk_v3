@@ -25,7 +25,7 @@ import {
   TruncationNotice,
   UserAvatar,
 } from '../components/ui/Primitives'
-import { ALL_TEAMS, teamShort } from '../lib/teams'
+import { ALL_TEAMS, COMMON_GROUP, teamShort } from '../lib/teams'
 
 const tabs = [
   ['aprovacoes', 'Aprovações'],
@@ -307,9 +307,12 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
   }
 
   function updateTeam(team) {
+    const previous = normalizeTeam(form.equipe)
     setValue('equipe', team, { shouldDirty: true })
     // [F9, D-F9-12] Crítico e Híbrido ficam sempre no grupo separado.
     if (SEPARATE_GROUP_TEAMS.includes(team) && ['comum', 'separado'].includes(form.grupo_escala)) setValue('grupo_escala', 'separado', { shouldDirty: true })
+    // [D-F9-25 revista] De Crítico ou Híbrido para N1 ou N2, o grupo vem "comum"; a gestão pode mudar antes de salvar.
+    else if (SEPARATE_GROUP_TEAMS.includes(previous) && COMMON_GROUP.includes(team) && form.grupo_escala === 'separado') setValue('grupo_escala', 'comum', { shouldDirty: true })
   }
 
   return (

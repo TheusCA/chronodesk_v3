@@ -173,6 +173,7 @@ for (const [file, needle, count] of [
 }
 check(() => assert.match(read('src/pages/RotationTeams.jsx'), /COMMON_GROUP\.includes\(String\(employee\.equipe\)\.toLowerCase\(\)\)/u, 'Times de rodízio: só o grupo comum (D-F9-11)'))
 check(() => assert.match(read('src/pages/AdminPage.jsx'), /if \(SEPARATE_GROUP_TEAMS\.includes\(team\) && \['comum', 'separado'\]\.includes\(form\.grupo_escala\)\) setValue\('grupo_escala', 'separado', \{ shouldDirty: true \}\)/u, 'Funcionários: Crítico e Híbrido levam o grupo para separado (D-F9-12)'))
+check(() => assert.match(read('src/pages/AdminPage.jsx'), /else if \(SEPARATE_GROUP_TEAMS\.includes\(previous\) && COMMON_GROUP\.includes\(team\) && form\.grupo_escala === 'separado'\) setValue\('grupo_escala', 'comum', \{ shouldDirty: true \}\)/u, 'Funcionários: de Crítico ou Híbrido para N1 ou N2, o grupo vem comum (D-F9-25 revista)'))
 check(() => assert.match(read('src/pages/AdminPage.jsx'), /<option disabled=\{SEPARATE_GROUP_TEAMS\.includes\(normalizeTeam\(form\.equipe\)\)\} value="comum">/u, 'Funcionários: grupo comum desabilitado para Crítico e Híbrido'))
 check(() => assert.match(read('src/pages/DashboardPage.jsx'), /const liveEmployees = WORK_TEAMS\.flatMap\(\(team\) => livePauses\.status\?\.\[team\.value\] \|\| \[\]\)/u, 'Visão operacional: pausas em andamento das quatro equipes'))
 check(() => assert.match(read('src/pages/DashboardPage.jsx'), /\{lunches > 0 && <> · Almoço \{lunches\}<\/>\}/u, 'Visão operacional: o almoço no resumo das pausas só quando há'))

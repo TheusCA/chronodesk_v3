@@ -2978,6 +2978,24 @@ async function rotationTeamsF102(page, port, mock) {
   await sleep(500)
   const update = mock.requests.filter((r) => r.method === 'POST' && r.key === 'atualizar_funcionario.php')
   report('Cadastro: o grupo da escala abre com o gravado e vai no corpo do salvar', group === 'comum' && update.length === updates + 1 && update.at(-1).body?.grupo_escala === 'separado', JSON.stringify({ group, enviado: update.at(-1)?.body?.grupo_escala }))
+  // [D-F9-25 revista] Critico leva o grupo para separado; de volta ao N1, o grupo
+  // vem "comum", e a gestao ainda pode marcar "separado" antes de salvar.
+  await page.click(`[...document.querySelectorAll('main button')].find((b) => b.offsetParent !== null && b.textContent.trim() === 'Editar')`)
+  await page.waitFor(`!!document.querySelector('[data-employee-group] select')`)
+  const TEAM = `[...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent.startsWith('Equipe operacional')).querySelector('select')`
+  const GROUP = `document.querySelector('[data-employee-group] select')`
+  await setInput(TEAM, 'critico')
+  const toCritical = await page.evaluate(`${GROUP}.value`)
+  await setInput(TEAM, 'n1')
+  const backToN1 = await page.evaluate(`${GROUP}.value`)
+  await setInput(TEAM, 'n2')
+  const n1ToN2 = await page.evaluate(`${GROUP}.value`)
+  await setInput(GROUP, 'separado')
+  const beforeGroup = mock.requests.filter((r) => r.method === 'POST' && r.key === 'atualizar_funcionario.php').length
+  await page.click(`[...document.querySelectorAll('[role="dialog"] button[type="submit"]')].at(-1)`)
+  await sleep(500)
+  const savedGroup = mock.requests.filter((r) => r.method === 'POST' && r.key === 'atualizar_funcionario.php')
+  report('Cadastro (D-F9-25 revista): Critico vai para separado; de volta ao N1, "comum"; N1 para N2 nao mexe; a gestao muda antes de salvar', toCritical === 'separado' && backToN1 === 'comum' && n1ToN2 === 'comum' && savedGroup.length === beforeGroup + 1 && savedGroup.at(-1).body?.equipe === 'n2' && savedGroup.at(-1).body?.grupo_escala === 'separado', JSON.stringify({ toCritical, backToN1, n1ToN2, enviado: savedGroup.at(-1)?.body }))
   mock.restoreRotationTeams()
   mock.restoreRules()
 }

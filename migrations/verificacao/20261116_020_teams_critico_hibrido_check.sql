@@ -10,7 +10,9 @@
 -- enum_legado_pa_map_com_critico = 0; almoco_fora_do_critico = 0,
 -- almoco_com_alerta = 0, ativos_equipe_desconhecida = 0 e
 -- critico_ou_hibrido_no_grupo_comum = 0. Logo depois da migration, nenhuma
--- linha com equipe nova e pausas_com_limite = 0.
+-- linha com equipe nova e pausas_com_limite = 0. O n1_n2_ativos_no_grupo_separado
+-- e so a contagem (D-F9-25 revista): a gestao pode deixar alguem do N1 ou do N2
+-- no grupo separado; nenhum valor esperado.
 -- As assinaturas (no fim) cobrem so colunas anteriores a 020: nao mudam com a
 -- migration nem com o rollback se nenhuma linha mudar.
 
@@ -75,15 +77,19 @@ PREPARE limite_020_stmt FROM @limite_020_sql;
 EXECUTE limite_020_stmt;
 DEALLOCATE PREPARE limite_020_stmt;
 
--- Grupo da escala (021): Critico e Hibrido nunca no grupo comum (D-F9-12)
+-- Grupo da escala (021): Critico e Hibrido nunca no grupo comum (D-F9-12); N1 e
+-- N2 ativos no grupo separado, so a contagem (D-F9-25 revista)
 SET @tem_grupo := (
     SELECT COUNT(*) FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'grupo_escala'
 );
 SET @grupo_020_sql := IF(
     @tem_grupo = 1,
-    'SELECT COUNT(*) AS critico_ou_hibrido_no_grupo_comum FROM funcionarios
-      WHERE LOWER(TRIM(equipe)) IN (''critico'', ''hibrido'') AND grupo_escala = ''comum''',
+    'SELECT
+        (SELECT COUNT(*) FROM funcionarios
+          WHERE LOWER(TRIM(equipe)) IN (''critico'', ''hibrido'') AND grupo_escala = ''comum'') AS critico_ou_hibrido_no_grupo_comum,
+        (SELECT COUNT(*) FROM funcionarios
+          WHERE ativo = 1 AND LOWER(TRIM(equipe)) IN (''n1'', ''n2'') AND grupo_escala = ''separado'') AS n1_n2_ativos_no_grupo_separado',
     'SELECT ''021 ausente'' AS critico_ou_hibrido_no_grupo_comum'
 );
 PREPARE grupo_020_stmt FROM @grupo_020_sql;
