@@ -1679,6 +1679,21 @@ Base da afirmação:
 
 ---
 
+### Controle de CHG no portal: plano (só docs) — 2026-11-17
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Planejar o módulo Controle de CHG no portal (substitui o Controle de CHG v5.2, HTML com JSON numa pasta de rede): grupo Tools, permissão `chg.manage`, migration 025, regras puras, API, telas, exportação e importação, roteiro do deploy 7. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: o commit deste plano. Sem push pela IA. |
+| **O que a IA alterou** | Desenho principal, seção 9.17 (plano, decisões D-CHG-13 a D-CHG-31, LGPD, riscos, lotes); `docs/DESENHO_CHG.md` com o aviso de que o G0 e o G0b foram substituídos. |
+| **Dados pessoais** | Nenhum no git. As referências (`_referencias/chg/`, fora do git) têm nomes reais: a IA leu a ferramenta inteira e, dos dois JSON, só a estrutura e contagens; nenhum valor foi copiado para docs, testes ou commits. |
+| **Validacao executada pela IA** | Leitura da ferramenta e dos formatos dos dois JSON; levantamento do código do portal (permissões, sessão, cadastro, orçamento do build). Bateria completa sozinha no commit. |
+| **Achados** | O orçamento de CSS do build (68,3 de 70 KB) não comporta o módulo: proposta D-CHG-26 (CSS da rota com orçamento próprio). O pedido põe "importar" no `chg.manage` e a tela de importação como do admin: vale a regra mais restrita (D-CHG-15). O JSON de dados tem um campo (`chamado`) que o v5.2 não usa: descartado e contado (D-CHG-24). |
+| **Decisões (recomendadas)** | D-CHG-13 a D-CHG-31 (9.17.8); o lote segue com elas, como pedido. |
+| **Validacao humana** | Pendente: revisão única no fim do lote. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

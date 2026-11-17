@@ -1,5 +1,7 @@
 # Desenho — Módulo de CHGs (mudanças)
 
+> **Substituído em 2026-11-17** pelo plano do Controle de CHG no portal (desenho principal, `docs/DESENHO_PA_ESCALA_AUSENCIA.md`, seção 9.17): o pedido novo leva todas as funcionalidades do Controle de CHG v5.2 para o portal. O G0 e o G0b abaixo ficam só como histórico (nunca implementados); as decisões C1 a C16 e D-CHG-1 a D-CHG-12 não valem mais.
+
 **Requisito:** `docs/REQUISITOS_CHG.md`
 **Data:** 2026-10-28 (G0); 2026-10-29 (G0b)
 **Base analisada:** `de93913` (G0) e `d2a9528` (G0b), no branch `feat/employee-form-rhf-zod`

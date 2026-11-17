@@ -5655,6 +5655,156 @@ Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a b
 
 **Fora do repositório:** a senha de root do MySQL local de ensaio (exposta em parte numa saída de ferramenta, 9.16.9 e registro) é trocada na estação, ou o contêiner é parado e removido quando não for mais usado; nada disso vai para o git. Os backups do servidor do deploy 3 são limpos pelo responsável, pela folha, depois do deploy 4.
 
+### 9.17 Controle de CHG no portal (substitui o "Controle de CHG v5.2"; plano de 2026-11-17)
+
+**Pedido de 2026-11-17:** levar **todas** as funcionalidades do Controle de CHG v5.2 (um HTML com JSON numa pasta de rede) para o portal, no padrão de sempre (React do redesenho, PHP, MySQL, auditoria, CSRF), com permissão por grupo. Referências fora do git, só leitura, com nomes reais (nunca copiados para docs, testes, capturas ou commits): a ferramenta (`_referencias/chg/controle_chg_v5_2.html`), os dados de 2026-11-05 (9 cards, 4 IDs em `deleted`) e o catálogo (168 carteiras, 8 locais). Testes e capturas só com dados fictícios (`Carteira Teste NN`, `Tecnico NN`, `CHG0000001`).
+
+**Este plano substitui o G0 e o G0b** (`docs/DESENHO_CHG.md`, 2026-10-28/29, nunca implementados): o modelo do v5.2 (planos com tasks, tentativas de patch, rollback) toma o lugar das tarefas e do comitê do G0b (a migration 023 de lá nunca existiu; a 023 é do F10-4), e a 4.5 de lá (branch e deploy) fica respondida: mesmo branch, **deploy 7**. O F8 (018) passa a ser o deploy 8 ou posterior. As decisões antigas (C1 a C16, D-CHG-1 a D-CHG-12) não valem mais; as novas começam na **D-CHG-13**. Onde o G0 tinha regra diferente do v5.2 (carteira fora do catálogo recusada, fim estritamente depois do início, só `https`, formato fixo do número), vale o v5.2, como pedido.
+
+#### 9.17.1 O que o v5.2 faz (leitura de 2026-11-17)
+
+- **Seis etapas:** Aguardando Comitê, Em preparação, Em execução, Validação/Encerramento TASK, Concluídas e Canceladas. A etapa é calculada (`stageOf`/`autoStage`) a cada desenho da tela, com o relógio de agora; a etapa manual (`stageManual` e `stageManualAuto`) só vale enquanto o automático não passa dela.
+- **Card:** solicitante, tipo (Padrão ou Emergencial), N carteiras (código ou "sem código", nome, PAs opcionais) e N locais, PAs (soma das carteiras), versão/caminho, versão anterior, descrição (até 300), link da planilha, data sugestão, aprovação Service, início e fim do Service Desk, número e status da CHG, técnico, N planos (implantação, backup, rollback e o status da task de cada um), a tentativa de patch atual e o histórico (endpoints com início, status, registrada em), o rollback e a conclusão.
+- **Telas:** Quadro (6 colunas; Concluídas e Canceladas atrás de um interruptor), Lista e Dashboard por técnico; KPIs; filtros; o card muda de conteúdo por etapa; formulário em diálogo com a guarda de "fechar sem salvar"; copiar a tabela (HTML e texto); exportar Excel (Cards e Base); mover por menu e por arrastar.
+- **Persistência:** `localStorage` e um JSON numa pasta de rede, lido a cada 15 s, com fusão pelo `updatedAt` e uma lista de `deleted`; a própria ferramenta avisa que não há controle de concorrência. O portal troca isso pelo banco com a versão da linha.
+- O JSON de dados tem um campo `chamado` que o v5.2 não lê nem mostra: fica de fora, como todo campo desconhecido (D-CHG-24).
+
+#### 9.17.2 Grupo Tools e permissão
+
+- **"Tools" é um grupo, separado da equipe e do perfil** (N1 + Tools, N2 + Tools, Liderança + Tools...). O campo "Grupo Tools", reservado e desabilitado em Funcionários desde o R4d (formulário e filtro), passa a valer.
+- **Persistência (D-CHG-13):** tabela `funcionario_grupos (funcionario_id, grupo)`, com `grupo` em lista fechada (`'tools'` por enquanto), chave primária nas duas colunas, FK para `funcionarios` com `RESTRICT`, autoria e data. **Por que tabela e não coluna:** um grupo novo é uma linha e um valor a mais na lista, sem `ALTER TABLE` na tabela de cadastros (a mais lida do sistema); a pertença tem autoria própria; e a consulta "quem é do grupo" é um índice, não uma varredura. Custo: uma leitura a mais para saber se alguém é do Tools (uma linha, pela chave primária).
+- **Quem marca e desmarca:** admin e Liderança, no formulário de Funcionários (a mesma tela, o mesmo salvar), **auditado só com IDs** (`FUNCIONARIO_GRUPO`, com o ID do cadastro, o grupo e entrou/saiu). A Liderança segue as regras de hoje do cadastro: não altera cadastro de Liderança nem de admin (L9). Gestor não marca.
+- **`chg.manage`** (criar, editar, mover, concluir, reabrir, arquivar, duplicar, importar não, ver abaixo): admin, Liderança e **quem está no grupo Tools**. Como o perfil não basta, a permissão é da **pessoa**: `chg_can_manage(role, employee_id)` = perfil admin ou Liderança, ou funcionário ativo da sessão no grupo Tools. **D-CHG-14:** o perfil "somente leitura" nunca escreve, nem no Tools (a regra global do portal continua valendo: `require_portal_write_access`); por isso o formulário **não deixa marcar Tools** em quem é somente leitura (400 no servidor, com a mensagem), e mudar o perfil de alguém do Tools para somente leitura tira o Tools na mesma gravação (auditado).
+- **Importar** (item 6 do pedido): **só admin** (`chg.import`, permissão nova do perfil admin).
+- **Catálogos** (carteiras base e locais): `chg.manage` edita (D-CHG-15), como as outras escritas do módulo.
+- **Todo perfil autenticado vê** o módulo (Quadro, Lista, Dashboard), em **somente leitura**: sem editores no card, sem arrastar, sem "Mover para", sem os botões de alterar. Copiar números, links e a tabela continua liberado. Exportar Excel: todos (D-CHG-16; é o que a lista mostra, com auditoria).
+- **O servidor confere em todo endpoint de escrita:** sem `chg.manage` (ou `chg.import`), **403 com auditoria da recusa** (`CHG_NEGADO`, só o perfil e a ação). A tela não decide nada: o GET devolve `can_manage` e `can_import`, calculados no servidor. Linhas novas na matriz do `qa-security` (técnico fora do Tools, técnico no Tools, somente leitura no Tools, gestor, Liderança, admin; GET, POST e importação).
+- **Menu:** "Controle de CHG", atrás de `CHG_MODULE_ENABLED` (D-CHG-17: **ausente ou inválido = desligado**; o deploy 7 liga). Desligado: o menu some e a API responde 404 (nada vaza). O `session.php` passa a levar `modulos.chg` (sem leitura de banco).
+
+#### 9.17.3 Dados (migration 025)
+
+A 022 e a 023 continuam reservadas para o F10-3 e o F10-4. A 025 cria as tabelas **vazias** (nenhum nome de cliente no git: as carteiras e os locais entram pela importação do 9.17.6). Mesmo padrão das anteriores: idempotente (cada passo confere o `information_schema`), rollback com guarda (para se já houver cópia `*_bkp_025`; copia e apaga na ordem das FKs), verificação **só com contagens**, ensaio no MySQL 8.0.46 do WSL nas duas variantes e as linhas do ensaio (fictícias) para a variante (b).
+
+| Tabela | Conteúdo | Regras no banco |
+|---|---|---|
+| `funcionario_grupos` | `funcionario_id`, `grupo` ENUM(`tools`), autoria, `created_at` | PK (`funcionario_id`, `grupo`); FK `RESTRICT` |
+| `portal_chg_carteiras` | catálogo: `codigo` (até 10, só dígitos), `nome` (até 120), `ativo`, autoria | `codigo` único; nome não vazio |
+| `portal_chg_locais` | catálogo: `nome` (até 60), `ativo`, autoria | `nome` único (sem diferença de caixa) |
+| `portal_chg_updates` | o card: `legacy_id` (id do v5.2, único, nulo nos novos), `solicitante` (até 100), `tipo` ENUM(`padrao`, `emergencial`), `versao` e `versao_anterior` (até 500, texto puro), `descricao` (até 300), `link_planilha` (até 2048), `sugestao_at`, `service_status` ENUM(`aguardando`, `aprovado`, `cancelado`), `sd_inicio` e `sd_fim` (+ `sd_fim_auto`), `chg_numero` (até 40, maiúsculas), `chg_status` ENUM(`pendente`, `aprovada`, `cancelada`) nulo = não solicitada, `tecnico_id` (FK) **ou** `tecnico_nome_legado` (até 100, só do histórico importado sem correspondência), `stage_manual` e `stage_manual_auto` ENUM(`comite`, `prep`, `exec`, `valid`), `concluida`, `concluida_em`, `archived_at`/`archived_by`, `row_version`, autoria, `created_at` e `updated_at` (milissegundos, preservados na importação) | `sd_fim >= sd_inicio`; `chg_status = 'aprovada'` exige número; número sem minúscula; nunca técnico por ID e por nome juntos; manual só com a base |
+| `portal_chg_update_carteiras` | por card, na ordem: `codigo` (nulo = sem código), `nome` (até 120), `pas` (0 a 99999, nulo) | (card, posição) único; até 50 por card |
+| `portal_chg_update_locais` | por card, na ordem: `nome` (até 60) | (card, nome) único: sem repetir |
+| `portal_chg_plans` | por card, `position` (0 = Plano 1): `implantacao`, `backup`, `rollback` (até 40, maiúsculas, `N/A` = não precisa) e `task_impl`, `task_bkp`, `task_roll` ENUM(`pendente`, `fechada`) | (card, posição) único; até 20 |
+| `portal_chg_attempts` | tentativas de patch: `attempt_no` (a de maior número é a atual), `patch_status` ENUM(`sucesso`, `parcial`, `erro`) nulo = sem status, `reagendando`, `registered_at` (nulo na atual) | (card, número) único; até 50 |
+| `portal_chg_endpoints` | por tentativa, na ordem: `url` (até 2048), `start_at` **ou** `start_date` ("só data, horário pendente") | nunca os dois; até 20 por tentativa |
+| `portal_chg_rollbacks` | `url`, `start_at`, `started_at`, `status` ENUM(`em_andamento`, `sucesso`, `erro`), `plan_position`, `removed_at` | **no máximo um ativo por card** (coluna gerada única, nula quando removido) |
+
+- **D-CHG-18 — carteira do card guarda código e nome (cópia), não FK do catálogo.** O v5.2 aceita código fora da lista (com aviso) e nome editado; o catálogo só sugere e preenche. A FK prenderia o histórico ao catálogo (renomear a carteira mudaria cards antigos).
+- **D-CHG-19 — técnico por FK, com o nome em texto só no histórico importado sem correspondência.** Na edição, o campo é a lista de funcionários ativos (com busca); o nome legado aparece como está, marcado "(histórico)", e some ao escolher alguém da lista. Ninguém digita nome novo.
+- **D-CHG-20 — partes do card (endpoint, plano extra, tentativa, rollback) não são cards:** saem como no v5.2, com a escrita auditada e a versão do card incrementada. O **card nunca é apagado**: arquiva (`archived_at`), como o F4, e o arquivado sai das telas (o filtro "Mostrar arquivados" fica para depois, D-CHG-31). O rollback "excluído" ganha `removed_at` (o histórico fica no banco).
+- **Datas:** `DATETIME` na hora local do portal (como o resto do sistema; regra do A4). Milissegundos (`DATETIME(3)`) só em criado, atualizado e concluído, que vêm do v5.2 em milissegundos.
+- **Concorrência (D-CHG-21):** toda escrita manda o `row_version` que a tela tem; diferente do banco = **409** "Alguém alterou este card; recarregue." A escrita trava o card (`SELECT ... FOR UPDATE`), aplica, incrementa a versão e devolve o card inteiro, com a etapa calculada.
+
+#### 9.17.4 Regras (servidor, funções puras com QA em tabela; a tela não recalcula)
+
+`ChgStageRules` (sem banco, sem relógio: o "agora" entra como parâmetro), espelho do v5.2:
+
+- `autoStage`: rollback ativo → `valid` se Sucesso, senão `exec`; sem número ou CHG não Aprovada → `comite`; patch Sucesso ou Parcial → `valid`; patch Erro → `prep`; reagendando → `exec` a partir do início do novo patch (o menor `start_at` da tentativa atual), `prep` antes (ou sem horário); sem início do SD → `prep`; agora ≥ início → `exec`; agora ≥ início − 4 h → `prep`; senão `comite`.
+- `stageOf`: cancelada se aprovação Service = Cancelado ou CHG = Cancelada; concluída se `concluida`; senão a combinação manual × automático do v5.2 (manual à frente da base fica até o automático passar dele; manual atrás da base vale só enquanto o automático for a base).
+- `isManual` ("Movido manualmente ↺", com volta ao automático), `waitingWindow` (CHG aprovada ainda no Comitê: "Inicia preparação em ..."), `isLate` ("Janela encerrada": em Execução com o fim do SD no passado), `prepAt`, `patchStart`.
+- **Mover** (`moveTo`): Concluídas marca concluída (e desfaz o cancelamento como no v5.2); Canceladas marca a aprovação Service como Cancelado; outra coluna reabre, desfaz o cancelamento e grava o manual (ou limpa, se a coluna for a automática).
+- **Erro do patch e rollback com Sucesso passam por cima do manual** (limpam o manual), como no v5.2. Iniciar rollback e "+ Novo patch" também limpam.
+- **Concluir execução:** só com o rollback em Sucesso (quando ativo), com técnico e com **todas as tasks necessárias Fechadas em todos os planos** (task necessária = plano preenchido e diferente de `N/A`); senão 409 com a lista do que falta ("Feche antes de concluir: Task de Backup (Plano 2) e Task de Rollback (Plano 1)."). **Reabrir** limpa o concluído e o manual.
+- **"+ Novo patch":** arquiva a tentativa atual (endpoints preenchidos, status, registrada em, reagendando) e abre outra com um endpoint vazio e **só a data de hoje**; o card volta a Preparação. **Excluir tentativa:** a atual devolve a anterior como atual; do histórico, renumera. **Status de tentativa do histórico:** editável. **Iniciar Rollback:** pelo status da task de rollback de um plano (opção "↶ Iniciar Rollback"), com início e "iniciado em" = agora, status Em andamento e o plano de origem; um só ativo (409 se já houver). **Excluir rollback:** mantém a etapa atual (grava o manual se preciso), como no v5.2. **Excluir plano:** o Plano 1 nunca; nem o plano de um rollback ativo.
+- **Formulário:** solicitante, data sugestão e ao menos uma carteira e um local obrigatórios; carteira com código ou "sem código" e nome; locais sem repetir (sem diferença de caixa); PAs = soma das carteiras (o v5.2 mantém o total anterior quando nenhuma carteira tem PAs em card com várias carteiras; igual); início do SD vem da sugestão e o fim = início + 24 h **enquanto o usuário não mexer** (`sd_fim_auto`); fim antes do início = 400; Aprovada sem número = 400; número novo sem status vira Pendente; sem número, o status é limpo; número e planos em maiúsculas.
+- **Duplicar:** abre o formulário com a cópia, sem CHG (número e status), técnico, endpoints, rollback, histórico, status do patch, etapa manual e conclusão (aprovação Service volta para Aguardando retorno).
+- **Links (endpoint, rollback, planilha) — D-CHG-22:** só `http://` e `https://` absolutos, com host; recusa `javascript:`, `data:`, `file:`, `vbscript:` e qualquer outro esquema, no servidor (400) e na tela (o botão de abrir fica desligado). O v5.2 também completava `www.` e domínio sem esquema com `https://`: o portal **guarda o que foi digitado só se for `http(s)`**; `www.exemplo` é recusado com a mensagem "Use o endereço completo, com https://" (a importação completa como o v5.2 e conta quantos completou). Abrir com `rel="noopener noreferrer"` e `target="_blank"`. Caminho UNC da versão é texto puro (nunca link).
+- **Normalização do v5.2 (`norm`) na importação:** `analista` vira solicitante; CHG e planos em maiúsculas; tasks dos planos extras só `Fechada` ou vazio; rollback ativo sem status = Em andamento; `triagem` = `comite`; carteira antiga (`carteira`, `codigo`, `nomeCarteira`) vira a lista; locais sem repetição.
+
+#### 9.17.5 Telas (redesenho "Mesa clara")
+
+- Rota `/chg` (menu "Controle de CHG", grupo Operação), atrás do `modulos.chg`. Três vistas (Quadro, Lista, Dashboard) num controle segmentado; o título da página mostra "N de M".
+- **Quadro:** quatro colunas ativas + Concluídas e Canceladas atrás de "Mostrar concluídas e canceladas". Abaixo de 1280 px, uma coluna por vez em seções empilhadas (sem rolagem lateral em 390 px).
+- **Card por etapa**, como no v5.2: Comitê (número, status e planos editáveis, técnico, "inicia preparação em", aprovação Service); Preparação (planos, endpoints e técnico); Execução (barra de SLA com as marcas dos patches e do rollback, "restam" ou "encerrado há"); Validação (endpoints só para consulta, status do patch editável, tasks do plano e "Concluir execução"); Concluída (planos só para consulta e "Reabrir"); Cancelada (número e status). Carrossel de planos, carrossel rollback/patches com o histórico, carteiras e locais expansíveis (`details`), copiar CHG, tasks, links e versão, selo do patch (Sucesso/Parcial/Erro) e do rollback.
+- **Sem atributo `style`:** a cor da etapa, do patch e do rollback vem de classes (`chg-stage-comite`...); a posição das marcas na barra de SLA usa um `<progress>`/`<meter>` e marcas posicionadas por classes de 5 em 5 % (D-CHG-23: 21 classes, sem `style`, precisão de 5 % na marca, com o horário exato no rótulo acessível).
+- **"Mover para"** por `select` acessível por teclado; arrastar e soltar só como atalho (mesma ação do servidor).
+- **Formulário no Drawer** do portal, com a guarda de alteração não salva (`formDirty`) e a máscara `dd/mm/aaaa hh:mm` (inclusive `--:--` para horário pendente no início do patch).
+- **KPIs, filtros, Lista e Dashboard** como no v5.2. Técnico e "mostrar concluídas" ficam guardados por pessoa (`localStorage` com `try/catch`).
+- **Copiar tabela:** HTML com as cores de status do v5.2 (para colar em e-mail, Teams e Excel) e texto com tabulação. O HTML copiado **leva estilo em linha** (é o que o e-mail e o Excel entendem); ele é montado como texto escapado e nunca entra no DOM do portal. A prévia de quando a cópia é bloqueada usa classes (sem `style`).
+- **Exportar Excel no servidor (D-CHG-25):** `api/portal/chg_export.php` gera o `.xlsx` ("Cards" + "Base", com as cores, os links e o filtro automático do v5.2) com um **escritor ZIP próprio** (entradas sem compressão, `crc32` nativo do PHP): sem CDN, sem dependência nova e **sem o `ZipArchive`** (o PHP da estação não tem; o do servidor tem, mas o QA precisa rodar nos dois). Células sempre como texto (`inlineStr`) e neutralizadas contra fórmula (`=`, `+`, `-`, `@`, tab e CR no início: o `csv_neutralize_cell` de hoje). Auditoria `CHG_EXPORTADO` com a contagem. Mesmo filtro da tela (a tela manda os filtros; o servidor recalcula).
+- **Atualização** a cada 30 s e ao voltar o foco (o "agora" muda a etapa); o servidor devolve a etapa calculada no "agora" dele.
+- **Orçamento de CSS (D-CHG-26):** o build está com 68,3 KB de 70 KB (D-R1-2). O módulo leva o próprio CSS (`src/pages/chg/chg.css`), importado só pela página do CHG (o Vite gera um arquivo à parte, carregado só na rota), escrito com os tokens e **sem classe utilitária nova** nos `.jsx` do módulo. O `qa:bundle` passa a separar: o CSS do resto do portal continua com o limite de 70 KB, e o da rota do CHG ganha limite próprio (**25 KB**).
+
+#### 9.17.6 API
+
+- `api/portal/chg.php`: **GET** (todo autenticado): cards não arquivados com as partes, a etapa e os rótulos calculados no "agora" do servidor, os catálogos, os técnicos possíveis (ID e nome dos funcionários ativos), `can_manage`, `can_import` e `now`. **POST** (`chg.manage` + CSRF): `create`, `update` (formulário), `patch_field` (os editores do card: CHG, status, aprovação Service, técnico, planos, tasks, endpoints, status do patch), `move`, `auto`, `finish`, `reopen`, `new_patch`, `delete_attempt`, `history_status`, `start_rollback`, `rollback_field`, `delete_rollback`, `add_plan`, `delete_plan`, `add_endpoint`, `delete_endpoint`, `archive`, `save_catalog`.
+- `api/portal/chg_export.php` (GET, todo autenticado) e `api/portal/chg_import.php` (POST, `chg.import` + CSRF; `preview` e `confirm`).
+- Validação de tamanho e tipo em todos os campos (lista fechada de chaves por ação; chave desconhecida = 400), payload até 64 KB (a importação, até 2 MB).
+- **Auditoria só com IDs e a operação** (`CHG_CRIADO`, `CHG_ALTERADO acao=finish id=12 versao=5`...), sem texto livre (nada de solicitante, técnico, link, caminho ou número da CHG no log).
+
+#### 9.17.7 Importação (admin)
+
+Tela "Importar do Controle v5" (no próprio módulo, só para quem tem `chg.import`): aceita o JSON de dados v2 (`items` e `deleted`) e o JSON do catálogo (`carteiras` e `locais`).
+
+- **Prévia só com contagens:** cards novos, atualizados, iguais, ignorados por estarem em `deleted`, ignorados por serem mais antigos que os do portal, técnicos sem correspondência em funcionários, carteiras e locais novos no catálogo, links completados com `https://`, campos desconhecidos descartados. Depois, "Confirmar importação" (a confirmação refaz a prévia no servidor, na mesma transação, e grava).
+- **Idempotente pelo id legado; o `updatedAt` mais novo vence** (igual = nada muda). Preserva `createdAt`, `updatedAt` e `concluidaEm`; normaliza como o `norm()` do v5.2; **casa o técnico por nome** (sem acento e sem caixa) com os funcionários **ativos**; mais de um com o mesmo nome = sem correspondência (D-CHG-27; fica no nome legado).
+- Limite de 2 MB e de 2000 cards por arquivo; esquema estrito (tipos e tamanhos de cada campo); campos desconhecidos descartados (contados na prévia).
+- Card importado que está em `deleted` de um arquivo posterior **não é apagado** (contado na prévia como "em deleted e já no portal: arquive pela tela"; D-CHG-28).
+
+#### 9.17.8 Decisões (D-CHG-13 a D-CHG-31, recomendadas; o lote segue com elas)
+
+| # | Decisão | Motivo |
+|---|---|---|
+| D-CHG-13 | Grupo Tools em tabela `funcionario_grupos` (grupo em lista fechada) | Grupos futuros sem `ALTER` na tabela de cadastros; autoria própria; índice para "quem é do grupo" |
+| D-CHG-14 | Somente leitura nunca escreve, nem no Tools; o formulário recusa Tools para esse perfil e a troca para somente leitura tira o Tools | Mantém a regra global do portal sem exceção |
+| D-CHG-15 | Catálogos editados por quem tem `chg.manage`; importar só o admin (`chg.import`) | Quem lança o card precisa incluir a carteira nova. O pedido põe "importar" na lista do `chg.manage` e a tela de importação como do admin: vale a regra mais restrita, porque a importação grava em lote |
+| D-CHG-16 | Exportar Excel liberado a todo autenticado (o que ele já vê), com auditoria | O v5.2 exporta para todos; é leitura |
+| D-CHG-17 | `CHG_MODULE_ENABLED` ausente ou inválido = desligado; desligado, a API responde 404 | Módulo novo: falha fechada |
+| D-CHG-18 | Carteira do card como cópia (código e nome), sem FK do catálogo | O v5.2 aceita código fora da lista e nome editado |
+| D-CHG-19 | Técnico por FK; nome em texto só no histórico importado sem correspondência | Pedido; ninguém digita nome novo |
+| D-CHG-20 | Card nunca é apagado (arquiva); partes saem como no v5.2, auditadas; rollback excluído ganha `removed_at` | "Nunca DELETE" do card; histórico do rollback no banco |
+| D-CHG-21 | `row_version` em toda escrita; 409 "Alguém alterou este card; recarregue." | Pedido |
+| D-CHG-22 | Links só `http(s)` absolutos; `www.` sem esquema recusado na tela e completado só na importação | O v5.2 completava; no portal o endereço gravado é o que se abre |
+| D-CHG-23 | Marcas da barra de SLA em classes de 5 em 5 %, sem `style` | Regra do redesenho (sem atributo `style`) |
+| D-CHG-24 | O campo `chamado` do JSON (não usado pelo v5.2) é descartado, como todo campo desconhecido, e contado na prévia | Pedido (campos desconhecidos descartados) |
+| D-CHG-25 | Excel no servidor com escritor ZIP próprio, sem `ZipArchive` | Sem dependência; o QA roda na estação, que não tem a extensão |
+| D-CHG-26 | CSS do módulo num arquivo da rota, com orçamento próprio de 25 KB; o resto continua em 70 KB | O orçamento atual (68,3 de 70 KB) não comporta o módulo |
+| D-CHG-27 | Técnico casado só com funcionário ativo e nome único (sem acento e sem caixa) | Nome repetido não decide sozinho |
+| D-CHG-28 | Card em `deleted` de um arquivo posterior não é apagado; a prévia conta | Nunca DELETE; quem arquiva é a pessoa |
+| D-CHG-29 | Limites: 50 carteiras, 20 locais, 20 planos, 50 tentativas, 20 endpoints por tentativa | Payload, tela e consulta |
+| D-CHG-30 | A etapa é calculada no servidor no GET (com o `now` dele) e devolvida pronta; a tela só mostra | Pedido ("a tela não recalcula") |
+| D-CHG-31 | Ver arquivados fica para depois (só pelo banco até lá) | Fora do v5.2 |
+
+#### 9.17.9 LGPD
+
+O módulo guarda **nomes de solicitante e de técnico** (o técnico por ID), **links** de endpoint, rollback e planilha, **caminhos** de rede (versão) e números de CHG e de task. **Nada disso vai para log, auditoria, chat, captura ou git:** a auditoria leva só IDs, a ação e contagens; QA, ensaio, integração e capturas usam só dados fictícios; a prévia da importação mostra só contagens. Leitura liberada a todo autenticado (como hoje na pasta de rede), escrita só com `chg.manage`. Retenção: como o resto do portal (sem apagar); arquivar tira das telas.
+
+#### 9.17.10 Riscos
+
+| Risco | Mitigação |
+|---|---|
+| Etapa diferente do v5.2 por diferença de fuso ou de relógio | Regras puras com o "agora" como parâmetro, QA em tabela com os casos do v5.2 (incluindo as 4 h e o reagendamento); a tela mostra o `now` do servidor |
+| Dois editores no mesmo card | `row_version` + `FOR UPDATE`; 409 com recarga |
+| Link malicioso | Só `http(s)` no servidor e na tela; `noopener noreferrer`; nada de `href` montado sem validação |
+| Fórmula no Excel | Células como texto e neutralizadas |
+| Importação errada | Prévia só com contagens, confirmação, idempotência pelo id legado, transação única |
+| Orçamento de CSS e JS | CSS da rota à parte (D-CHG-26); a página é carregada sob demanda (o JS de entrada não cresce) |
+| Módulo ligado antes da hora | Flag desligada por padrão; o deploy 7 liga depois das conferências |
+
+#### 9.17.11 Lotes e commits (parada única no fim)
+
+Cada commit com a bateria completa sozinha e a mutação; QAs PHP e do frontend novos; bloco do navegador (inclusive somente leitura × Tools) e capturas antes/depois.
+
+1. Este plano (docs).
+2. Migration 025 (tabelas, rollback, verificação, linhas do ensaio) e QA estrutural; ensaio no MySQL do WSL.
+3. Regras puras (`ChgStageRules`, validação e normalização) com QA em tabela.
+4. Servidor: grupo Tools no cadastro de funcionários, `chg_can_manage`, `ChgService`, `api/portal/chg.php`, `chg_export.php` (escritor XLSX), matriz do `qa-security`, flag.
+5. Telas: Funcionários (Tools ativo), menu, Quadro, Lista, Dashboard, card por etapa, formulário, copiar, exportar; QA do frontend, bloco do navegador, capturas.
+6. Importação (serviço, endpoint e tela) com QA e integração no MySQL local.
+7. Roteiro e folha do deploy 7 com a trava.
+8. Docs da execução e registro.
+
+**Próximo passo:** execução direta (pedido de 2026-11-17), parando antes só se aparecer algo que mude permissão ou o modelo de dados além do descrito.
+
 ---
 
 ## 10. Riscos e pendências
