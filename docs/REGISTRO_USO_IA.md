@@ -1620,6 +1620,19 @@ Base da afirmação:
 
 ---
 
+### Rodízio de papéis do Crítico: plano (só docs) — 2026-11-16
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Plano do lote próprio pedido na AD-F9-3 (desenho principal, 9.16): papéis com jornada e tipo de presença, rodízio por semana ou mês com âncora e troca pontual, alimentando a função da jornada do dia (9.15.6), sem planilha externa, reaproveitando do F10-2 as versões com vigência. **Nenhum código.** |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: um commit só de docs. Sem push pela IA. |
+| **O que a IA alterou** | `docs/DESENHO_PA_ESCALA_AUSENCIA.md` (9.16) e esta entrada. |
+| **Dados pessoais** | Nenhum. A ordem das pessoas no rodízio é lista de IDs; os papéis são cadastrados pela tela. |
+| **Limitacoes declaradas** | Migration 024 só desenhada (sem ensaio); AD-PC-1 a AD-PC-4 com a Liderança. |
+| **Validacao humana** | Pendente: revisão do plano. |
+
+---
+
 ## 5. Responsabilidade
 
 O conteúdo gerado por IA é **proposta técnica sujeita a revisão humana**. A responsabilidade pela correção, pela adequação ao negócio e pela publicação em qualquer ambiente é do responsável humano identificado na seção 1. Nenhuma alteração gerada por IA foi promovida a ambiente produtivo sem revisão e execução manual.

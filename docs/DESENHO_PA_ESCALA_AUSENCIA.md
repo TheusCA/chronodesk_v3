@@ -5501,6 +5501,83 @@ Commits por cima do lote (nenhum commit entregue foi reescrito), cada um com a b
 
 ---
 
+### 9.16 Rodízio de papéis do Crítico: plano (2026-11-16; só docs, nenhum código)
+
+**Base:** AD-F9-3, respondida em 2026-11-16 (9.15.6): o Crítico tem **2 pessoas 100% presenciais**, **abertura home das 07:00 às 17:00**, **fechamento home das 10:30 às 20:30** e **mais 1 home no horário normal**; nenhum turno passa da meia-noite; **os papéis rodam** entre as pessoas, por semana ou por mês. No F9, a jornada e a presença de cada um seguem o cadastro e a regra individual, e a gestão atualiza pela tela quando o papel roda. Este lote tira essa atualização manual: o papel do dia dá a jornada e o tipo de presença, pela função única da jornada do dia (`PresenceRepository::shiftFor`, 9.15.6). **Sem planilha externa.** Reaproveita do F10-2 o padrão de versões com vigência, a trava por colaborador, a prévia antes de salvar, a auditoria só com IDs e as permissões D-F10-5. **Nenhum código antes da aprovação.**
+
+#### 9.16.1 Conceitos
+
+- **Papel**: nome, tipo de presença (`presencial` ou `remoto`) e jornada (início e fim, sem cruzar a meia-noite; o "horário normal" é uma jornada como as outras). Os cinco papéis de hoje (Presencial A, Presencial B, Abertura home, Fechamento home e Home no horário normal) são cadastrados pela tela, sem valor no código.
+- **Rodízio**: uma versão com vigência (`effective_from`), período (`semana` ou `mes`), âncora (a segunda-feira da 1ª semana, ou o dia 1 do 1º mês), a ordem das pessoas (lista de IDs do Crítico) e a ordem dos papéis. No período *k* contado da âncora, a pessoa na posição *i* fica com o papel da posição *(i + k) mod n*. Versão nova, como no F10-2, vale a partir da data dela, e o passado fica como estava.
+- **Troca pontual**: para uma pessoa e uma data (ou intervalo curto), o papel daquele dia muda à mão, com autoria e auditoria só com IDs. Tem precedência sobre o rodízio.
+- **Precedência no motor** (por pessoa e dia): ausência > exceção de escala por data > troca pontual > papel do rodízio > regra individual > cadastro. Fora do Crítico, nada muda.
+
+#### 9.16.2 Onde entra
+
+| Área | Como fica |
+|---|---|
+| Jornada do dia (9.15.6) | `shiftFor` devolve a jornada do papel do dia (troca pontual ou rodízio); sem papel, a do cadastro, como hoje |
+| Presença (motor) | O tipo de presença do papel vira a "escala" do dia (origem `papel`), no lugar da regra individual; a ausência e a exceção por data continuam vencendo |
+| Regra de pelo menos 1 disponível (9.15.17) | Usa a jornada do dia do papel, sem mudança na regra |
+| Visão operacional, Calendário, Relatórios | Pelo motor, como hoje (o papel aparece no detalhe: "Abertura home 07:00–17:00") |
+| Mapa PA (F10-3, D-F10-19 revista) | Os 2 PAs reservados do Crítico (opção (b), N = 2) atendem os 2 papéis presenciais do dia |
+| Tela Escala presencial | Seção "Papéis do Crítico", como a dos times de rodízio: papéis, rodízio vigente, prévia de 8 semanas e trocas pontuais, num painel lateral (Drawer) |
+
+#### 9.16.3 Dados (migration 024; a 022 e a 023 são do F10-3 e do F10-4)
+
+- `portal_critical_roles`: `id`, `name` (único), `presence_type` (`onsite`/`remote`), `work_start`, `work_end` (`CHECK work_start < work_end`: sem cruzar a meia-noite), `active`, `sort_order`, autoria.
+- `portal_critical_role_rotations`: `id`, `effective_from` (único), `period` (`week`/`month`), `anchor_date` (`CHECK`: segunda-feira na semana; dia 1 no mês), `roles` (JSON com a ordem dos IDs de papel), `employees` (JSON com a ordem dos IDs do Crítico), autoria.
+- `portal_critical_role_overrides`: `id`, `employee_id` (FK, `RESTRICT`), `starts_on`, `ends_on`, `role_id` (FK), `note` em lista fechada (sem texto livre), autoria; sem sobreposição por pessoa (conferida no serviço com a trava, como no F10-2).
+- Padrão de sempre: idempotente, `SET time_zone`, rollback que para com cópia `*_bkp_024`, verificação só com contagens, ensaio no MySQL 8.0.46 local com as duas variantes.
+
+#### 9.16.4 Regras e validações
+
+- Papéis ativos ≥ 1; jornada sem cruzar a meia-noite; nome único.
+- Rodízio: a lista de pessoas só com cadastros ativos do Crítico, sem repetição; **o número de pessoas igual ao de papéis** (AD-PC-2 decide o que fazer com pessoa a mais ou a menos); âncora válida para o período.
+- Pessoa arquivada ou que sai do Crítico: o rodízio vigente fica inválido a partir da data; a tela pede uma versão nova (409 com a contagem, nada é trocado por script).
+- Mudar a equipe de quem está num rodízio: 409 ("mude pelo rodízio"), como a regra individual de membro de time (F10-2).
+- Prévia obrigatória antes de salvar (8 semanas, pessoa × dia com papel, jornada e tipo).
+
+#### 9.16.5 A DEFINIR (Liderança)
+
+| # | Pergunta | Sem resposta |
+|---|---|---|
+| AD-PC-1 | Rodízio por mês: mês do calendário ou blocos de 4 semanas? | Mês do calendário |
+| AD-PC-2 | Pessoa a mais (férias longas, cobertura) ou a menos que os papéis: quem fica sem papel, ou que papel fica vago? | Papel vago aparece na Visão operacional como alerta; pessoa a mais fica no cadastro |
+| AD-PC-3 | Troca pontual: só a gestão, ou o técnico pede e a gestão aprova? | Só a gestão (Liderança e admin) |
+| AD-PC-4 | Fim de semana e feriado: algum papel trabalha? | Não; como hoje, só por exceção por data |
+
+#### 9.16.6 Decisões de implementação (a aprovar)
+
+| # | Proposta | Motivo |
+|---|---|---|
+| D-PC-1 | Papéis e rodízio em tabelas próprias, sem reaproveitar `portal_rotation_teams` | O time de rodízio é do grupo comum (presencial/remoto por dia); o papel tem jornada e é só do Crítico |
+| D-PC-2 | A rotação é calculada (função pura), não gravada dia a dia | Como o ciclo do F10-2: versão com vigência e âncora; nada a migrar quando o período passa |
+| D-PC-3 | O papel substitui a regra individual no dia em que vale; a regra individual do Crítico fica como reserva (sem papel) | Uma fonte por dia; o histórico da regra individual não muda |
+| D-PC-4 | `shiftFor` passa a ler o papel do dia em lote (uma consulta por carga, como o repositório de hoje) | Sem N+1 no `status.php`, na Visão operacional e no Calendário |
+| D-PC-5 | Auditoria só com IDs (papel, rodízio, troca, pessoa) | LGPD, como no F10-2 |
+
+#### 9.16.7 Lotes e commits (parada única no fim)
+
+| # | Conteúdo |
+|---|---|
+| 1 | Migration 024, rollback, verificação, linhas do ensaio e QA estrutural; ensaio no MySQL local |
+| 2 | Regras puras: papel do dia (rodízio, âncora, período, troca pontual), validações e a prévia |
+| 3 | Servidor: serviço e API (permissões D-F10-5), `shiftFor` pelo papel, motor com a origem `papel`, 409s; QA e integração no MySQL |
+| 4 | Telas: "Papéis do Crítico" na Escala presencial (Drawer, prévia, trocas), capturas nos dois temas, bloco no navegador |
+| 5 | Roteiro e folha do deploy (numeração pela ordem de execução) e a trava; docs |
+
+#### 9.16.8 Riscos e LGPD
+
+- **Rodízio errado muda a jornada de todos do Crítico** (e a regra de pelo menos 1 disponível): prévia obrigatória, versão com vigência (o passado não muda) e a troca pontual para corrigir um dia.
+- **Pessoa arquivada no meio do rodízio**: 409 e versão nova pela tela (nunca troca automática).
+- **Desempenho do polling**: o papel do dia em lote, numa consulta, só quando há alguém do Crítico.
+- **LGPD**: a ordem das pessoas é lista de IDs; nomes não vão para o git, para o chat nem para a auditoria; a nota da troca é de lista fechada.
+
+**Próximo passo:** revisão deste plano junto com o lote F9 (ou depois dele). Nenhum código antes da aprovação.
+
+---
+
 ## 10. Riscos e pendências
 
 **Decisão do responsável (2026-11-06): deploy da Parte B em duas etapas.** O F8 e o F9 dependem da Liderança, sem prazo. **Deploy 1 (agora):** F1, F2, F2B, F3, SEC-07b, F4, F5, F6, F7, o lote de acabamento (17, 17b, 17d, 17e, 17f, 17g, DD), a retirada das páginas legadas e as correções das 9.12.1 a 9.12.5, pelo roteiro único do `DEPLOY_LINUX.md` (seção 9.13; aprovado em 2026-11-09; quem acompanha: o responsável pela infraestrutura da VM). **Em 2026-11-09, a data de 11/11 (19:00 às 22:00) foi cancelada:** o servidor está no `596db67` e a fila antiga nunca foi aplicada; o roteiro passou a levar tudo desde o `596db67` (9.13.4, `docs/DEPLOY1_INVENTARIO.md`). **No mesmo dia, o roteiro consolidado foi aprovado e a data voltou:** **11/11/2026, das 19:00 às 23:00**, com a véspera em 10/11 (pré-requisitos, BIZ-02 e os 14 ensaios das migrations), a indisponibilidade prevista entre 20:00 e 21:00 e o corte do F5 em 16/11 (9.13.6; cerca de 3 h no dia). **Deploy 2 (depois):** F8 e F9, com o roteiro próprio, quando a Liderança responder. O commit 1 do F8 (`EmployeeLunchPolicy`) vai no deploy 1 sem efeito (só o QA dele o chama). Onde este desenho diz "deploy único depois do F9", vale, desde 2026-11-06, o deploy 1 para o que já está aprovado e o deploy 2 para o F8 e o F9. **Desde 2026-11-12, a numeração segue a ordem de execução:** o deploy 1 foi executado em 10/11 (9.14.7) e o deploy 2, com o pós-deploy 1, em 12/11 (9.14.8); o do F8 e do F9 passa a ser o **deploy 3**, e assim por diante.
