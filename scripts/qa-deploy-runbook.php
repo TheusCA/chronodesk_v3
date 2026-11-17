@@ -253,7 +253,11 @@ assert_same($migrationsAfterDeploy1, array_values(array_intersect($migrationsAft
 // aplica so a 021.
 $migrationsAfterDeploy4 = ['20261116_020_teams_critico_hibrido.sql'];
 assert_same($migrationsAfterDeploy4, array_values(array_intersect($migrationsAfterDeploy4, $repoMigrations)), 'migrations posteriores ao deploy 4: cada uma existe no repositorio');
-$repoMigrations = array_values(array_diff($repoMigrations, $migrationsAfterDeploy1, $migrationsAfterDeploy4));
+// [9.16] A 024 (rodizio de papeis do Critico) vai no deploy 6 (secao 18): fora
+// do roteiro do deploy 5, que aplica so a 020.
+$migrationsAfterDeploy5 = ['20261117_024_critical_roles.sql'];
+assert_same($migrationsAfterDeploy5, array_values(array_intersect($migrationsAfterDeploy5, $repoMigrations)), 'migrations posteriores ao deploy 5: cada uma existe no repositorio');
+$repoMigrations = array_values(array_diff($repoMigrations, $migrationsAfterDeploy1, $migrationsAfterDeploy4, $migrationsAfterDeploy5));
 $expectedSorted = $deploy1Migrations;
 sort($expectedSorted);
 assert_same($expectedSorted, $repoMigrations, 'repositorio: as migrations da Parte B sao as do deploy 1 mais as da lista posterior (nova migration exige o roteiro)');
@@ -325,7 +329,11 @@ assert_same($qasAfterDeploy3, array_values(array_intersect($qasAfterDeploy3, $re
 // QAs criados depois dele vao no roteiro do deploy 5 (secao 17).
 $qasAfterDeploy4 = ['qa-critico-hibrido'];
 assert_same($qasAfterDeploy4, array_values(array_intersect($qasAfterDeploy4, $repoQas)), 'QAs criados depois do deploy 4: cada um existe no repositorio');
-$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2, $qasAfterDeploy3, $qasAfterDeploy4));
+// [9.16] O deploy 5 roda com o commit validado na estacao e fica como foi: os
+// QAs criados depois dele vao no roteiro do deploy 6 (secao 18).
+$qasAfterDeploy5 = ['qa-critical-roles'];
+assert_same($qasAfterDeploy5, array_values(array_intersect($qasAfterDeploy5, $repoQas)), 'QAs criados depois do deploy 5: cada um existe no repositorio');
+$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2, $qasAfterDeploy3, $qasAfterDeploy4, $qasAfterDeploy5));
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');
 // [pos-deploy 1, C1c] O 7m varre pelo padrao do mktemp, nao pelo $E: um
 // sudo -i novo no meio do dia perde a variavel (achado do dia do deploy 1).
@@ -822,7 +830,7 @@ sort($runbookQas3);
 $allRepoQas = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
 sort($allRepoQas);
 // [F10-2] Sem os QAs criados depois do deploy 3 (lista na secao 5).
-$allRepoQas = array_values(array_diff($allRepoQas, $qasAfterDeploy3, $qasAfterDeploy4));
+$allRepoQas = array_values(array_diff($allRepoQas, $qasAfterDeploy3, $qasAfterDeploy4, $qasAfterDeploy5));
 assert_same([true, $allRepoQas], [$check3 < $tmpEnv3 && $tmpEnv3 < $archive3 && $archive3 < $qaLoop3 && $qaLoop3 < $qaSweep3 && $qaSweep3 < $merge3, $runbookQas3], 'deploy 3: ensaio do codigo antes do merge, com TODOS os QAs PHP do repositorio (sem lista de excecao)');
 assert_same([true, true], [in_array('qa-pa-distribution', $runbookQas3, true), in_array('qa-paridade-escala', $runbookQas3, true)], 'deploy 3: os QAs do F10-1 no ensaio');
 assert_same(true, strpos($commands3[$archive3] ?? '', 'bash -o pipefail -c \'git archive "$D3" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands3[$qaLoop3] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && strpos($text3, 'qa-timezone.php --db') !== false && substr_count($text3, '--db') === 1, 'deploy 3: ensaio com pipefail, como www-data, e o --db so no qa-timezone do passo 7');
@@ -951,7 +959,7 @@ sort($runbookQas4);
 $everyQa = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
 sort($everyQa);
 // [F9] Sem os QAs criados depois do deploy 4 (lista na secao 5).
-$everyQa = array_values(array_diff($everyQa, $qasAfterDeploy4));
+$everyQa = array_values(array_diff($everyQa, $qasAfterDeploy4, $qasAfterDeploy5));
 assert_same($everyQa, $runbookQas4, 'deploy 4: o ensaio roda TODOS os QAs PHP do repositorio ate o deploy 4 (QA novo exige o roteiro)');
 assert_same($qasAfterDeploy3, array_values(array_intersect($qasAfterDeploy3, $runbookQas4)), 'deploy 4: os QAs criados depois do deploy 3 no ensaio');
 assert_same(true, strpos($commands4[$qaArchive4] ?? '', 'bash -o pipefail -c \'git archive "$D4" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands4[$qaLoop4] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text4, '--db') === 1, 'deploy 4: ensaio com pipefail, como www-data, e o --db so no qa-timezone');
@@ -1082,7 +1090,9 @@ $runbookQas5 = explode(' ', trim($qaList5[1] ?? ''));
 sort($runbookQas5);
 $everyQa5 = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
 sort($everyQa5);
-assert_same($everyQa5, $runbookQas5, 'deploy 5: o ensaio roda TODOS os QAs PHP do repositorio (QA novo exige o roteiro)');
+// [9.16] Sem os QAs criados depois do deploy 5 (lista na secao 5).
+$everyQa5 = array_values(array_diff($everyQa5, $qasAfterDeploy5));
+assert_same($everyQa5, $runbookQas5, 'deploy 5: o ensaio roda TODOS os QAs PHP do repositorio ate o deploy 5 (QA novo exige o roteiro)');
 assert_same($qasAfterDeploy4, array_values(array_intersect($qasAfterDeploy4, $runbookQas5)), 'deploy 5: os QAs criados depois do deploy 4 no ensaio');
 assert_same(true, strpos($commands5[$qaArchive5] ?? '', 'bash -o pipefail -c \'git archive "$D5" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands5[$qaLoop5] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text5, '--db') === 1, 'deploy 5: ensaio com pipefail, como www-data, e o --db so no qa-timezone');
 assert_same([$qaArchive5], array_keys(array_filter($commands5, static fn (string $line): bool => preg_match('/\b(chown|chmod)\b/', $line) === 1)), 'deploy 5: permissao so do diretorio do ensaio');

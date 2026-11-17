@@ -198,6 +198,14 @@ if (!$phpExecutable) {
         Pass "QA das equipes Critico e Hibrido concluido"
     }
 
+    # Sem banco: rodizio de papeis do Critico (9.16): migration 024, regras, motor e servico.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-critical-roles.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do rodizio de papeis do Critico falhou"
+    } else {
+        Pass "QA do rodizio de papeis do Critico concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {

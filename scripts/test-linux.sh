@@ -74,6 +74,10 @@ echo "== PHP critico e hibrido QA =="
 # Equipes Critico e Hibrido (F9): migration 020 e regras; sem banco.
 php scripts/qa-critico-hibrido.php
 
+echo "== PHP critical roles QA =="
+# Rodizio de papeis do Critico (9.16): migration 024, regras, motor e servico; sem banco.
+php scripts/qa-critical-roles.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php
