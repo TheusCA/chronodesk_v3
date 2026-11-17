@@ -3015,6 +3015,24 @@ async function teamsF9(page, port, mock) {
       const started = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'iniciar_pausa.php', mock.requests.length - 5)
       report(`F9, Pausas, ${width} px: um POST de iniciar_pausa com "Almoço" e o tecnico da sessao`, posts('iniciar_pausa.php').length === before + 1 && started?.body?.motivo_pausa === 'Almoço' && Number(started?.body?.funcionario_id) === 3, JSON.stringify(started?.body))
     }
+    // [AD-F9-1 e AD-F9-2] Reunião do Crítico sem aprovação e o destaque "sem ninguém disponível".
+    mock.setStatusEmployees({ ...statusWith('critico'), disponibilidade_equipes: { critico: { no_turno: 2, disponiveis: 0, sem_disponivel: true } } })
+    await goto(page, port, '/pausas', 1366)
+    await page.waitFor(`!!${OWN} && [...${OWN}.querySelectorAll('input[name="motivo_pausa"]')].length === 4`)
+    await page.click(CHOICE('Reunião'))
+    await page.waitFor(`${OWN}.querySelector('button[type="submit"]').textContent.trim() === 'Iniciar reunião'`)
+    const meeting = await page.evaluate(`(() => ({
+      dica: [...${OWN}.querySelectorAll('label')].find((l) => l.querySelector('input')?.value === 'Reunião')?.querySelector('small')?.textContent.trim(),
+      aviso: [...document.querySelectorAll('.inline-alert-danger')].some((el) => /Crítico sem ninguém disponível/.test(el.textContent) && el.querySelector('[data-none-available]')),
+      selo: /Crítico sem ninguém disponível/.test(document.querySelector('tbody[data-team="Crítico"]')?.textContent ?? ''),
+    }))()`)
+    report('F9, Pausas: reuniao do Critico "sem aprovação" e "Iniciar reunião"; o destaque "Crítico sem ninguém disponível" no topo e no grupo', meeting.dica === 'sem aprovação' && meeting.aviso && meeting.selo, JSON.stringify(meeting))
+    const askedBefore = posts('solicitar_pausa_com_aprovacao.php').length
+    await page.evaluate(`document.querySelector('[data-own-pause="start"] textarea').focus()`)
+    await page.typeText('Pauta de teste')
+    await page.click(`${OWN}.querySelector('button[type="submit"]')`)
+    const asked = await waitForRequest(mock, (r) => r.method === 'POST' && r.key === 'solicitar_pausa_com_aprovacao.php', mock.requests.length - 5)
+    report('F9, Pausas: a reuniao do Critico vai pelo mesmo endpoint (o servidor inicia sem aprovacao)', posts('solicitar_pausa_com_aprovacao.php').length === askedBefore + 1 && asked?.body?.motivo_pausa === 'Reunião', JSON.stringify(asked?.body))
     mock.setStatusEmployees(statusWith('n1'))
     await goto(page, port, '/pausas', 1366)
     await page.waitFor(`!!${OWN} && [...${OWN}.querySelectorAll('input[name="motivo_pausa"]')].length > 0`)

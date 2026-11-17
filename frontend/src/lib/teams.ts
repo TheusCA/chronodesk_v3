@@ -33,6 +33,22 @@ export function teamShort(team: unknown): string {
   return value === 'critico' || value === 'hibrido' ? LABELS[value] : String(team ?? '').toUpperCase()
 }
 
+// [AD-F9-1 e AD-F9-2] Crítico e Híbrido: reunião sem aprovação e a regra de
+// pelo menos 1 disponível (a conta é do servidor; a tela só mostra).
+export const AVAILABILITY_TEAMS = ['critico', 'hibrido']
+
+const plain = (team: unknown): string => String(team ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
+export function meetingNeedsApproval(team: unknown): boolean {
+  return !['n2', ...AVAILABILITY_TEAMS].includes(plain(team))
+}
+
+// Destaque "Crítico sem ninguém disponível" pela disponibilidade_equipes do servidor.
+export function noneAvailableLabels(situation: unknown): string[] {
+  const data = (situation && typeof situation === 'object' ? situation : {}) as Record<string, { sem_disponivel?: unknown } | undefined>
+  return AVAILABILITY_TEAMS.filter((team) => data[team]?.sem_disponivel === true).map((team) => `${LABELS[team]} sem ninguém disponível`)
+}
+
 export function isCriticalTeam(team: unknown): boolean {
   return String(team ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === 'critico'
 }

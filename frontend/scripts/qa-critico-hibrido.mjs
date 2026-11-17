@@ -45,6 +45,8 @@ const { createElement: h } = await import('react')
 const { renderToStaticMarkup } = await import('react-dom/server')
 const teams = await import(pathToFileURL(join(frontendRoot, 'src', 'lib', 'teams.ts')).href)
 const timer = await import(pathToFileURL(join(frontendRoot, 'src', 'lib', 'pauseTimer.ts')).href)
+const { employeeFormSchema } = await import(pathToFileURL(join(frontendRoot, 'src', 'lib', 'formSchemas.ts')).href)
+const { lunchOptions } = await import(pathToFileURL(join(frontendRoot, 'src', 'lib', 'employeeLunch.ts')).href)
 const { PausasPage } = await import(pathToFileURL(join(frontendRoot, 'src', 'pages', 'PausasPage.jsx')).href)
 const read = (path) => readFileSync(join(frontendRoot, path), 'utf8')
 let checks = 0
@@ -83,12 +85,12 @@ const worker = (id, equipe, extra = {}) => ({
   jornada_entrada: '08:00', jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', duracao_limite_segundos: 1200, ...extra,
 })
 const byTeam = (items) => Object.fromEntries(teams.WORK_TEAMS.map((team) => [team.value, items.filter((item) => item.equipe === team.value)]))
-const renderPausas = (items, id, reason) => {
+const renderPausas = (items, id, reason, extraStatus = {}) => {
   globalThis.qaInitialReason = reason
   try {
     return renderToStaticMarkup(h(PausasPage, {
       session: { role: 'tecnico', permissions: [], ci: { autenticado: true, funcionario_id: id, nome: 'QA', username: 'qa' } },
-      status: byTeam(items), livePauses: { status: byTeam(items), connection: 'online', serverNow: Date.now(), elapsedFor: () => 90 },
+      status: { ...byTeam(items), ...extraStatus }, livePauses: { status: { ...byTeam(items), ...extraStatus }, connection: 'online', serverNow: Date.now(), elapsedFor: () => 90 },
       loading: false, onStart: noop, onRequest: noop, onFinish: noop, onForceEndBreak: noop,
     }))
   } finally {
@@ -127,6 +129,30 @@ for (const id of [1, 2, 4]) {
   const withLimit = ownPause(renderPausas(lunchLimit, 3))
   check(() => assert.ok(withLimit.includes('limite de 60 min') && !withLimit.includes(timer.LUNCH_NO_LIMIT_NOTE), 'Pausas: almoço com limite mostra o limite, sem o aviso'))
 }
+
+// [AD-F9-2] Reunião sem aprovação no Crítico e no Híbrido; N1 e N2 com o texto de antes.
+check(() => assert.deepEqual(['n1', 'n2', 'critico', 'Crítico', 'hibrido', 'lideranca'].map(teams.meetingNeedsApproval), [true, false, false, false, false, true], 'reunião sem aprovação no N2, no Crítico e no Híbrido'))
+for (const [id, hint, action] of [[3, 'sem aprovação', 'Iniciar reunião'], [4, 'sem aprovação', 'Iniciar reunião'], [1, 'com aprovação', 'Pedir aprovação da reunião'], [2, 'com aprovação', 'Pedir aprovação da reunião']]) {
+  const own = ownPause(renderPausas(everyone, id, 'Reunião'))
+  check(() => assert.ok(own.includes(`Reunião</span><small class="text-xs text-muted">${hint}</small>`) && own.includes(`>${action}</button>`), `Pausas: reunião da equipe ${everyone[id - 1].equipe}: "${hint}" e "${action}"`))
+}
+// [AD-F9-1] Destaque "sem ninguém disponível" pelo servidor (selo e texto).
+check(() => assert.deepEqual([
+  teams.noneAvailableLabels({ critico: { sem_disponivel: true }, hibrido: { sem_disponivel: false } }),
+  teams.noneAvailableLabels({ critico: { sem_disponivel: true }, hibrido: { sem_disponivel: true } }),
+  teams.noneAvailableLabels([]), teams.noneAvailableLabels(null), teams.noneAvailableLabels({ n1: { sem_disponivel: true } }),
+], [['Crítico sem ninguém disponível'], ['Crítico sem ninguém disponível', 'Híbrido sem ninguém disponível'], [], [], []], 'destaque pela disponibilidade das equipes'))
+{
+  const markup = renderPausas(everyone, 1, undefined, { disponibilidade_equipes: { critico: { no_turno: 2, disponiveis: 0, sem_disponivel: true } } })
+  check(() => assert.match(markup, /inline-alert-danger[\s\S]*Crítico sem ninguém disponível[\s\S]*data-none-available=""/u, 'Pausas: o aviso "Crítico sem ninguém disponível" no topo'))
+  const critical = markup.slice(markup.indexOf('<tbody data-team="Crítico">'), markup.indexOf('<tbody data-team="Híbrido">'))
+  check(() => assert.ok(critical.includes('Crítico sem ninguém disponível') && !markup.slice(markup.indexOf('<tbody data-team="Híbrido">')).includes('sem ninguém disponível'), 'Pausas: o selo no grupo do Crítico, não no Híbrido'))
+  check(() => assert.equal(renderPausas(everyone, 1).includes('sem ninguém disponível'), false, 'Pausas: sem o destaque quando há disponível'))
+}
+check(() => assert.match(read('src/pages/DashboardPage.jsx'), /noneAvailableLabels\(livePauses\.status\?\.disponibilidade_equipes \?\? data\?\.disponibilidade_equipes\)\.map\(\(label\) => \(\s*<InlineAlert key=\{label\} title=\{label\} tone="danger">/u, 'Visão operacional: o destaque pelo status ao vivo (ou o do dashboard.php)'))
+// [AD-F9-4] Híbrido almoça pelo cadastro às 18:00: o formulário aceita e o filtro mostra.
+check(() => assert.equal(employeeFormSchema.safeParse({ id: 7, nome: 'Tecnico Hibrido', ad_login: '', equipe: 'hibrido', access_role: 'tecnico', jornada_entrada: '10:30', jornada_saida: '20:30', almoco_inicio: '18:00', almoco_fim: '19:00', fora_mapa_escala: false }).success, true, 'cadastro: Híbrido com almoço 18:00-19:00 na jornada 10:30-20:30'))
+check(() => assert.ok(lunchOptions([{ almoco_inicio: '18:00:00', almoco_fim: '19:00:00' }, { almoco_inicio: '12:00', almoco_fim: '13:00' }]).some((option) => option.value === '18:00-19:00'), 'filtro "Almoço": a opção 18:00-19:00 sai do cadastro'))
 
 // ---------------------------------------------------------------------------
 // 3. Telas pela lista única

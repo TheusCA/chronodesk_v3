@@ -97,8 +97,10 @@ const STATUS = { n1: TEAM.filter((item) => item.equipe === 'n1'), n2: TEAM.filte
 // [F9] Plano f9: o Crítico (o técnico 17 é o da sessão, com o intervalo de almoço do
 // cadastro 12:00 às 13:00; o 18 em almoço pela pausa) e o Híbrido, fictícios.
 const f9Person = (id, equipe, situacao, pause = null) => ({ ...person(0), id, nome: `Técnico ${id} Exemplo`, equipe, em_pausa: Boolean(pause), motivo_pausa: pause ? pause[0] : null, inicio_pausa: pause ? `2026-10-28T${pause[1]}:00-03:00` : null, almoco_inicio: '12:00', almoco_fim: '13:00', duracao_limite_segundos: pause && pause[0] === 'Almoço' ? 3600 : 1200, presenca: { situacao, origem: pause ? 'pausa' : 'regra_escala', detalhe: pause && pause[0] === 'Almoço' ? `Almoço desde ${pause[1]}` : '' } })
-const F9_TEAMS = { critico: [f9Person(17, 'critico', 'presencial'), f9Person(18, 'critico', 'almoco', ['Almoço', '10:05'])], hibrido: [f9Person(19, 'hibrido', 'remoto'), f9Person(20, 'hibrido', 'presencial')] }
-if (planName === 'f9') Object.assign(STATUS, F9_TEAMS)
+const F9_TEAMS = { critico: [f9Person(17, 'critico', 'presencial'), f9Person(18, 'critico', 'almoco', ['Almoço', '10:05'])], hibrido: [f9Person(19, 'hibrido', 'pausa', ['Café', '10:30']), f9Person(20, 'hibrido', 'fora_expediente')] }
+// [AD-F9-1] O Híbrido com o único do turno em pausa: o destaque "sem ninguém disponível".
+const F9_AVAILABILITY = { critico: { no_turno: 2, disponiveis: 1, sem_disponivel: false }, hibrido: { no_turno: 1, disponiveis: 0, sem_disponivel: true } }
+if (planName === 'f9') Object.assign(STATUS, F9_TEAMS, { disponibilidade_equipes: F9_AVAILABILITY })
 const count = (items) => {
   const out = { escalados: 0, disponiveis: 0, em_pausa: 0, almoco: 0, ausentes: 0, fora_expediente: 0, sem_escala: 0 }
   for (const item of items) {
@@ -120,6 +122,7 @@ const DASHBOARD = {
   presence_summary: { n1: count(STATUS.n1), n2: count(STATUS.n2), total: count(TEAM), lideranca: { escalados: 2, disponiveis: 2, em_pausa: 0, almoco: 0, ausentes: 0, fora_expediente: 0, sem_escala: 0 } },
 }
 if (planName === 'f9') Object.assign(DASHBOARD.presence_summary, { critico: count(F9_TEAMS.critico), hibrido: count(F9_TEAMS.hibrido) })
+if (planName === 'f9') DASHBOARD.disponibilidade_equipes = F9_AVAILABILITY
 
 // ---------------------------------------------------------------------------
 // Rotas por perfil

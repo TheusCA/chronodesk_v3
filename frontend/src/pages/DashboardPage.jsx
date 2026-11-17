@@ -7,7 +7,7 @@ import { Icon } from '../components/ui/Icon'
 import { hasPermission } from '../lib/roles'
 import { OPERATIONAL_SUMMARY_COLUMNS, serverClock, summaryCount } from '../lib/presenceLegend'
 import { clockDuration, isLunch, isMeeting, pauseTiming, pauseTimingNote } from '../lib/pauseTimer'
-import { teamShort, WORK_TEAMS } from '../lib/teams'
+import { noneAvailableLabels, teamShort, WORK_TEAMS } from '../lib/teams'
 
 // [R4b] Os totais do dashboard.php, numa lista compacta no pé da tela (saem os
 // 8 cartões iguais). Os rótulos são os de antes; o número vem do servidor.
@@ -380,6 +380,10 @@ export function DashboardPage({ navigate, session, livePauses, loading, onForceE
           A presença de agora não foi calculada (desligada ou com falha no servidor). Os números aparecem como "—" até a próxima atualização que os traga.
         </InlineAlert>
       )}
+      {/* [AD-F9-1] Crítico ou Híbrido sem ninguém disponível: selo e texto, não só cor. */}
+      {noneAvailableLabels(livePauses.status?.disponibilidade_equipes ?? data?.disponibilidade_equipes).map((label) => (
+        <InlineAlert key={label} title={label} tone="danger"><span data-none-available="">Quem está no turno está em pausa ou almoço.</span></InlineAlert>
+      ))}
       {presence !== null && !pausesAvailable && (
         <InlineAlert tone="warning" title="Pausas indisponíveis">
           O estado das pausas não pôde ser lido: Em pausa aparece como "—", e quem está em pausa conta pela escala até a leitura voltar.

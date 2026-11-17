@@ -7,7 +7,7 @@ import { EmptyState } from '../components/ui/States'
 import { hasPermission } from '../lib/roles'
 import { nowLegendItem } from '../lib/presenceLegend'
 import { clockDuration, isLunch, isMeeting, lunchIntervalSeconds, LUNCH_NO_LIMIT_NOTE, LUNCH_REASON, pauseLimitSeconds, pauseTiming, pauseTimingNote } from '../lib/pauseTimer'
-import { isCriticalTeam, WORK_TEAMS } from '../lib/teams'
+import { isCriticalTeam, meetingNeedsApproval, noneAvailableLabels, WORK_TEAMS } from '../lib/teams'
 
 // [R4a] Os três motivos ficam visíveis (D-R0-5): escolher e confirmar com um
 // botão que diz o que vai acontecer. Dois toques, no lugar de três.
@@ -105,7 +105,10 @@ function ActivePause({ current, elapsed, loading, onFinish }) {
 function StartPause({ current, loading, onStart, onRequest }) {
   const [reason, setReason] = useState('')
   const [observation, setObservation] = useState('')
-  const reasons = isCriticalTeam(current?.equipe) ? [...REASONS, LUNCH] : REASONS
+  // [AD-F9-2] Reunião sem aprovação no Crítico e no Híbrido (o servidor confere a regra de pelo menos 1 disponível).
+  const meetingFree = current ? !meetingNeedsApproval(current.equipe) && current.equipe !== 'n2' : false
+  const baseReasons = meetingFree ? REASONS.map((item) => (item.value === 'Reunião' ? { ...item, action: 'Iniciar reunião' } : item)) : REASONS
+  const reasons = isCriticalTeam(current?.equipe) ? [...baseReasons, LUNCH] : baseReasons
   const chosen = reasons.find((item) => item.value === reason) ?? null
   const meeting = reason === 'Reunião'
   // Limite do café pela configuração que o servidor manda (sem pausa, o
@@ -116,7 +119,7 @@ function StartPause({ current, loading, onStart, onRequest }) {
   const hints = {
     'Café': coffeeLimit > 0 ? `até ${Math.round(coffeeLimit / 60)} min` : 'com limite de tempo',
     'Pessoal': 'sem limite de tempo',
-    'Reunião': 'com aprovação',
+    'Reunião': meetingFree ? 'sem aprovação' : 'com aprovação',
     [LUNCH_REASON]: lunchLimit !== null ? `até ${Math.round(lunchLimit / 60)} min` : 'sem limite automático',
   }
 
@@ -218,7 +221,7 @@ function TeamRow({ item, elapsedFor, canForceEndBreak, loading, onForceEndBreak 
   )
 }
 
-function TeamPanel({ teams, livePauses, canForceEndBreak, loading, onForceEndBreak }) {
+function TeamPanel({ teams, noneAvailable = [], livePauses, canForceEndBreak, loading, onForceEndBreak }) {
   const [filter, setFilter] = useState('todos')
   const all = teams.flatMap(([, items]) => items)
   const counts = { todos: all.length, available: 0, paused: 0, outros: 0 }
@@ -257,6 +260,8 @@ function TeamPanel({ teams, livePauses, canForceEndBreak, loading, onForceEndBre
                     Equipe {title} · {items.filter((item) => operatorState(item)[0] === 'available').length} de {items.length} disponíveis
                     {/* [F9, D-F9-18] Destaque do Crítico por selo e rótulo, nunca só pela cor. */}
                     {isCriticalTeam(title) && <> <Tag tone="warning">Equipe crítica</Tag></>}
+                    {/* [AD-F9-1] Destaque por selo e texto, não só pela cor. */}
+                    {noneAvailable.includes(`${title} sem ninguém disponível`) && <> <Tag tone="danger">{`${title} sem ninguém disponível`}</Tag></>}
                   </th>
                 </tr>
                 {rows.map((item) => <TeamRow canForceEndBreak={canForceEndBreak} elapsedFor={livePauses.elapsedFor} item={item} key={item.id} loading={loading} onForceEndBreak={onForceEndBreak} />)}
@@ -275,9 +280,13 @@ export function PausasPage({ session, status, livePauses, loading, onStart, onRe
   const current = employees.find((item) => Number(item.id) === Number(session.ci.funcionario_id))
   const canForceEndBreak = hasPermission(session, 'pausas.force_end')
   const teams = WORK_TEAMS.map((team) => [team.label, status[team.value] || []])
+  const noneAvailable = noneAvailableLabels(status.disponibilidade_equipes)
 
   return (
     <div className="space-y-6">
+      {noneAvailable.map((label) => (
+        <InlineAlert key={label} title={label} tone="danger"><span data-none-available="">Quem está no turno está em pausa ou almoço.</span></InlineAlert>
+      ))}
       {!session.ci.autenticado && (
         <InlineAlert tone="info">A sessão administrativa permite monitoramento. Entre como CI para iniciar ou finalizar sua própria pausa.</InlineAlert>
       )}
@@ -285,7 +294,7 @@ export function PausasPage({ session, status, livePauses, loading, onStart, onRe
         {session.ci.autenticado && (
           <MyPause current={current} elapsed={current ? livePauses.elapsedFor(current) : 0} loading={loading} onFinish={onFinish} onRequest={onRequest} onStart={onStart} />
         )}
-        <TeamPanel canForceEndBreak={canForceEndBreak} livePauses={livePauses} loading={loading} onForceEndBreak={onForceEndBreak} teams={teams} />
+        <TeamPanel canForceEndBreak={canForceEndBreak} livePauses={livePauses} loading={loading} noneAvailable={noneAvailable} onForceEndBreak={onForceEndBreak} teams={teams} />
       </div>
     </div>
   )
