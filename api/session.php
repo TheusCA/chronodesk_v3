@@ -12,6 +12,8 @@ json_response([
     'csrf_token' => generate_csrf_token(),
     'role' => $role,
     'permissions' => portal_permissions_for_role($role),
+    // [9.17, D-CHG-17] Modulos ligados por interruptor (sem leitura de banco).
+    'modulos' => ['chg' => chg_module_enabled()],
     'ci' => [
         'autenticado' => $ci_authenticated,
         'funcionario_id' => $ci_authenticated ? (int)($_SESSION['ci_funcionario_id'] ?? 0) : 0,

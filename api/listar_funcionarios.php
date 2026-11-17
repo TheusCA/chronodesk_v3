@@ -4,6 +4,7 @@
  * Retorna id, nome, equipe e status ativo de todos os funcionários
  */
 require_once __DIR__ . '/../init.php';
+require_once __DIR__ . '/../services/EmployeeGroups.php';
 header('Content-Type: application/json; charset=utf-8');
 
 require_get_method();
@@ -41,6 +42,18 @@ if (portal_role_is_manager(current_portal_role())) {
     } catch (Throwable $e) {
         error_log('[FUNCIONARIO] grupo_escala indisponivel: ' . get_class($e));
         $grupo_escala = null;
+    }
+}
+
+// [9.17] Grupo Tools para a gestao (cadastro). Sem a tabela (migration 025
+// ainda nao aplicada), o campo fica de fora e a lista continua.
+$grupo_tools = null;
+if (portal_role_is_manager(current_portal_role())) {
+    try {
+        $grupo_tools = array_fill_keys((new EmployeeGroups(get_db_connection()))->members(), true);
+    } catch (Throwable $e) {
+        error_log('[FUNCIONARIO] grupo_tools indisponivel: ' . get_class($e));
+        $grupo_tools = null;
     }
 }
 
@@ -85,6 +98,9 @@ if ($gerenciador) {
         }
         if (is_array($grupo_escala)) {
             $item['grupo_escala'] = $grupo_escala[(int)$f->id] ?? 'comum';
+        }
+        if (is_array($grupo_tools)) {
+            $item['grupo_tools'] = isset($grupo_tools[(int)$f->id]);
         }
         if (is_array($arquivado_em)) {
             $item['arquivado_em'] = $ativo ? null : ($arquivado_em[(int)$f->id] ?? null);

@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../classes/Funcionario.php';
+require_once __DIR__ . '/../services/EmployeeGroups.php';
 
 // [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
 $actor_role = require_portal_auth();
@@ -47,6 +48,15 @@ if ($nome === false) {
 
 if ($equipe === null) {
     json_response(['sucesso' => false, 'mensagem' => 'Equipe inválida. Use N1, N2, Liderança, Crítico ou Híbrido.'], 400);
+}
+
+// [9.17, D-CHG-13] Grupo Tools opcional na criacao.
+$grupo_tools = array_key_exists('grupo_tools', $data) ? EmployeeGroups::flag($data['grupo_tools']) : false;
+if ($grupo_tools === null) {
+    json_response(['sucesso' => false, 'mensagem' => 'Valor inválido para o grupo Tools.'], 400);
+}
+if ($access_role !== null && EmployeeGroups::toolsDenied($grupo_tools, $access_role) !== null) {
+    json_response(['sucesso' => false, 'mensagem' => EmployeeGroups::READ_ONLY_MESSAGE], 400);
 }
 
 if ($access_role === null) {
@@ -145,6 +155,7 @@ try {
     if (PortalTeams::scheduleGroupFor($equipe, null) === 'separado') {
         $pdo->prepare("UPDATE funcionarios SET grupo_escala = 'separado' WHERE id = :id")->execute([':id' => $id]);
     }
+    $toolsChange = $grupo_tools ? (new EmployeeGroups($pdo))->setTools($id, true, sanitize_input($_SESSION['admin_username'] ?? $_SESSION['username'] ?? $_SESSION['ci_username'] ?? $actor_role, 100)) : null;
     $pdo->commit();
 
     // Adicionar ao gerenciador em memória
@@ -157,6 +168,9 @@ try {
     audit_log('FUNCIONARIO_ADICIONADO', "Funcionario '{$nome}' adicionado (ID: {$id}, equipe: {$equipe}, perfil: {$access_role})", 'WARNING');
     if ($id_recebido_ignorado) {
         audit_log('FUNCIONARIO_ID_IGNORADO', "Criacao do funcionario ID {$id}: o campo id veio na requisicao e foi ignorado (o ID vem do banco)", 'INFO');
+    }
+    if ($toolsChange !== null) {
+        audit_log('FUNCIONARIO_GRUPO_ALTERADO', EmployeeGroups::auditDetails($id, $toolsChange, $actor_role), 'WARNING');
     }
     if (funcionario_role_is_elevated($access_role)) {
         audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Funcionario ID {$id} criado com perfil {$access_role} por {$actor_role}", 'CRITICAL');

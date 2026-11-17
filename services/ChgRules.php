@@ -359,6 +359,20 @@ final class ChgRules {
         return is_string($host) && $host !== '';
     }
 
+    /** Tamanho em caracteres (UTF-8), sem depender do mbstring. */
+    public static function length(string $value): int {
+        return (int)preg_match_all('/./us', $value);
+    }
+
+    /** Minusculas para comparar (ASCII e as letras acentuadas do portugues), sem mbstring. */
+    public static function lower(string $value): string {
+        return strtolower(strtr($value, [
+            'Á' => 'á', 'À' => 'à', 'Â' => 'â', 'Ã' => 'ã', 'Ä' => 'ä', 'É' => 'é', 'È' => 'è', 'Ê' => 'ê', 'Ë' => 'ë',
+            'Í' => 'í', 'Ì' => 'ì', 'Î' => 'î', 'Ï' => 'ï', 'Ó' => 'ó', 'Ò' => 'ò', 'Ô' => 'ô', 'Õ' => 'õ', 'Ö' => 'ö',
+            'Ú' => 'ú', 'Ù' => 'ù', 'Û' => 'û', 'Ü' => 'ü', 'Ç' => 'ç', 'Ñ' => 'ñ',
+        ]));
+    }
+
     /** Numero da CHG em maiusculas, sem espacos nas pontas; vazio = null. */
     public static function chgNumber(?string $value): ?string {
         $value = strtoupper(trim((string)$value));

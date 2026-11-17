@@ -9,7 +9,12 @@ declare(strict_types=1);
 //    consulta de verificacao;
 // 2. regras puras (ChgRules), em tabela: etapa automatica e com o manual
 //    (igual ao v5.2), mover, concluir, tentativas de patch, duplicar, links e
-//    os rotulos prontos (selo, aviso, barra de SLA).
+//    os rotulos prontos (selo, aviso, barra de SLA);
+// 3. ChgService contra um banco em memoria: permissao (perfil e grupo Tools),
+//    formulario, 409 de versao, acoes do card, catalogos, auditoria so com IDs;
+// 4. tabela do card (copiar) e o Excel do servidor (ZIP, XML, formulas);
+// 5. endpoints, sessao, cadastro (grupo Tools) e o interruptor (leitura do
+//    codigo; a matriz de perfis fica no qa-security).
 // As consultas SQL rodam em MySQL no ensaio (scripts/ensaio-migration.sh) e na
 // integracao do lote. Dados so ficticios.
 //
@@ -328,5 +333,333 @@ assert_same([true, false, true, false], [
     ChgRules::view($approved + ['attempts' => [$attempt(1, 'erro')]], $now)['can_new_patch'],
     ChgRules::view($approved + ['attempts' => [$attempt(1, 'erro')], 'rollback' => ['status' => 'sucesso']], $now)['can_new_patch'],
 ], 'view: "+ Novo patch" em Execucao ou com patch em Erro, nunca com rollback ativo');
+
+// ----------------------------------------------------------------------------
+// 3. Servico (ChgService) contra um banco em memoria: permissao, formulario,
+//    409, acoes com as regras do v5.2, catalogos e auditoria so com IDs
+// ----------------------------------------------------------------------------
+require_once $root . '/security.php';
+require_once $root . '/services/ChgService.php';
+
+final class QaChgStore implements ChgStore {
+    public array $rows = [];
+    public array $employees = [7 => 'Tecnico 07', 8 => 'Tecnico 08'];
+    public array $tools = [8 => true];
+    public array $catalog = ['carteira' => [], 'local' => []];
+    private ?array $snapshot = null;
+    private int $nextRollback = 1;
+
+    public function cards(?int $id = null): array {
+        $list = [];
+        foreach ($this->rows as $rowId => $card) {
+            if (($card['archived_at'] ?? null) === null && ($id === null || $rowId === $id)) {
+                $list[] = $card + ['tecnico_nome' => $card['tecnico_id'] === null ? null : ($this->employees[$card['tecnico_id']] ?? 'Arquivado')];
+            }
+        }
+        return $list;
+    }
+    public function lockCard(int $id): ?array {
+        return $this->cards($id)[0] ?? null;
+    }
+    public function insertCard(array $card, string $actor): int {
+        $id = count($this->rows) + 1;
+        $this->rows[$id] = $this->withRollbackId(['id' => $id] + $card);
+        return $id;
+    }
+    public function saveCard(array $card, array $before, string $actor): void {
+        unset($card['tecnico_nome'], $card['view'], $card['tabela'], $card['qtd_pas']);
+        $this->rows[(int)$card['id']] = $this->withRollbackId($card);
+    }
+    private function withRollbackId(array $card): array {
+        if (($card['rollback'] ?? null) !== null && !isset($card['rollback']['id'])) {
+            $card['rollback']['id'] = $this->nextRollback++;
+        }
+        return $card;
+    }
+    public function activeEmployees(): array {
+        return $this->employees;
+    }
+    public function catalogs(): array {
+        return ['carteiras' => array_values($this->catalog['carteira']), 'locais' => array_values($this->catalog['local'])];
+    }
+    public function saveCatalog(string $kind, array $row, string $actor): int {
+        foreach ($this->catalog[$kind] as $id => $item) {
+            $key = $kind === 'carteira' ? 'codigo' : 'nome';
+            if ($id !== $row['id'] && ChgRules::lower($item[$key]) === ChgRules::lower($row[$key])) {
+                throw new PDOException('Duplicate entry', 23000);
+            }
+        }
+        $id = $row['id'] ?? count($this->catalog[$kind]) + 1;
+        $this->catalog[$kind][$id] = ['id' => $id] + $row;
+        return $id;
+    }
+    public function inTools(int $employeeId): bool {
+        return isset($this->tools[$employeeId]) && isset($this->employees[$employeeId]);
+    }
+    public function begin(): void {
+        $this->snapshot = [$this->rows, $this->catalog];
+    }
+    public function commit(): void {
+        $this->snapshot = null;
+    }
+    public function rollBack(): void {
+        [$this->rows, $this->catalog] = $this->snapshot;
+        $this->snapshot = null;
+    }
+    public function inTransaction(): bool {
+        return $this->snapshot !== null;
+    }
+}
+
+$audits = [];
+$clock = new DateTimeImmutable('2026-11-17 12:00:00');
+$store = new QaChgStore();
+$service = new ChgService($store, static function () use (&$clock): DateTimeImmutable {
+    return $clock;
+}, static function (string $action, string $details, string $severity) use (&$audits): void {
+    $audits[] = "{$action} {$details}";
+});
+$expectError = static function (callable $call, string $class, string $message, string $label): void {
+    try {
+        $call();
+        assert_same($class, 'nenhuma excecao', $label);
+    } catch (Throwable $e) {
+        assert_same([$class, $message], [get_class($e), $e->getMessage()], $label);
+    }
+};
+
+// Permissao (9.17.2): admin e Lideranca pelo perfil; Tools pela pessoa; somente
+// leitura nunca; importar so o admin.
+assert_same(
+    [true, true, false, false, true, false, false, false, false],
+    [
+        ChgAccess::canManage('admin', null, $store), ChgAccess::canManage('lideranca', null, $store),
+        ChgAccess::canManage('gestor', null, $store), ChgAccess::canManage('tecnico', 7, $store),
+        ChgAccess::canManage('tecnico', 8, $store), ChgAccess::canManage('somente_leitura', 8, $store),
+        ChgAccess::canManage(null, 8, $store), ChgAccess::canManage('tecnico', null, $store),
+        ChgAccess::canManage('tecnico', 9, $store),
+    ],
+    'permissao: admin e Lideranca; tecnico so no Tools; somente leitura nunca, nem no Tools (D-CHG-14)'
+);
+assert_same([true, false, false, false, false], [ChgAccess::canImport('admin'), ChgAccess::canImport('lideranca'), ChgAccess::canImport('gestor'), ChgAccess::canImport('tecnico'), ChgAccess::canImport('somente_leitura')], 'importar: so o admin (D-CHG-15)');
+assert_same([true, false, true], [in_array('chg.manage', portal_permissions_for_role('lideranca'), true), in_array('chg.manage', portal_permissions_for_role('gestor'), true), in_array('chg.import', portal_permissions_for_role('admin'), true)], 'permissoes: chg.manage na Lideranca (e no admin), chg.import so no admin');
+$gestorTools = new QaChgStore();
+$gestorTools->tools = [7 => true];
+assert_same(true, ChgAccess::canManage('gestor', 7, $gestorTools), 'permissao: gestor no grupo Tools escreve (o grupo e separado do perfil)');
+unset($gestorTools->employees[7]);
+assert_same(false, ChgAccess::canManage('tecnico', 7, $gestorTools), 'permissao: Tools de cadastro arquivado nao vale');
+
+// Formulario.
+$form = [
+    'solicitante' => 'Solicitante Teste 01', 'tipo' => 'padrao',
+    'carteiras' => [['codigo' => '9001', 'nome' => 'Carteira Teste 01', 'pas' => 12], ['sem_codigo' => true, 'nome' => 'Carteira Teste 02', 'pas' => 3]],
+    'locais' => ['Local Teste 01', 'Local Teste 02'],
+    'versao' => '\\\\servidor\\setups\\Versao Teste 01', 'versao_anterior' => '', 'descricao' => 'Descricao teste', 'link_planilha' => 'https://planilha.teste/1',
+    'sugestao_at' => '2026-11-18 20:00', 'service_status' => 'aguardando', 'sd_inicio' => '2026-11-18 20:00', 'sd_fim' => '2026-11-19 20:00',
+    'chg_numero' => 'chg0000001', 'chg_status' => '', 'tecnico_id' => 7,
+    'plans' => [['implantacao' => 'ctask0000001', 'backup' => 'n/a', 'rollback' => 'CTASK0000002', 'task_impl' => 'pendente', 'task_bkp' => 'pendente', 'task_roll' => 'pendente']],
+];
+$card = $service->create($form, 'qa.ator');
+assert_same([1, 1, 'CHG0000001', 'pendente', 'CTASK0000001', 'N/A', null, 15, 'comite', 'Aguardando aprovação'], [
+    $card['id'], $card['row_version'], $card['chg_numero'], $card['chg_status'], $card['plans'][0]['implantacao'], $card['plans'][0]['backup'],
+    $card['carteiras'][1]['codigo'], $card['qtd_pas'], $card['view']['stage'], $card['view']['badge']['text'],
+], 'criar: numero e planos em maiusculas, numero novo vira Pendente, carteira sem codigo, PAs = soma, etapa e selo do servidor');
+assert_same(['CHG_CRIADO Card ID 1 criado'], $audits, 'criar: auditoria so com o ID');
+$formErrors = [
+    ['campo desconhecido', ['chamado' => 'x'], 'Campo desconhecido no formulário.'],
+    ['sem solicitante', ['solicitante' => '  '], 'Informe o solicitante.'],
+    ['sem data sugestao', ['sugestao_at' => ''], 'Informe a data sugestão.'],
+    ['data invalida', ['sugestao_at' => '2026-02-30 10:00'], 'Data sugestão: data e hora inválidas.'],
+    ['fim antes do inicio', ['sd_fim' => '2026-11-18 19:59'], 'O fim do Service Desk não pode ser antes do início.'],
+    ['aprovada sem numero', ['chg_numero' => '', 'chg_status' => 'aprovada'], 'Informe o número da CHG antes de marcá-la como aprovada.'],
+    ['link javascript', ['link_planilha' => 'javascript:alert(1)'], 'Link da planilha: use o endereço completo, com https://.'],
+    ['link sem esquema', ['link_planilha' => 'www.planilha.teste'], 'Link da planilha: use o endereço completo, com https://.'],
+    ['local repetido (sem caixa)', ['locais' => ['Local Teste 01', 'local teste 01']], 'O local local teste 01 foi informado mais de uma vez.'],
+    ['local vazio', ['locais' => ['Local Teste 01', ' ']], 'Informe o local 2 ou remova a linha vazia.'],
+    ['sem local', ['locais' => []], 'Informe de 1 a 20 locais.'],
+    ['carteira sem codigo nem a marca', ['carteiras' => [['codigo' => '', 'nome' => 'Carteira Teste 03']]], "Na carteira 1, informe o código ou marque 'Sem código'."],
+    ['carteira sem nome', ['carteiras' => [['codigo' => '9001', 'nome' => '']]], 'Na carteira 1, informe o nome.'],
+    ['codigo com letra', ['carteiras' => [['codigo' => '90A', 'nome' => 'Carteira Teste 03']]], 'Código da carteira 1: só números.'],
+    ['PAs negativos', ['carteiras' => [['codigo' => '9001', 'nome' => 'Carteira Teste 01', 'pas' => -1]]], 'PAs da carteira 1: número de 0 a 99999.'],
+    ['PAs em texto', ['carteiras' => [['codigo' => '9001', 'nome' => 'Carteira Teste 01', 'pas' => '12']]], 'PAs da carteira 1: número de 0 a 99999.'],
+    ['carteiras demais', ['carteiras' => array_fill(0, 51, ['codigo' => '9001', 'nome' => 'Carteira Teste 01'])], 'Informe de 1 a 50 carteiras.'],
+    ['descricao longa', ['descricao' => str_repeat('a', 301)], 'Descrição: até 300 caracteres.'],
+    ['texto com controle', ['solicitante' => "Solicitante\x07"], 'Solicitante: caracteres inválidos.'],
+    ['tecnico fora dos ativos', ['tecnico_id' => 99], 'Técnico inválido: escolha um funcionário ativo.'],
+    ['tipo fora da lista', ['tipo' => 'normal'], 'Tipo de execução: valor inválido.'],
+    ['plano sem nenhum', ['plans' => []], 'Informe de 1 a 20 planos.'],
+    ['task fora da lista', ['plans' => [['task_impl' => 'aberta']]], 'Task do plano 1: valor inválido.'],
+];
+foreach ($formErrors as [$label, $over, $message]) {
+    $expectError(static fn () => $service->create(array_merge($form, $over), 'qa.ator'), 'InvalidArgumentException', $message, "formulario: {$label}");
+}
+assert_same(1, count($store->rows), 'formulario recusado nao grava nada');
+
+// 409 de concorrencia (D-CHG-21) e a edicao.
+$expectError(static fn () => $service->update(['id' => 1, 'row_version' => 5] + $form, 'qa.ator'), 'ChgConflictException', 'Alguém alterou este card; recarregue.', 'editar com versao velha: 409');
+$card = $service->update(['id' => 1, 'row_version' => 1] + array_merge($form, ['chg_numero' => '', 'chg_status' => 'pendente']), 'qa.ator');
+assert_same([2, null, null], [$card['row_version'], $card['chg_numero'], $card['chg_status']], 'editar: versao + 1; sem numero, o status e limpo');
+$expectError(static fn () => $service->action('set_field', ['id' => 1, 'row_version' => 1, 'field' => 'service_status', 'value' => 'aprovado'], 'qa.ator'), 'ChgConflictException', 'Alguém alterou este card; recarregue.', 'acao com versao velha: 409');
+$expectError(static fn () => $service->action('apagar', ['id' => 1, 'row_version' => 2], 'qa.ator'), 'InvalidArgumentException', 'Ação do Controle de CHG inválida.', 'acao desconhecida: 400');
+$expectError(static fn () => $service->action('auto', ['id' => 99, 'row_version' => 1], 'qa.ator'), 'InvalidArgumentException', 'Card inexistente ou arquivado.', 'card inexistente: 400');
+
+// Acoes do card (regras do v5.2).
+$act = static function (string $action, array $data = []) use ($service, &$card): array {
+    $card = $service->action($action, ['id' => $card['id'], 'row_version' => $card['row_version']] + $data, 'qa.ator');
+    return $card;
+};
+$act('set_field', ['field' => 'chg_numero', 'value' => 'chg0000009']);
+assert_same(['CHG0000009', 'pendente'], [$card['chg_numero'], $card['chg_status']], 'numero novo pelo card: maiusculas e Pendente');
+$expectError(static fn () => $service->action('set_field', ['id' => 1, 'row_version' => $card['row_version'], 'field' => 'chg_numero', 'value' => str_repeat('A', 41)], 'qa.ator'), 'InvalidArgumentException', 'CHG: até 40 caracteres.', 'numero da CHG longo demais');
+$act('set_field', ['field' => 'chg_status', 'value' => 'aprovada']);
+assert_same(['comite', 'CHG aprovada', 'CHG aprovada. Inicia preparação 18/11 16h00 (faltam 28h00).'], [$card['view']['stage'], $card['view']['badge']['text'], $card['view']['note']], 'aprovada com a janela amanha: Comite com o aviso da preparacao');
+$act('move', ['stage' => 'prep']);
+assert_same(['prep', 'prep', 'comite', true], [$card['view']['stage'], $card['stage_manual'], $card['stage_manual_auto'], $card['view']['is_manual']], 'mover para Preparacao: manual com a base');
+$act('auto');
+assert_same(['comite', null], [$card['view']['stage'], $card['stage_manual']], 'voltar ao automatico');
+$act('move', ['stage' => 'prep']);
+$act('set_field', ['field' => 'patch_status', 'value' => 'erro']);
+assert_same([null, 'prep', 'Patch com erro · reagendar', true], [$card['stage_manual'], $card['view']['stage'], $card['view']['badge']['text'], $card['view']['can_new_patch']], 'patch com Erro passa por cima do manual');
+$act('new_patch');
+assert_same([2, true, '2026-11-17', 'Novo patch · horário pendente'], [count($card['attempts']), $card['attempts'][1]['reagendando'], $card['attempts'][1]['endpoints'][0]['start_date'], $card['view']['badge']['text']], 'novo patch: a 2a tentativa abre so com a data de hoje');
+$act('endpoint_field', ['index' => 0, 'field' => 'start', 'value' => '2026-11-17 11:30']);
+assert_same(['exec', '2026-11-17 11:30:00', null], [$card['view']['stage'], $card['attempts'][1]['endpoints'][0]['start_at'], $card['attempts'][1]['endpoints'][0]['start_date']], 'horario do novo patch no passado: Execucao');
+$expectError(static fn () => $service->action('endpoint_field', ['id' => 1, 'row_version' => $card['row_version'], 'index' => 0, 'field' => 'url', 'value' => 'data:text/html,x'], 'qa.ator'), 'InvalidArgumentException', 'Link do endpoint: use o endereço completo, com https://.', 'endpoint com link data: recusado');
+$expectError(static fn () => $service->action('endpoint_field', ['id' => 1, 'row_version' => $card['row_version'], 'index' => 0, 'field' => 'start', 'value' => '17/11/2026 11:30'], 'qa.ator'), 'InvalidArgumentException', 'Início do patch: data e hora inválidas.', 'inicio do patch fora do formato');
+$act('endpoint_field', ['index' => 0, 'field' => 'url', 'value' => 'https://endpoint.teste/2']);
+$act('add_endpoint');
+assert_same(['https://endpoint.teste/2', null, '2026-11-17'], [$card['attempts'][1]['endpoints'][0]['url'], $card['attempts'][1]['endpoints'][1]['start_at'], $card['attempts'][1]['endpoints'][1]['start_date']], 'novo endpoint no reagendamento: so a data do primeiro');
+$act('delete_endpoint', ['index' => 1]);
+assert_same(1, count($card['attempts'][1]['endpoints']), 'excluir endpoint');
+$act('history_status', ['attempt_no' => 1, 'value' => 'parcial']);
+assert_same('parcial', $card['attempts'][0]['patch_status'], 'status de tentativa do historico editavel');
+$expectError(static fn () => $service->action('history_status', ['id' => 1, 'row_version' => $card['row_version'], 'attempt_no' => 2, 'value' => 'erro'], 'qa.ator'), 'InvalidArgumentException', 'Só o status das tentativas do histórico é editado aqui.', 'status da tentativa atual nao e pelo historico');
+$act('add_plan');
+$act('plan_field', ['plan' => 1, 'field' => 'backup', 'value' => 'ctask0000003']);
+assert_same([2, 'CTASK0000003'], [count($card['plans']), $card['plans'][1]['backup']], 'novo plano e numero em maiusculas');
+$act('plan_task', ['plan' => 1, 'task' => 'task_roll', 'value' => 'iniciar_rollback']);
+assert_same(['exec', 'em_andamento', 1, '2026-11-17 12:00:00', 'Rollback · Em andamento'], [$card['view']['stage'], $card['rollback']['status'], $card['rollback']['plan_position'], $card['rollback']['started_at'], $card['view']['badge']['text']], 'iniciar rollback pela task do Plano 2: Execucao, agora, plano de origem');
+$expectError(static fn () => $service->action('plan_task', ['id' => 1, 'row_version' => $card['row_version'], 'plan' => 0, 'task' => 'task_roll', 'value' => 'iniciar_rollback'], 'qa.ator'), 'DomainException', 'Já existe rollback em andamento.', 'um rollback ativo so');
+$expectError(static fn () => $service->action('delete_plan', ['id' => 1, 'row_version' => $card['row_version'], 'plan' => 1], 'qa.ator'), 'DomainException', 'Existe um rollback associado a este plano. Finalize ou exclua o rollback antes de remover o plano.', 'plano do rollback ativo nao sai');
+$expectError(static fn () => $service->action('delete_plan', ['id' => 1, 'row_version' => $card['row_version'], 'plan' => 0], 'qa.ator'), 'DomainException', 'O Plano 1 não pode ser excluído. Edite os números se necessário.', 'Plano 1 nao sai');
+$expectError(static fn () => $service->action('finish', ['id' => 1, 'row_version' => $card['row_version']], 'qa.ator'), 'DomainException', 'Finalize o rollback com Sucesso antes de concluir.', 'concluir com rollback em andamento: 409');
+$act('rollback_field', ['field' => 'url', 'value' => 'https://endpoint.teste/rollback']);
+$act('move', ['stage' => 'valid']);
+$act('move', ['stage' => 'prep']);
+assert_same(['prep', 'prep'], [$card['view']['stage'], $card['stage_manual']], 'rollback em andamento movido a mao para Preparacao');
+$act('rollback_field', ['field' => 'status', 'value' => 'sucesso']);
+assert_same(['valid', 'https://endpoint.teste/rollback', null], [$card['view']['stage'], $card['rollback']['url'], $card['stage_manual']], 'rollback com Sucesso passa por cima do manual: Validacao (v5.2)');
+$expectError(static fn () => $service->action('finish', ['id' => 1, 'row_version' => $card['row_version']], 'qa.ator'), 'DomainException', 'Feche antes de concluir: Task de Implantação (Plano 1), Task de Rollback (Plano 1) e Task de Backup (Plano 2).', 'concluir com tasks abertas: a lista do que falta');
+foreach ([[0, 'task_impl'], [0, 'task_roll'], [1, 'task_bkp']] as [$plan, $task]) {
+    $act('plan_task', ['plan' => $plan, 'task' => $task, 'value' => 'fechada']);
+}
+$act('finish');
+assert_same(['done', true, '2026-11-17 12:00:00.000'], [$card['view']['stage'], $card['concluida'], $card['concluida_em']], 'concluir execucao');
+$act('reopen');
+assert_same(['valid', false], [$card['view']['stage'], $card['concluida']], 'reabrir');
+$act('delete_rollback');
+assert_same(['valid', null, 'valid', 'valid'], [$card['view']['stage'], $card['rollback'], $card['stage_manual'], $card['view']['badge']['text'] === 'Validando TASKs' ? 'valid' : 'x'], 'excluir o rollback mantem a etapa (manual)');
+$act('delete_attempt', ['attempt_no' => 2]);
+assert_same([1, 'parcial'], [count($card['attempts']), $card['attempts'][0]['patch_status']], 'excluir a tentativa atual: a anterior volta');
+$act('move', ['stage' => 'cancel']);
+assert_same(['cancel', 'cancelado'], [$card['view']['stage'], $card['service_status']], 'mover para Canceladas');
+$dup = $service->duplicateBase(1);
+assert_same([null, null, 'aguardando', null, 1, 'Solicitante Teste 01'], [$dup['chg_numero'], $dup['tecnico_id'], $dup['service_status'], $dup['rollback'], count($dup['attempts']), $dup['solicitante']], 'duplicar: a base do formulario, sem CHG, tecnico, rollback e historico');
+$act('archive');
+assert_same([['id' => 1, 'archived' => true], []], [$card, $service->board(true, false)['cards']], 'arquivar: o card sai das telas (nunca apagado)');
+assert_same(true, isset($store->rows[1]) && $store->rows[1]['archived_at'] === '2026-11-17 12:00:00', 'arquivar: a linha continua no banco');
+
+// Auditoria so com IDs e a operacao (nada de nome, link, caminho ou numero).
+assert_same(0, preg_match('/Solicitante|Tecnico|Carteira|Local|https?:|CHG\d|CTASK|servidor|Versao Teste|Descricao/i', implode("\n", array_map(static fn (string $a): string => substr($a, strpos($a, ' ') + 1), $audits))), 'auditoria: so IDs, a acao e a versao');
+assert_same(1, count(array_filter($audits, static fn (string $a): bool => str_starts_with($a, 'CHG_ARQUIVADO Card ID 1 acao=archive versao='))), 'auditoria: arquivamento');
+
+// Catalogos.
+$saved = $service->saveCatalog(['kind' => 'carteira', 'codigo' => '9001', 'nome' => 'Carteira Teste 01'], 'qa.ator');
+assert_same([1, '9001'], [$saved['id'], $saved['catalogos']['carteiras'][0]['codigo']], 'catalogo: carteira nova');
+$expectError(static fn () => $service->saveCatalog(['kind' => 'carteira', 'codigo' => '9001', 'nome' => 'Outra'], 'qa.ator'), 'DomainException', 'Já existe carteira com este código.', 'catalogo: codigo repetido = 409');
+$expectError(static fn () => $service->saveCatalog(['kind' => 'carteira', 'codigo' => 'A1', 'nome' => 'Outra'], 'qa.ator'), 'InvalidArgumentException', 'Código da carteira: só números.', 'catalogo: codigo com letra');
+$service->saveCatalog(['kind' => 'local', 'nome' => 'Local Teste 01'], 'qa.ator');
+$expectError(static fn () => $service->saveCatalog(['kind' => 'local', 'nome' => 'LOCAL TESTE 01'], 'qa.ator'), 'DomainException', 'Já existe local com este nome.', 'catalogo: local repetido sem diferenca de caixa');
+
+// ----------------------------------------------------------------------------
+// 4. Tabela do card (copiar) e Excel do servidor (ZIP proprio, XML, formulas)
+// ----------------------------------------------------------------------------
+require_once $root . '/services/ChgExport.php';
+
+$service2 = new ChgService(new QaChgStore(), static fn (): DateTimeImmutable => new DateTimeImmutable('2026-11-17 12:00:00'), static function (): void {
+});
+$card = $service2->create(array_merge($form, ['solicitante' => '=HYPERLINK("https://x.teste")', 'descricao' => 'https://descricao.teste/nao-e-link', 'chg_status' => 'aprovada', 'sd_inicio' => '2026-11-17 08:00', 'sd_fim' => '2026-11-18 08:00', 'link_planilha' => 'https://planilha.teste/1']), 'qa.ator');
+$rows = array_column($card['tabela'], 'v', 'k');
+assert_same([
+    '9001 - Carteira Teste 01 (12 PAs); Carteira Teste 02 (3 PAs)', 'Local Teste 01; Local Teste 02', '15', 'Padrão', '17/11/2026 08h00',
+    'Em execução', 'CHG0000001', 'Aprovada', 'Tecnico 07', 'Pendente', '',
+], [
+    $rows['Carteiras e códigos'], $rows['Locais impactados'], $rows['Quantidade de Pas'], $rows['Tipo de Execução'], $rows['Inicio ServiceDesk'],
+    $rows['Etapa'], $rows['CHG'], $rows['Status CHG'], $rows['Tecnico Responsavel'], $rows['Task de Implantação'], $rows['Task de Backup'],
+], 'tabela do card: carteiras com PAs, locais, soma, rotulos e tasks (N/A sem status)');
+assert_same(['548235', 'BF8F00', null], [
+    $card['tabela'][array_search('Status CHG', array_column($card['tabela'], 'k'), true)]['color'],
+    $card['tabela'][array_search('Aprovação Service', array_column($card['tabela'], 'k'), true)]['color'],
+    $card['tabela'][array_search('Tecnico Responsavel', array_column($card['tabela'], 'k'), true)]['color'],
+], 'tabela do card: as cores de status do v5.2');
+assert_same("Dados\nSolicitante\t=HYPERLINK(\"https://x.teste\")", implode("\n", array_slice(explode("\n", ChgTable::text($card['tabela'])), 0, 2)), 'texto da tabela com tabulacao');
+
+$bytes = ChgExport::xlsx([$card, $card]);
+// Le o ZIP sem compressao: cada entrada com o CRC certo.
+$entries = [];
+for ($offset = 0; substr($bytes, $offset, 4) === "PK\x03\x04";) {
+    $head = unpack('vversion/vflags/vmethod/vtime/vdate/Vcrc/Vcsize/Vsize/vnamelen/vextra', substr($bytes, $offset + 4, 26));
+    $name = substr($bytes, $offset + 30, $head['namelen']);
+    $content = substr($bytes, $offset + 30 + $head['namelen'] + $head['extra'], $head['csize']);
+    $entries[$name] = [$head['method'], $head['crc'] === crc32($content), $content];
+    $offset += 30 + $head['namelen'] + $head['extra'] + $head['csize'];
+}
+assert_same(['[Content_Types].xml', 'xl/worksheets/sheet1.xml', 'xl/worksheets/_rels/sheet1.xml.rels', 'xl/worksheets/sheet2.xml', 'xl/worksheets/_rels/sheet2.xml.rels', 'xl/styles.xml', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', '_rels/.rels'], array_keys($entries), 'Excel: as partes do pacote');
+assert_same([true, [0], [true]], [str_ends_with($bytes, pack('v', 0)) && substr_count($bytes, "PK\x05\x06") === 1, array_values(array_unique(array_column($entries, 0))), array_values(array_unique(array_column($entries, 1)))], 'Excel: ZIP sem compressao, com o CRC de cada entrada e o fim do diretorio');
+libxml_use_internal_errors(true);
+foreach ($entries as $name => [, , $xml]) {
+    assert_same(true, simplexml_load_string($xml) !== false, "Excel: {$name} e XML valido");
+}
+$sheet1 = $entries['xl/worksheets/sheet1.xml'][2];
+$sheet2 = $entries['xl/worksheets/sheet2.xml'][2];
+assert_same(true, strpos($entries['xl/workbook.xml'][2], '<sheet name="Cards" sheetId="1" r:id="rId1"/><sheet name="Base" sheetId="2" r:id="rId2"/>') !== false, 'Excel: abas Cards e Base');
+assert_same([0, 2, 0], [substr_count($sheet1 . $sheet2, '<f>'), substr_count($sheet1, '=HYPERLINK(&quot;https://x.teste&quot;)'), preg_match('/t="(str|s)"/', $sheet1 . $sheet2)], 'Excel: nenhuma formula; o texto que parece formula fica como texto (inlineStr)');
+preg_match('/<c r="B2" s="(\d+)" t="inlineStr">/', $sheet1, $quoted);
+assert_same(1, preg_match('/<cellXfs count="\d+">(?:<xf[^>]*>(?:<alignment[^>]*\/><\/xf>)?)*/', $entries['xl/styles.xml'][2]), 'Excel: estilos');
+$xfs = [];
+preg_match_all('/<xf numFmtId="0"[^>]*>/', explode('<cellXfs', $entries['xl/styles.xml'][2])[1], $xfs);
+assert_same(true, isset($quoted[1]) && str_contains($xfs[0][(int)$quoted[1]], 'quotePrefix="1"'), 'Excel: celula que comeca com = ganha quotePrefix (protecao contra formula)');
+assert_same([true, 0], [str_contains($entries['xl/worksheets/_rels/sheet1.xml.rels'][2], 'Target="https://planilha.teste/1" TargetMode="External"'), substr_count($entries['xl/worksheets/_rels/sheet1.xml.rels'][2] . $entries['xl/worksheets/_rels/sheet2.xml.rels'][2], 'x.teste') + substr_count($entries['xl/worksheets/_rels/sheet1.xml.rels'][2] . $entries['xl/worksheets/_rels/sheet2.xml.rels'][2], 'descricao.teste')], 'Excel: links so dos campos de link http(s), nunca de outro texto (mesmo comecando com https)');
+assert_same([true, true], [str_contains($sheet2, '<autoFilter ref="A1:'), str_contains($sheet2, '<v>15</v>')], 'Excel: Base com filtro automatico e PAs como numero');
+assert_same(['A', 'Z', 'AA', 'AZ', 'BA'], [XlsxWriter::column(0), XlsxWriter::column(25), XlsxWriter::column(26), XlsxWriter::column(51), XlsxWriter::column(52)], 'Excel: nomes de coluna');
+assert_same([true, true, true, true, false, false], [XlsxWriter::needsQuotePrefix('=1'), XlsxWriter::needsQuotePrefix('+1'), XlsxWriter::needsQuotePrefix('-1'), XlsxWriter::needsQuotePrefix('@x'), XlsxWriter::needsQuotePrefix('1-2'), XlsxWriter::needsQuotePrefix('')], 'Excel: o que ganha quotePrefix');
+assert_same(true, str_starts_with(ChgExport::xlsx([]), 'PK'), 'Excel: lista vazia ainda gera o arquivo');
+
+// ----------------------------------------------------------------------------
+// 5. Endpoints, sessao, cadastro de funcionarios e flag (leitura do codigo)
+// ----------------------------------------------------------------------------
+$api = (string)file_get_contents($root . '/api/portal/chg.php');
+$export = (string)file_get_contents($root . '/api/portal/chg_export.php');
+assert_same([true, true], [strpos($api, "if (!chg_module_enabled()) {\n    json_response(['sucesso' => false, 'mensagem' => 'Recurso não encontrado.'], 404);") !== false, strpos($export, "if (!chg_module_enabled()) {\n    json_response(['sucesso' => false, 'mensagem' => 'Recurso não encontrado.'], 404);") !== false], 'endpoints: desligado = 404 (D-CHG-17)');
+$guard = strpos($api, 'if (!$canManage) {');
+assert_same(true, $guard !== false && strpos($api, "audit_log('CHG_NEGADO'") > $guard && strpos($api, 'ChgService::FORBIDDEN_MESSAGE], 403);') > $guard && $guard < strpos($api, "case 'create':") && strpos($api, '$data = portal_json_input();') < $guard, 'endpoint: POST com CSRF e JSON (portal_json_input) e 403 auditado antes de qualquer escrita');
+assert_same(true, strpos($api, 'ChgAccess::canManage($role, ci_session_is_current() ? $employeeId : null, $store)') !== false, 'endpoint: Tools so pelo funcionario da sessao CI atual');
+assert_same(true, strpos($export, 'require_get_method();') !== false && strpos($export, "audit_log('CHG_EXPORTADO', 'Exportacao Excel do Controle de CHG. Cards ' . count(\$cards), 'INFO');") !== false, 'exportar: GET autenticado, auditoria so com a contagem');
+assert_same(true, strpos((string)file_get_contents($root . '/api/session.php'), "'modulos' => ['chg' => chg_module_enabled()],") !== false, 'sessao: o modulo ligado vai para a tela');
+putenv('CHG_MODULE_ENABLED');
+$flags = [chg_module_enabled()];
+foreach (['true', '1', 'on', 'false', '0', 'talvez', ' '] as $value) {
+    putenv('CHG_MODULE_ENABLED=' . $value);
+    $flags[] = chg_module_enabled();
+}
+putenv('CHG_MODULE_ENABLED');
+assert_same([false, true, true, true, false, false, false, false], $flags, 'flag: ausente, falsa, invalida ou vazia = desligado (D-CHG-17)');
+$update = (string)file_get_contents($root . '/api/atualizar_funcionario.php');
+assert_same(true, strpos($update, '$toolsDenied = EmployeeGroups::toolsDenied($grupo_tools, $access_role);') < strpos($update, '$pdo->commit();') && strpos($update, "} elseif (portal_role_value(\$access_role) === 'somente_leitura') {") !== false && strpos($update, "audit_log('FUNCIONARIO_GRUPO_ALTERADO', EmployeeGroups::auditDetails(") !== false, 'cadastro: Tools na mesma transacao, recusado ao somente leitura, tirado ao virar somente leitura, auditado');
+assert_same(true, strpos((string)file_get_contents($root . '/api/adicionar_funcionario.php'), 'EmployeeGroups::toolsDenied($grupo_tools, $access_role) !== null') !== false && strpos((string)file_get_contents($root . '/api/listar_funcionarios.php'), "\$item['grupo_tools'] = isset(\$grupo_tools[(int)\$f->id]);") !== false, 'cadastro: Tools na criacao e na lista da gestao');
+assert_same(['Grupo tools do funcionario ID 12: entrou por lideranca', null, EmployeeGroups::READ_ONLY_MESSAGE, true, false, null], [
+    EmployeeGroups::auditDetails(12, 'entrou', 'lideranca'), EmployeeGroups::toolsDenied(true, 'tecnico'), EmployeeGroups::toolsDenied(true, 'somente_leitura'),
+    EmployeeGroups::flag(true), EmployeeGroups::flag(0), EmployeeGroups::flag('sim'),
+], 'grupo Tools: auditoria so com IDs, somente leitura recusado, valor so booleano');
 
 echo 'QA do Controle de CHG OK (' . $GLOBALS['qa_checks'] . " conferencias)\n";

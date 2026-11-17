@@ -950,6 +950,9 @@ function portal_permissions_for_role(?string $role): array {
         // [D3, L6] Ausencia retroativa: lancar com inicio anterior a hoje,
         // editar ou cancelar ausencia ja iniciada (F3, decisao 3).
         'ausencias.retroativa',
+        // [9.17] Controle de CHG: escrever. Quem esta no grupo Tools tambem
+        // escreve (por pessoa: ChgAccess::canManage), menos o somente leitura.
+        'chg.manage',
     ]);
     $permissions = [
         'admin' => array_merge($lideranca, [
@@ -961,6 +964,8 @@ function portal_permissions_for_role(?string $role): array {
             'funcionarios.fora_mapa',
             // [F4, D1] Restaurar cadastro arquivado; arquivar segue funcionarios.manage.
             'funcionarios.restaurar',
+            // [9.17, D-CHG-15] Importar do Controle v5 (grava em lote).
+            'chg.import',
         ]),
         'lideranca' => $lideranca,
         'gestor' => $gestor,
@@ -1097,6 +1102,23 @@ function announcement_visible(array $scope, ?string $audience): bool {
     $tokens = announcement_audience_tokens($audience);
     return in_array('all', $tokens, true)
         || ($scope['team'] !== null && in_array($scope['team'], $tokens, true));
+}
+
+/**
+ * [9.17, D-CHG-17] Controle de CHG ligado? CHG_MODULE_ENABLED ausente ou
+ * invalido = desligado (falha fechada); invalido gera aviso no log.
+ */
+function chg_module_enabled(): bool {
+    $raw = getenv('CHG_MODULE_ENABLED');
+    if ($raw === false || trim((string)$raw) === '') {
+        return false;
+    }
+    $value = filter_var(trim((string)$raw), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    if ($value === null) {
+        error_log('[CHG] CHG_MODULE_ENABLED com valor invalido; modulo desligado.');
+        return false;
+    }
+    return $value;
 }
 
 /** [Lote 5c] O perfil tem a permissão? Guardas por permissão, não por lista de perfis. */

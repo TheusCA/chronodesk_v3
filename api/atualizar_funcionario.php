@@ -3,6 +3,7 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../services/CriticalRoleService.php';
+require_once __DIR__ . '/../services/EmployeeGroups.php';
 
 // [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
 $actor_role = require_portal_auth();
@@ -75,6 +76,13 @@ if (PortalTeams::scheduleGroupFor($equipe, $grupo_escala_sent ? $grupo_escala : 
 if (!PortalTeams::inCommonGroup($equipe) && $equipe !== PortalTeams::LEADERSHIP) {
     $grupo_escala_sent = true;
     $grupo_escala = 'separado';
+}
+
+// [9.17, D-CHG-13] Grupo Tools: so quando enviado (true ou false).
+$grupo_tools_sent = array_key_exists('grupo_tools', $data);
+$grupo_tools = $grupo_tools_sent ? EmployeeGroups::flag($data['grupo_tools']) : null;
+if ($grupo_tools_sent && $grupo_tools === null) {
+    json_response(['sucesso' => false, 'mensagem' => 'Valor inválido para o grupo Tools.'], 400);
 }
 
 if ($access_role_sent && $access_role === null) {
@@ -244,6 +252,20 @@ try {
                 ->execute([':grupo_escala' => $grupo_escala, ':id' => $funcionario_id]);
         }
     }
+    // [9.17, D-CHG-14] Grupo Tools na mesma transacao. Somente leitura nunca
+    // entra (400) e, ao virar somente leitura, sai.
+    $toolsChange = null;
+    $groups = new EmployeeGroups($pdo);
+    if ($grupo_tools_sent) {
+        $toolsDenied = EmployeeGroups::toolsDenied($grupo_tools, $access_role);
+        if ($toolsDenied !== null) {
+            $pdo->rollBack();
+            json_response(['sucesso' => false, 'mensagem' => $toolsDenied], 400);
+        }
+        $toolsChange = $groups->setTools($funcionario_id, $grupo_tools, sanitize_input($_SESSION['admin_username'] ?? $_SESSION['username'] ?? $_SESSION['ci_username'] ?? $actor_role, 100));
+    } elseif (portal_role_value($access_role) === 'somente_leitura') {
+        $toolsChange = $groups->setTools($funcionario_id, false, sanitize_input($_SESSION['admin_username'] ?? $_SESSION['username'] ?? $_SESSION['ci_username'] ?? $actor_role, 100));
+    }
     $pdo->commit();
 
     if ($stmt->rowCount() === 0 && !$gerenciador->getFuncionario($funcionario_id)) {
@@ -270,6 +292,9 @@ if (($resultado['sucesso'] ?? false) === true) {
             "Grupo da escala do funcionario ID {$funcionario_id} alterado de {$currentGrupo} para {$grupo_escala} por {$actor_role}",
             'WARNING'
         );
+    }
+    if ($toolsChange !== null) {
+        audit_log('FUNCIONARIO_GRUPO_ALTERADO', EmployeeGroups::auditDetails($funcionario_id, $toolsChange, $actor_role), 'WARNING');
     }
     if ($currentForaMapa !== $newForaMapa) {
         audit_log(

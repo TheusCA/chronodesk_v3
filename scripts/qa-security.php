@@ -90,6 +90,20 @@ final class QaChildStatement extends PDOStatement {
 
     public function execute(?array $params = null): bool {
         $params = ($params ?? []) + $this->bound;
+        // [9.17] Grupo Tools (EmployeeGroups::inGroup): db['grupo_tools'] = IDs.
+        if (strpos($this->sql, 'SELECT 1 FROM funcionario_grupos g JOIN funcionarios f ON f.id = g.funcionario_id') === 0) {
+            $this->rows = in_array((int)($params[':id'] ?? 0), $this->pdo->db['grupo_tools'] ?? [], true) ? [['1' => 1]] : [];
+            return true;
+        }
+        // [9.17] Cadastro: pertenca travada e a gravacao (EmployeeGroups::setTools).
+        if ($this->sql === 'SELECT 1 FROM funcionario_grupos WHERE funcionario_id = :id AND grupo = :grupo FOR UPDATE') {
+            $this->rows = in_array((int)($params[':id'] ?? 0), $this->pdo->db['grupo_tools'] ?? [], true) ? [['1' => 1]] : [];
+            return true;
+        }
+        if (preg_match('/^(INSERT INTO|DELETE FROM) funcionario_grupos /', $this->sql) === 1) {
+            error_log('[QA_WRITE] ' . strtok($this->sql, ' ') . ' funcionario_grupos id=' . ($params[':id'] ?? '?'));
+            return true;
+        }
         // Lote 4 (SEC-07): avisos. Emula a clausula SQL de forma independente
         // da regra em PHP (announcement_visible), para comparar as duas.
         if (strpos($this->sql, 'SELECT id, title, category, severity, content, audience') === 0) {
@@ -1739,6 +1753,7 @@ $expect = [
     'ADMIN_LIDERANCA' => ['ok', 'ok', 403, 403, 403, 401],
 ];
 $emptyJson = ['content_type' => $json, 'body' => '{}'];
+$chgOn = ['CHG_MODULE_ENABLED' => 'true'];
 $matrix = [
     'api/adicionar_funcionario.php POST' => [$emptyJson, $expect['FUNCIONARIOS']],
     'api/alterar_senha_admin.php POST' => [$emptyJson, [[403, 'alterada no Active Directory']] + $expect['ADMIN_LEGADO']],
@@ -1802,6 +1817,13 @@ $matrix = [
     'api/portal/critical_roles.php POST save_rotation' => [['content_type' => $json, 'body' => '{"action":"save_rotation"}'], $expect['ADMIN_LIDERANCA']],
     'api/portal/critical_roles.php POST add_override' => [['content_type' => $json, 'body' => '{"action":"add_override"}'], $expect['ADMIN_LIDERANCA']],
     'api/portal/critical_roles.php POST remove_override' => [['content_type' => $json, 'body' => '{"action":"remove_override"}'], $expect['ADMIN_LIDERANCA']],
+    // [9.17] Controle de CHG (ligado): leitura para todos; escrita com chg.manage
+    // (admin e Lideranca; o grupo Tools e conferido a parte, abaixo).
+    'api/portal/chg.php GET' => [['env' => $chgOn], $expect['TODOS']],
+    'api/portal/chg.php POST update' => [['env' => $chgOn, 'content_type' => $json, 'body' => '{"action":"update"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/chg.php POST move' => [['env' => $chgOn, 'content_type' => $json, 'body' => '{"action":"move","id":1,"row_version":1,"stage":"done"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/chg.php POST save_catalog' => [['env' => $chgOn, 'content_type' => $json, 'body' => '{"action":"save_catalog"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/chg_export.php GET' => [['env' => $chgOn], $expect['TODOS']],
     // F2: presenca para qualquer perfil autenticado (desenho, secao 3.2).
     'api/portal/presence.php GET' => [[], $expect['TODOS']],
     'api/portal/sdk_responsibles.php GET' => [[], $expect['TODOS']],
@@ -1870,6 +1892,22 @@ foreach ($matrix as $row => [$extra, $expected]) {
     }
 }
 assert_same([], $matrixFailures, 'matriz de perfis por endpoint (5a, 5b e 5c)');
+
+// [9.17] Controle de CHG: o grupo Tools escreve (por pessoa, separado do
+// perfil), menos o somente leitura; a recusa e auditada; desligado = 404.
+$chgPost = static fn (array $session, array $tools): array => ['endpoint' => 'api/portal/chg.php', 'method' => 'POST', 'content_type' => $json, 'body' => '{"action":"update"}', 'session' => $session, 'db' => ['grupo_tools' => $tools] + QA_DB, 'env' => $chgOn];
+$chgCases = qa_run_endpoints($qaDir, [
+    'tecnico_tools' => $chgPost($roleSessions['tecnico'], [1]),
+    'gestor_tools' => $chgPost($roleSessions['gestor'], [3]),
+    'tecnico_fora' => $chgPost($roleSessions['tecnico'], [3]),
+    'leitura_tools' => $chgPost($roleSessions['somente_leitura'], [4]),
+    'desligado_get' => ['endpoint' => 'api/portal/chg.php', 'method' => 'GET', 'session' => QA_ADMIN_SESSION, 'db' => QA_DB],
+    'desligado_export' => ['endpoint' => 'api/portal/chg_export.php', 'method' => 'GET', 'session' => QA_ADMIN_SESSION, 'db' => QA_DB, 'env' => ['CHG_MODULE_ENABLED' => 'talvez']],
+]);
+assert_same([400, 400], [$chgCases['tecnico_tools']['status'], $chgCases['gestor_tools']['status']], 'CHG: tecnico e gestor no grupo Tools passam da permissao (o 400 e do formulario vazio)');
+assert_same([403, 403], [$chgCases['tecnico_fora']['status'], $chgCases['leitura_tools']['status']], 'CHG: fora do Tools 403; somente leitura no Tools tambem 403 (D-CHG-14)');
+assert_same([true, true], [strpos($chgCases['tecnico_fora']['log'], '[QA_AUDIT] CHG_NEGADO [WARNING]: Perfil tecnico sem permissao tentou acao=update') !== false, strpos($chgCases['leitura_tools']['log'], '[QA_AUDIT] CHG_NEGADO [WARNING]: Perfil somente_leitura sem permissao') !== false], 'CHG: recusa auditada so com o perfil e a acao');
+assert_same([404, 404], [$chgCases['desligado_get']['status'], $chgCases['desligado_export']['status']], 'CHG: modulo desligado (ausente ou invalido) responde 404 (D-CHG-17)');
 
 // [pos-deploy A1] Download do relatorio como admin, pela CLI (QA_RESULT) e
 // pelo servidor embutido (cabecalhos). Com ZipArchive (o servidor), o corpo e
@@ -2230,6 +2268,22 @@ foreach ([
     }
     assert_same(false, strpos($result['log'], 'FUNCIONARIO_PERFIL_ALTERADO') !== false, "campo ausente {$case}: perfil nao muda, sem evento");
 }
+// [9.17, D-CHG-13 e D-CHG-14] Grupo Tools no cadastro: entra e sai na mesma
+// gravacao, com a auditoria so com IDs; o somente leitura nunca entra (400) e,
+// ao virar somente leitura, sai.
+$toolsDb = ['grupo_tools' => [4]] + $keepDb;
+$toolsCases = qa_run_endpoints($qaDir, [
+    'entra' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', [], ['grupo_tools' => true]), $keepDb),
+    'sem_mudanca' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', [], ['grupo_tools' => false]), $keepDb),
+    'leitura_recusado' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(4, 'qa.leitura', ['access_role'], ['grupo_tools' => true]), $keepDb),
+    'leitura_sai' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(4, 'qa.leitura', ['access_role']), $toolsDb),
+    'valor_invalido' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $keepBody(1, 'joao.silva', [], ['grupo_tools' => 'sim']), $keepDb),
+]);
+assert_same([200, true, true], [$toolsCases['entra']['status'], strpos($toolsCases['entra']['log'], '[QA_WRITE] INSERT funcionario_grupos id=1') !== false, strpos($toolsCases['entra']['log'], 'FUNCIONARIO_GRUPO_ALTERADO [WARNING]: Grupo tools do funcionario ID 1: entrou por admin') !== false], 'Tools: entra no cadastro, auditado so com o ID');
+assert_same([200, false, false], [$toolsCases['sem_mudanca']['status'], strpos($toolsCases['sem_mudanca']['log'], 'funcionario_grupos') !== false, strpos($toolsCases['sem_mudanca']['log'], 'FUNCIONARIO_GRUPO_ALTERADO') !== false], 'Tools: sem mudanca, nada gravado nem auditado');
+assert_same([400, true, false], [$toolsCases['leitura_recusado']['status'], strpos($toolsCases['leitura_recusado']['body'], 'O perfil somente leitura não entra no grupo Tools') !== false, strpos($toolsCases['leitura_recusado']['log'], '[QA_WRITE] UPDATE funcionarios SET nome') !== false && strpos($toolsCases['leitura_recusado']['log'], 'FUNCIONARIO_ATUALIZADO') !== false], 'Tools: somente leitura recusado (400), cadastro desfeito');
+assert_same([200, true, true], [$toolsCases['leitura_sai']['status'], strpos($toolsCases['leitura_sai']['log'], '[QA_WRITE] DELETE funcionario_grupos id=4') !== false, strpos($toolsCases['leitura_sai']['log'], 'Grupo tools do funcionario ID 4: saiu por admin') !== false], 'Tools: somente leitura que estava no grupo sai na mesma gravacao');
+assert_same(400, $toolsCases['valor_invalido']['status'], 'Tools: valor nao booleano recusado');
 foreach (['sem_horarios', 'sem_perfil_lideranca', 'sem_login', 'legado_sem_perfil'] as $case) {
     // So o UPDATE: a carga de emergencia do init.php grava INSERT com o padrao.
     assert_same(0, preg_match('/\[QA_WRITE\] UPDATE funcionarios SET nome[^\n]*horarios=08:00:00-17:00:00\/12:00:00-13:00:00/', $keepCases[$case]['log']), "campo ausente {$case}: nao grava o padrao antigo");
