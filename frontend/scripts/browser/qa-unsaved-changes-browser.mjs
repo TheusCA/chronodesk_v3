@@ -3056,6 +3056,67 @@ async function teamsF9(page, port, mock) {
   report('F9, Visao operacional, 390 px: os seis cartoes, sem rolagem lateral', !phone.lateral && phone.cartoes === 'n1|n2|total|critico|hibrido|lideranca', JSON.stringify(phone))
 }
 
+// 29. [Marca] Os ícones da aba e a marca do topo: os <link rel=icon> e o
+// apple-touch-icon respondem 200 com o tipo de imagem certo; a marca do topo
+// (SVG inline) aparece e segue o tema (placa no token do botão principal,
+// ponto no token da situação "Em pausa"), nos dois temas e nos dois tamanhos.
+async function brandIcons(page, port) {
+  await goto(page, port, '/dashboard', 1366)
+  await page.waitFor(`!!document.querySelector('header [data-brand-mark], aside [data-brand-mark], [data-brand-mark]')`)
+  const icons = await page.evaluate(`(async () => {
+    const links = [...document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')].map((l) => [l.rel, l.getAttribute('href'), l.getAttribute('type')])
+    const out = []
+    for (const [rel, href] of links) {
+      const r = await fetch(href, { cache: 'no-store' })
+      const bytes = (await r.arrayBuffer()).byteLength
+      out.push({ rel, href, status: r.status, tipo: r.headers.get('content-type'), bytes })
+    }
+    return out
+  })()`)
+  const expected = [['icon', '/app/favicon.ico?v=2', /^image\//], ['icon', '/app/favicon.svg?v=2', /^image\/svg\+xml/], ['apple-touch-icon', '/app/apple-touch-icon.png?v=2', /^image\/png/]]
+  report('Marca: os tres links do icone, na ordem, com ?v=2', JSON.stringify(icons.map((i) => [i.rel, i.href])) === JSON.stringify(expected.map(([rel, href]) => [rel, href])), JSON.stringify(icons))
+  report('Marca: cada icone responde 200 com o tipo de imagem certo (com nosniff, tipo errado quebra o icone)', icons.length === 3 && icons.every((i, n) => i.status === 200 && expected[n][2].test(i.tipo || '') && i.bytes > 0), JSON.stringify(icons))
+  const brandState = `(() => {
+    const mark = [...document.querySelectorAll('[data-brand-mark]')].find((el) => el.getBoundingClientRect().width > 0)
+    const box = mark?.getBoundingClientRect()
+    const css = getComputedStyle(document.documentElement)
+    const rgb = (name) => 'rgb(' + css.getPropertyValue(name).trim().split(/\\s+/).join(', ') + ')'
+    return {
+      visivel: !!box && box.width >= 28 && box.height >= 28 && box.top >= 0 && box.top < innerHeight,
+      tag: mark?.tagName.toLowerCase(),
+      placa: getComputedStyle(mark.querySelector('rect')).fill === rgb('--action'),
+      ponto: getComputedStyle(mark.querySelector('[data-brand-dot]')).fill === rgb('--pause-line'),
+      simbolo: getComputedStyle(mark.querySelector('g')).color === rgb('--action-ink'),
+      corPlaca: getComputedStyle(mark.querySelector('rect')).fill,
+      nome: /Portal SDK/.test(mark.parentElement?.textContent ?? ''),
+      tema: document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+    }
+  })()`
+  const seen = []
+  for (const width of [1366, 390]) {
+    await goto(page, port, '/dashboard', width)
+    await page.waitFor(`!!document.querySelector('[data-brand-mark]')`)
+    for (let turn = 0; turn < 2; turn += 1) {
+      // Em 390 px a marca fica no menu lateral: abre, confere e fecha.
+      if (width < 1024) {
+        await page.click(`document.querySelector('button[aria-label="Abrir menu"]')`)
+        await sleep(300)
+      }
+      const state = await page.evaluate(brandState)
+      if (width < 1024) {
+        await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+        await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+        await sleep(300)
+      }
+      seen.push(state.corPlaca)
+      report(`Marca, ${width} px, tema ${state.tema}: a marca ${width < 1024 ? 'do menu' : 'do topo'} em SVG, visivel, ao lado de "Portal SDK", nas cores do tema (placa, simbolos e ponto pelos tokens)`, state.tag === 'svg' && state.visivel && state.nome && state.placa && state.ponto && state.simbolo, JSON.stringify(state))
+      await page.click(`document.querySelector('[data-theme-toggle]')`)
+      await sleep(200)
+    }
+  }
+  report('Marca: a placa muda de cor entre os dois temas', new Set(seen).size === 2, JSON.stringify(seen))
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -3098,6 +3159,7 @@ try {
     [26, 'Funcionarios: lista primeiro e filtros ativos (R4d)', () => employeesR4d(page, mock.port)],
     [27, 'Times de rodizio e ciclo semana a semana (F10-2)', () => rotationTeamsF102(page, mock.port, mock)],
     [28, 'Equipes Critico e Hibrido e o almoco do Critico (F9)', () => teamsF9(page, mock.port, mock)],
+    [29, 'Icones da aba e marca do topo nos dois temas (marca)', () => brandIcons(page, mock.port)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

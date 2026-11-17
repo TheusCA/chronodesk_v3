@@ -26,6 +26,7 @@
 //                         a lista com as quatro equipes, a Visão operacional
 //                         (linhas Crítico e Híbrido) e a edição de funcionário,
 //                         em 1280 e 390 px
+// [Marca] --plano=marca   o login e o topo da casca, em 1280 e 390 px
 //   --app=<pasta>         fotografa outro build (o "antes" de um lote); sem
 //                         isso, ../app
 import { createServer, request } from 'node:http'
@@ -151,6 +152,11 @@ const PLAN_R = [
 const PLAN_F10 = [
   ['lideranca', ['/escala-presencial', '/escala-presencial#time', '/escala-presencial#semanal', '/admin?tab=funcionarios#editar'], [1280, 390]],
 ]
+// [Marca] O login e o topo da casca (a marca ao lado de "Portal SDK"), nos dois tamanhos.
+const PLAN_MARCA = [
+  ['anonimo', ['/'], [1280, 390]],
+  ['admin', ['/dashboard'], [1280, 390]],
+]
 // [F9] Pausas do técnico do Crítico (sessão do técnico 17), a Visão operacional e a edição.
 const PLAN_F9 = [
   ['tecnico_critico', ['/pausas', '/pausas#almoco'], [1280, 390]],
@@ -214,7 +220,7 @@ async function before() {
   let total = 0
   let problems = 0
   try {
-    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : planName === 'f9' ? PLAN_F9 : PLAN) {
+    for (const [who, routes, widths] of planName === 'r' ? PLAN_R : planName === 'f10' ? PLAN_F10 : planName === 'f9' ? PLAN_F9 : planName === 'marca' ? PLAN_MARCA : PLAN) {
       profile = who
       for (const width of widths) {
         const height = HEIGHTS.get(width)

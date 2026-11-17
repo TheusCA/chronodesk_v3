@@ -135,4 +135,28 @@ for (const [key, limit] of Object.entries(BUDGET)) {
 assert.ok(measured.fonts > 0, 'Orçamento: as fontes do portal estão no build')
 assert.deepEqual(assets.filter((name) => /\.(woff|ttf|otf|eot)$/.test(name)), [], 'Fontes só em woff2')
 
+// [Marca] Os quatro ícones do public/ no build, com os links ?v=2 na ordem
+// pedida; o sdk-icon.png (retirado no R4d) e o icon-512.png (só fonte, em
+// docs/design/marca) fora do build.
+const ICONS = ['favicon.ico', 'favicon.svg', 'favicon.png', 'apple-touch-icon.png']
+for (const icon of ICONS) {
+  assert.ok(existsSync(join(appRoot, icon)) && statSync(join(appRoot, icon)).size > 0, `Marca: ${icon} no build`)
+}
+assert.deepEqual(['sdk-icon.png', 'icon-512.png', 'favicon-16.svg'].filter((name) => existsSync(join(appRoot, name))), [], 'Marca: sdk-icon.png, icon-512.png e favicon-16.svg fora do build')
+const iconLinks = [...appIndex.matchAll(/<link rel="(icon|apple-touch-icon)"[^>]*>/g)].map((match) => match[0])
+assert.deepEqual(iconLinks, [
+  '<link rel="icon" href="/app/favicon.ico?v=2" sizes="32x32" />',
+  '<link rel="icon" href="/app/favicon.svg?v=2" type="image/svg+xml" />',
+  '<link rel="apple-touch-icon" href="/app/apple-touch-icon.png?v=2" />',
+], 'Marca: os links do ícone no index.html do build, nesta ordem, com ?v=2')
+// As páginas PHP que ainda servem HTML apontam para os mesmos ícones (a 503 é texto puro).
+for (const page of ['index.php', 'login.php', 'admin_login.php', 'admin.php', 'metricas.php']) {
+  const html = readFileSync(join(projectRoot, page), 'utf8')
+  assert.deepEqual([html.includes("/app/favicon.ico?v=2'); ?>\" sizes=\"32x32\">"), html.includes("/app/favicon.svg?v=2'); ?>\" type=\"image/svg+xml\">"), html.includes("/app/apple-touch-icon.png?v=2'); ?>\">"), html.includes('favicon.png')], [true, true, true, false], `Marca: ${page} com os ícones novos`)
+}
+const svgIcon = readFileSync(join(appRoot, 'favicon.svg'), 'utf8')
+assert.doesNotMatch(svgIcon, /<script|href=|xlink:|@import|url\(|on[a-z]+=/i, 'Marca: favicon.svg sem script, link externo, import ou evento')
+const ico = readFileSync(join(appRoot, 'favicon.ico'))
+assert.deepEqual([ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4), [0, 1, 2].map((i) => ico[6 + 16 * i])], [0, 1, 3, [16, 32, 48]], 'Marca: favicon.ico com 16, 32 e 48 px')
+
 console.log(`Bundle frontend QA OK (JS de entrada ${measured.entryJs} de ${BUDGET.entryJs} bytes, CSS ${measured.css} de ${BUDGET.css}, fontes ${measured.fonts} de ${BUDGET.fonts})`)

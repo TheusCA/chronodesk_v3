@@ -300,7 +300,9 @@ export function startMockServer(appDir) {
     }
     const relative = normalize(decodeURIComponent(url.pathname.replace(/^\/app\/?/, ''))).replace(/^(\.\.[/\\])+/, '')
     let file = join(appDir, relative)
-    if (!url.pathname.startsWith('/app/assets/') || !existsSync(file) || statSync(file).isDirectory()) file = join(appDir, 'index.html')
+    // [Marca] Como o Apache: arquivo que existe em app/ (assets e os ícones do public/) é
+    // entregue; o resto de /app/ (rotas do SPA) cai no index.html.
+    if (!url.pathname.startsWith('/app/') || !existsSync(file) || statSync(file).isDirectory()) file = join(appDir, 'index.html')
     res.writeHead(200, { 'Content-Type': TYPES[extname(file)] || 'application/octet-stream' })
     res.end(readFileSync(file))
   })

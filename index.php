@@ -16,7 +16,9 @@ $ci_nome = $_SESSION['ci_nome'] ?? '';
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>Portal SDK - Gestão de Tempo</title>
-    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.png'); ?>" type="image/png">
+    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.ico?v=2'); ?>" sizes="32x32">
+    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.svg?v=2'); ?>" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="<?php echo sanitize_attr(get_base_path() . '/app/apple-touch-icon.png?v=2'); ?>">
     <?php
     $base_path_test = dirname($_SERVER['SCRIPT_NAME']);
     if ($base_path_test === '/') $base_path_test = '';

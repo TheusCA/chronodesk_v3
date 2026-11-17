@@ -126,11 +126,25 @@ for (const path of ['/pausas', '/dashboard', '/admin', '/mapa-pa', '/chamados-cr
   const login = renderToStaticMarkup(h(LoginPage, { onLoginCI: async () => null, loading: false }))
   for (const [label, html] of [['casca', markup], ['login', login]]) {
     assert.doesNotMatch(html, /<img\b/u, `${label}: marca sem imagem (nada de arquivo fora do build)`)
-    assert.match(html, /<span aria-hidden="true" class="[^"]*" data-brand-mark="">SDK<\/span>/u, `${label}: marca em texto, decorativa`)
+    assert.match(html, /<svg aria-hidden="true" class="[^"]*" data-brand-mark="" focusable="false" viewBox="0 0 64 64" xmlns="http:\/\/www\.w3\.org\/2000\/svg">/u, `${label}: marca em SVG inline, decorativa (viewBox 64 x 64)`)
+    assert.doesNotMatch(html.slice(html.indexOf('data-brand-mark'), html.indexOf('</svg>', html.indexOf('data-brand-mark'))), /style=|#[0-9a-f]{3,6}\b/iu, `${label}: marca sem atributo style nem cor fixa (CSP e os dois temas)`)
     assert.ok(html.includes('Portal SDK'), `${label}: o nome "Portal SDK" escrito`)
     assert.ok(html.includes('Desenvolvido por Matheus Camargo'), `${label}: crédito do desenvolvedor`)
   }
-  assert.doesNotMatch(read('src/components/BrandMark.jsx').replace(/^\s*\/\/.*$/gmu, ''), /\.png|<img|src=/u, 'BrandMark sem imagem (fora os comentários)')
+  assert.doesNotMatch(read('src/components/BrandMark.jsx').replace(/^\s*\/\/.*$/gmu, ''), /\.png|<img|src=|style=/u, 'BrandMark sem imagem nem style (fora os comentários)')
+  // [Marca] A mesma geometria do favicon.svg, pelos tokens: placa bg-action (fill),
+  // anel e barras em currentColor do text-action-ink, ponto na cor da situação "Em pausa".
+  const brand = read('src/components/BrandMark.jsx')
+  const favicon = read('public/favicon.svg')
+  const shapes = (source) => ({
+    ring: source.match(/<path[^>]*d="([^"]+)"/u)?.[1],
+    bars: [...source.matchAll(/<rect[^>]*?x="([\d.]+)"[^>]*?y="([\d.]+)"|<rect[^>]*?y="([\d.]+)"[^>]*?x="([\d.]+)"/gu)].length,
+    dot: source.match(/<circle[^>]*cx="(\d+)"[^>]*cy="(\d+)"[^>]*r="(\d+)"/u)?.slice(1).join(','),
+  })
+  assert.deepEqual(shapes(brand), shapes(favicon), 'BrandMark: o anel, as duas barras e o ponto do favicon.svg')
+  assert.match(brand, /<rect className="fill-action" height="64" rx="14" width="64" \/>/u, 'BrandMark: a placa 64 x 64 com rx 14 no token do bg-action')
+  assert.match(brand, /<g className="text-action-ink">[\s\S]*stroke="currentColor"[\s\S]*fill="currentColor"[\s\S]*fill="currentColor"[\s\S]*<\/g>/u, 'BrandMark: anel e barras em currentColor do text-action-ink')
+  assert.match(brand, /<circle className="fill-pause-line" cx="44" cy="20" data-brand-dot="" r="4" \/>/u, 'BrandMark: o ponto no token da situação "Em pausa"')
 }
 
 // ---------------------------------------------------------------------------
