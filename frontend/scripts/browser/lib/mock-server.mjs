@@ -216,6 +216,7 @@ function rotationResponse(body) {
 // DAY), entao a tela recebe o que o servidor devolveria. Dados ficticios.
 let chgOn = false
 let chgCanManage = false
+let chgCanImport = false
 let chgCards = null
 const CHG_NOW = `${DAY} 12:00:00`
 const chgBase = {
@@ -238,7 +239,7 @@ const chgPresent = (cards) => chgPhp('echo json_encode(array_map(fn ($c) => $s->
 function chgResponse(method, body) {
   if (!chgOn) return [404, { sucesso: false, mensagem: 'Recurso não encontrado.' }]
   chgCards ??= chgPresent(chgFixtures())
-  if (method === 'GET') return [200, { sucesso: true, now: CHG_NOW, cards: chgCards, catalogos: { carteiras: [{ id: 1, codigo: '9001', nome: 'Carteira Teste 01', ativo: true }], locais: [{ id: 1, nome: 'Local Teste 01', ativo: true }] }, tecnicos: each((nome, id) => ({ id, nome })), can_manage: chgCanManage, can_import: false }]
+  if (method === 'GET') return [200, { sucesso: true, now: CHG_NOW, cards: chgCards, catalogos: { carteiras: [{ id: 1, codigo: '9001', nome: 'Carteira Teste 01', ativo: true }], locais: [{ id: 1, nome: 'Local Teste 01', ativo: true }] }, tecnicos: each((nome, id) => ({ id, nome })), can_manage: chgCanManage, can_import: chgCanImport }]
   if (!chgCanManage) return [403, { sucesso: false, mensagem: 'Somente administradores, Liderança e o grupo Tools alteram o Controle de CHG.' }]
   const card = chgCards.find((item) => item.id === Number(body?.id))
   if (body?.action === 'move' && card) {
@@ -272,6 +273,8 @@ const GET = {
 function apiResponse(method, key, search, body) {
   if (key === 'status.php' && method === 'GET') return [200, pausedStatus()]
   if (key === 'portal/chg.php') return chgResponse(method, body)
+  // [9.17.7] Importar: so contagens, como o servidor.
+  if (key === 'portal/chg_import.php') return chgCanImport ? [200, { sucesso: true, mensagem: 'Importação concluída.', contagens: { novos: (body?.dados?.items ?? []).length, atualizados: 0, iguais: 0 }, campos_descartados: {} }] : [403, { sucesso: false, mensagem: 'Somente administradores importam do Controle v5.' }]
   if (key === 'session.php' && method === 'GET' && chgOn) return [200, { ...GET[key], modulos: { chg: true } }]
   if (key === 'portal/admin_force_end_break.php' && method === 'POST') {
     if (forceEndRefusal) return forceEndRefusal
@@ -423,7 +426,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false, canImport = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCanImport = canImport; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

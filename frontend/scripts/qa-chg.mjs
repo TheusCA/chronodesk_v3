@@ -181,6 +181,21 @@ check(() => assert.ok(read('src/pages/ChgPage.jsx').includes("import './chg/chg.
 check(() => assert.ok(read('src/lib/navigation.ts').includes("{ path: '/chg', label: 'Controle de CHG', icon: 'file', module: 'chg' },") && read('src/components/PortalLayout.jsx').includes('if (item.module && session.modulos?.[item.module] !== true) return null') && read('src/App.jsx').includes("(!route?.module || session.modulos?.[route.module] === true)"), 'menu e rota atrás do interruptor (session.modulos.chg)'))
 check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('useResource(ENDPOINT, { intervalMs: REFRESH_MS })') && read('src/pages/ChgPage.jsx').includes('const REFRESH_MS = 30_000'), 'atualiza a cada 30 s (e ao voltar o foco, pelo useResource)'))
 check(() => assert.ok(read('src/pages/chg/ChgForm.jsx').includes('useUnsavedChangesGuard(dirty)') && read('src/pages/chg/ChgForm.jsx').includes('<ConfirmDiscardDialog {...dialogProps} />'), 'formulário com a guarda de alteração não salva'))
-check(() => assert.ok(existsSync(join(projectRoot, 'api', 'portal', 'chg.php')) && readdirSync(join(srcRoot, 'pages', 'chg')).sort().join(',') === 'ChgCard.jsx,ChgForm.jsx,ChgViews.jsx,chg.css,chgFormModel.js', 'arquivos do módulo'))
+check(() => assert.ok(existsSync(join(projectRoot, 'api', 'portal', 'chg.php')) && readdirSync(join(srcRoot, 'pages', 'chg')).sort().join(',') === 'ChgCard.jsx,ChgForm.jsx,ChgImportPanel.jsx,ChgViews.jsx,chg.css,chgFormModel.js,chgImportModel.js', 'arquivos do módulo'))
+
+// 5. Importação do Controle v5 (só admin): prévia só com contagens.
+const importModel = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'chgImportModel.js')).href)
+const { ChgImportPanel } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'ChgImportPanel.jsx')).href)
+check(() => assert.deepEqual(importModel.summaryRows({ contagens: { novos: 2, atualizados: 0, iguais: 0, invalidos: 1, desconhecida: 3 }, campos_descartados: { chamado: 6 } }), [['Cards novos', 2], ['Cards atualizados (o arquivo é mais novo)', 0], ['Inválidos (fora do esquema)', 1], ['desconhecida', 3], ['Campo descartado: chamado', 6]], 'prévia da importação: contagens acima de zero (novos e atualizados sempre) e os campos descartados'))
+const tooBig = { size: importModel.IMPORT_MAX_BYTES + 1, text: async () => '{}' }
+const notJson = { size: 2, text: async () => '{x' }
+const okFile = { size: 2, text: async () => '{"items":[]}' }
+const readResults = await Promise.all([tooBig, notJson].map((file) => importModel.readJsonFile(file).then(() => 'ok', (error) => error.message)))
+check(() => assert.deepEqual(readResults, ['Arquivo acima de 2 MB.', 'O arquivo escolhido não é um JSON válido.'], 'arquivo da importação: limite de 2 MB e JSON válido'))
+const readOk = [await importModel.readJsonFile(null), await importModel.readJsonFile(okFile)]
+check(() => assert.deepEqual(readOk, [null, { items: [] }], 'arquivo da importação: sem arquivo = null; JSON lido'))
+const importHtml = renderToStaticMarkup(h(ChgImportPanel, { notify: () => {}, onClose: () => {}, onDone: () => {} }))
+check(() => assert.ok(importHtml.includes('Importar do Controle v5') && (importHtml.match(/type="file"/gu) || []).length === 2 && /data-chg-import-preview="" disabled=""/u.test(importHtml) && !importHtml.includes('data-chg-import-confirm'), 'painel da importação: dois arquivos; prévia desligada sem arquivo; confirmar só depois da prévia'))
+check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('{data?.can_import === true && <button className="btn-secondary chg-btn" data-chg-import-open=""'), 'importar só com can_import do servidor (admin)'))
 
 console.log(`QA do Controle de CHG (frontend) OK (${checks} conferências)`)

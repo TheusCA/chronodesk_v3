@@ -1824,6 +1824,8 @@ $matrix = [
     'api/portal/chg.php POST move' => [['env' => $chgOn, 'content_type' => $json, 'body' => '{"action":"move","id":1,"row_version":1,"stage":"done"}'], $expect['ADMIN_LIDERANCA']],
     'api/portal/chg.php POST save_catalog' => [['env' => $chgOn, 'content_type' => $json, 'body' => '{"action":"save_catalog"}'], $expect['ADMIN_LIDERANCA']],
     'api/portal/chg_export.php GET' => [['env' => $chgOn], $expect['TODOS']],
+    // [9.17.7] Importar do Controle v5: so o admin (chg.import), antes de ler o corpo.
+    'api/portal/chg_import.php POST' => [['env' => $chgOn, 'content_type' => $json, 'body' => '{"action":"preview"}'], $expect['ADMIN']],
     // F2: presenca para qualquer perfil autenticado (desenho, secao 3.2).
     'api/portal/presence.php GET' => [[], $expect['TODOS']],
     'api/portal/sdk_responsibles.php GET' => [[], $expect['TODOS']],

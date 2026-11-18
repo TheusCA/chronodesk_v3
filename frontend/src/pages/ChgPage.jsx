@@ -11,6 +11,7 @@ import {
 } from '../lib/chg'
 import { ChgCard } from './chg/ChgCard'
 import { ChgForm } from './chg/ChgForm'
+import { ChgImportPanel } from './chg/ChgImportPanel'
 import { ChgDashboard, ChgList } from './chg/ChgViews'
 import './chg/chg.css'
 
@@ -79,6 +80,7 @@ export function ChgPage({ notify }) {
   const [confirmBusy, setConfirmBusy] = useState(false)
   const [preview, setPreview] = useState(null)
   const [dropStage, setDropStage] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
   const dragId = useRef(null)
 
   const cards = useMemo(() => data?.cards || [], [data])
@@ -204,6 +206,7 @@ export function ChgPage({ notify }) {
         <Segmented label="Visualização" onChange={setView} options={[{ value: 'board', label: 'Quadro' }, { value: 'list', label: 'Lista' }, { value: 'dash', label: 'Dashboard' }]} value={view} />
         <div className="chg-toolbar-actions">
           <a className="btn-secondary chg-btn" data-chg-export="" download href={apiUrl(`portal/chg_export.php?ids=${exportIds}`)}>Exportar Excel</a>
+          {data?.can_import === true && <button className="btn-secondary chg-btn" data-chg-import-open="" onClick={() => setImportOpen(true)} type="button">Importar do Controle v5</button>}
           {canManage && <button className="btn-primary chg-btn" data-chg-new="" onClick={() => setFormState({ mode: 'new', card: null })} type="button">Nova atualização</button>}
         </div>
       </div>
@@ -273,6 +276,7 @@ export function ChgPage({ notify }) {
           title={formState.mode === 'edit' ? 'Editar atualização' : formState.mode === 'duplicate' ? 'Duplicar atualização' : 'Nova atualização'}
         />
       )}
+      {importOpen && <ChgImportPanel notify={notify} onClose={() => setImportOpen(false)} onDone={refresh} />}
       {confirm && (
         <ConfirmActionDialog busy={confirmBusy} busyLabel="Aguarde..." confirmLabel={confirm.confirmLabel} description={confirm.description} onCancel={() => setConfirm(null)} onConfirm={runConfirm} title={confirm.title} />
       )}

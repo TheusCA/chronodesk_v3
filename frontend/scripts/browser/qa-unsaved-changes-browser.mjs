@@ -3281,6 +3281,17 @@ async function chg917(page, port, mock) {
     await sleep(150)
     await expectChg('tema escuro: a tela continua sem style e sem rolagem lateral', { pagina: true, com_style: 0, lateral: false })
     await page.evaluate(`document.documentElement.removeAttribute('data-theme')`)
+
+    // [9.17.7] Importar do Controle v5: so com can_import (admin); o painel
+    // com os dois arquivos e a previa desligada sem arquivo.
+    report('Controle de CHG: sem can_import, sem o botao de importar', await page.evaluate(`!document.querySelector('[data-chg-import-open]')`))
+    mock.useChg({ on: true, canManage: true, canImport: true })
+    await goto(page, port, '/chg', 390)
+    await page.waitFor(`!!document.querySelector('[data-chg-import-open]')`)
+    await page.click(`document.querySelector('[data-chg-import-open]')`)
+    await page.waitFor(`!!document.querySelector('[data-chg-import]')`)
+    const panel = await page.evaluate(`(() => ({ arquivos: document.querySelectorAll('[data-chg-import] input[type="file"]').length, previa_desligada: document.querySelector('[data-chg-import-preview]').disabled, lateral: document.documentElement.scrollWidth > innerWidth }))()`)
+    report('Controle de CHG: com can_import, "Importar do Controle v5" abre o painel com os dois arquivos e a previa desligada (390 px, sem rolagem lateral)', panel.arquivos === 2 && panel.previa_desligada && !panel.lateral, JSON.stringify(panel))
   } finally {
     mock.useChg({ on: false })
     mock.useAdminSession()

@@ -368,6 +368,11 @@ final class QaChgStore implements ChgStore {
     }
     public function saveCard(array $card, array $before, string $actor): void {
         unset($card['tecnico_nome'], $card['view'], $card['tabela'], $card['qtd_pas']);
+        // Como o PdoChgStore: o UPDATE nao mexe no id legado nem na criacao.
+        $old = $this->rows[(int)$card['id']] ?? [];
+        $card = ['legacy_id' => $old['legacy_id'] ?? null, 'created_at' => $old['created_at'] ?? null] + $card;
+        $card['legacy_id'] = $old['legacy_id'] ?? null;
+        $card['created_at'] = $old['created_at'] ?? $card['created_at'];
         $this->rows[(int)$card['id']] = $this->withRollbackId($card);
     }
     private function withRollbackId(array $card): array {
@@ -395,6 +400,15 @@ final class QaChgStore implements ChgStore {
     }
     public function inTools(int $employeeId): bool {
         return isset($this->tools[$employeeId]) && isset($this->employees[$employeeId]);
+    }
+    public function legacyIndex(): array {
+        $index = [];
+        foreach ($this->rows as $id => $card) {
+            if (($card['legacy_id'] ?? null) !== null) {
+                $index[$card['legacy_id']] = ['id' => $id, 'updated_at' => $card['updated_at'], 'row_version' => $card['row_version']];
+            }
+        }
+        return $index;
     }
     public function begin(): void {
         $this->snapshot = [$this->rows, $this->catalog];
@@ -683,5 +697,109 @@ assert_same(['Grupo tools do funcionario ID 12: entrou por lideranca', null, Emp
     EmployeeGroups::auditDetails(12, 'entrou', 'lideranca'), EmployeeGroups::toolsDenied(true, 'tecnico'), EmployeeGroups::toolsDenied(true, 'somente_leitura'),
     EmployeeGroups::flag(true), EmployeeGroups::flag(0), EmployeeGroups::flag('sim'),
 ], 'grupo Tools: auditoria so com IDs, somente leitura recusado, valor so booleano');
+
+// ----------------------------------------------------------------------------
+// 6. Importacao do Controle v5 (ChgImport): previa so com contagens, idempotente
+//    pelo id legado, updatedAt mais novo vence, norm() do v5.2, tecnico por nome
+// ----------------------------------------------------------------------------
+require_once $root . '/services/ChgImport.php';
+
+$importNow = new DateTimeImmutable('2026-11-17 12:00:00');
+$ms = static fn (string $local): int => (int)(new DateTimeImmutable($local, $importNow->getTimezone()))->format('U') * 1000 + 250;
+$asLocal = static fn (int $millis): string => (new DateTimeImmutable('@' . intdiv($millis, 1000)))->setTimezone($importNow->getTimezone())->format('Y-m-d H:i:s') . '.250';
+$itemA = [
+    'id' => 'a1test', 'solicitante' => 'Solicitante Teste 01', 'chamado' => 'campo que o v5.2 nao usa',
+    'carteiras' => [['codigo' => '9001', 'nome' => 'Carteira Teste 01', 'semCodigo' => false]], 'locais' => ['Local Teste 01', 'local teste 01'], 'qtdPas' => '12',
+    'tipo' => 'Padrão', 'versao' => 'Versao Teste 01', 'link' => 'www.planilha.teste/1', 'sugestao' => '2026-11-18T20:00', 'status' => 'Aprovado',
+    'inicio' => '2026-11-18T20:00', 'fim' => '2026-11-19T20:00', 'chg' => 'chg0000001', 'chgStatus' => 'Aprovada', 'tecnico' => 'técnico  07',
+    'planoImplantacao' => 'ctask1', 'planoBackup' => 'N/A', 'planoRollback' => 'ctask2', 'taskImplStatus' => 'Fechada', 'taskBkpStatus' => '', 'taskRollStatus' => '',
+    'planosExtras' => [['planoImplantacao' => 'ctask3', 'taskImplStatus' => 'Aberta']],
+    'endpoints' => [['url' => 'https://endpoint.teste/1', 'hora' => '2026-11-18T21:00']],
+    'historico' => [['tentativa' => 1, 'endpoints' => [['url' => 'endpoint.teste/0', 'hora' => '20:30'], ['url' => '', 'hora' => '01:30']], 'patchStatus' => 'Erro', 'registradoEm' => $ms('2026-11-18 20:45:00'), 'reagendandoPatch' => false]],
+    'patchStatus' => 'Sucesso', 'reagendandoPatch' => true,
+    'rollback' => ['ativo' => true, 'url' => 'https://endpoint.teste/rb', 'hora' => '2026-11-18T22:00', 'iniciadoEm' => '2026-11-18T22:00'],
+    'stageManual' => 'triagem', 'stageManualAuto' => 'prep', 'concluida' => false,
+    'createdAt' => $ms('2026-11-10 09:00:00'), 'updatedAt' => $ms('2026-11-12 10:00:00'),
+];
+$itemB = [
+    'id' => 'b2test', 'analista' => 'Solicitante Teste 02', 'carteira' => '9002 - Carteira Teste 02', 'local' => 'Local Teste 02', 'tecnico' => 'Tecnico Repetido',
+    'chgStatus' => 'Aprovada', 'link' => 'www.planilha.teste/arquivo.xlsx',
+    'inicio' => '2026-11-18T20:00', 'fim' => '2026-11-18T19:00', 'sugestao' => '2026-11-18T20:00', 'concluida' => true, 'concluidaEm' => $ms('2026-11-15 10:00:00'),
+    'createdAt' => $ms('2026-11-10 09:00:00'), 'updatedAt' => $ms('2026-11-15 10:00:00'),
+];
+$dados = ['app' => 'controle_atualizações', 'versao' => 2, 'items' => [
+    $itemA, $itemB, ['solicitante' => 'Solicitante Teste 09'] + $itemA,
+    ['id' => 'c3test', 'solicitante' => 'Solicitante Teste 03', 'createdAt' => 1, 'updatedAt' => 1],
+    ['id' => 'id invalido!', 'solicitante' => 'x'],
+    ['id' => 'e5test', 'solicitante' => 'Solicitante Teste 05', 'versao' => str_repeat('v', 501)],
+], 'deleted' => ['c3test', 'zzantigo']];
+$importStore = new QaChgStore();
+$importStore->employees += [20 => 'Tecnico Repetido', 21 => 'tecnico repetido'];
+$importer = new ChgImport($importStore, $importNow);
+$pick = static function (array $counts, array $keys): array {
+    $out = [];
+    foreach ($keys as $key) {
+        $out[$key] = $counts[$key] ?? 0;
+    }
+    return $out;
+};
+$preview = $importer->run($dados, null, false, 'qa.admin');
+assert_same(
+    ['novos' => 2, 'atualizados' => 0, 'iguais' => 0, 'ignorados_em_deleted' => 1, 'invalidos' => 2, 'repetidos_no_arquivo' => 1, 'tecnicos_sem_correspondencia' => 1, 'links_completados' => 3, 'fim_antes_do_inicio_limpo' => 1],
+    $pick($preview['contagens'], ['novos', 'atualizados', 'iguais', 'ignorados_em_deleted', 'invalidos', 'repetidos_no_arquivo', 'tecnicos_sem_correspondencia', 'links_completados', 'fim_antes_do_inicio_limpo']),
+    'importar, previa: novos, em deleted, invalidos, repetido no arquivo, tecnico sem correspondencia, links completados e o fim antes do inicio, so contagens'
+);
+assert_same([['chamado' => 1], 0], [$preview['campos_descartados'], count($importStore->rows)], 'importar, previa: o campo que o v5.2 nao usa e contado (D-CHG-24) e nada e gravado');
+assert_same(0, preg_match('/Solicitante Teste|Carteira Teste|Local Teste|planilha\.teste|endpoint\.teste|CHG0000|ctask|Versao Teste|Tecnico Repetido|tecnico  07/i', json_encode($preview, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)), 'importar, previa: nenhum valor de card na resposta');
+$importer->run($dados, null, true, 'qa.admin');
+$byLegacy = [];
+foreach ($importStore->rows as $row) {
+    $byLegacy[$row['legacy_id']] = ChgRules::card($row);
+}
+$a = $byLegacy['a1test'];
+assert_same(
+    ['Solicitante Teste 01', 7, null, ['Local Teste 01'], 'https://www.planilha.teste/1', 12, 'CHG0000001', 'aprovada', 'aprovado', 'padrao'],
+    [$a['solicitante'], $a['tecnico_id'], $a['tecnico_nome_legado'], $a['locais'], $a['link_planilha'], $a['carteiras'][0]['pas'], $a['chg_numero'], $a['chg_status'], $a['service_status'], $a['tipo']],
+    'importar: tecnico casado por nome sem acento e sem caixa, locais sem repetir, link www completado, PAs da carteira unica, numero em maiusculas'
+);
+assert_same(
+    [['CTASK1', 'N/A', 'CTASK2', 'fechada', 'pendente', 'pendente'], ['CTASK3', 'pendente']],
+    [array_values($a['plans'][0]), [$a['plans'][1]['implantacao'], $a['plans'][1]['task_impl']]],
+    'importar: Plano 1 dos campos originais e os planos extras (task so Fechada ou pendente, norm())'
+);
+assert_same(
+    [2, 'erro', '2026-11-18 20:30:00', '2026-11-19 01:30:00', 'https://endpoint.teste/0', $asLocal($ms('2026-11-18 20:45:00')), 'sucesso', true, null, '2026-11-18 21:00:00'],
+    [count($a['attempts']), $a['attempts'][0]['patch_status'], $a['attempts'][0]['endpoints'][0]['start_at'], $a['attempts'][0]['endpoints'][1]['start_at'], $a['attempts'][0]['endpoints'][0]['url'], $a['attempts'][0]['registered_at'], $a['attempts'][1]['patch_status'], $a['attempts'][1]['reagendando'], $a['attempts'][1]['registered_at'], $a['attempts'][1]['endpoints'][0]['start_at']],
+    'importar: historico de tentativas (hora so com HH:MM relativa ao inicio, antes dele no dia seguinte, como o patchDT) e a tentativa atual'
+);
+assert_same(['em_andamento', '2026-11-18 22:00:00', 0, 'comite', 'prep'], [$a['rollback']['status'], $a['rollback']['start_at'], $a['rollback']['plan_position'], $a['stage_manual'], $a['stage_manual_auto']], 'importar: rollback ativo sem status = Em andamento; triagem = comite (norm())');
+assert_same([$asLocal($ms('2026-11-10 09:00:00')), $asLocal($ms('2026-11-12 10:00:00'))], [$a['created_at'], $a['updated_at']], 'importar: createdAt e updatedAt preservados (milissegundos)');
+$b = $byLegacy['b2test'];
+assert_same(
+    ['Solicitante Teste 02', null, 'Tecnico Repetido', [['codigo' => '9002', 'nome' => 'Carteira Teste 02', 'pas' => null]], ['Local Teste 02'], null, true, $asLocal($ms('2026-11-15 10:00:00')), null, 'https://www.planilha.teste/arquivo.xlsx'],
+    [$b['solicitante'], $b['tecnico_id'], $b['tecnico_nome_legado'], $b['carteiras'], $b['locais'], $b['sd_fim'], $b['concluida'], $b['concluida_em'], $b['chg_status'], $b['link_planilha']],
+    'importar: analista vira solicitante, carteira antiga em texto, nome repetido fica no historico (D-CHG-27), fim antes do inicio limpo, concluidaEm preservado, status sem numero limpo, www completado (mesmo com extensao)'
+);
+assert_same(2, count($importStore->rows), 'importar: dois cards gravados (deleted, invalidos e repetidos fora)');
+$again = $importer->run($dados, null, true, 'qa.admin');
+assert_same([0, 0, 2, 2], [$again['contagens']['novos'], $again['contagens']['atualizados'], $again['contagens']['iguais'], count($importStore->rows)], 'importar de novo: idempotente pelo id legado (updatedAt igual, nada muda)');
+$newer = ['items' => [['updatedAt' => $ms('2026-11-16 10:00:00'), 'tecnico' => 'Tecnico 08'] + $itemA, ['updatedAt' => $ms('2026-11-14 10:00:00')] + $itemB], 'deleted' => ['a1test']];
+$mixed = $importer->run($newer, null, false, 'qa.admin');
+assert_same([0, 0, 1, 1], [$mixed['contagens']['novos'], $mixed['contagens']['atualizados'], $mixed['contagens']['mais_antigos_que_o_portal'], $mixed['contagens']['em_deleted_e_no_portal'] ?? 0], 'importar: mais antigo que o portal fica de fora; em deleted e ja no portal e contado (e nao importado)');
+$newer['deleted'] = [];
+$updated = $importer->run($newer, null, true, 'qa.admin');
+$a2 = ChgRules::card($importStore->rows[array_search('a1test', array_column($importStore->rows, 'legacy_id', 'id'), true)]);
+assert_same([1, 8, $a['row_version'] + 1, 2], [$updated['contagens']['atualizados'], $a2['tecnico_id'], $a2['row_version'], count($importStore->rows)], 'importar: updatedAt mais novo vence (atualiza o card, versao + 1); card em deleted nunca e apagado (D-CHG-28)');
+$catalogPreview = $importer->run(null, ['app' => 'catalogo', 'carteiras' => [['codigo' => '9001', 'nome' => 'Carteira Teste 01'], ['codigo' => '9001', 'nome' => 'Repetida'], ['codigo' => 'A1', 'nome' => 'Invalida']], 'locais' => ['Local Teste 01', 'LOCAL TESTE 01', '']], true, 'qa.admin');
+assert_same(['carteiras_novas' => 1, 'carteiras_existentes' => 1, 'carteiras_invalidas' => 1, 'locais_novos' => 1, 'locais_existentes' => 1, 'locais_invalidos' => 1], $pick($catalogPreview['contagens'], ['carteiras_novas', 'carteiras_existentes', 'carteiras_invalidas', 'locais_novos', 'locais_existentes', 'locais_invalidos']), 'importar o catalogo: carteira por codigo, local sem diferenca de caixa, invalidos contados');
+$expectError(static fn () => $importer->run(['items' => 'x'], null, false, 'qa.admin'), 'InvalidArgumentException', 'Dados inválidos: esperado o JSON v2 do Controle de CHG ({"items": [...], "deleted": [...]}).', 'importar: arquivo fora do formato v2');
+$expectError(static fn () => $importer->run(['items' => array_fill(0, 2001, [])], null, false, 'qa.admin'), 'InvalidArgumentException', 'Arquivo com mais de 2000 cards.', 'importar: limite de cards');
+$expectError(static fn () => $importer->run(null, ['carteiras' => 'x'], false, 'qa.admin'), 'InvalidArgumentException', 'Catálogo inválido: esperado {"carteiras": [...], "locais": [...]}.', 'importar: catalogo fora do formato');
+$expectError(static fn () => $importer->run(null, null, false, 'qa.admin'), 'InvalidArgumentException', 'Envie o JSON de dados, o do catálogo ou os dois.', 'importar: sem arquivo');
+assert_same(['tecnico 07', 'joao da silva'], [ChgImport::fold('Técnico  07 '), ChgImport::fold('JOÃO DA SILVA')], 'importar: nome sem acento, sem caixa e sem espacos repetidos');
+$importApi = (string)file_get_contents($root . '/api/portal/chg_import.php');
+$guardAt = strpos($importApi, 'if (!ChgAccess::canImport($role)) {');
+assert_same(true, $guardAt !== false && $guardAt < strpos($importApi, '$data = portal_json_input(ChgImport::MAX_BYTES);') && strpos($importApi, "audit_log('CHG_NEGADO'") > $guardAt && strpos($importApi, "if (!chg_module_enabled()) {") < $guardAt, 'importar, endpoint: so o admin (403 auditado antes de ler o corpo), CSRF, limite de 2 MB e desligado = 404');
+assert_same(1, preg_match("/audit_log\\('CHG_IMPORTADO', 'Importacao do Controle v5: novos ' \\. \\\$c\\['novos'\\]/", $importApi), 'importar, endpoint: auditoria so com as contagens');
 
 echo 'QA do Controle de CHG OK (' . $GLOBALS['qa_checks'] . " conferencias)\n";

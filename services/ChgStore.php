@@ -32,6 +32,9 @@ interface ChgStore {
     /** O funcionario ativo esta no grupo Tools? */
     public function inTools(int $employeeId): bool;
 
+    /** [9.17.7] Cards importados (arquivados tambem): [legacy_id => {id, updated_at, row_version}]. */
+    public function legacyIndex(): array;
+
     public function begin(): void;
     public function commit(): void;
     public function rollBack(): void;
@@ -257,6 +260,14 @@ final class PdoChgStore implements ChgStore {
 
     public function inTools(int $employeeId): bool {
         return (new EmployeeGroups($this->pdo))->inGroup($employeeId);
+    }
+
+    public function legacyIndex(): array {
+        $index = [];
+        foreach ($this->pdo->query('SELECT id, legacy_id, updated_at, row_version FROM portal_chg_updates WHERE legacy_id IS NOT NULL')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $index[(string)$row['legacy_id']] = ['id' => (int)$row['id'], 'updated_at' => (string)$row['updated_at'], 'row_version' => (int)$row['row_version']];
+        }
+        return $index;
     }
 
     public function begin(): void {
