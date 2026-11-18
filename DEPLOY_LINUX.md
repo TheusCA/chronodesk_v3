@@ -5811,6 +5811,337 @@ cadastra pela tela os papeis, o rodizio (com a previa) e as trocas**: quem
 fica com qual papel nunca vai para o git nem para o chat; a verificacao da
 024 conta (problemas em 0).
 
+### Deploy 7 (Controle de CHG e grupo Tools; migration 025)
+
+**O que vai** (tudo depois do `<commit do deploy 6>`, o commit validado do
+deploy 6; desenho principal, 9.17):
+
+- **Migration 025** (commit 2): dez tabelas novas e vazias (o grupo por
+  funcionario, os catalogos de carteiras e locais, o card e as partes dele).
+  Nenhuma linha existente muda; nenhuma tabela existente e alterada.
+  Idempotente; o rollback copia as dez tabelas (`*_bkp_025`) e as apaga, e
+  para se ja existir copia.
+- **Regras, servidor, telas e importacao do Controle de CHG** (commits 3 a 6):
+  quadro, lista e dashboard; o card por etapa como no Controle de CHG v5.2,
+  com a etapa calculada no servidor; o grupo Tools no cadastro de
+  funcionarios; o Excel gerado no servidor; a importacao do Controle v5 (so
+  admin). **O modulo entra desligado** (`CHG_MODULE_ENABLED` ausente ou falso
+  = desligado: menu escondido e API com 404) e **so e ligado no passo 10**,
+  depois das conferencias. Com ele desligado, so muda o cadastro de
+  funcionarios (o campo Grupo Tools).
+- O roteiro e a trava deste deploy e os commits de docs.
+
+**O lockfile nao mudou** desde o `<commit do deploy 6>` (o `package.json`
+ganhou so o `qa:chg`): o build roda sem `npm ci`; com `lockfile alterado: 1`
+no passo 1, o mesmo comando do passo 7 faz o `npm ci`. **Numeracao:** o F8
+(018), que espera a Lideranca, passa a ser o deploy 8 em diante.
+
+**Pre-requisito: o deploy 6 executado com o `<commit do deploy 6>`** (o hash
+completo anotado no registro do deploy 6; ate la, este roteiro nao roda). Se
+producao estiver em outro commit, este roteiro muda antes (o passo 1 da PARE).
+
+A folha do dia e `docs/DEPLOY7_FOLHA_DO_DIA.md`: os mesmos comandos, na
+mesma ordem. Mudou um, muda o outro no mesmo commit.
+
+**Data, janela e quem acompanha: A DEFINIR** com o responsavel. A janela e a
+do deploy 6 mais os minutos do passo 10 (ligar o modulo).
+
+**Shell root, sem `sudo`**, como nos deploys 1 a 6: `sudo -i` e todos os
+comandos nele; o que roda como `www-data` usa `runuser -u www-data --`. O 1o
+comando e a conferencia do ambiente; **qualquer `BLOQUEADO` e PARE**.
+
+**Sem valor real**: a senha do root do MySQL e lida sem eco e apagada no fim
+do comando; o `ServerName` e lido do `chronodesk.conf` na hora; as consultas
+devolvem so contagens e assinaturas; a importacao do passo 12 mostra so
+contagens. Onde aparece `<commit validado na estacao>`, o hash completo
+anotado no item 0. Cada comando em **uma linha**.
+
+**Regras de parada:** qualquer linha com `PARE`, ou saida diferente do
+"Esperado": pare e envie so a contagem ou a mensagem. Nada de `git pull`; o
+unico `git fetch` e o do passo 1, so do branch.
+
+0. **Antes do dia, na estacao.** O responsavel publica o
+   `feat/employee-form-rhf-zod`. Depois, a bateria completa sobre o commit do
+   branch, sozinha (nada pesado em paralelo):
+   `git fetch origin; git worktree add --detach ..\chronodesk-deploy7 origin/feat/employee-form-rhf-zod; Set-Location ..\chronodesk-deploy7\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`.
+   Esperado: `Validacao local concluida com sucesso`, a linha
+   `frontend: 30 scripts npm rodados (...): 30 OK, 0 com falha` (lint,
+   typecheck, build e 27 `qa:*`), o roteiro de navegador com `falharam: 0` e
+   o hash completo no fim: anote como `<commit validado na estacao>`.
+   Qualquer falha: nao ha deploy com esse commit.
+
+0b. **Aviso a Lideranca e a gestao, na vespera** (pelo canal de sempre; sem
+   nome, sem hostname, sem endereco): "Em <data>, entre <inicio> e <fim>, o
+   portal fica indisponivel por alguns minutos para uma atualizacao. Depois
+   dela, o menu ganha o Controle de CHG (no lugar do Controle de CHG v5.2 na
+   pasta de rede, que fica so para consulta ate a importacao) e o cadastro de
+   funcionarios ganha o campo Grupo Tools. Duvidas: <contato>."
+
+**1. Conferencia do ambiente, commit validado e producao no `<commit do deploy 6>`.**
+
+```bash
+R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
+cd /var/www/chronodesk; install -d -o root -g root -m 700 /var/backups/chronodesk; H=$(git rev-parse HEAD); if [ "$H" = "<commit do deploy 6>" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy7-commit >/dev/null; echo "HEAD de producao: o commit do deploy 6 (OK, gravado em pre-deploy7-commit)"; else echo "PARE: HEAD de producao $(git rev-parse --short HEAD), nao o commit do deploy 6"; fi; echo "branch: $(git rev-parse --abbrev-ref HEAD)"; echo "alteracoes locais: $(git status --porcelain | wc -l)"; unset H
+cd /var/www/chronodesk; git fetch origin feat/employee-form-rhf-zod && K=$(git rev-parse origin/feat/employee-form-rhf-zod) && if [ "$K" = "<commit validado na estacao>" ]; then echo "$K" | tee /var/backups/chronodesk/deploy7-commit; else echo "PARE: origin/feat/employee-form-rhf-zod ($K) nao e o commit validado na estacao"; fi; unset K
+cd /var/www/chronodesk; D7=$(cat /var/backups/chronodesk/deploy7-commit); git cat-file -e "$D7^{commit}" && git cat-file -e "$D7:scripts/smoke-deploy1.sh" && git cat-file -e "$D7:migrations/20261117_025_chg.sql" && git merge-base --is-ancestor HEAD "$D7" && echo "fast-forward OK: $(git rev-list --count HEAD.."$D7") commits a aplicar" || echo "PARE: deploy7-commit ausente, sem o smoke-deploy1.sh, sem a 025 ou o HEAD nao e ancestral dele"; echo "migrations alteradas: $(git diff --name-only HEAD "$D7" -- migrations | sort | tr '\n' ' ')"; echo "lockfile alterado: $(git diff --name-only HEAD "$D7" -- frontend/package-lock.json | wc -l)"; unset D7
+```
+
+   Esperado: `ambiente: OK`; `HEAD de producao: o commit do deploy 6 (OK,
+   ...)`, `branch: codex/modernizacao-ui-backend`, `alteracoes locais: 0`; o
+   hash do commit validado gravado em `deploy7-commit`; `fast-forward OK`
+   (anote o numero de commits); `migrations alteradas:` com exatamente os
+   quatro arquivos da 025 (`migrations/20261117_025_chg.sql`, o rollback, as
+   linhas do ensaio e a verificacao); `lockfile alterado: 0`. **PARE** com
+   qualquer `PARE`, alteracao local, outra migration na lista ou outro HEAD
+   (o deploy 6 nao terminou com o commit dele: traga o hash curto).
+
+**2. Ensaio do codigo do commit gravado**, como no deploy 6: o commit inteiro
+em `/tmp`, dono `www-data`, e **todos** os QAs PHP do repositorio, agora com
+o `qa-chg`. Nenhum QA do ensaio toca o banco real.
+
+```bash
+[ ! -e /tmp/.env ] && echo "/tmp/.env ausente: OK" || echo "PARE: existe /tmp/.env; o ensaio leria esse arquivo"
+cd /var/www/chronodesk; export D7=$(cat /var/backups/chronodesk/deploy7-commit); Q=$(mktemp -d /tmp/ensaio-deploy7-qa.XXXXXX); export Q; bash -o pipefail -c 'git archive "$D7" | tar -x -C "$Q"' && chown -R www-data: "$Q" && echo "extraido em $Q" || echo "PARE: falha ao extrair o deploy7-commit"
+find "$Q" -name '*.php' -not -path '*/node_modules/*' -exec runuser -u www-data -- php -l {} \; | grep -v '^No syntax errors' ; echo "fim do php -l"
+[ ! -e /tmp/.env ] && for q in qa-smoke qa-auth qa-timezone qa-overtime qa-schedule-history qa-schedule-legacy-output qa-presence-engine qa-absences qa-calendar-text qa-archive qa-presence-cutoff qa-pa-conflicts qa-operational-view qa-employee-lunch qa-pa-distribution qa-paridade-escala qa-rotation-teams qa-critico-hibrido qa-critical-roles qa-chg qa-security qa-deploy-runbook; do printf '%s: ' "$q"; runuser -u www-data -- php "$Q/scripts/$q.php" >/dev/null 2>&1 && echo OK || echo FALHOU; done
+for Q in /tmp/ensaio-deploy7-qa.??????; do [ -d "$Q" ] && rm -r -- "$Q" && echo "removido: $Q"; done; echo "ensaios restantes: $(ls -d /tmp/ensaio-deploy7-qa.?????? 2>/dev/null | wc -l)"; unset Q D7
+```
+
+   Esperado: `/tmp/.env ausente: OK`; `extraido em ...`; nenhuma linha antes
+   de `fim do php -l`; os 22 QAs com `OK`; `removido: ...` e `ensaios
+   restantes: 0`. **PARE** com qualquer `FALHOU` (rode o QA de novo sem o
+   `>/dev/null` e envie so o nome e a ultima linha).
+
+**3. Q-CHG e ensaio da 025 no MySQL do servidor**, com o portal no ar. A
+Q-CHG e a verificacao da 025 rodada **antes** dela, no banco real (so
+leitura, so contagens): "025 ausente" e a assinatura dos cadastros. Depois, o
+ensaio num banco descartavel `ensaio_<nome>` que o proprio script cria e
+apaga (copia `funcionarios` com os dados e as outras tabelas so na
+estrutura). Duas variantes: (a) migration 2x, rollback 2x; (b) com o grupo
+Tools, uma carteira, um local e um card ficticios gravados (as linhas do
+ensaio so gravam em banco `ensaio_*`). O script e as migrations vem do commit
+gravado.
+
+```bash
+cd /var/www/chronodesk; export D7=$(cat /var/backups/chronodesk/deploy7-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D7:migrations/verificacao/20261117_025_chg_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D7
+cd /var/www/chronodesk; export D7=$(cat /var/backups/chronodesk/deploy7-commit); EV=$(mktemp -d /root/ensaio-deploy7.XXXXXX); export EV; git cat-file -e "$D7^{commit}" && bash -o pipefail -c 'git archive "$D7" migrations scripts/ensaio-migration.sh | tar -x -C "$EV"' && echo "extraido em $EV" || echo "PARE: falha ao extrair as migrations do deploy7-commit"; unset D7
+env VERIFICA="$EV/migrations/verificacao/20261117_025_chg_check.sql" bash "$EV/scripts/ensaio-migration.sh" d7_025 "$EV/migrations/20261117_025_chg.sql" "$EV/migrations/rollback/20261117_025_chg_down.sql" portal_pa_assignments,portal_absences,portal_shift_attachments,portal_overtime_entries,portal_time_adjustments,portal_oncall_shifts,audit_log
+env PREPARO="$EV/migrations/20261117_025_chg.sql" VERIFICA="$EV/migrations/verificacao/20261117_025_chg_check.sql" bash "$EV/scripts/ensaio-migration.sh" d7_025_rollback "$EV/migrations/rollback/20261117_025_ensaio_linhas_chg.sql" "$EV/migrations/rollback/20261117_025_chg_down.sql" portal_pa_assignments,portal_absences,portal_shift_attachments,portal_overtime_entries,portal_time_adjustments,portal_oncall_shifts,audit_log
+case "$EV" in /root/ensaio-deploy7.*) rm -r "$EV" && echo "removido: $EV";; *) echo "PARE: diretorio do ensaio inesperado";; esac; unset EV
+```
+
+   Esperado: **Q-CHG** com `tabelas_025 = 0`, `checks_025 = 0`,
+   `copias_de_rollback_025 = 0` e "025 ausente" (anote o numero de linhas e a
+   assinatura dos cadastros). **Ensaio (a)** (a mesma forma do ensaio local,
+   registrado no desenho principal, 9.17): `-> migration, 1a vez: OK` e `2a
+   vez: OK`, com `tabelas_025 = 10`, `checks_025 = 27` e todas as contagens
+   de linhas em 0; `-> rollback, 1a vez: OK`, com `tabelas_025 = 0`,
+   `copias_de_rollback_025 = 10` e "025 ausente"; a 2a vez para de proposito
+   (`rollback_025 abortado: ja existe copia *_bkp_025 ...`). A assinatura dos
+   `cadastros` igual nos cinco estados. **(b)** depois das linhas,
+   `grupo_tools = 1`, `carteiras_catalogo = 1`, `locais_catalogo = 1`,
+   `cards = 1`, `planos = 1`, `tentativas = 1`, `endpoints = 1`,
+   `rollbacks_ativos = 1` e as contagens de problema (`cards_sem_plano_1`,
+   `cards_sem_tentativa`, `tentativas_atuais_no_historico`,
+   `historico_sem_data`, `rollbacks_ativos_repetidos`,
+   `tools_somente_leitura`, `tools_inativos`) em 0; o 1o rollback `OK`
+   (`copias_de_rollback_025 = 10`) e o 2o para de proposito. As duas terminam
+   com `Removendo o banco de ensaio ...` e `Removido.`; no fim, `removido:
+   /root/ensaio-deploy7.<sufixo>`. **PARE** com `FALHOU` em etapa que nao
+   seja o 2o rollback de (a) ou de (b), ou assinatura diferente: envie so as
+   contagens (o deploy nao segue).
+
+**4. Espaco livre e backup rapido**, com o portal no ar (o mesmo do deploy 6).
+
+```bash
+cd /var/www/chronodesk/frontend; NPMC=$(npm config get cache); test -e "$NPMC" || NPMC=$(dirname "$NPMC"); DROOT=$(docker info --format '{{.DockerRootDir}}'); ESP=OK; for LIM in "/var/www/chronodesk:500" "$NPMC:200" "/var/backups:100" "$DROOT:200" "/tmp:50" "/root:50"; do DIR=${LIM%:*}; MIN=${LIM##*:}; LIVRE=$(df -BM --output=avail "$DIR" | tail -n 1 | tr -dc '0-9'); if [ "${LIVRE:-0}" -ge "$MIN" ]; then echo "OK $DIR (disco $(df --output=target "$DIR" | tail -n 1)): $LIVRE MB livres, minimo $MIN"; else echo "BAIXO $DIR: ${LIVRE:-?} MB livres, minimo $MIN"; ESP=PARE; fi; done; [ "$ESP" = OK ] && echo "espaco livre: OK" || echo "PARE: espaco livre abaixo do minimo"; unset NPMC DROOT ESP LIM DIR MIN LIVRE
+B=/var/backups/chronodesk/deploy7-$(date +%Y%m%d-%H%M%S); export B; read -rsp 'Senha root do MySQL: ' P; echo; export P; install -d -o root -g root -m 700 "$B" && bash -o pipefail -c 'docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysqldump -uroot --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | gzip | tee "$B/database.sql.gz" > /dev/null' && gzip -t "$B/database.sql.gz" && tar -czf "$B/estado.tar.gz" -C /var/www/chronodesk --ignore-failed-read estado.json pausas.csv config_sistema.json funcionarios.json && sh -c 'cd "$1" && sha256sum database.sql.gz estado.tar.gz > SHA256SUMS' _ "$B" && echo "backup concluido: $B ($(du -sh "$B" | cut -f1))" || echo "PARE: backup falhou (sem ponto de restauracao, o deploy nao segue)"; unset P
+```
+
+   Esperado: seis linhas `OK` e `espaco livre: OK`; `backup concluido:
+   /var/backups/chronodesk/deploy7-<data> (<tamanho>)` (anote). **PARE** com
+   `BAIXO` ou backup que falhou.
+
+**5. Manutencao e copia do `app/`.** O portal responde 503 ate o passo 11.
+
+```bash
+touch /var/www/chronodesk.maintenance; echo "arquivo de manutencao: $(test -e /var/www/chronodesk.maintenance && echo presente || echo AUSENTE)"
+cd /var/www/chronodesk; A=/var/backups/chronodesk/app-antes-deploy7; if test -e "$A"; then diff -rq app "$A" && echo "copia do app/ ja existe e e igual: $A" || echo "PARE: $A existe e e diferente do app/ atual"; else cp -a app "$A" && diff -rq app "$A" && echo "copia do app/: $A ($(du -sh "$A" | cut -f1); $(find "$A" -type f | wc -l) arquivos)" || echo "PARE: copia do app/ falhou"; fi; unset A
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora (manutencao): %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+```
+
+   Esperado: `arquivo de manutencao: presente`; `copia do app/: ...` (anote);
+   `portal visto de fora (manutencao): 503`. **PARE** como no deploy 6.
+
+**6. Migration 025, antes do merge** (o codigo do deploy 6 nao le as tabelas
+novas; o do Controle de CHG le o grupo Tools no cadastro de funcionarios),
+do commit gravado, e a verificacao logo depois:
+
+```bash
+cd /var/www/chronodesk; export D7=$(cat /var/backups/chronodesk/deploy7-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D7:migrations/20261117_025_chg.sql" && bash -o pipefail -c 'git show "$D7:migrations/20261117_025_chg.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "025 aplicada" || echo "PARE: a 025 nao foi aplicada"; unset P D7
+cd /var/www/chronodesk; export D7=$(cat /var/backups/chronodesk/deploy7-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D7:migrations/verificacao/20261117_025_chg_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D7
+```
+
+   Esperado: `025 aplicada`; na verificacao, `tabelas_025 = 10`,
+   `checks_025 = 27`, `copias_de_rollback_025 = 0`, todas as contagens de
+   linhas em 0, as contagens de problema em 0 e a assinatura dos cadastros
+   igual a da Q-CHG (passo 3). **PARE** com `PARE` ou outro numero: fique em
+   manutencao; o codigo ainda e o do deploy 6, que nao le a 025 (o rollback
+   da 025, passo 16, so com aprovacao).
+
+**7. `git merge --ff-only` do commit gravado**, o build e o QA do bundle:
+
+```bash
+cd /var/www/chronodesk; D7=$(cat /var/backups/chronodesk/deploy7-commit); git merge --ff-only "$D7"; [ "$(git rev-parse HEAD)" = "$D7" ] && echo "HEAD = deploy7-commit" || echo "PARE: HEAD diferente do deploy7-commit"; echo "alteracoes locais: $(git status --porcelain | wc -l)"; unset D7
+cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy7-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi
+cd /var/www/chronodesk/frontend && npm run -s qa:bundle
+```
+
+   Esperado: o `merge` em fast-forward, `HEAD = deploy7-commit` e
+   `alteracoes locais: 0`; `lockfile sem mudanca: so o build` e o build sem
+   erro; `Bundle frontend QA OK (...)` com o CSS do portal abaixo de 70000
+   bytes e o CSS do Controle de CHG abaixo de 25000 (D-CHG-26). **PARE** com
+   as mesmas regras dos passos 5 e 6 do deploy 3.
+
+**8. Recarga, health, fuso e teste de fumaca**, ainda em manutencao, com o
+modulo ainda desligado:
+
+```bash
+systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'health: %{http_code}\n' -H "Host: $S" http://127.0.0.1/api/health.php; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+cd /var/www/chronodesk; runuser -u www-data -- php scripts/qa-timezone.php --db
+cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then env PHPLOG=/var/log/chronodesk/php_error.log bash scripts/smoke-deploy1.sh "$S"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+```
+
+   Esperado: o mesmo do passo 8 do deploy 6 (`health: 200`, `QA timezone
+   (banco real) OK`, `FUMACA OK`). **PARE** com qualquer `PARE` ou codigo
+   diferente: nao reabra.
+
+**9. Conferencia no banco, so leitura:** a mesma verificacao do passo 6,
+agora com o codigo novo no ar (a fumaca nao grava card nem grupo).
+
+```bash
+cd /var/www/chronodesk; export D7=$(cat /var/backups/chronodesk/deploy7-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D7:migrations/verificacao/20261117_025_chg_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D7
+```
+
+   Esperado: os mesmos numeros do passo 6. **PARE** com numero diferente.
+
+**10. Ligar o Controle de CHG** (`CHG_MODULE_ENABLED=true` no `.env` em uso,
+`/var/www/.env`; D-CHG-17), ainda em manutencao. A variavel so vale se o
+pool do PHP-FPM nao a definir (`env[...]` no `www.conf` vence o `.env`), e so
+a recarga do PHP-FPM aplica a mudanca. Antes de alterar, a copia do `.env`
+com modo `600` (tem os segredos do `.env`, como o backup); a linha so muda se
+a copia der certo. A API do modulo responde 404 sem ele e 401 (sem sessao)
+com ele.
+
+```bash
+grep -rn 'CHG_MODULE_ENABLED' /etc/php/*/fpm/ ; echo "fim (esperado: nada acima)"
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'controle de CHG (desligado, sem sessao): %{http_code}\n' -H "Host: $S" http://127.0.0.1/api/portal/chg.php; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+K=/var/backups/chronodesk/env-antes-deploy7-$(date +%Y%m%d-%H%M%S); if install -m 600 /var/www/.env "$K"; then echo "copia do .env: $K ($(stat -c '%a %U' "$K"))"; if grep -q '^CHG_MODULE_ENABLED=' /var/www/.env; then sed -i 's/^CHG_MODULE_ENABLED=.*/CHG_MODULE_ENABLED=true/' /var/www/.env; else echo 'CHG_MODULE_ENABLED=true' >> /var/www/.env; fi; echo "linhas CHG_MODULE_ENABLED=true no .env: $(grep -c '^CHG_MODULE_ENABLED=true$' /var/www/.env)"; else echo "PARE: copia do .env falhou, nada alterado"; fi; unset K
+systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'controle de CHG (ligado, sem sessao): %{http_code}\n' -H "Host: $S" http://127.0.0.1/api/portal/chg.php; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+```
+
+   Esperado: nada no `grep` do pool; `controle de CHG (desligado, sem
+   sessao): 404`; `copia do .env: ... (600 root)` e `linhas
+   CHG_MODULE_ENABLED=true no .env: 1`; recarga sem saida; `controle de CHG
+   (ligado, sem sessao): 401`. **PARE** com linha no `grep` do pool (o
+   pool vence o `.env`: avise), outro codigo ou outro numero.
+
+**11. Reabertura e conferencia na tela.**
+
+```bash
+[ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+```
+
+   So com os passos 8 e 10 como esperado. Esperado: `manutencao encerrada` e
+   `portal visto de fora: 302`. **Na tela**, como admin (Ctrl+F5 uma vez),
+   **sem salvar nada**:
+
+   - **Controle de CHG:** o item no menu; o quadro com as quatro colunas
+     vazias ("Nenhuma solicitação em análise..."), os seis indicadores em 0,
+     "Exportar Excel", "Importar do Controle v5" e "Nova atualização".
+   - **Funcionarios:** o campo "Grupo Tools" ativo na edicao e o filtro
+     "Grupo Tools: todos" (abra uma edicao e feche sem salvar).
+   - **Pausas e Visao operacional:** como antes.
+
+   **PARE** com `PARE`, outro codigo, ou tela em branco ou quebrada: avise.
+
+**12. Importacao do Controle v5 (admin, na tela; sem comando).** Com os dois
+arquivos da pasta de rede (o JSON de dados v2 e o do catalogo), em
+"Importar do Controle v5": **Ver previa** e anote so as contagens (cards
+novos, ignorados em "deleted", tecnicos sem correspondencia, carteiras e
+locais novos, campos descartados); com o responsavel de acordo, **Confirmar
+importacao**. Depois, a verificacao da 025 (passo 9) conta os cards, as
+carteiras e os locais (anote). Nenhum valor dos cards vai para o chat, o
+registro ou o git; o Controle v5 na pasta de rede fica so para consulta.
+
+**13. Medicao do polling**, alguns minutos depois da reabertura, 2 rodadas
+por endpoint, valendo a melhor, sessao de gestao (base: os numeros do deploy
+6, anotados no registro dele).
+
+```bash
+cd /var/www/chronodesk; bash scripts/medir-polling.sh
+cd /var/www/chronodesk; URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh
+cd /var/www/chronodesk; URL=http://127.0.0.1/api/solicitacoes_pendentes.php bash scripts/medir-polling.sh
+```
+
+   Esperado: p50 e p95 de cada um (anote a melhor rodada). O Controle de CHG
+   nao entra no polling do painel (a tela dele atualiza a cada 30 s so com
+   ela aberta). **PARE se** o p95 passar de 50 ms **e** de 20% acima da base
+   do deploy 6: meca de novo e avise antes de qualquer reversao.
+
+**14. Desligamento rapido do Controle de CHG (so se preciso, com aprovacao do
+responsavel).** Esconde o menu e a API (404) sem voltar o codigo; os cards
+ficam no banco.
+
+```bash
+K=/var/backups/chronodesk/env-antes-desligar-chg-$(date +%Y%m%d-%H%M%S); if install -m 600 /var/www/.env "$K"; then echo "copia do .env: $K ($(stat -c '%a %U' "$K"))"; sed -i 's/^CHG_MODULE_ENABLED=.*/CHG_MODULE_ENABLED=false/' /var/www/.env; echo "linhas CHG_MODULE_ENABLED=false no .env: $(grep -c '^CHG_MODULE_ENABLED=false$' /var/www/.env)"; else echo "PARE: copia do .env falhou, nada alterado"; fi; unset K
+systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+   Esperado: `copia do .env: ... (600 root)`, `linhas
+   CHG_MODULE_ENABLED=false no .env: 1` e a recarga sem saida; na tela, o
+   menu sem o Controle de CHG.
+
+**15. Rollback de codigo (so se preciso, com aprovacao do responsavel).** O
+`app/` volta da copia do passo 5, sem `npm`. A 025 fica: o codigo do deploy 6
+nao le as tabelas novas (cards e grupos gravados ficam guardados, sem efeito).
+
+```bash
+cd /var/www/chronodesk; git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy7-commit)" && echo "codigo anterior no ar: $(git rev-parse --short HEAD)"
+cd /var/www/chronodesk; A=/var/backups/chronodesk/app-antes-deploy7; X=/var/backups/chronodesk/app-deploy7-retirado-$(date +%Y%m%d-%H%M%S); if test -d "$A"; then { ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && echo "app/ anterior de volta (o build retirado esta em $X)" || echo "PARE: a volta do app/ falhou"; else echo "PARE: copia $A ausente; nada mudou no app/"; fi; unset A X
+systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
+```
+
+   Esperado: `codigo anterior no ar: <hash curto do deploy 6>`; `app/
+   anterior de volta (...)`; recarga sem saida. Depois, o passo 8 e a
+   reabertura do passo 11 (o `CHG_MODULE_ENABLED` no `.env` nao tem efeito
+   no codigo do deploy 6).
+
+**16. Rollback da 025 (so depois do passo 15, e so com aprovacao: os cards,
+os catalogos e o grupo Tools gravados vao para as copias `*_bkp_025`).** Para
+de proposito se ja houver copia de um rollback anterior.
+
+```bash
+cd /var/www/chronodesk; export D7=$(cat /var/backups/chronodesk/deploy7-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy7-commit)" ] && git cat-file -e "$D7:migrations/rollback/20261117_025_chg_down.sql" && bash -o pipefail -c 'git show "$D7:migrations/rollback/20261117_025_chg_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 025 aplicado" || echo "PARE: o codigo no ar nao e o do deploy 6 ou o rollback da 025 falhou"; unset P D7
+cd /var/www/chronodesk; export D7=$(cat /var/backups/chronodesk/deploy7-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D7:migrations/verificacao/20261117_025_chg_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D7
+```
+
+   Esperado: `rollback da 025 aplicado`; a verificacao com
+   `tabelas_025 = 0`, `copias_de_rollback_025 = 10`, "025 ausente" e a
+   assinatura dos cadastros igual a do passo 6. **PARE** com `PARE`
+   (`rollback_025 abortado: ja existe copia *_bkp_025`: confira e renomeie as
+   copias antes) e avise.
+
+**Depois de um ciclo estavel, com o responsavel:** o push do commit validado
+para o `codex/modernizacao-ui-backend` (nunca `--force`); com aprovacao, a
+limpeza de `/var/backups/chronodesk` (`deploy7-<data>`, com dados pessoais,
+`app-antes-deploy7`, as copias `env-antes-*` pelo nome, `pre-deploy7-commit`
+e `deploy7-commit`). **A Lideranca e o admin marcam o grupo Tools pela tela**
+(quem esta nele nunca vai para o git nem para o chat; a verificacao da 025 so
+conta, com `tools_somente_leitura` e `tools_inativos` em 0).
+
 ## HTTPS Interno
 
 Use HTTPS mesmo na rede interna, com certificado corporativo ou self-signed distribuido de forma controlada. Quando HTTPS estiver ativo:
