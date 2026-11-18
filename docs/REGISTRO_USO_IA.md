@@ -1692,6 +1692,19 @@ Base da afirmação:
 | **Decisões (recomendadas)** | D-CHG-13 a D-CHG-31 (9.17.8); o lote segue com elas, como pedido. |
 | **Validacao humana** | Pendente: revisão única no fim do lote. |
 
+### Controle de CHG no portal: execução (commits 2 a 7) — 2026-11-17
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Executar o plano 9.17: migration 025, regras puras, servidor (grupo Tools, `chg.manage`, API, Excel), telas, importação do Controle v5 e roteiro do deploy 7 com a trava. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `9784e0d`, `0c37b82`, `d72444e`, `1ae1a81`, `6e93ca3`, `7986f8b` e o commit destes docs. Sem push pela IA. |
+| **O que a IA alterou** | Migration 025 (com rollback, verificação e linhas do ensaio); `services/Chg*.php`, `EmployeeGroups.php`, `XlsxWriter.php`; `api/portal/chg*.php`; cadastro de funcionários (Tools); `security.php` (permissões e flag); telas do módulo e de Funcionários; QAs (`qa-chg.php`, `qa:chg`, `qa-security`, `qa-deploy-runbook` seção 19, bloco 31 do navegador); capturas; `DEPLOY_LINUX.md` e `docs/DEPLOY7_FOLHA_DO_DIA.md`; `.env.example` (`CHG_MODULE_ENABLED=false`). |
+| **Dados pessoais** | Nenhum no git: testes, mocks e capturas só com dados fictícios ("Carteira Teste NN", "Tecnico NN", "CHG0000001"). Auditoria só com IDs e contagens. A prévia dos JSON de referência (fora do git) imprimiu só contagens. Deslize: a saída de uma leitura da ferramenta de referência mostrou o início de linhas reais no terminal da sessão; nada foi gravado. |
+| **Validacao executada pela IA** | Bateria completa sozinha em cada commit (29 a 30 scripts npm, até 1153/1153); mutação em cada commit (30/30, 37/37, 42/42, 44/44, 34/34, 16/16, sobreviventes corrigidos antes do commit); ensaio da 025 nas duas variantes e integração 35/35 no MySQL 8.0.46 do WSL; varredura de vazamento antes de cada commit. |
+| **Achados** | Bug real pego pelo QA na tabela de cópia (cores perdidas na união de arrays), corrigido antes do commit. Conflitos com regras do portal resolvidos sem afrouxar QA: preferências em `sessionStorage` (D-CHG-32), tabela de cópia no servidor (QA visual sem hex), CSS da rota com orçamento próprio (D-CHG-26). Em dois commits rodei processos durante a bateria; as baterias foram repetidas sozinhas. |
+| **Decisões (propostas)** | D-CHG-32 (precisa da decisão do responsável) e D-CHG-33 (9.17.12). |
+| **Validacao humana** | Pendente: revisão única no fim do lote. |
+
 ---
 
 ## 5. Responsabilidade

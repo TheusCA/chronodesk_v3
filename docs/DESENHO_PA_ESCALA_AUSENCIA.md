@@ -5805,6 +5805,33 @@ Cada commit com a bateria completa sozinha e a mutação; QAs PHP e do frontend 
 
 **Próximo passo:** execução direta (pedido de 2026-11-17), parando antes só se aparecer algo que mude permissão ou o modelo de dados além do descrito.
 
+#### 9.17.12 Execução (2026-11-17; aguarda a revisão única)
+
+Nada mudou permissão nem o modelo de dados além do descrito: o lote seguiu sem parada. Sem push.
+
+| Commit | O que entrou | Bateria (sozinha) | Mutação |
+|---|---|---|---|
+| `1d8a3a6` | Este plano (9.17.1 a 9.17.11) | OK | (só docs) |
+| `9784e0d` | Migration 025 (10 tabelas, 27 CHECKs), rollback com a guarda, verificação, linhas do ensaio; `qa-chg` seção 1; listas "depois do deploy 6" no `qa-deploy-runbook` | 29 OK, 1139/1139 | 30/30 |
+| `0c37b82` | `ChgRules` (regras puras do v5.2) e `qa-chg` seção 2 | 29 OK, 1139/1139 | 37/37 (1 sobrevivente corrigido no QA) |
+| `d72444e` | Grupo Tools no cadastro (`EmployeeGroups`), `chg.manage`/`chg.import`, flag, `ChgStore`/`ChgService`/`ChgTable`, escritor XLSX próprio, `chg.php`, `chg_export.php`, matriz do `qa-security` | 29 OK, 1139/1139 | 42/42 (2 corrigidos no QA) |
+| `1ae1a81` | Telas (Quadro, Lista, Dashboard, card por etapa, formulário, copiar, exportar), Tools em Funcionários, `qa:chg`, bloco 31 do navegador, capturas (16 antes, 16 depois, dois temas, 390 px sem rolagem) | 30 OK, 1151/1151 | 44/44 (4 corrigidos: 1 bug real na cor da tabela de cópia, 1 equivalente simplificado) |
+| `6e93ca3` | Importação do Controle v5 (`ChgImport`, `chg_import.php`, painel) e `qa-chg` seção 6 | 30 OK, 1153/1153 | 34/34 (4 corrigidos no QA) |
+| `7986f8b` | Roteiro e folha do deploy 7 e a seção 19 do `qa-deploy-runbook` | 30 OK, 1153/1153 | 16/16 |
+
+**Ensaio e integração (MySQL 8.0.46 do WSL):** a 025 nas variantes (a) e (b) OK, com a assinatura de `funcionarios` igual nos cinco estados; integração do serviço e da importação contra o banco `qa_chg`, 35/35. Prévia da importação com os dois JSON de referência (fora do git), só contagens: 9 cards novos, 168 carteiras e 8 locais novos para o catálogo, 9 técnicos sem correspondência (ficam como nome legado, D-CHG-19/27), 1 total de PAs atribuído à 1ª carteira (D-CHG-33) e o campo `chamado` descartado em 6 cards (D-CHG-24).
+
+**Decisões novas na execução (propostas, para a revisão):**
+
+- **D-CHG-32 (decisão do responsável):** as preferências da tela (visão, filtros) ficam no `sessionStorage`, não no `localStorage` do v5.2, porque o QA de AppSec do portal proíbe `localStorage` em `frontend/src`. Efeito: a preferência dura a aba, não volta no dia seguinte. Alternativa: abrir exceção no QA só para a chave `chronodesk_chg_prefs` (sem dado pessoal).
+- **D-CHG-33:** card antigo com várias carteiras e um total de PAs sem divisão: o total vai para a 1ª carteira (como o v5.2 soma), contado na prévia.
+
+**Diferenças em relação ao plano:** a coluna `sd_fim_auto` não foi criada (o fim automático é inferido como no v5.2, sem estado guardado); a exportação recebe os IDs que a tela mostra (`chg_export.php?ids=`), para o Excel seguir os filtros; a tabela de cópia (HTML com as cores do v5.2 e texto) é montada no servidor (`chg.php?tabela=ID`), porque o QA visual proíbe cor hexadecimal no frontend.
+
+**Deslizes do processo (registrados):** em dois commits (`0c37b82`, `d72444e`) rodei `php -l`/`python` durante a bateria; as baterias foram repetidas sozinhas. Ao inspecionar a estrutura da ferramenta de referência, a saída de uma leitura mostrou o início de linhas reais de dados (catálogo e semente) só no terminal da sessão; nada foi gravado em arquivo, teste, doc ou commit, e a leitura não se repetiu. A varredura de vazamento (`leak_scan`, só contagens) rodou antes de cada commit: nenhum achado.
+
+**Ordem dos deploys:** deploy 4 (`5a2494c`) → no aviso do fim, push só até o `bc158f3`; deploy 5 (`bc158f3`); deploy 6 (9.16, 024); deploy 7 (este lote, 025, com o módulo ligado no passo 10); F8 a partir do deploy 8.
+
 ---
 
 ## 10. Riscos e pendências
