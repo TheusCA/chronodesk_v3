@@ -236,6 +236,30 @@ Padrão por time, com a mesma âncora da CONFIG:
 - `PA_INVENTARIO_ALTERADO` (WARNING quando muda tipo, empréstimo ou reserva; INFO no resto);
 - `PA_PREFERENCIA_ALTERADA` (INFO).
 
+### 3.3.1 Revisão de 2026-11-19 (antes do F10-3)
+
+**O que mudou desde o desenho de 2026-11-13:**
+- **Grupo comum derivado da equipe (F9, D-F9-12):** comum = equipe N1 ou N2 **e** `grupo_escala = 'comum'`; Crítico e Híbrido ficam sempre `separado`. A distribuição, as preferências e as travas usam esse grupo; o `grupo_escala` à mão do 3.1 vale só dentro de N1 e N2.
+- **D-F10-19 revista (2026-11-16):** o **Crítico tem N PAs reservados** (opção (b), N = 2, configurável) e **os papéis do 9.16 dizem quem ocupa**; o **Híbrido fica na opção (c)**: PA fixo por pessoa, pelo vínculo do Mapa PA, com o "pode emprestar".
+- **Papéis do Crítico (9.16, deploy 4):** a presença do Crítico no dia vem do papel (troca pontual > rodízio > regra individual; ausência e exceção por data vencem o papel).
+
+**Plano revisto do F10-3 (migration 022):**
+
+| Item | Como fica |
+|---|---|
+| `portal_pa_inventory` | `seat_type ENUM('flexible','fixed')` (padrão `flexible`), `can_lend TINYINT(1)` (padrão 0) e `reserved_team ENUM('critico','hibrido') NULL` (no lugar do `reserved_for` do 3.3, com os valores do ENUM de equipe); CHECKs: reserva só em `fixed`; empréstimo só em `fixed` sem reserva. Nenhuma linha muda: todo PA continua flexível |
+| N do Crítico | O número de PAs marcados como reservados ao Crítico (sem campo numérico separado): hoje 2, a gestão marca pela tela |
+| Quem ocupa o reservado | As pessoas do Crítico presenciais no dia, na ordem do papel do dia (ordem do papel; sem papel por último; empate pelo nome normalizado e o ID). O 1º PA reservado (fileira, coluna, número) fica com a 1ª pessoa. PA sem pessoa fica reservado e vazio e **não empresta** (opção (b): "mais assentos parados em dia de pouca gente"). Pessoa sem PA: alerta `reserved_short` (motor: ATENÇÃO CONFIG; Mapa PA: aviso "Crítico sem PA reservado") |
+| Híbrido | Sem reserva (o serviço recusa `hibrido`); PA `fixed` com o vínculo da pessoa e o "pode emprestar" |
+| PA reservado | Não recebe vínculo (409) nem preferência (409). Reservar exige o PA sem vínculo vigente ou futuro e sem preferência (409 com a contagem; nada é encerrado por script) |
+| PA fixo | Um dono por data: vínculo sobreposto dá 409; marcar como fixo exige 0 pares de vínculos sobrepostos de hoje em diante |
+| Preferências | `portal_pa_preferences` (PA do inventário por ID, colaborador, autoria; única por par; FKs `RESTRICT`); só cadastros ativos do grupo comum derivado, fora do "fora do Mapa"; até 20 por PA; a gravação troca o conjunto |
+| Motor | `reserved_people` por dia (opcional; sem ele, o reservado fica ocupado sem pessoa, como o script: a paridade não muda); `reservedSeating` e `orderReservedPeople` são funções puras do motor, a regra única do motor e do Mapa PA; versão `f10-pa-2` |
+| Mapa PA | O tipo do PA no cartão (Fixo, Fixo · empresta, Reservado ao Crítico), o ocupante do reservado no dia com o papel, o aviso de quem ficou sem PA e o inventário no diálogo do PA (gestão). **A fonte "escala do mês" fica para o F10-4** (depende do mês publicado) |
+| API | `portal/pa_map.php`: `inventory_save` e `preferences_save` (`pa_map.manage`, CSRF); auditoria `PA_INVENTARIO_ALTERADO` (WARNING) e `PA_PREFERENCIA_ALTERADA` (INFO), só com o PA e os IDs |
+
+**Achado:** o `OperationalService::engineSchedule` (a leitura de presença da tela Escala, do Calendário e do `mapPresence` do Mapa PA) **não passa o papel do dia** do 9.16 ao motor; só o `PresenceService` (Visão operacional e status) passa. Nessas telas, a pessoa do Crítico com papel aparece pela regra individual. No Mapa PA do F10-3, o reservado do Crítico usa a presença corrigida pelo papel (a mesma precedência), e o vínculo de alguém do Crítico continua pela regra individual. A correção do `engineSchedule` fica para um lote próprio, a aprovar (mexe na Escala, no Calendário e nos relatórios).
+
 ### 3.4 Motor puro de distribuição de PA
 
 **`services/PaDistributionEngine.php`:** função pura, sem banco, arquivo nem relógio, como o `PresenceEngine`. Recebe tudo já carregado e devolve o resultado do mês.
@@ -822,3 +846,41 @@ Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL,
   - commit 3: 23/23 (telas, schema, funções puras, bloco 27); na 1ª rodada, 21/23: a âncora padrão (o "hoje" do QA era segunda) e a largura das tabelas do painel em 1366 px ganharam conferência (`bbdc095` e `0ab3f17` viraram `a740998`);
   - commit 4: 14/14 (roteiro, folha e a seção 16 da trava).
 - **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree): `f346051`: saída 0, frontend 26/26, navegador 1092/1092; `4b714c7`: 0, 26/26, 1092/1092; `a740998`: 0, 27/27, 1112/1112 (repetida sozinha: na 1ª, um QA de 1 segundo rodou em paralelo por engano; as duas deram o mesmo número); `4e3d9ec`: 0, 27/27, 1112/1112. O commit de docs tem a bateria rodada depois dele, com o resultado no estado da sessão.
+
+### 8.7 Lote F10-3: inventário de PA completo, reservados do Crítico e preferências (2026-11-19)
+
+**Pedido de 2026-11-19:** revisar a seção 3 com o que mudou (grupo comum derivado da equipe; D-F10-19 revista: Crítico com 2 PAs reservados, configurável, e os papéis do 9.16 dizendo quem ocupa; Híbrido na opção (c)) e seguir do plano direto para a implementação (migration 022, ensaio no MySQL do WSL, bateria sozinha e mutação por commit, roteiro do próximo deploy), com uma parada só, no fim. Sem push. O plano revisto é a 3.3.1.
+
+**Commits** (branch `feat/employee-form-rhf-zod`, sem push):
+
+| Commit | Conteúdo |
+|---|---|
+| `3983886` | Migration 022, rollback, verificação e linhas do ensaio; `qa-pa-inventory.php` (estrutura) na bateria; a trava separa a 022 e o QA novo do deploy 4 já executado |
+| (commit 2) | `PaInventoryRules`; o motor com os reservados pelos papéis (`f10-pa-2`); `PaMapService` (leitura do inventário, ocupante do reservado, 409 do reservado e do fixo, `saveSeat`, `savePreferences`); `api/portal/pa_map.php` (`inventory_save`, `preferences_save`); QAs |
+| (commit 3) | Telas do Mapa PA (selo do tipo, cartão do reservado, aviso do Crítico sem PA, inventário no diálogo), `qa:pa-map` e o bloco 32 do navegador |
+| (commit 4) | Roteiro e folha do deploy 5 (`DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md`) e a seção 18 da trava |
+| os de docs | Esta seção, a 3.3.1 e o `REGISTRO_USO_IA.md` |
+
+**Ensaio da 022 no MySQL 8.0.46 local** (contêiner do WSL; base fictícia `qa_f103` = `qa_chg` com 3 vínculos fictícios; `scripts/ensaio-migration.sh` do repositório, com `DADOS=portal_pa_inventory,portal_pa_assignments`). Só contagens e assinaturas:
+
+| Variante | Resultado |
+|---|---|
+| (a) `f10_022` | migration 2x `OK` (`colunas_022 = 3`, `checks_022 = 2`, `tabela_022 = 1`; 16 PAs ativos, 16 flexíveis, 0 fixos, 0 reservados, 0 preferências; problemas 0); rollback 1x `OK` (`copias_de_rollback_022 = 2`, "022 ausente"); a 2ª para de propósito (`ERROR 1644 ... rollback_022 abortado`); assinaturas do inventário (16 linhas) e dos vínculos (3) iguais nos cinco estados |
+| (b) `f10_022_rollback` | linhas do ensaio 2x: 13 flexíveis, 1 fixo que empresta, 2 reservados ao Crítico, 1 preferência, problemas 0 (iguais na 2ª); rollback 1x `OK` (2 cópias), a 2ª para; assinaturas iguais às do estado inicial |
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D-F10-32 | `reserved_team ENUM('critico','hibrido')` no banco; o serviço só aceita `critico` enquanto o Híbrido estiver na opção (c) | Mudar o Híbrido para (a) ou (b) depois é só serviço e tela, sem migration |
+| D-F10-33 | N = o número de PAs marcados como reservados ao Crítico (sem campo numérico) | Uma fonte só: o assento é um PA do inventário; "configurável" é marcar ou desmarcar pela tela |
+| D-F10-34 | Ordem de quem ocupa o reservado: com papel do dia pela ordem do papel (e o ID do papel), sem papel por último; empate pelo nome normalizado e o ID. Pessoa sem PA: alerta `reserved_short` (ATENÇÃO CONFIG no motor; aviso no Mapa PA). PA reservado vazio não empresta | O papel diz quem ocupa (D-F10-19 revista); a opção (b) aceita assento parado |
+| D-F10-35 | A regra do reservado mora no motor como funções puras (`reservedSeating`, `orderReservedPeople`); o Mapa PA chama só elas; o `distribute` continua fora de produção até o F10-4 (a trava do F10-1 passou a permitir só essas duas no `PaMapService`) | Uma regra para o mapa de hoje e para o mês publicado |
+| D-F10-36 | No Mapa PA, a presença do Crítico no reservado segue a precedência do 9.16 (ausência e exceção por data > papel > regra), corrigindo o dia do `mapPresence`, que não aplica o papel (achado da 3.3.1) | O reservado tem de mostrar quem vem pelo papel; a correção geral do `engineSchedule` é outro lote |
+| D-F10-37 | PA reservado não recebe vínculo nem preferência (409); reservar exige o PA sem vínculo vigente ou futuro e sem preferência (409 com a contagem); nada é encerrado por script | A gestão decide o que fazer com quem estava no PA |
+| D-F10-38 | PA fixo: um dono por data (vínculo sobreposto 409, inclusive o que começa no último dia do anterior); marcar como fixo exige 0 pares sobrepostos de hoje em diante | A 3.3 ("no máximo um vínculo ativo por data") |
+| D-F10-39 | Preferências só de cadastros ativos do grupo comum derivado (N1 e N2 com `comum`, fora do "fora do Mapa"), até 20 por PA; a gravação troca o conjunto e audita incluídos e retirados por ID | A preferência só tem efeito na distribuição do grupo comum |
+| D-F10-40 | A fonte "escala do mês" no Mapa PA fica para o F10-4 | Depende do mês publicado |
+| D-F10-41 | Nenhum dado é marcado no deploy; a gestão marca os 2 reservados, os fixos e as preferências pela tela depois (a virada da D-F10-8 continua no F10-7) | "Nada muda no deploy", como os deploys anteriores |
+
+**Validação:** no resumo da entrega e no `REGISTRO_USO_IA.md` (mutação e bateria por commit, integração no MySQL local).

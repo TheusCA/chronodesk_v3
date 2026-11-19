@@ -1716,8 +1716,21 @@ Base da afirmação:
 | **Incidente** | No Bloco B, um filtro de resumo da saída passado ao responsável incluía `umask 077`: o merge e o build gravaram arquivos com 600/700, o `www-data` não lia o `security.php` e o `qa-timezone` e a fumaça falharam, com o portal em manutenção. Corrigido com `chmod go+rX` só nos arquivos do `git diff` pré..HEAD e no `app/`; depois, health, fuso e fumaça OK. Nada mudou no banco. |
 | **Dados pessoais** | Nenhum: só contagens, sem nome, hostname, IP nem senha. |
 | **Validacao executada pela IA** | Trava do roteiro com 483 verificações; mutação da lição no worktree (10/10 mortos, cada um pela conferência da seção 17 ou da folha); bateria completa sozinha no `45420db` (resultado no estado da sessão). |
-| **Achados** | As edições da lição foram feitas por script direto na cópia principal (fora da trava `mut_guard.php`, que vale para todo script que grava arquivo); o conteúdo foi conferido pela trava e pela mutação, e as edições seguintes usaram as ferramentas de edição. |
+| **Achados** | As edições da lição foram feitas por script de edição (não de mutação) direto na cópia principal; a trava `mut_guard.php` ficou nos scripts de mutação, que rodaram no worktree. O conteúdo foi conferido pela trava e pela mutação. A 1ª bateria do `45420db` rodou com o ensaio da 022 e um laço de QAs PHP em paralelo (1152/1153, uma falha de tempo no Mapa PA): foi parada e repetida sozinha (1153/1153); nos últimos 2 minutos da repetição, um `grep` de leitura nos scratchpads rodou junto (parado em seguida). |
 | **Validacao humana** | Pendente: revisão com o lote F10-3. |
+
+### F10-3: inventário de PA completo, reservados do Crítico e preferências — 2026-11-19
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Revisar a seção 3 do desenho do F10 (grupo comum derivado da equipe; D-F10-19 revista: Crítico com 2 PAs reservados, configurável, ocupados pelos papéis do 9.16; Híbrido na opção (c)) e implementar o F10-3 com a migration 022, o ensaio no MySQL local, bateria e mutação por commit e o roteiro do deploy 5, com parada única no fim. Sem push. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `3983886` (022) e os commits 2 a 4 com os de docs (tabela no desenho do F10, 8.7). Sem push. |
+| **O que a IA alterou** | Migration 022 (rollback, verificação, linhas do ensaio); `services/PaInventoryRules.php`; `PaDistributionEngine` (reservados pelos papéis, `f10-pa-2`); `PaMapService` e `api/portal/pa_map.php` (inventário, preferências, 409 do reservado e do fixo); `PaMapPage.jsx` e `paMap.ts`; QAs (`qa-pa-inventory`, `qa-pa-conflicts`, `qa-pa-distribution`, `qa:pa-map`, bloco 32 do navegador); roteiro e folha do deploy 5 e as seções 18 da trava; desenho do F10 (3.3.1 e 8.7). |
+| **Dados pessoais** | Nenhum no git: testes, mocks, ensaio e integração com dados fictícios; preferências e auditoria só com IDs; a verificação só conta. |
+| **Validacao executada pela IA** | Ensaio da 022 nas duas variantes no MySQL 8.0.46 local (dados fictícios); integração do serviço no MySQL local numa transação desfeita; mutação e bateria completa sozinha por commit (números no desenho do F10, 8.7, e no estado da sessão). |
+| **Achados** | O `OperationalService::engineSchedule` (tela Escala, Calendário e o `mapPresence` do Mapa PA) não passa o papel do dia do 9.16 ao motor; só o `PresenceService` passa. O F10-3 corrige só o reservado do Crítico no Mapa PA; a correção geral fica para um lote próprio (3.3.1). |
+| **Decisões (a aprovar)** | D-F10-32 a D-F10-41 (desenho do F10, 8.7). |
+| **Validacao humana** | Pendente: revisão única no fim do lote. |
 
 ---
 
