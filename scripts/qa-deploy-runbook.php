@@ -1232,6 +1232,8 @@ $checkout5 = $first5('git checkout --detach "$(cat /var/backups/chronodesk/pre-d
 $appBack5 = $first5('A=/var/backups/chronodesk/app-antes-deploy5; X=/var/backups/chronodesk/app-deploy5-retirado-');
 $rollback5 = $first5('git show "$D5:migrations/rollback/20261119_022_pa_inventory_down.sql" | docker exec');
 assert_same(1, count($applyMigration5), 'deploy 5: a 022 aplicada uma vez, do commit gravado');
+assert_same([1, 1], [count(array_filter($all5('git merge'), static fn (int $i): bool => strpos($commands5[$i], 'merge-base') === false)), substr_count($text5, 'git merge --ff-only')], 'deploy 5: um merge so (--ff-only), no comando dele, com o HEAD conferido');
+assert_same(true, strpos($commands5[$merge5] ?? '', '[ "$(git rev-parse HEAD)" = "$D5" ] && echo "HEAD = deploy5-commit" || echo "PARE: ') !== false, 'deploy 5: o HEAD conferido logo depois do merge');
 assert_same(true, strpos($commands5[$applyMigration5[0]] ?? '', "git cat-file -e \"\$D5:migrations/20261119_022_pa_inventory.sql\" && bash -o pipefail -c 'git show") !== false && strpos($commands5[$applyMigration5[0]], 'echo "022 aplicada" || echo "PARE: a 022 nao foi aplicada"; unset P D5') !== false && strpos($commands5[($applyMigration5[0] ?? -2) + 1] ?? '', 'git show "$D5:migrations/verificacao/20261119_022_pa_inventory_check.sql"') !== false, 'deploy 5: a 022 com cat-file e pipefail, e a verificacao logo depois');
 $order5 = [$check5, $qaArchive5, $qaLoop5, $qaSweep5, $verifies5[0] ?? -1, $evExtract5, $evClean5, $space5, $backup5, $maintOn5, $appCopy5, $applyMigration5[0] ?? -1, $merge5, $build5, $bundle5, $health5, $tz5, $smoke5, $verifies5[1] ?? -1, $maintOff5, min($polling5 ?: [-1]), max($polling5 ?: [-1]), $checkout5, $appBack5, $rollback5];
 $sortedOrder5 = $order5;
