@@ -239,6 +239,85 @@ assert.match(source, /aria-describedby=\{endError \? `\$\{endHintId\} \$\{endErr
 assert.doesNotMatch(source, /anterior ao início/, 'a mensagem vem da lib (uma só, a do servidor), sem cópia no JSX')
 
 // ---------------------------------------------------------------------------
+// 3b. [F10-3] Inventário do PA, reservados do Crítico e preferências
+// ---------------------------------------------------------------------------
+assert.deepEqual(
+  [paMap.seatMode({}), paMap.seatMode({ seat_type: 'flexible' }), paMap.seatMode({ seat_type: 'fixed' }), paMap.seatMode({ seat_type: 'fixed', reserved_team: 'critico' }), paMap.seatMode({ seat_type: 'fixed', reserved_team: 'hibrido' }), paMap.seatMode(null)],
+  ['flexible', 'flexible', 'fixed', 'reserved', 'fixed', 'flexible'],
+  'seatMode: sem a 022 é flexível; reservado só o do Crítico (o Híbrido fica no PA fixo por pessoa)',
+)
+assert.deepEqual(
+  [paMap.seatBadge({}), paMap.seatBadge({ seat_type: 'fixed' }), paMap.seatBadge({ seat_type: 'fixed', can_lend: true }), paMap.seatBadge({ seat_type: 'fixed', reserved_team: 'critico' })],
+  [null, 'Fixo', 'Fixo · empresta', 'Reservado ao Crítico'],
+  'seatBadge: flexível sem selo (como antes); fixo, fixo que empresta e reservado',
+)
+assert.deepEqual(
+  [paMap.seatPayload('flexible', true), paMap.seatPayload('fixed', true), paMap.seatPayload('fixed', false), paMap.seatPayload('reserved', true)],
+  [
+    { seat_type: 'flexible', can_lend: false, reserved_team: null },
+    { seat_type: 'fixed', can_lend: true, reserved_team: null },
+    { seat_type: 'fixed', can_lend: false, reserved_team: null },
+    { seat_type: 'fixed', can_lend: false, reserved_team: 'critico' },
+  ],
+  'seatPayload: empréstimo só no fixo; reservado é fixo do Crítico, sem empréstimo (as regras do servidor)',
+)
+assert.deepEqual(
+  [paMap.reservedOccupantLabel(null), paMap.reservedOccupantLabel({ employee_id: 3, employee_name: 'Pessoa C', role_label: 'Presencial A 08:00–17:00' }), paMap.reservedOccupantLabel({ employee_id: 4, employee_name: 'Pessoa D', role_label: null })],
+  ['Reservado e vazio', 'Pessoa C · Presencial A 08:00–17:00', 'Pessoa D · sem papel no dia'],
+  'reservedOccupantLabel: o ocupante com o papel do dia, ou o vazio',
+)
+assert.deepEqual(
+  [
+    paMap.criticalShortage(null),
+    paMap.criticalShortage({ seats: 2, without_seat: [] }),
+    paMap.criticalShortage({ seats: 1, without_seat: [{ employee_id: 5, employee_name: 'Pessoa E' }] }),
+    paMap.criticalShortage({ seats: 2, without_seat: [{ employee_id: 5, employee_name: 'Pessoa E' }, { employee_id: 6, employee_name: 'Pessoa F' }] }),
+  ],
+  [
+    null,
+    null,
+    '1 pessoa do Crítico presencial sem PA reservado (1 reservado): Pessoa E. Marque mais PAs como reservados ao Crítico no inventário.',
+    '2 pessoas do Crítico presenciais sem PA reservado (2 reservados): Pessoa E, Pessoa F. Marque mais PAs como reservados ao Crítico no inventário.',
+  ],
+  'criticalShortage: aviso só com alguém do Crítico sem PA reservado',
+)
+assert.deepEqual(paMap.preferenceCandidates([{ id: 1, team: 'n1' }, { id: 2, team: 'critico' }, { id: 3, team: 'n2' }, { id: 4, team: 'lideranca' }, { id: 5, team: 'hibrido' }]).map((e) => e.id), [1, 3], 'preferências: só N1 e N2 na lista da tela')
+assert.deepEqual([paMap.samePreferenceSet([1, '2'], ['2', 1]), paMap.samePreferenceSet([1], [1, 2]), paMap.samePreferenceSet([], []), paMap.samePreferenceSet([1, 1], [1])], [true, false, true, true], 'samePreferenceSet: mesmo conjunto, sem ordem')
+
+const reservedCard = render(page.PaCard, { pa: { pa_number: '1723', seat_type: 'fixed', reserved_team: 'critico', has_conflict: false, conflict_days: [], assignments: [], reserved_occupant: { employee_id: 31, employee_name: 'Pessoa B', role_label: 'Presencial A 08:00–17:00' } }, canManage: true, onOpen: () => {} })
+assert.match(reservedCard, /data-seat="reserved"/, 'cartão do reservado marcado')
+assert.match(reservedCard, /aria-label="PA 1723, reservado ao Crítico: Pessoa B · Presencial A 08:00–17:00"/, 'reservado: ocupante e papel no nome acessível')
+assert.match(reservedCard, /data-reserved-occupant="31"/, 'reservado: o ocupante do dia vem do servidor (papéis)')
+assert.doesNotMatch(reservedCard, /Alocar/, 'reservado: sem "Alocar" (não recebe vínculo)')
+const emptyReserved = render(page.PaCard, { pa: { pa_number: '1722', seat_type: 'fixed', reserved_team: 'critico', has_conflict: false, conflict_days: [], assignments: [], reserved_occupant: null }, canManage: true, onOpen: () => {} })
+assert.match(emptyReserved, />Reservado e vazio</, 'reservado sem pessoa: "Reservado e vazio"')
+const fixedCard = render(page.PaCard, { pa: { pa_number: '1725', seat_type: 'fixed', can_lend: true, has_conflict: false, conflict_days: [], assignments: [chips.onsite] }, canManage: false, onOpen: () => {} })
+assert.match(fixedCard, /aria-label="PA 1725, Fixo · empresta"/, 'PA fixo que empresta: selo no nome acessível')
+assert.match(fixedCard, /data-seat="fixed"/, 'PA fixo marcado')
+const legacyCard = render(page.PaCard, { pa: { pa_number: '1729', has_conflict: false, conflict_days: [], assignments: [] }, canManage: true, onOpen: () => {} })
+assert.match(legacyCard, /aria-label="PA 1729"/, 'sem a 022: o cartão fica como antes (sem selo)')
+
+const inventoryProps = (overrides) => ({
+  pa: { pa_number: '1730', seat_type: 'flexible', preference_ids: [1] },
+  employees: [{ id: 1, name: 'Pessoa A', team: 'n1' }, { id: 2, name: 'Pessoa B', team: 'critico' }, { id: 3, name: 'Pessoa C', team: 'n2' }],
+  form: { mode: 'flexible', canLend: false, prefs: ['1'] },
+  onChange: () => {}, onSaveSeat: () => {}, onSavePreferences: () => {}, saving: false, seatDirty: false, prefDirty: false,
+  ...overrides,
+})
+const inventoryHtml = render(page.SeatInventory, inventoryProps({}))
+assert.deepEqual([...inventoryHtml.matchAll(/data-preference="(\d+)"/g)].map((m) => m[1]), ['1', '3'], 'inventário: preferências só com N1 e N2')
+assert.match(inventoryHtml, /<input(?=[^>]*checked="")[^>]*data-preference="1"/, 'inventário: a preferência gravada vem marcada')
+assert.match(inventoryHtml, /<input(?=[^>]*disabled="")[^>]*data-seat-lend="true"/, 'inventário: empréstimo desligado fora do fixo')
+assert.match(inventoryHtml, /<button(?=[^>]*disabled="")[^>]*data-seat-save="true"/, 'inventário: salvar desligado sem mudança')
+assert.match(render(page.SeatInventory, inventoryProps({ seatDirty: true, form: { mode: 'fixed', canLend: false, prefs: ['1'] } })), /<input(?![^>]*disabled)[^>]*data-seat-lend="true"/, 'inventário: no fixo, o empréstimo liga')
+assert.doesNotMatch(render(page.SeatInventory, inventoryProps({ pa: { pa_number: '1723', seat_type: 'fixed', reserved_team: 'critico' }, form: { mode: 'reserved', canLend: false, prefs: [] } })), /data-preference=/, 'inventário: PA reservado sem preferências')
+assert.match(render(page.SeatInventory, inventoryProps({ form: { mode: 'reserved', canLend: false, prefs: [] } })), /Reservado: sem vínculo e sem preferência/, 'inventário: ao escolher reservado, a regra do servidor antes de salvar')
+assert.match(source, /const guard = useUnsavedChangesGuard\(formValuesChanged\(openedWith, form\) \|\| seatDirty \|\| prefDirty\)/, 'inventário sujo também pergunta antes de fechar o diálogo (17f)')
+assert.match(source, /post\('portal\/pa_map\.php', \{ action: 'inventory_save', pa_number: paNumber, \.\.\.payload \}\)/, 'inventário salva pela ação inventory_save')
+assert.match(source, /post\('portal\/pa_map\.php', \{ action: 'preferences_save', pa_number: paNumber, employee_ids: employeeIds \}\)/, 'preferências salvam pela ação preferences_save')
+assert.match(source, /\{reserved \? null : canManage \? \(/, 'PA reservado sem o formulário do vínculo')
+
+// ---------------------------------------------------------------------------
 // 4. CSS gerado: as classes da tela existem (Tailwind descarta o que não vê).
 // ---------------------------------------------------------------------------
 {
@@ -249,7 +328,7 @@ assert.doesNotMatch(source, /anterior ao início/, 'a mensagem vem da lib (uma s
   // Os tons metric-card-* e inline-alert-* (montados por template no
   // Primitives) são conferidos no qa:calendar-presence, com os das outras telas.
   // [R1] Classes por token (antes ring-red-400/60, border-red-400/80 e bg-red-500/15).
-  for (const name of ['presence-onsite', 'presence-remote', 'presence-absence', 'presence-no-schedule', 'pa-cell', 'data-table', 'status-neutral', 'ring-danger', 'border-danger', 'bg-danger-bg', 'ring-2']) {
+  for (const name of ['presence-onsite', 'presence-remote', 'presence-absence', 'presence-no-schedule', 'pa-cell', 'data-table', 'status-neutral', 'ring-danger', 'border-danger', 'bg-danger-bg', 'ring-2', 'border-info-line', 'bg-info-bg', 'text-info']) {
     assert.match(compiled, new RegExp(`\\.${name.split('/').join(String.raw`\\\/`)}[\\s,{:]`), `CSS gerado com .${name}`)
   }
 }

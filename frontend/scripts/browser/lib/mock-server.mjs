@@ -115,6 +115,23 @@ restoreRotationTeams()
 // restoreCriticalRoles(true): o rodizio vigente tambem com o tecnico 2, que
 // nao e do Critico (quem saiu), como o servidor devolve (invalid_people).
 let criticalTeam = false
+// [F10-3] Mapa PA com a 022: o PA dos vinculos fica flexivel com preferencia,
+// e dois PAs reservados ao Critico (um com a pessoa do papel do dia, o outro
+// vazio), com uma pessoa sem PA reservado. useSeatSetup(true) liga.
+let seatSetup = false
+const SEAT_RESERVED_OCCUPANT = { employee_id: 3, employee_name: NAMES[2], role_label: 'Presencial A 08:00–17:00' }
+function paMapWithSeats(map) {
+  return {
+    ...map,
+    seat_setup: true,
+    critical_seating: { seats: 2, onsite: 2, without_seat: [{ employee_id: 1, employee_name: NAMES[0], role_label: null }] },
+    pas: [
+      ...map.pas.map((pa) => ({ ...pa, seat_type: 'flexible', can_lend: false, reserved_team: null, preference_ids: [1] })),
+      { pa_number: '1723', display_order: 10, row_number: 2, column_number: 1, has_conflict: false, conflict_days: [], assignments: [], seat_type: 'fixed', can_lend: false, reserved_team: 'critico', preference_ids: [], reserved_occupant: SEAT_RESERVED_OCCUPANT },
+      { pa_number: '1722', display_order: 11, row_number: 2, column_number: 2, has_conflict: false, conflict_days: [], assignments: [], seat_type: 'fixed', can_lend: false, reserved_team: 'critico', preference_ids: [], reserved_occupant: null },
+    ],
+  }
+}
 let criticalRoles = null
 let vacantCriticalRoles = null
 const restoreCriticalRoles = (withLeftPerson = false) => {
@@ -352,7 +369,15 @@ function apiResponse(method, key, search, body) {
   }
   if (key === 'portal/pa_map.php' && method === 'GET') {
     const map = GET['portal/pa_map.php']
-    return [200, { ...map, pas: map.pas.map((pa) => ({ ...pa, assignments: pa.assignments.filter((item) => !removedPaAssignments.has(item.id)) })) }]
+    const current = { ...map, pas: map.pas.map((pa) => ({ ...pa, assignments: pa.assignments.filter((item) => !removedPaAssignments.has(item.id)) })) }
+    return [200, seatSetup ? paMapWithSeats(current) : current]
+  }
+  if (key === 'portal/pa_map.php' && method === 'POST' && body?.action === 'inventory_save') {
+    if (body.reserved_team === 'critico' && body.pa_number === PA_ASSIGNMENT.pa_number) return [409, { sucesso: false, mensagem: 'PA com 2 vínculo(s) vigente(s) ou futuro(s): encerre antes de reservar ao Crítico.' }]
+    return [200, { sucesso: true, pa_number: body.pa_number, changed: ['seat_type'], mensagem: 'Inventário do PA salvo.' }]
+  }
+  if (key === 'portal/pa_map.php' && method === 'POST' && body?.action === 'preferences_save') {
+    return [200, { sucesso: true, pa_number: body.pa_number, total: (body.employee_ids || []).length, mensagem: 'Preferências do PA salvas.' }]
   }
   if (key === 'portal/pa_map.php' && method === 'POST' && body?.action === 'remove') {
     if (paRemoveRefusal) return paRemoveRefusal
@@ -426,7 +451,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false, canImport = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCanImport = canImport; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false, canImport = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCanImport = canImport; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, useSeatSetup: (on) => { seatSetup = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

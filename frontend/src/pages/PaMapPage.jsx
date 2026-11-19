@@ -15,8 +15,15 @@ import {
   absencePeriodLabel,
   brDate,
   conflictDaysLabel,
+  criticalShortage,
+  preferenceCandidates,
   presenceReasonLabel,
+  reservedOccupantLabel,
+  samePreferenceSet,
   saveFeedback,
+  seatBadge,
+  seatMode,
+  seatPayload,
   showsCategory,
   validityEndError,
   weekDays,
@@ -115,24 +122,52 @@ export function AssignmentChip({ item }) {
   )
 }
 
-export function PaCard({ pa, canManage, onOpen }) {
-  const assignments = pa.assignments || []
-  const onsiteCount = assignments.filter((item) => item.presence?.status === 'onsite').length
-  const conflictDays = conflictDaysLabel(pa.conflict_days)
-  const outline = pa.has_conflict
-    ? 'border-danger bg-surface ring-2 ring-danger'
-    : assignments.length ? 'border-line bg-surface' : 'border-dashed border-line bg-surface-2'
+// [F10-3] PA reservado ao Crítico: quem ocupa vem dos papéis do dia (D-F10-19
+// revista), sem vínculo; o cartão mostra o ocupante ou "Reservado e vazio".
+export function ReservedSeatCard({ pa, onOpen }) {
+  const occupant = pa.reserved_occupant ?? null
   return (
     <button
-      aria-label={`PA ${pa.pa_number}${pa.has_conflict ? `, conflito: ${conflictDays}` : ''}`}
-      className={`pa-cell ${outline}`}
-      data-conflict={pa.has_conflict ? 'true' : 'false'}
+      aria-label={`PA ${pa.pa_number}, reservado ao Crítico: ${reservedOccupantLabel(occupant)}`}
+      className={`pa-cell ${occupant ? 'border-info-line bg-surface' : 'border-dashed border-info-line bg-surface-2'}`}
+      data-conflict="false"
+      data-seat="reserved"
       onClick={(event) => onOpen(pa, event.currentTarget)}
       type="button"
     >
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold text-info">PA</p>
+          <strong className="mt-1 block text-2xl font-semibold text-ink">{pa.pa_number}</strong>
+        </div>
+        <span className="shrink-0 rounded-full border border-info-line bg-info-bg px-2.5 py-1 text-xs font-semibold text-info">Reservado ao Crítico</span>
+      </div>
+      <p className="mt-4 truncate text-sm text-ink" data-reserved-occupant={occupant ? occupant.employee_id : ''} title={reservedOccupantLabel(occupant)}>{reservedOccupantLabel(occupant)}</p>
+    </button>
+  )
+}
+
+export function PaCard({ pa, canManage, onOpen }) {
+  const assignments = pa.assignments || []
+  const onsiteCount = assignments.filter((item) => item.presence?.status === 'onsite').length
+  const conflictDays = conflictDaysLabel(pa.conflict_days)
+  const badge = seatBadge(pa)
+  if (seatMode(pa) === 'reserved') return <ReservedSeatCard onOpen={onOpen} pa={pa} />
+  const outline = pa.has_conflict
+    ? 'border-danger bg-surface ring-2 ring-danger'
+    : assignments.length ? 'border-line bg-surface' : 'border-dashed border-line bg-surface-2'
+  return (
+    <button
+      aria-label={`PA ${pa.pa_number}${badge ? `, ${badge}` : ''}${pa.has_conflict ? `, conflito: ${conflictDays}` : ''}`}
+      className={`pa-cell ${outline}`}
+      data-conflict={pa.has_conflict ? 'true' : 'false'}
+      data-seat={seatMode(pa)}
+      onClick={(event) => onOpen(pa, event.currentTarget)}
+      type="button"
+    >
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-info">PA{badge ? ` · ${badge}` : ''}</p>
           <strong className="mt-1 block text-2xl font-semibold text-ink">{pa.pa_number}</strong>
         </div>
         {pa.has_conflict ? (
@@ -202,7 +237,67 @@ export function SaveFeedbackAlert({ feedback }) {
   )
 }
 
-export function PaModal({ pa, date, employees, canManage, feedback, onClose, onSave, onRemove, saving, returnFocusRef = null }) {
+// [F10-3] Inventário do PA (só quem edita o mapa, com a 022): o tipo, o
+// empréstimo e as preferências do grupo comum. Cada parte salva sozinha; o
+// servidor confere as travas (vínculo e preferência antes de reservar, um dono
+// por data no fixo) e devolve a mensagem.
+const SEAT_MODE_OPTIONS = [
+  { value: 'flexible', label: 'Flexível (entra na distribuição do dia)' },
+  { value: 'fixed', label: 'Fixo (do dono, pelo vínculo)' },
+  { value: 'reserved', label: 'Reservado ao Crítico (papéis do dia)' },
+]
+
+export function SeatInventory({ pa, employees, form, onChange, onSaveSeat, onSavePreferences, saving, seatDirty, prefDirty }) {
+  const candidates = preferenceCandidates(employees)
+  const typeId = useId()
+  return (
+    <div className="mt-6 rounded-card border border-line bg-surface-2 p-4" data-seat-inventory>
+      <h3 className="text-sm font-semibold text-muted">Inventário do PA</h3>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <label className="label" htmlFor={typeId}>Tipo do PA
+          <select className="field mt-2" data-seat-mode id={typeId} value={form.mode} onChange={(event) => onChange({ mode: event.target.value, canLend: event.target.value === 'fixed' ? form.canLend : false })}>
+            {SEAT_MODE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 self-end text-sm text-ink">
+          <input checked={form.canLend} data-seat-lend disabled={form.mode !== 'fixed'} type="checkbox" onChange={(event) => onChange({ canLend: event.target.checked })} />
+          Empresta ao grupo comum quando o dono falta
+        </label>
+      </div>
+      {form.mode === 'reserved' && <p className="mt-3 text-xs text-muted">Reservado: sem vínculo e sem preferência. Quem ocupa vem dos papéis do Crítico no dia; encerre os vínculos e retire as preferências antes.</p>}
+      <div className="mt-4 flex justify-end">
+        <button className="btn-secondary" data-seat-save disabled={saving || !seatDirty} onClick={() => onSaveSeat(seatPayload(form.mode, form.canLend))} type="button">Salvar inventário</button>
+      </div>
+      {seatMode(pa) !== 'reserved' && (
+        <fieldset className="mt-4 border-t border-line pt-4">
+          <legend className="text-sm font-semibold text-muted">Preferências do grupo comum (N1 e N2)</legend>
+          {candidates.length === 0 ? <p className="mt-2 text-xs text-muted">Nenhum colaborador de N1 ou N2 na lista.</p> : (
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+              {candidates.map((employee) => (
+                <li key={employee.id}>
+                  <label className="flex items-center gap-2 text-sm text-ink">
+                    <input checked={form.prefs.includes(String(employee.id))} data-preference={employee.id} type="checkbox" onChange={(event) => onChange({ prefs: event.target.checked ? [...form.prefs, String(employee.id)] : form.prefs.filter((id) => id !== String(employee.id)) })} />
+                    <span className="truncate">{employee.name}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-muted">Na distribuição do mês, quem prefere o PA tem prioridade sobre os outros, depois de quem sentou nele no dia útil anterior.</p>
+          <div className="mt-3 flex justify-end">
+            <button className="btn-secondary" data-preferences-save disabled={saving || !prefDirty} onClick={() => onSavePreferences(form.prefs.map(Number))} type="button">Salvar preferências</button>
+          </div>
+        </fieldset>
+      )}
+    </div>
+  )
+}
+
+function seatFormOf(pa) {
+  return { mode: seatMode(pa), canLend: pa.can_lend === true, prefs: (pa.preference_ids || []).map(String) }
+}
+
+export function PaModal({ pa, date, employees, canManage, feedback, onClose, onSave, onRemove, saving, returnFocusRef = null, seatSetup = false, onSaveSeat = null, onSavePreferences = null }) {
   // [17f] No Dialog (role="dialog", Esc, foco preso, foco de volta ao PA que
   // abriu, fundo no body cobrindo a janela inteira). Sujo = algum campo
   // diferente do valor com que o formulário abriu (adicionar ou o vínculo em
@@ -211,7 +306,21 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
   // recarregar, pela peça do 17f.
   const [openedWith, setOpenedWith] = useState(() => emptyForm(pa.pa_number, date))
   const [form, setForm] = useState(openedWith)
-  const guard = useUnsavedChangesGuard(formValuesChanged(openedWith, form))
+  // [F10-3] Inventário: sujo também conta para a proteção do diálogo (17f).
+  const inventory = seatSetup && canManage
+  const reserved = seatMode(pa) === 'reserved'
+  const [seatOpenedWith, setSeatOpenedWith] = useState(() => seatFormOf(pa))
+  const [seatForm, setSeatForm] = useState(seatOpenedWith)
+  const seatDirty = inventory && (seatForm.mode !== seatOpenedWith.mode || seatForm.canLend !== seatOpenedWith.canLend)
+  const prefDirty = inventory && !samePreferenceSet(seatForm.prefs, seatOpenedWith.prefs)
+  const guard = useUnsavedChangesGuard(formValuesChanged(openedWith, form) || seatDirty || prefDirty)
+  const changeSeat = (patch) => setSeatForm((current) => ({ ...current, ...patch }))
+  async function saveSeat(payload) {
+    if (await onSaveSeat(pa.pa_number, payload)) setSeatOpenedWith((current) => ({ ...current, mode: seatForm.mode, canLend: payload.can_lend }))
+  }
+  async function savePreferences(ids) {
+    if (await onSavePreferences(pa.pa_number, ids)) setSeatOpenedWith((current) => ({ ...current, prefs: ids.map(String) }))
+  }
   const editing = openedWith.id !== null
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }))
   const assignments = pa.assignments || []
@@ -298,12 +407,18 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
         )}
         <SaveFeedbackAlert feedback={feedback} />
 
-        <div className="mt-6">
-          <SectionHeader title="Colaboradores vinculados" />
-          <AssignmentList assignments={assignments} canManage={canManage} onEdit={edit} onRemove={remove} saving={saving} />
-        </div>
+        {reserved ? (
+          <InlineAlert className="mt-4" title="PA reservado ao Crítico">
+            <span data-reserved-detail>Quem ocupa vem dos papéis do Crítico no dia, sem vínculo. Em {brDate(date)}: {reservedOccupantLabel(pa.reserved_occupant)}.</span>
+          </InlineAlert>
+        ) : (
+          <div className="mt-6">
+            <SectionHeader title="Colaboradores vinculados" />
+            <AssignmentList assignments={assignments} canManage={canManage} onEdit={edit} onRemove={remove} saving={saving} />
+          </div>
+        )}
 
-        {canManage ? (
+        {reserved ? null : canManage ? (
           <div className="mt-6 rounded-card border border-line bg-surface-2 p-4">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-muted">{editing ? 'Editar vínculo' : 'Adicionar colaborador'}</h3>
@@ -327,6 +442,19 @@ export function PaModal({ pa, date, employees, canManage, feedback, onClose, onS
           </div>
         ) : (
           <p className="mt-6 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm text-muted">Seu perfil permite apenas visualizar o mapa.</p>
+        )}
+        {inventory && (
+          <SeatInventory
+            employees={employees}
+            form={seatForm}
+            onChange={changeSeat}
+            onSavePreferences={savePreferences}
+            onSaveSeat={saveSeat}
+            pa={pa}
+            prefDirty={prefDirty}
+            saving={saving}
+            seatDirty={seatDirty}
+          />
         )}
       </form>
     </Dialog>
@@ -411,6 +539,9 @@ export function PaMapPage({ notify }) {
   const onsiteCount = assignments.filter((item) => item.presence?.status === 'onsite').length
   const conflictCount = pas.filter((pa) => pa.has_conflict).length
   const absences = resource.data?.absences_week || []
+  // [F10-3] Com a 022 no servidor: tipo do PA, reservados do Crítico e inventário.
+  const seatSetup = resource.data?.seat_setup === true
+  const shortage = criticalShortage(resource.data?.critical_seating)
   const days = weekDays(resource.data?.week, filters.date)
   // O modal lê o PA da última resposta: a lista e o conflito se atualizam na recarga.
   const selected = selectedPa === null ? null : pas.find((pa) => pa.pa_number === selectedPa) || null
@@ -437,6 +568,38 @@ export function PaMapPage({ notify }) {
       await resource.refresh()
     } catch (error) {
       notify(error.message, 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // [F10-3] Inventário e preferências: devolvem se salvou (o diálogo passa a
+  // considerar o salvo como o novo "limpo").
+  async function saveSeat(paNumber, payload) {
+    setSaving(true)
+    try {
+      const result = await post('portal/pa_map.php', { action: 'inventory_save', pa_number: paNumber, ...payload })
+      notify(result?.mensagem || 'Inventário do PA salvo.')
+      await resource.refresh()
+      return true
+    } catch (error) {
+      notify(error.message, 'error')
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function savePreferences(paNumber, employeeIds) {
+    setSaving(true)
+    try {
+      const result = await post('portal/pa_map.php', { action: 'preferences_save', pa_number: paNumber, employee_ids: employeeIds })
+      notify(result?.mensagem || 'Preferências do PA salvas.')
+      await resource.refresh()
+      return true
+    } catch (error) {
+      notify(error.message, 'error')
+      return false
     } finally {
       setSaving(false)
     }
@@ -484,7 +647,10 @@ export function PaMapPage({ notify }) {
         <PresenceLegend />
         <span className="status-badge gap-1 border-danger bg-danger-bg text-danger"><Icon name="alert" className="h-3 w-3" />PA em conflito (contorno)</span>
         <span className="status-badge status-neutral border-dashed">PA livre</span>
+        {seatSetup && <span className="status-badge border-info-line bg-info-bg text-info">Reservado ao Crítico (papéis do dia)</span>}
       </section>
+
+      {shortage && <InlineAlert title="Crítico sem PA reservado" tone="warning"><span data-critical-shortage>{shortage}</span></InlineAlert>}
 
       <MapTabs absences={absences.length} onSelect={setTab} tab={tab} />
 
@@ -512,9 +678,12 @@ export function PaMapPage({ notify }) {
           onClose={() => setSelectedPa(null)}
           onRemove={remove}
           onSave={save}
+          onSavePreferences={savePreferences}
+          onSaveSeat={saveSeat}
           pa={selected}
           returnFocusRef={modalTriggerRef}
           saving={saving}
+          seatSetup={seatSetup}
         />
       )}
     </div>

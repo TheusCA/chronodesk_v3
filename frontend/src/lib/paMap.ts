@@ -135,3 +135,60 @@ export function validityEndError(validFrom: unknown, validUntil: unknown): strin
   if (!isIsoDate(validFrom) || !isIsoDate(validUntil)) return null
   return validUntil < validFrom ? VALIDITY_END_BEFORE_START : null
 }
+
+// [F10-3] Inventário do PA (desenho do F10, 3.3.1; D-F10-19 revista): o tipo
+// vem do servidor (seat_type, can_lend, reserved_team). Na tela, três modos:
+// flexível, fixo (com ou sem empréstimo) e reservado ao Crítico. O Híbrido
+// fica com o PA fixo por pessoa (vínculo), sem reserva.
+export type SeatMode = 'flexible' | 'fixed' | 'reserved'
+export type SeatInfo = { seat_type?: unknown, can_lend?: unknown, reserved_team?: unknown }
+
+export function seatMode(pa: SeatInfo | null | undefined): SeatMode {
+  if (pa?.reserved_team === 'critico') return 'reserved'
+  return pa?.seat_type === 'fixed' ? 'fixed' : 'flexible'
+}
+
+// Selo do PA no cartão: o flexível fica sem selo (como antes do F10-3).
+export function seatBadge(pa: SeatInfo | null | undefined): string | null {
+  const mode = seatMode(pa)
+  if (mode === 'reserved') return 'Reservado ao Crítico'
+  if (mode === 'fixed') return pa?.can_lend === true ? 'Fixo · empresta' : 'Fixo'
+  return null
+}
+
+// Corpo do inventory_save: as mesmas regras do servidor (empréstimo só no fixo).
+export function seatPayload(mode: SeatMode, canLend: boolean): { seat_type: 'flexible' | 'fixed', can_lend: boolean, reserved_team: 'critico' | null } {
+  if (mode === 'reserved') return { seat_type: 'fixed', can_lend: false, reserved_team: 'critico' }
+  if (mode === 'fixed') return { seat_type: 'fixed', can_lend: canLend === true, reserved_team: null }
+  return { seat_type: 'flexible', can_lend: false, reserved_team: null }
+}
+
+type SeatPerson = { employee_id?: unknown, employee_name?: unknown, role_label?: unknown }
+
+// Ocupante do reservado no dia (papéis do 9.16): "Nome · papel" ou o vazio.
+export function reservedOccupantLabel(occupant: SeatPerson | null | undefined): string {
+  if (!occupant || typeof occupant.employee_name !== 'string' || occupant.employee_name === '') return 'Reservado e vazio'
+  return typeof occupant.role_label === 'string' && occupant.role_label !== '' ? `${occupant.employee_name} · ${occupant.role_label}` : `${occupant.employee_name} · sem papel no dia`
+}
+
+// Aviso de quem do Crítico ficou sem PA reservado no dia (null se ninguém).
+export function criticalShortage(seating: { seats?: unknown, without_seat?: unknown } | null | undefined): string | null {
+  const list: unknown = seating?.without_seat
+  const people = Array.isArray(list) ? (list as SeatPerson[]) : []
+  if (people.length === 0) return null
+  const names = people.map((person) => String(person.employee_name ?? '')).filter((name) => name !== '')
+  const seats = Number(seating?.seats ?? 0)
+  const head = `${people.length} ${people.length === 1 ? 'pessoa' : 'pessoas'} do Crítico ${people.length === 1 ? 'presencial' : 'presenciais'} sem PA reservado (${seats} ${seats === 1 ? 'reservado' : 'reservados'})`
+  return `${head}${names.length ? `: ${names.join(', ')}` : ''}. Marque mais PAs como reservados ao Crítico no inventário.`
+}
+
+// Preferências: só N1 e N2 entram na lista da tela (o servidor confere o grupo).
+export function preferenceCandidates<T extends { team?: unknown }>(employees: T[]): T[] {
+  return employees.filter((employee) => employee.team === 'n1' || employee.team === 'n2')
+}
+
+export function samePreferenceSet(a: unknown[], b: unknown[]): boolean {
+  const left = [...new Set(a.map(String))].sort()
+  const right = [...new Set(b.map(String))].sort()
+  return left.length === right.length && left.every((id, index) => id === right[index])
+}

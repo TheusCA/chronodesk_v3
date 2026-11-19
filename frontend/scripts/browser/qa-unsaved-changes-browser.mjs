@@ -3298,6 +3298,68 @@ async function chg917(page, port, mock) {
   }
 }
 
+// 32. [F10-3] Mapa PA com o inventario: os reservados do Critico com a pessoa
+// do papel do dia (D-F10-19 revista), o aviso de quem ficou sem PA reservado,
+// o diálogo do reservado sem o formulario do vinculo, o inventario (tipo,
+// emprestimo e preferencias) com o corpo certo, e a protecao do dialogo.
+async function paInventoryF103(page, port, mock) {
+  const posts = (action) => mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/pa_map.php' && r.body?.action === action)
+  mock.useSeatSetup(true)
+  try {
+    for (const width of [1366, 390]) {
+      await goto(page, port, '/mapa-pa', width)
+      await page.waitFor(`!!document.querySelector('[data-seat="reserved"]')`)
+      const state = await page.evaluate(`(() => ({ ocupante: document.querySelector('[data-reserved-occupant="3"]')?.textContent || '', vazio: [...document.querySelectorAll('[data-seat="reserved"]')].some((b) => b.textContent.includes('Reservado e vazio')), aviso: document.querySelector('[data-critical-shortage]')?.textContent || '', lateral: document.documentElement.scrollWidth > innerWidth }))()`)
+      report(`Mapa PA com inventario, ${width} px: reservado com a pessoa e o papel do dia, o outro vazio, aviso de quem ficou sem PA, sem rolagem lateral`, /Presencial A 08:00–17:00/.test(state.ocupante) && state.vazio && /^1 pessoa do Crítico presencial sem PA reservado \(2 reservados\)/.test(state.aviso) && !state.lateral, JSON.stringify(state))
+    }
+    await page.click(`document.querySelector('[data-seat="reserved"]')`)
+    await page.waitFor(`!!document.querySelector('[data-reserved-detail]')`)
+    const reservedDialog = await page.evaluate(`(() => { const dialog = document.querySelector('[data-reserved-detail]').closest('[role="dialog"]'); return { formulario: [...dialog.querySelectorAll('h3')].some((h) => /vínculo|colaborador/i.test(h.textContent)), preferencias: dialog.querySelectorAll('[data-preference]').length, inventario: !!dialog.querySelector('[data-seat-inventory]'), lateral: dialog.scrollWidth > dialog.clientWidth + 1 } })()`)
+    report('Mapa PA, PA reservado (390 px): sem o formulario do vinculo nem preferencias; com o inventario', !reservedDialog.formulario && reservedDialog.preferencias === 0 && reservedDialog.inventario && !reservedDialog.lateral, JSON.stringify(reservedDialog))
+    await page.evaluate(`[...document.querySelector('[data-reserved-detail]').closest('[role="dialog"]').querySelectorAll('button')].find((b) => b.textContent.trim() === 'Fechar').click()`)
+    await sleep(300)
+
+    await goto(page, port, '/mapa-pa', 1366)
+    await openPaModal(page)
+    const seatSelect = `${PA_MODAL}.querySelector('[data-seat-mode]')`
+    const before = await page.evaluate(`(() => ({ modo: ${seatSelect}.value, emprestimo: ${PA_MODAL}.querySelector('[data-seat-lend]').disabled, salvar: ${PA_MODAL}.querySelector('[data-seat-save]').disabled, pref1: ${PA_MODAL}.querySelector('[data-preference="1"]')?.checked, prefs: ${PA_MODAL}.querySelectorAll('[data-preference]').length }))()`)
+    report('Mapa PA, inventario: abre com o tipo gravado, empréstimo desligado fora do fixo, salvar desligado e a preferencia gravada marcada', before.modo === 'flexible' && before.emprestimo && before.salvar && before.pref1 === true && before.prefs >= 1, JSON.stringify(before))
+    await page.evaluate(`(() => { const field = ${seatSelect}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(field, 'fixed'); field.dispatchEvent(new Event('change', { bubbles: true })) })()`)
+    await sleep(150)
+    await page.click(`${PA_MODAL}.querySelector('[data-seat-lend]')`)
+    await sleep(150)
+    const seatPosts = posts('inventory_save').length
+    await page.click(`${PA_MODAL}.querySelector('[data-seat-save]')`)
+    await sleep(500)
+    const seatBody = posts('inventory_save').at(-1)?.body || {}
+    report('Mapa PA, inventario: fixo que empresta vai no corpo (inventory_save)', posts('inventory_save').length === seatPosts + 1 && seatBody.pa_number === PA_ASSIGNMENT.pa_number && seatBody.seat_type === 'fixed' && seatBody.can_lend === true && seatBody.reserved_team === null, JSON.stringify(seatBody))
+    report('Mapa PA, inventario: depois de salvar, o salvar desliga (o salvo vira o limpo)', await page.evaluate(`${PA_MODAL}.querySelector('[data-seat-save]').disabled`))
+    await page.click(`${PA_MODAL}.querySelector('[data-preference="1"]')`)
+    await sleep(150)
+    const prefPosts = posts('preferences_save').length
+    await page.click(`${PA_MODAL}.querySelector('[data-preferences-save]')`)
+    await sleep(500)
+    const prefBody = posts('preferences_save').at(-1)?.body || {}
+    report('Mapa PA, preferencias: tirar a preferencia manda a lista vazia (preferences_save)', posts('preferences_save').length === prefPosts + 1 && prefBody.pa_number === PA_ASSIGNMENT.pa_number && JSON.stringify(prefBody.employee_ids) === '[]', JSON.stringify(prefBody))
+    // Recusa do servidor (reservar com vinculo): a mensagem aparece e o tipo fica sujo.
+    await page.evaluate(`(() => { const field = ${seatSelect}; Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(field, 'reserved'); field.dispatchEvent(new Event('change', { bubbles: true })) })()`)
+    await sleep(150)
+    await page.click(`${PA_MODAL}.querySelector('[data-seat-save]')`)
+    await sleep(600)
+    const refused = await page.evaluate(`(() => ({ aviso: document.body.textContent.includes('encerre antes de reservar ao Crítico'), salvar: ${PA_MODAL}.querySelector('[data-seat-save]').disabled }))()`)
+    report('Mapa PA, inventario: a recusa do servidor (PA com vinculo) aparece e o tipo continua para salvar', refused.aviso && !refused.salvar, JSON.stringify(refused))
+    // Inventario sujo: fechar pergunta antes de descartar (17f).
+    await page.evaluate(`[...${PA_MODAL}.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Fechar').click()`)
+    await sleep(300)
+    const asked = await page.evaluate(`[...document.querySelectorAll('[role="alertdialog"], [role="dialog"]')].some((el) => /Descartar/.test(el.textContent))`)
+    report('Mapa PA, inventario sujo: fechar pergunta antes de descartar (17f)', asked)
+    await page.evaluate(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Descartar')?.click()`)
+    await sleep(300)
+  } finally {
+    mock.useSeatSetup(false)
+  }
+}
+
 let chrome = null
 let mock = null
 let page = null
@@ -3343,6 +3405,7 @@ try {
     [29, 'Icones da aba e marca do topo nos dois temas (marca)', () => brandIcons(page, mock.port)],
     [30, 'Papeis do Critico: hoje, previa, rodizio e troca (9.16)', () => criticalRoles916(page, mock.port, mock)],
     [31, 'Controle de CHG: somente leitura x Tools, mover e formulario (9.17)', () => chg917(page, mock.port, mock)],
+    [32, 'Mapa PA: inventario e reservados do Critico (F10-3)', () => paInventoryF103(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue
