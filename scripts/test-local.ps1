@@ -214,6 +214,14 @@ if (!$phpExecutable) {
         Pass "QA do Controle de CHG concluido"
     }
 
+    # Sem banco: inventario de PA completo e preferencias (F10-3): migration 022.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-pa-inventory.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do inventario de PA falhou"
+    } else {
+        Pass "QA do inventario de PA concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {

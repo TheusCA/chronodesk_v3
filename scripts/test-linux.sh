@@ -82,6 +82,10 @@ echo "== PHP CHG QA =="
 # Controle de CHG no portal (9.17): migration 025; sem banco.
 php scripts/qa-chg.php
 
+echo "== PHP PA inventory QA =="
+# Inventario de PA completo e preferencias (F10-3): migration 022; sem banco.
+php scripts/qa-pa-inventory.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php
