@@ -46,6 +46,10 @@ declare(strict_types=1);
 // antes da reabertura (C3); o DROP da fotografia do BIZ-02 no degrau 2 so
 // sem a correcao historica (A3); o aviso sem prometer o fim da observacao
 // da excecao de escala visivel a todos (A1).
+//
+// Desde 2026-11-18 (decisao do responsavel): os deploys 4, 5, 6 e 7 viram um
+// deploy so, o deploy 4 consolidado (secao 16); as travas dos roteiros
+// separados sairam com eles.
 // ============================================================================
 
 $root = dirname(__DIR__);
@@ -244,24 +248,13 @@ foreach ($applyLines as $file => $i) {
 // esquema.
 $repoMigrations = array_values(array_filter(array_map('basename', glob($root . '/migrations/2026*.sql') ?: []), static fn (string $name): bool => substr($name, 0, 8) >= '20261001' && strpos($name, '_registrar_corte') === false));
 sort($repoMigrations);
-// [F10-2] Migrations posteriores ao deploy 1: cada uma tem o roteiro do seu
-// deploy e a trava dele (a 021 vai no deploy 4, secao 16). Migration nova
-// fora desta lista reprova ate o roteiro decidir.
-$migrationsAfterDeploy1 = ['20261115_021_rotation_teams.sql'];
-assert_same($migrationsAfterDeploy1, array_values(array_intersect($migrationsAfterDeploy1, $repoMigrations)), 'migrations posteriores ao deploy 1: cada uma existe no repositorio');
-// [F9] A 020 vai no deploy 5 (secao 17): fora do roteiro do deploy 4, que
-// aplica so a 021.
-$migrationsAfterDeploy4 = ['20261116_020_teams_critico_hibrido.sql'];
-assert_same($migrationsAfterDeploy4, array_values(array_intersect($migrationsAfterDeploy4, $repoMigrations)), 'migrations posteriores ao deploy 4: cada uma existe no repositorio');
-// [9.16] A 024 (rodizio de papeis do Critico) vai no deploy 6 (secao 18): fora
-// do roteiro do deploy 5, que aplica so a 020.
-$migrationsAfterDeploy5 = ['20261117_024_critical_roles.sql'];
-assert_same($migrationsAfterDeploy5, array_values(array_intersect($migrationsAfterDeploy5, $repoMigrations)), 'migrations posteriores ao deploy 5: cada uma existe no repositorio');
-// [9.17] A 025 (Controle de CHG) vai no deploy 7: fora do roteiro do deploy 6,
-// que aplica so a 024.
-$migrationsAfterDeploy6 = ['20261117_025_chg.sql'];
-assert_same($migrationsAfterDeploy6, array_values(array_intersect($migrationsAfterDeploy6, $repoMigrations)), 'migrations posteriores ao deploy 6: cada uma existe no repositorio');
-$repoMigrations = array_values(array_diff($repoMigrations, $migrationsAfterDeploy1, $migrationsAfterDeploy4, $migrationsAfterDeploy5, $migrationsAfterDeploy6));
+// [Deploy 4 consolidado, 2026-11-18] Migrations posteriores ao deploy 1: as
+// quatro vao no deploy 4 consolidado (os deploys 4 a 7 viraram um so, secao
+// 16), nesta ordem de aplicacao. Migration nova fora desta lista reprova ate
+// o roteiro decidir.
+$migrationsDeploy4 = ['20261115_021_rotation_teams.sql', '20261116_020_teams_critico_hibrido.sql', '20261117_024_critical_roles.sql', '20261117_025_chg.sql'];
+assert_same($migrationsDeploy4, array_values(array_intersect($migrationsDeploy4, $repoMigrations)), 'migrations do deploy 4 consolidado: as quatro existem no repositorio');
+$repoMigrations = array_values(array_diff($repoMigrations, $migrationsDeploy4));
 $expectedSorted = $deploy1Migrations;
 sort($expectedSorted);
 assert_same($expectedSorted, $repoMigrations, 'repositorio: as migrations da Parte B sao as do deploy 1 mais as da lista posterior (nova migration exige o roteiro)');
@@ -325,23 +318,12 @@ sort($repoQas);
 // excecao: QA novo reprova la ate entrar no roteiro.
 $qasAfterDeploy2 = ['qa-pa-distribution', 'qa-paridade-escala'];
 assert_same($qasAfterDeploy2, array_values(array_intersect($qasAfterDeploy2, $repoQas)), 'QAs criados depois do deploy 2: cada um existe no repositorio');
-// [F10-2] O deploy 3 roda com o cd0653b e fica como foi: os QAs criados
-// depois dele vao no roteiro do deploy 4 (secao 16), que roda todos.
-$qasAfterDeploy3 = ['qa-rotation-teams'];
+// [Deploy 4 consolidado, 2026-11-18] O deploy 3 roda com o cd0653b e fica
+// como foi: os QAs criados depois dele vao no deploy 4 consolidado (secao 16),
+// que roda todos.
+$qasAfterDeploy3 = ['qa-rotation-teams', 'qa-critico-hibrido', 'qa-critical-roles', 'qa-chg'];
 assert_same($qasAfterDeploy3, array_values(array_intersect($qasAfterDeploy3, $repoQas)), 'QAs criados depois do deploy 3: cada um existe no repositorio');
-// [F9] O deploy 4 roda com o commit validado na estacao e fica como foi: os
-// QAs criados depois dele vao no roteiro do deploy 5 (secao 17).
-$qasAfterDeploy4 = ['qa-critico-hibrido'];
-assert_same($qasAfterDeploy4, array_values(array_intersect($qasAfterDeploy4, $repoQas)), 'QAs criados depois do deploy 4: cada um existe no repositorio');
-// [9.16] O deploy 5 roda com o commit validado na estacao e fica como foi: os
-// QAs criados depois dele vao no roteiro do deploy 6 (secao 18).
-$qasAfterDeploy5 = ['qa-critical-roles'];
-assert_same($qasAfterDeploy5, array_values(array_intersect($qasAfterDeploy5, $repoQas)), 'QAs criados depois do deploy 5: cada um existe no repositorio');
-// [9.17] O deploy 6 fica como foi escrito: os QAs criados depois dele vao no
-// roteiro do deploy 7.
-$qasAfterDeploy6 = ['qa-chg'];
-assert_same($qasAfterDeploy6, array_values(array_intersect($qasAfterDeploy6, $repoQas)), 'QAs criados depois do deploy 6: cada um existe no repositorio');
-$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2, $qasAfterDeploy3, $qasAfterDeploy4, $qasAfterDeploy5, $qasAfterDeploy6));
+$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2, $qasAfterDeploy3));
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');
 // [pos-deploy 1, C1c] O 7m varre pelo padrao do mktemp, nao pelo $E: um
 // sudo -i novo no meio do dia perde a variavel (achado do dia do deploy 1).
@@ -838,7 +820,7 @@ sort($runbookQas3);
 $allRepoQas = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
 sort($allRepoQas);
 // [F10-2] Sem os QAs criados depois do deploy 3 (lista na secao 5).
-$allRepoQas = array_values(array_diff($allRepoQas, $qasAfterDeploy3, $qasAfterDeploy4, $qasAfterDeploy5, $qasAfterDeploy6));
+$allRepoQas = array_values(array_diff($allRepoQas, $qasAfterDeploy3));
 assert_same([true, $allRepoQas], [$check3 < $tmpEnv3 && $tmpEnv3 < $archive3 && $archive3 < $qaLoop3 && $qaLoop3 < $qaSweep3 && $qaSweep3 < $merge3, $runbookQas3], 'deploy 3: ensaio do codigo antes do merge, com TODOS os QAs PHP do repositorio (sem lista de excecao)');
 assert_same([true, true], [in_array('qa-pa-distribution', $runbookQas3, true), in_array('qa-paridade-escala', $runbookQas3, true)], 'deploy 3: os QAs do F10-1 no ensaio');
 assert_same(true, strpos($commands3[$archive3] ?? '', 'bash -o pipefail -c \'git archive "$D3" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands3[$qaLoop3] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && strpos($text3, 'qa-timezone.php --db') !== false && substr_count($text3, '--db') === 1, 'deploy 3: ensaio com pipefail, como www-data, e o --db so no qa-timezone do passo 7');
@@ -905,12 +887,23 @@ assert_same([0, 0, 0, 0, 0], [
 ], 'folha do deploy 3: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
 
 // ----------------------------------------------------------------------------
-// 16. Deploy 4 (F10-2): migration 021 e o codigo dos times de rodizio. O
-// ensaio do codigo roda TODOS os QAs PHP do repositorio (sem lista de
-// excecao); a 021 e a unica migration posterior ao deploy 1 e e aplicada
-// aqui, do commit gravado, antes do merge, depois do ensaio na copia.
+// 16. Deploy 4 consolidado (decisao do responsavel, 2026-11-18): os deploys 4,
+// 5, 6 e 7 viram um deploy so, com o commit final do branch. Um roteiro e uma
+// folha, no padrao do deploy 1. Pre-requisito: producao no cd0653b. As
+// quatro migrations (021, 020, 024, 025) antes do merge, nesta ordem, cada uma
+// seguida da verificacao dela; o "antes" das quatro (com a Q-F9) e os oito
+// ensaios (a e b de cada uma, cada um sobre a copia ja com as anteriores, pelo
+// PREPARO) com o portal no ar; o ensaio do codigo com TODOS os QAs PHP; as
+// quatro verificacoes de novo depois da fumaca; o Controle de CHG ligado ainda
+// em manutencao; o Content-Type dos icones; o polling com o HOST_HEADER do
+// ServerName; o rollback em degraus (codigo e app/ primeiro, depois 025, 024,
+// 020 e 021, cada um com a guarda dele). As folhas dos deploys 5 a 7 so
+// apontam para a do deploy 4.
 // ----------------------------------------------------------------------------
-$heading4 = '### Deploy 4 (F10-2';
+foreach (['### Deploy 4 (F10-2', '### Deploy 5 (F9', '### Deploy 6 (rodizio', '### Deploy 7 (Controle de CHG'] as $oldHeading) {
+    assert_same(false, strpos($deployDoc, $oldHeading), "deploy 4 consolidado: o roteiro separado '{$oldHeading}' saiu do DEPLOY_LINUX.md");
+}
+$heading4 = '### Deploy 4 (consolidado: deploys 4, 5, 6 e 7 numa execucao so; migrations 021, 020, 024 e 025)';
 $start4 = strpos($deployDoc, $heading4);
 $ends4 = $start4 === false ? [] : array_filter([strpos($deployDoc, "\n### ", $start4 + 1), strpos($deployDoc, "\n## ", $start4)], static fn ($pos): bool => $pos !== false);
 $runbook4 = $start4 === false ? '' : substr($deployDoc, $start4, ($ends4 === [] ? strlen($deployDoc) : min($ends4)) - $start4);
@@ -927,82 +920,181 @@ $first4 = static function (string $needle) use ($commands4): int {
     return -1;
 };
 $all4 = static fn (string $needle): array => array_keys(array_filter($commands4, static fn (string $line): bool => strpos($line, $needle) !== false));
-assert_same([true, [], []], [$runbook4 !== '' && count($commands4) >= 30 && $blocks4[1] === array_fill(0, count($blocks4[1]), 'bash'), array_values(array_filter($commands4, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), array_values(array_filter($commands4, static fn (string $line): bool => preg_match('/\bsudo\b/', $line) === 1))], 'deploy 4: secao com os comandos Linux, um por linha, nenhum com sudo');
+assert_same([true, [], []], [$runbook4 !== '' && count($commands4) >= 60 && $blocks4[1] === array_fill(0, count($blocks4[1]), 'bash'), array_values(array_filter($commands4, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), array_values(array_filter($commands4, static fn (string $line): bool => preg_match('/\bsudo\b/', $line) === 1))], 'deploy 4: secao consolidada com os comandos Linux, um por linha, nenhum com sudo');
 assert_same($envCheck, $commands4[0] ?? '', 'deploy 4: o 1o comando e a conferencia do ambiente, igual a dos deploys 1 a 3');
+assert_same(true, strpos($prose4, '**Decisao do responsavel (2026-11-18):** os deploys 4, 5, 6 e 7 viram um deploy so, o **deploy 4** (numeracao pela ordem de execucao), com o commit final do branch.') !== false && strpos($prose4, 'o texto deles fica no historico do git, ate o `0a8d304`') !== false, 'deploy 4: a decisao da consolidacao e o historico dos roteiros separados');
+
+// Producao no cd0653b, um fetch so, o commit gravado, as quatro migrations e a lista exata dos 16 arquivos.
 $prod4 = $first4('if [ "$H" = "cd0653b22a528cb3cb700b57c05a729cdf6f6f5e" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy4-commit');
 $record4 = $first4('| tee /var/backups/chronodesk/deploy4-commit');
 $check4 = $first4('git merge-base --is-ancestor HEAD "$D4"');
 $fetch4 = array_keys(array_filter($commands4, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
-assert_same(true, $prod4 === 1 && strpos($commands4[1], 'echo "PARE: HEAD de producao') !== false && strpos($commands4[1], 'echo "alteracoes locais: $(git status --porcelain | wc -l)"') !== false && strpos($prose4, '**Pre-requisito: o deploy 3 executado com o `cd0653b`.**') !== false, 'deploy 4: producao no cd0653b (o commit do deploy 3), gravado como ponto de volta');
+assert_same(true, $prod4 === 1 && strpos($commands4[1], 'echo "PARE: HEAD de producao') !== false && strpos($commands4[1], 'echo "alteracoes locais: $(git status --porcelain | wc -l)"') !== false && strpos($prose4, '**Pre-requisito: producao no `cd0653b`**') !== false, 'deploy 4: producao no cd0653b (o commit do deploy 3), gravado como ponto de volta');
 assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin feat\/employee-form-rhf-zod && K=\$\(git rev-parse origin\/feat\/employee-form-rhf-zod\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy4-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands4[$record4] ?? ''), 'deploy 4: fetch so do branch e grava so o commit validado na estacao');
 assert_same([[$record4], 0], [$fetch4, preg_match('/\bgit pull\b|(^|\s)(--force|-f)(\s|$)/m', $text4)], 'deploy 4: um fetch so, sem pull, sem --force');
-assert_same(true, $check4 === $record4 + 1 && strpos($commands4[$check4], 'git cat-file -e "$D4:migrations/20261115_021_rotation_teams.sql" && ') !== false && strpos($commands4[$check4], 'echo "migrations alteradas: $(git diff --name-only HEAD "$D4" -- migrations | sort | tr \'\n\' \' \')"') !== false && strpos($commands4[$check4], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D4" -- frontend/package-lock.json | wc -l)"') !== false, 'deploy 4: cat-file da 021, fast-forward, a lista das migrations e o lockfile conferidos logo depois de gravar');
-// A migration: so a 021, do commit gravado, uma vez, antes do merge; a lista
-// das posteriores ao deploy 1 (secao 5) e exatamente o que este roteiro aplica.
-$apply4 = array_values(array_filter($all4('| docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas'), static fn (int $i): bool => strpos($commands4[$i], 'migrations/2026') !== false));
+foreach ($migrationsDeploy4 as $file) {
+    assert_same(true, strpos($commands4[$check4] ?? '', "git cat-file -e \"\$D4:migrations/{$file}\" && ") !== false, "deploy 4: cat-file de {$file} logo depois de gravar");
+}
+$migrationFiles4 = [];
+foreach (['', 'rollback/', 'verificacao/'] as $dir) {
+    foreach (glob($root . '/migrations/' . $dir . '*.sql') ?: [] as $path) {
+        if (preg_match('/^2026111[5-9]_|^20261[12]\d{2}_|^2027/', basename($path)) === 1) {
+            $migrationFiles4[] = 'migrations/' . $dir . basename($path);
+        }
+    }
+}
+sort($migrationFiles4, SORT_STRING);
+assert_same(16, count($migrationFiles4), 'repositorio: os arquivos de migration posteriores ao deploy 3 sao os 16 das quatro migrations (arquivo novo exige o roteiro)');
+assert_same(true, $check4 === $record4 + 1 && strpos($commands4[$check4], 'L=$(git diff --name-only HEAD "$D4" -- migrations | sort | tr \'\n\' \' \'); [ "$L" = "' . implode(' ', $migrationFiles4) . ' " ] && echo "migrations alteradas: exatamente as 16 esperadas (021, 020, 024 e 025)" || echo "PARE: migrations alteradas diferentes das esperadas: $L"') !== false && strpos($commands4[$check4], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D4" -- frontend/package-lock.json | wc -l)"') !== false, 'deploy 4: a lista exata das migrations (os 16 arquivos do repositorio) e o lockfile conferidos logo depois de gravar');
+
+// As quatro migrations: do commit gravado, uma vez cada, na ordem 021, 020, 024, 025, antes do merge, cada uma com a verificacao logo depois.
+$apply4 = array_values(array_filter($all4('| docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas'), static fn (int $i): bool => preg_match('/git show "\$D4:migrations\/2026\d{4}_\d{3}_[a-z_]+\.sql"/', $commands4[$i]) === 1));
 preg_match_all('/git show "\$D4:migrations\/(2026\d{4}_\d{3}_[a-z_]+\.sql)"/', implode("\n", array_map(static fn (int $i): string => $commands4[$i], $apply4)), $applied4);
-assert_same([$migrationsAfterDeploy1, 1], [$applied4[1], count($apply4)], 'deploy 4: aplica exatamente as migrations posteriores ao deploy 1 (a 021), uma vez');
-assert_same(true, strpos($commands4[$apply4[0]] ?? '', 'git cat-file -e "$D4:migrations/20261115_021_rotation_teams.sql" && bash -o pipefail -c \'git show "$D4:migrations/20261115_021_rotation_teams.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas\' && echo "021 aplicada" || echo "PARE: ') !== false && strpos($commands4[$apply4[0]], "read -rsp 'Senha root do MySQL: ' P;") !== false && preg_match('/unset P D4$/', rtrim($commands4[$apply4[0]])) === 1, 'deploy 4: a 021 do commit gravado, com cat-file e pipefail, senha sem eco e apagada');
-$checks4 = $all4('git show "$D4:migrations/verificacao/20261115_021_rotation_teams_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas');
+assert_same($migrationsDeploy4, $applied4[1], 'deploy 4: aplica exatamente as quatro migrations, uma vez cada, na ordem 021, 020, 024, 025');
+$checkNames4 = [];
+foreach ($migrationsDeploy4 as $k => $file) {
+    $number = substr($file, 9, 3);
+    $checkName = substr($file, 0, -4) . '_check';
+    $checkNames4[] = $checkName;
+    $i = $apply4[$k] ?? -1;
+    assert_same(true, strpos($commands4[$i] ?? '', "git cat-file -e \"\$D4:migrations/{$file}\" && bash -o pipefail -c 'git show \"\$D4:migrations/{$file}\" | docker exec -i -e MYSQL_PWD=\"\$P\" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo \"{$number} aplicada\" || echo \"PARE: a {$number} nao foi aplicada\"; unset P D4") !== false && strpos($commands4[$i], "read -rsp 'Senha root do MySQL: ' P;") !== false, "deploy 4: a {$number} do commit gravado, com cat-file e pipefail, senha sem eco e apagada");
+    assert_same(true, strpos($commands4[$i + 1] ?? '', "bash -o pipefail -c 'git show \"\$D4:migrations/verificacao/{$checkName}.sql\" | docker exec -i -e MYSQL_PWD=\"\$P\" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D4") !== false, "deploy 4: a verificacao da {$number} logo depois dela");
+    if ($k > 0) {
+        assert_same($apply4[$k - 1] + 2, $i, "deploy 4: a {$number} so depois da verificacao da anterior");
+    }
+}
+assert_same(true, strpos($prose4, '**PARE no primeiro numero fora do esperado**') !== false && strpos($prose4, '**7. As quatro migrations, antes do merge, na ordem 021, 020, 024, 025**') !== false, 'deploy 4: as migrations param no primeiro numero fora do esperado');
 $merge4 = $first4('git merge --ff-only "$D4"');
-$rollback021 = $first4('migrations/rollback/20261115_021_rotation_teams_down.sql" | docker exec');
-assert_same(true, count($checks4) === 3 && $checks4[0] === $apply4[0] + 1 && $checks4[1] > $merge4 && $commands4[$checks4[0]] === $commands4[$checks4[1]] && $checks4[2] === $rollback021 + 1, 'deploy 4: a verificacao da 021 logo depois dela, de novo depois do merge (o mesmo comando) e depois do rollback');
-assert_same(true, $apply4[0] < $merge4 && strpos($commands4[$merge4] ?? '', '[ "$(git rev-parse HEAD)" = "$D4" ] && echo "HEAD = deploy4-commit" || echo "PARE: ') !== false && count(array_filter($all4('git merge'), static fn (int $i): bool => strpos($commands4[$i], 'merge-base') === false)) === 1, 'deploy 4: a 021 antes do merge (o codigo novo exige a 021) e um merge so, com o HEAD conferido');
-assert_same(true, strpos($commands4[$rollback021] ?? '', '[ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy4-commit)" ] && ') !== false && strpos($prose4, '**13. Rollback da 021 (so depois do passo 12, e so com aprovacao') !== false, 'deploy 4: rollback da 021 so com o codigo do deploy 3 no ar e so com aprovacao');
+assert_same(true, ($apply4[3] ?? PHP_INT_MAX) + 1 < $merge4 && strpos($commands4[$merge4] ?? '', '[ "$(git rev-parse HEAD)" = "$D4" ] && echo "HEAD = deploy4-commit" || echo "PARE: ') !== false && count(array_filter($all4('git merge'), static fn (int $i): bool => strpos($commands4[$i], 'merge-base') === false)) === 1, 'deploy 4: as quatro antes do merge e um merge so, com o HEAD conferido');
 assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|GRANT)\b/', implode("\n", array_filter($commands4, static fn (string $line): bool => strpos($line, 'mysql') !== false && strpos($line, 'mysqldump') === false))), 'deploy 4: nenhum comando de escrita digitado no MySQL (so os arquivos do commit)');
-// Ensaio da 021 na copia (as duas variantes, com o script e as migrations do commit gravado), antes do backup.
+
+// O "antes" das quatro (com a Q-F9) e as quatro de novo depois da fumaca: o mesmo comando, as quatro verificacoes na ordem de aplicacao.
+$verifyLoop4 = 'cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp \'Senha root do MySQL: \' P; echo; export P; for V in ' . implode(' ', $checkNames4) . '; do echo "== $V"; export V; bash -o pipefail -c \'git show "$D4:migrations/verificacao/$V.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas\' || echo "PARE: a verificacao $V falhou"; done; unset P D4 V';
+$verifies4 = array_keys(array_filter($commands4, static fn (string $line): bool => $line === $verifyLoop4));
+assert_same(2, count($verifies4), 'deploy 4: as quatro verificacoes (o "antes", com a Q-F9) e de novo depois da fumaca, o mesmo comando');
+assert_same(true, strpos($prose4, '**PARE** com `ativos_equipe_desconhecida` maior que 0') !== false && strpos($prose4, '**3. Q-F9 e o "antes" das quatro migrations no banco real**') !== false, 'deploy 4: a Q-F9 para com cadastro ativo de equipe desconhecida');
+
+// Os oito ensaios: com o script e as migrations do commit gravado, as mesmas tabelas, cada um sobre a copia ja com as anteriores (PREPARO).
 $evExtract4 = $first4('EV=$(mktemp -d /root/ensaio-deploy4.XXXXXX)');
-$ensaioA4 = $first4('bash "$EV/scripts/ensaio-migration.sh" d4_021 ');
-$ensaioB4 = $first4('bash "$EV/scripts/ensaio-migration.sh" d4_021_rollback ');
+$preparos4 = $first4('> "$EV/preparo-021-020.sql"');
 $evClean4 = $first4('case "$EV" in /root/ensaio-deploy4.*) rm -r "$EV"');
-assert_same(true, strpos($commands4[$evExtract4] ?? '', 'bash -o pipefail -c \'git archive "$D4" migrations scripts/ensaio-migration.sh | tar -x -C "$EV"\'') !== false && strpos($commands4[$ensaioA4] ?? '', 'env DADOS=portal_schedule_rules,portal_schedule_exceptions VERIFICA="$EV/migrations/verificacao/20261115_021_rotation_teams_check.sql"') === 0 && strpos($commands4[$ensaioB4] ?? '', 'env PREPARO="$EV/migrations/20261115_021_rotation_teams.sql"') === 0 && strpos($commands4[$ensaioB4], '"$EV/migrations/rollback/20261115_021_ensaio_linhas_f10.sql"') !== false, 'deploy 4: ensaio da 021 nas duas variantes, com o script e as migrations extraidos do commit gravado');
+assert_same(true, strpos($commands4[$evExtract4] ?? '', 'git cat-file -e "$D4^{commit}" && bash -o pipefail -c \'git archive "$D4" migrations scripts/ensaio-migration.sh | tar -x -C "$EV"\'') !== false, 'deploy 4: o script e as migrations do ensaio extraidos do commit gravado');
+assert_same('M="$EV/migrations"; cat "$M/' . $migrationsDeploy4[0] . '" "$M/' . $migrationsDeploy4[1] . '" > "$EV/preparo-021-020.sql" && cat "$EV/preparo-021-020.sql" "$M/' . $migrationsDeploy4[2] . '" > "$EV/preparo-021-020-024.sql" && cat "$EV/preparo-021-020-024.sql" "$M/' . $migrationsDeploy4[3] . '" > "$EV/preparo-021-020-024-025.sql" && echo "preparos das anteriores: $(ls "$EV"/preparo-021-*.sql | wc -l) arquivos" || echo "PARE: falha ao montar os preparos"; unset M', $commands4[$preparos4] ?? '', 'deploy 4: os preparos juntam as migrations do commit gravado, na ordem de aplicacao');
+$tables4 = 'DADOS=portal_schedule_rules,portal_schedule_exceptions,portal_absences,pausas';
+$extras4 = 'portal_pa_assignments,portal_shift_attachments,portal_overtime_entries,portal_time_adjustments,portal_oncall_shifts,audit_log';
+$prep021 = '"$EV/migrations/' . $migrationsDeploy4[0] . '"';
+$ensaioPlan4 = [
+    ['d4_021', '', $migrationsDeploy4[0], '20261115_021_rotation_teams_down.sql', false],
+    ['d4_021_rollback', $prep021, '20261115_021_ensaio_linhas_f10.sql', '20261115_021_rotation_teams_down.sql', true],
+    ['d4_020', $prep021, $migrationsDeploy4[1], '20261116_020_teams_critico_hibrido_down.sql', false],
+    ['d4_020_rollback', '"$EV/preparo-021-020.sql"', '20261116_020_ensaio_linhas_f9.sql', '20261116_020_teams_critico_hibrido_down.sql', true],
+    ['d4_024', '"$EV/preparo-021-020.sql"', $migrationsDeploy4[2], '20261117_024_critical_roles_down.sql', false],
+    ['d4_024_rollback', '"$EV/preparo-021-020-024.sql"', '20261117_024_ensaio_linhas_pc.sql', '20261117_024_critical_roles_down.sql', true],
+    ['d4_025', '"$EV/preparo-021-020-024.sql"', $migrationsDeploy4[3], '20261117_025_chg_down.sql', false],
+    ['d4_025_rollback', '"$EV/preparo-021-020-024-025.sql"', '20261117_025_ensaio_linhas_chg.sql', '20261117_025_chg_down.sql', true],
+];
+$ensaioLines4 = [];
+foreach ($ensaioPlan4 as $k => [$name, $prep, $step, $down, $isRows]) {
+    $verify = '"$EV/migrations/verificacao/' . $checkNames4[intdiv($k, 2)] . '.sql"';
+    $stepPath = '"$EV/migrations/' . ($isRows ? 'rollback/' : '') . $step . '"';
+    $expected = 'env ' . ($prep !== '' ? 'PREPARO=' . $prep . ' ' : '') . $tables4 . ' VERIFICA=' . $verify . ' bash "$EV/scripts/ensaio-migration.sh" ' . $name . ' ' . $stepPath . ' "$EV/migrations/rollback/' . $down . '" ' . $extras4;
+    $line = $first4('bash "$EV/scripts/ensaio-migration.sh" ' . $name . ' ');
+    $ensaioLines4[] = $line;
+    assert_same($expected, $commands4[$line] ?? '', "deploy 4: ensaio {$name} com as mesmas tabelas, o preparo das anteriores e os arquivos do commit gravado");
+    assert_same(true, file_exists($root . '/migrations/' . ($isRows ? 'rollback/' : '') . $step) && file_exists($root . '/migrations/rollback/' . $down), "deploy 4: os arquivos do ensaio {$name} existem no repositorio");
+}
+$sortedEnsaios4 = $ensaioLines4;
+sort($sortedEnsaios4);
+assert_same([$sortedEnsaios4, $preparos4 + 1, $evExtract4 + 1, $evClean4], [$ensaioLines4, $ensaioLines4[0], $preparos4, end($ensaioLines4) + 1], 'deploy 4: extracao, preparos, os oito ensaios na ordem de aplicacao e a limpeza, em sequencia');
 assert_same(0, preg_match('/(^|[\s;])bash scripts\/ensaio-migration\.sh/m', $text4), 'deploy 4: ensaio so com o script do commit gravado');
-// Ensaio do codigo com TODOS os QAs PHP do repositorio.
+
+// Ensaio do codigo com TODOS os QAs PHP do repositorio (sem lista de excecao).
 $qaLoop4 = $first4('[ ! -e /tmp/.env ] && for q in ');
 $qaArchive4 = $first4('Q=$(mktemp -d /tmp/ensaio-deploy4-qa.XXXXXX)');
 $qaSweep4 = $first4('for Q in /tmp/ensaio-deploy4-qa.??????; do');
 preg_match('/for q in ([a-z0-9 -]+); do/', $commands4[$qaLoop4] ?? '', $qaList4);
 $runbookQas4 = explode(' ', trim($qaList4[1] ?? ''));
 sort($runbookQas4);
-$everyQa = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
-sort($everyQa);
-// [F9] Sem os QAs criados depois do deploy 4 (lista na secao 5).
-$everyQa = array_values(array_diff($everyQa, $qasAfterDeploy4, $qasAfterDeploy5, $qasAfterDeploy6));
-assert_same($everyQa, $runbookQas4, 'deploy 4: o ensaio roda TODOS os QAs PHP do repositorio ate o deploy 4 (QA novo exige o roteiro)');
+$everyQa4 = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
+sort($everyQa4);
+assert_same($everyQa4, $runbookQas4, 'deploy 4: o ensaio roda TODOS os QAs PHP do repositorio (QA novo exige o roteiro)');
 assert_same($qasAfterDeploy3, array_values(array_intersect($qasAfterDeploy3, $runbookQas4)), 'deploy 4: os QAs criados depois do deploy 3 no ensaio');
-assert_same(true, strpos($commands4[$qaArchive4] ?? '', 'bash -o pipefail -c \'git archive "$D4" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands4[$qaLoop4] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text4, '--db') === 1, 'deploy 4: ensaio com pipefail, como www-data, e o --db so no qa-timezone');
+assert_same(true, strpos($commands4[$qaArchive4] ?? '', 'bash -o pipefail -c \'git archive "$D4" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands4[$qaLoop4] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text4, '--db') === 1 && strpos($prose4, 'os ' . count($everyQa4) . ' QAs com `OK`') !== false, 'deploy 4: ensaio com pipefail, como www-data, o --db so no qa-timezone e a contagem dos QAs no esperado');
 assert_same([$qaArchive4], array_keys(array_filter($commands4, static fn (string $line): bool => preg_match('/\b(chown|chmod)\b/', $line) === 1)), 'deploy 4: permissao so do diretorio do ensaio');
+
+// O interruptor do Controle de CHG: o pool sem a variavel, 404 desligado, copia do .env com 600 antes de mudar, recarga, 401 ligado.
+$poolGrep4 = $first4("grep -rn 'CHG_MODULE_ENABLED' /etc/php/*/fpm/");
+$off404 = $first4('controle de CHG (desligado, sem sessao): %{http_code}');
+$flagOn4 = $first4("echo 'CHG_MODULE_ENABLED=true' >> /var/www/.env");
+$on401 = $first4('controle de CHG (ligado, sem sessao): %{http_code}');
+$flagOff4 = $first4("sed -i 's/^CHG_MODULE_ENABLED=.*/CHG_MODULE_ENABLED=false/' /var/www/.env");
+$envEdits4 = array_keys(array_filter($commands4, static fn (string $line): bool => strpos($line, '/var/www/.env') !== false && preg_match('/sed -i|>> \/var\/www\/\.env/', $line) === 1));
+assert_same([$flagOn4, $flagOff4], $envEdits4, 'deploy 4: o .env so muda nos comandos de ligar e de desligar o Controle de CHG');
+foreach ([$flagOn4, $flagOff4] as $edit) {
+    assert_same(1, preg_match('/^K=\/var\/backups\/chronodesk\/env-antes-[a-z0-9-]+-\$\(date \+%Y%m%d-%H%M%S\); if install -m 600 \/var\/www\/\.env "\$K"; then .* else echo "PARE: copia do \.env falhou, nada alterado"; fi; unset K$/', $commands4[$edit] ?? ''), 'deploy 4: o .env so muda depois da copia com modo 600');
+}
+assert_same(true, strpos($prose4, '**O Controle de CHG entra desligado**') !== false && strpos($prose4, '**so e ligado no passo 11**') !== false, 'deploy 4: o Controle de CHG entra desligado e e ligado no passo 11');
+
 // Ordem do dia.
+$reloads4 = $all4('systemctl reload "php$(php -r');
 $space4 = $first4('for LIM in "/var/www/chronodesk:500"');
 $backup4 = $first4('B=/var/backups/chronodesk/deploy4-$(date +%Y%m%d-%H%M%S)');
 $maintOn4 = $first4('touch /var/www/chronodesk.maintenance');
 $appCopy4 = $first4('A=/var/backups/chronodesk/app-antes-deploy4; if test -e "$A"; then');
 $build4 = $first4('cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy4-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi');
 $bundle4 = $first4('cd /var/www/chronodesk/frontend && npm run -s qa:bundle');
-$reloads4 = $all4('systemctl reload "php$(php -r');
 $health4 = $first4("-w 'health: %{http_code}\\n'");
 $tz4 = $first4('runuser -u www-data -- php scripts/qa-timezone.php --db');
 $smoke4 = $first4('bash scripts/smoke-deploy1.sh "$S"');
 $maintOff4 = $first4('rm -- /var/www/chronodesk.maintenance');
+$icons4 = $first4('for F in favicon.svg favicon.ico apple-touch-icon.png; do');
 $polling4 = $all4('bash scripts/medir-polling.sh');
 $checkout4 = $first4('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy4-commit)"');
 $appBack4 = $first4('A=/var/backups/chronodesk/app-antes-deploy4; X=/var/backups/chronodesk/app-deploy4-retirado-');
-assert_same(true, $check4 < $qaArchive4 && $qaArchive4 < $qaLoop4 && $qaLoop4 < $qaSweep4 && $qaSweep4 < $evExtract4 && $evExtract4 < $ensaioA4 && $ensaioA4 < $ensaioB4 && $ensaioB4 < $evClean4 && $evClean4 < $space4 && $space4 + 1 === $backup4 && $backup4 < $maintOn4 && $maintOn4 < $appCopy4 && $appCopy4 < $apply4[0] && $checks4[0] < $merge4 && $merge4 < $build4 && $build4 + 1 === $bundle4 && ($reloads4[0] ?? -1) === $bundle4 + 1 && $bundle4 < $health4 && $health4 < $tz4 && $tz4 < $smoke4 && $smoke4 < $checks4[1] && $checks4[1] < $maintOff4 && $maintOff4 < min($polling4 ?: [-1]) && max($polling4 ?: [PHP_INT_MAX]) < $checkout4 && $checkout4 + 1 === $appBack4 && ($reloads4[1] ?? -1) === $appBack4 + 1 && $appBack4 < $rollback021, 'deploy 4: ensaios, espaco e backup, manutencao e copia do app/, a 021 e a verificacao, merge, build e qa:bundle, recarga, health, fuso, fumaca, verificacao, reabertura, polling, rollback do codigo e da 021, nesta ordem');
+$rollbackPlan4 = [['025', '20261117_025_chg_down.sql', ''], ['024', '20261117_024_critical_roles_down.sql', "TABLE_NAME = 'portal_chg_updates'"], ['020', '20261116_020_teams_critico_hibrido_down.sql', "TABLE_NAME = 'portal_critical_roles'"], ['021', '20261115_021_rotation_teams_down.sql', "TABLE_NAME = 'pausas' AND COLUMN_NAME = 'limite_segundos'"]];
+$rollbacks4 = [];
+foreach ($rollbackPlan4 as $k => [$number, $down, $guard]) {
+    $line = $first4("migrations/rollback/{$down}\" | docker exec");
+    $rollbacks4[] = $line;
+    $checkName = $checkNames4[3 - $k];
+    assert_same(true, strpos($commands4[$line] ?? '', '[ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy4-commit)" ] && ') !== false && strpos($commands4[$line], "echo \"rollback da {$number} aplicado\" || echo \"PARE: ") !== false && strpos($commands4[$line + 1] ?? '', "git show \"\$D4:migrations/verificacao/{$checkName}.sql\" | docker exec -i -e MYSQL_PWD=\"\$P\" Chrono_Desk_DB mysql -uroot --table sistema_pausas") !== false, "deploy 4: rollback da {$number} so com o codigo do cd0653b no ar, com a verificacao logo depois");
+    if ($guard !== '') {
+        assert_same(true, strpos($commands4[$line], '[ "$(docker exec -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -N -e "SELECT COUNT(*) FROM information_schema.') !== false && strpos($commands4[$line], "WHERE TABLE_SCHEMA = 'sistema_pausas' AND {$guard}\")\" = 0 ] && git cat-file -e") !== false, "deploy 4: o rollback da {$number} confere antes que a migration seguinte ja foi desfeita");
+    }
+}
+assert_same(true, strpos($prose4, '**17. Rollback da 025 (so depois do passo 16, e so com aprovacao') !== false && strpos($prose4, '**18. Rollback da 024 (so depois do passo 17 com "025 ausente", e so com aprovacao') !== false && strpos($prose4, '**19. Rollback da 020 (so depois do passo 18 com "024 ausente", e so com aprovacao') !== false && strpos($prose4, '**20. Rollback da 021 (so depois do passo 19 com "020 ausente", e so com aprovacao') !== false && strpos($prose4, '**codigo e `app/` primeiro** (passo 16)') !== false, 'deploy 4: rollback em degraus, codigo primeiro e as migrations na ordem inversa, cada uma so com aprovacao');
+$order4 = [$check4, $qaArchive4, $qaLoop4, $qaSweep4, $verifies4[0] ?? -1, $evExtract4, $evClean4, $space4, $backup4, $maintOn4, $appCopy4, $apply4[0] ?? -1, ($apply4[3] ?? -1) + 1, $merge4, $build4, $bundle4, $health4, $tz4, $smoke4, $verifies4[1] ?? -1, $poolGrep4, $off404, $flagOn4, $on401, $maintOff4, $icons4, min($polling4 ?: [-1]), max($polling4 ?: [-1]), $flagOff4, $checkout4, $appBack4, $rollbacks4[0], $rollbacks4[1], $rollbacks4[2], $rollbacks4[3]];
+$sortedOrder4 = $order4;
+sort($sortedOrder4);
+assert_same([$sortedOrder4, true], [$order4, !in_array(-1, $order4, true) && count(array_unique($order4)) === count($order4)], 'deploy 4: gravar, ensaio do codigo, o "antes", os ensaios, espaco e backup, manutencao e copia do app/, as quatro migrations, merge, build e qa:bundle, recarga, health, fuso, fumaca, as quatro de novo, o modulo ligado, reabertura, icones, polling, desligamento rapido, rollback do codigo e das migrations (025, 024, 020, 021), nesta ordem');
+assert_same([$backup4, $bundle4, $bundle4 + 1, $off404, $flagOn4, $flagOn4 + 1, $on401, $icons4, $flagOff4 + 1, $appBack4, $appBack4 + 1, 4], [$space4 + 1, $build4 + 1, $reloads4[0] ?? -1, $poolGrep4 + 1, $off404 + 1, $reloads4[1] ?? -1, $flagOn4 + 2, $maintOff4 + 1, $reloads4[2] ?? -1, $checkout4 + 1, $reloads4[3] ?? -1, count($reloads4)], 'deploy 4: os pares colados (espaco e backup, build e qa:bundle, recargas, pool e 404, ligar e 401, reabertura e icones, checkout e app/)');
 assert_same(true, strpos($commands4[$appBack4] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all4('npm '), static fn (int $i): bool => $i >= $checkout4)) === 0, 'deploy 4: rollback volta o app/ da copia, sem npm');
-assert_same([$qaSweep4, $evClean4, $maintOff4], array_keys(array_filter($commands4, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'deploy 4: so tres remocoes (o ensaio da 021 guardado por case, o ensaio do codigo pelo padrao do mktemp e o arquivo-sinal)');
+assert_same([$qaSweep4, $evClean4, $maintOff4], array_keys(array_filter($commands4, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'deploy 4: so tres remocoes (o ensaio das migrations guardado por case, o ensaio do codigo pelo padrao do mktemp e o arquivo-sinal)');
+
+// Icones, polling com o HOST_HEADER do ServerName e os curl sem marcador.
+assert_same(true, strpos($commands4[$icons4] ?? '', $serverNameRead) === 0 && strpos($commands4[$icons4], 'curl -s -o /dev/null -w \'%{http_code} %{content_type}\n\' -H "Host: $S" "http://127.0.0.1/app/$F?v=2"') !== false && strpos($prose4, '`favicon.svg: 200 image/svg+xml`') !== false, 'deploy 4: o Content-Type dos tres icones logo depois da reabertura');
 assert_same(3, count($polling4), 'deploy 4: tres medicoes do polling (status.php, dashboard.php e solicitacoes_pendentes.php)');
-assert_same(true, strpos($prose4, 'alguns minutos depois da reabertura, 2 rodadas por endpoint, valendo a melhor, sessao de gestao') !== false, 'deploy 4: polling alguns minutos depois da reabertura, 2 rodadas, sessao de gestao');
+foreach (['' => 'status.php', 'URL=http://127.0.0.1/api/portal/dashboard.php ' => 'dashboard.php', 'URL=http://127.0.0.1/api/solicitacoes_pendentes.php ' => 'solicitacoes_pendentes.php'] as $url => $endpoint) {
+    assert_same(1, count(array_filter($polling4, static fn (int $i): bool => $commands4[$i] === 'cd /var/www/chronodesk; ' . $serverNameRead . 'for R in 1 2; do echo "== ' . $endpoint . ', rodada $R"; HOST_HEADER="$S" ' . $url . 'bash scripts/medir-polling.sh; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S R')), "deploy 4: polling do {$endpoint} em 2 rodadas, com o HOST_HEADER do ServerName");
+}
+assert_same(true, strpos($prose4, 'alguns minutos depois da reabertura, 2 rodadas por endpoint, valendo a melhor, sessao de gestao, com o `HOST_HEADER` lido do `ServerName`') !== false, 'deploy 4: polling alguns minutos depois da reabertura, 2 rodadas, sessao de gestao, HOST_HEADER do ServerName');
 $outside4 = array_values(array_filter($commands4, static fn (string $line): bool => strpos($line, 'curl') !== false));
 assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text4), count(array_filter($outside4, static fn (string $line): bool => strpos($line, $serverNameRead) !== false)) === count($outside4)], 'deploy 4: ServerName do chronodesk.conf em todo curl, sem marcador e sem https');
-// Prosa: a bateria da estacao com a contagem certa de scripts npm, a escala de ninguem muda, o plano nao roda.
-// [F9] O deploy 4 roda com o commit validado na estacao (5a2494c), que tinha
-// 27 scripts npm; os qa:* criados depois dele nao mudam a folha do deploy 4.
-$frontendCount = 27;
-assert_same(true, strpos($runbook4, "`frontend: {$frontendCount} scripts npm rodados (...): {$frontendCount} OK, 0 com falha`") !== false && strpos($runbook4, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy4 origin/feat/employee-form-rhf-zod;') !== false, 'deploy 4: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
-assert_same(true, strpos($prose4, '**Ninguem e membro de time depois do deploy**') !== false && strpos($prose4, 'o plano de migracao (so leitura) nao roda neste deploy') !== false && strpos($prose4, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false, 'deploy 4: ninguem vira membro, o plano de migracao fica para depois e o aviso com marcadores');
-foreach (['**Escala presencial:**', '**Regra por colaborador:**', '"Semana a semana"', '**Funcionarios:**', 'Grupo da escala: Comum'] as $screen) {
+
+// Prosa: a bateria da estacao, o QA do bundle, o aviso, a tela e o que fica para depois, com a gestao.
+$package4 = json_decode((string)file_get_contents($root . '/frontend/package.json'), true);
+$frontendCount4 = 3 + count(array_filter(array_keys((array)($package4['scripts'] ?? [])), static fn (string $name): bool => strpos($name, 'qa:') === 0));
+assert_same(true, strpos($runbook4, "`frontend: {$frontendCount4} scripts npm rodados (...): {$frontendCount4} OK, 0 com falha`") !== false && strpos($runbook4, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy4-consolidado origin/feat/employee-form-rhf-zod;') !== false, 'deploy 4: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
+assert_same(true, strpos($prose4, 'os quatro icones no build (`favicon.ico`, `favicon.svg`, `favicon.png` e `apple-touch-icon.png`)') !== false && strpos($prose4, 'o CSS do portal abaixo de 70000 bytes e o CSS do Controle de CHG abaixo de 25000') !== false, 'deploy 4: o qa:bundle com os quatro icones e os dois orcamentos de CSS');
+assert_same(true, strpos($prose4, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false && strpos($prose4, '**Nada muda para ninguem no deploy:**') !== false, 'deploy 4: o aviso com marcadores e nada muda para ninguem no deploy');
+foreach (['**Controle de CHG:** o item **no menu**', '**Escala presencial:**', '"Times de rodizio"', '"Papeis do Critico"', '**Regra por colaborador:**', '"Semana a semana"', '**Funcionarios:**', 'Grupo da escala: Comum', '"Grupo Tools"', '**Visao operacional:**', '"Papel vago no Critico hoje"', '**Pausas:**', '**Icone:**'] as $screen) {
     assert_same(true, strpos($prose4, $screen) !== false, "deploy 4: conferencia na tela com {$screen}");
 }
+assert_same(true, strpos($prose4, '**13. Conferencia na tela**, como admin (Ctrl+F5 uma vez), **sem salvar nada**') !== false, 'deploy 4: a conferencia na tela sem salvar nada');
+foreach (['**Marcar o grupo Tools e as equipes Critico e Hibrido pela tela**', '**Importar o Controle v5 pela tela de importacao**', '**Ver previa**', '**Confirmar importacao**', '**Conferir que os tecnicos de CHG estao cadastrados**'] as $after) {
+    assert_same(true, strpos($prose4, '**Depois do deploy, com a gestao**') !== false && strpos($prose4, $after) > strpos($prose4, '**Depois do deploy, com a gestao**'), "deploy 4: depois do deploy, com a gestao: {$after}");
+}
+
 // Folha do deploy 4: os mesmos comandos, na mesma ordem, numerados, sem valor real.
 $sheet4 = $readOptional($root . '/docs/DEPLOY4_FOLHA_DO_DIA.md');
 [$runbook4All] = $fencedCommands($runbook4);
@@ -1025,7 +1117,8 @@ foreach ($sheet4Lines as $i => $line) {
 }
 preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* \(/m', $sheet4, $sheet4Numbers);
 assert_same([[], range(1, count($sheet4All))], [$unmarked4, array_map('intval', $sheet4Numbers[1])], 'folha do deploy 4: cada comando com caixa, numero de 1 em diante, Esperado e PARE se');
-assert_same(true, strpos($sheet4, "`frontend: {$frontendCount} scripts npm rodados (...): {$frontendCount} OK, 0 com falha`") !== false, 'folha do deploy 4: a contagem atual de scripts npm no item 0');
+assert_same(true, strpos($sheet4, "`frontend: {$frontendCount4} scripts npm rodados (...): {$frontendCount4} OK, 0 com falha`") !== false && strpos($sheet4, '..\\chronodesk-deploy4-consolidado') !== false, 'folha do deploy 4: a contagem atual de scripts npm e o worktree no item 0');
+assert_same(true, strpos($sheet4, '**As migrations param no primeiro numero fora do esperado**') !== false && strpos($sheet4, '`ativos_equipe_desconhecida` maior que 0') !== false && strpos($sheet4, 'Conferir que os tecnicos de CHG estao cadastrados') !== false, 'folha do deploy 4: PARE na primeira migration fora do esperado, a Q-F9 e o que fica com a gestao');
 $sheet4NoLoopback = str_replace('127.0.0.1', '', $sheet4);
 assert_same([0, 0, 0, 0, 0], [
     preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheet4NoLoopback),
@@ -1034,415 +1127,10 @@ assert_same([0, 0, 0, 0, 0], [
     preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet4),
     preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet4)),
 ], 'folha do deploy 4: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
-
-// ----------------------------------------------------------------------------
-// 17. [F9] Deploy 5 (F9): migration 020 e o codigo das equipes Critico e Hibrido. O
-// ensaio do codigo roda TODOS os QAs PHP do repositorio (sem lista de
-// excecao); a 020 e a unica migration posterior ao deploy 4 e e aplicada
-// aqui, do commit gravado, antes do merge, depois da Q-F9 e do ensaio na copia.
-// ----------------------------------------------------------------------------
-$heading5 = '### Deploy 5 (F9';
-$start5 = strpos($deployDoc, $heading5);
-$ends5 = $start5 === false ? [] : array_filter([strpos($deployDoc, "\n### ", $start5 + 1), strpos($deployDoc, "\n## ", $start5)], static fn ($pos): bool => $pos !== false);
-$runbook5 = $start5 === false ? '' : substr($deployDoc, $start5, ($ends5 === [] ? strlen($deployDoc) : min($ends5)) - $start5);
-$prose5 = (string)preg_replace('/\s+/', ' ', $runbook5);
-preg_match_all('/```(bash|powershell)\n(.*?)```/s', $runbook5, $blocks5);
-$commands5 = array_values(array_filter(explode("\n", implode("\n", $blocks5[2])), static fn (string $line): bool => trim($line) !== ''));
-$text5 = implode("\n", $commands5);
-$first5 = static function (string $needle) use ($commands5): int {
-    foreach ($commands5 as $i => $line) {
-        if (strpos($line, $needle) !== false) {
-            return $i;
-        }
-    }
-    return -1;
-};
-$all5 = static fn (string $needle): array => array_keys(array_filter($commands5, static fn (string $line): bool => strpos($line, $needle) !== false));
-assert_same([true, [], []], [$runbook5 !== '' && count($commands5) >= 30 && $blocks5[1] === array_fill(0, count($blocks5[1]), 'bash'), array_values(array_filter($commands5, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), array_values(array_filter($commands5, static fn (string $line): bool => preg_match('/\bsudo\b/', $line) === 1))], 'deploy 5: secao com os comandos Linux, um por linha, nenhum com sudo');
-assert_same($envCheck, $commands5[0] ?? '', 'deploy 5: o 1o comando e a conferencia do ambiente, igual a dos deploys 1 a 3');
-$prod5 = $first5('if [ "$H" = "5a2494c85cb60b20b4a465dc9a76e72f28faa732" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy5-commit');
-$record5 = $first5('| tee /var/backups/chronodesk/deploy5-commit');
-$check5 = $first5('git merge-base --is-ancestor HEAD "$D5"');
-$fetch5 = array_keys(array_filter($commands5, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
-assert_same(true, $prod5 === 1 && strpos($commands5[1], 'echo "PARE: HEAD de producao') !== false && strpos($commands5[1], 'echo "alteracoes locais: $(git status --porcelain | wc -l)"') !== false && strpos($prose5, '**Pre-requisito: o deploy 4 executado com o `5a2494c`.**') !== false, 'deploy 5: producao no 5a2494c (o commit do deploy 3), gravado como ponto de volta');
-assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin feat\/employee-form-rhf-zod && K=\$\(git rev-parse origin\/feat\/employee-form-rhf-zod\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy5-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands5[$record5] ?? ''), 'deploy 5: fetch so do branch e grava so o commit validado na estacao');
-assert_same([[$record5], 0], [$fetch5, preg_match('/\bgit pull\b|(^|\s)(--force|-f)(\s|$)/m', $text5)], 'deploy 5: um fetch so, sem pull, sem --force');
-assert_same(true, $check5 === $record5 + 1 && strpos($commands5[$check5], 'git cat-file -e "$D5:migrations/20261116_020_teams_critico_hibrido.sql" && ') !== false && strpos($commands5[$check5], 'echo "migrations alteradas: $(git diff --name-only HEAD "$D5" -- migrations | sort | tr \'\n\' \' \')"') !== false && strpos($commands5[$check5], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D5" -- frontend/package-lock.json | wc -l)"') !== false, 'deploy 5: cat-file da 021, fast-forward, a lista das migrations e o lockfile conferidos logo depois de gravar');
-// A migration: so a 020, do commit gravado, uma vez, antes do merge; a lista
-// das posteriores ao deploy 4 (secao 5) e exatamente o que este roteiro aplica.
-$apply5 = array_values(array_filter($all5('| docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas'), static fn (int $i): bool => strpos($commands5[$i], 'migrations/2026') !== false));
-preg_match_all('/git show "\$D5:migrations\/(2026\d{4}_\d{3}_[a-z_]+\.sql)"/', implode("\n", array_map(static fn (int $i): string => $commands5[$i], $apply5)), $applied5);
-assert_same([$migrationsAfterDeploy4, 1], [$applied5[1], count($apply5)], 'deploy 5: aplica exatamente as migrations posteriores ao deploy 4 (a 020), uma vez');
-assert_same(true, strpos($commands5[$apply5[0]] ?? '', 'git cat-file -e "$D5:migrations/20261116_020_teams_critico_hibrido.sql" && bash -o pipefail -c \'git show "$D5:migrations/20261116_020_teams_critico_hibrido.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas\' && echo "020 aplicada" || echo "PARE: ') !== false && strpos($commands5[$apply5[0]], "read -rsp 'Senha root do MySQL: ' P;") !== false && preg_match('/unset P D5$/', rtrim($commands5[$apply5[0]])) === 1, 'deploy 5: a 020 do commit gravado, com cat-file e pipefail, senha sem eco e apagada');
-$checks5 = $all5('git show "$D5:migrations/verificacao/20261116_020_teams_critico_hibrido_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas');
-$merge5 = $first5('git merge --ff-only "$D5"');
-$rollback020 = $first5('migrations/rollback/20261116_020_teams_critico_hibrido_down.sql" | docker exec');
-// [F9] A Q-F9 e a mesma verificacao, rodada antes de tudo no banco real (so leitura).
-assert_same(true, count($checks5) === 4 && $checks5[1] === $apply5[0] + 1 && $checks5[2] > $merge5 && $commands5[$checks5[0]] === $commands5[$checks5[1]] && $commands5[$checks5[1]] === $commands5[$checks5[2]] && $checks5[3] === $rollback020 + 1, 'deploy 5: a Q-F9 (a verificacao antes da 020), a verificacao logo depois dela, de novo depois do merge (o mesmo comando) e depois do rollback');
-assert_same(true, $apply5[0] < $merge5 && strpos($commands5[$merge5] ?? '', '[ "$(git rev-parse HEAD)" = "$D5" ] && echo "HEAD = deploy5-commit" || echo "PARE: ') !== false && count(array_filter($all5('git merge'), static fn (int $i): bool => strpos($commands5[$i], 'merge-base') === false)) === 1, 'deploy 5: a 020 antes do merge (o codigo novo grava limite_segundos) e um merge so, com o HEAD conferido');
-assert_same(true, strpos($commands5[$rollback020] ?? '', '[ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy5-commit)" ] && ') !== false && strpos($prose5, '**13. Rollback da 020 (so depois do passo 12, e so com aprovacao') !== false, 'deploy 5: rollback da 020 so com o codigo do deploy 4 no ar e so com aprovacao');
-assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|GRANT)\b/', implode("\n", array_filter($commands5, static fn (string $line): bool => strpos($line, 'mysql') !== false && strpos($line, 'mysqldump') === false))), 'deploy 5: nenhum comando de escrita digitado no MySQL (so os arquivos do commit)');
-// Ensaio da 020 na copia (as duas variantes, com o script e as migrations do commit gravado), antes do backup.
-$evExtract5 = $first5('EV=$(mktemp -d /root/ensaio-deploy5.XXXXXX)');
-$ensaioA5 = $first5('bash "$EV/scripts/ensaio-migration.sh" d5_020 ');
-$ensaioB5 = $first5('bash "$EV/scripts/ensaio-migration.sh" d5_020_rollback ');
-$evClean5 = $first5('case "$EV" in /root/ensaio-deploy5.*) rm -r "$EV"');
-assert_same(true, strpos($commands5[$evExtract5] ?? '', 'bash -o pipefail -c \'git archive "$D5" migrations scripts/ensaio-migration.sh | tar -x -C "$EV"\'') !== false && strpos($commands5[$ensaioA5] ?? '', 'env DADOS=portal_absences,pausas VERIFICA="$EV/migrations/verificacao/20261116_020_teams_critico_hibrido_check.sql"') === 0 && strpos($commands5[$ensaioB5] ?? '', 'env PREPARO="$EV/migrations/20261116_020_teams_critico_hibrido.sql"') === 0 && strpos($commands5[$ensaioB5], '"$EV/migrations/rollback/20261116_020_ensaio_linhas_f9.sql"') !== false, 'deploy 5: ensaio da 021 nas duas variantes, com o script e as migrations extraidos do commit gravado');
-assert_same(0, preg_match('/(^|[\s;])bash scripts\/ensaio-migration\.sh/m', $text5), 'deploy 5: ensaio so com o script do commit gravado');
-// Ensaio do codigo com TODOS os QAs PHP do repositorio.
-$qaLoop5 = $first5('[ ! -e /tmp/.env ] && for q in ');
-$qaArchive5 = $first5('Q=$(mktemp -d /tmp/ensaio-deploy5-qa.XXXXXX)');
-$qaSweep5 = $first5('for Q in /tmp/ensaio-deploy5-qa.??????; do');
-preg_match('/for q in ([a-z0-9 -]+); do/', $commands5[$qaLoop5] ?? '', $qaList5);
-$runbookQas5 = explode(' ', trim($qaList5[1] ?? ''));
-sort($runbookQas5);
-$everyQa5 = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
-sort($everyQa5);
-// [9.16] Sem os QAs criados depois do deploy 5 (lista na secao 5).
-$everyQa5 = array_values(array_diff($everyQa5, $qasAfterDeploy5, $qasAfterDeploy6));
-assert_same($everyQa5, $runbookQas5, 'deploy 5: o ensaio roda TODOS os QAs PHP do repositorio ate o deploy 5 (QA novo exige o roteiro)');
-assert_same($qasAfterDeploy4, array_values(array_intersect($qasAfterDeploy4, $runbookQas5)), 'deploy 5: os QAs criados depois do deploy 4 no ensaio');
-assert_same(true, strpos($commands5[$qaArchive5] ?? '', 'bash -o pipefail -c \'git archive "$D5" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands5[$qaLoop5] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text5, '--db') === 1, 'deploy 5: ensaio com pipefail, como www-data, e o --db so no qa-timezone');
-assert_same([$qaArchive5], array_keys(array_filter($commands5, static fn (string $line): bool => preg_match('/\b(chown|chmod)\b/', $line) === 1)), 'deploy 5: permissao so do diretorio do ensaio');
-// Ordem do dia.
-$space5 = $first5('for LIM in "/var/www/chronodesk:500"');
-$backup5 = $first5('B=/var/backups/chronodesk/deploy5-$(date +%Y%m%d-%H%M%S)');
-$maintOn5 = $first5('touch /var/www/chronodesk.maintenance');
-$appCopy5 = $first5('A=/var/backups/chronodesk/app-antes-deploy5; if test -e "$A"; then');
-$build5 = $first5('cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy5-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi');
-$bundle5 = $first5('cd /var/www/chronodesk/frontend && npm run -s qa:bundle');
-$reloads5 = $all5('systemctl reload "php$(php -r');
-$health5 = $first5("-w 'health: %{http_code}\\n'");
-$tz5 = $first5('runuser -u www-data -- php scripts/qa-timezone.php --db');
-$smoke5 = $first5('bash scripts/smoke-deploy1.sh "$S"');
-$maintOff5 = $first5('rm -- /var/www/chronodesk.maintenance');
-$polling5 = $all5('bash scripts/medir-polling.sh');
-$checkout5 = $first5('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy5-commit)"');
-$appBack5 = $first5('A=/var/backups/chronodesk/app-antes-deploy5; X=/var/backups/chronodesk/app-deploy5-retirado-');
-assert_same(true, $check5 < $qaArchive5 && $qaArchive5 < $qaLoop5 && $qaLoop5 < $qaSweep5 && $qaSweep5 < $checks5[0] && $checks5[0] + 1 === $evExtract5 && $evExtract5 < $ensaioA5 && $ensaioA5 < $ensaioB5 && $ensaioB5 < $evClean5 && $evClean5 < $space5 && $space5 + 1 === $backup5 && $backup5 < $maintOn5 && $maintOn5 < $appCopy5 && $appCopy5 < $apply5[0] && $checks5[1] < $merge5 && $merge5 < $build5 && $build5 + 1 === $bundle5 && ($reloads5[0] ?? -1) === $bundle5 + 1 && $bundle5 < $health5 && $health5 < $tz5 && $tz5 < $smoke5 && $smoke5 < $checks5[2] && $checks5[2] < $maintOff5 && $maintOff5 < min($polling5 ?: [-1]) && max($polling5 ?: [PHP_INT_MAX]) < $checkout5 && $checkout5 + 1 === $appBack5 && ($reloads5[1] ?? -1) === $appBack5 + 1 && $appBack5 < $rollback020, 'deploy 5: ensaio do codigo, Q-F9 e ensaio da 020, espaco e backup, manutencao e copia do app/, a 020 e a verificacao, merge, build e qa:bundle, recarga, health, fuso, fumaca, verificacao, reabertura, polling, rollback do codigo e da 020, nesta ordem');
-assert_same(true, strpos($commands5[$appBack5] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all5('npm '), static fn (int $i): bool => $i >= $checkout5)) === 0, 'deploy 5: rollback volta o app/ da copia, sem npm');
-assert_same([$qaSweep5, $evClean5, $maintOff5], array_keys(array_filter($commands5, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'deploy 5: so tres remocoes (o ensaio da 020 guardado por case, o ensaio do codigo pelo padrao do mktemp e o arquivo-sinal)');
-assert_same(3, count($polling5), 'deploy 5: tres medicoes do polling (status.php, dashboard.php e solicitacoes_pendentes.php)');
-assert_same(true, strpos($prose5, 'alguns minutos depois da reabertura, 2 rodadas por endpoint, valendo a melhor, sessao de gestao') !== false, 'deploy 5: polling alguns minutos depois da reabertura, 2 rodadas, sessao de gestao');
-$outside5 = array_values(array_filter($commands5, static fn (string $line): bool => strpos($line, 'curl') !== false));
-assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text5), count(array_filter($outside5, static fn (string $line): bool => strpos($line, $serverNameRead) !== false)) === count($outside5)], 'deploy 5: ServerName do chronodesk.conf em todo curl, sem marcador e sem https');
-// Prosa: a bateria da estacao com a contagem de scripts npm, ninguem muda de equipe, a copia das ausencias.
-// [9.16] O deploy 5 roda com o commit validado na estacao, que tinha 28 scripts
-// npm; os qa:* criados depois dele (qa:critical-roles) nao mudam a folha do deploy 5.
-$frontendCount5 = 28;
-assert_same(true, strpos($runbook5, "`frontend: {$frontendCount5} scripts npm rodados (...): {$frontendCount5} OK, 0 com falha`") !== false && strpos($runbook5, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy5 origin/feat/employee-form-rhf-zod;') !== false, 'deploy 5: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
-assert_same(true, strpos($prose5, '**Ninguem muda de equipe no deploy**') !== false && strpos($prose5, '`portal_absences` e **copiada**') !== false && strpos($prose5, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false && strpos($prose5, '(AD-F9-5)') !== false, 'deploy 5: ninguem muda de equipe, a copia das ausencias com a manutencao ligada e o aviso com marcadores');
-assert_same(true, strpos($prose5, '**PARE** com `ativos_equipe_desconhecida` maior que 0') !== false && strpos($prose5, 'os **dois** rollbacks param de proposito') !== false, 'deploy 5: a Q-F9 para com cadastro de equipe desconhecida; na variante (b), os dois rollbacks param');
-// [Marca] O icone novo: o Content-Type dos tres icones depois da reabertura (com
-// nosniff, tipo errado = icone quebrado) e a conferencia na aba e no topo.
-$icons5 = $first5('for F in favicon.svg favicon.ico apple-touch-icon.png; do');
-assert_same(true, $icons5 === $maintOff5 + 1 && $icons5 < min($polling5 ?: [-1]) && strpos($commands5[$icons5] ?? '', "curl -s -o /dev/null -w '%{http_code} %{content_type}\\n' -H \"Host: \$S\" \"http://127.0.0.1/app/\$F?v=2\"") !== false && strpos($prose5, '`favicon.svg: 200 image/svg+xml`') !== false && strpos($prose5, 'nada muda no Apache durante o deploy') !== false, 'deploy 5: o tipo dos icones logo depois da reabertura, so o Content-Type, sem mudar o Apache');
-assert_same(true, strpos($prose5, '**Icone novo do Portal SDK**') !== false && strpos($prose5, '**Icone:** o icone novo na aba e no topo, nos dois temas (Ctrl+F5).') !== false, 'deploy 5: o icone no que vai e na conferencia de tela');
-foreach (['**Visao operacional:**', '**Funcionarios:**', '**Pausas:**', 'sem a opcao "Almoço"'] as $screen) {
-    assert_same(true, strpos($prose5, $screen) !== false, "deploy 5: conferencia na tela com {$screen}");
+// As folhas dos deploys 5 a 7 so apontam para a do deploy 4: nenhum comando.
+foreach ([5, 6, 7] as $n) {
+    $oldSheet = $readOptional($root . "/docs/DEPLOY{$n}_FOLHA_DO_DIA.md");
+    assert_same([0, true], [preg_match('/```/', $oldSheet), strpos($oldSheet, '`docs/DEPLOY4_FOLHA_DO_DIA.md`') !== false && strpos($oldSheet, '**Nao execute nada a partir desta folha.**') !== false], "folha do deploy {$n}: substituida, so aponta para a do deploy 4, sem comando");
 }
-// Folha do deploy 5: os mesmos comandos, na mesma ordem, numerados, sem valor real.
-$sheet5 = $readOptional($root . '/docs/DEPLOY5_FOLHA_DO_DIA.md');
-[$runbook4All] = $fencedCommands($runbook5);
-[$sheet4All, $sheet4Blocks] = $fencedCommands($sheet5);
-assert_same([true, $runbook4All], [$sheet5 !== '' && count($runbook4All) === count($commands5), $sheet4All], 'folha do deploy 5: os mesmos comandos do roteiro, na mesma ordem');
-assert_same(count($sheet4All), $sheet4Blocks, 'folha do deploy 5: um comando por bloco');
-$sheet4Lines = explode("\n", $sheet5);
-$unmarked5 = [];
-foreach ($sheet4Lines as $i => $line) {
-    if (preg_match('/^```bash$/', $line) !== 1) {
-        continue;
-    }
-    $previous = '';
-    for ($j = $i - 1; $j >= 0 && $previous === ''; $j--) {
-        $previous = trim($sheet4Lines[$j]);
-    }
-    if (preg_match('/^- \[ \] \*\*\d+\.\*\* .*Esperado: .+ \*\*PARE se:\*\* .+/', $previous) !== 1) {
-        $unmarked5[] = $i + 1;
-    }
-}
-preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* \(/m', $sheet5, $sheet4Numbers);
-assert_same([[], range(1, count($sheet4All))], [$unmarked5, array_map('intval', $sheet4Numbers[1])], 'folha do deploy 5: cada comando com caixa, numero de 1 em diante, Esperado e PARE se');
-assert_same(true, strpos($sheet5, "`frontend: {$frontendCount5} scripts npm rodados (...): {$frontendCount5} OK, 0 com falha`") !== false, 'folha do deploy 5: a contagem atual de scripts npm no item 0');
-$sheet4NoLoopback = str_replace('127.0.0.1', '', $sheet5);
-assert_same([0, 0, 0, 0, 0], [
-    preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheet4NoLoopback),
-    preg_match('/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\./', $sheet5),
-    preg_match('/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(local|lan|corp|intra|internal|com|br|net|org)\b/i', $sheet5),
-    preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet5),
-    preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet5)),
-], 'folha do deploy 5: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
-
-// ----------------------------------------------------------------------------
-// 18. [9.16] Deploy 6 (rodizio de papeis do Critico): migration 024 e o codigo do
-// rodizio. O ensaio do codigo roda TODOS os QAs PHP do repositorio (sem lista
-// de excecao); a 024 e a unica migration posterior ao deploy 5 e e aplicada
-// aqui, do commit gravado, antes do merge, depois da Q-PC e do ensaio na copia.
-// O commit do deploy 5 ainda nao existe: o roteiro usa o marcador
-// <commit do deploy 5>, trocado pelo hash do registro no dia.
-// ----------------------------------------------------------------------------
-$heading6 = '### Deploy 6 (rodizio';
-$start6 = strpos($deployDoc, $heading6);
-$ends6 = $start6 === false ? [] : array_filter([strpos($deployDoc, "\n### ", $start6 + 1), strpos($deployDoc, "\n## ", $start6)], static fn ($pos): bool => $pos !== false);
-$runbook6 = $start6 === false ? '' : substr($deployDoc, $start6, ($ends6 === [] ? strlen($deployDoc) : min($ends6)) - $start6);
-$prose6 = (string)preg_replace('/\s+/', ' ', $runbook6);
-preg_match_all('/```(bash|powershell)\n(.*?)```/s', $runbook6, $blocks6);
-$commands6 = array_values(array_filter(explode("\n", implode("\n", $blocks6[2])), static fn (string $line): bool => trim($line) !== ''));
-$text6 = implode("\n", $commands6);
-$first6 = static function (string $needle) use ($commands6): int {
-    foreach ($commands6 as $i => $line) {
-        if (strpos($line, $needle) !== false) {
-            return $i;
-        }
-    }
-    return -1;
-};
-$all6 = static fn (string $needle): array => array_keys(array_filter($commands6, static fn (string $line): bool => strpos($line, $needle) !== false));
-assert_same([true, [], []], [$runbook6 !== '' && count($commands6) >= 30 && $blocks6[1] === array_fill(0, count($blocks6[1]), 'bash'), array_values(array_filter($commands6, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), array_values(array_filter($commands6, static fn (string $line): bool => preg_match('/\bsudo\b/', $line) === 1))], 'deploy 6: secao com os comandos Linux, um por linha, nenhum com sudo');
-assert_same($envCheck, $commands6[0] ?? '', 'deploy 6: o 1o comando e a conferencia do ambiente, igual a dos deploys 1 a 3');
-$prod6 = $first6('if [ "$H" = "<commit do deploy 5>" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy6-commit');
-$record6 = $first6('| tee /var/backups/chronodesk/deploy6-commit');
-$check6 = $first6('git merge-base --is-ancestor HEAD "$D6"');
-$fetch6 = array_keys(array_filter($commands6, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
-assert_same(true, $prod6 === 1 && strpos($commands6[1], 'echo "PARE: HEAD de producao') !== false && strpos($commands6[1], 'echo "alteracoes locais: $(git status --porcelain | wc -l)"') !== false && strpos($prose6, '**Pre-requisito: o deploy 5 executado com o `<commit do deploy 5>`**') !== false, 'deploy 6: producao no commit do deploy 5 (marcador trocado no dia), gravado como ponto de volta');
-assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin feat\/employee-form-rhf-zod && K=\$\(git rev-parse origin\/feat\/employee-form-rhf-zod\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy6-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands6[$record6] ?? ''), 'deploy 6: fetch so do branch e grava so o commit validado na estacao');
-assert_same([[$record6], 0], [$fetch6, preg_match('/\bgit pull\b|(^|\s)(--force|-f)(\s|$)/m', $text6)], 'deploy 6: um fetch so, sem pull, sem --force');
-assert_same(true, $check6 === $record6 + 1 && strpos($commands6[$check6], 'git cat-file -e "$D6:migrations/20261117_024_critical_roles.sql" && ') !== false && strpos($commands6[$check6], 'echo "migrations alteradas: $(git diff --name-only HEAD "$D6" -- migrations | sort | tr \'\n\' \' \')"') !== false && strpos($commands6[$check6], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D6" -- frontend/package-lock.json | wc -l)"') !== false, 'deploy 6: cat-file da 021, fast-forward, a lista das migrations e o lockfile conferidos logo depois de gravar');
-// A migration: so a 024, do commit gravado, uma vez, antes do merge; a lista
-// das posteriores ao deploy 5 (secao 5) e exatamente o que este roteiro aplica.
-$apply6 = array_values(array_filter($all6('| docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas'), static fn (int $i): bool => strpos($commands6[$i], 'migrations/2026') !== false));
-preg_match_all('/git show "\$D6:migrations\/(2026\d{4}_\d{3}_[a-z_]+\.sql)"/', implode("\n", array_map(static fn (int $i): string => $commands6[$i], $apply6)), $applied6);
-assert_same([$migrationsAfterDeploy5, 1], [$applied6[1], count($apply6)], 'deploy 6: aplica exatamente as migrations posteriores ao deploy 5 (a 024), uma vez');
-assert_same(true, strpos($commands6[$apply6[0]] ?? '', 'git cat-file -e "$D6:migrations/20261117_024_critical_roles.sql" && bash -o pipefail -c \'git show "$D6:migrations/20261117_024_critical_roles.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas\' && echo "024 aplicada" || echo "PARE: ') !== false && strpos($commands6[$apply6[0]], "read -rsp 'Senha root do MySQL: ' P;") !== false && preg_match('/unset P D6$/', rtrim($commands6[$apply6[0]])) === 1, 'deploy 6: a 024 do commit gravado, com cat-file e pipefail, senha sem eco e apagada');
-$checks6 = $all6('git show "$D6:migrations/verificacao/20261117_024_critical_roles_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas');
-$merge6 = $first6('git merge --ff-only "$D6"');
-$rollback024 = $first6('migrations/rollback/20261117_024_critical_roles_down.sql" | docker exec');
-// [9.16] A Q-PC e a mesma verificacao, rodada antes de tudo no banco real (so leitura).
-assert_same(true, count($checks6) === 4 && $checks6[1] === $apply6[0] + 1 && $checks6[2] > $merge6 && $commands6[$checks6[0]] === $commands6[$checks6[1]] && $commands6[$checks6[1]] === $commands6[$checks6[2]] && $checks6[3] === $rollback024 + 1, 'deploy 6: a Q-PC (a verificacao antes da 024), a verificacao logo depois dela, de novo depois do merge (o mesmo comando) e depois do rollback');
-assert_same(true, $apply6[0] < $merge6 && strpos($commands6[$merge6] ?? '', '[ "$(git rev-parse HEAD)" = "$D6" ] && echo "HEAD = deploy6-commit" || echo "PARE: ') !== false && count(array_filter($all6('git merge'), static fn (int $i): bool => strpos($commands6[$i], 'merge-base') === false)) === 1, 'deploy 6: a 024 antes do merge (o codigo novo le as tabelas novas) e um merge so, com o HEAD conferido');
-assert_same(true, strpos($commands6[$rollback024] ?? '', '[ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy6-commit)" ] && ') !== false && strpos($prose6, '**13. Rollback da 024 (so depois do passo 12, e so com aprovacao') !== false, 'deploy 6: rollback da 024 so com o codigo do deploy 5 no ar e so com aprovacao');
-assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|GRANT)\b/', implode("\n", array_filter($commands6, static fn (string $line): bool => strpos($line, 'mysql') !== false && strpos($line, 'mysqldump') === false))), 'deploy 6: nenhum comando de escrita digitado no MySQL (so os arquivos do commit)');
-// Ensaio da 024 na copia (as duas variantes, com o script e as migrations do commit gravado), antes do backup.
-$evExtract6 = $first6('EV=$(mktemp -d /root/ensaio-deploy6.XXXXXX)');
-$ensaioA6 = $first6('bash "$EV/scripts/ensaio-migration.sh" d6_024 ');
-$ensaioB6 = $first6('bash "$EV/scripts/ensaio-migration.sh" d6_024_rollback ');
-$evClean6 = $first6('case "$EV" in /root/ensaio-deploy6.*) rm -r "$EV"');
-assert_same(true, strpos($commands6[$evExtract6] ?? '', 'bash -o pipefail -c \'git archive "$D6" migrations scripts/ensaio-migration.sh | tar -x -C "$EV"\'') !== false && strpos($commands6[$ensaioA6] ?? '', 'env DADOS=portal_schedule_rules,portal_schedule_exceptions VERIFICA="$EV/migrations/verificacao/20261117_024_critical_roles_check.sql"') === 0 && strpos($commands6[$ensaioB6] ?? '', 'env PREPARO="$EV/migrations/20261117_024_critical_roles.sql"') === 0 && strpos($commands6[$ensaioB6], '"$EV/migrations/rollback/20261117_024_ensaio_linhas_pc.sql"') !== false, 'deploy 6: ensaio da 024 nas duas variantes, com o script e as migrations extraidos do commit gravado');
-assert_same(0, preg_match('/(^|[\s;])bash scripts\/ensaio-migration\.sh/m', $text6), 'deploy 6: ensaio so com o script do commit gravado');
-// Ensaio do codigo com TODOS os QAs PHP do repositorio.
-$qaLoop6 = $first6('[ ! -e /tmp/.env ] && for q in ');
-$qaArchive6 = $first6('Q=$(mktemp -d /tmp/ensaio-deploy6-qa.XXXXXX)');
-$qaSweep6 = $first6('for Q in /tmp/ensaio-deploy6-qa.??????; do');
-preg_match('/for q in ([a-z0-9 -]+); do/', $commands6[$qaLoop6] ?? '', $qaList6);
-$runbookQas6 = explode(' ', trim($qaList6[1] ?? ''));
-sort($runbookQas6);
-$everyQa6 = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
-sort($everyQa6);
-// [9.17] Sem os QAs criados depois do deploy 6 (lista na secao 5).
-$everyQa6 = array_values(array_diff($everyQa6, $qasAfterDeploy6));
-assert_same($everyQa6, $runbookQas6, 'deploy 6: o ensaio roda TODOS os QAs PHP do repositorio ate o deploy 6 (QA novo exige o roteiro)');
-assert_same($qasAfterDeploy5, array_values(array_intersect($qasAfterDeploy5, $runbookQas6)), 'deploy 6: os QAs criados depois do deploy 5 no ensaio');
-assert_same(true, strpos($commands6[$qaArchive6] ?? '', 'bash -o pipefail -c \'git archive "$D6" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands6[$qaLoop6] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text6, '--db') === 1, 'deploy 6: ensaio com pipefail, como www-data, e o --db so no qa-timezone');
-assert_same([$qaArchive6], array_keys(array_filter($commands6, static fn (string $line): bool => preg_match('/\b(chown|chmod)\b/', $line) === 1)), 'deploy 6: permissao so do diretorio do ensaio');
-// Ordem do dia.
-$space6 = $first6('for LIM in "/var/www/chronodesk:500"');
-$backup6 = $first6('B=/var/backups/chronodesk/deploy6-$(date +%Y%m%d-%H%M%S)');
-$maintOn6 = $first6('touch /var/www/chronodesk.maintenance');
-$appCopy6 = $first6('A=/var/backups/chronodesk/app-antes-deploy6; if test -e "$A"; then');
-$build6 = $first6('cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy6-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi');
-$bundle6 = $first6('cd /var/www/chronodesk/frontend && npm run -s qa:bundle');
-$reloads6 = $all6('systemctl reload "php$(php -r');
-$health6 = $first6("-w 'health: %{http_code}\\n'");
-$tz6 = $first6('runuser -u www-data -- php scripts/qa-timezone.php --db');
-$smoke6 = $first6('bash scripts/smoke-deploy1.sh "$S"');
-$maintOff6 = $first6('rm -- /var/www/chronodesk.maintenance');
-$polling6 = $all6('bash scripts/medir-polling.sh');
-$checkout6 = $first6('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy6-commit)"');
-$appBack6 = $first6('A=/var/backups/chronodesk/app-antes-deploy6; X=/var/backups/chronodesk/app-deploy6-retirado-');
-assert_same(true, $check6 < $qaArchive6 && $qaArchive6 < $qaLoop6 && $qaLoop6 < $qaSweep6 && $qaSweep6 < $checks6[0] && $checks6[0] + 1 === $evExtract6 && $evExtract6 < $ensaioA6 && $ensaioA6 < $ensaioB6 && $ensaioB6 < $evClean6 && $evClean6 < $space6 && $space6 + 1 === $backup6 && $backup6 < $maintOn6 && $maintOn6 < $appCopy6 && $appCopy6 < $apply6[0] && $checks6[1] < $merge6 && $merge6 < $build6 && $build6 + 1 === $bundle6 && ($reloads6[0] ?? -1) === $bundle6 + 1 && $bundle6 < $health6 && $health6 < $tz6 && $tz6 < $smoke6 && $smoke6 < $checks6[2] && $checks6[2] < $maintOff6 && $maintOff6 < min($polling6 ?: [-1]) && max($polling6 ?: [PHP_INT_MAX]) < $checkout6 && $checkout6 + 1 === $appBack6 && ($reloads6[1] ?? -1) === $appBack6 + 1 && $appBack6 < $rollback024, 'deploy 6: ensaio do codigo, Q-PC e ensaio da 024, espaco e backup, manutencao e copia do app/, a 024 e a verificacao, merge, build e qa:bundle, recarga, health, fuso, fumaca, verificacao, reabertura, polling, rollback do codigo e da 024, nesta ordem');
-assert_same(true, strpos($commands6[$appBack6] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all6('npm '), static fn (int $i): bool => $i >= $checkout6)) === 0, 'deploy 6: rollback volta o app/ da copia, sem npm');
-assert_same([$qaSweep6, $evClean6, $maintOff6], array_keys(array_filter($commands6, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'deploy 6: so tres remocoes (o ensaio da 024 guardado por case, o ensaio do codigo pelo padrao do mktemp e o arquivo-sinal)');
-assert_same(3, count($polling6), 'deploy 6: tres medicoes do polling (status.php, dashboard.php e solicitacoes_pendentes.php)');
-assert_same(true, strpos($prose6, 'alguns minutos depois da reabertura, 2 rodadas por endpoint, valendo a melhor, sessao de gestao') !== false, 'deploy 6: polling alguns minutos depois da reabertura, 2 rodadas, sessao de gestao');
-$outside6 = array_values(array_filter($commands6, static fn (string $line): bool => strpos($line, 'curl') !== false));
-assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text6), count(array_filter($outside6, static fn (string $line): bool => strpos($line, $serverNameRead) !== false)) === count($outside6)], 'deploy 6: ServerName do chronodesk.conf em todo curl, sem marcador e sem https');
-// Prosa: a bateria da estacao com a contagem atual de scripts npm; sem papel, nada muda.
-// [9.17] O deploy 6 roda com o commit do 9.16 (29 scripts npm); o qa:chg vem
-// depois, no deploy 7.
-$frontendCount6 = 29;
-assert_same(true, strpos($runbook6, "`frontend: {$frontendCount6} scripts npm rodados (...): {$frontendCount6} OK, 0 com falha`") !== false && strpos($runbook6, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy6 origin/feat/employee-form-rhf-zod;') !== false, 'deploy 6: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
-assert_same(true, strpos($prose6, '**Sem papel e sem rodizio, nada muda**') !== false && strpos($prose6, 'nenhuma tabela existente e alterada') !== false && strpos($prose6, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false, 'deploy 6: sem papel nada muda, a 024 so cria tabelas e o aviso com marcadores');
-assert_same(true, strpos($prose6, '(`trocas_sobrepostas`, `trocas_fora_do_critico`,') !== false && strpos($prose6, 'o 1o rollback `OK` (`copias_de_rollback_024 = 3`) e o 2o para de proposito') !== false, 'deploy 6: as contagens de problema em 0 na variante (b), e o 2o rollback para');
-foreach (['**Escala:**', '**Visao operacional:**', '**Pausas:**', 'sem o alerta "Papel vago no Critico hoje"'] as $screen) {
-    assert_same(true, strpos($prose6, $screen) !== false, "deploy 6: conferencia na tela com {$screen}");
-}
-// Folha do deploy 6: os mesmos comandos, na mesma ordem, numerados, sem valor real.
-$sheet6 = $readOptional($root . '/docs/DEPLOY6_FOLHA_DO_DIA.md');
-[$runbook4All] = $fencedCommands($runbook6);
-[$sheet4All, $sheet4Blocks] = $fencedCommands($sheet6);
-assert_same([true, $runbook4All], [$sheet6 !== '' && count($runbook4All) === count($commands6), $sheet4All], 'folha do deploy 6: os mesmos comandos do roteiro, na mesma ordem');
-assert_same(count($sheet4All), $sheet4Blocks, 'folha do deploy 6: um comando por bloco');
-$sheet4Lines = explode("\n", $sheet6);
-$unmarked6 = [];
-foreach ($sheet4Lines as $i => $line) {
-    if (preg_match('/^```bash$/', $line) !== 1) {
-        continue;
-    }
-    $previous = '';
-    for ($j = $i - 1; $j >= 0 && $previous === ''; $j--) {
-        $previous = trim($sheet4Lines[$j]);
-    }
-    if (preg_match('/^- \[ \] \*\*\d+\.\*\* .*Esperado: .+ \*\*PARE se:\*\* .+/', $previous) !== 1) {
-        $unmarked6[] = $i + 1;
-    }
-}
-preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* \(/m', $sheet6, $sheet4Numbers);
-assert_same([[], range(1, count($sheet4All))], [$unmarked6, array_map('intval', $sheet4Numbers[1])], 'folha do deploy 6: cada comando com caixa, numero de 1 em diante, Esperado e PARE se');
-assert_same(true, strpos($sheet6, "`frontend: {$frontendCount6} scripts npm rodados (...): {$frontendCount6} OK, 0 com falha`") !== false, 'folha do deploy 6: a contagem atual de scripts npm no item 0');
-$sheet4NoLoopback = str_replace('127.0.0.1', '', $sheet6);
-assert_same([0, 0, 0, 0, 0], [
-    preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheet4NoLoopback),
-    preg_match('/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\./', $sheet6),
-    preg_match('/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(local|lan|corp|intra|internal|com|br|net|org)\b/i', $sheet6),
-    preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet6),
-    preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet6)),
-], 'folha do deploy 6: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
-
-// ----------------------------------------------------------------------------
-// 19. [9.17] Deploy 7 (Controle de CHG e grupo Tools): migration 025 e o codigo
-// do modulo. O mesmo desenho do deploy 6 (ensaio do codigo com TODOS os QAs
-// PHP, Q-CHG, ensaio da 025 nas duas variantes, a 025 antes do merge) e mais o
-// interruptor CHG_MODULE_ENABLED: o modulo entra desligado e so e ligado
-// depois das conferencias, ainda em manutencao, com copia do .env antes.
-// ----------------------------------------------------------------------------
-$heading7 = '### Deploy 7 (Controle de CHG';
-$start7 = strpos($deployDoc, $heading7);
-$ends7 = $start7 === false ? [] : array_filter([strpos($deployDoc, "\n### ", $start7 + 1), strpos($deployDoc, "\n## ", $start7)], static fn ($pos): bool => $pos !== false);
-$runbook7 = $start7 === false ? '' : substr($deployDoc, $start7, ($ends7 === [] ? strlen($deployDoc) : min($ends7)) - $start7);
-$prose7 = (string)preg_replace('/\s+/', ' ', $runbook7);
-preg_match_all('/```(bash|powershell)\n(.*?)```/s', $runbook7, $blocks7);
-$commands7 = array_values(array_filter(explode("\n", implode("\n", $blocks7[2])), static fn (string $line): bool => trim($line) !== ''));
-$text7 = implode("\n", $commands7);
-$first7 = static function (string $needle) use ($commands7): int {
-    foreach ($commands7 as $i => $line) {
-        if (strpos($line, $needle) !== false) {
-            return $i;
-        }
-    }
-    return -1;
-};
-$all7 = static fn (string $needle): array => array_keys(array_filter($commands7, static fn (string $line): bool => strpos($line, $needle) !== false));
-assert_same([true, [], []], [$runbook7 !== '' && count($commands7) >= 40 && $blocks7[1] === array_fill(0, count($blocks7[1]), 'bash'), array_values(array_filter($commands7, static fn (string $line): bool => substr(rtrim($line), -1) === '\\')), array_values(array_filter($commands7, static fn (string $line): bool => preg_match('/\bsudo\b/', $line) === 1))], 'deploy 7: secao com os comandos Linux, um por linha, nenhum com sudo');
-assert_same($envCheck, $commands7[0] ?? '', 'deploy 7: o 1o comando e a conferencia do ambiente, igual a dos deploys 1 a 3');
-$prod7 = $first7('if [ "$H" = "<commit do deploy 6>" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy7-commit');
-$record7 = $first7('| tee /var/backups/chronodesk/deploy7-commit');
-$check7 = $first7('git merge-base --is-ancestor HEAD "$D7"');
-$fetch7 = array_keys(array_filter($commands7, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
-assert_same(true, $prod7 === 1 && strpos($commands7[1], 'echo "PARE: HEAD de producao') !== false && strpos($commands7[1], 'echo "alteracoes locais: $(git status --porcelain | wc -l)"') !== false && strpos($prose7, '**Pre-requisito: o deploy 6 executado com o `<commit do deploy 6>`**') !== false, 'deploy 7: producao no commit do deploy 6 (marcador trocado no dia), gravado como ponto de volta');
-assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin feat\/employee-form-rhf-zod && K=\$\(git rev-parse origin\/feat\/employee-form-rhf-zod\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy7-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands7[$record7] ?? ''), 'deploy 7: fetch so do branch e grava so o commit validado na estacao');
-assert_same([[$record7], 0], [$fetch7, preg_match('/\bgit pull\b|(^|\s)(--force|-f)(\s|$)/m', $text7)], 'deploy 7: um fetch so, sem pull, sem --force');
-assert_same(true, $check7 === $record7 + 1 && strpos($commands7[$check7], 'git cat-file -e "$D7:migrations/20261117_025_chg.sql" && ') !== false && strpos($commands7[$check7], 'echo "migrations alteradas: $(git diff --name-only HEAD "$D7" -- migrations | sort | tr \'\n\' \' \')"') !== false && strpos($commands7[$check7], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D7" -- frontend/package-lock.json | wc -l)"') !== false, 'deploy 7: cat-file da 025, fast-forward, a lista das migrations e o lockfile conferidos logo depois de gravar');
-// A migration: so a 025, do commit gravado, uma vez, antes do merge.
-$apply7 = array_values(array_filter($all7('| docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas'), static fn (int $i): bool => strpos($commands7[$i], 'migrations/2026') !== false));
-preg_match_all('/git show "\$D7:migrations\/(2026\d{4}_\d{3}_[a-z_]+\.sql)"/', implode("\n", array_map(static fn (int $i): string => $commands7[$i], $apply7)), $applied7);
-assert_same([$migrationsAfterDeploy6, 1], [$applied7[1], count($apply7)], 'deploy 7: aplica exatamente as migrations posteriores ao deploy 6 (a 025), uma vez');
-assert_same(true, strpos($commands7[$apply7[0]] ?? '', 'git cat-file -e "$D7:migrations/20261117_025_chg.sql" && bash -o pipefail -c \'git show "$D7:migrations/20261117_025_chg.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas\' && echo "025 aplicada" || echo "PARE: ') !== false && strpos($commands7[$apply7[0]], "read -rsp 'Senha root do MySQL: ' P;") !== false && preg_match('/unset P D7$/', rtrim($commands7[$apply7[0]])) === 1, 'deploy 7: a 025 do commit gravado, com cat-file e pipefail, senha sem eco e apagada');
-$checks7 = $all7('git show "$D7:migrations/verificacao/20261117_025_chg_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas');
-$merge7 = $first7('git merge --ff-only "$D7"');
-$rollback025 = $first7('migrations/rollback/20261117_025_chg_down.sql" | docker exec');
-assert_same(true, count($checks7) === 4 && $checks7[1] === $apply7[0] + 1 && $checks7[2] > $merge7 && $commands7[$checks7[0]] === $commands7[$checks7[1]] && $commands7[$checks7[1]] === $commands7[$checks7[2]] && $checks7[3] === $rollback025 + 1, 'deploy 7: a Q-CHG (a verificacao antes da 025), a verificacao logo depois dela, de novo depois do merge (o mesmo comando) e depois do rollback');
-assert_same(true, $apply7[0] < $merge7 && strpos($commands7[$merge7] ?? '', '[ "$(git rev-parse HEAD)" = "$D7" ] && echo "HEAD = deploy7-commit" || echo "PARE: ') !== false && count(array_filter($all7('git merge'), static fn (int $i): bool => strpos($commands7[$i], 'merge-base') === false)) === 1, 'deploy 7: a 025 antes do merge e um merge so, com o HEAD conferido');
-assert_same(true, strpos($commands7[$rollback025] ?? '', '[ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy7-commit)" ] && ') !== false && strpos($prose7, '**16. Rollback da 025 (so depois do passo 15, e so com aprovacao') !== false, 'deploy 7: rollback da 025 so com o codigo do deploy 6 no ar e so com aprovacao');
-assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|GRANT)\b/', implode("\n", array_filter($commands7, static fn (string $line): bool => strpos($line, 'mysql') !== false && strpos($line, 'mysqldump') === false))), 'deploy 7: nenhum comando de escrita digitado no MySQL (so os arquivos do commit)');
-// Ensaio da 025 na copia (as duas variantes; funcionarios sempre copiada com os dados, sem DADOS).
-$evExtract7 = $first7('EV=$(mktemp -d /root/ensaio-deploy7.XXXXXX)');
-$ensaioA7 = $first7('bash "$EV/scripts/ensaio-migration.sh" d7_025 ');
-$ensaioB7 = $first7('bash "$EV/scripts/ensaio-migration.sh" d7_025_rollback ');
-$evClean7 = $first7('case "$EV" in /root/ensaio-deploy7.*) rm -r "$EV"');
-assert_same(true, strpos($commands7[$evExtract7] ?? '', 'bash -o pipefail -c \'git archive "$D7" migrations scripts/ensaio-migration.sh | tar -x -C "$EV"\'') !== false && strpos($commands7[$ensaioA7] ?? '', 'env VERIFICA="$EV/migrations/verificacao/20261117_025_chg_check.sql" bash') === 0 && strpos($commands7[$ensaioA7], '"$EV/migrations/20261117_025_chg.sql" "$EV/migrations/rollback/20261117_025_chg_down.sql"') !== false && strpos($commands7[$ensaioB7] ?? '', 'env PREPARO="$EV/migrations/20261117_025_chg.sql" VERIFICA=') === 0 && strpos($commands7[$ensaioB7], '"$EV/migrations/rollback/20261117_025_ensaio_linhas_chg.sql" "$EV/migrations/rollback/20261117_025_chg_down.sql"') !== false, 'deploy 7: ensaio da 025 nas duas variantes, com o script e as migrations extraidos do commit gravado');
-assert_same(0, preg_match('/(^|[\s;])bash scripts\/ensaio-migration\.sh/m', $text7), 'deploy 7: ensaio so com o script do commit gravado');
-// Ensaio do codigo com TODOS os QAs PHP do repositorio (agora com o qa-chg).
-$qaLoop7 = $first7('[ ! -e /tmp/.env ] && for q in ');
-$qaArchive7 = $first7('Q=$(mktemp -d /tmp/ensaio-deploy7-qa.XXXXXX)');
-$qaSweep7 = $first7('for Q in /tmp/ensaio-deploy7-qa.??????; do');
-preg_match('/for q in ([a-z0-9 -]+); do/', $commands7[$qaLoop7] ?? '', $qaList7);
-$runbookQas7 = explode(' ', trim($qaList7[1] ?? ''));
-sort($runbookQas7);
-$everyQa7 = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
-sort($everyQa7);
-assert_same($everyQa7, $runbookQas7, 'deploy 7: o ensaio roda TODOS os QAs PHP do repositorio (QA novo exige o roteiro)');
-assert_same($qasAfterDeploy6, array_values(array_intersect($qasAfterDeploy6, $runbookQas7)), 'deploy 7: os QAs criados depois do deploy 6 no ensaio');
-assert_same(true, strpos($commands7[$qaArchive7] ?? '', 'bash -o pipefail -c \'git archive "$D7" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands7[$qaLoop7] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text7, '--db') === 1, 'deploy 7: ensaio com pipefail, como www-data, e o --db so no qa-timezone');
-assert_same([$qaArchive7], array_keys(array_filter($commands7, static fn (string $line): bool => preg_match('/\b(chown|chmod)\b/', $line) === 1)), 'deploy 7: permissao so do diretorio do ensaio');
-// O interruptor: o pool sem a variavel, 404 desligado, copia do .env com 600 antes de mudar, recarga, 401 ligado.
-$poolGrep7 = $first7("grep -rn 'CHG_MODULE_ENABLED' /etc/php/*/fpm/");
-$off404 = $first7("controle de CHG (desligado, sem sessao): %{http_code}");
-$flagOn7 = $first7("echo 'CHG_MODULE_ENABLED=true' >> /var/www/.env");
-$on401 = $first7("controle de CHG (ligado, sem sessao): %{http_code}");
-$flagOff7 = $first7("sed -i 's/^CHG_MODULE_ENABLED=.*/CHG_MODULE_ENABLED=false/' /var/www/.env");
-$envEdits7 = array_keys(array_filter($commands7, static fn (string $line): bool => strpos($line, '/var/www/.env') !== false && preg_match('/sed -i|>> \/var\/www\/\.env/', $line) === 1));
-assert_same([$flagOn7, $flagOff7], $envEdits7, 'deploy 7: o .env so muda nos comandos de ligar e de desligar o modulo');
-foreach ([$flagOn7, $flagOff7] as $edit) {
-    assert_same(1, preg_match('/^K=\/var\/backups\/chronodesk\/env-antes-[a-z0-9-]+-\$\(date \+%Y%m%d-%H%M%S\); if install -m 600 \/var\/www\/\.env "\$K"; then .* else echo "PARE: copia do \.env falhou, nada alterado"; fi; unset K$/', $commands7[$edit] ?? ''), 'deploy 7: o .env so muda depois da copia com modo 600');
-}
-$reloads7 = $all7('systemctl reload "php$(php -r');
-// Ordem do dia.
-$space7 = $first7('for LIM in "/var/www/chronodesk:500"');
-$backup7 = $first7('B=/var/backups/chronodesk/deploy7-$(date +%Y%m%d-%H%M%S)');
-$maintOn7 = $first7('touch /var/www/chronodesk.maintenance');
-$appCopy7 = $first7('A=/var/backups/chronodesk/app-antes-deploy7; if test -e "$A"; then');
-$build7 = $first7('cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy7-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi');
-$bundle7 = $first7('cd /var/www/chronodesk/frontend && npm run -s qa:bundle');
-$health7 = $first7("-w 'health: %{http_code}\\n'");
-$tz7 = $first7('runuser -u www-data -- php scripts/qa-timezone.php --db');
-$smoke7 = $first7('bash scripts/smoke-deploy1.sh "$S"');
-$maintOff7 = $first7('rm -- /var/www/chronodesk.maintenance');
-$polling7 = $all7('bash scripts/medir-polling.sh');
-$checkout7 = $first7('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy7-commit)"');
-$appBack7 = $first7('A=/var/backups/chronodesk/app-antes-deploy7; X=/var/backups/chronodesk/app-deploy7-retirado-');
-assert_same(true, $check7 < $qaArchive7 && $qaArchive7 < $qaLoop7 && $qaLoop7 < $qaSweep7 && $qaSweep7 < $checks7[0] && $checks7[0] + 1 === $evExtract7 && $evExtract7 < $ensaioA7 && $ensaioA7 < $ensaioB7 && $ensaioB7 < $evClean7 && $evClean7 < $space7 && $space7 + 1 === $backup7 && $backup7 < $maintOn7 && $maintOn7 < $appCopy7 && $appCopy7 < $apply7[0] && $checks7[1] < $merge7 && $merge7 < $build7 && $build7 + 1 === $bundle7 && ($reloads7[0] ?? -1) === $bundle7 + 1 && $bundle7 < $health7 && $health7 < $tz7 && $tz7 < $smoke7 && $smoke7 < $checks7[2] && $checks7[2] < $poolGrep7 && $poolGrep7 + 1 === $off404 && $off404 + 1 === $flagOn7 && ($reloads7[1] ?? -1) === $flagOn7 + 1 && $on401 === $flagOn7 + 2 && $on401 < $maintOff7 && $maintOff7 < min($polling7 ?: [-1]) && max($polling7 ?: [PHP_INT_MAX]) < $flagOff7 && ($reloads7[2] ?? -1) === $flagOff7 + 1 && $flagOff7 < $checkout7 && $checkout7 + 1 === $appBack7 && ($reloads7[3] ?? -1) === $appBack7 + 1 && $appBack7 < $rollback025 && count($reloads7) === 4, 'deploy 7: ensaio do codigo, Q-CHG e ensaio da 025, espaco e backup, manutencao e copia do app/, a 025 e a verificacao, merge, build e qa:bundle, recarga, health, fuso, fumaca, verificacao, o modulo ligado (pool, 404, .env, recarga, 401), reabertura, polling, desligamento rapido, rollback do codigo e da 025, nesta ordem');
-assert_same(true, strpos($commands7[$appBack7] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all7('npm '), static fn (int $i): bool => $i >= $checkout7)) === 0, 'deploy 7: rollback volta o app/ da copia, sem npm');
-assert_same([$qaSweep7, $evClean7, $maintOff7], array_keys(array_filter($commands7, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'deploy 7: so tres remocoes (o ensaio da 025 guardado por case, o ensaio do codigo pelo padrao do mktemp e o arquivo-sinal)');
-assert_same(3, count($polling7), 'deploy 7: tres medicoes do polling (status.php, dashboard.php e solicitacoes_pendentes.php)');
-assert_same(true, strpos($prose7, 'alguns minutos depois da reabertura, 2 rodadas por endpoint, valendo a melhor, sessao de gestao') !== false, 'deploy 7: polling alguns minutos depois da reabertura, 2 rodadas, sessao de gestao');
-$outside7 = array_values(array_filter($commands7, static fn (string $line): bool => strpos($line, 'curl') !== false));
-assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $text7), count(array_filter($outside7, static fn (string $line): bool => strpos($line, $serverNameRead) !== false)) === count($outside7)], 'deploy 7: ServerName do chronodesk.conf em todo curl, sem marcador e sem https');
-// Prosa: a bateria da estacao com a contagem atual de scripts npm (3 + os qa:*).
-$package7 = json_decode((string)file_get_contents($root . '/frontend/package.json'), true);
-$frontendCount7 = 3 + count(array_filter(array_keys((array)($package7['scripts'] ?? [])), static fn (string $name): bool => strpos($name, 'qa:') === 0));
-assert_same(true, strpos($runbook7, "`frontend: {$frontendCount7} scripts npm rodados (...): {$frontendCount7} OK, 0 com falha`") !== false && strpos($runbook7, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy7 origin/feat/employee-form-rhf-zod;') !== false, 'deploy 7: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
-assert_same(true, strpos($prose7, '**O modulo entra desligado**') !== false && strpos($prose7, 'nenhuma tabela existente e alterada') !== false && strpos($prose7, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false && strpos($prose7, '**12. Importacao do Controle v5 (admin, na tela; sem comando).**') !== false, 'deploy 7: o modulo entra desligado, a 025 so cria tabelas, o aviso e a importacao pela tela');
-assert_same(true, strpos($prose7, '`tools_somente_leitura`, `tools_inativos`) em 0') !== false && strpos($prose7, 'o 1o rollback `OK` (`copias_de_rollback_025 = 10`) e o 2o para de proposito') !== false, 'deploy 7: as contagens de problema em 0 na variante (b), e o 2o rollback para');
-// Folha do deploy 7: os mesmos comandos, na mesma ordem, numerados, sem valor real.
-$sheet7 = $readOptional($root . '/docs/DEPLOY7_FOLHA_DO_DIA.md');
-[$runbook7All] = $fencedCommands($runbook7);
-[$sheet7All, $sheet7Blocks] = $fencedCommands($sheet7);
-assert_same([true, $runbook7All], [$sheet7 !== '' && count($runbook7All) === count($commands7), $sheet7All], 'folha do deploy 7: os mesmos comandos do roteiro, na mesma ordem');
-assert_same(count($sheet7All), $sheet7Blocks, 'folha do deploy 7: um comando por bloco');
-$sheet7Lines = explode("\n", $sheet7);
-$unmarked7 = [];
-foreach ($sheet7Lines as $i => $line) {
-    if (preg_match('/^```bash$/', $line) !== 1) {
-        continue;
-    }
-    $previous = '';
-    for ($j = $i - 1; $j >= 0 && $previous === ''; $j--) {
-        $previous = trim($sheet7Lines[$j]);
-    }
-    if (preg_match('/^- \[ \] \*\*\d+\.\*\* .*Esperado: .+ \*\*PARE se:\*\* .+/', $previous) !== 1) {
-        $unmarked7[] = $i + 1;
-    }
-}
-preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* \(/m', $sheet7, $sheet7Numbers);
-assert_same([[], range(1, count($sheet7All))], [$unmarked7, array_map('intval', $sheet7Numbers[1])], 'folha do deploy 7: cada comando com caixa, numero de 1 em diante, Esperado e PARE se');
-assert_same(true, strpos($sheet7, "`frontend: {$frontendCount7} scripts npm rodados (...): {$frontendCount7} OK, 0 com falha`") !== false, 'folha do deploy 7: a contagem atual de scripts npm no item 0');
-$sheet7NoLoopback = str_replace('127.0.0.1', '', $sheet7);
-assert_same([0, 0, 0, 0, 0], [
-    preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheet7NoLoopback),
-    preg_match('/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\./', $sheet7),
-    preg_match('/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(local|lan|corp|intra|internal|com|br|net|org)\b/i', $sheet7),
-    preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet7),
-    preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet7)),
-], 'folha do deploy 7: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
 
 echo "QA deploy runbook OK ({$checks} verificacoes)\n";
