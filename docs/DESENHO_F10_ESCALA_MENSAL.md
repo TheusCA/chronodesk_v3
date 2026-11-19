@@ -1,6 +1,6 @@
 # Desenho do F10: escala mensal no portal (substitui o script e a planilha "Escala Home")
 
-**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8).
+**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8). **D-F10-19 revista em 2026-11-16** (Crítico com 2 PAs reservados, configurável, ocupados pelos papéis do 9.16; Híbrido na opção (c)). **F10-3 entregue em 2026-11-19, sem push** (plano revisto na 3.3.1, execução na 8.7, D-F10-32 a D-F10-41 a aprovar; vai no deploy 5).
 
 **Fontes lidas** (locais, fora do git, em `_referencias/`): o script `gerar_escala_home_V17_ARQUIVO_MENSAL.py` (1.660 linhas, lido inteiro) e a planilha `Escala Home - Base.xlsx`. A planilha tem nomes reais. Este documento traz só estrutura, regras e contagens: nenhum nome, login ou dado pessoal. As linhas citadas são do script V17.
 
@@ -856,10 +856,12 @@ Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL,
 | Commit | Conteúdo |
 |---|---|
 | `3983886` | Migration 022, rollback, verificação e linhas do ensaio; `qa-pa-inventory.php` (estrutura) na bateria; a trava separa a 022 e o QA novo do deploy 4 já executado |
-| (commit 2) | `PaInventoryRules`; o motor com os reservados pelos papéis (`f10-pa-2`); `PaMapService` (leitura do inventário, ocupante do reservado, 409 do reservado e do fixo, `saveSeat`, `savePreferences`); `api/portal/pa_map.php` (`inventory_save`, `preferences_save`); QAs |
-| (commit 3) | Telas do Mapa PA (selo do tipo, cartão do reservado, aviso do Crítico sem PA, inventário no diálogo), `qa:pa-map` e o bloco 32 do navegador |
-| (commit 4) | Roteiro e folha do deploy 5 (`DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md`) e a seção 18 da trava |
-| os de docs | Esta seção, a 3.3.1 e o `REGISTRO_USO_IA.md` |
+| `ea61e39` | `PaInventoryRules`; o motor com os reservados pelos papéis (`f10-pa-2`); `PaMapService` (leitura do inventário, ocupante do reservado, 409 do reservado e do fixo, `saveSeat`, `savePreferences`); `api/portal/pa_map.php` (`inventory_save`, `preferences_save`); QAs (os simuladores do `qa-archive` e do `qa-schedule-legacy-output` respondem "sem a 022") |
+| `f448249` | Telas do Mapa PA (selo do tipo, cartão do reservado, aviso do Crítico sem PA, inventário no diálogo), `qa:pa-map` e o bloco 32 do navegador |
+| `5868acb` | Roteiro e folha do deploy 5 (`DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md`) e a seção 18 da trava |
+| `cbd5598`, `04720eb` | Os casos novos da mutação: o conjunto de preferências fora de ordem dos dois lados (`qa:pa-map`) e um merge só no roteiro do deploy 5 (trava) |
+| `3fab6cc` | O `qa:unsaved-changes` com o inventário na proteção do diálogo do Mapa PA (a bateria do `f448249` reprovou nele) |
+| `5f6a0c3`, `cc8bac6` e o último | Registro do deploy 4, esta seção, a 3.3.1 e o `REGISTRO_USO_IA.md` |
 
 **Ensaio da 022 no MySQL 8.0.46 local** (contêiner do WSL; base fictícia `qa_f103` = `qa_chg` com 3 vínculos fictícios; `scripts/ensaio-migration.sh` do repositório, com `DADOS=portal_pa_inventory,portal_pa_assignments`). Só contagens e assinaturas:
 
@@ -883,4 +885,12 @@ Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL,
 | D-F10-40 | A fonte "escala do mês" no Mapa PA fica para o F10-4 | Depende do mês publicado |
 | D-F10-41 | Nenhum dado é marcado no deploy; a gestão marca os 2 reservados, os fixos e as preferências pela tela depois (a virada da D-F10-8 continua no F10-7) | "Nada muda no deploy", como os deploys anteriores |
 
-**Validação:** no resumo da entrega e no `REGISTRO_USO_IA.md` (mutação e bateria por commit, integração no MySQL local).
+**Validação:**
+- **Mutação** no worktree, com a trava `mut_guard.php`, cada mutante morto pela conferência certa:
+  - commit 1 (`3983886`): 24/24 (migration, rollback, linhas do ensaio, verificação, QA na bateria e a trava);
+  - commit 2 (`ea61e39`): 33/33. Na 1ª rodada (`fbb2eca`), 31/33: o reservado vazio passar a emprestar e a exceção por data deixar de vencer o papel não eram testados. Casos novos (motor com mais gente que flexíveis; Crítico com troca para remoto e exceção presencial) e o commit refeito antes da entrega;
+  - commit 3 (`f448249`): 14/14 no `qa:pa-map` e 3/3 no bloco 32 do navegador; na 1ª rodada, 13/14 (o conjunto de preferências comparado sem ordenar um lado): caso novo em `cbd5598`;
+  - commit 4 (`5868acb`): 16/16; na 1ª rodada, 14/16 (o merge repetido passava; um mutante não se aplicava na folha e foi trocado): conferência nova em `04720eb`.
+- **Integração no MySQL 8.0.46 local** (`qa_f103i` = `qa_f103` + 022, dados fictícios, transação desfeita): 18/18. As restrições recusam linha a linha (reserva em flexível, empréstimo em flexível e no reservado, empréstimo 2: `3819`; tipo e reserva fora do ENUM: `1265`); preferência repetida `1062`, cadastro inexistente `1452`, PA com preferência não some `1451`; o serviço reserva e marca fixo, recusa reservar com vínculo e o Híbrido; preferências trocam o conjunto e recusam o Crítico e o reservado; a leitura põe no 1º reservado quem tem o papel presencial do dia (com regra remota) e deixa o 2º vazio; vínculo no reservado 409, o fixo aceita o 1º dono e recusa o 2º; nada fica gravado.
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree): `45420db` 0, 30/30, 1153/1153 (repetida; ver o registro); `3983886` 0, 30/30, 1153/1153; `ea61e39` 0, 30/30, 1153/1153; `f448249` **saída 1**: 29/30 (o `qa:unsaved-changes` conferia a forma antiga da proteção do diálogo; corrigido no commit seguinte), navegador 1162/1162; o último commit: no resumo da entrega e no estado da sessão.
+- **Trava do roteiro:** 513 verificações; os 39 comandos do deploy 5 passam no `bash -n`.
