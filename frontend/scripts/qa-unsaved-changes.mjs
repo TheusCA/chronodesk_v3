@@ -724,7 +724,9 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
 {
   const paSource = read('src/pages/PaMapPage.jsx')
   const modalSource = paSource.slice(paSource.indexOf('export function PaModal('), paSource.indexOf('// Aba "Ausências da semana"'))
-  assert.match(modalSource, /const \[openedWith, setOpenedWith\] = useState\(\(\) => emptyForm\(pa\.pa_number, date\)\)\s*const \[form, setForm\] = useState\(openedWith\)\s*const guard = useUnsavedChangesGuard\(formValuesChanged\(openedWith, form\)\)/, 'Mapa PA: sujo = diferente do que o formulario abriu')
+  // [F10-3] O inventario do PA (tipo, emprestimo e preferencias) tambem conta como sujo.
+  assert.match(modalSource, /const \[openedWith, setOpenedWith\] = useState\(\(\) => emptyForm\(pa\.pa_number, date\)\)\s*const \[form, setForm\] = useState\(openedWith\)\s*[\s\S]*?const guard = useUnsavedChangesGuard\(formValuesChanged\(openedWith, form\) \|\| seatDirty \|\| prefDirty\)/, 'Mapa PA: sujo = diferente do que o formulario abriu (o vinculo ou o inventario)')
+  assert.match(modalSource, /const seatDirty = inventory && \(seatForm\.mode !== seatOpenedWith\.mode \|\| seatForm\.canLend !== seatOpenedWith\.canLend\)\s*const prefDirty = inventory && !samePreferenceSet\(seatForm\.prefs, seatOpenedWith\.prefs\)/, 'Mapa PA: o inventario sujo e o diferente do que abriu (ou do ultimo salvo)')
   assert.match(modalSource, /const editing = openedWith\.id !== null/, 'Mapa PA: editar ou adicionar pelo que abriu')
   assert.match(modalSource, /function load\(next\) \{\s*setOpenedWith\(next\)\s*setForm\(next\)\s*(?:setEndError\(null\)\s*)?\}/, 'Mapa PA: abrir o formulario troca o valor de abertura junto (abrir sem mexer nao e sujo)')
   assert.match(modalSource, /function reset\(focusEmployee = false\) \{\s*load\(emptyForm\(pa\.pa_number, date\)\)\s*if \(focusEmployee\) employeeRef\.current\?\.focus\(\)\s*\}/, 'Mapa PA: reset volta a "Adicionar" limpo; com o pedido, o foco vai ao Colaborador')
