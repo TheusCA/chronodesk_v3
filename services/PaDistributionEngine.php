@@ -44,11 +44,19 @@ declare(strict_types=1);
  *               (e alerta, se a pessoa for do grupo comum);
  *   preferences [pa => [employee_id, ...]];
  *   locks       [data => [['pa' => int, 'employee_id' => int], ...]];
- *   last_pa     [employee_id => pa] antes do 1o dia.
+ *   last_pa     [employee_id => pa] antes do 1o dia;
+ *   reserved_people (opcional; F10-3, D-F10-19 revista) [data => [reserva =>
+ *               [employee_id, ...]]]: quem da equipe da reserva esta
+ *               presencial no dia, ja na ordem (orderReservedPeople: pelo
+ *               papel do dia do 9.16). Com a entrada do dia e da reserva, os
+ *               PAs reservados dela, na ordem, recebem essas pessoas
+ *               (reservedSeating); PA sem pessoa fica reservado e vazio (nao
+ *               empresta); pessoa sem PA vira o alerta reserved_short. Sem a
+ *               entrada, o reservado fica ocupado sem pessoa, como no script.
  */
 final class PaDistributionEngine
 {
-    public const VERSION = 'f10-pa-1';
+    public const VERSION = 'f10-pa-2';
     public const DP_MAX_SEATS = 16;
     public const COST_LAST_PA = 0;
     public const COST_PREFERENCE = 2;
@@ -58,7 +66,7 @@ final class PaDistributionEngine
     public const STATUS_CONFIG = 'ATENCAO CONFIG';
 
     /** Alertas que pedem conferencia da configuracao (status ATENCAO CONFIG). */
-    private const CONFIG_ALERTS = ['presence_missing', 'lock_ignored', 'owner_overlap', 'owner_multiple_seats'];
+    private const CONFIG_ALERTS = ['presence_missing', 'lock_ignored', 'owner_overlap', 'owner_multiple_seats', 'reserved_short'];
     private const SEAT_TYPES = ['flexible', 'fixed'];
     private const RESERVED = ['hybrid', 'critical'];
     private const PRESENCE = ['onsite', 'remote', 'absent'];
@@ -80,10 +88,11 @@ final class PaDistributionEngine
         $preferences = self::preferences($input['preferences'] ?? [], $seats);
         $locks = self::locks($input['locks'] ?? []);
         $lastPa = self::lastPa($input['last_pa'] ?? []);
+        $reservedPeople = self::reservedPeople($input['reserved_people'] ?? [], $people);
 
         $result = [];
         foreach ($days as $date) {
-            $result[$date] = self::day($date, $seats, $people, $presence[$date] ?? [], $preferences, $locks[$date] ?? [], $lastPa);
+            $result[$date] = self::day($date, $seats, $people, $presence[$date] ?? [], $preferences, $locks[$date] ?? [], $lastPa, $reservedPeople[$date] ?? null);
         }
         ksort($lastPa);
         return ['engine_version' => self::VERSION, 'days' => $result, 'last_pa' => $lastPa];
@@ -102,17 +111,61 @@ final class PaDistributionEngine
         return strtr(strtr(strtoupper($trimmed), self::upperLatin1()), self::SCRIPT_ACCENTS);
     }
 
+    /**
+     * [F10-3, D-F10-19 revista] Assentos reservados de uma equipe no dia: os
+     * PAs reservados, ja na ordem do inventario (fileira, coluna, numero), e
+     * as pessoas da equipe presenciais no dia, ja na ordem (orderReservedPeople).
+     * O 1o PA fica com a 1a pessoa, e assim por diante. Devolve
+     * ['occupants' => [pa => employee_id|null], 'without_seat' => [ids]]:
+     * PA sem pessoa fica null (reservado e vazio); pessoa sem PA vai para
+     * without_seat. Regra unica do motor e do Mapa PA.
+     */
+    public static function reservedSeating(array $seatPas, array $orderedIds): array
+    {
+        $occupants = [];
+        $ids = array_values($orderedIds);
+        foreach (array_values($seatPas) as $index => $pa) {
+            $occupants[$pa] = $ids[$index] ?? null;
+        }
+        return ['occupants' => $occupants, 'without_seat' => array_slice($ids, count($occupants))];
+    }
+
+    /**
+     * [F10-3] Ordem de quem ocupa os assentos reservados: quem tem papel do
+     * dia (9.16) primeiro, pela ordem do papel (sort_order e o ID do papel);
+     * depois quem nao tem papel; no empate, o nome normalizado e o ID.
+     * $people: lista de ['employee_id' => int, 'name' => string,
+     * 'role_order' => ?int, 'role_id' => ?int]. Devolve a lista de IDs.
+     */
+    public static function orderReservedPeople(array $people): array
+    {
+        $keyed = [];
+        foreach ($people as $person) {
+            $role = $person['role_order'] ?? null;
+            $keyed[] = [
+                $role === null ? 1 : 0,
+                (int)($role ?? 0),
+                (int)($person['role_id'] ?? 0),
+                self::normalizeName((string)($person['name'] ?? '')),
+                (int)$person['employee_id'],
+            ];
+        }
+        usort($keyed, static fn (array $a, array $b): int => $a <=> $b);
+        return array_map(static fn (array $key): int => $key[4], $keyed);
+    }
+
     // ------------------------------------------------------------------
     // Um dia
     // ------------------------------------------------------------------
 
-    private static function day(string $date, array $seats, array $people, array $presence, array $preferences, array $locks, array &$lastPa): array
+    private static function day(string $date, array $seats, array $people, array $presence, array $preferences, array $locks, array &$lastPa, ?array $reservedToday = null): array
     {
         $occupants = [];
         $alerts = [];
         $available = [];
         $fixedUsed = [];
         $moved = [];
+        $reservedSeats = [];
 
         // 1. PAs fixos e reservados; flexiveis e fixos que emprestam vao para a lista.
         foreach ($seats as $seat) {
@@ -125,6 +178,7 @@ final class PaDistributionEngine
                 continue;
             }
             if ($seat['reserved_for'] !== null) {
+                $reservedSeats[$seat['reserved_for']][] = $pa;
                 $occupants[$pa] = self::occupant(null, $seat['reserved_for'], 'reserved');
                 continue;
             }
@@ -145,6 +199,17 @@ final class PaDistributionEngine
             }
         }
         $capacity = count($available);
+
+        // 1b. [F10-3] Reservados com as pessoas da equipe no dia (papeis do 9.16).
+        foreach ($reservedToday ?? [] as $team => $ids) {
+            $seating = self::reservedSeating($reservedSeats[$team] ?? [], $ids);
+            foreach ($seating['occupants'] as $pa => $id) {
+                $occupants[$pa] = self::occupant($id, $team, 'reserved');
+            }
+            if ($seating['without_seat'] !== []) {
+                $alerts[] = ['code' => 'reserved_short', 'reserved_for' => $team, 'count' => count($seating['without_seat'])];
+            }
+        }
 
         // 2. Grupo comum presencial ainda sem PA.
         $onsite = [];
@@ -539,6 +604,35 @@ final class PaDistributionEngine
             // Ordem fixa (PA, pessoa): a trava repetida que perde e sempre a mesma.
             usort($day, static fn (array $a, array $b): int => [$a['pa'], $a['employee_id']] <=> [$b['pa'], $b['employee_id']]);
             $out[$date] = $day;
+        }
+        return $out;
+    }
+
+    private static function reservedPeople(mixed $reserved, array $people): array
+    {
+        if (!is_array($reserved)) {
+            throw new InvalidArgumentException('reserved_people: mapa data => [reserva => [ids]]');
+        }
+        $out = [];
+        foreach ($reserved as $date => $byTeam) {
+            self::validDate((string)$date, 'reserved_people');
+            if (!is_array($byTeam)) {
+                throw new InvalidArgumentException('reserved_people: mapa reserva => [ids]');
+            }
+            $seen = [];
+            foreach ($byTeam as $team => $ids) {
+                if (!in_array($team, self::RESERVED, true) || !is_array($ids) || !array_is_list($ids)) {
+                    throw new InvalidArgumentException('reserved_people: reserva invalida (so hybrid/critical, com lista de IDs)');
+                }
+                foreach ($ids as $id) {
+                    self::positiveInt($id, 'reserved_people.id');
+                    if (isset($seen[$id]) || isset($people[$id])) {
+                        throw new InvalidArgumentException('reserved_people: pessoa repetida no dia ou do grupo comum');
+                    }
+                    $seen[$id] = true;
+                }
+                $out[(string)$date][$team] = $ids;
+            }
         }
         return $out;
     }

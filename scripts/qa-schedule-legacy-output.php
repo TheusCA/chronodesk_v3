@@ -233,6 +233,8 @@ final class QaLegacyStatement extends PDOStatement {
         if ($sql === 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name') {
             $this->rows[] = ['total' => match ($params[':table_name']) {
                 'portal_pa_map' => 0,
+                // [F10-3] Sem a 022 (o inventario completo tem QA proprio no qa-pa-conflicts).
+                'portal_pa_preferences' => 0,
                 'portal_presence_cutoff' => $db->cutoffTable ? 1 : 0,
                 default => 1,
             }];

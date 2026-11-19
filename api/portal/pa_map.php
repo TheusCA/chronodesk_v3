@@ -44,6 +44,25 @@ try {
         json_response(['sucesso' => true, 'mensagem' => 'PA desocupado.']);
     }
 
+    // [F10-3] Inventario: tipo, emprestimo e reserva do PA (WARNING: muda a
+    // distribuicao e quem ocupa o PA); preferencias (INFO). So IDs e valores
+    // da lista fechada, sem nome nem login.
+    if ($action === 'inventory_save') {
+        $result = $service->saveSeat($data, portal_username());
+        if ($result['changed'] !== []) {
+            $describe = static fn (array $seat): string => 'tipo ' . $seat['seat_type'] . ', empresta ' . ($seat['can_lend'] ? 'sim' : 'nao') . ', reserva ' . ($seat['reserved_team'] ?? 'nenhuma');
+            audit_log('PA_INVENTARIO_ALTERADO', 'Inventario de PA alterado. PA ' . $result['pa_number'] . ': ' . $describe($result['before']) . ' -> ' . $describe($result['after']), 'WARNING');
+        }
+        json_response(['sucesso' => true, 'pa_number' => $result['pa_number'], 'changed' => $result['changed'], 'mensagem' => $result['changed'] === [] ? 'Nada mudou no PA.' : 'Inventário do PA salvo.']);
+    }
+    if ($action === 'preferences_save') {
+        $result = $service->savePreferences($data, portal_username());
+        if ($result['added'] !== [] || $result['removed'] !== []) {
+            audit_log('PA_PREFERENCIA_ALTERADA', 'Preferencias de PA alteradas. PA ' . $result['pa_number'] . ', incluidos ID ' . ($result['added'] === [] ? 'nenhum' : implode(', ', $result['added'])) . ', retirados ID ' . ($result['removed'] === [] ? 'nenhum' : implode(', ', $result['removed'])), 'INFO');
+        }
+        json_response(['sucesso' => true, 'pa_number' => $result['pa_number'], 'total' => $result['total'], 'mensagem' => 'Preferências do PA salvas.']);
+    }
+
     if ($action !== 'save') {
         throw new InvalidArgumentException('Ação inválida.');
     }

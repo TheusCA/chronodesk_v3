@@ -78,6 +78,13 @@ final class QaPaPdo extends PDO {
     public array $assignments = [];
     public array $legacy = [];
     public array $tables = ['portal_pa_assignments' => 1, 'portal_pa_map' => 1];
+    // [F10-3] Inventario com a 022 (pa_number => id, tipo, emprestimo, reserva),
+    // preferencias ([pa_id, employee_id]) e os papeis do Critico (9.16).
+    public array $seats = [];
+    public array $preferences = [];
+    public array $roles = [];
+    public array $rotations = [];
+    public array $overrides = [];
     public array $log = [];
     public array $written = [];
     public array $transactions = [];
@@ -321,7 +328,113 @@ final class QaPaStatement extends PDOStatement {
             }
             return true;
         }
+        if ($this->f103($sql, $params)) {
+            return true;
+        }
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $sql);
+    }
+
+    /** [F10-3] Inventario completo, preferencias e papeis do Critico. */
+    private function f103(string $sql, array $params): bool {
+        $db = $this->pdo;
+        if ($sql === 'SELECT id, pa_number, seat_type, can_lend, reserved_team FROM portal_pa_inventory WHERE active = 1') {
+            foreach ($db->seats as $pa => $seat) {
+                $this->rows[] = ['id' => $seat['id'], 'pa_number' => $pa, 'seat_type' => $seat['seat_type'], 'can_lend' => $seat['can_lend'], 'reserved_team' => $seat['reserved_team']];
+            }
+            return true;
+        }
+        if ($sql === 'SELECT id, pa_number, seat_type, can_lend, reserved_team FROM portal_pa_inventory WHERE pa_number = :pa_number AND active = 1 LIMIT 1 FOR UPDATE') {
+            $seat = $db->seats[$params[':pa_number']] ?? null;
+            if ($seat !== null) {
+                $this->rows[] = ['id' => $seat['id'], 'pa_number' => $params[':pa_number'], 'seat_type' => $seat['seat_type'], 'can_lend' => $seat['can_lend'], 'reserved_team' => $seat['reserved_team']];
+            }
+            return true;
+        }
+        if ($sql === 'UPDATE portal_pa_inventory SET seat_type = :seat_type, can_lend = :can_lend, reserved_team = :reserved_team WHERE id = :id') {
+            foreach ($db->seats as $pa => $seat) {
+                if ($seat['id'] === $params[':id']) {
+                    $db->seats[$pa] = ['id' => $seat['id'], 'seat_type' => $params[':seat_type'], 'can_lend' => $params[':can_lend'], 'reserved_team' => $params[':reserved_team']];
+                    $db->written[] = ['inventory' => $pa];
+                }
+            }
+            return true;
+        }
+        if ($sql === 'SELECT i.pa_number, p.employee_id FROM portal_pa_preferences p JOIN portal_pa_inventory i ON i.id = p.pa_id ORDER BY i.pa_number, p.employee_id') {
+            $paById = array_flip(array_map(static fn (array $seat): int => $seat['id'], $db->seats));
+            foreach ($db->preferences as [$paId, $employeeId]) {
+                $this->rows[] = ['pa_number' => (string)$paById[$paId], 'employee_id' => $employeeId];
+            }
+            usort($this->rows, static fn (array $a, array $b): int => [$a['pa_number'], $a['employee_id']] <=> [$b['pa_number'], $b['employee_id']]);
+            return true;
+        }
+        if (preg_match('/^SELECT employee_id FROM portal_pa_preferences WHERE pa_id = :pa_id ORDER BY employee_id( FOR UPDATE)?$/', $sql) === 1) {
+            $ids = [];
+            foreach ($db->preferences as [$paId, $employeeId]) {
+                if ($paId === $params[':pa_id']) {
+                    $ids[] = $employeeId;
+                }
+            }
+            sort($ids);
+            $this->rows = array_map(static fn (int $id): array => ['employee_id' => $id], $ids);
+            return true;
+        }
+        if (preg_match('/^DELETE FROM portal_pa_preferences WHERE pa_id = \? AND employee_id IN \(\?(, \?)*\)$/', $sql) === 1) {
+            $paId = array_shift($params);
+            $db->preferences = array_values(array_filter($db->preferences, static fn (array $p): bool => !($p[0] === $paId && in_array($p[1], $params, true))));
+            $db->written[] = ['preferences_removed' => $params];
+            return true;
+        }
+        if ($sql === 'INSERT INTO portal_pa_preferences (pa_id, employee_id, created_by) VALUES (:pa_id, :employee_id, :created_by)') {
+            $db->preferences[] = [$params[':pa_id'], $params[':employee_id']];
+            $db->written[] = ['preference_added' => $params[':employee_id'], 'by' => $params[':created_by']];
+            return true;
+        }
+        if (preg_match('/^SELECT id, equipe, grupo_escala, fora_mapa_escala FROM funcionarios WHERE ativo = 1 AND id IN \(\?(, \?)*\)$/', $sql) === 1) {
+            foreach ($params as $id) {
+                $row = $db->employees[$id] ?? null;
+                if ($row !== null && (int)$row['ativo'] === 1) {
+                    $this->rows[] = ['id' => $id, 'equipe' => $row['equipe'], 'grupo_escala' => $row['grupo_escala'] ?? (in_array($row['equipe'], ['critico', 'hibrido'], true) ? 'separado' : 'comum'), 'fora_mapa_escala' => $row['fora_mapa_escala']];
+                }
+            }
+            return true;
+        }
+        $activeFilter = strpos($sql, 'f.ativo = 1)') !== false;
+        $covers = static fn (array $row, string $from, string $until): bool => ($row['active'] ?? 1) === 1 && $row['valid_from'] <= $until && ($row['valid_until'] === null || $row['valid_until'] >= $from);
+        if (strpos($sql, 'SELECT COUNT(*) FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number AND id <> :id AND valid_from <= :date_until AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {
+            $total = 0;
+            foreach ($db->assignments as $id => $row) {
+                if ($row['pa_number'] === $params[':pa_number'] && $id !== $params[':id'] && $covers($row, $params[':date_from'], $params[':date_until'])
+                    && (!$activeFilter || (int)$db->employees[$row['employee_id']]['ativo'] === 1)) {
+                    $total++;
+                }
+            }
+            $this->rows[] = ['total' => $total];
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, valid_from, valid_until FROM portal_pa_assignments WHERE active = 1 AND pa_number = :pa_number AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {
+            foreach ($db->assignments as $id => $row) {
+                if ($row['pa_number'] === $params[':pa_number'] && $covers($row, $params[':date_from'], '9999-12-31')
+                    && (!$activeFilter || (int)$db->employees[$row['employee_id']]['ativo'] === 1)) {
+                    $this->rows[] = ['id' => $id, 'valid_from' => $row['valid_from'], 'valid_until' => $row['valid_until']];
+                }
+            }
+            usort($this->rows, static fn (array $a, array $b): int => [$a['valid_from'], $a['id']] <=> [$b['valid_from'], $b['id']]);
+            return true;
+        }
+        // Papeis do Critico (PresenceRepository::criticalRoleContext).
+        if ($sql === 'SELECT id, name, presence_type, work_start, work_end, active, sort_order FROM portal_critical_roles ORDER BY sort_order, id') {
+            $this->rows = array_values($db->roles);
+            return true;
+        }
+        if ($sql === 'SELECT id, effective_from, period, anchor_date, roles, employees FROM portal_critical_role_rotations WHERE effective_from <= :date_to ORDER BY effective_from') {
+            $this->rows = array_values(array_filter($db->rotations, static fn (array $r): bool => $r['effective_from'] <= $params[':date_to']));
+            return true;
+        }
+        if ($sql === 'SELECT id, employee_id, starts_on, ends_on, role_id, reason FROM portal_critical_role_overrides WHERE starts_on <= :date_to AND ends_on >= :date_from ORDER BY employee_id, starts_on') {
+            $this->rows = array_values(array_filter($db->overrides, static fn (array $o): bool => $o['starts_on'] <= $params[':date_to'] && $o['ends_on'] >= $params[':date_from']));
+            return true;
+        }
+        return false;
     }
 
     public function rowCount(): int {
@@ -340,7 +453,8 @@ final class QaPaStatement extends PDOStatement {
     public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
         $rows = $this->rows;
         $this->rows = [];
-        return $rows;
+        // [F10-3] FETCH_COLUMN devolve so a 1a coluna, como o PDO.
+        return $mode === PDO::FETCH_COLUMN ? array_map(static fn (array $row): mixed => array_values($row)[0], $rows) : $rows;
     }
 }
 
@@ -791,5 +905,182 @@ assert_same([true, true, true], [
 foreach (['scripts/test-linux.sh', 'scripts/test-local.ps1'] as $runner) {
     assert_same(true, strpos((string)file_get_contents($root . '/' . $runner), 'qa-pa-conflicts.php') !== false, "{$runner} roda o qa-pa-conflicts");
 }
+
+// ----------------------------------------------------------------------------
+// 6. [F10-3] Inventario completo, reservados do Critico pelos papeis do dia
+//    (D-F10-19 revista), PA fixo com um dono por data e preferencias
+// ----------------------------------------------------------------------------
+// Sem a 022: a leitura e a gravacao do vinculo ficam como antes, e o inventario recusa.
+$plain = $list();
+assert_same([false, false, false], [$plain['seat_setup'], array_key_exists('critical_seating', $plain), array_key_exists('seat_type', $plain['pas'][0])], 'sem a 022: leitura como antes (sem tipo nem reservados)');
+try {
+    (new PaMapService($baseDb(), $today))->saveSeat(['pa_number' => '1732', 'seat_type' => 'fixed'], 'qa.lider');
+    $noSetup = 'gravou';
+} catch (DomainException $error) {
+    $noSetup = $error->getMessage();
+}
+assert_same('Inventário de PA ainda não foi atualizado (migration 022).', $noSetup, 'sem a 022: gravar o inventario da 409');
+
+// Com a 022: 1723 e 1722 reservados ao Critico (sem vinculo vigente), 1725 fixo
+// (dono Q) e 1732 com preferencias. Critico: 31 papel Presencial A (rodizio);
+// 35 Presencial B (rodizio); 32 Abertura home no rodizio, mas troca para
+// Presencial B em 18/11; 34 sem papel e remoto, mas excecao presencial em 18/11;
+// 30 sem papel e sempre presencial; 33 sem papel, ausente o dia todo em 18/11;
+// 36 com papel Presencial A, mas ausente o dia todo (a ausencia vence o papel).
+$f103Db = static function () use ($saveDb): QaPaPdo {
+    $pdo = $saveDb();
+    $pdo->tables['portal_pa_preferences'] = 1;
+    unset($pdo->assignments[18], $pdo->assignments[19]);
+    foreach (['1732', '1731', '1730', '1729', '1728', '1727', '1726', '1725', '1724', '1723', '1722'] as $index => $pa) {
+        $pdo->seats[$pa] = ['id' => $index + 1, 'seat_type' => 'flexible', 'can_lend' => 0, 'reserved_team' => null];
+    }
+    $pdo->seats['1723'] = ['id' => 10, 'seat_type' => 'fixed', 'can_lend' => 0, 'reserved_team' => 'critico'];
+    $pdo->seats['1722'] = ['id' => 11, 'seat_type' => 'fixed', 'can_lend' => 0, 'reserved_team' => 'critico'];
+    $pdo->seats['1725'] = ['id' => 8, 'seat_type' => 'fixed', 'can_lend' => 1, 'reserved_team' => null];
+    $pdo->preferences = [[1, 2], [1, 5]];
+    foreach ([30 => 'Critico Zeta', 31 => 'Critico Beta', 32 => 'Critico Gama', 33 => 'Critico Delta', 34 => 'Critico Alfa', 35 => 'Critico Eta', 36 => 'Critico Iota'] as $id => $nome) {
+        $pdo->employees[$id] = ['nome' => $nome, 'equipe' => 'critico', 'ativo' => 1, 'arquivado_em' => null, 'fora_mapa_escala' => 0];
+    }
+    foreach ([30 => 'always_onsite', 31 => 'always_remote', 32 => 'always_onsite', 33 => 'always_onsite', 34 => 'always_remote', 35 => 'always_remote', 36 => 'always_onsite'] as $id => $type) {
+        $pdo->rules[100 + $id * 10] = ['employee_id' => $id, 'rule_type' => $type, 'rule_config' => null, 'effective_from' => '2026-01-05', 'effective_until' => null];
+    }
+    $pdo->exceptions[230] = ['employee_id' => 34, 'exception_date' => '2026-11-18', 'exception_type' => 'onsite'];
+    foreach ([33, 36] as $id) {
+        $pdo->absences[] = ['employee_id' => $id, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-18', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'category' => 'ferias', 'reason' => 'observacao ficticia'];
+    }
+    $pdo->roles = [
+        ['id' => 1, 'name' => 'Presencial A', 'presence_type' => 'onsite', 'work_start' => '08:00:00', 'work_end' => '17:00:00', 'active' => 1, 'sort_order' => 1],
+        ['id' => 2, 'name' => 'Presencial B', 'presence_type' => 'onsite', 'work_start' => '09:00:00', 'work_end' => '18:00:00', 'active' => 1, 'sort_order' => 2],
+        ['id' => 3, 'name' => 'Abertura home', 'presence_type' => 'remote', 'work_start' => '07:00:00', 'work_end' => '17:00:00', 'active' => 1, 'sort_order' => 3],
+        ['id' => 4, 'name' => 'Reserva', 'presence_type' => 'onsite', 'work_start' => '08:00:00', 'work_end' => '17:00:00', 'active' => 1, 'sort_order' => 4],
+    ];
+    $pdo->rotations = [['id' => 1, 'effective_from' => '2026-11-16', 'period' => 'week', 'anchor_date' => '2026-11-16', 'roles' => '[1,3,2,4]', 'employees' => '[31,32,35,36]']];
+    $pdo->overrides = [['id' => 1, 'employee_id' => 32, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-18', 'role_id' => 2, 'reason' => 'troca']];
+    // 37: troca para Abertura home (remoto) em 18/11, mas excecao presencial no dia (a excecao vence o papel).
+    $pdo->employees[37] = ['nome' => 'Critico Kapa', 'equipe' => 'critico', 'ativo' => 1, 'arquivado_em' => null, 'fora_mapa_escala' => 0];
+    $pdo->rules[470] = ['employee_id' => 37, 'rule_type' => 'always_remote', 'rule_config' => null, 'effective_from' => '2026-01-05', 'effective_until' => null];
+    $pdo->exceptions[237] = ['employee_id' => 37, 'exception_date' => '2026-11-18', 'exception_type' => 'onsite'];
+    $pdo->overrides[] = ['id' => 2, 'employee_id' => 37, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-18', 'role_id' => 3, 'reason' => 'troca'];
+    return $pdo;
+};
+$view = $list([], ['role' => 'admin', 'employee_id' => null], true, $f103Db());
+$byPa = array_column($view['pas'], null, 'pa_number');
+assert_same(
+    [true, ['fixed', false, 'critico'], ['fixed', true, null], ['flexible', false, null], [2, 5], []],
+    [$view['seat_setup'], array_values(array_intersect_key($byPa['1723'], array_flip(['seat_type', 'can_lend', 'reserved_team']))), array_values(array_intersect_key($byPa['1725'], array_flip(['seat_type', 'can_lend', 'reserved_team']))), array_values(array_intersect_key($byPa['1730'], array_flip(['seat_type', 'can_lend', 'reserved_team']))), $byPa['1732']['preference_ids'], $byPa['1731']['preference_ids']],
+    'com a 022: tipo, emprestimo e reserva de cada PA e as preferencias (so IDs) para quem edita'
+);
+// Ordem: com papel pela ordem do papel (31 Presencial A; 35 e 32 Presencial B,
+// pelo nome; 37 Abertura home, presencial pela excecao); sem papel pelo nome
+// (34, 30); 33 e 36 ausentes ficam fora.
+assert_same(
+    [['employee_id' => 31, 'employee_name' => 'Critico Beta', 'role_label' => 'Presencial A 08:00–17:00'], ['employee_id' => 35, 'employee_name' => 'Critico Eta', 'role_label' => 'Presencial B 09:00–18:00'], 2, 6, [32, 37, 34, 30]],
+    [$byPa['1723']['reserved_occupant'], $byPa['1722']['reserved_occupant'], $view['critical_seating']['seats'], $view['critical_seating']['onsite'], array_column($view['critical_seating']['without_seat'], 'employee_id')],
+    'reservados do Critico: os papeis do dia dizem quem ocupa (troca > rodizio > regra; ausencia e excecao vencem o papel); quem sobra fica sem assento'
+);
+assert_same([false, false], [array_key_exists('reserved_occupant', $byPa['1725']), array_key_exists('preference_ids', array_column($list([], ['role' => 'gestor', 'employee_id' => null], false, $f103Db())['pas'], null, 'pa_number')['1732'])], 'so o reservado tem ocupante do Critico; quem nao edita nao recebe as preferencias');
+$weekend = array_column($list(['date' => '2026-11-21'], ['role' => 'admin', 'employee_id' => null], true, $f103Db())['pas'], null, 'pa_number');
+assert_same([null, null], [$weekend['1723']['reserved_occupant'], $weekend['1722']['reserved_occupant']], 'reservados no sabado: vazios (nenhum papel nem presencial)');
+$oneSeat = $f103Db();
+$oneSeat->seats['1722'] = ['id' => 11, 'seat_type' => 'flexible', 'can_lend' => 0, 'reserved_team' => null];
+$oneView = $list([], ['role' => 'admin', 'employee_id' => null], true, $oneSeat);
+assert_same([1, 31, [35, 32, 37, 34, 30]],[$oneView['critical_seating']['seats'], array_column($oneView['pas'], null, 'pa_number')['1723']['reserved_occupant']['employee_id'], array_column($oneView['critical_seating']['without_seat'], 'employee_id')], 'N configuravel: com 1 PA reservado, so o 1o da ordem senta');
+// Consultas fixas com a 022 (L-10): 40 cadastros a mais nao mudam as consultas.
+$count103 = static function (int $extra) use ($f103Db, $today): array {
+    $pdo = $f103Db();
+    for ($id = 300; $id < 300 + $extra; $id++) {
+        $pdo->employees[$id] = ['nome' => 'Extra ' . $id, 'equipe' => $id % 2 === 0 ? 'n1' : 'critico', 'ativo' => 1, 'arquivado_em' => null, 'fora_mapa_escala' => 0];
+        $pdo->rules[3000 + $id] = ['employee_id' => $id, 'rule_type' => 'always_onsite', 'rule_config' => null, 'effective_from' => '2026-01-05', 'effective_until' => null];
+    }
+    (new PaMapService($pdo, $today))->list(['date' => '2026-11-18'], ['role' => 'admin', 'employee_id' => null], true);
+    return $pdo->log;
+};
+assert_same(count($count103(0)), count($count103(40)), 'com a 022: numero de consultas fixo para N cadastros (L-10), inclusive do Critico');
+
+// Vinculo: PA reservado 409; PA fixo com dono no periodo 409; o proprio dono edita; fixo livre aceita.
+assert_same(['DomainException: PA reservado ao Crítico: quem ocupa vem dos papéis do dia, e ele não recebe vínculo.', 'DomainException: PA fixo: já tem dono no período. Encerre o vínculo atual antes (um dono por data).'], [$save(['pa_number' => '1723', 'employee_id' => 24], $f103Db())[0]['erro'], $save(['pa_number' => '1725', 'employee_id' => 24], $f103Db())[0]['erro']], 'vinculo: PA reservado e PA fixo com dono no periodo dao 409');
+$own = $f103Db();
+[$ownResult] = $save(['id' => 15, 'pa_number' => '1725', 'employee_id' => 17, 'valid_from' => '2026-09-01', 'valid_until' => ''], $own);
+assert_same([15, 'commit'], [$ownResult['id'] ?? $ownResult, end($own->transactions)], 'vinculo: o dono do PA fixo edita o proprio vinculo');
+$freeFixed = $f103Db();
+$freeFixed->seats['1725']['seat_type'] = 'fixed';
+unset($freeFixed->assignments[15]);
+assert_same(true, isset($save(['pa_number' => '1725', 'employee_id' => 24], $freeFixed)[0]['id']), 'vinculo: PA fixo sem dono no periodo aceita');
+$nextOwner = $f103Db();
+$nextOwner->assignments[15]['valid_until'] = '2026-11-30';
+assert_same([true, 'DomainException: PA fixo: já tem dono no período. Encerre o vínculo atual antes (um dono por data).'], [isset($save(['pa_number' => '1725', 'employee_id' => 24, 'valid_from' => '2026-12-01'], $nextOwner)[0]['id']), $save(['pa_number' => '1725', 'employee_id' => 25, 'valid_from' => '2026-11-30'], $f103Db())[0]['erro']], 'vinculo: PA fixo aceita o proximo dono depois do fim do atual; no mesmo dia, 409');
+assert_same(true, isset($save(['pa_number' => '1729', 'employee_id' => 24], $f103Db())[0]['id']), 'vinculo: PA flexivel com outros vinculos continua aceitando (conflito so avisa, F6)');
+$futureOwner = $f103Db();
+$futureOwner->assignments[15]['valid_from'] = '2026-12-01';
+assert_same([true, 'DomainException: PA fixo: já tem dono no período. Encerre o vínculo atual antes (um dono por data).'], [isset($save(['pa_number' => '1725', 'employee_id' => 24, 'valid_until' => '2026-11-30'], $futureOwner)[0]['id']), $save(['pa_number' => '1725', 'employee_id' => 25, 'valid_until' => '2026-12-01'], $futureOwner)[0]['erro']], 'vinculo: PA fixo aceita um dono que termina antes do proximo; terminando no 1o dia dele, 409');
+
+// Inventario: validacao, as tres travas e a gravacao.
+$seatSave = static function (array $data, ?QaPaPdo $pdo = null) use ($f103Db, $today): array {
+    $pdo ??= $f103Db();
+    try {
+        return [(new PaMapService($pdo, $today))->saveSeat($data, 'qa.lider'), $pdo];
+    } catch (Throwable $error) {
+        return [['erro' => get_class($error) . ': ' . $error->getMessage()], $pdo];
+    }
+};
+assert_same([
+    'InvalidArgumentException: Tipo do PA inválido: use flexível ou fixo.',
+    'InvalidArgumentException: O Híbrido usa PA fixo por pessoa (vínculo do Mapa PA): a reserva por equipe é só do Crítico.',
+    'InvalidArgumentException: Reserva só em PA fixo.',
+    'InvalidArgumentException: Empréstimo só em PA fixo sem reserva: o dono ausente empresta o PA ao grupo comum.',
+    'InvalidArgumentException: PA não encontrado no inventário.',
+    'DomainException: PA com 2 vínculo(s) vigente(s) ou futuro(s): encerre antes de reservar ao Crítico.',
+    'DomainException: PA com 2 preferência(s): retire antes de reservar ao Crítico.',
+    'DomainException: PA com 1 par(es) de vínculos sobrepostos de hoje em diante: deixe um dono por data antes de marcar como fixo.',
+], [
+    $seatSave(['pa_number' => '1730', 'seat_type' => 'misto'])[0]['erro'],
+    $seatSave(['pa_number' => '1730', 'seat_type' => 'fixed', 'reserved_team' => 'hibrido'])[0]['erro'],
+    $seatSave(['pa_number' => '1730', 'seat_type' => 'flexible', 'reserved_team' => 'critico'])[0]['erro'],
+    $seatSave(['pa_number' => '1730', 'seat_type' => 'flexible', 'can_lend' => true])[0]['erro'],
+    $seatSave(['pa_number' => '1999', 'seat_type' => 'fixed'])[0]['erro'],
+    $seatSave(['pa_number' => '1729', 'seat_type' => 'fixed', 'reserved_team' => 'critico'])[0]['erro'],
+    $seatSave(['pa_number' => '1732', 'seat_type' => 'fixed', 'reserved_team' => 'critico'], (static function () use ($f103Db): QaPaPdo { $pdo = $f103Db(); unset($pdo->assignments[1], $pdo->assignments[2]); return $pdo; })())[0]['erro'],
+    $seatSave(['pa_number' => '1724', 'seat_type' => 'fixed'])[0]['erro'],
+], 'inventario: tipo, Hibrido (D-F10-19 c), reserva e emprestimo validados; reservar exige PA sem vinculo nem preferencia; fixo exige um dono por data');
+[$fixed, $pdo] = $seatSave(['pa_number' => '1729', 'seat_type' => 'fixed', 'can_lend' => true], (static function () use ($f103Db): QaPaPdo { $pdo = $f103Db(); $pdo->assignments[7]['valid_until'] = '2026-11-17'; return $pdo; })());
+assert_same([['seat_type', 'can_lend'], ['fixed', 1, null], ['begin', 'commit']], [$fixed['changed'], array_values(array_diff_key($pdo->seats['1729'], ['id' => 1])), $pdo->transactions], 'inventario: fixo que empresta gravado (vinculo encerrado nao conta), numa transacao');
+[$same, $pdo] = $seatSave(['pa_number' => '1725', 'seat_type' => 'fixed', 'can_lend' => true]);
+assert_same([[], []], [$same['changed'], $pdo->written], 'inventario: sem mudanca, nada e gravado');
+[$release, $pdo] = $seatSave(['pa_number' => '1723', 'seat_type' => 'flexible']);
+assert_same([['seat_type', 'reserved_team'], 'flexible', null], [$release['changed'], $pdo->seats['1723']['seat_type'], $pdo->seats['1723']['reserved_team']], 'inventario: tirar a reserva volta o PA a flexivel');
+
+// Preferencias: so o grupo comum; PA reservado nao tem; troca o conjunto.
+$prefSave = static function (array $data, ?QaPaPdo $pdo = null) use ($f103Db, $today): array {
+    $pdo ??= $f103Db();
+    try {
+        return [(new PaMapService($pdo, $today))->savePreferences($data, 'qa.lider'), $pdo];
+    } catch (Throwable $error) {
+        return [['erro' => get_class($error) . ': ' . $error->getMessage()], $pdo];
+    }
+};
+assert_same([
+    'DomainException: PA reservado ao Crítico não tem preferência.',
+    'DomainException: 1 colaborador(es) fora do grupo comum (N1 e N2): a preferência só vale na distribuição do grupo comum.',
+    'DomainException: 1 colaborador(es) fora do grupo comum (N1 e N2): a preferência só vale na distribuição do grupo comum.',
+    'DomainException: 1 colaborador(es) fora do grupo comum (N1 e N2): a preferência só vale na distribuição do grupo comum.',
+    'InvalidArgumentException: Colaborador ativo inválido.',
+    'InvalidArgumentException: Preferências: colaboradores inválidos ou repetidos.',
+    'InvalidArgumentException: Preferências: de 0 a 20 colaboradores por PA.',
+], [
+    $prefSave(['pa_number' => '1723', 'employee_ids' => [1]])[0]['erro'],
+    $prefSave(['pa_number' => '1730', 'employee_ids' => [1, 30]])[0]['erro'],
+    $prefSave(['pa_number' => '1730', 'employee_ids' => [8]])[0]['erro'],
+    $prefSave(['pa_number' => '1730', 'employee_ids' => [23]])[0]['erro'],
+    $prefSave(['pa_number' => '1730', 'employee_ids' => [10]])[0]['erro'],
+    $prefSave(['pa_number' => '1730', 'employee_ids' => [5, 5]])[0]['erro'],
+    $prefSave(['pa_number' => '1730', 'employee_ids' => range(1, 21)])[0]['erro'],
+], 'preferencias: reservado, Critico, Lideranca e fora do Mapa (409), inativo, repetido e mais de 20 (400)');
+$separated = $f103Db();
+$separated->employees[6]['grupo_escala'] = 'separado';
+assert_same('DomainException: 1 colaborador(es) fora do grupo comum (N1 e N2): a preferência só vale na distribuição do grupo comum.', $prefSave(['pa_number' => '1730', 'employee_ids' => [6]], $separated)[0]['erro'], 'preferencias: N2 no grupo separado tambem fica de fora (D-F9-12)');
+[$swap, $pdo] = $prefSave(['pa_number' => '1732', 'employee_ids' => ['5', 6]]);
+assert_same([[6], [2], 2, [[1, 5], [1, 6]], ['begin', 'commit']], [$swap['added'], $swap['removed'], $swap['total'], $pdo->preferences, $pdo->transactions], 'preferencias: troca o conjunto (inclui 6, retira 2) numa transacao');
+[$clear, $pdo] = $prefSave(['pa_number' => '1732', 'employee_ids' => []]);
+assert_same([[], [2, 5], []], [$clear['added'], $clear['removed'], $pdo->preferences], 'preferencias: lista vazia retira todas');
 
 echo "QA PA conflicts OK ({$checks} verificacoes)\n";

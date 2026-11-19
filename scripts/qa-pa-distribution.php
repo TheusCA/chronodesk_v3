@@ -532,13 +532,20 @@ foreach ($iterator as $file) {
         continue;
     }
     $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
-    if (in_array($relative, ['services/PaDistributionEngine.php', 'scripts/qa-pa-distribution.php', 'scripts/paridade-escala-mensal.php', 'scripts/qa-paridade-escala.php'], true)) {
+    if (in_array($relative, ['services/PaDistributionEngine.php', 'scripts/qa-pa-distribution.php', 'scripts/paridade-escala-mensal.php', 'scripts/qa-paridade-escala.php', 'scripts/qa-pa-inventory.php'], true)) {
         continue;
     }
-    if (strpos((string)file_get_contents($file->getPathname()), 'PaDistributionEngine') !== false) {
+    $content = (string)file_get_contents($file->getPathname());
+    // [F10-3] O Mapa PA usa so as funcoes puras do assento reservado (a regra
+    // unica de quem ocupa o reservado do Critico; o qa-pa-inventory, QA do
+    // F10-3, fica na lista acima); o distribute continua so no QA e na paridade.
+    if ($relative === 'services/PaMapService.php') {
+        $content = str_replace(["require_once __DIR__ . '/PaDistributionEngine.php';", 'PaDistributionEngine::reservedSeating(', 'PaDistributionEngine::orderReservedPeople('], '', $content);
+    }
+    if (strpos($content, 'PaDistributionEngine') !== false) {
         $callers[] = $relative;
     }
 }
-assert_same([], $callers, 'F10-1: o motor so e chamado pelo QA e pela paridade (nada em producao)');
+assert_same([], $callers, 'F10-1: o motor (distribute) so e chamado pelo QA e pela paridade; o Mapa PA so usa as funcoes do assento reservado (F10-3)');
 
 echo "QA PA distribution OK ({$checks} verificacoes; porta do script x motor em {$months} meses, {$totals['dias']} dias)\n";

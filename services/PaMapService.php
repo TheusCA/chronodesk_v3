@@ -2,6 +2,9 @@
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/PortalTeams.php';
 require_once __DIR__ . '/OperationalService.php';
+require_once __DIR__ . '/PaInventoryRules.php';
+require_once __DIR__ . '/PaDistributionEngine.php';
+require_once __DIR__ . '/PresenceRepository.php';
 
 final class PaMapService {
     public const MAX_PAYLOAD_BYTES = 32768;
@@ -45,7 +48,15 @@ final class PaMapService {
         [$weekFrom, $weekTo] = self::week($date);
         $presence = $this->operational()->mapPresence($weekFrom, max($weekTo, $date), $actor);
         $inventory = $this->inventory();
-        $items = array_merge($this->assignmentsForMap($date, $team, $presence), $this->legacySpecificDateAssignments($date, $team, $presence));
+        // [F10-3] Com a 022: tipo, emprestimo, reserva, preferencias (gestao) e
+        // quem ocupa os reservados do Critico na data (papeis do 9.16).
+        $seatSetup = $this->seatSetupReady();
+        $criticalSeating = null;
+        if ($seatSetup) {
+            $inventory = $this->withSeatSetup($inventory, $canManage);
+            $criticalSeating = $this->criticalSeating($inventory, $date, $presence);
+        }
+        $items =array_merge($this->assignmentsForMap($date, $team, $presence), $this->legacySpecificDateAssignments($date, $team, $presence));
         $weekRows = $this->weekRows($weekFrom, $weekTo);
         $conflicts = $this->weekConflicts($weekRows, $presence, $weekFrom, $weekTo);
         if (!$canManage) {
@@ -66,7 +77,9 @@ final class PaMapService {
                 'assignments' => $byPa[$pa['pa_number']] ?? [],
                 'has_conflict' => isset($conflictDays[$pa['pa_number']]),
                 'conflict_days' => $conflictDays[$pa['pa_number']] ?? [],
-            ];
+            ] + ($criticalSeating !== null && array_key_exists($pa['pa_number'], $criticalSeating['by_pa'])
+                ? ['reserved_occupant' => $criticalSeating['by_pa'][$pa['pa_number']]]
+                : []);
         }
 
         return [
@@ -78,7 +91,12 @@ final class PaMapService {
             'items' => $items,
             'conflicts' => $conflicts,
             'absences_week' => $this->weekAbsences($weekRows, $presence, $team, $weekFrom, $weekTo),
-        ] + ($canManage ? ['employees' => $this->eligibleEmployees($date, $team, $presence)] : []);
+            'seat_setup' => $seatSetup,
+        ] + ($criticalSeating === null ? [] : ['critical_seating' => [
+            'seats' => $criticalSeating['seats'],
+            'onsite' => $criticalSeating['onsite'],
+            'without_seat' => $criticalSeating['without_seat'],
+        ]]) + ($canManage ? ['employees' => $this->eligibleEmployees($date, $team, $presence)] : []);
     }
 
     /**
@@ -192,6 +210,16 @@ final class PaMapService {
             $notes = $this->text($stored !== null && !array_key_exists('notes', $data) ? ($stored['notes'] ?? '') : ($data['notes'] ?? ''), 1000, true);
             $employeeId = (int)$employee['id'];
             $this->assertNoOtherPa($employeeId, $validFrom, $validUntil, $id);
+            // [F10-3] PA reservado ao Critico nao recebe vinculo (quem ocupa vem
+            // dos papeis do dia); PA fixo tem no maximo um dono por data (o
+            // conflito da F6 vira 409 nesse tipo). O PA fica travado ate o fim.
+            $seat = $this->seatSetupReady() ? $this->lockedSeat($paNumber) : null;
+            if ($seat !== null && $seat['reserved_team'] !== null) {
+                throw new DomainException('PA reservado ao Crítico: quem ocupa vem dos papéis do dia, e ele não recebe vínculo.');
+            }
+            if ($seat !== null && $seat['seat_type'] === 'fixed' && $this->ownersInPeriod($paNumber, $validFrom, $validUntil, $id) > 0) {
+                throw new DomainException('PA fixo: já tem dono no período. Encerre o vínculo atual antes (um dono por data).');
+            }
 
             // Motor: o horizonte do conflito e, se ficar antes dele, o 1o dia util do vinculo.
             $horizon = $this->conflictHorizon($validFrom, $validUntil);
@@ -483,6 +511,258 @@ final class PaMapService {
             ];
         }
         return $items;
+    }
+
+    // ------------------------------------------------------------------
+    // [F10-3] Inventario completo e preferencias (desenho do F10, 3.3.1)
+    // ------------------------------------------------------------------
+
+    /**
+     * Grava o tipo, o emprestimo e a reserva de um PA (pa_map.manage), com o
+     * PA travado. Reservar ao Critico so sem vinculo vigente ou futuro e sem
+     * preferencia; marcar como fixo so sem vinculos sobrepostos de hoje em
+     * diante. Devolve o antes e o depois (changed = [] quando nada mudou).
+     */
+    public function saveSeat(array $data, string $actor): array {
+        return $this->atomic(function () use ($data): array {
+            $this->requireSeatSetup();
+            $paNumber = $this->paNumber($data['pa_number'] ?? null);
+            $seat = $this->lockedSeat($paNumber);
+            if ($seat === null) {
+                throw new InvalidArgumentException('PA não encontrado no inventário.');
+            }
+            $after = PaInventoryRules::seat($data);
+            $before = ['seat_type' => $seat['seat_type'], 'can_lend' => $seat['can_lend'], 'reserved_team' => $seat['reserved_team']];
+            $changed = PaInventoryRules::changedFields($before, $after);
+            if ($changed === []) {
+                return ['pa_number' => $paNumber, 'changed' => [], 'before' => $before, 'after' => $after];
+            }
+            $today = $this->today();
+            if ($after['reserved_team'] !== null && $before['reserved_team'] === null) {
+                $links = $this->ownersInPeriod($paNumber, $today, null, null);
+                if ($links > 0) {
+                    throw new DomainException("PA com {$links} vínculo(s) vigente(s) ou futuro(s): encerre antes de reservar ao Crítico.");
+                }
+                $preferences = count($this->preferenceIdsOf((int)$seat['id'], false));
+                if ($preferences > 0) {
+                    throw new DomainException("PA com {$preferences} preferência(s): retire antes de reservar ao Crítico.");
+                }
+            }
+            if ($after['seat_type'] === 'fixed' && $after['reserved_team'] === null && ($before['seat_type'] !== 'fixed' || $before['reserved_team'] !== null)) {
+                $overlaps = $this->overlappingOwners($paNumber, $today);
+                if ($overlaps > 0) {
+                    throw new DomainException("PA com {$overlaps} par(es) de vínculos sobrepostos de hoje em diante: deixe um dono por data antes de marcar como fixo.");
+                }
+            }
+            $stmt = $this->pdo->prepare(
+                'UPDATE portal_pa_inventory
+                 SET seat_type = :seat_type, can_lend = :can_lend, reserved_team = :reserved_team
+                 WHERE id = :id'
+            );
+            $stmt->execute([':seat_type' => $after['seat_type'], ':can_lend' => $after['can_lend'] ? 1 : 0, ':reserved_team' => $after['reserved_team'], ':id' => (int)$seat['id']]);
+            return ['pa_number' => $paNumber, 'changed' => $changed, 'before' => $before, 'after' => $after];
+        });
+    }
+
+    /**
+     * Troca o conjunto de preferencias de um PA (pa_map.manage), com o PA
+     * travado: so cadastros ativos do grupo comum (N1 e N2, grupo 'comum',
+     * fora do "fora do Mapa"); PA reservado nao tem preferencia. Devolve os IDs
+     * incluidos e retirados (so IDs, para a auditoria).
+     */
+    public function savePreferences(array $data, string $actor): array {
+        return $this->atomic(function () use ($data, $actor): array {
+            $this->requireSeatSetup();
+            $paNumber = $this->paNumber($data['pa_number'] ?? null);
+            $seat = $this->lockedSeat($paNumber);
+            if ($seat === null) {
+                throw new InvalidArgumentException('PA não encontrado no inventário.');
+            }
+            if ($seat['reserved_team'] !== null) {
+                throw new DomainException('PA reservado ao Crítico não tem preferência.');
+            }
+            $ids = PaInventoryRules::preferenceIds($data['employee_ids'] ?? null);
+            if ($ids !== []) {
+                $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+                $stmt = $this->pdo->prepare("SELECT id, equipe, grupo_escala, fora_mapa_escala FROM funcionarios WHERE ativo = 1 AND id IN ({$placeholders})");
+                $stmt->execute($ids);
+                $rows = $stmt->fetchAll();
+                if (count($rows) !== count($ids)) {
+                    throw new InvalidArgumentException('Colaborador ativo inválido.');
+                }
+                $outside = count(array_filter($rows, static fn (array $row): bool => !PaInventoryRules::canPrefer(['team' => PortalTeams::normalize((string)$row['equipe'])] + $row)));
+                if ($outside > 0) {
+                    throw new DomainException("{$outside} colaborador(es) fora do grupo comum (N1 e N2): a preferência só vale na distribuição do grupo comum.");
+                }
+            }
+            $current = $this->preferenceIdsOf((int)$seat['id'], true);
+            $removed = array_values(array_diff($current, $ids));
+            $added = array_values(array_diff($ids, $current));
+            if ($removed !== []) {
+                $placeholders = implode(', ', array_fill(0, count($removed), '?'));
+                $stmt = $this->pdo->prepare("DELETE FROM portal_pa_preferences WHERE pa_id = ? AND employee_id IN ({$placeholders})");
+                $stmt->execute(array_merge([(int)$seat['id']], $removed));
+            }
+            if ($added !== []) {
+                $stmt = $this->pdo->prepare('INSERT INTO portal_pa_preferences (pa_id, employee_id, created_by) VALUES (:pa_id, :employee_id, :created_by)');
+                foreach ($added as $employeeId) {
+                    $stmt->execute([':pa_id' => (int)$seat['id'], ':employee_id' => $employeeId, ':created_by' => $actor]);
+                }
+            }
+            return ['pa_number' => $paNumber, 'added' => $added, 'removed' => $removed, 'total' => count($ids)];
+        });
+    }
+
+    /** A 022 aplicada (a tabela das preferencias e a marca): uma consulta por instancia. */
+    private function seatSetupReady(): bool {
+        return $this->tableExists('portal_pa_preferences');
+    }
+
+    private function requireSeatSetup(): void {
+        if (!$this->seatSetupReady()) {
+            throw new DomainException('Inventário de PA ainda não foi atualizado (migration 022).');
+        }
+    }
+
+    /** O PA do inventario, ativo, travado (FOR UPDATE), com o tipo, o emprestimo e a reserva. */
+    private function lockedSeat(string $paNumber): ?array {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, pa_number, seat_type, can_lend, reserved_team
+             FROM portal_pa_inventory
+             WHERE pa_number = :pa_number AND active = 1
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $stmt->execute([':pa_number' => $paNumber]);
+        $row = $stmt->fetch();
+        return $row ? ['id' => (int)$row['id']] + PaInventoryRules::storedSeat($row) : null;
+    }
+
+    /** Vinculos ativos do PA que cruzam o periodo (menos $id), de cadastros ativos. */
+    private function ownersInPeriod(string $paNumber, string $from, ?string $until, ?int $id): int {
+        $stmt = $this->pdo->prepare(
+            'SELECT COUNT(*)
+             FROM portal_pa_assignments
+             WHERE active = 1
+               AND pa_number = :pa_number
+               AND id <> :id
+               AND valid_from <= :date_until
+               AND (valid_until IS NULL OR valid_until >= :date_from)'
+            . $this->activeEmployeeFilter('portal_pa_assignments', $from)
+        );
+        $stmt->execute([':pa_number' => $paNumber, ':id' => $id ?: 0, ':date_from' => $from, ':date_until' => $until ?? '9999-12-31']);
+        return (int)$stmt->fetchColumn();
+    }
+
+    /** Pares de vinculos ativos do PA que se sobrepoem de $from em diante. */
+    private function overlappingOwners(string $paNumber, string $from): int {
+        $stmt = $this->pdo->prepare(
+            'SELECT id, valid_from, valid_until
+             FROM portal_pa_assignments
+             WHERE active = 1
+               AND pa_number = :pa_number
+               AND (valid_until IS NULL OR valid_until >= :date_from)'
+            . $this->activeEmployeeFilter('portal_pa_assignments', $from)
+            . ' ORDER BY valid_from, id'
+        );
+        $stmt->execute([':pa_number' => $paNumber, ':date_from' => $from]);
+        $rows = $stmt->fetchAll();
+        $pairs = 0;
+        foreach ($rows as $i => $a) {
+            foreach (array_slice($rows, $i + 1) as $b) {
+                if ((string)$b['valid_from'] <= (string)($a['valid_until'] ?? '9999-12-31') && (string)$a['valid_from'] <= (string)($b['valid_until'] ?? '9999-12-31')) {
+                    $pairs++;
+                }
+            }
+        }
+        return $pairs;
+    }
+
+    /** IDs com preferencia pelo PA (do inventario), em ordem; $lock trava as linhas. */
+    private function preferenceIdsOf(int $paId, bool $lock): array {
+        $stmt = $this->pdo->prepare('SELECT employee_id FROM portal_pa_preferences WHERE pa_id = :pa_id ORDER BY employee_id' . ($lock ? ' FOR UPDATE' : ''));
+        $stmt->execute([':pa_id' => $paId]);
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Inventario da leitura com o tipo, o emprestimo, a reserva e, para quem
+     * edita o mapa, os IDs com preferencia (duas consultas, qualquer que seja
+     * o numero de PAs).
+     */
+    private function withSeatSetup(array $inventory, bool $canManage): array {
+        $setup = [];
+        foreach ($this->pdo->query('SELECT id, pa_number, seat_type, can_lend, reserved_team FROM portal_pa_inventory WHERE active = 1')->fetchAll() as $row) {
+            $setup[(string)$row['pa_number']] = PaInventoryRules::storedSeat($row);
+        }
+        $preferences = [];
+        if ($canManage) {
+            foreach ($this->pdo->query('SELECT i.pa_number, p.employee_id FROM portal_pa_preferences p JOIN portal_pa_inventory i ON i.id = p.pa_id ORDER BY i.pa_number, p.employee_id')->fetchAll() as $row) {
+                $preferences[(string)$row['pa_number']][] = (int)$row['employee_id'];
+            }
+        }
+        $default = ['seat_type' => 'flexible', 'can_lend' => false, 'reserved_team' => null];
+        return array_map(static fn (array $pa): array => $pa + ($setup[(string)$pa['pa_number']] ?? $default)
+            + ($canManage ? ['preference_ids' => $preferences[(string)$pa['pa_number']] ?? []] : []), $inventory);
+    }
+
+    /**
+     * [D-F10-19 revista] Quem ocupa os PAs reservados ao Critico na data: as
+     * pessoas do Critico presenciais no motor, na ordem do papel do dia (9.16;
+     * sem papel por ultimo), pela regra unica do motor (reservedSeating).
+     * Papeis so com alguem do Critico presencial (tres consultas). Devolve o
+     * ocupante por PA reservado (null = reservado e vazio), quantos assentos,
+     * quantos presenciais e quem ficou sem assento (so ID e nome).
+     */
+    private function criticalSeating(array $inventory, string $date, array $presence): array {
+        $reserved = array_values(array_filter($inventory, static fn (array $pa): bool => ($pa['reserved_team'] ?? null) === PortalTeams::CRITICAL));
+        usort($reserved, [PaInventoryRules::class, 'inventoryOrder']);
+        $critical = [];
+        foreach ($presence['days'] as $day) {
+            if ($day['date'] === $date && PortalTeams::normalize((string)($day['team'] ?? '')) === PortalTeams::CRITICAL) {
+                $critical[(int)$day['employee_id']] = $day;
+            }
+        }
+        $roles = [];
+        if ($critical !== []) {
+            $repository = new PresenceRepository($this->pdo);
+            $people = array_map(static fn (int $id): array => ['id' => $id, 'team' => PortalTeams::CRITICAL], array_keys($critical));
+            $roles = PresenceRepository::criticalRoleDays($repository->criticalRoleContext($people, $date, $date), $date, $date);
+        }
+        // Precedencia do 9.16 no dia: ausencia e excecao por data > papel > regra.
+        $onsite = array_filter($critical, static fn (array $day): bool => self::criticalOnsite($day, $roles[$day['employee_id'] . ':' . $date] ?? null));
+        $ordered = PaDistributionEngine::orderReservedPeople(array_map(static function (array $day) use ($roles, $date): array {
+            $role = $roles[$day['employee_id'] . ':' . $date] ?? null;
+            return ['employee_id' => (int)$day['employee_id'], 'name' => (string)$day['employee_name'], 'role_order' => $role['sort_order'] ?? null, 'role_id' => $role['id'] ?? null];
+        }, array_values($onsite)));
+        $seating = PaDistributionEngine::reservedSeating(array_column($reserved, 'pa_number'), $ordered);
+        $person = static function (int $id) use ($onsite, $roles, $date): array {
+            $role = $roles[$id . ':' . $date] ?? null;
+            return ['employee_id' => $id, 'employee_name' => (string)$onsite[$id]['employee_name'], 'role_label' => $role === null ? null : CriticalRolePlanner::label($role)];
+        };
+        $byPa = [];
+        foreach ($seating['occupants'] as $pa => $id) {
+            $byPa[(string)$pa] = $id === null ? null : $person($id);
+        }
+        return [
+            'by_pa' => $byPa,
+            'seats' => count($reserved),
+            'onsite' => count($onsite),
+            'without_seat' => array_map($person, $seating['without_seat']),
+        ];
+    }
+
+    /**
+     * Presencial no dia para o assento reservado: o dia do motor sem o papel
+     * (a leitura do mapa nao aplica o 9.16) corrigido pelo papel do dia. A
+     * ausencia de dia inteiro e a excecao por data vencem o papel; sem elas,
+     * o tipo do papel decide; sem papel, o dia do motor.
+     */
+    private static function criticalOnsite(array $day, ?array $role): bool {
+        if ($day['presence_type'] === 'absence' || ($day['source'] ?? null) === 'exception' || $role === null) {
+            return $day['presence_type'] === 'onsite';
+        }
+        return ($role['presence_type'] ?? null) === 'onsite';
     }
 
     private function assignmentsForMap(string $date, ?string $team, array $presence): array {
