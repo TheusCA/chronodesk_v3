@@ -282,7 +282,7 @@ assert.deepEqual(
   'criticalShortage: aviso só com alguém do Crítico sem PA reservado',
 )
 assert.deepEqual(paMap.preferenceCandidates([{ id: 1, team: 'n1' }, { id: 2, team: 'critico' }, { id: 3, team: 'n2' }, { id: 4, team: 'lideranca' }, { id: 5, team: 'hibrido' }]).map((e) => e.id), [1, 3], 'preferências: só N1 e N2 na lista da tela')
-assert.deepEqual([paMap.samePreferenceSet([1, '2'], ['2', 1]), paMap.samePreferenceSet([1], [1, 2]), paMap.samePreferenceSet([], []), paMap.samePreferenceSet([1, 1], [1])], [true, false, true, true], 'samePreferenceSet: mesmo conjunto, sem ordem')
+assert.deepEqual([paMap.samePreferenceSet([1, '2'], ['2', 1]), paMap.samePreferenceSet([1], [1, 2]), paMap.samePreferenceSet([], []), paMap.samePreferenceSet([1, 1], [1]), paMap.samePreferenceSet(['2', 1], [1, 2]), paMap.samePreferenceSet([3, 1, 2], [2, 3, 1])], [true, false, true, true, true, true], 'samePreferenceSet: mesmo conjunto, sem ordem (dos dois lados)')
 
 const reservedCard = render(page.PaCard, { pa: { pa_number: '1723', seat_type: 'fixed', reserved_team: 'critico', has_conflict: false, conflict_days: [], assignments: [], reserved_occupant: { employee_id: 31, employee_name: 'Pessoa B', role_label: 'Presencial A 08:00–17:00' } }, canManage: true, onOpen: () => {} })
 assert.match(reservedCard, /data-seat="reserved"/, 'cartão do reservado marcado')
