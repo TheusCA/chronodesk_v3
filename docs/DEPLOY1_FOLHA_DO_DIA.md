@@ -18,10 +18,10 @@ Data, janela, vespera, indisponibilidade e quem acompanha (iguais as do roteiro;
 
 O responsavel publica o `feat/employee-form-rhf-zod` antes do 0a. Anote os numeros: os passos seguintes comparam.
 
-- [ ] **1.** (00, ambiente) Esperado: antes, `sudo -i` no terminal da VM. Oito linhas `OK` (`id -u = 0`, `bash -c`, `tar` com `gzip`, `find -exec`, `runuser -u www-data -- php -v`, PHP filho como `www-data`, `npm -v`, `git` no clone) e `ambiente: OK`. **PARE se:** qualquer `BLOQUEADO` ou `PARE: ambiente com BLOQUEADO`: nada roda na vespera ate a infraestrutura resolver (o sudoers nao muda).
+- [ ] **1.** (00, ambiente) Esperado: antes, `sudo -i` no terminal da VM. Nove linhas `OK` (`id -u = 0`, `bash -c`, `tar` com `gzip`, `find -exec`, `runuser -u www-data -- php -v`, PHP filho como `www-data`, `npm -v`, `git` no clone, `umask 0022`) e `ambiente: OK`. **PARE se:** qualquer `BLOQUEADO` ou `PARE: ambiente com BLOQUEADO`: nada roda na vespera ate a infraestrutura resolver (o sudoers nao muda).
 
 ```bash
-R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
+R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; umask 022 && [ "$(umask)" = 0022 ] && echo "OK umask $(umask) (arquivos novos legiveis pelo www-data)" || { echo "BLOQUEADO umask $(umask)"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
 ```
 
 - [ ] **2.** (0a) Esperado: `branch: codex/modernizacao-ui-backend`, `HEAD no ar: 596db67 (OK)` (ou ancestral, anote o hash curto), `commits a aplicar` maior que `280`, `alteracoes locais: 1`, `alteracoes fora do .htaccess: 0`, `.htaccess` com `6` e `0`. **PARE se:** linha `PARE`, outro branch, alteracao fora do `.htaccess` ou outra contagem no `.htaccess` (traga os numeros).
@@ -108,7 +108,7 @@ U=$(grep -E '^DB_USER=' /var/www/.env | cut -d= -f2- | tr -d "\"'"); read -rsp '
 D='2026-11-11'; if [ "$(date -d "$D" +%d)" -ge 16 ]; then C=$(date -d "$(date -d "$D" +%Y-%m-01) +1 month" +%Y-%m-16); else C=$(date -d "$D" +%Y-%m-16); fi; [[ "$C" =~ ^[0-9]{4}-[0-9]{2}-16$ ]] && echo "corte planejado: $C" || echo "PARE: data do corte invalida ($C)"
 ```
 
-- [ ] **16.** (0i) Esperado: referencia `ativos_n1_n2 = 22`; anote `sem_regra_no_corte` e `sem_regra_na_competencia` (o ideal e `0`). **PARE se:** nao para aqui; maior que `0` no dia impede o registro do corte (comando 116).
+- [ ] **16.** (0i) Esperado: referencia `ativos_n1_n2 = 22`; anote `sem_regra_no_corte` e `sem_regra_na_competencia` (o ideal e `0`). **PARE se:** nao para aqui; maior que `0` no dia impede o registro do corte (comando 117).
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET @corte := '$C'; WITH RECURSIVE dias (d) AS (SELECT CAST(@corte AS DATE) UNION ALL SELECT d + INTERVAL 1 DAY FROM dias WHERE d < @corte + INTERVAL 1 MONTH - INTERVAL 1 DAY) SELECT COUNT(*) AS ativos_n1_n2, COALESCE(SUM(NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= @corte AND (r.effective_until IS NULL OR r.effective_until >= @corte))), 0) AS sem_regra_no_corte, COALESCE(SUM(EXISTS (SELECT 1 FROM dias WHERE NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= dias.d AND (r.effective_until IS NULL OR r.effective_until >= dias.d)))), 0) AS sem_regra_na_competencia FROM funcionarios f WHERE f.ativo = 1 AND LOWER(f.equipe) IN ('n1', 'n2');"; unset P
@@ -132,7 +132,7 @@ git fetch origin; gitleaks version; gitleaks git --redact --log-opts="596db67c67
 sh -c 'cat /var/log/apache2/chronodesk_access.log /var/log/apache2/chronodesk_access.log.1 2>/dev/null; zcat /var/log/apache2/chronodesk_access.log.*.gz 2>/dev/null' | awk '{print $6, $7, $9}' | sed -E 's/\?[^ ]*//' | grep -E '^"(GET|POST) /(admin|admin_login|admin_logout|login|logout|metricas|index)\.php |^"GET /static/js/admin(_users)?\.js ' | sort | uniq -c
 ```
 
-- [ ] **20.** (0l) Esperado: `GET 302` no `/`; as demais, como hoje (anote). **PARE se:** nada (so anotar); o comando 109 repete com o esperado novo.
+- [ ] **20.** (0l) Esperado: `GET 302` no `/`; as demais, como hoje (anote). **PARE se:** nada (so anotar); o comando 110 repete com o esperado novo.
 
 ```bash
 S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "http://$S$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "http://$S$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "http://$S/static/js/$j")"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
@@ -304,7 +304,7 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 echo "timers com chronodesk: $(systemctl list-timers --all 2>/dev/null | grep -ci chronodesk)"; echo "cron do root com chronodesk: $(crontab -l 2>/dev/null | grep -ci chronodesk)"; echo "cron do www-data, linhas ativas: $(crontab -l -u www-data 2>/dev/null | grep -v '^#' | grep -c .)"; echo "arquivos em /etc/cron* com chronodesk: $(grep -rlis chronodesk /etc/cron* 2>/dev/null | wc -l)"
 ```
 
-- [ ] **47.** (0r, log do PHP) Esperado: o caminho do arquivo que recebe os erros do PHP (o `PHP_ERROR_LOG` do `.env` vence; senao, o `error_log` do pool ou do `php.ini`; senao, o log de erros do vhost): anote como `<log de erros do PHP>` (comando 103). **PARE se:** nenhum identificado: combine com o responsavel antes do dia.
+- [ ] **47.** (0r, log do PHP) Esperado: o caminho do arquivo que recebe os erros do PHP (o `PHP_ERROR_LOG` do `.env` vence; senao, o `error_log` do pool ou do `php.ini`; senao, o log de erros do vhost): anote como `<log de erros do PHP>` (comando 104). **PARE se:** nenhum identificado: combine com o responsavel antes do dia.
 
 ```bash
 echo "PHP_ERROR_LOG no .env: $(sed -n 's/^PHP_ERROR_LOG=//p' /var/www/.env | tr -d "\"'")"; grep -HE '^[[:space:]]*(error_log|php_admin_value\[error_log\]|php_value\[error_log\]|catch_workers_output)[[:space:]]*=' /etc/php/*/fpm/php.ini /etc/php/*/fpm/pool.d/*.conf; ls -l /var/log/apache2/*error*.log /var/log/php*-fpm.log 2>/dev/null
@@ -314,10 +314,10 @@ echo "PHP_ERROR_LOG no .env: $(sed -n 's/^PHP_ERROR_LOG=//p' /var/www/.env | tr 
 
 - [ ] **Passo 1.** A data e a janela (**11/11/2026, das 19:00 as 23:00**) e quem acompanha presente; 0a a 0r feitos na vespera, com os numeros anotados; o ensaio do BIZ-02 (comando 23) sem guarda disparada e os 14 ensaios (comandos 27 a 40) como esperado, sobre o mesmo commit validado, com a copia apagada (comando 42); aviso enviado; `<commit validado na estacao>` e `<log de erros do PHP>` (comando 47) em maos; ninguem gravando cadastro, escala, ausencia ou Mapa PA. Daqui em diante, um shell so, na ordem (as variaveis `E`, `Q`, `B` e `C` passam de um comando ao outro).
 
-- [ ] **48.** (1, ambiente) Esperado: antes, `sudo -i` no terminal do dia; oito linhas `OK` e `ambiente: OK` (o mesmo do comando 1). **PARE se:** qualquer `BLOQUEADO`: nada foi alterado; nao comece.
+- [ ] **48.** (1, ambiente) Esperado: antes, `sudo -i` no terminal do dia; nove linhas `OK` (com o `umask 0022`) e `ambiente: OK` (o mesmo do comando 1). **PARE se:** qualquer `BLOQUEADO`: nada foi alterado; nao comece.
 
 ```bash
-R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
+R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; umask 022 && [ "$(umask)" = 0022 ] && echo "OK umask $(umask) (arquivos novos legiveis pelo www-data)" || { echo "BLOQUEADO umask $(umask)"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
 ```
 
 
@@ -453,13 +453,13 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/20261005_011_schedule_history.sql" && bash -o pipefail -c 'git show "$D1:migrations/20261005_011_schedule_history.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "011 aplicada" || echo "PARE: a 011 nao foi aplicada"; unset P
 ```
 
-- [ ] **70.** (4e) Esperado: as tres primeiras contagens em `0`. **PARE se:** saida diferente do esperado (desfazer so com o comando 136, com aprovacao).
+- [ ] **70.** (4e) Esperado: as tres primeiras contagens em `0`. **PARE se:** saida diferente do esperado (desfazer so com o comando 137, com aprovacao).
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(cat "$E/migrations/verificacao/20261005_011_schedule_history_check.sql"); unset P
 ```
 
-- [ ] **71.** (4f, Q-F4) Esperado: referencia `inativos = 5`, `inativos_com_pa = 1`, `inativos_com_regra = 0`, `excecoes_de_inativos = 0` (anote). **PARE se:** nao bloqueia a 014; numeros diferentes: envie ao responsavel antes do comando 110.
+- [ ] **71.** (4f, Q-F4) Esperado: referencia `inativos = 5`, `inativos_com_pa = 1`, `inativos_com_regra = 0`, `excecoes_de_inativos = 0` (anote). **PARE se:** nao bloqueia a 014; numeros diferentes: envie ao responsavel antes do comando 111.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT (SELECT COUNT(*) FROM funcionarios WHERE ativo = 0) AS inativos, (SELECT COUNT(DISTINCT a.employee_id) FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 0 WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE())) AS inativos_com_pa, (SELECT COUNT(DISTINCT r.employee_id) FROM portal_schedule_rules r JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 0 WHERE (r.effective_until IS NULL OR r.effective_until >= CURDATE()) AND (r.effective_until IS NULL OR r.effective_until >= r.effective_from)) AS inativos_com_regra, (SELECT COUNT(*) FROM portal_schedule_exceptions e JOIN funcionarios f ON f.id = e.employee_id AND f.ativo = 0 WHERE e.exception_date >= CURDATE()) AS excecoes_de_inativos;"; unset P
@@ -495,7 +495,7 @@ cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit);
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < <(cat "$E/migrations/verificacao/20261013_019_presence_cutoff_check.sql"); unset P
 ```
 
-- [ ] **77.** (4i, Q4) Esperado: contagens por tipo (anote; o comando 108 compara) e `ausencias = 0`. **PARE se:** `ausencias` maior que `0` (a 012 pararia): envie a contagem.
+- [ ] **77.** (4i, Q4) Esperado: contagens por tipo (anote; o comando 109 compara) e `ausencias = 0`. **PARE se:** `ausencias` maior que `0` (a 012 pararia): envie a contagem.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT exception_type, COUNT(*) AS n, SUM(exception_date >= CURDATE()) AS futuras FROM portal_schedule_exceptions GROUP BY exception_type; SELECT COUNT(*) AS ausencias FROM portal_absences;"; unset P
@@ -561,13 +561,13 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT COUNT(*) AS rotulo_que_o_php_nao_reconhece FROM funcionarios WHERE ativo = 1 AND (CAST(LOWER(TRIM(equipe)) AS BINARY) NOT IN ('n1', 'n2', 'lideranca', 'liderança', 'na', 'não se aplica', 'nao se aplica', 'nao_se_aplica', 'sem_equipe') OR LOCATE(CAST('Ç' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0 OR LOCATE(CAST('Ã' AS BINARY), CAST(TRIM(equipe) AS BINARY)) > 0);"; unset P
 ```
 
-- [ ] **87.** (6a, base) Esperado: p50 e p95 do `status.php` (anote: base do comando 112). **PARE se:** nada (so anotar).
+- [ ] **87.** (6a, base) Esperado: p50 e p95 do `status.php` (anote: base do comando 113). **PARE se:** nada (so anotar).
 
 ```bash
 cd /var/www/chronodesk; D1=$(cat /var/backups/chronodesk/deploy1-commit); git cat-file -e "$D1:scripts/medir-polling.sh" && bash <(git show "$D1:scripts/medir-polling.sh")
 ```
 
-- [ ] **88.** (6a, base) Esperado: p50 e p95 do `dashboard.php` (anote: base do comando 113). **PARE se:** nada (so anotar).
+- [ ] **88.** (6a, base) Esperado: p50 e p95 do `dashboard.php` (anote: base do comando 114). **PARE se:** nada (so anotar).
 
 ```bash
 git cat-file -e "$D1:scripts/medir-polling.sh" && URL=http://127.0.0.1/api/portal/dashboard.php bash <(git show "$D1:scripts/medir-polling.sh"); unset D1
@@ -627,43 +627,49 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/20261002_016b_lideranca_profile_data.sql" && bash -o pipefail -c 'git show "$D1:migrations/20261002_016b_lideranca_profile_data.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "016b aplicada" || echo "PARE: a 016b nao foi aplicada"; unset P
 ```
 
-- [ ] **98.** (6d) Esperado: contagens por equipe, perfil e situacao iguais as do comando 29 (ensaio da 016b, na vespera; um cadastro mudado desde 09/11 explica diferenca, anotada); um evento de cada tipo; `funcionarios_perfil_016b` com as linhas de cada passo. **PARE se:** saida diferente do esperado (reversao: degrau 2, comando 128).
+- [ ] **98.** (6d) Esperado: contagens por equipe, perfil e situacao iguais as do comando 29 (ensaio da 016b, na vespera; um cadastro mudado desde 09/11 explica diferenca, anotada); um evento de cada tipo; `funcionarios_perfil_016b` com as linhas de cada passo. **PARE se:** saida diferente do esperado (reversao: degrau 2, comando 129).
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT equipe, access_role, ativo, COUNT(*) AS cadastros FROM funcionarios GROUP BY equipe, access_role, ativo ORDER BY equipe, access_role, ativo; SELECT action, COUNT(*) AS eventos FROM audit_log WHERE action IN ('LIDERANCA_PERFIL_MIGRADO', 'ADMIN_INATIVO_REBAIXADO') GROUP BY action; SELECT passo, COUNT(*) AS registrados FROM funcionarios_perfil_016b GROUP BY passo;"; unset P
 ```
 
-- [ ] **99.** (6e) Esperado: build sem erro. **PARE se:** falha por falta de espaco (`ENOSPC`) ou de rede (`ETIMEDOUT`, `ECONNRESET`, `ECONNREFUSED`, `EAI_AGAIN`, `ENOTFOUND`, `E403`, `E404`, `E5xx`, `EINTEGRITY`): fique em manutencao, sem recarga, e avise a infraestrutura; resolvido, repita uma vez; senao, degrau 2 (comandos 126 a 132), com aprovacao (o `app/` volta da copia do comando 56, sem `npm`); outra falha no build: degrau 2, com aprovacao.
+- [ ] **99.** (6e) Esperado: build sem erro. **PARE se:** falha por falta de espaco (`ENOSPC`) ou de rede (`ETIMEDOUT`, `ECONNRESET`, `ECONNREFUSED`, `EAI_AGAIN`, `ENOTFOUND`, `E403`, `E404`, `E5xx`, `EINTEGRITY`): fique em manutencao, sem recarga, e avise a infraestrutura; resolvido, repita uma vez; senao, degrau 2 (comandos 127 a 133), com aprovacao (o `app/` volta da copia do comando 56, sem `npm`); outra falha no build: degrau 2, com aprovacao.
 
 ```bash
 cd /var/www/chronodesk/frontend && npm ci && npm run build
 ```
 
-- [ ] **100.** (6e) Esperado: nenhuma saida. **PARE se:** erro na recarga.
+- [ ] **100.** (6e) Esperado: `sem leitura para o www-data: 0 (arquivos do deploy e app/)` (licao do deploy 4: com `umask 077` no shell, o merge e o build gravaram arquivos com 600/700 e o portal parou). **PARE se:** `PARE: ... sem leitura para o www-data` ou `PARE: pre-deploy-commit ausente`: fique em manutencao, nao reabra e avise.
+
+```bash
+cd /var/www/chronodesk; PRE=$(cat /var/backups/chronodesk/pre-deploy-commit); if git cat-file -e "$PRE^{commit}" 2>/dev/null; then N=$( { git diff -z --name-only --diff-filter=d "$PRE" HEAD; find app -print0; } | runuser -u www-data -- xargs -0 -r sh -c 'for f; do if [ -d "$f" ]; then { [ -r "$f" ] && [ -x "$f" ]; } || echo x; else [ -r "$f" ] || echo x; fi; done' _ | wc -l); [ "$N" = 0 ] && echo "sem leitura para o www-data: 0 (arquivos do deploy e app/)" || echo "PARE: $N arquivos ou diretorios do deploy ou do app/ sem leitura para o www-data"; else echo "PARE: pre-deploy-commit ausente"; fi; unset PRE N
+```
+
+- [ ] **101.** (6e) Esperado: nenhuma saida. **PARE se:** erro na recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
 ```
 
-- [ ] **101.** (6f, em manutencao) Esperado: `health: 200`. **PARE se:** diferente de `200`: degrau 2, com aprovacao.
+- [ ] **102.** (6f, em manutencao) Esperado: `health: 200`. **PARE se:** diferente de `200`: degrau 2, com aprovacao.
 
 ```bash
 curl -s -o /dev/null -w 'health: %{http_code}\n' -H 'Host: <ServerName do vhost>' http://127.0.0.1/api/health.php
 ```
 
-- [ ] **102.** (6f) Esperado: `sessao MySQL em America/Sao_Paulo` e `QA timezone (banco real) OK`. **PARE se:** falha: sem permissao de `SET timestamp`, use a secao 8.3 do BIZ-02 (root); fuso errado: degrau 2, com aprovacao.
+- [ ] **103.** (6f) Esperado: `sessao MySQL em America/Sao_Paulo` e `QA timezone (banco real) OK`. **PARE se:** falha: sem permissao de `SET timestamp`, use a secao 8.3 do BIZ-02 (root); fuso errado: degrau 2, com aprovacao.
 
 ```bash
 cd /var/www/chronodesk; runuser -u www-data -- php scripts/qa-timezone.php --db
 ```
 
-- [ ] **103.** (6f, teste de fumaca) Esperado: antes, troque `<log de erros do PHP>` (comando 47) e `<ServerName do vhost>`; pede login e senha do AD do responsavel (admin), a senha sem eco. `login: 200`, perfil `admin`, os quatro `GET` com `200`, `ausencia de teste lancada: 201`, `ausencia de teste cancelada: 200`, `logout: 200`, `linhas novas no log do PHP, fora o login: 0`, `logins bem-sucedidos no log: 1` e, na ultima linha, `FUMACA OK`. **PARE se:** qualquer `PARE`: nao reabra (comando 104), fique em manutencao e envie so a saida; ausencia de teste que ficou lancada: cancele pela tela; senha errada (`401`): uma nova tentativa; outro codigo ou linha nova no log: degrau 2, com aprovacao.
+- [ ] **104.** (6f, teste de fumaca) Esperado: antes, troque `<log de erros do PHP>` (comando 47) e `<ServerName do vhost>`; pede login e senha do AD do responsavel (admin), a senha sem eco. `login: 200`, perfil `admin`, os quatro `GET` com `200`, `ausencia de teste lancada: 201`, `ausencia de teste cancelada: 200`, `logout: 200`, `linhas novas no log do PHP, fora o login: 0`, `logins bem-sucedidos no log: 1` e, na ultima linha, `FUMACA OK`. **PARE se:** qualquer `PARE`: nao reabra (comando 105), fique em manutencao e envie so a saida; ausencia de teste que ficou lancada: cancele pela tela; senha errada (`401`): uma nova tentativa; outro codigo ou linha nova no log: degrau 2, com aprovacao.
 
 ```bash
 cd /var/www/chronodesk; env PHPLOG='<log de erros do PHP>' bash scripts/smoke-deploy1.sh '<ServerName do vhost>'
 ```
 
-- [ ] **104.** (6g, reabertura) Esperado: so com os comandos 101, 102 e 103 como esperado (`FUMACA OK`). `manutencao encerrada` e `portal visto de fora: 302`. Numa tela, uma data de atualizacao recente bate com o relogio. **PARE se:** `PARE: arquivo de manutencao ainda presente`.
+- [ ] **105.** (6g, reabertura) Esperado: so com os comandos 102, 103 e 104 como esperado (`FUMACA OK`). `manutencao encerrada` e `portal visto de fora: 302`. Numa tela, uma data de atualizacao recente bate com o relogio. **PARE se:** `PARE: arquivo de manutencao ainda presente`.
 
 ```bash
 [ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
@@ -671,25 +677,25 @@ cd /var/www/chronodesk; env PHPLOG='<log de erros do PHP>' bash scripts/smoke-de
 
 ## 7. Verificacao pos-deploy
 
-- [ ] **105.** (7a) Esperado: `200`. **PARE se:** diferente de `200`: degrau 2, com aprovacao.
+- [ ] **106.** (7a) Esperado: `200`. **PARE se:** diferente de `200`: degrau 2, com aprovacao.
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' -H 'Host: <ServerName do vhost>' http://127.0.0.1/api/health.php
 ```
 
-- [ ] **106.** (7a) Esperado: as quatro verificacoes como nos comandos 70, 96, 73 e 76 (019 com `inconsistente = 0`), salvo `linhas = 1` na da 012 (a folga de teste do comando 103, cancelada). **PARE se:** `inconsistente = 1` (regra 16a) ou saida diferente do esperado.
+- [ ] **107.** (7a) Esperado: as quatro verificacoes como nos comandos 70, 96, 73 e 76 (019 com `inconsistente = 0`), salvo `linhas = 1` na da 012 (a folga de teste do comando 104, cancelada). **PARE se:** `inconsistente = 1` (regra 16a) ou saida diferente do esperado.
 
 ```bash
 cd /var/www/chronodesk; for v in 20261005_011_schedule_history_check 20261007_012_absences_check 20261013_014_employee_archive_check 20261013_019_presence_cutoff_check; do echo "== $v"; read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < "migrations/verificacao/$v.sql"; unset P; done
 ```
 
-- [ ] **107.** (7a) Esperado: `migration_015 = 1`, `migration_016 = 1`, `migration_017 = 1`, `registrados_016b` como no comando 98, `corte_biz02 = 1`. **PARE se:** saida diferente do esperado.
+- [ ] **108.** (7a) Esperado: `migration_015 = 1`, `migration_016 = 1`, `migration_017 = 1`, `registrados_016b` como no comando 98, `corte_biz02 = 1`. **PARE se:** saida diferente do esperado.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SELECT (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_user_throttle') AS migration_015, (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND INDEX_NAME = 'uq_funcionarios_ad_login') AS migration_016, (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'portal_shift_attachments' AND COLUMN_NAME = 'team') AS migration_017, (SELECT COUNT(*) FROM funcionarios_perfil_016b) AS registrados_016b, (SELECT COUNT(*) FROM manutencao_marcadores WHERE chave = 'biz02_corte') AS corte_biz02, (SELECT COUNT(*) FROM login_user_throttle) AS logins_com_falha;"; unset P
 ```
 
-- [ ] **108.** (7a, Q4 e eventos) Esperado: as mesmas contagens do comando 77; desde o corte, so os eventos das acoes de hoje (os da 016b, os do teste de fumaca do comando 103 e os dos logins de teste). **PARE se:** `LOGIN_THROTTLE_UNAVAILABLE` (todo login daria 503) ou saida diferente do esperado.
+- [ ] **109.** (7a, Q4 e eventos) Esperado: as mesmas contagens do comando 77; desde o corte, so os eventos das acoes de hoje (os da 016b, os do teste de fumaca do comando 104 e os dos logins de teste). **PARE se:** `LOGIN_THROTTLE_UNAVAILABLE` (todo login daria 503) ou saida diferente do esperado.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT exception_type, COUNT(*) AS n, SUM(exception_date >= CURDATE()) AS futuras FROM portal_schedule_exceptions GROUP BY exception_type; SELECT action, COUNT(*) AS n FROM audit_log WHERE id > (SELECT COALESCE(MAX(linha_id), 0) FROM manutencao_biz02_datetime WHERE tabela = 'audit_log') GROUP BY action ORDER BY action;"; unset P
@@ -697,22 +703,22 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 - [ ] **7b.** Checagem HTTP do `scripts/test-linux.sh` (agora na arvore), sem `MAINTENANCE_TEST`, **so o bloco HTTP** (o script inteiro roda o build de novo e os QAs como root em `/var/www`): `cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then { echo 'set -eu'; sed -n '/^check_status() {/,/^# Modo de manutencao/p' scripts/test-linux.sh; echo 'echo "checagem HTTP: OK"'; } | env BASE_URL="http://$S" sh; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S`. Esperado: 51 linhas de codigo (43 caminhos e 8 `POST` legados) e `checagem HTTP: OK` (no deploy 1: 51/51). PARE se: `Unexpected status`, `not blocked` ou `must return 410`.
 
-- [ ] **109.** (7c) Esperado: `GET 302` e `POST 410` em todas as paginas, menos `/logout.php` (`GET 410` e `POST 410`); `403` nos dois JS. **PARE se:** `GET 200` numa pagina legada (`AllowOverride`; o rollback e o `.htaccess` anterior).
+- [ ] **110.** (7c) Esperado: `GET 302` e `POST 410` em todas as paginas, menos `/logout.php` (`GET 410` e `POST 410`); `403` nos dois JS. **PARE se:** `GET 200` numa pagina legada (`AllowOverride`; o rollback e o `.htaccess` anterior).
 
 ```bash
 S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for p in / /index.php /login.php /admin_login.php /admin_logout.php /admin.php /metricas.php /logout.php; do echo "$p GET $(curl -k -s -o /dev/null -w '%{http_code}' "http://$S$p") POST $(curl -k -s -o /dev/null -w '%{http_code}' -X POST "http://$S$p")"; done; for j in admin.js admin_users.js; do echo "$j $(curl -k -s -o /dev/null -w '%{http_code}' "http://$S/static/js/$j")"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
-- [ ] **7d.** Repita os comandos 83 e 84: os mesmos numeros (diferencas batem com os `PA_MAP_*` do comando 108).
+- [ ] **7d.** Repita os comandos 83 e 84: os mesmos numeros (diferencas batem com os `PA_MAP_*` do comando 109).
 - [ ] **7e.** Repita os comandos 85 e 86: os mesmos numeros.
 
-- [ ] **110.** (7f, D5) Esperado: so com os numeros do comando 71 iguais a referencia. So o ID interno; depois, como admin, Funcionarios > "Arquivados" > "Arquivar (regularizar)" na linha com esse ID: "Cadastro inativo regularizado e arquivado. 1 vinculo de PA encerrado." (ou "removido"). **PARE se:** numeros do comando 71 diferentes da referencia: avise antes de arquivar.
+- [ ] **111.** (7f, D5) Esperado: so com os numeros do comando 71 iguais a referencia. So o ID interno; depois, como admin, Funcionarios > "Arquivados" > "Arquivar (regularizar)" na linha com esse ID: "Cadastro inativo regularizado e arquivado. 1 vinculo de PA encerrado." (ou "removido"). **PARE se:** numeros do comando 71 diferentes da referencia: avise antes de arquivar.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT DISTINCT a.employee_id AS id_cadastro FROM portal_pa_assignments a JOIN funcionarios f ON f.id = a.employee_id AND f.ativo = 0 WHERE a.active = 1 AND (a.valid_until IS NULL OR a.valid_until >= CURDATE());"; unset P
 ```
 
-- [ ] **111.** (7f) Esperado: `inativos_com_pa = 0`, `arquivados_f4 = 1`, `inativos_sem_data = 4`, `ativos_com_data = 0`, `arquivados_sem_autor = 0`. **PARE se:** `ativos_com_data` ou `arquivados_sem_autor` maior que `0` (incidente) ou saida diferente do esperado.
+- [ ] **112.** (7f) Esperado: `inativos_com_pa = 0`, `arquivados_f4 = 1`, `inativos_sem_data = 4`, `ativos_com_data = 0`, `arquivados_sem_autor = 0`. **PARE se:** `ativos_com_data` ou `arquivados_sem_autor` maior que `0` (incidente) ou saida diferente do esperado.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < /var/www/chronodesk/migrations/verificacao/20261013_014_employee_archive_check.sql; unset P
@@ -720,51 +726,51 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 - [ ] **7g.** Repita o comando 83: `vinculos_de_inativos = 0` e `vinculos_fora_do_mapa = 0`. **PARE se:** diferente.
 - [ ] **7h.** O responsavel marca pela tela os cadastros fora do Mapa (so admin) e repete o comando 85 (`fora_do_mapa` cresce na mesma conta).
-- [ ] **7i.** Navegador, por perfil (login de cada perfil e revalidacao com usuario de teste; admin, com funcionario sem login AD; Lideranca, com anexo de escala para N1; gestor, com horas extras e CSV; tecnico; 1280 px e 390 px): lista do roteiro, 7i. Depois, o comando 108 de novo (`ADMIN_ROLE_SEM_ALLOWLIST`, `SESSION_REVOKED`). Anote so numeros.
+- [ ] **7i.** Navegador, por perfil (login de cada perfil e revalidacao com usuario de teste; admin, com funcionario sem login AD; Lideranca, com anexo de escala para N1; gestor, com horas extras e CSV; tecnico; 1280 px e 390 px): lista do roteiro, 7i. Depois, o comando 109 de novo (`ADMIN_ROLE_SEM_ALLOWLIST`, `SESSION_REVOKED`). Anote so numeros.
 
-- [ ] **112.** (7j) Esperado: p50 e p95 do `status.php` (anote na 9.9). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima do comando 87: degrau 1 (comandos 120 a 123) e medir de novo.
+- [ ] **113.** (7j) Esperado: p50 e p95 do `status.php` (anote na 9.9). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima do comando 87: degrau 1 (comandos 121 a 124) e medir de novo.
 
 ```bash
 cd /var/www/chronodesk; bash scripts/medir-polling.sh
 ```
 
-- [ ] **113.** (7j) Esperado: p50 e p95 do `dashboard.php` (anote na 9.9). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima do comando 88: degrau 1 e medir de novo.
+- [ ] **114.** (7j) Esperado: p50 e p95 do `dashboard.php` (anote na 9.9). **PARE se:** p95 mais de 50 ms **e** mais de 20% acima do comando 88: degrau 1 e medir de novo.
 
 ```bash
 cd /var/www/chronodesk; URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh
 ```
 
-- [ ] **114.** (7k) Esperado: `corte planejado` igual ao do comando 15 (diferente: o deploy passou do dia 16; a data nova vale, avise a gestao). **PARE se:** `PARE: data do corte invalida`.
+- [ ] **115.** (7k) Esperado: `corte planejado` igual ao do comando 15 (diferente: o deploy passou do dia 16; a data nova vale, avise a gestao). **PARE se:** `PARE: data do corte invalida`.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; C=$(docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -N sistema_pausas -e "SET time_zone = 'America/Sao_Paulo'; SELECT IF(DAYOFMONTH(CURDATE()) >= 16, DATE_FORMAT(CURDATE() + INTERVAL 1 MONTH, '%Y-%m-16'), DATE_FORMAT(CURDATE(), '%Y-%m-16'));"); unset P; [[ "$C" =~ ^[0-9]{4}-[0-9]{2}-16$ ]] && echo "corte planejado: $C" || echo "PARE: data do corte invalida ($C)"
 ```
 
-- [ ] **115.** (7k) Esperado: `sem_regra_no_corte = 0` e `sem_regra_na_competencia = 0`. **PARE se:** qualquer um maior que `0`: o comando 116 nao roda (o deploy fica no ar sem corte).
+- [ ] **116.** (7k) Esperado: `sem_regra_no_corte = 0` e `sem_regra_na_competencia = 0`. **PARE se:** qualquer um maior que `0`: o comando 117 nao roda (o deploy fica no ar sem corte).
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "SET @corte := '$C'; WITH RECURSIVE dias (d) AS (SELECT CAST(@corte AS DATE) UNION ALL SELECT d + INTERVAL 1 DAY FROM dias WHERE d < @corte + INTERVAL 1 MONTH - INTERVAL 1 DAY) SELECT COUNT(*) AS ativos_n1_n2, COALESCE(SUM(NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= @corte AND (r.effective_until IS NULL OR r.effective_until >= @corte))), 0) AS sem_regra_no_corte, COALESCE(SUM(EXISTS (SELECT 1 FROM dias WHERE NOT EXISTS (SELECT 1 FROM portal_schedule_rules r WHERE r.employee_id = f.id AND r.rule_type <> 'undefined' AND r.effective_from <= dias.d AND (r.effective_until IS NULL OR r.effective_until >= dias.d)))), 0) AS sem_regra_na_competencia FROM funcionarios f WHERE f.ativo = 1 AND f.fora_mapa_escala = 0 AND LOWER(f.equipe) IN ('n1', 'n2');"; unset P
 ```
 
-- [ ] **116.** (7l) Esperado: so com o comando 115 em `0`, `inconsistente = 0` e o `C` do comando 114 na mesma sessao; antes, troque `<login do operador>`. `corte a registrar: <C>` e nenhuma outra mensagem. **PARE se:** `registro_019 abortado: ...` (nada gravado): confira o `C`, `DROP PROCEDURE IF EXISTS registrar_corte_019` e envie a mensagem.
+- [ ] **117.** (7l) Esperado: so com o comando 116 em `0`, `inconsistente = 0` e o `C` do comando 115 na mesma sessao; antes, troque `<login do operador>`. `corte a registrar: <C>` e nenhuma outra mensagem. **PARE se:** `registro_019 abortado: ...` (nada gravado): confira o `C`, `DROP PROCEDURE IF EXISTS registrar_corte_019` e envie a mensagem.
 
 ```bash
 cd /var/www/chronodesk; echo "corte a registrar: $C"; read -rsp 'Senha root do MySQL: ' P; echo; { printf "SET @corte := '%s'; SET @autor := '%s';\n" "$C" '<login do operador>'; cat migrations/20261013_019_registrar_corte.sql; } | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas; unset P
 ```
 
-- [ ] **117.** (7l) Esperado: `cortes = 1`, `corte` = o `C`, `corte_dia_16 = 1`, `corte_no_futuro = 1`, `sem_autor = 0`, `eventos_registro = 1`, `eventos_remocao = 0`, `procedimentos_soltos = 0`, `inconsistente = 0`. **PARE se:** `inconsistente = 1` (regra 16a) ou saida diferente do esperado.
+- [ ] **118.** (7l) Esperado: `cortes = 1`, `corte` = o `C`, `corte_dia_16 = 1`, `corte_no_futuro = 1`, `sem_autor = 0`, `eventos_registro = 1`, `eventos_remocao = 0`, `procedimentos_soltos = 0`, `inconsistente = 0`. **PARE se:** `inconsistente = 1` (regra 16a) ou saida diferente do esperado.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas < migrations/verificacao/20261013_019_presence_cutoff_check.sql; unset P
 ```
 
-- [ ] **118.** (7m) Esperado: `removido: /root/ensaio-deploy1.<sufixo>` (e a do ensaio de codigo, se o comando 82 nao a removeu) e `ensaios restantes: 0`. A varredura e pelo padrao do `mktemp`, nao pelo `$E`: um `sudo -i` novo no meio do dia perde a variavel (achado do dia do deploy 1: o comando anterior dependia do `$E`). **PARE se:** `ensaios restantes` maior que `0` (envie so a contagem).
+- [ ] **119.** (7m) Esperado: `removido: /root/ensaio-deploy1.<sufixo>` (e a do ensaio de codigo, se o comando 82 nao a removeu) e `ensaios restantes: 0`. A varredura e pelo padrao do `mktemp`, nao pelo `$E`: um `sudo -i` novo no meio do dia perde a variavel (achado do dia do deploy 1: o comando anterior dependia do `$E`). **PARE se:** `ensaios restantes` maior que `0` (envie so a contagem).
 
 ```bash
 for E in /root/ensaio-deploy1.?????? /tmp/ensaio-deploy1-qa.??????; do [ -d "$E" ] && rm -r -- "$E" && echo "removido: $E"; done; echo "ensaios restantes: $(ls -d /root/ensaio-deploy1.?????? /tmp/ensaio-deploy1-qa.?????? 2>/dev/null | wc -l)"; unset E D1
 ```
 
-- [ ] **119.** (7m, copia de ensaio) Esperado: `copia_restante = 0` (apagada na vespera, comando 42). **PARE se:** `copia_restante = 1`: apague-a com o comando 42 (nome digitado) e registre o atraso.
+- [ ] **120.** (7m, copia de ensaio) Esperado: `copia_restante = 0` (apagada na vespera, comando 42). **PARE se:** `copia_restante = 1`: apague-a com o comando 42 (nome digitado) e registre o atraso.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table -e "SELECT COUNT(*) AS copia_restante FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = 'sistema_pausas_ensaio';"; unset P
@@ -774,121 +780,121 @@ read -rsp 'Senha root do MySQL: ' P; echo; docker exec -i -e MYSQL_PWD="$P" Chro
 
 Do degrau mais baixo para o mais alto; os degraus 2 e 3 so com aprovacao previa do responsavel. Riscos de cada degrau: roteiro, passo 8.
 
-- [ ] **120.** (8a, degrau 1) Esperado: nada acima de `fim (esperado: nada acima)`. **PARE se:** alguma linha (a variavel no pool do PHP-FPM venceria o `.env`).
+- [ ] **121.** (8a, degrau 1) Esperado: nada acima de `fim (esperado: nada acima)`. **PARE se:** alguma linha (a variavel no pool do PHP-FPM venceria o `.env`).
 
 ```bash
 grep -rn 'STATUS_PRESENCE_ENABLED' /etc/php/*/fpm/ ; echo "fim (esperado: nada acima)"
 ```
 
-- [ ] **121.** (8a) Esperado: `copia do .env: ... (600 root)`. **PARE se:** `PARE: copia do .env falhou, nada alterado`.
+- [ ] **122.** (8a) Esperado: `copia do .env: ... (600 root)`. **PARE se:** `PARE: copia do .env falhou, nada alterado`.
 
 ```bash
 K=/var/backups/chronodesk/env-antes-interruptor-$(date +%Y%m%d-%H%M%S); if install -m 600 /var/www/.env "$K"; then echo "copia do .env: $K ($(stat -c '%a %U' "$K"))"; if grep -q '^STATUS_PRESENCE_ENABLED=' /var/www/.env; then sed -i 's/^STATUS_PRESENCE_ENABLED=.*/STATUS_PRESENCE_ENABLED=false/' /var/www/.env; else echo 'STATUS_PRESENCE_ENABLED=false' | tee -a /var/www/.env >/dev/null; fi; else echo "PARE: copia do .env falhou, nada alterado"; fi; unset K
 ```
 
-- [ ] **122.** (8a) Esperado: `STATUS_PRESENCE_ENABLED: OK (desligado)`. **PARE se:** saida diferente do esperado.
+- [ ] **123.** (8a) Esperado: `STATUS_PRESENCE_ENABLED: OK (desligado)`. **PARE se:** saida diferente do esperado.
 
 ```bash
 cd /var/www/chronodesk && sh scripts/preflight-deploy.sh /var/www/.env | grep STATUS_PRESENCE_ENABLED
 ```
 
-- [ ] **123.** (8a) Esperado: nenhuma saida. Para religar: os comandos 121 a 123 com `true` (roteiro, 8a). **PARE se:** erro na recarga.
+- [ ] **124.** (8a) Esperado: nenhuma saida. Para religar: os comandos 122 a 124 com `true` (roteiro, 8a). **PARE se:** erro na recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
 ```
 
-- [ ] **124.** (8a, limpeza das copias) Esperado: so com aprovacao do responsavel. As copias, modo `600`, dono `root` (so nome, modo e dono). **PARE se:** saida diferente do esperado.
+- [ ] **125.** (8a, limpeza das copias) Esperado: so com aprovacao do responsavel. As copias, modo `600`, dono `root` (so nome, modo e dono). **PARE se:** saida diferente do esperado.
 
 ```bash
 find /var/backups/chronodesk -maxdepth 1 -type f \( -name 'env-antes-interruptor-*' -o -name 'env-antes-app-env-*' \) -printf '%f %m %u\n'
 ```
 
-- [ ] **125.** (8a, limpeza das copias) Esperado: as mesmas copias ao apagar; o comando 124 de novo nao mostra nada. **PARE se:** saida diferente do esperado.
+- [ ] **126.** (8a, limpeza das copias) Esperado: as mesmas copias ao apagar; o comando 125 de novo nao mostra nada. **PARE se:** saida diferente do esperado.
 
 ```bash
 find /var/backups/chronodesk -maxdepth 1 -type f \( -name 'env-antes-interruptor-*' -o -name 'env-antes-app-env-*' \) -print -delete
 ```
 
-- [ ] **126.** (8b, degrau 2) Esperado: so com aprovacao previa do responsavel. `regras_cycle` (anote; maior que `0`: rode o 127 antes do 129). **PARE se:** saida diferente do esperado.
+- [ ] **127.** (8b, degrau 2) Esperado: so com aprovacao previa do responsavel. `regras_cycle` (anote; maior que `0`: rode o 127 antes do 129). **PARE se:** saida diferente do esperado.
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/verificacao/20261007_f2b_cycle_check.sql" && bash -o pipefail -c 'git show "$D1:migrations/verificacao/20261007_f2b_cycle_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P
 ```
 
-- [ ] **127.** (8b) Esperado: so com `regras_cycle` maior que `0`, com o codigo novo no ar. `ciclo trocado por undefined`. **PARE se:** sem a mensagem.
+- [ ] **128.** (8b) Esperado: so com `regras_cycle` maior que `0`, com o codigo novo no ar. `ciclo trocado por undefined`. **PARE se:** sem a mensagem.
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261007_f2b_cycle_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261007_f2b_cycle_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "ciclo trocado por undefined"; unset P
 ```
 
-- [ ] **128.** (8b) Esperado: com o codigo novo no ar. `perfis da 016b revertidos`. **PARE se:** sem a mensagem.
+- [ ] **129.** (8b) Esperado: com o codigo novo no ar. `perfis da 016b revertidos`. **PARE se:** sem a mensagem.
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261002_016b_lideranca_profile_data_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261002_016b_lideranca_profile_data_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "perfis da 016b revertidos"; unset P
 ```
 
-- [ ] **129.** (8b) Esperado: `codigo anterior no ar: 596db67; .htaccess local de volta: 6 0`. **PARE se:** sem a mensagem, ou outra contagem do `.htaccess`.
+- [ ] **130.** (8b) Esperado: `codigo anterior no ar: 596db67; .htaccess local de volta: 6 0`. **PARE se:** sem a mensagem, ou outra contagem do `.htaccess`.
 
 ```bash
 cd /var/www/chronodesk; git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy-commit)" && cp -p /var/backups/chronodesk/htaccess-local-antes-deploy1 .htaccess && echo "codigo anterior no ar: $(git rev-parse --short HEAD); .htaccess local de volta: $(git diff --numstat -- .htaccess | cut -f1,2)"
 ```
 
-- [ ] **130.** (8b, `app/`) Esperado: `app/ anterior de volta (o build retirado esta em ...)` (a copia do comando 56, sem `npm`; nada e apagado). **PARE se:** `PARE: a volta do app/ falhou` ou `PARE: copia ... ausente`: fique em manutencao e avise.
+- [ ] **131.** (8b, `app/`) Esperado: `app/ anterior de volta (o build retirado esta em ...)` (a copia do comando 56, sem `npm`; nada e apagado). **PARE se:** `PARE: a volta do app/ falhou` ou `PARE: copia ... ausente`: fique em manutencao e avise.
 
 ```bash
 cd /var/www/chronodesk; A=/var/backups/chronodesk/app-antes-deploy1; X=/var/backups/chronodesk/app-deploy1-retirado-$(date +%Y%m%d-%H%M%S); if test -d "$A"; then { ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && echo "app/ anterior de volta (o build retirado esta em $X)" || echo "PARE: a volta do app/ falhou"; else echo "PARE: copia $A ausente; nada mudou no app/"; fi; unset A X
 ```
 
-- [ ] **131.** (8b) Esperado: nenhuma saida. Arquivo de manutencao ainda presente: tire-o como no comando 104. **PARE se:** erro na recarga.
+- [ ] **132.** (8b) Esperado: nenhuma saida. Arquivo de manutencao ainda presente: tire-o como no comando 105. **PARE se:** erro na recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
 ```
 
-- [ ] **132.** (8b, BIZ-02) Esperado: `marcadores_biz02 = 0` (so sem a correcao historica, A3). **PARE se:** `PARE: biz02_correcao = 1` (nada apagado: o script 4 do BIZ-02 vem antes, com o responsavel) ou saida diferente do esperado.
+- [ ] **133.** (8b, BIZ-02) Esperado: `marcadores_biz02 = 0` (so sem a correcao historica, A3). **PARE se:** `PARE: biz02_correcao = 1` (nada apagado: o script 4 do BIZ-02 vem antes, com o responsavel) ou saida diferente do esperado.
 
 ```bash
 read -rsp 'Senha root do MySQL: ' P; echo; X=$(docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -N sistema_pausas -e "SELECT COUNT(*) FROM manutencao_marcadores WHERE chave = 'biz02_correcao';"); if [ "$X" = "0" ]; then docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas -e "DROP TABLE IF EXISTS manutencao_biz02_datetime; DELETE FROM manutencao_marcadores WHERE chave LIKE 'biz02%'; SELECT COUNT(*) AS marcadores_biz02 FROM manutencao_marcadores WHERE chave LIKE 'biz02%';"; else echo "PARE: biz02_correcao = ${X:-erro na consulta}; a correcao historica ja rodou: o script 4 do BIZ-02 vem antes, com o responsavel; nada apagado"; fi; unset X; unset P
 ```
 
-- [ ] **133.** (8c, degrau 3) Esperado: so com aprovacao e depois do degrau 2. `rollback da 019 aplicado`. **PARE se:** sem a mensagem (nao rodou; copia `*_bkp_019` ja existente: renomear e repetir).
+- [ ] **134.** (8c, degrau 3) Esperado: so com aprovacao e depois do degrau 2. `rollback da 019 aplicado`. **PARE se:** sem a mensagem (nao rodou; copia `*_bkp_019` ja existente: renomear e repetir).
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261013_019_presence_cutoff_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261013_019_presence_cutoff_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 019 aplicado"; unset P
 ```
 
-- [ ] **134.** (8c) Esperado: `rollback da 014 aplicado`. **PARE se:** sem a mensagem (copia `*_bkp_014` ja existente: renomear e repetir).
+- [ ] **135.** (8c) Esperado: `rollback da 014 aplicado`. **PARE se:** sem a mensagem (copia `*_bkp_014` ja existente: renomear e repetir).
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261013_014_employee_archive_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261013_014_employee_archive_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 014 aplicado"; unset P
 ```
 
-- [ ] **135.** (8c) Esperado: so sem ausencia alem da folga de teste do comando 103, cancelada (`linhas = 1` na verificacao da 012; `0` se ela nao foi lancada). `rollback da 012 aplicado`. **PARE se:** sem a mensagem (copia `*_bkp_012` ja existente: renomear e repetir).
+- [ ] **136.** (8c) Esperado: so sem ausencia alem da folga de teste do comando 104, cancelada (`linhas = 1` na verificacao da 012; `0` se ela nao foi lancada). `rollback da 012 aplicado`. **PARE se:** sem a mensagem (copia `*_bkp_012` ja existente: renomear e repetir).
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261007_012_absences_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261007_012_absences_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 012 aplicado"; unset P
 ```
 
-- [ ] **136.** (8c) Esperado: `rollback da 011 aplicado`. **PARE se:** sem a mensagem (copia `*_bkp_011` ja existente: renomear e repetir).
+- [ ] **137.** (8c) Esperado: `rollback da 011 aplicado`. **PARE se:** sem a mensagem (copia `*_bkp_011` ja existente: renomear e repetir).
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261005_011_schedule_history_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261005_011_schedule_history_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 011 aplicado"; unset P
 ```
 
-- [ ] **137.** (8c) Esperado: `rollback da 017 aplicado`. **PARE se:** sem a mensagem.
+- [ ] **138.** (8c) Esperado: `rollback da 017 aplicado`. **PARE se:** sem a mensagem.
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261002_017_shift_attachment_team_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261002_017_shift_attachment_team_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 017 aplicado"; unset P
 ```
 
-- [ ] **138.** (8c) Esperado: `rollback da 016 aplicado`. **PARE se:** sem a mensagem (`rollback_016_abortado_perfil_lideranca_em_uso`: nada alterado; ha cadastro `lideranca`).
+- [ ] **139.** (8c) Esperado: `rollback da 016 aplicado`. **PARE se:** sem a mensagem (`rollback_016_abortado_perfil_lideranca_em_uso`: nada alterado; ha cadastro `lideranca`).
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261002_016_lideranca_profile_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261002_016_lideranca_profile_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 016 aplicado"; unset P
 ```
 
-- [ ] **139.** (8c) Esperado: `rollback da 015 aplicado`. **PARE se:** sem a mensagem.
+- [ ] **140.** (8c) Esperado: `rollback da 015 aplicado`. **PARE se:** sem a mensagem.
 
 ```bash
 cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D1:migrations/rollback/20261001_015_login_user_throttle_down.sql" && bash -o pipefail -c 'git show "$D1:migrations/rollback/20261001_015_login_user_throttle_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 015 aplicado"; unset P
@@ -896,7 +902,7 @@ cd /var/www/chronodesk; export D1=$(cat /var/backups/chronodesk/deploy1-commit);
 
 ## 9. Depois de um ciclo estavel, com o responsavel
 
-- [ ] **140.** (9a, estacao) Esperado: push do responsavel, depois de um ciclo estavel; antes, troque `<commit validado na estacao>`. A linha `<antigo>..<novo>` com `-> codex/modernizacao-ui-backend`. **PARE se:** `rejected` ou `non-fast-forward`: nunca `--force`; o responsavel decide.
+- [ ] **141.** (9a, estacao) Esperado: push do responsavel, depois de um ciclo estavel; antes, troque `<commit validado na estacao>`. A linha `<antigo>..<novo>` com `-> codex/modernizacao-ui-backend`. **PARE se:** `rejected` ou `non-fast-forward`: nunca `--force`; o responsavel decide.
 
 ```powershell
 git push origin <commit validado na estacao>:codex/modernizacao-ui-backend

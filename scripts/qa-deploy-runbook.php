@@ -350,7 +350,7 @@ foreach (array_merge($referenceLines, $baseLines) as $i) {
 }
 $buildLine = $first('cd /var/www/chronodesk/frontend && npm ci && npm run build');
 $reloadLine = $first('systemctl reload "php$(php -r');
-assert_same(true, $buildLine > $mergeLine && $reloadLine === $buildLine + 1, 'roteiro unico: build e recarga do PHP-FPM depois do merge');
+assert_same(true, $buildLine > $mergeLine && $reloadLine === $buildLine + 2, 'roteiro unico: build, a leitura pelo www-data (secao 17) e a recarga do PHP-FPM depois do merge');
 // BIZ-02 (9.13.4): manutencao ligada antes do merge (a regra entra com o
 // .htaccess novo), descarte do .htaccess local so no comando do merge, depois
 // dele o corte (biz02_01) antes de qualquer gravacao do codigo novo: antes da
@@ -731,7 +731,7 @@ $maintOff2 = $first2('[ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/c
 $polling2 = $all2('bash scripts/medir-polling.sh');
 $checkout2 = $first2('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy2-commit)"');
 $appBack2 = $first2('A=/var/backups/chronodesk/app-antes-deploy2; X=/var/backups/chronodesk/app-deploy2-retirado-');
-assert_same(true, $qaSweep2 < $space2 && $space2 + 1 === $backup2 && $backup2 < $maintOn2 && $maintOn2 < $appCopy2 && $appCopy2 < $merge2 && $merge2 < $build2 && ($reloads2[0] ?? -1) === $build2 + 1 && $build2 < $health2 && $health2 < $tz2 && $tz2 < $smoke2 && $smoke2 < $autoInc2 && $autoInc2 < $maintOff2 && $maintOff2 < min($polling2 ?: [-1]) && max($polling2 ?: [PHP_INT_MAX]) < $checkout2 && $checkout2 + 1 === $appBack2 && ($reloads2[1] ?? -1) === $appBack2 + 1, 'deploy 2: espaco e backup, manutencao e copia do app/, merge, build e recarga, health, fuso, fumaca, AUTO_INCREMENT, reabertura, polling e rollback, nesta ordem');
+assert_same(true, $qaSweep2 < $space2 && $space2 + 1 === $backup2 && $backup2 < $maintOn2 && $maintOn2 < $appCopy2 && $appCopy2 < $merge2 && $merge2 < $build2 && ($reloads2[0] ?? -1) === $build2 + 2 && $build2 < $health2 && $health2 < $tz2 && $tz2 < $smoke2 && $smoke2 < $autoInc2 && $autoInc2 < $maintOff2 && $maintOff2 < min($polling2 ?: [-1]) && max($polling2 ?: [PHP_INT_MAX]) < $checkout2 && $checkout2 + 1 === $appBack2 && ($reloads2[1] ?? -1) === $appBack2 + 1, 'deploy 2: espaco e backup, manutencao e copia do app/, merge, build e recarga, health, fuso, fumaca, AUTO_INCREMENT, reabertura, polling e rollback, nesta ordem');
 assert_same(true, strpos($commands2[$backup2] ?? '', "read -rsp 'Senha root do MySQL: ' P;") !== false && strpos($commands2[$backup2], '&& gzip -t "$B/database.sql.gz" && ') !== false && strpos($commands2[$backup2], 'sha256sum database.sql.gz estado.tar.gz > SHA256SUMS') !== false && strpos($commands2[$backup2], '|| echo "PARE: backup falhou') !== false && ($commands[$spaceLines[0]] ?? '') === $commands2[$space2], 'deploy 2: o mesmo espaco livre do deploy 1 e o backup com pipefail, gzip -t e SHA256SUMS, ou PARE');
 assert_same(true, strpos($commands2[$appBack2] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all2('npm '), static fn (int $i): bool => $i >= $checkout2)) === 0, 'deploy 2: rollback volta o app/ da copia, sem npm (nem na linha do checkout)');
 assert_same(true, strpos($commands2[$autoInc2] ?? '', "AS id_extra, (SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios' AND COLUMN_NAME = 'id') AS id_tipo, (SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'funcionarios') AS proximo_id, (SELECT MAX(id) FROM funcionarios) AS maior_id, (SELECT COUNT(*) FROM funcionarios) AS cadastros;") !== false && strpos($prose2, 'Nenhum cadastro de teste: a criacao pela tela fica para o primeiro cadastro real.') !== false, 'deploy 2: AUTO_INCREMENT so leitura (sem cache do information_schema) e sem cadastro de teste');
@@ -840,7 +840,7 @@ $maintOff3 = $first3('rm -- /var/www/chronodesk.maintenance');
 $polling3 = $all3('bash scripts/medir-polling.sh');
 $checkout3 = $first3('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy3-commit)"');
 $appBack3 = $first3('A=/var/backups/chronodesk/app-antes-deploy3; X=/var/backups/chronodesk/app-deploy3-retirado-');
-assert_same(true, $qaSweep3 < $space3 && $space3 + 1 === $backup3 && $backup3 < $maintOn3 && $maintOn3 < $appCopy3 && $appCopy3 < $merge3 && $merge3 < $build3 && $build3 + 1 === $bundle3 && ($reloads3[0] ?? -1) === $bundle3 + 1 && $bundle3 < $health3 && $health3 < $tz3 && $tz3 < $smoke3 && $smoke3 < $maintOff3 && $maintOff3 < min($polling3 ?: [-1]) && max($polling3 ?: [PHP_INT_MAX]) < $checkout3 && $checkout3 + 1 === $appBack3 && ($reloads3[1] ?? -1) === $appBack3 + 1, 'deploy 3: espaco e backup, manutencao e copia do app/, merge, build e qa:bundle, recarga, health, fuso, fumaca, reabertura, polling e rollback, nesta ordem');
+assert_same(true, $qaSweep3 < $space3 && $space3 + 1 === $backup3 && $backup3 < $maintOn3 && $maintOn3 < $appCopy3 && $appCopy3 < $merge3 && $merge3 < $build3 && $build3 + 2 === $bundle3 && ($reloads3[0] ?? -1) === $bundle3 + 1 && $bundle3 < $health3 && $health3 < $tz3 && $tz3 < $smoke3 && $smoke3 < $maintOff3 && $maintOff3 < min($polling3 ?: [-1]) && max($polling3 ?: [PHP_INT_MAX]) < $checkout3 && $checkout3 + 1 === $appBack3 && ($reloads3[1] ?? -1) === $appBack3 + 1, 'deploy 3: espaco e backup, manutencao e copia do app/, merge, build e qa:bundle, recarga, health, fuso, fumaca, reabertura, polling e rollback, nesta ordem');
 assert_same(true, ($commands[$spaceLines[0]] ?? '') === $commands3[$space3] && strpos($commands3[$backup3] ?? '', "read -rsp 'Senha root do MySQL: ' P;") !== false && strpos($commands3[$backup3], '&& gzip -t "$B/database.sql.gz" && ') !== false && strpos($commands3[$backup3], 'sha256sum database.sql.gz estado.tar.gz > SHA256SUMS') !== false && preg_match('/unset P$/', rtrim($commands3[$backup3])) === 1, 'deploy 3: o mesmo espaco livre do deploy 1 e o backup com pipefail, gzip -t, SHA256SUMS e a senha apagada');
 assert_same(true, strpos($commands3[$appBack3] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all3('npm '), static fn (int $i): bool => $i >= $checkout3)) === 0, 'deploy 3: rollback volta o app/ da copia, sem npm');
 // Polling: os tres endpoints, depois da reabertura, 2 rodadas, sessao de gestao.
@@ -1067,7 +1067,7 @@ $order4 = [$check4, $qaArchive4, $qaLoop4, $qaSweep4, $verifies4[0] ?? -1, $evEx
 $sortedOrder4 = $order4;
 sort($sortedOrder4);
 assert_same([$sortedOrder4, true], [$order4, !in_array(-1, $order4, true) && count(array_unique($order4)) === count($order4)], 'deploy 4: gravar, ensaio do codigo, o "antes", os ensaios, espaco e backup, manutencao e copia do app/, as quatro migrations, merge, build e qa:bundle, recarga, health, fuso, fumaca, as quatro de novo, o modulo ligado, reabertura, icones, polling, desligamento rapido, rollback do codigo e das migrations (025, 024, 020, 021), nesta ordem');
-assert_same([$backup4, $bundle4, $bundle4 + 1, $off404, $flagOn4, $flagOn4 + 1, $on401, $icons4, $flagOff4 + 1, $appBack4, $appBack4 + 1, 4], [$space4 + 1, $build4 + 1, $reloads4[0] ?? -1, $poolGrep4 + 1, $off404 + 1, $reloads4[1] ?? -1, $flagOn4 + 2, $maintOff4 + 1, $reloads4[2] ?? -1, $checkout4 + 1, $reloads4[3] ?? -1, count($reloads4)], 'deploy 4: os pares colados (espaco e backup, build e qa:bundle, recargas, pool e 404, ligar e 401, reabertura e icones, checkout e app/)');
+assert_same([$backup4, $bundle4, $bundle4 + 1, $off404, $flagOn4, $flagOn4 + 1, $on401, $icons4, $flagOff4 + 1, $appBack4, $appBack4 + 1, 4], [$space4 + 1, $build4 + 2, $reloads4[0] ?? -1, $poolGrep4 + 1, $off404 + 1, $reloads4[1] ?? -1, $flagOn4 + 2, $maintOff4 + 1, $reloads4[2] ?? -1, $checkout4 + 1, $reloads4[3] ?? -1, count($reloads4)], 'deploy 4: os pares colados (espaco e backup, build e qa:bundle, recargas, pool e 404, ligar e 401, reabertura e icones, checkout e app/)');
 assert_same(true, strpos($commands4[$appBack4] ?? '', '{ ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && ') !== false && count(array_filter($all4('npm '), static fn (int $i): bool => $i >= $checkout4)) === 0, 'deploy 4: rollback volta o app/ da copia, sem npm');
 assert_same([$qaSweep4, $evClean4, $maintOff4], array_keys(array_filter($commands4, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'deploy 4: so tres remocoes (o ensaio das migrations guardado por case, o ensaio do codigo pelo padrao do mktemp e o arquivo-sinal)');
 
@@ -1133,4 +1133,28 @@ foreach ([5, 6, 7] as $n) {
     assert_same([0, true], [preg_match('/```/', $oldSheet), strpos($oldSheet, '`docs/DEPLOY4_FOLHA_DO_DIA.md`') !== false && strpos($oldSheet, '**Nao execute nada a partir desta folha.**') !== false], "folha do deploy {$n}: substituida, so aponta para a do deploy 4, sem comando");
 }
 
+// ----------------------------------------------------------------------------
+// 17. Licao do deploy 4 (19/11/2026): um filtro de resumo com "umask 077"
+// rodou no shell do dia; o merge e o build gravaram arquivos com 600/700, o
+// www-data nao lia o security.php e o portal ficou em manutencao. Em todos os
+// roteiros: o comando 1 fixa e imprime o "umask 022" (BLOQUEADO se nao for
+// 0022) e, logo depois do build, uma linha confere que nenhum arquivo do git
+// diff do deploy nem do app/ ficou sem leitura para o www-data (PARE).
+// ----------------------------------------------------------------------------
+$umaskNeedle = 'umask 022 && [ "$(umask)" = 0022 ] && echo "OK umask $(umask) (arquivos novos legiveis pelo www-data)" || { echo "BLOQUEADO umask $(umask)"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R';
+$readCheck = static fn (string $preFile): string => 'cd /var/www/chronodesk; PRE=$(cat /var/backups/chronodesk/' . $preFile . '); if git cat-file -e "$PRE^{commit}" 2>/dev/null; then N=$( { git diff -z --name-only --diff-filter=d "$PRE" HEAD; find app -print0; } | runuser -u www-data -- xargs -0 -r sh -c \'for f; do if [ -d "$f" ]; then { [ -r "$f" ] && [ -x "$f" ]; } || echo x; else [ -r "$f" ] || echo x; fi; done\' _ | wc -l); [ "$N" = 0 ] && echo "sem leitura para o www-data: 0 (arquivos do deploy e app/)" || echo "PARE: $N arquivos ou diretorios do deploy ou do app/ sem leitura para o www-data"; else echo "PARE: ' . $preFile . ' ausente"; fi; unset PRE N';
+assert_same(true, substr($envCheck, -strlen($umaskNeedle)) === $umaskNeedle, 'licao do deploy 4: o comando 1 (conferencia do ambiente) fixa e imprime o umask 022, com BLOQUEADO se nao for 0022');
+$lessonRunbooks = [
+    1 => [$commands, $buildLine, 'pre-deploy-commit', $sheet],
+    2 => [$commands2, $build2, 'pre-deploy2-commit', $sheet2],
+    3 => [$commands3, $build3, 'pre-deploy3-commit', $sheet3],
+    4 => [$commands4, $build4, 'pre-deploy4-commit', $sheet4],
+];
+foreach ($lessonRunbooks as $n => [$lessonCommands, $lessonBuild, $lessonPre, $lessonSheet]) {
+    $envLines = array_values(array_filter($lessonCommands, static fn (string $line): bool => strpos($line, 'R=OK; [ "$(id -u)" = 0 ]') === 0));
+    assert_same([true, true], [$envLines !== [] && count(array_filter($envLines, static fn (string $line): bool => $line === $envCheck)) === count($envLines), strpos($lessonSheet, 'Nove linhas `OK`') !== false || strpos($lessonSheet, 'nove linhas `OK`') !== false], "licao do deploy 4, deploy {$n}: a conferencia do ambiente com o umask e as nove linhas OK na folha");
+    $reads = array_keys(array_filter($lessonCommands, static fn (string $line): bool => strpos($line, 'sem leitura para o www-data') !== false));
+    assert_same([[$lessonBuild + 1], $readCheck($lessonPre)], [$reads, $lessonCommands[$lessonBuild + 1] ?? ''], "licao do deploy 4, deploy {$n}: a leitura pelo www-data (git diff desde o {$lessonPre} e app/) logo depois do build, uma vez");
+    assert_same(0, preg_match('/\bumask\s+(?!022\b)[0-7]{3,4}\b/', implode("\n", $lessonCommands)), "licao do deploy 4, deploy {$n}: nenhum comando com umask diferente de 022 (a folha repete os mesmos comandos)");
+}
 echo "QA deploy runbook OK ({$checks} verificacoes)\n";

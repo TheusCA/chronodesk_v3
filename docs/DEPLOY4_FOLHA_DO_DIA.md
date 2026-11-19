@@ -2,7 +2,7 @@
 
 Gerada do roteiro "Deploy 4 (consolidado: deploys 4, 5, 6 e 7 numa execucao so; migrations 021, 020, 024 e 025)" do `DEPLOY_LINUX.md`: os mesmos comandos, na mesma ordem. O roteiro e a referencia: o detalhe de cada esperado esta la. Mudou o roteiro, muda esta folha no mesmo commit. Substitui as folhas separadas dos deploys 4 a 7 (decisao do responsavel, 2026-11-18).
 
-**O que vai:** as migrations 021 (times de rodizio e grupo da escala), 020 (equipes Critico e Hibrido e o limite aplicado da pausa; copia a `portal_absences`), 024 (rodizio de papeis do Critico) e 025 (Controle de CHG), nesta ordem, todas antes do merge; o codigo do F10-2, do F9, do icone novo, do rodizio de papeis e do Controle de CHG com o grupo Tools. O Controle de CHG entra desligado e so e ligado nos comandos 43 a 47, depois das conferencias. Ninguem muda de time, equipe ou jornada no deploy. O lockfile nao mudou desde o `cd0653b`: so o build. **Pre-requisito:** producao no `cd0653b`.
+**O que vai:** as migrations 021 (times de rodizio e grupo da escala), 020 (equipes Critico e Hibrido e o limite aplicado da pausa; copia a `portal_absences`), 024 (rodizio de papeis do Critico) e 025 (Controle de CHG), nesta ordem, todas antes do merge; o codigo do F10-2, do F9, do icone novo, do rodizio de papeis e do Controle de CHG com o grupo Tools. O Controle de CHG entra desligado e so e ligado nos comandos 44 a 48, depois das conferencias. Ninguem muda de time, equipe ou jornada no deploy. O lockfile nao mudou desde o `cd0653b`: so o build. **Pre-requisito:** producao no `cd0653b`.
 
 **Data, janela e quem acompanha: A DEFINIR.**
 
@@ -19,10 +19,10 @@ Gerada do roteiro "Deploy 4 (consolidado: deploys 4, 5, 6 e 7 numa execucao so; 
 
 ## 1. Conferencia do ambiente, commit validado, producao no cd0653b e a lista das migrations
 
-- [ ] **1.** (1) Esperado: antes, `sudo -i`. Oito linhas `OK` e `ambiente: OK`. **PARE se:** qualquer `BLOQUEADO` ou `PARE: ambiente com BLOQUEADO`.
+- [ ] **1.** (1) Esperado: antes, `sudo -i`. Nove linhas `OK` (com o `umask 0022`) e `ambiente: OK`. **PARE se:** qualquer `BLOQUEADO` ou `PARE: ambiente com BLOQUEADO`.
 
 ```bash
-R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
+R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; umask 022 && [ "$(umask)" = 0022 ] && echo "OK umask $(umask) (arquivos novos legiveis pelo www-data)" || { echo "BLOQUEADO umask $(umask)"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
 ```
 
 - [ ] **2.** (1) Esperado: `HEAD de producao: cd0653b (OK, gravado em pre-deploy4-commit)`, `branch: codex/modernizacao-ui-backend`, `alteracoes locais: 0`. **PARE se:** `PARE: HEAD de producao ...` (o deploy 3 nao terminou com o `cd0653b`: traga o hash curto) ou alteracao local.
@@ -77,7 +77,7 @@ for Q in /tmp/ensaio-deploy4-qa.??????; do [ -d "$Q" ] && rm -r -- "$Q" && echo 
 
 ## 3. Q-F9 e o "antes" das quatro migrations no banco real (portal no ar; so leitura)
 
-- [ ] **10.** (3) Esperado: as quatro verificacoes, na ordem: **021** com `tabelas_021 = 0`, `colunas_021 = 0`, `restricoes_021 = 0`, `copias_de_rollback_021 = 0` e "021 ausente"; **020 (Q-F9)** com `enums_com_critico_020 = 0`, `coluna_020 = 0`, `checks_ausencias = 2`, `copias_de_rollback_020 = 0`, `ativos_equipe_desconhecida = 0`, linhas com equipe nova em 0, "020 ausente" e "021 ausente" no grupo da escala; **024 (Q-PC)** com `tabelas_024 = 0`, `checks_024 = 0`, `copias_de_rollback_024 = 0` e "024 ausente"; **025 (Q-CHG)** com `tabelas_025 = 0`, `checks_025 = 0`, `copias_de_rollback_025 = 0` e "025 ausente". Anote o numero de linhas e as assinaturas das quatro (referencia dos comandos 28 a 34 e 42), os cadastros por equipe, as pausas por motivo (sem `Almoço`) e o total de ausencias. **PARE se:** `ativos_equipe_desconhecida` maior que 0 (corrigir pela tela antes), copia de rollback maior que 0, outro numero ou erro do MySQL.
+- [ ] **10.** (3) Esperado: as quatro verificacoes, na ordem: **021** com `tabelas_021 = 0`, `colunas_021 = 0`, `restricoes_021 = 0`, `copias_de_rollback_021 = 0` e "021 ausente"; **020 (Q-F9)** com `enums_com_critico_020 = 0`, `coluna_020 = 0`, `checks_ausencias = 2`, `copias_de_rollback_020 = 0`, `ativos_equipe_desconhecida = 0`, linhas com equipe nova em 0, "020 ausente" e "021 ausente" no grupo da escala; **024 (Q-PC)** com `tabelas_024 = 0`, `checks_024 = 0`, `copias_de_rollback_024 = 0` e "024 ausente"; **025 (Q-CHG)** com `tabelas_025 = 0`, `checks_025 = 0`, `copias_de_rollback_025 = 0` e "025 ausente". Anote o numero de linhas e as assinaturas das quatro (referencia dos comandos 28 a 34 e 43), os cadastros por equipe, as pausas por motivo (sem `Almoço`) e o total de ausencias. **PARE se:** `ativos_equipe_desconhecida` maior que 0 (corrigir pela tela antes), copia de rollback maior que 0, outro numero ou erro do MySQL.
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; for V in 20261115_021_rotation_teams_check 20261116_020_teams_critico_hibrido_check 20261117_024_critical_roles_check 20261117_025_chg_check; do echo "== $V"; export V; bash -o pipefail -c 'git show "$D4:migrations/verificacao/$V.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas' || echo "PARE: a verificacao $V falhou"; done; unset P D4 V
@@ -165,7 +165,7 @@ cd /var/www/chronodesk/frontend; NPMC=$(npm config get cache); test -e "$NPMC" |
 B=/var/backups/chronodesk/deploy4-$(date +%Y%m%d-%H%M%S); export B; read -rsp 'Senha root do MySQL: ' P; echo; export P; install -d -o root -g root -m 700 "$B" && bash -o pipefail -c 'docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysqldump -uroot --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF sistema_pausas | gzip | tee "$B/database.sql.gz" > /dev/null' && gzip -t "$B/database.sql.gz" && tar -czf "$B/estado.tar.gz" -C /var/www/chronodesk --ignore-failed-read estado.json pausas.csv config_sistema.json funcionarios.json && sh -c 'cd "$1" && sha256sum database.sql.gz estado.tar.gz > SHA256SUMS' _ "$B" && echo "backup concluido: $B ($(du -sh "$B" | cut -f1))" || echo "PARE: backup falhou (sem ponto de restauracao, o deploy nao segue)"; unset P
 ```
 
-## 6. Manutencao e copia do `app/` (o portal responde 503 ate o comando 48)
+## 6. Manutencao e copia do `app/` (o portal responde 503 ate o comando 49)
 
 - [ ] **24.** (6) Esperado: `arquivo de manutencao: presente`. **PARE se:** `AUSENTE`.
 
@@ -249,7 +249,13 @@ cd /var/www/chronodesk; D4=$(cat /var/backups/chronodesk/deploy4-commit); git me
 cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy4-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi
 ```
 
-- [ ] **37.** (8) Esperado: `Bundle frontend QA OK (...)`: os quatro icones no build, o `sdk-icon.png` fora, o CSS do portal abaixo de 70000 bytes e o do Controle de CHG abaixo de 25000. **PARE se:** qualquer falha do `qa:bundle`.
+- [ ] **37.** (8) Esperado: `sem leitura para o www-data: 0 (arquivos do deploy e app/)` (licao do deploy 4: com `umask 077` no shell, o merge e o build gravaram arquivos com 600/700 e o portal parou). **PARE se:** `PARE: ... sem leitura para o www-data` ou `PARE: pre-deploy4-commit ausente`: fique em manutencao, nao reabra e avise.
+
+```bash
+cd /var/www/chronodesk; PRE=$(cat /var/backups/chronodesk/pre-deploy4-commit); if git cat-file -e "$PRE^{commit}" 2>/dev/null; then N=$( { git diff -z --name-only --diff-filter=d "$PRE" HEAD; find app -print0; } | runuser -u www-data -- xargs -0 -r sh -c 'for f; do if [ -d "$f" ]; then { [ -r "$f" ] && [ -x "$f" ]; } || echo x; else [ -r "$f" ] || echo x; fi; done' _ | wc -l); [ "$N" = 0 ] && echo "sem leitura para o www-data: 0 (arquivos do deploy e app/)" || echo "PARE: $N arquivos ou diretorios do deploy ou do app/ sem leitura para o www-data"; else echo "PARE: pre-deploy4-commit ausente"; fi; unset PRE N
+```
+
+- [ ] **38.** (8) Esperado: `Bundle frontend QA OK (...)`: os quatro icones no build, o `sdk-icon.png` fora, o CSS do portal abaixo de 70000 bytes e o do Controle de CHG abaixo de 25000. **PARE se:** qualquer falha do `qa:bundle`.
 
 ```bash
 cd /var/www/chronodesk/frontend && npm run -s qa:bundle
@@ -257,25 +263,25 @@ cd /var/www/chronodesk/frontend && npm run -s qa:bundle
 
 ## 9. Recarga, health, fuso e teste de fumaca (ainda em manutencao, com o Controle de CHG desligado)
 
-- [ ] **38.** (9) Esperado: recarga sem saida. **PARE se:** erro da recarga.
+- [ ] **39.** (9) Esperado: recarga sem saida. **PARE se:** erro da recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
 ```
 
-- [ ] **39.** (9) Esperado: `health: 200`. **PARE se:** outro codigo ou `PARE: ServerName nao encontrado`.
+- [ ] **40.** (9) Esperado: `health: 200`. **PARE se:** outro codigo ou `PARE: ServerName nao encontrado`.
 
 ```bash
 S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'health: %{http_code}\n' -H "Host: $S" http://127.0.0.1/api/health.php; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
-- [ ] **40.** (9) Esperado: `QA timezone (banco real) OK`. **PARE se:** qualquer falha.
+- [ ] **41.** (9) Esperado: `QA timezone (banco real) OK`. **PARE se:** qualquer falha.
 
 ```bash
 cd /var/www/chronodesk; runuser -u www-data -- php scripts/qa-timezone.php --db
 ```
 
-- [ ] **41.** (9) Esperado: `FUMACA OK`. **PARE se:** qualquer `PARE` ou falha da fumaca: nao reabra.
+- [ ] **42.** (9) Esperado: `FUMACA OK`. **PARE se:** qualquer `PARE` ou falha da fumaca: nao reabra.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then env PHPLOG=/var/log/chronodesk/php_error.log bash scripts/smoke-deploy1.sh "$S"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
@@ -283,7 +289,7 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
 
 ## 10. As quatro verificacoes de novo (so leitura, com o codigo novo no ar)
 
-- [ ] **42.** (10) Esperado: os mesmos numeros dos comandos 28, 30, 32 e 34, e as assinaturas iguais as do comando 10. **PARE se:** numero diferente.
+- [ ] **43.** (10) Esperado: os mesmos numeros dos comandos 28, 30, 32 e 34, e as assinaturas iguais as do comando 10. **PARE se:** numero diferente.
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; for V in 20261115_021_rotation_teams_check 20261116_020_teams_critico_hibrido_check 20261117_024_critical_roles_check 20261117_025_chg_check; do echo "== $V"; export V; bash -o pipefail -c 'git show "$D4:migrations/verificacao/$V.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas' || echo "PARE: a verificacao $V falhou"; done; unset P D4 V
@@ -291,45 +297,45 @@ cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit);
 
 ## 11. Ligar o Controle de CHG (ainda em manutencao)
 
-- [ ] **43.** (11) Esperado: nada acima de `fim (esperado: nada acima)`. **PARE se:** linha no `grep` do pool (o pool vence o `.env`: avise).
+- [ ] **44.** (11) Esperado: nada acima de `fim (esperado: nada acima)`. **PARE se:** linha no `grep` do pool (o pool vence o `.env`: avise).
 
 ```bash
 grep -rn 'CHG_MODULE_ENABLED' /etc/php/*/fpm/ ; echo "fim (esperado: nada acima)"
 ```
 
-- [ ] **44.** (11) Esperado: `controle de CHG (desligado, sem sessao): 404`. **PARE se:** outro codigo.
+- [ ] **45.** (11) Esperado: `controle de CHG (desligado, sem sessao): 404`. **PARE se:** outro codigo.
 
 ```bash
 S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'controle de CHG (desligado, sem sessao): %{http_code}\n' -H "Host: $S" http://127.0.0.1/api/portal/chg.php; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
-- [ ] **45.** (11) Esperado: `copia do .env: ... (600 root)` e `linhas CHG_MODULE_ENABLED=true no .env: 1`. **PARE se:** `PARE: copia do .env falhou` ou outro numero.
+- [ ] **46.** (11) Esperado: `copia do .env: ... (600 root)` e `linhas CHG_MODULE_ENABLED=true no .env: 1`. **PARE se:** `PARE: copia do .env falhou` ou outro numero.
 
 ```bash
 K=/var/backups/chronodesk/env-antes-deploy4-$(date +%Y%m%d-%H%M%S); if install -m 600 /var/www/.env "$K"; then echo "copia do .env: $K ($(stat -c '%a %U' "$K"))"; if grep -q '^CHG_MODULE_ENABLED=' /var/www/.env; then sed -i 's/^CHG_MODULE_ENABLED=.*/CHG_MODULE_ENABLED=true/' /var/www/.env; else echo 'CHG_MODULE_ENABLED=true' >> /var/www/.env; fi; echo "linhas CHG_MODULE_ENABLED=true no .env: $(grep -c '^CHG_MODULE_ENABLED=true$' /var/www/.env)"; else echo "PARE: copia do .env falhou, nada alterado"; fi; unset K
 ```
 
-- [ ] **46.** (11) Esperado: recarga sem saida. **PARE se:** erro da recarga.
+- [ ] **47.** (11) Esperado: recarga sem saida. **PARE se:** erro da recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
 ```
 
-- [ ] **47.** (11) Esperado: `controle de CHG (ligado, sem sessao): 401`. **PARE se:** outro codigo.
+- [ ] **48.** (11) Esperado: `controle de CHG (ligado, sem sessao): 401`. **PARE se:** outro codigo.
 
 ```bash
 S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'controle de CHG (ligado, sem sessao): %{http_code}\n' -H "Host: $S" http://127.0.0.1/api/portal/chg.php; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
-## 12. Reabertura e o `Content-Type` dos icones (so com os comandos 38 a 47 como esperado)
+## 12. Reabertura e o `Content-Type` dos icones (so com os comandos 39 a 48 como esperado)
 
-- [ ] **48.** (12) Esperado: `manutencao encerrada` e `portal visto de fora: 302`. **PARE se:** `PARE: arquivo de manutencao ainda presente` ou outro codigo.
+- [ ] **49.** (12) Esperado: `manutencao encerrada` e `portal visto de fora: 302`. **PARE se:** `PARE: arquivo de manutencao ainda presente` ou outro codigo.
 
 ```bash
 [ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
-- [ ] **49.** (12) Esperado: `favicon.svg: 200 image/svg+xml`, `favicon.ico: 200 image/vnd.microsoft.icon` (ou `image/x-icon`) e `apple-touch-icon.png: 200 image/png`. **PARE se:** `text/html`, `text/plain` ou `application/octet-stream` num icone (anote e avise; nada muda no Apache durante o deploy).
+- [ ] **50.** (12) Esperado: `favicon.svg: 200 image/svg+xml`, `favicon.ico: 200 image/vnd.microsoft.icon` (ou `image/x-icon`) e `apple-touch-icon.png: 200 image/png`. **PARE se:** `text/html`, `text/plain` ou `application/octet-stream` num icone (anote e avise; nada muda no Apache durante o deploy).
 
 ```bash
 S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for F in favicon.svg favicon.ico apple-touch-icon.png; do printf '%s: ' "$F"; curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H "Host: $S" "http://127.0.0.1/app/$F?v=2"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S F
@@ -349,19 +355,19 @@ S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enable
 
 ## 14. Medicao do polling (alguns minutos depois da reabertura; sessao de gestao; `HOST_HEADER` do `ServerName`)
 
-- [ ] **50.** (14) Esperado: duas rodadas do `status.php`, com p50 e p95 (anote a melhor). **PARE se:** p95 acima de 50 ms **e** de 20% acima da base do deploy 3 (meca de novo e avise antes de qualquer reversao) ou `PARE: ServerName nao encontrado`.
+- [ ] **51.** (14) Esperado: duas rodadas do `status.php`, com p50 e p95 (anote a melhor). **PARE se:** p95 acima de 50 ms **e** de 20% acima da base do deploy 3 (meca de novo e avise antes de qualquer reversao) ou `PARE: ServerName nao encontrado`.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for R in 1 2; do echo "== status.php, rodada $R"; HOST_HEADER="$S" bash scripts/medir-polling.sh; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S R
 ```
 
-- [ ] **51.** (14) Esperado: duas rodadas do `dashboard.php`, com p50 e p95 (anote a melhor). **PARE se:** o mesmo criterio do comando 50.
+- [ ] **52.** (14) Esperado: duas rodadas do `dashboard.php`, com p50 e p95 (anote a melhor). **PARE se:** o mesmo criterio do comando 51.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for R in 1 2; do echo "== dashboard.php, rodada $R"; HOST_HEADER="$S" URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S R
 ```
 
-- [ ] **52.** (14) Esperado: duas rodadas do `solicitacoes_pendentes.php`, com p50 e p95 (anote a melhor). **PARE se:** o mesmo criterio do comando 50.
+- [ ] **53.** (14) Esperado: duas rodadas do `solicitacoes_pendentes.php`, com p50 e p95 (anote a melhor). **PARE se:** o mesmo criterio do comando 51.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for R in 1 2; do echo "== solicitacoes_pendentes.php, rodada $R"; HOST_HEADER="$S" URL=http://127.0.0.1/api/solicitacoes_pendentes.php bash scripts/medir-polling.sh; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S R
@@ -371,13 +377,13 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
 
 ## 15. Desligamento rapido do Controle de CHG (so se preciso, com aprovacao)
 
-- [ ] **53.** (15) Esperado: `copia do .env: ... (600 root)` e `linhas CHG_MODULE_ENABLED=false no .env: 1`. **PARE se:** `PARE: copia do .env falhou`.
+- [ ] **54.** (15) Esperado: `copia do .env: ... (600 root)` e `linhas CHG_MODULE_ENABLED=false no .env: 1`. **PARE se:** `PARE: copia do .env falhou`.
 
 ```bash
 K=/var/backups/chronodesk/env-antes-desligar-chg-$(date +%Y%m%d-%H%M%S); if install -m 600 /var/www/.env "$K"; then echo "copia do .env: $K ($(stat -c '%a %U' "$K"))"; sed -i 's/^CHG_MODULE_ENABLED=.*/CHG_MODULE_ENABLED=false/' /var/www/.env; echo "linhas CHG_MODULE_ENABLED=false no .env: $(grep -c '^CHG_MODULE_ENABLED=false$' /var/www/.env)"; else echo "PARE: copia do .env falhou, nada alterado"; fi; unset K
 ```
 
-- [ ] **54.** (15) Esperado: recarga sem saida; na tela, o menu sem o Controle de CHG. **PARE se:** erro da recarga.
+- [ ] **55.** (15) Esperado: recarga sem saida; na tela, o menu sem o Controle de CHG. **PARE se:** erro da recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
@@ -385,19 +391,19 @@ systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-f
 
 ## 16. Rollback de codigo (so se preciso, com aprovacao; antes, cadastros Critico ou Hibrido de volta para N1 ou N2 pela tela)
 
-- [ ] **55.** (16) Esperado: `codigo anterior no ar: cd0653b`. **PARE se:** erro do checkout.
+- [ ] **56.** (16) Esperado: `codigo anterior no ar: cd0653b`. **PARE se:** erro do checkout.
 
 ```bash
 cd /var/www/chronodesk; git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy4-commit)" && echo "codigo anterior no ar: $(git rev-parse --short HEAD)"
 ```
 
-- [ ] **56.** (16) Esperado: `app/ anterior de volta (o build retirado esta em ...)`. **PARE se:** `PARE: ...`.
+- [ ] **57.** (16) Esperado: `app/ anterior de volta (o build retirado esta em ...)`. **PARE se:** `PARE: ...`.
 
 ```bash
 cd /var/www/chronodesk; A=/var/backups/chronodesk/app-antes-deploy4; X=/var/backups/chronodesk/app-deploy4-retirado-$(date +%Y%m%d-%H%M%S); if test -d "$A"; then { ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && echo "app/ anterior de volta (o build retirado esta em $X)" || echo "PARE: a volta do app/ falhou"; else echo "PARE: copia $A ausente; nada mudou no app/"; fi; unset A X
 ```
 
-- [ ] **57.** (16) Esperado: recarga sem saida. Depois, os comandos 38 a 41 e a reabertura do comando 48. **PARE se:** erro da recarga.
+- [ ] **58.** (16) Esperado: recarga sem saida. Depois, os comandos 39 a 42 e a reabertura do comando 49. **PARE se:** erro da recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
@@ -405,13 +411,13 @@ systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-f
 
 ## 17. Rollback da 025 (so depois do 16, com aprovacao)
 
-- [ ] **58.** (17) Esperado: `rollback da 025 aplicado`. **PARE se:** `PARE: ...` (`rollback_025 abortado: ja existe copia *_bkp_025`: confira e renomeie as copias antes).
+- [ ] **59.** (17) Esperado: `rollback da 025 aplicado`. **PARE se:** `PARE: ...` (`rollback_025 abortado: ja existe copia *_bkp_025`: confira e renomeie as copias antes).
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy4-commit)" ] && git cat-file -e "$D4:migrations/rollback/20261117_025_chg_down.sql" && bash -o pipefail -c 'git show "$D4:migrations/rollback/20261117_025_chg_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 025 aplicado" || echo "PARE: o codigo no ar nao e o cd0653b ou o rollback da 025 falhou"; unset P D4
 ```
 
-- [ ] **59.** (17) Esperado: `tabelas_025 = 0`, `copias_de_rollback_025 = 10`, "025 ausente" e a assinatura dos cadastros igual a do comando 34. **PARE se:** outro numero.
+- [ ] **60.** (17) Esperado: `tabelas_025 = 0`, `copias_de_rollback_025 = 10`, "025 ausente" e a assinatura dos cadastros igual a do comando 34. **PARE se:** outro numero.
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D4:migrations/verificacao/20261117_025_chg_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D4
@@ -419,13 +425,13 @@ cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit);
 
 ## 18. Rollback da 024 (so depois do 17 com "025 ausente", com aprovacao)
 
-- [ ] **60.** (18) Esperado: `rollback da 024 aplicado`. **PARE se:** `PARE: ...` (a 025 ainda existe: o 58 antes; ou `rollback_024 abortado`).
+- [ ] **61.** (18) Esperado: `rollback da 024 aplicado`. **PARE se:** `PARE: ...` (a 025 ainda existe: o 58 antes; ou `rollback_024 abortado`).
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy4-commit)" ] && [ "$(docker exec -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -N -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas' AND TABLE_NAME = 'portal_chg_updates'")" = 0 ] && git cat-file -e "$D4:migrations/rollback/20261117_024_critical_roles_down.sql" && bash -o pipefail -c 'git show "$D4:migrations/rollback/20261117_024_critical_roles_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 024 aplicado" || echo "PARE: o codigo no ar nao e o cd0653b, a 025 ainda existe ou o rollback da 024 falhou"; unset P D4
 ```
 
-- [ ] **61.** (18) Esperado: `tabelas_024 = 0`, `copias_de_rollback_024 = 3`, "024 ausente" e as assinaturas iguais as do comando 32. **PARE se:** outro numero.
+- [ ] **62.** (18) Esperado: `tabelas_024 = 0`, `copias_de_rollback_024 = 3`, "024 ausente" e as assinaturas iguais as do comando 32. **PARE se:** outro numero.
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D4:migrations/verificacao/20261117_024_critical_roles_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D4
@@ -433,13 +439,13 @@ cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit);
 
 ## 19. Rollback da 020 (so depois do 18 com "024 ausente", com aprovacao)
 
-- [ ] **62.** (19) Esperado: `rollback da 020 aplicado`. **PARE se:** `PARE: ...` (a 024 ainda existe: o 60 antes; ou `ha linhas com equipe critico ou hibrido`: volte os cadastros pela tela antes).
+- [ ] **63.** (19) Esperado: `rollback da 020 aplicado`. **PARE se:** `PARE: ...` (a 024 ainda existe: o 60 antes; ou `ha linhas com equipe critico ou hibrido`: volte os cadastros pela tela antes).
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy4-commit)" ] && [ "$(docker exec -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -N -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'sistema_pausas' AND TABLE_NAME = 'portal_critical_roles'")" = 0 ] && git cat-file -e "$D4:migrations/rollback/20261116_020_teams_critico_hibrido_down.sql" && bash -o pipefail -c 'git show "$D4:migrations/rollback/20261116_020_teams_critico_hibrido_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 020 aplicado" || echo "PARE: o codigo no ar nao e o cd0653b, a 024 ainda existe ou o rollback da 020 falhou"; unset P D4
 ```
 
-- [ ] **63.** (19) Esperado: `enums_com_critico_020 = 0`, `coluna_020 = 0`, `copias_de_rollback_020 = 1`, "020 ausente" e as assinaturas iguais as do comando 30 se nenhuma pausa foi finalizada. **PARE se:** outro numero.
+- [ ] **64.** (19) Esperado: `enums_com_critico_020 = 0`, `coluna_020 = 0`, `copias_de_rollback_020 = 1`, "020 ausente" e as assinaturas iguais as do comando 30 se nenhuma pausa foi finalizada. **PARE se:** outro numero.
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D4:migrations/verificacao/20261116_020_teams_critico_hibrido_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D4
@@ -447,13 +453,13 @@ cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit);
 
 ## 20. Rollback da 021 (so depois do 19 com "020 ausente", com aprovacao)
 
-- [ ] **64.** (20) Esperado: `rollback da 021 aplicado`. **PARE se:** `PARE: ...` (a 020 ainda existe: o 62 antes).
+- [ ] **65.** (20) Esperado: `rollback da 021 aplicado`. **PARE se:** `PARE: ...` (a 020 ainda existe: o 62 antes).
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy4-commit)" ] && [ "$(docker exec -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot -N -e "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = 'sistema_pausas' AND TABLE_NAME = 'pausas' AND COLUMN_NAME = 'limite_segundos'")" = 0 ] && git cat-file -e "$D4:migrations/rollback/20261115_021_rotation_teams_down.sql" && bash -o pipefail -c 'git show "$D4:migrations/rollback/20261115_021_rotation_teams_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 021 aplicado" || echo "PARE: o codigo no ar nao e o cd0653b, a 020 ainda existe ou o rollback da 021 falhou"; unset P D4
 ```
 
-- [ ] **65.** (20) Esperado: `tabelas_021 = 0`, `colunas_021 = 0`, `copias_de_rollback_021 = 5`, "021 ausente" e as assinaturas iguais as do comando 10 se nenhum time foi usado. **PARE se:** outro numero.
+- [ ] **66.** (20) Esperado: `tabelas_021 = 0`, `colunas_021 = 0`, `copias_de_rollback_021 = 5`, "021 ausente" e as assinaturas iguais as do comando 10 se nenhum time foi usado. **PARE se:** outro numero.
 
 ```bash
 cd /var/www/chronodesk; export D4=$(cat /var/backups/chronodesk/deploy4-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D4:migrations/verificacao/20261115_021_rotation_teams_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D4
