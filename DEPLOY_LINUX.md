@@ -5567,6 +5567,62 @@ limpeza de `/var/backups/chronodesk` (`deploy4-<data>`, com dados pessoais,
 em membros de time segue o plano do desenho do F10 (8.6), depois de
 aprovada; os papeis e o rodizio do Critico, a Lideranca cadastra pela tela.
 
+#### Registro da execucao do deploy 4 (19/11/2026, no `f0844fd`)
+
+Executado pela `docs/DEPLOY4_FOLHA_DO_DIA.md` com o commit validado
+`f0844fd` (bateria completa sozinha na estacao: saida 0, frontend 30/30,
+navegador 1153/1153), com a manutencao das 08:30 as 08:36 e o portal no ar
+desde as 08:36. So numeros, pela numeracao dos passos deste roteiro:
+
+- **1:** ambiente OK; fast-forward com 41 commits; as 16 migrations
+  conferidas (021, 020, 024 e 025, com os arquivos de cada uma); lockfile
+  alterado 0.
+- **2:** `php -l` limpo; os 22 QAs PHP OK.
+- **3 (Q-F9 e o "antes"):** `ativos_equipe_desconhecida = 0`, 3 ausencias e
+  25 cadastros ativos.
+- **4:** os ensaios das quatro migrations, variantes (a) e (b), OK, com as
+  assinaturas iguais.
+- **5:** espaco livre OK, com `/var` em 3226 MB e `/` em 575 MB; backup de 56K.
+- **6:** copia do `app/` com 916K e 34 arquivos.
+- **7:** as quatro migrations na ordem 021, 020, 024 e 025, cada uma com a
+  verificacao OK e as assinaturas iguais as da referencia, tirada ja em
+  manutencao.
+- **8:** `merge --ff-only`; build em 1,75 s, sem `npm ci` (lockfile sem
+  mudanca); `qa:bundle` OK, com o JS de entrada em 200423 bytes, o CSS em
+  68341, o CSS do Controle de CHG em 11502 e as fontes em 85912.
+- **9:** health 200; `qa-timezone --db` OK; `FUMACA OK` (depois do incidente
+  abaixo).
+- **11:** Controle de CHG com 404 desligado e 401 ligado.
+- **12:** reabertura com 302; os icones com o tipo de imagem certo.
+- **14 (polling):** a preencher (os numeros vem do responsavel).
+
+**Incidente (sem efeito no banco):** no Bloco B, um filtro de resumo da
+saida passado ao responsavel incluia `umask 077`. Com ele no shell do dia, o
+merge e o build gravaram os arquivos com 600/700, o `www-data` nao lia o
+`security.php`, e o `qa-timezone` e a fumaca falharam, com o portal ainda em
+manutencao. Correcao: `chmod go+rX` so nos arquivos do `git diff` entre o
+`pre-deploy4-commit` e o `HEAD` e no `app/`; depois, health, fuso e fumaca
+OK. Nada mudou no banco.
+
+**Licao, em todos os roteiros e na trava (secao 17 do
+`scripts/qa-deploy-runbook.php`):** o comando 1 (conferencia do ambiente)
+fixa `umask 022` e imprime o umask (`BLOQUEADO` se nao for 0022), e, logo
+depois do build, uma linha confere que nenhum arquivo do `git diff` do
+deploy nem do `app/` ficou sem leitura para o `www-data` (`PARE` com outro
+numero). Aplicada aos roteiros e as folhas dos deploys 1 a 4 (as folhas
+renumeradas a partir do build) e ao roteiro do proximo deploy.
+
+**Push:** o `f0844fd` foi enviado ao `codex/modernizacao-ui-backend` em
+19/11/2026 (fast-forward do `cd0653b`, sem `--force`), com a autorizacao do
+responsavel.
+
+**Pendente, so com aprovacao:** os numeros do polling; a limpeza de
+`/var/backups/chronodesk` (`deploy4-<data>`, com dados pessoais,
+`app-antes-deploy4`, as copias `env-antes-*`, `pre-deploy4-commit` e
+`deploy4-commit`; listar antes so nome, modo, dono e tamanho); e, com a
+gestao, pela tela: marcar Tools e as equipes Critico e Hibrido, importar o
+Controle v5 e conferir os tecnicos de CHG.
+
 ## HTTPS Interno
 
 Use HTTPS mesmo na rede interna, com certificado corporativo ou self-signed distribuido de forma controlada. Quando HTTPS estiver ativo:

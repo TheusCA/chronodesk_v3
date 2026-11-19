@@ -1705,6 +1705,20 @@ Base da afirmação:
 | **Decisões (propostas)** | D-CHG-32 (precisa da decisão do responsável) e D-CHG-33 (9.17.12). |
 | **Validacao humana** | Pendente: revisão única no fim do lote. |
 
+### Deploy 4 consolidado: registro da execução, incidente do umask e a lição — 2026-11-19
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Registrar a execução do deploy 4 consolidado (19/11/2026, `f0844fd`, manutenção das 08:30 às 08:36), só com contagens, e aplicar a lição do incidente em todos os roteiros e na trava. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `45420db` (lição nos roteiros, folhas e trava) e o commit destes docs. Push do `f0844fd` para o `codex/modernizacao-ui-backend` feito pela IA com a autorização do responsável (fast-forward do `cd0653b`, sem `--force`). |
+| **O que a IA alterou** | `DEPLOY_LINUX.md` (registro do deploy 4; nos roteiros dos deploys 1 a 4, o `umask 022` impresso no comando 1 e a conferência de leitura pelo `www-data` logo depois do build); `docs/DEPLOY1_FOLHA_DO_DIA.md` a `docs/DEPLOY4_FOLHA_DO_DIA.md` (os mesmos comandos, renumeradas a partir do build); `scripts/qa-deploy-runbook.php` (seção 17 e os pares colados do build). |
+| **Números do dia (do responsável)** | 41 commits; 16 arquivos de migration conferidos; lockfile 0; `php -l` limpo; 22/22 QAs; Q-F9: `ativos_equipe_desconhecida` 0, 3 ausências, 25 cadastros ativos; ensaios (a) e (b) das quatro migrations OK, assinaturas iguais; `/var` 3226 MB e `/` 575 MB livres; backup de 56K; cópia do `app/` com 916K e 34 arquivos; as quatro migrations na ordem, com as verificações OK e as assinaturas iguais às da referência tirada já em manutenção; build em 1,75 s; `qa:bundle` OK (JS de entrada 200423, CSS 68341, CSS do CHG 11502, fontes 85912); health 200, fuso OK, `FUMACA OK`; CHG 404 desligado e 401 ligado; reabertura 302; ícones com o tipo certo. Polling: a preencher. |
+| **Incidente** | No Bloco B, um filtro de resumo da saída passado ao responsável incluía `umask 077`: o merge e o build gravaram arquivos com 600/700, o `www-data` não lia o `security.php` e o `qa-timezone` e a fumaça falharam, com o portal em manutenção. Corrigido com `chmod go+rX` só nos arquivos do `git diff` pré..HEAD e no `app/`; depois, health, fuso e fumaça OK. Nada mudou no banco. |
+| **Dados pessoais** | Nenhum: só contagens, sem nome, hostname, IP nem senha. |
+| **Validacao executada pela IA** | Trava do roteiro com 483 verificações; mutação da lição no worktree (10/10 mortos, cada um pela conferência da seção 17 ou da folha); bateria completa sozinha no `45420db` (resultado no estado da sessão). |
+| **Achados** | As edições da lição foram feitas por script direto na cópia principal (fora da trava `mut_guard.php`, que vale para todo script que grava arquivo); o conteúdo foi conferido pela trava e pela mutação, e as edições seguintes usaram as ferramentas de edição. |
+| **Validacao humana** | Pendente: revisão com o lote F10-3. |
+
 ---
 
 ## 5. Responsabilidade
