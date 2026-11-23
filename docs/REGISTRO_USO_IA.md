@@ -1744,6 +1744,19 @@ Base da afirmação:
 | **Decisões (a aprovar)** | D-F10-42 a D-F10-47 (desenho do F10, 8.8). |
 | **Validacao humana** | F10-3 e D-F10-32 a D-F10-41 aprovados em 2026-11-23; o 8.8 pendente de revisão. |
 
+### Lote NC (matrícula na hora extra e na correção de ponto) e ícone novo — 2026-11-23
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | O NC (a matrícula do cadastro Senior) no cadastro do funcionário e uma cópia em cada hora extra e correção de ponto, com a coluna NC dos dois CSVs preenchida e a chave `NC_OBRIGATORIO`; e o ícone novo do portal (opção B, escolhida pelo responsável). Entra no deploy 5. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `806a73c` (migration 026 e o roteiro), `62738e7` (plano), `2116c4d` (servidor), `0bc74c3` (telas), `4a33925` (ícone), `ee09eb5` (roteiro do deploy 5) e o commit destes docs. O push vai junto da autorização do lote anterior, só com a bateria final verde (resposta do responsável em 2026-11-23). |
+| **O que a IA alterou** | Migration 026 (rollback, verificação, linhas do ensaio); `services/EmployeeNc.php`; `api/adicionar_funcionario.php`, `api/atualizar_funcionario.php`, `api/listar_funcionarios.php`, `api/portal/overtime.php`, `api/portal/time_corrections.php`, `services/OperationalService.php`, `.env.example`; `AdminPage.jsx`, `OperationalPages.jsx`, `formSchemas.ts`, `employeeNc.ts`; o ícone (`BrandMark.jsx`, `frontend/public`, `docs/design/marca`, `index.html` e 5 páginas PHP); `qa-nc.php`, `qa-security.php`, `qa:employee-form`, `qa:operational`, `qa:bundle`, `qa:shell`, o navegador; `scripts/smoke-deploy1.sh`; `DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md`, `scripts/qa-deploy-runbook.php`; `docs/DESENHO_NC_E_ICONE.md`. |
+| **Dados pessoais** | O NC é dado pessoal: nenhum NC real no git, nos docs, nos QAs, no ensaio nem no chat (só fictícios); a auditoria registra que o NC mudou, por ID, sem o valor; a lista só traz o NC para Liderança e admin; a verificação só conta. |
+| **Validacao executada pela IA** | Ensaio da 026 nas duas variantes no MySQL 8.0.46 local (dados fictícios); integração no MySQL local, 16/16; mutação por commit (24/24, 29/29, 21/21, 12/12, 15/15; os sobreviventes da 1ª rodada viraram casos novos); navegador 1163/1163; trava com 519 verificações; bateria completa sozinha no último commit (no estado da sessão). |
+| **Achados** | Sem push próprio: a resposta do responsável ligou o push deste lote à autorização do lote anterior, com a bateria verde. O pedido do ícone veio com o marcador `<A|B|C>`; o responsável escolheu a B. |
+| **Decisões (a aprovar)** | D-NC-1 a D-NC-9 (`docs/DESENHO_NC_E_ICONE.md`). |
+| **Validacao humana** | Pendente: revisão única no fim do lote. |
+
 ---
 
 ## 5. Responsabilidade

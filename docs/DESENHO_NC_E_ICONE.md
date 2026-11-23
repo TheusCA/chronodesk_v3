@@ -1,6 +1,6 @@
 # Lote NC e ícone novo (deploy 5)
 
-**Estado:** pedido em 2026-11-23, depois do lote 8.8; plano e execução neste documento; entra no deploy 5. Sem push próprio: o push do `codex/modernizacao-ui-backend` vai junto da autorização do lote anterior, só com a bateria final verde (resposta do responsável em 2026-11-23).
+**Estado:** pedido em 2026-11-23, depois do lote 8.8; plano e execução neste documento; **entregue em 2026-11-23** (seção 4), D-NC-1 a D-NC-9 a aprovar; entra no deploy 5. Sem push próprio: o push do `codex/modernizacao-ui-backend` vai junto da autorização do lote anterior, só com a bateria final verde (resposta do responsável em 2026-11-23).
 
 **LGPD:** o NC é a matrícula da pessoa (cadastro Senior). Nenhum NC real entra no git, nos docs, nos QAs nem no chat: só valores fictícios e contagens.
 
@@ -40,3 +40,45 @@
 | D-NC-7 | CSV: `COALESCE(copia do lançamento, NC atual do cadastro)` na mesma consulta do export; a lista da tela não ganha o campo | O pedido: a cópia; nas linhas antigas, o NC atual |
 | D-NC-8 | A fila de sincronização (SharePoint) não muda | Fora do pedido; o modelo novo do CSV é outro lote |
 | D-NC-9 | Ícone: a opção B, escolhida pelo responsável | O pedido veio com o marcador `<A|B|C>` |
+
+## 4. Execução (2026-11-23)
+
+**Commits** (branch `feat/employee-form-rhf-zod`):
+
+| Commit | Conteúdo |
+|---|---|
+| `806a73c` | Migration 026 (rollback, verificação, linhas do ensaio); `qa-nc.php` seção 1 na bateria (`test-local.ps1` e `test-linux.sh`); deploy 5 com a 026 (a lista das 8 migrations, o "antes", os ensaios (a) e (b), a 026 logo depois da 022, a verificação de novo, o rollback no passo 16; 24 QAs); roteiro e folha regerados; a trava |
+| `62738e7` | Este documento (plano e decisões) |
+| `2116c4d` | Servidor: `services/EmployeeNc.php`; NC no criar, editar e listar funcionário (auditoria `FUNCIONARIO_NC_ALTERADO` só com o ID e o tipo); a cópia do NC no lançamento; `NC_OBRIGATORIO`; `?nc=1` nos dois endpoints; a coluna NC dos dois CSVs; `.env.example`; `qa-nc.php` seção 2 e os casos do NC no `qa-security` |
+| `0bc74c3` | Telas: campo NC no cadastro, aviso e filtro "Sem NC" na lista; o NC só leitura, o aviso e o bloqueio nos formulários; `qa:employee-form`, `qa:operational` e o navegador |
+| `4a33925` | Ícone B: `BrandMark.jsx`, `favicon.svg` (sem tema), `favicon-16.svg`, `favicon.ico` (16, 32 e 48), `favicon.png`, `apple-touch-icon.png`, `icon-512.png` (gerados dos SVG pelo Chrome headless), `?v=3` no `index.html` e nas 5 páginas PHP; `docs/design/marca/NOTA.md`; `qa:bundle`, `qa:shell` e o bloco da marca no navegador |
+| `ee09eb5` | Roteiro e folha do deploy 5 com o código do NC e o ícone (a chave desligada), a fumaça com os dois CSVs (oito GET), os ícones `?v=3` logo depois da reabertura, as conferências na tela e o depois do deploy; a trava |
+| O último | Esta seção e o `REGISTRO_USO_IA.md` |
+
+**Ensaio da 026 no MySQL 8.0.46 local** (contêiner do WSL; base fictícia `qa_nc` = `qa_f103` mais 4 horas extras e 3 correções fictícias; `scripts/ensaio-migration.sh` do repositório, com `DADOS=portal_overtime_entries,portal_time_adjustments`). Só contagens e assinaturas:
+
+| Variante | Resultado |
+|---|---|
+| (a) `nc_026` | migration 2x `OK` (`colunas_026 = 3`, `checks_026 = 3`, `indice_026 = 1`; 13 cadastros ativos, 0 com NC; 4 horas extras e 3 correções, 0 com cópia; problemas 0); rollback 1x `OK` (`copias_de_rollback_026 = 3`, "026 ausente"); a 2ª para de propósito (`rollback_026 abortado`); assinaturas do cadastro (14 linhas), das horas extras (4) e das correções (3) iguais nos cinco estados |
+| (b) `nc_026_rollback` | linhas do ensaio 2x: 3 cadastros com NC fictício, 3 horas extras e 3 correções com a cópia, problemas 0 (iguais na 2ª); rollback 1x `OK` (3 cópias), a 2ª para; assinaturas iguais às do estado inicial |
+
+A verificação mudou depois da 1ª rodada (a contagem `nc_repetido` passou a não listar o NC, por causa da conferência da mutação); as duas variantes rodaram de novo com o arquivo final, com o mesmo resultado.
+
+**Integração no MySQL 8.0.46 local** (`qa_nci` = `qa_nc` + 026; dados e NC fictícios; transação desfeita): 16/16. As restrições recusam linha a linha (letra, vazio, espaço, 13 dígitos e as cópias fora do formato: `3819`/`1406`); NC repetido `1062`, vários sem NC; `EmployeeNc` grava, lê com zero à esquerda e confere a unicidade; o lançamento grava a cópia do cadastro (o `nc` e o `employee_nc` do corpo ignorados) e NULL sem NC; com `NC_OBRIGATORIO=1`, sem NC 409 e com NC grava; os dois CSVs com o NC da cópia ou, nas linhas antigas, o atual do cadastro; a leitura do formulário pela gestão; nada fica gravado.
+
+**Mutação por commit** (no worktree, com a trava `mut_guard.php`):
+- `806a73c`: 24/24. Na 1ª rodada, 22/24: a verificação podia exibir o NC (por exemplo, com `GROUP_CONCAT`) sem reprovar; o `qa-nc` passou a uma lista branca dos usos do NC na verificação (commit refeito antes de qualquer envio); e um mutante do roteiro não se aplicava na folha (erro do script).
+- `2116c4d`: 29/29. Na 1ª rodada, 28/29: a leitura `?nc=1` sem sessão não era testada; casos novos no `qa-security` (sem sessão 401; o técnico lê o próprio NC), commit refeito antes de qualquer envio.
+- `0bc74c3`: 21/21.
+- `4a33925`: 12/12.
+- `ee09eb5`: 15/15. Na 1ª rodada, 11/15: 4 mutantes não se aplicaram (erro do script: `\n` entre aspas simples e textos repetidos em outros deploys); reescritos com alvos únicos do deploy 5, 4/4.
+
+**Navegador:** com as telas do NC, 1163/1163 (+1: o corpo do cadastro novo leva o NC). Na 1ª rodada, 1162/1163: um segundo roteiro de "Adicionar funcionário" não digitava o NC (obrigatório agora); corrigido antes do commit.
+
+**Ícone:** contraste das barras da pausa contra a placa de 10,4:1 no tema claro e 6,4:1 no escuro (marca do topo); no favicon fixo, 10,5:1; as chaves, 17,2:1, 15,6:1 e 15,5:1.
+
+**Trava do roteiro:** 519 verificações; os 48 comandos do deploy 5 passam no `bash -n`. `qa-nc`: 50 verificações.
+
+**Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
+
+**Não verificado aqui:** o NC real dos cadastros (fica com a gestão, pela tela) e a chave `NC_OBRIGATORIO` ligada em produção (passo combinado depois, com `ativos_sem_nc = 0`).
