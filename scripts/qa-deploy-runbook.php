@@ -390,12 +390,12 @@ assert_same([true, true, true, true, true, true, true, 0], [
     strpos($smoke, "read -rsp 'Senha do AD: ' SMK_S") !== false,
     strpos($smoke, "trap 'rm -rf -- \"\${W:?}\"' EXIT") !== false,
     strpos($smoke, '--data-binary @-') !== false && strpos($smoke, '-H @"$HDR"') !== false,
-    strpos($smoke, 'for U in api/status.php api/portal/schedules.php api/portal/pa_map.php api/portal/absences.php api/portal/calendar.php api/portal/reports.php; do') !== false,
+    strpos($smoke, "for U in api/status.php api/portal/schedules.php api/portal/pa_map.php api/portal/absences.php api/portal/calendar.php api/portal/reports.php 'api/portal/overtime.php?format=csv' 'api/portal/time_corrections.php?format=csv'; do") !== false,
     strpos($smoke, '"action" => "create"') !== false && strpos($smoke, '"action" => "cancel"') !== false,
     strpos($smoke, "grep -vc '\\[AUTH_AD\\] Login bem-sucedido'") !== false,
     strpos($smoke, 'echo "FUMACA OK"') !== false,
     preg_match('/^[^\n#]*\bcurl\b[^\n]*(\s-u\s|--user|\s-d\s|--data\s|--data-raw|SMK_S)/m', str_replace("\\\n", ' ', $smoke)),
-], 'smoke-deploy1.sh: senha sem eco e fora do argv, cookie e token em diretorio temporario apagado, os seis GET (com o Calendario e os relatorios desde o deploy 5, 8.8), lancar e cancelar, log do PHP e FUMACA OK');
+], 'smoke-deploy1.sh: senha sem eco e fora do argv, cookie e token em diretorio temporario apagado, os oito GET (com o Calendario e os relatorios, 8.8, e os dois CSVs, lote NC, desde o deploy 5), lancar e cancelar, log do PHP e FUMACA OK');
 assert_same([1, 0, 0], [count($all('migrations/correcao_dados/biz02_01_registrar_corte.sql; unset P')), count(array_filter($commands, static fn (string $line, int $i): bool => $i > $recordLine && preg_match('/biz02_0[234]/', $line) === 1, ARRAY_FILTER_USE_BOTH)), preg_match('/\bSET @ignorar_guardas\b/', $text)], 'roteiro unico: no dia, so o script 1 do BIZ-02, sem ignorar guardas por comando');
 assert_same(true, strpos($prose, 'Corte do BIZ-02 com **`ABORTADO PELAS GUARDAS`** (passo 6c): pare') !== false, 'roteiro unico: regra de parada das guardas do BIZ-02');
 // Ensaio do BIZ-02 antes do dia (0n), na copia sistema_pausas_ensaio que o
@@ -1283,11 +1283,27 @@ assert_same([0, 0, 0, 0, 0, true], [
 assert_same([true, true, true, true, true, true], [
     strpos((string)strtok($runbook5, "\n"), '; papel do dia do Critico numa fonte so, 8.8;') !== false,
     strpos($prose5, '**Papel do dia do Critico numa fonte so (desenho do F10, 8.8, sem') !== false && strpos($prose5, '(D-F10-36 retirada)') !== false,
-    strpos($prose5, 'agora com **seis** linhas `GET ...: 200`') !== false && strpos($prose5, '`GET /api/portal/calendar.php: 200`') !== false && strpos($prose5, '`GET /api/portal/reports.php: 200`') !== false,
+    strpos($prose5, 'agora com **oito** linhas `GET ...: 200`') !== false && strpos($prose5, '`GET /api/portal/calendar.php: 200`') !== false && strpos($prose5, '`GET /api/portal/reports.php: 200`') !== false,
     strpos($prose5, '- **Escala, Calendario e Visao operacional (8.8):**') !== false && strpos($prose5, 'a mesma pessoa diferente entre as telas') !== false,
     strpos($prose5, 'A Escala, o Calendario e os relatorios passam a mostrar o Critico pelo papel do dia, como a Visao operacional.') !== false,
-    strpos($sheet5, 'seis linhas `GET ...: 200` (com `calendar.php` e `reports.php`, 8.8) e `FUMACA OK`') !== false && strpos($sheet5, 'igual na Escala, com a origem "Papel do Critico", no Calendario e na Visao operacional, 8.8') !== false,
-], 'deploy 5 (8.8): titulo, o que vai, fumaca com seis GET, conferencia da mesma pessoa nas telas e aviso, no roteiro e na folha');
+    strpos($sheet5, 'oito linhas `GET ...: 200` (com `calendar.php` e `reports.php`, 8.8, e os CSVs `overtime.php?format=csv` e `time_corrections.php?format=csv`, lote NC) e `FUMACA OK`') !== false && strpos($sheet5, 'igual na Escala, com a origem "Papel do Critico", no Calendario e na Visao operacional, 8.8') !== false,
+], 'deploy 5 (8.8): titulo, o que vai, fumaca com o Calendario e os relatorios, conferencia da mesma pessoa nas telas e aviso, no roteiro e na folha');
+// [Lote NC, commit 6] O codigo do NC e o icone B: o que vai (a chave
+// desligada), a fumaca com os dois CSVs, os icones ?v=3 logo depois da
+// reabertura, as conferencias na tela e o depois do deploy (preencher o NC,
+// a chave so com ativos_sem_nc = 0); a folha junto.
+$icons5 = $first5('for F in favicon.svg favicon.ico apple-touch-icon.png; do');
+assert_same([true, true, true, true, true, true, true, true, 0], [
+    $icons5 === $maintOff5 + 1 && strpos($commands5[$icons5], 'curl -s -o /dev/null -w \'%{http_code} %{content_type}\n\' -H "Host: $S" "http://127.0.0.1/app/$F?v=3"') !== false,
+    strpos((string)strtok($runbook5, "\n"), '; NC na hora extra e na correcao de ponto, migration 026; icone novo)') !== false,
+    strpos($prose5, '- **Codigo do lote NC:**') !== false && strpos($prose5, 'A chave `NC_OBRIGATORIO` **fica desligada** neste deploy') !== false,
+    strpos($prose5, '- **Icone novo (opcao B, "chaves com pausa"):**') !== false && strpos($prose5, '`favicon.svg: 200 image/svg+xml`') !== false,
+    strpos($prose5, '`GET /api/portal/overtime.php?format=csv: 200`') !== false && strpos($prose5, '`GET /api/portal/time_corrections.php?format=csv: 200`') !== false,
+    strpos($prose5, '- **Funcionarios (lote NC):**') !== false && strpos($prose5, '- **Horas extras e Correcao de ponto (lote NC):**') !== false && strpos($prose5, '- **Icone:**') !== false,
+    strpos($prose5, '- **Ligar a chave `NC_OBRIGATORIO`** so quando a verificacao da 026 der `ativos_sem_nc = 0`') !== false,
+    strpos($sheet5, 'o NC nas telas e nos CSVs (a chave `NC_OBRIGATORIO` fica desligada), o icone novo (`?v=3`)') !== false && strpos($sheet5, '(o icone B, com `?v=3`)') !== false,
+    substr_count($text5, 'NC_OBRIGATORIO'),
+], 'deploy 5 (lote NC): titulo, o que vai com a chave desligada, fumaca com os CSVs, icones ?v=3 depois da reabertura, conferencias e o depois do deploy; nenhum comando liga a chave');
 
 // ----------------------------------------------------------------------------
 // 17. Licao do deploy 4 (19/11/2026): um filtro de resumo com "umask 077"

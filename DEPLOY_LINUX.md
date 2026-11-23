@@ -5623,7 +5623,7 @@ responsavel.
 gestao, pela tela: marcar Tools e as equipes Critico e Hibrido, importar o
 Controle v5 e conferir os tecnicos de CHG.
 
-### Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022; papel do dia do Critico numa fonte so, 8.8; NC na hora extra e na correcao de ponto, migration 026)
+### Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022; papel do dia do Critico numa fonte so, 8.8; NC na hora extra e na correcao de ponto, migration 026; icone novo)
 
 **O que vai** (tudo depois do `f0844fd`, o commit do deploy 4):
 
@@ -5658,10 +5658,21 @@ Controle v5 e conferir os tecnicos de CHG.
   colunas entram com `ALGORITHM=INSTANT`, as tres CHECK com `ALGORITHM=COPY`
   (o MySQL confere as linhas) e o indice unico com `INPLACE`, por isso com a
   manutencao ligada. Rollback para se ja existir copia `*_bkp_026`.
+- **Codigo do lote NC:** o campo NC no cadastro de funcionarios
+  (obrigatorio no cadastro novo; so Lideranca e admin veem e alteram; a
+  auditoria registra so que mudou), o aviso "N cadastro(s) ativo(s) sem NC" e
+  o filtro "Sem NC" na lista; o NC da pessoa, so leitura, nos formularios de
+  hora extra e de correcao de ponto; a copia do NC em cada lancamento, lida do
+  cadastro pelo servidor; a coluna NC dos dois CSVs com a copia (nas linhas
+  antigas, o NC atual do cadastro). A chave `NC_OBRIGATORIO` **fica
+  desligada** neste deploy (ausente no `.env`): sem NC, a tela so avisa.
+- **Icone novo (opcao B, "chaves com pausa"):** a marca do topo e o favicon,
+  com os links `?v=3`; o favicon nao depende do tema.
 - **O que muda para quem usa:** so o Critico com papel no dia (Escala,
-  Calendario e relatorios iguais a Visao operacional). Sem PA marcado, o Mapa
-  PA fica como hoje. A gestao marca os PAs pela tela depois (fim deste
-  roteiro).
+  Calendario e relatorios iguais a Visao operacional), o campo e o aviso do
+  NC, o NC nos formularios e no CSV e o icone. Sem PA marcado, o Mapa PA fica
+  como hoje. A gestao marca os PAs e preenche os NC pela tela depois (fim
+  deste roteiro).
 
 **A 022 e a 026 antes do merge:** o codigo do `f0844fd` le o inventario e o
 cadastro com a lista de colunas dele, nao le a tabela nova e grava os
@@ -5715,7 +5726,9 @@ unico `git fetch` e o do passo 1, so do branch.
    reservados pelos papeis do dia, e cada PA pode ter preferencias do grupo
    comum. Nada muda na atualizacao: a gestao marca os PAs pela tela depois.
    A Escala, o Calendario e os relatorios passam a mostrar o Critico pelo
-   papel do dia, como a Visao operacional. Duvidas: <contato>."
+   papel do dia, como a Visao operacional. O cadastro de funcionarios ganha
+   o NC (a matricula), que vai na hora extra e na correcao de ponto e na
+   planilha; o portal ganha um icone novo. Duvidas: <contato>."
 
 **1. Conferencia do ambiente (com o umask), producao no `f0844fd`, commit validado e a lista das migrations.**
 
@@ -5897,9 +5910,13 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
 ```
 
    Esperado: o mesmo do passo 9 do deploy 4 (`health: 200`, `QA timezone
-   (banco real) OK`, `FUMACA OK`), agora com **seis** linhas `GET ...: 200`
+   (banco real) OK`, `FUMACA OK`), agora com **oito** linhas `GET ...: 200`
    na fumaca: as quatro de antes mais `GET /api/portal/calendar.php: 200` e
-   `GET /api/portal/reports.php: 200` (o papel do dia, 8.8, roda nas duas).
+   `GET /api/portal/reports.php: 200` (o papel do dia, 8.8, roda nas duas) e
+   `GET /api/portal/overtime.php?format=csv: 200` e
+   `GET /api/portal/time_corrections.php?format=csv: 200` (o NC da 026 nos
+   dois CSVs; a saida vai para `/dev/null`, e cada um grava a auditoria de
+   exportacao de sempre).
    **PARE** com qualquer `PARE` ou codigo diferente: nao reabra.
 
 **10. As verificacoes da 022 e da 026 de novo, so leitura**, agora com o
@@ -5918,10 +5935,16 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
 
 ```bash
 [ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for F in favicon.svg favicon.ico apple-touch-icon.png; do printf '%s: ' "$F"; curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H "Host: $S" "http://127.0.0.1/app/$F?v=3"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S F
 ```
 
    So com os passos 9 e 10 como esperado. Esperado: `manutencao encerrada` e
-   `portal visto de fora: 302`.
+   `portal visto de fora: 302`; os icones (o B, com `?v=3`) com o tipo certo:
+   `favicon.svg: 200 image/svg+xml`, `favicon.ico: 200
+   image/vnd.microsoft.icon` (ou `image/x-icon`) e `apple-touch-icon.png: 200
+   image/png`. Icone com `text/html`, `text/plain` ou
+   `application/octet-stream`: anote e avise (nada muda no Apache durante o
+   deploy).
 
 **12. Conferencia na tela**, como admin (Ctrl+F5 uma vez), **sem salvar
 nada** (abra e feche sem gravar):
@@ -5940,6 +5963,16 @@ nada** (abra e feche sem gravar):
   operacional; no Calendario de hoje, "Papel do dia: <papel>". Com excecao ou
   ausencia hoje, vale a excecao ou a ausencia nas tres telas. Nada de anotar
   nome: so "igual" ou "diferente".
+- **Funcionarios (lote NC):** o aviso "N cadastro(s) ativo(s) sem NC" (anote
+  so o N; logo depois do deploy, todos os ativos); "Ver cadastros sem NC"
+  aplica o filtro "Sem NC"; em "Adicionar funcionario", o campo NC obrigatorio;
+  em "Editar", o campo NC vazio (feche sem salvar).
+- **Horas extras e Correcao de ponto (lote NC):** com um colaborador
+  escolhido, o campo "NC (matricula)" com "Sem NC no cadastro" e o aviso
+  amarelo "Sem NC no cadastro" (a chave desligada: o botao de enviar continua
+  ligado). Nada de enviar.
+- **Icone:** a aba e o topo com o icone B (as chaves com a pausa ambar), nos
+  temas claro e escuro.
 
 **PARE** com tela em branco ou quebrada, item que nao aparece ou a mesma
 pessoa diferente entre as telas: avise.
@@ -6031,6 +6064,15 @@ verificacao so conta):
   O Hibrido fica com o PA fixo por pessoa (opcao (c)).
 - **Preferencias** do grupo comum (N1 e N2) por PA, se a gestao quiser
   reproduzir as do CONFIG PA da planilha.
+- **Preencher o NC** de cada cadastro ativo (Lideranca ou admin, em "Editar";
+  a matricula do cadastro Senior, so digitos). O NC nunca vai para o git, os
+  docs ou o chat; a verificacao da 026 so conta (`ativos_sem_nc`,
+  `nc_repetido = 0`).
+- **Ligar a chave `NC_OBRIGATORIO`** so quando a verificacao da 026 der
+  `ativos_sem_nc = 0`, com o responsavel, num passo combinado (a linha
+  `NC_OBRIGATORIO=1` no `/var/www/.env`, com copia do `.env` antes, e a
+  recarga do PHP-FPM, como a chave do Controle de CHG no deploy 4). Ligada, o
+  servidor recusa o lancamento de quem nao tem NC e a tela avisa e nao envia.
 
 Depois de um ciclo estavel, com o responsavel: o push do commit validado
 para o `codex/modernizacao-ui-backend` (nunca `--force`); com aprovacao, a

@@ -1,8 +1,8 @@
-# Deploy 5 (F10-3, 8.8 e NC): folha de execucao do dia
+# Deploy 5 (F10-3, 8.8, NC e icone): folha de execucao do dia
 
-Gerada do roteiro "Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022; papel do dia do Critico numa fonte so, 8.8; NC na hora extra e na correcao de ponto, migration 026)" do `DEPLOY_LINUX.md`: os mesmos comandos, na mesma ordem. O roteiro e a referencia: o detalhe de cada esperado esta la. Mudou o roteiro, muda esta folha no mesmo commit. (Ate 2026-11-19 esta folha so apontava para a do deploy 4 consolidado.)
+Gerada do roteiro "Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022; papel do dia do Critico numa fonte so, 8.8; NC na hora extra e na correcao de ponto, migration 026; icone novo)" do `DEPLOY_LINUX.md`: os mesmos comandos, na mesma ordem. O roteiro e a referencia: o detalhe de cada esperado esta la. Mudou o roteiro, muda esta folha no mesmo commit. (Ate 2026-11-19 esta folha so apontava para a do deploy 4 consolidado.)
 
-**O que vai:** a migration 022 (inventario de PA: tipo, emprestimo, reserva do Critico e a tabela de preferencias; nenhuma linha muda) e a migration 026 (o NC no cadastro e a copia dele na hora extra e na correcao de ponto; nenhuma linha muda), antes do merge; o codigo do F10-3, o papel do dia do Critico numa fonte so (8.8: a Escala, o Calendario, os relatorios e o Mapa PA mostram o Critico pelo papel do dia, como a Visao operacional; sem migration) e a licao do deploy 4 (umask). Ninguem muda de PA no deploy: a gestao marca os PAs pela tela depois. O lockfile nao mudou desde o `f0844fd`: so o build. **Pre-requisito:** producao no `f0844fd`.
+**O que vai:** a migration 022 (inventario de PA: tipo, emprestimo, reserva do Critico e a tabela de preferencias; nenhuma linha muda) e a migration 026 (o NC no cadastro e a copia dele na hora extra e na correcao de ponto; nenhuma linha muda), antes do merge; o codigo do F10-3, o papel do dia do Critico numa fonte so (8.8: a Escala, o Calendario, os relatorios e o Mapa PA mostram o Critico pelo papel do dia, como a Visao operacional; sem migration), o NC nas telas e nos CSVs (a chave `NC_OBRIGATORIO` fica desligada), o icone novo (`?v=3`) e a licao do deploy 4 (umask). Ninguem muda de PA no deploy: a gestao marca os PAs pela tela depois. O lockfile nao mudou desde o `f0844fd`: so o build. **Pre-requisito:** producao no `f0844fd`.
 
 **Data, janela e quem acompanha: A DEFINIR.**
 
@@ -233,7 +233,7 @@ S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enable
 cd /var/www/chronodesk; runuser -u www-data -- php scripts/qa-timezone.php --db
 ```
 
-- [ ] **34.** (9) Esperado: seis linhas `GET ...: 200` (com `calendar.php` e `reports.php`, 8.8) e `FUMACA OK`. **PARE se:** qualquer `PARE` ou falha da fumaca: nao reabra.
+- [ ] **34.** (9) Esperado: oito linhas `GET ...: 200` (com `calendar.php` e `reports.php`, 8.8, e os CSVs `overtime.php?format=csv` e `time_corrections.php?format=csv`, lote NC) e `FUMACA OK`. **PARE se:** qualquer `PARE` ou falha da fumaca: nao reabra.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then env PHPLOG=/var/log/chronodesk/php_error.log bash scripts/smoke-deploy1.sh "$S"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
@@ -261,25 +261,31 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
 [ -e /var/www/chronodesk.maintenance ] && rm -- /var/www/chronodesk.maintenance; [ -e /var/www/chronodesk.maintenance ] && echo "PARE: arquivo de manutencao ainda presente" || echo "manutencao encerrada"; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then curl -s -o /dev/null -w 'portal visto de fora: %{http_code}\n' "http://$S/"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
 ```
 
+- [ ] **38.** (11) Esperado: `favicon.svg: 200 image/svg+xml`, `favicon.ico: 200 image/vnd.microsoft.icon` (ou `image/x-icon`) e `apple-touch-icon.png: 200 image/png` (o icone B, com `?v=3`). **PARE se:** `text/html`, `text/plain` ou `application/octet-stream` num icone (anote e avise; nada muda no Apache durante o deploy).
+
+```bash
+S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for F in favicon.svg favicon.ico apple-touch-icon.png; do printf '%s: ' "$F"; curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H "Host: $S" "http://127.0.0.1/app/$F?v=3"; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S F
+```
+
 ## 12. Conferencia na tela (como admin, Ctrl+F5 uma vez, sem salvar nada)
 
-Os itens do passo 12 do roteiro (Mapa de PA sem selo e com a legenda nova; o "Inventario do PA" no dialogo com os botoes de salvar desligados; uma pessoa do Critico com papel hoje igual na Escala, com a origem "Papel do Critico", no Calendario e na Visao operacional, 8.8, anotando so "igual" ou "diferente"). **PARE** com tela em branco ou quebrada, ou a mesma pessoa diferente entre as telas.
+Os itens do passo 12 do roteiro (Mapa de PA sem selo e com a legenda nova; o "Inventario do PA" no dialogo com os botoes de salvar desligados; uma pessoa do Critico com papel hoje igual na Escala, com a origem "Papel do Critico", no Calendario e na Visao operacional, 8.8, anotando so "igual" ou "diferente"; em Funcionarios, o aviso "N cadastro(s) ativo(s) sem NC" (anote so o N), o filtro "Sem NC" e o campo NC; nos formularios de hora extra e de correcao de ponto, o NC so leitura com o aviso amarelo e o envio ligado; o icone B na aba e no topo, nos dois temas). **PARE** com tela em branco ou quebrada, ou a mesma pessoa diferente entre as telas.
 
 ## 13. Medicao do polling (alguns minutos depois da reabertura; sessao de gestao; `HOST_HEADER` do `ServerName`)
 
-- [ ] **38.** (13) Esperado: duas rodadas do `status.php`, com p50 e p95 (anote a melhor). **PARE se:** p95 acima de 50 ms **e** de 20% acima da base do deploy 4: meca de novo e avise.
+- [ ] **39.** (13) Esperado: duas rodadas do `status.php`, com p50 e p95 (anote a melhor). **PARE se:** p95 acima de 50 ms **e** de 20% acima da base do deploy 4: meca de novo e avise.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for R in 1 2; do echo "== status.php, rodada $R"; HOST_HEADER="$S" bash scripts/medir-polling.sh; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S R
 ```
 
-- [ ] **39.** (13) Esperado: duas rodadas do `dashboard.php`, com p50 e p95 (anote a melhor). **PARE se:** o mesmo criterio.
+- [ ] **40.** (13) Esperado: duas rodadas do `dashboard.php`, com p50 e p95 (anote a melhor). **PARE se:** o mesmo criterio.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for R in 1 2; do echo "== dashboard.php, rodada $R"; HOST_HEADER="$S" URL=http://127.0.0.1/api/portal/dashboard.php bash scripts/medir-polling.sh; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S R
 ```
 
-- [ ] **40.** (13) Esperado: duas rodadas do `solicitacoes_pendentes.php`, com p50 e p95 (anote a melhor). **PARE se:** o mesmo criterio.
+- [ ] **41.** (13) Esperado: duas rodadas do `solicitacoes_pendentes.php`, com p50 e p95 (anote a melhor). **PARE se:** o mesmo criterio.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then for R in 1 2; do echo "== solicitacoes_pendentes.php, rodada $R"; HOST_HEADER="$S" URL=http://127.0.0.1/api/solicitacoes_pendentes.php bash scripts/medir-polling.sh; done; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S R
@@ -287,19 +293,19 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
 
 ## 14. Rollback de codigo (so se preciso, com aprovacao)
 
-- [ ] **41.** (14) Esperado: `codigo anterior no ar: f0844fd`. **PARE se:** erro do checkout.
+- [ ] **42.** (14) Esperado: `codigo anterior no ar: f0844fd`. **PARE se:** erro do checkout.
 
 ```bash
 cd /var/www/chronodesk; git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy5-commit)" && echo "codigo anterior no ar: $(git rev-parse --short HEAD)"
 ```
 
-- [ ] **42.** (14) Esperado: `app/ anterior de volta (...)`. **PARE se:** `PARE`.
+- [ ] **43.** (14) Esperado: `app/ anterior de volta (...)`. **PARE se:** `PARE`.
 
 ```bash
 cd /var/www/chronodesk; A=/var/backups/chronodesk/app-antes-deploy5; X=/var/backups/chronodesk/app-deploy5-retirado-$(date +%Y%m%d-%H%M%S); if test -d "$A"; then { ! test -e app || mv app "$X"; } && cp -a "$A" app && diff -rq "$A" app && echo "app/ anterior de volta (o build retirado esta em $X)" || echo "PARE: a volta do app/ falhou"; else echo "PARE: copia $A ausente; nada mudou no app/"; fi; unset A X
 ```
 
-- [ ] **43.** (14) Esperado: recarga sem saida. Depois, os comandos de health, fuso e fumaca (passo 9) e a reabertura (passo 11). **PARE se:** erro da recarga.
+- [ ] **44.** (14) Esperado: recarga sem saida. Depois, os comandos de health, fuso e fumaca (passo 9) e a reabertura (passo 11). **PARE se:** erro da recarga.
 
 ```bash
 systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-fpm"
@@ -307,13 +313,13 @@ systemctl reload "php$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')-f
 
 ## 15. Rollback da 022 (so depois do 14, com aprovacao)
 
-- [ ] **44.** (15) Esperado: `rollback da 022 aplicado`. **PARE se:** `PARE` (o codigo no ar nao e o `f0844fd`: o passo 14 antes; `rollback_022 abortado: ja existe copia *_bkp_022`: confira e renomeie as copias antes) e avise.
+- [ ] **45.** (15) Esperado: `rollback da 022 aplicado`. **PARE se:** `PARE` (o codigo no ar nao e o `f0844fd`: o passo 14 antes; `rollback_022 abortado: ja existe copia *_bkp_022`: confira e renomeie as copias antes) e avise.
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy5-commit)" ] && git cat-file -e "$D5:migrations/rollback/20261119_022_pa_inventory_down.sql" && bash -o pipefail -c 'git show "$D5:migrations/rollback/20261119_022_pa_inventory_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 022 aplicado" || echo "PARE: o codigo no ar nao e o f0844fd ou o rollback da 022 falhou"; unset P D5
 ```
 
-- [ ] **45.** (15) Esperado: `colunas_022 = 0`, `tabela_022 = 0`, `copias_de_rollback_022 = 2`, "022 ausente" e as assinaturas iguais as do passo 3. **PARE se:** outro numero.
+- [ ] **46.** (15) Esperado: `colunas_022 = 0`, `tabela_022 = 0`, `copias_de_rollback_022 = 2`, "022 ausente" e as assinaturas iguais as do passo 3. **PARE se:** outro numero.
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261119_022_pa_inventory_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D5
@@ -321,13 +327,13 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
 
 ## 16. Rollback da 026 (so depois do 14, com aprovacao)
 
-- [ ] **46.** (16) Esperado: `rollback da 026 aplicado`. **PARE se:** `PARE` (o codigo no ar nao e o `f0844fd`: o passo 14 antes; `rollback_026 abortado: ja existe copia *_bkp_026`: confira e renomeie as copias antes).
+- [ ] **47.** (16) Esperado: `rollback da 026 aplicado`. **PARE se:** `PARE` (o codigo no ar nao e o `f0844fd`: o passo 14 antes; `rollback_026 abortado: ja existe copia *_bkp_026`: confira e renomeie as copias antes).
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy5-commit)" ] && git cat-file -e "$D5:migrations/rollback/20261123_026_matricula_nc_down.sql" && bash -o pipefail -c 'git show "$D5:migrations/rollback/20261123_026_matricula_nc_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 026 aplicado" || echo "PARE: o codigo no ar nao e o f0844fd ou o rollback da 026 falhou"; unset P D5
 ```
 
-- [ ] **47.** (16) Esperado: `colunas_026 = 0`, `indice_026 = 0`, `copias_de_rollback_026 = 3`, "026 ausente" e as assinaturas iguais as do passo 3. **PARE se:** outro numero.
+- [ ] **48.** (16) Esperado: `colunas_026 = 0`, `indice_026 = 0`, `copias_de_rollback_026 = 3`, "026 ausente" e as assinaturas iguais as do passo 3. **PARE se:** outro numero.
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D5
@@ -335,4 +341,4 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
 
 ## Depois do deploy, com a gestao (pela tela, sem comando)
 
-Os itens do fim do roteiro: marcar os 2 PAs reservados ao Critico (antes, encerrar os vinculos e retirar as preferencias desses PAs), os PAs fixos com o vinculo do dono e o "Empresta", e as preferencias do grupo comum. A verificacao da 022 conta (`reservados_critico`, `fixos`, `fixos_que_emprestam`, `preferencias`) e as contagens de problema ficam em 0. Quem prefere qual PA nunca vai para o git nem para o chat.
+Os itens do fim do roteiro: marcar os 2 PAs reservados ao Critico (antes, encerrar os vinculos e retirar as preferencias desses PAs), os PAs fixos com o vinculo do dono e o "Empresta", e as preferencias do grupo comum. A verificacao da 022 conta (`reservados_critico`, `fixos`, `fixos_que_emprestam`, `preferencias`) e as contagens de problema ficam em 0. Quem prefere qual PA nunca vai para o git nem para o chat. Preencher o NC dos cadastros ativos (Lideranca ou admin); a verificacao da 026 conta `ativos_sem_nc`. A chave `NC_OBRIGATORIO` so depois, com `ativos_sem_nc = 0`, num passo combinado com o responsavel. Nenhum NC vai para o git, os docs nem o chat.
