@@ -19,3 +19,26 @@ export function workflowNcState(info: WorkflowNc | null | undefined): { missing:
   const missing = Boolean(info) && !info?.nc
   return { missing, blocked: missing && info?.nc_required === true }
 }
+
+// [Lote NC revisto, D-NC-11 e D-NC-12] Importação de NCs com prévia.
+export type NcImportSummary = {
+  linhas: number; entra: number; muda: number; igual: number; nao_casou: number; nc_invalido: number; nc_repetido: number
+}
+
+/** Rótulos e contagens da prévia, na ordem da tela. */
+export function ncImportSummary(resumo: NcImportSummary | null | undefined): Array<[string, number]> {
+  if (!resumo) return []
+  return [
+    ['Entram', resumo.entra],
+    ['Mudam', resumo.muda],
+    ['Iguais', resumo.igual],
+    ['Não casaram', resumo.nao_casou],
+    ['NC inválido', resumo.nc_invalido],
+    ['NC repetido', resumo.nc_repetido],
+  ]
+}
+
+/** Confirmar só com prévia do mesmo arquivo e algo a gravar (entra ou muda). */
+export function ncImportCanConfirm(preview: { resumo?: NcImportSummary } | null | undefined): boolean {
+  return Boolean(preview?.resumo) && (preview!.resumo!.entra + preview!.resumo!.muda) > 0
+}

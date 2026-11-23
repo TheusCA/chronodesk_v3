@@ -6,6 +6,22 @@ final class SpreadsheetImportService {
     private const MAX_ARCHIVE_ENTRIES = 1000;
     private const MAX_UNCOMPRESSED_BYTES = 16777216;
 
+    /**
+     * [Lote NC revisto] Leitura crua: as linhas com dado, sem tratar a 1a como
+     * cabecalho (o modelo do RH tem coluna vazia no meio da 1a linha). As
+     * mesmas validacoes do parseUpload (formato, tamanho, origem, conteudo).
+     */
+    private bool $rawMatrix = false;
+
+    public function parseUploadMatrix(array $file, int $maxRows, int $maxColumns, int $maxCellChars): array {
+        $this->rawMatrix = true;
+        try {
+            return $this->parseUpload($file, $maxRows, $maxColumns, $maxCellChars);
+        } finally {
+            $this->rawMatrix = false;
+        }
+    }
+
     public function parseUpload(array $file, int $maxRows, int $maxColumns, int $maxCellChars): array {
         $this->validateUploadArray($file);
         $name = $this->safeName((string)$file['name']);
@@ -212,6 +228,20 @@ final class SpreadsheetImportService {
     }
 
     private function matrixToRows(array $matrix, int $maxRows, int $maxColumns, int $maxCellChars): array {
+        if ($this->rawMatrix) {
+            $rows = array_values(array_filter($matrix, fn(array $row): bool => $this->rowHasData($row)));
+            if (count($rows) > $maxRows) {
+                throw new LengthException("A planilha excede {$maxRows} linhas.");
+            }
+            foreach ($rows as $row) {
+                foreach ($row as $value) {
+                    if ($this->length(trim((string)$value)) > $maxCellChars) {
+                        throw new LengthException('Uma celula excede o limite de caracteres.');
+                    }
+                }
+            }
+            return $rows;
+        }
         while ($matrix && !$this->rowHasData(end($matrix))) {
             array_pop($matrix);
         }

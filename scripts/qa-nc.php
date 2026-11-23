@@ -10,6 +10,8 @@ declare(strict_types=1);
 //    consulta de verificacao;
 // 2. servidor: a regra do NC, a copia no lancamento lida do cadastro (nunca
 //    do corpo), NC_OBRIGATORIO, a leitura do NC para o formulario e os CSVs.
+// 3. importacao de NCs com previa (o modelo do RH, as categorias, o
+//    confirmar numa transacao, idempotente, auditoria sem NC) e a leitura crua.
 // As consultas SQL rodam em MySQL no ensaio (scripts/ensaio-migration.sh) e na
 // integracao do lote. Nenhuma matricula real: so valores ficticios.
 //
@@ -303,5 +305,174 @@ foreach (['api/portal/overtime.php', 'api/portal/time_corrections.php'] as $endp
     $source = (string)file_get_contents($root . '/' . $endpoint);
     assert_same(true, strpos($source, "if ((\$_GET['nc'] ?? '') === '1') {\n            json_response(['sucesso' => true] + \$service->employeeNcForForm(\$_GET, \$actor));") !== false && strpos($source, '$actor = portal_actor($role);') < strpos($source, "employeeNcForForm"), "{$endpoint}: leitura do NC do formulario so com sessao e pelo perfil do ator");
 }
+
+// ----------------------------------------------------------------------------
+// 3. Importacao de NCs com previa (banco simulado; nomes e NC ficticios)
+// ----------------------------------------------------------------------------
+require_once $root . '/services/EmployeeNcImport.php';
+require_once $root . '/services/SpreadsheetImportService.php';
+
+final class QaImportPdo extends PDO {
+    public array $employees = [];
+    public array $log = [];
+    public array $updates = [];
+    public array $tx = [];
+
+    public function __construct() {
+    }
+
+    public function beginTransaction(): bool { $this->tx[] = 'begin'; return true; }
+    public function commit(): bool { $this->tx[] = 'commit'; return true; }
+    public function rollBack(): bool { $this->tx[] = 'rollback'; return true; }
+    public function inTransaction(): bool { return end($this->tx) === 'begin'; }
+
+    public function query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs): PDOStatement|false {
+        $this->log[] = $query;
+        $rows = [];
+        if (preg_match('/^SELECT id, nome, matricula FROM funcionarios WHERE ativo = 1 ORDER BY id( FOR UPDATE)?$/', $query) === 1) {
+            foreach ($this->employees as $id => $row) {
+                if ($row['ativo'] === 1) {
+                    $rows[] = ['id' => $id, 'nome' => $row['nome'], 'matricula' => $row['nc']];
+                }
+            }
+        } elseif ($query === 'SELECT id, matricula FROM funcionarios WHERE matricula IS NOT NULL') {
+            foreach ($this->employees as $id => $row) {
+                if ($row['nc'] !== null) {
+                    $rows[] = ['id' => $id, 'matricula' => $row['nc']];
+                }
+            }
+        } else {
+            throw new PDOException('consulta nao prevista: ' . $query);
+        }
+        return new QaImportStatement($this, '', $rows);
+    }
+
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaImportStatement($this, $query, []);
+    }
+}
+
+final class QaImportStatement extends PDOStatement {
+    public function __construct(private QaImportPdo $db, private string $sql, private array $rows) {
+    }
+
+    public function execute(?array $params = null): bool {
+        if ($this->sql !== 'UPDATE funcionarios SET matricula = :matricula WHERE id = :id') {
+            throw new PDOException('comando nao previsto: ' . $this->sql);
+        }
+        $this->db->updates[] = [(int)$params[':id'], $params[':matricula']];
+        $this->db->employees[(int)$params[':id']]['nc'] = $params[':matricula'];
+        return true;
+    }
+
+    public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
+        return $this->rows;
+    }
+}
+
+$importDb = static function (): QaImportPdo {
+    $pdo = new QaImportPdo();
+    $pdo->employees = [
+        1 => ['nome' => 'Ana Lúcia Teste', 'ativo' => 1, 'nc' => null],
+        2 => ['nome' => 'Bruno Ficticio', 'ativo' => 1, 'nc' => '900000002'],
+        3 => ['nome' => 'Carla Ficticia', 'ativo' => 1, 'nc' => '900000003'],
+        4 => ['nome' => 'Davi Repetido', 'ativo' => 1, 'nc' => null],
+        5 => ['nome' => 'DAVI  REPETIDO', 'ativo' => 1, 'nc' => null],
+        6 => ['nome' => 'Eva Arquivada', 'ativo' => 0, 'nc' => '900000006'],
+        7 => ['nome' => 'Fabio Ficticio', 'ativo' => 1, 'nc' => null],
+        8 => ['nome' => 'Gil Ficticio', 'ativo' => 1, 'nc' => null],
+        9 => ['nome' => 'Hugo Ficticio', 'ativo' => 1, 'nc' => null],
+    ];
+    return $pdo;
+};
+// O modelo do RH: coluna G vazia na 1a linha, "Nome completo " com espaco, a
+// mesma pessoa em varias linhas com o mesmo NC, o total em H1 e I1.
+$rhMatrix = [
+    ['CENTRO DE CUSTO', 'NC', 'Nome completo ', 'Data da realização', 'Total de Horas', 'Descrição', '', 'Total de Horas Geral:', '0.5'],
+    ['1.123.01  Suporte Tecnico', '900000001', 'ANA LUCIA TESTE', '01/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000001.0', 'ana   lúcia teste', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000022', 'BRUNO FICTICIO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000003', 'CARLA FICTICIA', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000004', 'DAVI REPETIDO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000099', 'SEM CADASTRO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000006', 'FABIO FICTICIO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000008', 'GIL FICTICIO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000008', 'GIL FICTICIO', '03/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000077', 'HUGO FICTICIO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000078', 'HUGO FICTICIO', '03/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '0123', 'IVO FICTICIO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '', 'JOAO FICTICIO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000055', '', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000050', 'KAIO FICTICIO', '02/11/2026', '0.1', 'qa'],
+    ['1.123.01  Suporte Tecnico', '900000050', 'LIA FICTICIA', '02/11/2026', '0.1', 'qa'],
+];
+$pdo = $importDb();
+$preview = (new EmployeeNcImport($pdo))->preview($rhMatrix);
+$ids = static fn (array $list): array => array_column($list, 'employee_id');
+$names = static fn (array $list): array => array_column($list, 'nome');
+assert_same(
+    [['linhas' => 16, 'entra' => 2, 'muda' => 1, 'igual' => 1, 'nao_casou' => 2, 'nc_repetido' => 4, 'nc_invalido' => 3], [1, 8], [2], ['DAVI REPETIDO', 'SEM CADASTRO'], [], []],
+    [$preview['resumo'], $ids($preview['entra']), $ids($preview['muda']), $names($preview['nao_casou']), $pdo->updates, $pdo->tx],
+    'importacao, previa: o modelo do RH lido pelo cabecalho; entra quem nao tem NC, muda quem tem outro, igual quem tem o mesmo; nome ambiguo e sem cadastro nao casam; nada gravado nem transacao'
+);
+assert_same(
+    [['FABIO FICTICIO', 'o NC já está em outro cadastro'], ['HUGO FICTICIO', 'o mesmo nome com NCs diferentes no arquivo'], ['KAIO FICTICIO', 'o mesmo NC para nomes diferentes no arquivo'], ['LIA FICTICIA', 'o mesmo NC para nomes diferentes no arquivo']],
+    array_map(static fn (array $i): array => [$i['nome'], $i['motivo']], $preview['nc_repetido']),
+    'importacao, previa: NC repetido no arquivo, de outro cadastro (inclusive arquivado) e o mesmo nome com dois NCs'
+);
+assert_same([['NC inválido', 13], ['sem NC', 14], ['sem nome', 15]], array_map(static fn (array $i): array => [$i['motivo'], $i['linha']], $preview['nc_invalido']), 'importacao, previa: NC com zero a esquerda, sem NC e sem nome, com a linha da planilha');
+assert_same(['900000002', '900000022'], [$preview['muda'][0]['nc_atual'], $preview['muda'][0]['nc']], 'importacao, previa: o que muda mostra o NC atual e o novo (so na tela de quem gerencia)');
+$pdo = $importDb();
+$confirmed = (new EmployeeNcImport($pdo))->confirm($rhMatrix);
+assert_same(
+    [[[1, '900000001'], [8, '900000008'], [2, '900000022']], ['begin', 'commit'], ['incluidos' => [1, 8], 'alterados' => [2]], true],
+    [$pdo->updates, $pdo->tx, $confirmed['gravados'], in_array('SELECT id, nome, matricula FROM funcionarios WHERE ativo = 1 ORDER BY id FOR UPDATE', $pdo->log, true)],
+    'importacao, confirmar: grava so o que entra e o que muda, numa transacao, com os cadastros travados'
+);
+$again = (new EmployeeNcImport($pdo))->confirm($rhMatrix);
+assert_same([0, 0, 4, [[1, '900000001'], [8, '900000008'], [2, '900000022']]], [$again['resumo']['entra'], $again['resumo']['muda'], $again['resumo']['igual'], $pdo->updates], 'importacao: o mesmo arquivo de novo da tudo igual e nao grava (idempotente)');
+$audit = EmployeeNcImport::auditDetails($confirmed, 'lideranca');
+assert_same([true, 0], [strpos($audit, 'incluidos 2 (IDs 1, 8), alterados 1 (IDs 2)') !== false, preg_match('/9000000\d\d/', $audit)], 'importacao: auditoria com as contagens e os IDs, nunca o NC');
+$noHeader = static function (array $matrix) use ($importDb): string {
+    try {
+        (new EmployeeNcImport($importDb()))->preview($matrix);
+        return 'aceito';
+    } catch (InvalidArgumentException $e) {
+        return $e->getMessage();
+    }
+};
+$titled = array_merge([['Total H-E Suporte Tecnico BPM'], ['']], $rhMatrix);
+assert_same([2, 1], [(new EmployeeNcImport($importDb()))->preview($titled)['resumo']['entra'], (new EmployeeNcImport($importDb()))->preview($titled)['resumo']['muda']], 'importacao: o cabecalho e a 1a linha com NC e Nome completo, mesmo com linhas de titulo antes');
+assert_same([EmployeeNcImport::HEADER_MESSAGE, EmployeeNcImport::HEADER_MESSAGE], [$noHeader([['NC', 'Nome'], ['1', 'Ana']]), $noHeader([['Matricula', 'Nome completo'], ['1', 'Ana']])], 'importacao: sem as colunas NC e Nome completo, recusa com a mensagem');
+assert_same(['ana lucia teste', 'nome completo', '123', '7', null, false], [EmployeeNcImport::normalize("  Ána   LÚCIA\tteste "), EmployeeNcImport::normalize('Nome Completo '), EmployeeNcImport::ncFromCell('123.0'), EmployeeNcImport::ncFromCell(' 7 '), EmployeeNcImport::ncFromCell(''), EmployeeNcImport::ncFromCell('0123')], 'importacao: nome sem acento, caixa e espaco repetido; NC do Excel (123.0) vira 123; zero a esquerda recusado');
+// Leitura crua (o leitor do portal): a 1a linha nao vira cabecalho e a coluna vazia do meio fica.
+$csv = tempnam(sys_get_temp_dir(), 'qa-nc-csv-');
+file_put_contents($csv, "CENTRO DE CUSTO;NC;Nome completo ;;Total de Horas Geral:\n1.123.01  Suporte Tecnico;900000001;ANA LUCIA TESTE;;\n;;;;\n");
+$reader = new SpreadsheetImportService();
+$parseCsv = new ReflectionMethod(SpreadsheetImportService::class, 'parseCsv');
+$rawFlag = new ReflectionProperty(SpreadsheetImportService::class, 'rawMatrix');
+$rawFlag->setValue($reader, true);
+$rawRows = $parseCsv->invoke($reader, $csv, 50, 10, 200);
+$rawFlag->setValue($reader, false);
+$strictError = '';
+try {
+    $parseCsv->invoke($reader, $csv, 50, 10, 200);
+} catch (InvalidArgumentException $e) {
+    $strictError = $e->getMessage();
+}
+// O modo cru volta a desligado mesmo com erro (o finally do parseUploadMatrix).
+$legacyError = '';
+try {
+    $reader->parseUploadMatrix(['name' => 'nc.xls', 'tmp_name' => $csv, 'size' => filesize($csv), 'error' => UPLOAD_ERR_OK], 50, 10, 200);
+} catch (DomainException $e) {
+    $legacyError = $e->getMessage();
+}
+$flagAfterError = $rawFlag->getValue($reader);
+@unlink($csv);
+assert_same([2, 'Nome completo ', '', true, true, false], [count($rawRows), $rawRows[0][2], $rawRows[0][3], str_starts_with($strictError, 'Cabecalho vazio'), str_starts_with($legacyError, 'XLS legado'), $flagAfterError], 'leitor: o modo cru devolve as linhas com dado (a coluna vazia do meio fica); o modo de sempre continua recusando cabecalho vazio; o modo cru desliga depois de um erro');
+$endpoint = (string)file_get_contents($root . '/api/portal/employee_nc_import.php');
+$permissionAt = strpos($endpoint, "if (!portal_role_can(\$role, 'funcionarios.manage')) {
+        json_response(['sucesso' => false, 'mensagem' => 'Só Liderança e admin importam NCs.'], 403);");
+assert_same(true, $permissionAt !== false && $permissionAt < strpos($endpoint, 'require_csrf_token();') && strpos($endpoint, 'require_csrf_token();') < strpos($endpoint, '->parseUploadMatrix(') && strpos($endpoint, "unset(\$result['todos']);") !== false, 'importacao: endpoint so para quem gerencia funcionarios, com CSRF antes de ler o arquivo, sem devolver a lista completa');
 
 echo "QA NC OK ({$GLOBALS['qa_checks']} verificacoes)\n";

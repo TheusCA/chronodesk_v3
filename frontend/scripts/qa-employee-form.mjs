@@ -326,6 +326,20 @@ assert.match(adminSource, /\{listHasNc && <select aria-label="NC" className="fie
 assert.match(adminSource, /ncFilter && \['nc', 'Sem NC', \(\) => setNcFilter\(''\)\]/, 'NC: o filtro aparece nos filtros ativos')
 assert.match(adminSource, /setTools\(''\); setNcFilter\(''\); setPendingAction\(null\)/, 'NC: "Limpar filtros" limpa o filtro do NC')
 
+// [Lote NC revisto] Importacao de NCs com previa: regras puras e a ligacao da tela.
+{
+  const { ncImportSummary, ncImportCanConfirm } = await import(pathToFileURL(join(srcRoot, 'lib', 'employeeNc.ts')).href)
+  const resumo = { linhas: 9, entra: 2, muda: 1, igual: 3, nao_casou: 1, nc_invalido: 1, nc_repetido: 1 }
+  assert.deepEqual(ncImportSummary(resumo), [['Entram', 2], ['Mudam', 1], ['Iguais', 3], ['Não casaram', 1], ['NC inválido', 1], ['NC repetido', 1]], 'importacao: as contagens da previa, na ordem da tela')
+  assert.deepEqual([ncImportCanConfirm(null), ncImportCanConfirm({ resumo }), ncImportCanConfirm({ resumo: { ...resumo, entra: 0, muda: 0 } }), ncImportCanConfirm({ resumo: { ...resumo, entra: 0, muda: 1 } })], [false, true, false, true], 'importacao: confirmar so com previa e algo que entra ou muda')
+  const importSource = read('src/pages/NcImport.jsx')
+  assert.match(importSource, /body\.append\('spreadsheet', file\)\n    body\.append\('action', action\)\n[\s\S]*?postForm\('portal\/employee_nc_import\.php', body\)/u, 'importacao: o arquivo vai na previa e de novo no confirmar')
+  assert.match(importSource, /onChange=\{\(event\) => \{ setFile\(event\.target\.files\?\.\[0\] \?\? null\); setPreview\(null\) \}\}/u, 'importacao: trocar o arquivo apaga a previa (o confirmar e sempre do arquivo da previa)')
+  assert.match(importSource, /data-nc-import-confirm="" disabled=\{!ncImportCanConfirm\(preview\) \|\| busy\}/u, 'importacao: confirmar desligado sem previa ou sem nada a gravar')
+  assert.match(adminSource, /\{listHasNc && <NcImportPanel notify=\{notify\} onImported=\{resource\.refresh\} \/>\}/u, 'importacao: so com o NC na lista (Lideranca e admin), e a lista recarrega depois')
+  assert.doesNotMatch(importSource, /confirm\(|alert\(|prompt\(/u, 'importacao: sem dialogo do navegador')
+}
+
 const allMessages = [
   { id: '' }, { id: '0' }, { id: 'x' }, { nome: '' }, { nome: null }, { ad_login: 5 }, { ad_login: 'a b' },
   { equipe: 'x' }, { access_role: 'x' }, { jornada_entrada: null }, { jornada_entrada: '99:99' },

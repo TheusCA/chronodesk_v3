@@ -1813,6 +1813,8 @@ $matrix = [
     'api/portal/dashboard.php GET' => [[], $expect['TODOS']],
     'api/portal/documents.php GET' => [[], $expect['TODOS']],
     'api/portal/documents.php POST' => [['content_type' => 'multipart/form-data', 'body' => 'x'], $expect['GESTAO']],
+    // [Lote NC revisto] Importacao de NCs: funcionarios.manage (Lideranca e admin).
+    'api/portal/employee_nc_import.php POST' => [$emptyJson, $expect['FUNCIONARIOS']],
     'api/portal/documents_delete.php POST' => [['content_type' => $json, 'body' => '{"id":0}'], $expect['GESTAO']],
     'api/portal/documents_download.php GET' => [[], $expect['TODOS']],
     'api/portal/integrations.php GET' => [[], $expect['ADMIN']],

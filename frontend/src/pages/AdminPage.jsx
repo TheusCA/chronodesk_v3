@@ -15,6 +15,7 @@ import { archiveEffectsSummary, employeeArchiveState, matchesArchiveFilter } fro
 import { keepLunchSelection, lunchKey, lunchOptions, matchesLunchFilter, scheduleText } from '../lib/employeeLunch'
 import { employeeCreateSchema, employeeFormSchema, NC_CLEAR_MESSAGE } from '../lib/formSchemas'
 import { employeeWithoutNc } from '../lib/employeeNc'
+import { NcImportPanel } from './NcImport'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { Segmented } from '../components/ui/Segmented'
@@ -828,6 +829,9 @@ function EmployeesTab({
           </InlineAlert>
         </div>
       )}
+
+      {/* [Lote NC revisto] Importação de NCs com prévia (Liderança e admin). */}
+      {listHasNc && <NcImportPanel notify={notify} onImported={resource.refresh} />}
 
       <section className="card" data-employee-section="">
           <SectionHeader
