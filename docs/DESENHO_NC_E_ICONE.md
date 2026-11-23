@@ -82,3 +82,32 @@ A verificação mudou depois da 1ª rodada (a contagem `nc_repetido` passou a n�
 **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
 
 **Não verificado aqui:** o NC real dos cadastros (fica com a gestão, pela tela) e a chave `NC_OBRIGATORIO` ligada em produção (passo combinado depois, com `ativos_sem_nc = 0`).
+
+## 5. Pedido revisto (2026-11-23, à tarde)
+
+O responsável reenviou o pedido com três mudanças sobre o lote já entregue (`806a73c` a `f93f789`, enviado): o NC **sem zero à esquerda**; a **importação de NCs com prévia**; e a **exportação de hora extra no modelo do RH** (`.xlsx` no lugar do CSV de horas extras). O CSV da correção de ponto continua, com o NC. O ícone veio de novo com o marcador `<A|B|C>`: fica a opção B, já escolhida e entregue (`4a33925`). Nada do que foi enviado é reescrito: as correções vão em commits novos.
+
+**Plano curto:**
+
+| Commit | Conteúdo |
+|---|---|
+| 1 | NC sem zero à esquerda: as três CHECK da 026 e a verificação (`^[1-9][0-9]{0,11}$`), o `EmployeeNc` e o schema da tela; ensaio e integração de novo |
+| 2 | Este plano |
+| 3 | Importação de NCs com prévia (servidor, tela e QA) |
+| 4 | Exportação de hora extra no modelo do RH: o `XlsxWriter` com formato de número, fórmula e fonte; o centro de custo configurável; a prévia na tela; o QA que abre o `.xlsx` |
+| 5 | Roteiro, folha e trava do deploy 5 (a fumaça passa a ler a prévia da exportação) |
+| 6 | Docs: execução, validação e registro |
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D-NC-10 | NC só com dígitos, de 1 a 12, **sem zero à esquerda**, na 026 (CHECK), no servidor e na tela. Revê a D-NC-1 ("texto guarda zero à esquerda") | Pedido revisto: o NC sai como número na planilha do RH |
+| D-NC-11 | Importação: `.xlsx` ou `.csv` (até 2 MB e 5000 linhas, o leitor de planilha do portal); a 1ª linha com as colunas "NC" e "Nome completo" (sem diferenciar acento, caixa e espaço) é o cabeçalho; o modelo do RH serve (várias linhas da mesma pessoa com o mesmo NC contam uma vez). Casa pelo nome normalizado (sem acento, caixa e espaços repetidos) com os cadastros **ativos**; nome de mais de um cadastro ativo não casa | O nome é a única chave comum com o arquivo do RH; arquivado não recebe NC por importação |
+| D-NC-12 | A prévia separa: entra (cadastro sem NC), muda (cadastro com outro NC), igual (nada a fazer), não casou (nome sem cadastro ativo ou com mais de um), NC inválido e NC repetido (o mesmo NC para nomes diferentes no arquivo, ou já de outro cadastro que não muda). Confirmar reenvia o arquivo; o servidor refaz a prévia e grava só "entra" e "muda", numa transação, com os cadastros travados. Rodar de novo o mesmo arquivo dá tudo "igual" | Nada gravado sem confirmar; idempotente; o que está em conflito nunca é gravado |
+| D-NC-13 | Auditoria da importação `FUNCIONARIO_NC_IMPORTADO` (WARNING) com as contagens e os IDs incluídos e alterados, nunca o NC | LGPD |
+| D-NC-14 | Exportação do RH: só `approved` (`pending`, `rejected`, `synced` e `sync_error` ficam fora, como pedido); o período e os filtros da tela (equipe e colaborador); o técnico só o próprio; o NC da cópia ou, nas linhas antigas, o do cadastro. Lançamento aprovado sem NC: a exportação é recusada (409 com a contagem); a prévia lista quem falta, pelo nome, só na tela | Pedido; `synced` fora a confirmar com o RH |
+| D-NC-15 | A prévia (`GET ...?export=preview`) mostra quantos aprovados vão, quantos pendentes e outros ficaram fora, o total geral, quem está sem NC e o nome do arquivo; a auditoria `OVERTIME_EXPORTED` leva o formato e as contagens | Pedido |
+| D-NC-16 | O centro de custo fica no `config_sistema.json` (`centro_custo_horas_extras`, padrão `1.123.01  Suporte Tecnico`, com os dois espaços), editado pelo admin na aba Configurações (1 a 60 caracteres, sem caractere de controle); a auditoria da configuração leva o valor (não é dado pessoal) | Mesmo lugar das configurações de pausa |
+| D-NC-17 | O `XlsxWriter` ganha formato de número, fórmula, fonte (nome e tamanho) e a borda preta, só quando usados: a saída do Controle de CHG não muda | Uma dependência a menos; o QA confere a saída do CHG |
+| D-NC-18 | O nome em maiúsculas por uma tabela própria das letras acentuadas do português (sem o `mbstring`) | Pedido |
