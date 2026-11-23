@@ -1730,7 +1730,19 @@ Base da afirmação:
 | **Validacao executada pela IA** | Ensaio da 022 nas duas variantes no MySQL 8.0.46 local (dados fictícios); integração no MySQL local, 18/18, numa transação desfeita; mutação por commit (24/24, 33/33, 14/14 + 3/3 no navegador, 16/16; os sobreviventes da 1ª rodada viraram casos novos); bateria completa sozinha nos commits de código (números no desenho do F10, 8.7, e no estado da sessão). |
 | **Achados** | O `OperationalService::engineSchedule` (tela Escala, Calendário e o `mapPresence` do Mapa PA) não passa o papel do dia do 9.16 ao motor; só o `PresenceService` passa. O F10-3 corrige só o reservado do Crítico no Mapa PA; a correção geral fica para um lote próprio (3.3.1). |
 | **Decisões (a aprovar)** | D-F10-32 a D-F10-41 (desenho do F10, 8.7). |
-| **Validacao humana** | Pendente: revisão única no fim do lote. |
+| **Validacao humana** | Revisão do `aabfc24` feita pelo responsável em 2026-11-23: F10-3 aprovado, com D-F10-32 a D-F10-41 como estão na 8.7 (D-F10-34 inclusive); o achado vira o lote 8.8, no deploy 5. |
+
+### Lote 8.8: papel do dia do Crítico numa fonte só (Escala, Calendário, relatórios e Mapa PA) — 2026-11-23
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Corrigir o achado da 3.3.1 do desenho do F10: o `OperationalService::engineSchedule` passa o papel do dia (9.16) ao motor com a precedência do `PresenceService` (ausência e exceção por data > papel > regra), para a Escala, o Calendário, os relatórios e o `mapPresence`; retirar a correção local do reservado no Mapa PA (D-F10-36). Entra no deploy 5, junto do F10-3, sem migration nova. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `df207c9` (servidor, tela Escala e testes), `24b1895` (desenho), `9c4002f` (roteiro e folha do deploy 5, fumaça e trava) e o commit destes docs. Push para o `codex/modernizacao-ui-backend` autorizado pelo responsável, só com a bateria verde (resultado no estado da sessão). |
+| **O que a IA alterou** | `services/OperationalService.php` (`engineSchedule` com o papel; origem `role`; `mapPresence` com o papel; descrição do Calendário); `services/PaMapService.php` (o reservado lê o `mapPresence`, sem o `PresenceRepository`); `frontend/src/pages/OperationalPages.jsx` ("Papel do Crítico"); `scripts/qa-pa-conflicts.php` (seção 7 e o simulador das leituras da Escala, do Calendário, dos relatórios e do `PresenceService`); `frontend/scripts/qa-calendar-presence.mjs`; `scripts/smoke-deploy1.sh` (seis GET); `DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md` e `scripts/qa-deploy-runbook.php`; desenho do F10 (8.8, estado e 3.3.1). |
+| **Dados pessoais** | Nenhum no git: testes e integração com dados fictícios; a conferência na tela do deploy anota só "igual" ou "diferente". |
+| **Validacao executada pela IA** | Integração no MySQL 8.0.46 local, 26/26, numa transação desfeita (dados fictícios); mutação do commit 1, 21/21 (18/19 na 1ª rodada: caso novo do desempate pelo ID do papel, no mesmo commit, antes de qualquer envio); mutação do commit 3, 15/15; trava com 514 verificações; bateria completa sozinha no último commit (no estado da sessão). |
+| **Decisões (a aprovar)** | D-F10-42 a D-F10-47 (desenho do F10, 8.8). |
+| **Validacao humana** | F10-3 e D-F10-32 a D-F10-41 aprovados em 2026-11-23; o 8.8 pendente de revisão. |
 
 ---
 

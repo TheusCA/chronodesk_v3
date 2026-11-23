@@ -915,7 +915,9 @@ Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL,
 | Commit | Conteúdo |
 |---|---|
 | `df207c9` | `engineSchedule` com o papel do dia; `mapPresence` com o papel; Mapa PA numa fonte só; "Papel do Crítico" na tela Escala; `qa-pa-conflicts` seção 7 (a mesma pessoa em cinco leituras) e o texto no `qa-calendar-presence` |
-| Este | Esta seção, a linha de estado e a nota na 3.3.1 |
+| `24b1895` | Esta seção (plano e commit 1), a linha de estado e a nota na 3.3.1 |
+| `9c4002f` | Roteiro e folha do deploy 5 com o 8.8 (o que vai, aviso, fumaça com seis GET, conferência da mesma pessoa nas telas, nota do polling); `smoke-deploy1.sh` com o `calendar.php` e o `reports.php`; a trava |
+| O último | A validação abaixo e o `REGISTRO_USO_IA.md` |
 
 **Decisões de implementação (a aprovar):**
 
@@ -928,6 +930,9 @@ Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL,
 | D-F10-46 | O cálculo antigo (antes da data de corte) não ganha o papel | Ele não muda desde o F5; os papéis do 9.16 existem desde o deploy 4 |
 | D-F10-47 | A fumaça do deploy passa a ler o `calendar.php` e o `reports.php` (seis GET) | São as duas leituras novas do papel que a fumaça não cobria |
 
-**Validação até aqui:**
+**Validação:**
 - **Mutação do commit 1** no worktree, com a trava `mut_guard.php`: 21/21 mortos. Entre eles: o papel ignorado no motor, os papéis nunca lidos, o papel do 1º dia em todos os dias, a origem `role` perdida, o papel em todas as respostas, o `mapPresence` sem o papel, a ordem do papel trocada pelo ID, o papel antes da exceção, a ausência sem vencer o papel, o papel remoto virando presencial, o reservado com remoto e a correção local de volta. Na 1ª rodada, 18/19: o desempate pelo ID do papel (dois papéis com a mesma ordem) não era testado; caso novo no mesmo commit, refeito antes de qualquer envio.
 - **Integração no MySQL 8.0.46 local** (`qa_f103i`, dados fictícios, transação desfeita): 26/26, com as 18 do F10-3 e oito novas. Dois cadastros fictícios do Crítico, um com papel presencial e regra remota e outro com papel remoto e regra presencial, aparecem iguais na Escala (origem `role`), no Calendário, nos relatórios, no `mapPresence` e na Visão operacional (10:00). No dia seguinte, a exceção remota vence o papel presencial; o `mapPresence` leva o papel. A base de ensaio tinha uma exceção de um dos cadastros no período; o script a retira na transação.
+- **Mutação do commit 3** (`9c4002f`) no worktree: 15/15 mortos (a fumaça sem o Calendário ou sem os relatórios, o título e o que vai sem o 8.8, a D-F10-36 sem a retirada, o esperado com quatro GET ou sem o `reports.php`, o passo 12 e o PARE sem a mesma pessoa nas telas, o aviso sem o 8.8, a folha sem os seis GET, sem a conferência, com um e-mail ou com um comando a mais, e o roteiro com uma migration nova). Na 1ª rodada, 3 mutantes não se aplicaram (erro do script de mutação: `\n` entre aspas simples e um texto que aparece duas vezes); corrigidos, 3/3.
+- **Trava do roteiro:** 514 verificações (513 + a do 8.8 no deploy 5). `qa-pa-conflicts`: 144 verificações (132 + 12 da seção 7).
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
