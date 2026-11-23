@@ -307,6 +307,8 @@ function apiResponse(method, key, search, body) {
     return [200, { sucesso: true, mensagem: 'Documento removido da listagem.' }]
   }
   if (key === OVERTIME_KEY || key === ADJUSTMENT_KEY) {
+    // [Lote NC] Leitura do NC do formulario (so leitura); NC ficticio.
+    if (method === 'GET' && search.get('nc') === '1') return [200, { sucesso: true, employee_id: Number(search.get('employee_id') || 1), nc: '900000001', nc_required: false }]
     if (method === 'GET') return [200, workflow(key === OVERTIME_KEY)]
     if (body?.action === 'decision') {
       const refusal = refusals.get(`${key}:${body.id}`)

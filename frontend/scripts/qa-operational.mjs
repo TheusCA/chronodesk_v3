@@ -331,4 +331,45 @@ for (const [Page, overtimeKind, label] of [[OvertimePage, true, 'Horas extras'],
   assert.doesNotMatch(pageSource, /setException\(/u, '9.12.4: nenhuma troca de estado da exceção fora da proteção')
 }
 
+// ---------------------------------------------------------------------------
+// [Lote NC, D-NC-6] Formulario de hora extra e de correcao de ponto: o NC da
+// pessoa do lancamento, so leitura, lido do servidor (?nc=1); sem NC, avisa;
+// com NC_OBRIGATORIO, avisa e nao envia. NC ficticio.
+// ---------------------------------------------------------------------------
+{
+  function renderWithNc(Page, overtimeKind, role, ncData) {
+    const endpoint = overtimeKind ? 'portal/overtime.php' : 'portal/time_corrections.php'
+    globalThis.qaResources = {
+      [`${endpoint}?nc=1`]: ncData,
+      [endpoint]: { sucesso: true, limit: 200, truncated: false, totals: { approved_minutes: 0, pending_minutes: 0 }, items: [] },
+      'listar_funcionarios.php': { sucesso: true, funcionarios: [] },
+    }
+    try {
+      return renderToStaticMarkup(h(Page, { session: sessionFor(role), notify: () => {} }))
+    } finally {
+      delete globalThis.qaResources
+    }
+  }
+  for (const [Page, overtimeKind, label] of [[OvertimePage, true, 'Horas extras'], [TimeCorrectionPage, false, 'Correcao de ponto']]) {
+    for (const role of ['tecnico', 'gestor']) {
+      const withNc = renderWithNc(Page, overtimeKind, role, { sucesso: true, employee_id: 1, nc: '900000001', nc_required: true })
+      assert.match(withNc, /data-workflow-nc="">NC \(matrícula\)<p class="field mt-2 text-ink-2" data-nc-value="">900000001<\/p>/u, `${label}/${role}: o NC do cadastro, so leitura`)
+      assert.doesNotMatch(withNc, /data-nc-alert=|<button class="btn-primary" disabled="" type="submit">/u, `${label}/${role}: com NC, sem aviso e o envio liberado`)
+      const warn = renderWithNc(Page, overtimeKind, role, { sucesso: true, employee_id: 1, nc: null, nc_required: false })
+      assert.match(warn, /data-nc-value="">Sem NC no cadastro<\/p>/u, `${label}/${role}: sem NC no cadastro`)
+      assert.match(warn, /data-nc-alert="aviso"><div class="inline-alert inline-alert-warning [^"]*">[\s\S]*?Sua matrícula \(NC\) não está no cadastro\. Peça à Liderança para incluir\.[\s\S]*?a planilha sai sem o NC\./u, `${label}/${role}: sem NC e sem a chave, so avisa`)
+      assert.match(warn, /<button class="btn-primary" type="submit">Enviar para aprovação<\/button>/u, `${label}/${role}: sem a chave, o envio segue`)
+      const blocked = renderWithNc(Page, overtimeKind, role, { sucesso: true, employee_id: 1, nc: null, nc_required: true })
+      assert.match(blocked, /data-nc-alert="bloqueado"><div class="inline-alert inline-alert-danger [^"]*">[\s\S]*?não é enviado até o NC estar no cadastro\./u, `${label}/${role}: com NC_OBRIGATORIO, o aviso de bloqueio`)
+      assert.match(blocked, /<button class="btn-primary" disabled="" type="submit">Enviar para aprovação<\/button>/u, `${label}/${role}: com NC_OBRIGATORIO, nao envia`)
+      const other = renderWithNc(Page, overtimeKind, role, { sucesso: true, employee_id: 2, nc: null, nc_required: true })
+      assert.match(other, /data-nc-value="">Escolha o colaborador<\/p>/u, `${label}/${role}: resposta de outra pessoa (pedido antigo) nao vale`)
+      assert.doesNotMatch(other, /disabled="" type="submit"/u, `${label}/${role}: resposta de outra pessoa nao bloqueia`)
+    }
+  }
+  assert.match(workflowSource, /const ncEmployee = canApprove \? form\.employee_id : ownEmployee\n  const ncResource = useResource\(`\$\{endpoint\}\$\{queryString\(\{ nc: 1, employee_id: ncEmployee \}\)\}`, \{ enabled: canCreate && Boolean\(ncEmployee\) \}\)/u, 'NC: lido do servidor para a pessoa do lancamento (o tecnico, o proprio)')
+  assert.match(workflowSource, /if \(ncState\.blocked\) \{\n      notify\(NC_REQUIRED_MESSAGE, 'error'\)\n      return\n    \}/u, 'NC: com NC_OBRIGATORIO, o envio para antes do servidor')
+  assert.doesNotMatch(workflowSource, /nc: ncInfo|employee_nc|\.\.\.form, nc/u, 'NC: o formulario nunca manda o NC (o servidor le do cadastro)')
+}
+
 console.log('Operational frontend QA OK')

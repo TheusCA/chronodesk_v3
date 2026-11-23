@@ -32,6 +32,16 @@ const employeeIdSchema = z.preprocess(
     .max(EMPLOYEE_ID_MAX, `ID deve ser no máximo ${EMPLOYEE_ID_MAX}.`),
 )
 
+// [Lote NC] NC: a matrícula do cadastro Senior, só dígitos, de 1 a 12 (o
+// servidor confere de novo, com a unicidade). Vazio = sem NC.
+export const NC_INVALID_MESSAGE = 'NC inválido: use só dígitos, de 1 a 12.'
+export const NC_MISSING_MESSAGE = 'NC obrigatório: informe a matrícula do cadastro Senior (só dígitos, de 1 a 12).'
+export const NC_CLEAR_MESSAGE = 'O NC não pode ser apagado pela tela: corrija o número.'
+const ncSchema = z.preprocess(
+  (value) => String(value ?? '').trim(),
+  z.string().regex(/^[0-9]{0,12}$/, NC_INVALID_MESSAGE),
+)
+
 const employeeTimeSchema = z.string({ error: 'Informe o horário.' })
   .min(1, 'Informe o horário.')
   .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, 'Horário inválido.')
@@ -99,14 +109,21 @@ function refineEmployeeHours(value: EmployeeHours, ctx: z.RefinementCtx): void {
 // Edição: o ID do cadastro (só leitura na tela) vai junto e é validado.
 // [F10-2] Grupo da escala (comum ou separado, desenho do F10 3.1 e 3.8): só na
 // edição; ausente (lista sem a coluna) não vai para o servidor, que mantém o gravado.
+// [Lote NC, D-NC-4] NC na edição: ausente (lista sem o campo) não vai; vazio
+// num cadastro que já tem NC é recusado na tela e no servidor.
 export const employeeFormSchema = z.object({
   id: employeeIdSchema,
   ...employeeFieldsShape,
   grupo_escala: z.enum(['comum', 'separado'], { error: 'Grupo da escala inválido.' }).optional(),
+  nc: ncSchema.optional(),
 }).superRefine(refineEmployeeHours)
 
 // Criação: sem ID; um 'id' que chegue aqui é descartado pelo Zod (chave desconhecida).
-export const employeeCreateSchema = z.object(employeeFieldsShape).superRefine(refineEmployeeHours)
+// [Lote NC, D-NC-4] NC obrigatório no cadastro novo.
+export const employeeCreateSchema = z.object({
+  ...employeeFieldsShape,
+  nc: ncSchema.pipe(z.string().min(1, NC_MISSING_MESSAGE)),
+}).superRefine(refineEmployeeHours)
 
 export const scheduleRuleSchema = z.object({
   employee_id: z.string()

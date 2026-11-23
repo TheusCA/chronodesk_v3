@@ -23,6 +23,7 @@ import { ACTION_FEEDBACK, importFeedback } from '../lib/actionFeedback'
 import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { reportFiltersSchema, scheduleRuleSchema } from '../lib/formSchemas'
+import { NC_REQUIRED_MESSAGE, workflowNcState } from '../lib/employeeNc'
 import { presenceCutoffNotice, presenceCutoffTitle, presenceLegendItem, rowPartialTime } from '../lib/presenceLegend'
 import { queryKeys } from '../lib/queryKeys'
 import { formValuesChanged } from '../lib/formDirty'
@@ -984,6 +985,12 @@ function WorkflowPage({ kind, session, notify }) {
     ? { employee_id: ownEmployee, work_date: today, start_time: '18:00', end_time: '19:00', reason: '', justification: '' }
     : { employee_id: ownEmployee, adjustment_date: today, adjustment_type: 'entry', correct_time: '08:00', recorded_time: '', justification: '' })
   const preview = overtime ? overtimePreview(form) : null
+  // [Lote NC, D-NC-6] NC da pessoa do lançamento, do cadastro (só leitura): o
+  // servidor grava a cópia; sem NC, avisa; com NC_OBRIGATORIO, não envia.
+  const ncEmployee = canApprove ? form.employee_id : ownEmployee
+  const ncResource = useResource(`${endpoint}${queryString({ nc: 1, employee_id: ncEmployee })}`, { enabled: canCreate && Boolean(ncEmployee) })
+  const ncInfo = ncEmployee && Number(ncResource.data?.employee_id) === Number(ncEmployee) ? ncResource.data : null
+  const ncState = workflowNcState(ncInfo)
   const exportUrl = apiUrl(`${endpoint}${queryString({ ...filters, format: 'csv' })}`)
   const pendingTitleRef = useRef(null)
   const decision = useDecisionConfirm(notify, [resource.refresh])
@@ -992,6 +999,10 @@ function WorkflowPage({ kind, session, notify }) {
     event.preventDefault()
     if (overtime && preview.sameTime) {
       notify(SAME_TIME_MESSAGE, 'error')
+      return
+    }
+    if (ncState.blocked) {
+      notify(NC_REQUIRED_MESSAGE, 'error')
       return
     }
     await submit(
@@ -1125,6 +1136,9 @@ function WorkflowPage({ kind, session, notify }) {
         >
         <div className="form-grid">
           <label className="label">Colaborador<EmployeeSelect disabled={!canApprove} employees={employees.data?.funcionarios} value={form.employee_id} onChange={(event) => setForm({ ...form, employee_id: event.target.value })} /></label>
+          <div className="label" data-workflow-nc="">NC (matrícula)
+            <p className="field mt-2 text-ink-2" data-nc-value="">{ncInfo ? (ncInfo.nc || 'Sem NC no cadastro') : 'Escolha o colaborador'}</p>
+          </div>
           {overtime ? (
             <>
               <label className="label">Data da realização<input className="field mt-2" required type="date" value={form.work_date} onChange={(event) => setForm({ ...form, work_date: event.target.value })} /></label>
@@ -1148,8 +1162,15 @@ function WorkflowPage({ kind, session, notify }) {
           )}
           <label className="label xl:col-span-2">Justificativa<textarea className="field mt-2 min-h-24" maxLength="2000" required value={form.justification} onChange={(event) => setForm({ ...form, justification: event.target.value })} /></label>
         </div>
+          {ncState.missing && (
+            <div className="mt-4" data-nc-alert={ncState.blocked ? 'bloqueado' : 'aviso'}>
+              <InlineAlert tone={ncState.blocked ? 'danger' : 'warning'} title="Sem NC no cadastro">
+                {NC_REQUIRED_MESSAGE} {ncState.blocked ? 'O lançamento não é enviado até o NC estar no cadastro.' : 'O lançamento segue, e a planilha sai sem o NC.'}
+              </InlineAlert>
+            </div>
+          )}
           <div className="form-actions">
-            <button className="btn-primary" type="submit">Enviar para aprovação</button>
+            <button className="btn-primary" disabled={ncState.blocked} type="submit">Enviar para aprovação</button>
           </div>
         </FormSection>
       </form>

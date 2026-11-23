@@ -622,6 +622,9 @@ async function employees(page, port, mock) {
   report('adicionar sem campo ID (D3)', (await page.evaluate(CREATE_ID_FIELDS)) === 0)
   await page.evaluate(`${CREATE_NAME}.focus()`)
   await page.typeText(FAILING_EMPLOYEE)
+  // [Lote NC] O NC e obrigatorio no cadastro novo (NC ficticio).
+  await page.evaluate(`${CREATE_FORM}.querySelector('[data-employee-nc] input').focus()`)
+  await page.typeText('900000001')
   await page.click(CREATE_SUBMIT)
   await page.waitFor(`[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Falha simulada'))`)
   await expectEmployee('adicionar, erro do servidor: aviso de erro, painel aberto, dados mantidos, ainda sujo', { aviso_erro: true, novo_nome: FAILING_EMPLOYEE, beforeunload: 1, dialogos: 1 })
@@ -636,6 +639,7 @@ async function employees(page, port, mock) {
   {
     const created = mock.requests.filter((r) => r.method === 'POST' && r.key === 'adicionar_funcionario.php').at(-1)
     report('adicionar (D3): corpo sem id', !!created && !('id' in (created.body ?? {})), JSON.stringify(Object.keys(created?.body ?? {})))
+    report('adicionar (lote NC): o corpo leva o NC digitado', !!created && created.body?.nc === '900000001', JSON.stringify(Object.keys(created?.body ?? {})))
     // [9.17] O grupo Tools agora vale: o corpo leva grupo_tools (desmarcado por padrao).
     report('adicionar (9.17): o corpo leva o grupo Tools desmarcado por padrao', !!created && created.body?.grupo_tools === false, JSON.stringify(Object.keys(created?.body ?? {})))
     report('adicionar (D3): o aviso mostra o ID gerado pelo servidor', await page.evaluate(`document.body.textContent.includes('Funcionário adicionado com o ID 334.')`))
@@ -1282,6 +1286,9 @@ async function toastAboveLayers(page, port) {
   await page.waitFor(`!!${CREATE_FORM}`)
   await page.evaluate(`${CREATE_NAME}.focus()`)
   await page.typeText(FAILING_EMPLOYEE)
+  // [Lote NC] O NC e obrigatorio no cadastro novo (NC ficticio).
+  await page.evaluate(`${CREATE_FORM}.querySelector('[data-employee-nc] input').focus()`)
+  await page.typeText('900000001')
   await page.evaluate(`${CREATE_SUBMIT}.click()`)
   await page.waitFor(failToast)
   await page.press('Escape')

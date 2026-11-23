@@ -13,7 +13,8 @@ import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { archiveEffectsSummary, employeeArchiveState, matchesArchiveFilter } from '../lib/employeeArchive'
 import { keepLunchSelection, lunchKey, lunchOptions, matchesLunchFilter, scheduleText } from '../lib/employeeLunch'
-import { employeeCreateSchema, employeeFormSchema } from '../lib/formSchemas'
+import { employeeCreateSchema, employeeFormSchema, NC_CLEAR_MESSAGE } from '../lib/formSchemas'
+import { employeeWithoutNc } from '../lib/employeeNc'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { Icon } from '../components/ui/Icon'
 import { Segmented } from '../components/ui/Segmented'
@@ -264,7 +265,7 @@ function SettingsTab({ resource, notify }) {
 
 const emptyEmployee = {
   nome: '', ad_login: '', equipe: 'n1', access_role: 'tecnico', jornada_entrada: '08:00',
-  jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', fora_mapa_escala: false, grupo_tools: false,
+  jornada_saida: '17:00', almoco_inicio: '12:00', almoco_fim: '13:00', fora_mapa_escala: false, grupo_tools: false, nc: '',
 }
 
 // [F9, D-F9-12] Equipes que ficam sempre no grupo separado da escala.
@@ -333,6 +334,16 @@ function EmployeeFields({ form, register, setValue, errors = {}, editing = false
         <input aria-invalid={Boolean(errors.ad_login)} className="field mt-2" maxLength="100" placeholder="nome.sobrenome" {...register('ad_login')} />
         {errors.ad_login && <span className="mt-1 block text-xs text-danger">{errors.ad_login.message}</span>}
       </label>
+      {/* [Lote NC] NC (matrícula do cadastro Senior): obrigatório no cadastro
+          novo; na edição, só se a lista trouxe o campo (Liderança e admin). */}
+      {(!editing || typeof form.nc === 'string') && (
+        <label className="label" data-employee-nc="">NC (matrícula Senior)
+          <input aria-invalid={Boolean(errors.nc)} autoComplete="off" className="field mt-2" inputMode="numeric" maxLength="12" placeholder="Só dígitos" required={!editing} {...register('nc')} />
+          {errors.nc
+            ? <span className="mt-1 block text-xs text-danger">{errors.nc.message}</span>
+            : <span className="mt-1 block text-xs text-muted">{editing ? 'Corrija se preciso; o NC não se apaga pela tela.' : 'Obrigatório. Vai como cópia em cada hora extra e correção de ponto.'}</span>}
+        </label>
+      )}
       <label className="label">Equipe operacional
         <input type="hidden" {...register('equipe')} />
         <select className="field mt-2" value={normalizeTeam(form.equipe)} onChange={(event) => updateTeam(event.target.value)}>
@@ -517,6 +528,8 @@ function EmployeesTab({
   const [lunch, setLunch] = useState('')
   // [9.17] Filtro do grupo Tools: '', 'sim' ou 'nao'.
   const [tools, setTools] = useState('')
+  // [Lote NC] Filtro dos cadastros sem NC: '' ou 'sem' (só com o campo na lista).
+  const [ncFilter, setNcFilter] = useState('')
   const [pendingAction, setPendingAction] = useState(null)
   const [acting, setActing] = useState(false)
   // [R4d] No celular, os filtros ficam atrás do botão "Filtros": a lista vem primeiro.
@@ -539,8 +552,9 @@ function EmployeesTab({
       && matchesArchiveFilter(item, status)
       && matchesLunchFilter(item, keepLunchSelection(lunch, lunchChoices))
       && (!tools || (tools === 'sim') === (item.grupo_tools === true))
+      && (!ncFilter || employeeWithoutNc(item))
     ))
-  }, [lunch, lunchChoices, resource.data, role, search, status, team, tools])
+  }, [lunch, lunchChoices, ncFilter, resource.data, role, search, status, team, tools])
   const allEmployees = resource.data?.funcionarios || []
 
   if (resource.loading) return <LoadingState />
@@ -548,7 +562,7 @@ function EmployeesTab({
 
   function applyEmployeeErrors(error, setError, setFocus, editing = false) {
     // Campos que renderizam a mensagem de erro abaixo do input em EmployeeFields.
-    const fieldsWithMessage = ['id', 'nome', 'ad_login', 'jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim']
+    const fieldsWithMessage = ['id', 'nome', 'ad_login', 'nc', 'jornada_entrada', 'jornada_saida', 'almoco_inicio', 'almoco_fim']
     let firstField = null
     let hiddenMessage = ''
     for (const issue of error.issues) {
@@ -577,6 +591,7 @@ function EmployeesTab({
       equipe: normalizeTeam(item.equipe),
       grupo_escala: ['comum', 'separado'].includes(item.grupo_escala) ? item.grupo_escala : undefined,
       grupo_tools: typeof item.grupo_tools === 'boolean' ? item.grupo_tools : undefined,
+      nc: 'nc' in item ? (item.nc ?? '') : undefined,
     }
     setEditForm(nextForm)
     resetEditEmployee(nextForm)
@@ -646,6 +661,12 @@ function EmployeesTab({
 
   async function update(values) {
     clearEditEmployeeErrors()
+    // [Lote NC, D-NC-4] O NC gravado não se apaga pela tela.
+    if (editForm?.nc && !String(values.nc ?? '').trim()) {
+      setEditEmployeeError('nc', { type: 'nc', message: NC_CLEAR_MESSAGE })
+      setEditEmployeeFocus('nc')
+      return
+    }
     // [D3] O ID não é campo do formulário: vem do cadastro aberto.
     const parsed = employeeFormSchema.safeParse({ ...values, id: editForm?.id })
     if (!parsed.success) {
@@ -751,7 +772,11 @@ function EmployeesTab({
     status !== 'ativos' && ['situacao', `Situação: ${status === 'arquivados' ? 'Arquivados' : 'Ativos e arquivados'}`, () => { setStatus('ativos'); setPendingAction(null) }],
     lunchSelected && ['almoco', `Almoço: ${lunchSelected}`, () => setLunch('')],
     tools && ['tools', tools === 'sim' ? 'No grupo Tools' : 'Fora do grupo Tools', () => setTools('')],
+    ncFilter && ['nc', 'Sem NC', () => setNcFilter('')],
   ].filter(Boolean)
+  // [Lote NC] Aviso e filtro só quando a lista traz o NC (Liderança e admin).
+  const listHasNc = allEmployees.some((item) => 'nc' in item)
+  const withoutNcCount = allEmployees.filter((item) => employeeArchiveState(item) === 'ativo' && employeeWithoutNc(item)).length
   const activeCount = allEmployees.filter((item) => employeeArchiveState(item) === 'ativo').length
   const leadershipCount = filtered.filter((item) => item.access_role === 'lideranca').length
 
@@ -778,6 +803,7 @@ function EmployeesTab({
           {/* [9.17] Grupo Tools (D-CHG-13): quem altera o Controle de CHG além da Liderança e do admin. */}
           <select aria-describedby="filtro-tools-ajuda" aria-label="Grupo Tools" className="field" data-tools-filter="" value={tools} onChange={(event) => setTools(event.target.value)}><option value="">Grupo Tools: todos</option><option value="sim">No grupo Tools</option><option value="nao">Fora do grupo Tools</option></select>
           <p className="field-help self-center xl:col-span-2" id="filtro-tools-ajuda">Grupo Tools: altera o Controle de CHG, além do que o perfil permite.</p>
+          {listHasNc && <select aria-label="NC" className="field" data-nc-filter="" value={ncFilter} onChange={(event) => setNcFilter(event.target.value)}><option value="">NC: todos</option><option value="sem">Sem NC</option></select>}
         </FilterBar>
         </div>
         <div aria-label="Filtros ativos" className="flex min-h-10 flex-wrap items-center gap-2" data-active-filters="" role="group">
@@ -789,10 +815,19 @@ function EmployeesTab({
             </button>
           ))}
           {activeFilters.length > 1 && (
-            <button className="btn-ghost btn-sm" onClick={() => { setSearch(''); setTeam(''); setRole(''); setStatus('ativos'); setLunch(''); setTools(''); setPendingAction(null) }} type="button">Limpar filtros</button>
+            <button className="btn-ghost btn-sm" onClick={() => { setSearch(''); setTeam(''); setRole(''); setStatus('ativos'); setLunch(''); setTools(''); setNcFilter(''); setPendingAction(null) }} type="button">Limpar filtros</button>
           )}
         </div>
       </div>
+
+      {listHasNc && withoutNcCount > 0 && (
+        <div data-nc-missing="">
+          <InlineAlert tone="warning" title={`${withoutNcCount} cadastro(s) ativo(s) sem NC`}>
+            A hora extra e a correção de ponto dessas pessoas saem sem NC no CSV.{' '}
+            <button className="btn-ghost btn-sm" data-nc-show="" onClick={() => { setNcFilter('sem'); setStatus('ativos') }} type="button">Ver cadastros sem NC</button>
+          </InlineAlert>
+        </div>
+      )}
 
       <section className="card" data-employee-section="">
           <SectionHeader

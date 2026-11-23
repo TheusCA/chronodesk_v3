@@ -41,7 +41,7 @@ assert.equal(existsSync(join(frontendRoot, 'scripts', 'qa-employee-form.mjs')), 
 assert.match(schemaSource, /export const employeeFormSchema = z\.object\(\{/, 'employeeFormSchema deve existir')
 
 assert.match(adminSource, /import \{ useForm \} from 'react-hook-form'/, 'AdminPage deve usar React Hook Form')
-assert.match(adminSource, /import \{ employeeCreateSchema, employeeFormSchema \} from '\.\.\/lib\/formSchemas'/, 'AdminPage deve importar os schemas de criacao (sem ID, D3) e de edicao')
+assert.match(adminSource, /import \{ employeeCreateSchema, employeeFormSchema, NC_CLEAR_MESSAGE \} from '\.\.\/lib\/formSchemas'/, 'AdminPage deve importar os schemas de criacao (sem ID, D3) e de edicao')
 assert.match(adminSource, /useForm\(\{[\s\S]*defaultValues:\s*emptyEmployee[\s\S]*\}\)/, 'Formulario de funcionario deve usar emptyEmployee como default')
 assert.match(adminSource, /handleCreateEmployeeSubmit\(create\)/, 'Criacao deve usar handleSubmit')
 assert.match(adminSource, /handleEditEmployeeSubmit\(update\)/, 'Edicao deve usar handleSubmit')
@@ -285,6 +285,46 @@ for (const id of [2147483648, '2147483648', 0, '0', -1, '-1', '12abc', 12.5]) {
   assert.deepEqual(issuesFor({ id }).map((issue) => issue.path), ['id'], `F3: id ${JSON.stringify(id)} recusado`)
 }
 assert.deepEqual(issuesFor({ id: 2147483648 }), [{ path: 'id', message: 'ID deve ser no máximo 2147483647.' }], 'F3: acima do INT com a mensagem do teto')
+
+// [Lote NC, D-NC-4] NC: obrigatorio no cadastro novo, so digitos (1 a 12),
+// opcional na edicao (ausente nao vai); nunca apagado pela tela. NC ficticio.
+const { employeeCreateSchema, NC_INVALID_MESSAGE, NC_MISSING_MESSAGE, NC_CLEAR_MESSAGE } = await import(pathToFileURL(join(srcRoot, 'lib', 'formSchemas.ts')).href)
+const validCreate = { ...validEmployee, nc: '900000001' }
+delete validCreate.id
+const createIssues = (overrides) => {
+  const result = employeeCreateSchema.safeParse({ ...validCreate, ...overrides })
+  return result.success ? [] : result.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message }))
+}
+assert.deepEqual([employeeCreateSchema.safeParse(validCreate).data?.nc, employeeCreateSchema.safeParse({ ...validCreate, nc: ' 000123 ' }).data?.nc, employeeCreateSchema.safeParse({ ...validCreate, nc: '123456789012' }).success], ['900000001', '000123', true], 'NC no cadastro novo: digitos com zero a esquerda, ate 12, sem espacos')
+for (const nc of ['', null, undefined, '   ']) {
+  assert.deepEqual(createIssues({ nc }), [{ path: 'nc', message: NC_MISSING_MESSAGE }], `NC ${JSON.stringify(nc)} no cadastro novo: obrigatorio`)
+}
+for (const nc of ['12a', '1234567890123', '-1', '1 2', '1.0']) {
+  assert.deepEqual(createIssues({ nc }), [{ path: 'nc', message: NC_INVALID_MESSAGE }], `NC ${JSON.stringify(nc)}: so digitos, de 1 a 12`)
+}
+const editNoNc = employeeFormSchema.safeParse(validEmployee)
+const editNc = employeeFormSchema.safeParse({ ...validEmployee, nc: ' 42 ' })
+const editEmpty = employeeFormSchema.safeParse({ ...validEmployee, nc: '' })
+assert.deepEqual([editNoNc.success, 'nc' in editNoNc.data, editNc.data?.nc, editEmpty.data?.nc, issuesFor({ nc: 'x1' })], [true, false, '42', '', [{ path: 'nc', message: NC_INVALID_MESSAGE }]], 'NC na edicao: ausente nao vai; vazio passa no schema (a tela recusa apagar o gravado); invalido falha')
+assert.equal(NC_CLEAR_MESSAGE, 'O NC não pode ser apagado pela tela: corrija o número.', 'NC: a mesma mensagem do servidor ao apagar')
+const updateNcGuard = updateSource.indexOf("if (editForm?.nc && !String(values.nc ?? '').trim()) {")
+assert.ok(updateNcGuard > -1 && updateNcGuard < updateSource.indexOf('employeeFormSchema.safeParse'), 'NC: a edicao recusa apagar o NC gravado antes do schema')
+assert.match(updateSource, /setEditEmployeeError\('nc', \{ type: 'nc', message: NC_CLEAR_MESSAGE \}\)/, 'NC: o erro de apagar no proprio campo')
+assert.match(adminSource, /\{\(!editing \|\| typeof form\.nc === 'string'\) && \(\s*<label className="label" data-employee-nc="">NC \(matrícula Senior\)[\s\S]*?required=\{!editing\} \{\.\.\.register\('nc'\)\} \/>/u, 'NC: campo no cadastro novo (obrigatorio) e na edicao so com o campo na lista')
+assert.match(adminSource, /nc: 'nc' in item \? \(item\.nc \?\? ''\) : undefined,/, 'NC: a edicao abre com o NC da lista, ou sem o campo')
+assert.match(adminSource, /'nome', 'ad_login', 'nc', 'jornada_entrada'/, 'NC: o erro do schema aparece no campo')
+const { employeeWithoutNc, workflowNcState, NC_REQUIRED_MESSAGE } = await import(pathToFileURL(join(srcRoot, 'lib', 'employeeNc.ts')).href)
+assert.deepEqual([{ nc: null }, { nc: '' }, { nc: '1' }, {}].map(employeeWithoutNc), [true, true, false, false], 'NC: sem NC so quando a lista trouxe o campo')
+assert.deepEqual([null, { nc: '1', nc_required: true }, { nc: null, nc_required: false }, { nc: null, nc_required: true }].map(workflowNcState), [
+  { missing: false, blocked: false }, { missing: false, blocked: false }, { missing: true, blocked: false }, { missing: true, blocked: true },
+], 'NC no formulario: sem NC avisa; com NC_OBRIGATORIO, bloqueia')
+assert.equal(NC_REQUIRED_MESSAGE, 'Sua matrícula (NC) não está no cadastro. Peça à Liderança para incluir.', 'NC: a mensagem do pedido, igual a do servidor')
+assert.match(adminSource, /&& \(!ncFilter \|\| employeeWithoutNc\(item\)\)/, 'NC: o filtro da lista usa a regra testada')
+assert.match(adminSource, /const withoutNcCount = allEmployees\.filter\(\(item\) => employeeArchiveState\(item\) === 'ativo' && employeeWithoutNc\(item\)\)\.length/, 'NC: o aviso conta so os ativos sem NC')
+assert.match(adminSource, /\{listHasNc && withoutNcCount > 0 && \([\s\S]*?title=\{`\$\{withoutNcCount\} cadastro\(s\) ativo\(s\) sem NC`\}[\s\S]*?onClick=\{\(\) => \{ setNcFilter\('sem'\); setStatus\('ativos'\) \}\}/, 'NC: aviso "N cadastros ativos sem NC" com o atalho para o filtro')
+assert.match(adminSource, /\{listHasNc && <select aria-label="NC" className="field" data-nc-filter="" value=\{ncFilter\}[^\n]*<option value="sem">Sem NC<\/option><\/select>\}/, 'NC: filtro dos cadastros sem NC so com o campo na lista')
+assert.match(adminSource, /ncFilter && \['nc', 'Sem NC', \(\) => setNcFilter\(''\)\]/, 'NC: o filtro aparece nos filtros ativos')
+assert.match(adminSource, /setTools\(''\); setNcFilter\(''\); setPendingAction\(null\)/, 'NC: "Limpar filtros" limpa o filtro do NC')
 
 const allMessages = [
   { id: '' }, { id: '0' }, { id: 'x' }, { nome: '' }, { nome: null }, { ad_login: 5 }, { ad_login: 'a b' },
@@ -575,7 +615,9 @@ const appliedFiltersOf = (markup) => (markup.match(/class="filter-chip" data-fil
 {
   const { employeeCreateSchema } = await import(pathToFileURL(join(srcRoot, 'lib', 'formSchemas.ts')).href)
   const { employeeCreatedFeedback, ACTION_FEEDBACK: FEEDBACK } = await import(pathToFileURL(join(srcRoot, 'lib', 'actionFeedback.ts')).href)
-  const { id: _ignored, ...withoutId } = validEmployee
+  const { id: _ignored, ...withoutIdBase } = validEmployee
+  // [Lote NC] O cadastro novo leva o NC (obrigatorio); NC ficticio.
+  const withoutId = { ...withoutIdBase, nc: '900000001' }
   const created = employeeCreateSchema.safeParse(withoutId)
   assert.deepEqual([created.success, 'id' in (created.data ?? {})], [true, false], 'D3: criacao valida sem ID')
   const withStaleId = employeeCreateSchema.safeParse({ ...withoutId, id: '777' })
