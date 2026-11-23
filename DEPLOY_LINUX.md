@@ -5683,10 +5683,22 @@ Controle v5 e conferir os tecnicos de CHG.
   padrao).
 - **Icone novo (opcao B, "chaves com pausa"):** a marca do topo e o favicon,
   com os links `?v=3`; o favicon nao depende do tema.
+- **Ajustes do Controle de CHG pedidos pelo Tools (sem migration):** no
+  quadro, o card fica compacto (carteira, CHG, tipo, prazos, situacao,
+  tecnico, mover, copiar e "Abrir"); planos, endpoints, rollback e tarefas
+  passam para o painel "Abrir" (gravando ao sair do campo, como antes; fechar
+  com campo nao gravado pergunta antes de descartar). As colunas tem no
+  minimo 18rem e o quadro rola, com o cabecalho da coluna fixo. Visao nova
+  "Etapa" (uma etapa por vez). O admin ganha "Catalogo de carteiras":
+  importa a planilha base (colunas cod e carteira; as demais sao ignoradas e
+  nunca gravadas) com previa; as carteiras fora da planilha ficam inativas,
+  nunca apagadas; os cards ja gravados nao mudam. No formulario, o nome igual
+  ao do catalogo preenche o codigo vazio.
 - **O que muda para quem usa:** so o Critico com papel no dia (Escala,
   Calendario e relatorios iguais a Visao operacional), o campo e o aviso do
   NC, o NC nos formularios e no CSV da correcao de ponto, a importacao de
-  NCs, a planilha de horas extras do RH no lugar do CSV e o icone. Sem PA marcado, o Mapa PA fica
+  NCs, a planilha de horas extras do RH no lugar do CSV, o quadro do
+  Controle de CHG (card compacto, painel "Abrir" e visao Etapa) e o icone. Sem PA marcado, o Mapa PA fica
   como hoje. A gestao marca os PAs e preenche os NC pela tela depois (fim
   deste roteiro).
 
@@ -5745,7 +5757,9 @@ unico `git fetch` e o do passo 1, so do branch.
    papel do dia, como a Visao operacional. O cadastro de funcionarios ganha
    o NC (a matricula), que vai na hora extra e na correcao de ponto; a
    exportacao de horas extras passa a ser a planilha do RH (.xlsx, so
-   aprovados, e so sai com o NC de todos); o portal ganha um icone novo. Duvidas: <contato>."
+   aprovados, e so sai com o NC de todos); no Controle de CHG, o card do
+   quadro fica compacto e os planos, endpoints e rollback ficam no botao
+   "Abrir"; o portal ganha um icone novo. Duvidas: <contato>."
 
 **1. Conferencia do ambiente (com o umask), producao no `f0844fd`, commit validado e a lista das migrations.**
 
@@ -5994,6 +6008,12 @@ nada** (abra e feche sem gravar):
   link de baixar. Nada de anotar nome.
 - **Configuracoes (lote NC revisto):** o campo "Centro de custo (planilha de
   horas extras do RH)" com "1.123.01  Suporte Tecnico" (nao salve).
+- **Controle de CHG (ajustes do Tools):** num notebook com o menu aberto, o
+  quadro com as colunas lado a lado e a rolagem horizontal, sem texto
+  quebrado letra por letra; "Abrir" num card mostra o painel largo com os
+  planos e os endpoints, e o Esc fecha (sem digitar nada); "Etapa" mostra
+  uma etapa por vez. Como admin, "Catalogo de carteiras" mostra as contagens
+  do catalogo (nao envie planilha). Nada de salvar nem mover card.
 - **Horas extras e Correcao de ponto (lote NC):** com um colaborador
   escolhido, o campo "NC (matricula)" com "Sem NC no cadastro" e o aviso
   amarelo "Sem NC no cadastro" (a chave desligada: o botao de enviar continua
@@ -6099,6 +6119,12 @@ verificacao so conta):
   docs ou o chat; a verificacao da 026 so conta (`ativos_sem_nc`,
   `nc_repetido = 0`). A planilha de horas extras do RH so sai quando todos os
   aprovados do periodo tiverem NC.
+- **Catalogo de carteiras (ajustes do Tools):** o admin importa a planilha
+  base de carteiras em "Catalogo de carteiras", confere a previa (novas,
+  renomeadas, reativadas, as que saem e as recusadas; so as contagens no
+  chat) e confirma. A planilha tem enderecos internos: fica fora do git, dos
+  docs e do chat, e so as colunas cod e carteira sao lidas. Importar a mesma
+  planilha de novo da 0 mudancas.
 - **Ligar a chave `NC_OBRIGATORIO`** so quando a verificacao da 026 der
   `ativos_sem_nc = 0`, com o responsavel, num passo combinado (a linha
   `NC_OBRIGATORIO=1` no `/var/www/.env`, com copia do `.env` antes, e a

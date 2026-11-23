@@ -1320,6 +1320,20 @@ assert_same([true, true, true, true, true, true, true, true, 0], [
     strpos($sheet5, 'em "Editar" ou pela importacao com previa em Funcionarios); a verificacao da 026 conta `ativos_sem_nc`. A planilha de horas extras do RH so sai com o NC de todos os aprovados do periodo.') !== false,
     count(array_filter($commands5, static fn (string $line): bool => preg_match('/format=xlsx|employee_nc_import/', $line) === 1)),
 ], 'deploy 5 (lote NC revisto): sem zero a esquerda, importacao com previa, planilha do RH no lugar do CSV com a fumaca na previa, conferencias sem enviar nem salvar e o depois do deploy, na folha junto; nenhum comando baixa a planilha nem importa NC');
+// [Ajustes do CHG pedidos pelo Tools] Layout do quadro e catalogo de carteiras,
+// sem migration (a lista das 8 migrations do passo 1 continua): o que vai, o
+// aviso, a conferencia na tela sem enviar planilha nem salvar, o depois do
+// deploy com a importacao pelo admin (a planilha fora do git); a folha junto.
+// Nenhum comando do deploy 5 importa o catalogo nem cita a planilha.
+assert_same([true, true, true, true, true, true, 0], [
+    strpos($prose5, '- **Ajustes do Controle de CHG pedidos pelo Tools (sem migration):**') !== false && strpos($prose5, 'as carteiras fora da planilha ficam inativas, nunca apagadas; os cards ja gravados nao mudam.') !== false,
+    strpos($prose5, 'no Controle de CHG, o card do quadro fica compacto e os planos, endpoints e rollback ficam no botao "Abrir"; o portal ganha um icone novo.') !== false,
+    strpos($prose5, '- **Controle de CHG (ajustes do Tools):**') !== false && strpos($prose5, 'do catalogo (nao envie planilha). Nada de salvar nem mover card.') !== false,
+    strpos($prose5, '- **Catalogo de carteiras (ajustes do Tools):**') !== false && strpos($prose5, 'A planilha tem enderecos internos: fica fora do git, dos docs e do chat, e so as colunas cod e carteira sao lidas.') !== false,
+    strpos($sheet5, 'os ajustes do Controle de CHG pedidos pelo Tools (card compacto, painel "Abrir", colunas de 18rem com rolagem, visao Etapa e o catalogo de carteiras pela planilha; sem migration)') !== false && strpos($sheet5, '"Catalogo de carteiras" com as contagens, sem enviar planilha, salvar nem mover card;') !== false,
+    strpos($sheet5, 'O admin importa a planilha base de carteiras em "Catalogo de carteiras" (previa, depois confirmar; a planilha tem enderecos internos e fica fora do git, dos docs e do chat; so as contagens no chat).') !== false,
+    count(array_filter($commands5, static fn (string $line): bool => preg_match('/chg_catalog_import|Carteiras\.xlsx|_referencias/i', $line) === 1)),
+], 'deploy 5 (ajustes do CHG): o que vai sem migration, o aviso, a conferencia sem enviar nem salvar e o depois com a importacao pelo admin, na folha junto; nenhum comando importa o catalogo');
 
 // ----------------------------------------------------------------------------
 // 17. Licao do deploy 4 (19/11/2026): um filtro de resumo com "umask 077"
