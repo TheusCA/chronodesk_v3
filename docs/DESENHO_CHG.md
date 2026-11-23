@@ -975,3 +975,44 @@ Respostas: 4.1 (a equipe lança; solicitante é texto; leitura do técnico A CON
 - **Uma leitura da IA, a conferir na próxima revisão:** um `agendado` com data **futura** não pode receber `aprovada` com essa data (D-CHG-10). Nesse caso, a aprovação também abre a confirmação, e o `agendado` recebe a data informada, com a troca auditada (3.4.1, última linha da tabela). A alternativa seria recusar com 409 e pedir a remarcação antes.
 
 **G1 continua bloqueado:** o 4.5 (branch e deploy) e os itens A CONFIRMAR (leitura do técnico, 4.6c, listas da C6 e da C10, formato da C12, 4.6b) serão respondidos pelo responsável na próxima revisão.
+
+## 16. Ajustes pedidos pelo Tools (2026-11-23): layout do quadro e catálogo de carteiras
+
+Pedido do responsável, com o relato e a captura do Tools e a planilha base de carteiras em `_referencias/chg/` (com endereços internos: nada dela no git, nos docs ou nos QAs). Entra no deploy 5, **sem migration nova**.
+
+**Causa do layout quebrado:** a partir de 1280 px, o `.chg-board` dividia a largura em 6 colunas `minmax(0, 1fr)`. Num notebook com o menu aberto, cada coluna ficava com cerca de 170 px, e os planos, os endpoints, as datas e os botões editados dentro do card, com `overflow-wrap: anywhere`, quebravam o texto letra por letra.
+
+**Plano curto:**
+
+| Commit | Conteúdo |
+|---|---|
+| 1 | Este plano |
+| 2 | Layout: card compacto, painel "Abrir", colunas de no mínimo 18rem com rolagem e cabeçalho fixo, a visão Etapa; `qa:chg`, `qa:unsaved-changes` e o bloco 33 do navegador; capturas antes e depois (fora do git) |
+| 3 | Catálogo: a importação da planilha de carteiras com prévia (servidor, tela e QA) e a busca reversa no formulário |
+| 4 | Roteiro, folha e trava do deploy 5 (sem migration) |
+| 5 | Docs: execução, validação e registro |
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D-CHG-34 | O card do quadro e da visão Etapa é compacto: o número da CHG (com copiar), a situação (selo), o rollback, "Movido manualmente", a 1ª carteira e "+N" (todas no `title`), a barra de SLA na execução, o tipo, o técnico, o início e o fim do Service Desk, "Mover para…", copiar a tabela e "Abrir". Nada de editar planos, endpoints, rollback e tarefas na coluna | Pedido |
+| D-CHG-35 | "Abrir" mostra o card inteiro num Drawer `max-w-4xl` (o padrão do "Nova atualização"): os mesmos componentes de hoje, gravando ao sair do campo como antes (`row_version`; 409 recarrega). Editar, Duplicar e Arquivar passam para o rodapé do painel. Sujo = um campo digitado e ainda não gravado. Fechar (Esc, clique fora, X, Fechar), Editar e Duplicar perguntam antes de descartar. O campo não grava quando o foco sai para o aviso ou para esses controles; descartar devolve o valor carregado. O foco volta ao "Abrir" | Pedido; sem isso, o Esc gravaria o campo ao abrir o aviso |
+| D-CHG-36 | De 1280 px para cima, as colunas têm no mínimo 18rem (crescem até dividir a largura), e o quadro rola na horizontal e na vertical, até a altura da tela menos 8rem, com o cabeçalho de cada coluna fixo. Abaixo de 1280 px, continuam empilhadas. O arrastar entre etapas continua | Pedido |
+| D-CHG-37 | Visão "Etapa" no seletor (Quadro, Etapa, Lista, Dashboard): uma aba por etapa, com a contagem; os cards da etapa escolhida numa grade de colunas de 18rem na largura toda | Pedido |
+| D-CHG-38 | Leitura do critério do QA: "texto com largura menor que 8rem" é texto que quebra em mais de uma linha numa caixa de menos de 8rem (o defeito do relato). Rótulos curtos numa linha só ("+2", "PAs") passam. "Rolagem horizontal dentro de um card" é o card, ou um descendente com `overflow` auto/scroll, mais largo do que a caixa. "Botão fora da área visível" é um controle fora do card, do painel, da área visível do quadro ou da tela | Torna o pedido verificável |
+| D-CHG-39 | Importação do catálogo de carteiras: só com `chg.import` (admin), no Drawer "Catálogo de carteiras" (botão novo ao lado de "Importar do Controle v5"), com as contagens do catálogo e a planilha `.xlsx` ou `.csv` (até 2 MB e 5000 linhas, o leitor de planilha do portal). O cabeçalho é a 1ª linha com as colunas "cod" e "carteira" (sem diferenciar acento, caixa e espaço); **as demais colunas são ignoradas e nunca gravadas**. Por linha: o código só com dígitos, de 1 a 10 (aceita o "123.0" do Excel); o nome com 1 a 120 caracteres. Linha com código não numérico, código repetido no arquivo (todas as linhas dele), nome vazio ou longo: recusada | Pedido; a planilha tem endereços internos |
+| D-CHG-40 | A prévia compara com o catálogo inteiro (ativas e inativas) e separa as categorias abaixo. Nada é gravado sem confirmar: a confirmação refaz a prévia numa transação, com o catálogo travado, e grava. A auditoria `CHG_CATALOGO` leva só as contagens. Os cards já gravados não mudam: o nome fica como foi salvo (cópia, D-CHG-18) | Pedido |
+| D-CHG-41 | Busca reversa no formulário, como no v5.2: com o código vazio (e "sem código" desmarcado), um nome digitado igual ao de uma carteira ativa do catálogo (sem diferença de maiúsculas e dos espaços das pontas) preenche o código. Nome de mais de uma carteira ativa não preenche. O código continua preenchendo o nome, que continua editável | Pedido |
+
+Categorias da prévia (D-CHG-40):
+- **novas:** o código não está no catálogo;
+- **renomeadas:** o nome mudou (a inativa volta a ativa);
+- **reativadas:** o mesmo nome, mas a carteira estava inativa;
+- **sem mudança;**
+- **as que saíram:** ativas fora do arquivo, que viram `ativo = 0` e nunca são apagadas. A carteira de um código recusado no arquivo não sai;
+- **recusadas.**
+
+Arquivo sem nenhuma linha válida: recusado, para nunca desativar o catálogo inteiro. Repetir o mesmo arquivo dá tudo "sem mudança".
+
+**QA da importação:** com um catálogo fictício no QA. O catálogo da referência (168 carteiras) é importado sobre ele mesmo só na estação, fora do git, e o resultado vai só em contagens para os docs.
