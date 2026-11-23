@@ -10,6 +10,10 @@ try {
     // portal_operational_error(), sem excecao sem captura.
     $service = new OperationalService();
     if ($method === 'GET') {
+        // [Lote NC, D-NC-6] NC da pessoa do formulario (so leitura), do cadastro.
+        if (($_GET['nc'] ?? '') === '1') {
+            json_response(['sucesso' => true] + $service->employeeNcForForm($_GET, $actor));
+        }
         if (($_GET['format'] ?? '') === 'csv') {
             audit_log('TIME_ADJUSTMENT_EXPORTED', 'Exportacao CSV de correcao de ponto.', 'INFO');
             $service->streamTimeAdjustmentsCsv($_GET, $actor);

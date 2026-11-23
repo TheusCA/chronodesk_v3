@@ -40,7 +40,7 @@ final class QaChildPdo extends PDO {
         if (trim($query) === 'SELECT 1 FROM audit_log LIMIT 1') {
             return new QaChildStatement($this, 'SELECT 1 FROM audit_log LIMIT 1');
         }
-        if (in_array(trim($query), ['SELECT id, fora_mapa_escala FROM funcionarios', 'SELECT id, arquivado_em FROM funcionarios WHERE ativo = 0', 'SELECT id, grupo_escala FROM funcionarios'], true)) {
+        if (in_array(trim($query), ['SELECT id, fora_mapa_escala FROM funcionarios', 'SELECT id, arquivado_em FROM funcionarios WHERE ativo = 0', 'SELECT id, grupo_escala FROM funcionarios', 'SELECT id, matricula FROM funcionarios'], true)) {
             $statement = new QaChildStatement($this, trim($query));
             $statement->execute();
             return $statement;
@@ -214,6 +214,33 @@ final class QaChildStatement extends PDOStatement {
             }
             return true;
         }
+        // [Lote NC] NC: leitura travada, unicidade, gravacao no log (sem o
+        // valor: so se mudou para vazio ou nao) e lista. NC ficticio.
+        if ($this->sql === 'SELECT matricula FROM funcionarios WHERE id = :id FOR UPDATE' || $this->sql === 'SELECT matricula FROM funcionarios WHERE id = :id') {
+            $row = $byId($this->pdo, $params[':id'] ?? 0);
+            $this->rows = $row ? [['matricula' => $row['matricula'] ?? null]] : [];
+            return true;
+        }
+        if ($this->sql === 'SELECT id FROM funcionarios WHERE matricula = :matricula AND id <> :id LIMIT 1') {
+            $this->rows = [];
+            foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                if (($row['matricula'] ?? null) === $params[':matricula'] && (string)$id !== (string)$params[':id']) {
+                    $this->rows[] = ['id' => (int)$id];
+                }
+            }
+            return true;
+        }
+        if ($this->sql === 'UPDATE funcionarios SET matricula = :matricula WHERE id = :id') {
+            error_log('[QA_WRITE] UPDATE funcionarios SET matricula id=' . $params[':id'] . ' nc=' . ($params[':matricula'] === null ? 'vazio' : 'preenchido'));
+            return true;
+        }
+        if ($this->sql === 'SELECT id, matricula FROM funcionarios') {
+            $this->rows = [];
+            foreach ($this->pdo->db['funcionarios'] as $id => $row) {
+                $this->rows[] = ['id' => (int)$id, 'matricula' => $row['matricula'] ?? null];
+            }
+            return true;
+        }
         // [F10-2] Grupo da escala: leitura travada, gravacao no log e lista.
         if ($this->sql === 'SELECT grupo_escala FROM funcionarios WHERE id = :id FOR UPDATE') {
             $row = $byId($this->pdo, $params[':id'] ?? 0);
@@ -281,7 +308,8 @@ final class QaChildStatement extends PDOStatement {
             // [D5] INSERT de funcionario: id=banco quando o ID nao vai no comando e coluna_id diz se a coluna id esta no INSERT.
             $insertIdColumn = strpos($this->sql, 'INSERT INTO funcionarios (') === 0 ? ' coluna_id=' . (preg_match('/^INSERT INTO funcionarios \( ?id,/', $this->sql) === 1 ? 'sim' : 'nao') : '';
             error_log('[QA_WRITE] ' . rtrim((string)strtok($this->sql, '(')) . ' id=' . ($params[':id'] ?? 'banco') . $insertIdColumn . ' perfil=' . ($params[':access_role'] ?? '-') . ' login=' . ($params[':ad_login'] ?? '-') . ' fora_mapa=' . ($params[':fora_mapa_escala'] ?? '-')
-                . ' horarios=' . ($params[':jornada_entrada'] ?? '-') . '-' . ($params[':jornada_saida'] ?? '-') . '/' . ($params[':almoco_inicio'] ?? '-') . '-' . ($params[':almoco_fim'] ?? '-'));
+                . ' horarios=' . ($params[':jornada_entrada'] ?? '-') . '-' . ($params[':jornada_saida'] ?? '-') . '/' . ($params[':almoco_inicio'] ?? '-') . '-' . ($params[':almoco_fim'] ?? '-')
+                . (array_key_exists(':matricula', $params) ? ' nc=' . ($params[':matricula'] === null ? 'vazio' : 'preenchido') : ''));
             return true;
         }
         // F4: arquivamento e restauracao (EmployeeArchiveService). Cadastro
@@ -2037,8 +2065,11 @@ $employeeBody = static fn (array $override): string => (string)json_encode($over
 $leaderSession = qa_ci_session(2, 'qa.lider', 'lideranca');
 $withInactive = QA_DB;
 $withInactive['funcionarios']['8'] = ['ativo' => 0, 'access_role' => 'tecnico', 'equipe' => 'n1', 'ad_login' => 'qa.inativo'];
+// [Lote NC] Cadastro novo com NC ficticio por padrao (obrigatorio, D-NC-4).
 $employeeSpec = static fn (string $endpoint, array $session, string $body, array $db = QA_DB): array
-    => ['endpoint' => 'api/' . $endpoint, 'method' => 'POST', 'content_type' => 'application/json', 'body' => $body, 'session' => $session, 'db' => $db];
+    => ['endpoint' => 'api/' . $endpoint, 'method' => 'POST', 'content_type' => 'application/json',
+        'body' => $endpoint === 'adicionar_funcionario.php' && !array_key_exists('nc', (array)json_decode($body, true)) ? (string)json_encode(json_decode($body, true) + ['nc' => '900000001']) : $body,
+        'session' => $session, 'db' => $db];
 $employeeCases = qa_run_endpoints($qaDir, [
     'lid_cria_lideranca' => $employeeSpec('adicionar_funcionario.php', $leaderSession, $employeeBody(['access_role' => 'lideranca'])),
     'lid_altera_para_lideranca' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'access_role' => 'lideranca', 'ad_login' => 'joao.silva'])),
@@ -2114,6 +2145,73 @@ assert_same([200, false, false], [$grupoCases['mesmo_grupo']['status'], strpos($
 assert_same([400, true, false], [$grupoCases['invalido']['status'], strpos($grupoCases['invalido']['body'], 'Grupo da escala inválido') !== false, preg_match('/\[QA_WRITE\] (UPDATE |INSERT INTO funcionarios id=banco)/', $grupoCases['invalido']['log']) === 1], 'grupo da escala: valor fora da lista da 400 e nada gravado');
 assert_same([200, false, true], [$grupoCases['ausente']['status'], strpos($grupoCases['ausente']['log'], 'grupo_escala') !== false, strpos($grupoCases['ausente']['log'], '[QA_WRITE] UPDATE funcionarios SET nome = :nome') !== false], 'grupo da escala: ausente mantem o gravado sem comando do grupo (o UPDATE de antes nao muda)');
 assert_same([true, false], [strpos($grupoCases['lista_gestor']['body'], '"grupo_escala":"comum"') !== false, strpos($grupoCases['lista_tecnico']['body'], 'grupo_escala') !== false], 'grupo da escala: a lista mostra o grupo para a gestao, nao para o tecnico');
+
+// [Lote NC] NC no cadastro: obrigatorio no novo, so digitos (1 a 12), unico,
+// nunca apagado pela tela; ausente na edicao nao gera comando; auditoria so
+// com o ID e o tipo da mudanca; a lista so para quem gerencia funcionarios.
+// NC ficticio.
+$ncDb = QA_DB;
+$ncDb['funcionarios']['1']['matricula'] = '900000011';
+$ncDb['funcionarios']['3']['matricula'] = '900000033';
+$ncBodyNew = static fn (array $override): string => (string)json_encode(array_diff_key(json_decode($employeeBody($override + ['ad_login' => 'nc.novo']), true), ['id' => true]));
+$ncCases = qa_run_endpoints($qaDir, [
+    'novo_sem_nc' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $ncBodyNew(['nc' => '']), $ncDb),
+    'novo_nc_invalido' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $ncBodyNew(['nc' => '12a']), $ncDb),
+    'novo_nc_longo' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $ncBodyNew(['nc' => '1234567890123']), $ncDb),
+    'novo_nc_em_uso' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $ncBodyNew(['nc' => '900000033']), $ncDb),
+    'novo_ok' => $employeeSpec('adicionar_funcionario.php', $leaderSession, $ncBodyNew(['nc' => ' 000123 ']), $ncDb),
+    'edita_sem_nc' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva']), $ncDb),
+    'edita_mesmo_nc' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'nc' => '900000011']), $ncDb),
+    'edita_troca_nc' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'nc' => '900000012']), $ncDb),
+    'edita_inclui_nc' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 3, 'id' => 3, 'access_role' => 'gestor', 'equipe' => 'n2', 'ad_login' => 'qa.gestor', 'nc' => '900000034']), QA_DB),
+    'edita_apaga_nc' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'nc' => '']), $ncDb),
+    'edita_nc_em_uso' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'nc' => '900000033']), $ncDb),
+    'edita_nc_invalido' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'nc' => '9.1']), $ncDb),
+    'lista_lideranca' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => $leaderSession, 'db' => $ncDb],
+    'lista_gestor' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => $manager, 'db' => $ncDb],
+    'lista_tecnico' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => qa_ci_session(1, 'joao.silva', 'tecnico'), 'db' => $ncDb],
+]);
+$ncWrote = static fn (array $result): bool => preg_match('/\[QA_WRITE\] (UPDATE funcionarios SET matricula|INSERT INTO funcionarios id=banco)/', $result['log']) === 1;
+foreach (['novo_sem_nc' => 'NC obrigatório', 'novo_nc_invalido' => 'NC inválido', 'novo_nc_longo' => 'NC inválido', 'novo_nc_em_uso' => 'já está em outro cadastro', 'edita_apaga_nc' => 'não pode ser apagado', 'edita_nc_em_uso' => 'já está em outro cadastro', 'edita_nc_invalido' => 'NC inválido'] as $case => $message) {
+    assert_same([400, true, false, false], [$ncCases[$case]['status'], strpos($ncCases[$case]['body'], $message) !== false, $ncWrote($ncCases[$case]), strpos($ncCases[$case]['log'], 'FUNCIONARIO_NC_ALTERADO') !== false], "NC {$case}: 400 com a mensagem, nada gravado nem auditado");
+}
+assert_same([200, true, true, false], [
+    $ncCases['novo_ok']['status'],
+    preg_match('/\[QA_WRITE\] INSERT INTO funcionarios id=banco coluna_id=nao perfil=tecnico login=nc\.novo [^
+]* nc=preenchido/', $ncCases['novo_ok']['log']) === 1,
+    strpos($ncCases['novo_ok']['log'], '[QA_AUDIT] FUNCIONARIO_NC_ALTERADO [WARNING]: NC do funcionario ID 30 incluido por lideranca') !== false,
+    strpos($ncCases['novo_ok']['log'] . $ncCases['novo_ok']['body'], '000123') !== false,
+], 'NC no cadastro novo: gravado no INSERT e auditado so com o ID (o valor nunca no log, na auditoria nem na resposta)');
+assert_same([[200, false, false], [200, false, false]], [
+    [$ncCases['edita_sem_nc']['status'], strpos($ncCases['edita_sem_nc']['log'], 'matricula') !== false, strpos($ncCases['edita_sem_nc']['log'], 'FUNCIONARIO_NC_ALTERADO') !== false],
+    [$ncCases['edita_mesmo_nc']['status'], strpos($ncCases['edita_mesmo_nc']['log'], 'SET matricula') !== false, strpos($ncCases['edita_mesmo_nc']['log'], 'FUNCIONARIO_NC_ALTERADO') !== false],
+], 'NC na edicao: ausente nao gera comando; o mesmo NC nao grava nem audita');
+assert_same([[200, true, true], [200, true, true]], [
+    [$ncCases['edita_troca_nc']['status'], strpos($ncCases['edita_troca_nc']['log'], '[QA_WRITE] UPDATE funcionarios SET matricula id=1 nc=preenchido') !== false, strpos($ncCases['edita_troca_nc']['log'], '[QA_AUDIT] FUNCIONARIO_NC_ALTERADO [WARNING]: NC do funcionario ID 1 alterado por lideranca') !== false],
+    [$ncCases['edita_inclui_nc']['status'], strpos($ncCases['edita_inclui_nc']['log'], '[QA_WRITE] UPDATE funcionarios SET matricula id=3 nc=preenchido') !== false, strpos($ncCases['edita_inclui_nc']['log'], '[QA_AUDIT] FUNCIONARIO_NC_ALTERADO [WARNING]: NC do funcionario ID 3 incluido por admin') !== false],
+], 'NC na edicao: troca e inclusao gravadas em comando proprio e auditadas so com o ID e o tipo');
+assert_same(0, preg_match('/9000000(11|12|33|34)/', $ncCases['edita_troca_nc']['log'] . $ncCases['edita_inclui_nc']['log']), 'NC na edicao: o valor nunca no log nem na auditoria');
+assert_same([true, false, false], [
+    strpos($ncCases['lista_lideranca']['body'], '"nc":"900000011"') !== false,
+    strpos($ncCases['lista_gestor']['body'], '"nc"') !== false,
+    strpos($ncCases['lista_tecnico']['body'], '"nc"') !== false,
+], 'NC na lista: so para quem gerencia funcionarios (Lideranca e admin)');
+
+// [Lote NC, D-NC-6] Leitura do NC do formulario (?nc=1) nos dois endpoints:
+// so com sessao; o tecnico le o proprio, mesmo pedindo outro.
+$ncReadCases = qa_run_endpoints($qaDir, [
+    'he_sem_sessao' => ['endpoint' => 'api/portal/overtime.php', 'method' => 'GET', 'db' => $ncDb, 'query' => ['nc' => '1', 'employee_id' => '1']],
+    'cp_sem_sessao' => ['endpoint' => 'api/portal/time_corrections.php', 'method' => 'GET', 'db' => $ncDb, 'query' => ['nc' => '1', 'employee_id' => '1']],
+    'he_tecnico_outro' => ['endpoint' => 'api/portal/overtime.php', 'method' => 'GET', 'session' => qa_ci_session(1, 'joao.silva', 'tecnico'), 'db' => $ncDb, 'query' => ['nc' => '1', 'employee_id' => '3']],
+    'cp_tecnico' => ['endpoint' => 'api/portal/time_corrections.php', 'method' => 'GET', 'session' => qa_ci_session(1, 'joao.silva', 'tecnico'), 'db' => $ncDb, 'query' => ['nc' => '1']],
+]);
+foreach (['he_sem_sessao', 'cp_sem_sessao'] as $case) {
+    assert_same([401, false], [$ncReadCases[$case]['status'], strpos($ncReadCases[$case]['body'], '9000000') !== false], "NC {$case}: sem sessao, 401 e nenhum NC");
+}
+foreach (['he_tecnico_outro', 'cp_tecnico'] as $case) {
+    $body = json_decode($ncReadCases[$case]['body'], true);
+    assert_same([200, 1, '900000011', false], [$ncReadCases[$case]['status'], $body['employee_id'] ?? null, $body['nc'] ?? null, $body['nc_required'] ?? null], "NC {$case}: o tecnico le o proprio NC (o employee_id do pedido e ignorado)");
+}
 
 // Criar tecnico ou tecnico na equipe Lideranca nao gera evento de perfil (QA 5).
 foreach (['lid_cria_tecnico', 'admin_lideranca_tecnico', 'login_tecnico'] as $case) {

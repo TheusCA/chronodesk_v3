@@ -4,6 +4,7 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../services/CriticalRoleService.php';
 require_once __DIR__ . '/../services/EmployeeGroups.php';
+require_once __DIR__ . '/../services/EmployeeNc.php';
 
 // [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
 $actor_role = require_portal_auth();
@@ -93,6 +94,14 @@ require_funcionario_change($actor_role, null, $access_role, 'atualizar');
 
 if ($ad_login === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Login AD inválido. Use letras, números, ponto, hífen, underscore ou @.'], 400);
+}
+
+// [Lote NC, D-NC-4] NC opcional na edicao: ausente mantem o gravado e nao gera
+// comando nenhum; presente, so digitos (1 a 12), unico e nunca apagado.
+$nc_sent = array_key_exists('nc', $data);
+$nc = $nc_sent ? EmployeeNc::normalize($data['nc']) : null;
+if ($nc === false) {
+    json_response(['sucesso' => false, 'mensagem' => EmployeeNc::INVALID_MESSAGE], 400);
 }
 
 // Validar formato de horários (HH:MM ou HH:MM:SS), só dos enviados.
@@ -266,6 +275,24 @@ try {
     } elseif (portal_role_value($access_role) === 'somente_leitura') {
         $toolsChange = $groups->setTools($funcionario_id, false, sanitize_input($_SESSION['admin_username'] ?? $_SESSION['username'] ?? $_SESSION['ci_username'] ?? $actor_role, 100));
     }
+    // [Lote NC] NC so quando enviado, com o cadastro travado, em comandos proprios.
+    $ncChange = null;
+    if ($nc_sent) {
+        $ncService = new EmployeeNc($pdo);
+        $currentNc = $ncService->of($funcionario_id, true);
+        if ($nc === null && $currentNc !== null) {
+            $pdo->rollBack();
+            json_response(['sucesso' => false, 'mensagem' => EmployeeNc::CLEAR_MESSAGE], 400);
+        }
+        if ($nc !== null && $nc !== $currentNc && $ncService->inUse($nc, $funcionario_id)) {
+            $pdo->rollBack();
+            json_response(['sucesso' => false, 'mensagem' => EmployeeNc::IN_USE_MESSAGE], 400);
+        }
+        $ncChange = EmployeeNc::changeKind($currentNc, $nc);
+        if ($ncChange !== null) {
+            $ncService->store($funcionario_id, $nc);
+        }
+    }
     $pdo->commit();
 
     if ($stmt->rowCount() === 0 && !$gerenciador->getFuncionario($funcionario_id)) {
@@ -276,6 +303,10 @@ try {
 } catch (Exception $e) {
     if (isset($pdo) && $pdo->inTransaction()) {
         $pdo->rollBack();
+    }
+    // [Lote NC] Corrida no indice unico do NC: a mesma mensagem da conferencia.
+    if ($e instanceof PDOException && (int)($e->errorInfo[1] ?? 0) === 1062 && strpos($e->getMessage(), 'uq_funcionarios_matricula') !== false) {
+        json_response(['sucesso' => false, 'mensagem' => EmployeeNc::IN_USE_MESSAGE], 400);
     }
     error_log('[FUNCIONARIO] Erro ao atualizar funcionário: ' . $e->getMessage());
     json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao atualizar funcionário.')], 500);
@@ -295,6 +326,10 @@ if (($resultado['sucesso'] ?? false) === true) {
     }
     if ($toolsChange !== null) {
         audit_log('FUNCIONARIO_GRUPO_ALTERADO', EmployeeGroups::auditDetails($funcionario_id, $toolsChange, $actor_role), 'WARNING');
+    }
+    // [D-NC-3] So o ID e o tipo da mudanca, nunca o valor.
+    if ($ncChange !== null) {
+        audit_log('FUNCIONARIO_NC_ALTERADO', EmployeeNc::auditDetails($funcionario_id, $ncChange, $actor_role), 'WARNING');
     }
     if ($currentForaMapa !== $newForaMapa) {
         audit_log(

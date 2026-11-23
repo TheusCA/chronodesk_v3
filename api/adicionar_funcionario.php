@@ -4,6 +4,7 @@ require_once __DIR__ . '/../init.php';
 require_once __DIR__ . '/../db.php';
 require_once __DIR__ . '/../classes/Funcionario.php';
 require_once __DIR__ . '/../services/EmployeeGroups.php';
+require_once __DIR__ . '/../services/EmployeeNc.php';
 
 // [Lote 5b] Admin e Liderança, com a regra de perfis de 2.3 do desenho.
 $actor_role = require_portal_auth();
@@ -69,6 +70,16 @@ if ($ad_login === false) {
     json_response(['sucesso' => false, 'mensagem' => 'Login AD inválido. Use letras, números, ponto, hífen, underscore ou @.'], 400);
 }
 
+// [Lote NC, D-NC-4] NC obrigatorio no cadastro novo (so digitos, 1 a 12),
+// conferido depois das regras de perfil; unico, conferido antes de gravar.
+$nc = EmployeeNc::normalize($data['nc'] ?? null);
+if ($nc === false) {
+    json_response(['sucesso' => false, 'mensagem' => EmployeeNc::INVALID_MESSAGE], 400);
+}
+if ($nc === null) {
+    json_response(['sucesso' => false, 'mensagem' => EmployeeNc::MISSING_MESSAGE], 400);
+}
+
 // Validar formato de horários (HH:MM ou HH:MM:SS)
 if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/', $jornada_entrada)) {
     json_response(['sucesso' => false, 'mensagem' => 'Horário de entrada inválido (formato: HH:MM)'], 400);
@@ -115,13 +126,17 @@ $pdo = null;
 try {
     $pdo = get_db_connection();
     $pdo->beginTransaction();
+    if ((new EmployeeNc($pdo))->inUse($nc)) {
+        $pdo->rollBack();
+        json_response(['sucesso' => false, 'mensagem' => EmployeeNc::IN_USE_MESSAGE], 400);
+    }
     $stmt = $pdo->prepare(
         "INSERT INTO funcionarios (
             nome, equipe, access_role, ad_login, jornada_entrada, jornada_saida,
-            almoco_inicio, almoco_fim, ativo
+            almoco_inicio, almoco_fim, ativo, matricula
         ) VALUES (
             :nome, :equipe, :access_role, :ad_login, :jornada_entrada, :jornada_saida,
-            :almoco_inicio, :almoco_fim, :ativo
+            :almoco_inicio, :almoco_fim, :ativo, :matricula
         )"
     );
     $stmt->execute([
@@ -134,6 +149,7 @@ try {
         ':almoco_inicio' => formatar_hora_mysql($almoco_inicio, '12:00:00'),
         ':almoco_fim' => formatar_hora_mysql($almoco_fim, '13:00:00'),
         ':ativo' => $ativo ? 1 : 0,
+        ':matricula' => $nc,
     ]);
     $id = filter_var($pdo->lastInsertId(), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
     if ($id === false) {
@@ -172,6 +188,8 @@ try {
     if ($toolsChange !== null) {
         audit_log('FUNCIONARIO_GRUPO_ALTERADO', EmployeeGroups::auditDetails($id, $toolsChange, $actor_role), 'WARNING');
     }
+    // [D-NC-3] So o ID e o tipo da mudanca, nunca o valor.
+    audit_log('FUNCIONARIO_NC_ALTERADO', EmployeeNc::auditDetails($id, 'incluido', $actor_role), 'WARNING');
     if (funcionario_role_is_elevated($access_role)) {
         audit_log('FUNCIONARIO_PERFIL_ALTERADO', "Funcionario ID {$id} criado com perfil {$access_role} por {$actor_role}", 'CRITICAL');
     }
@@ -184,6 +202,10 @@ try {
 } catch (Exception $e) {
     if ($pdo instanceof PDO && $pdo->inTransaction()) {
         $pdo->rollBack();
+    }
+    // [Lote NC] Corrida no indice unico do NC: a mesma mensagem da conferencia.
+    if ($e instanceof PDOException && (int)($e->errorInfo[1] ?? 0) === 1062 && strpos($e->getMessage(), 'uq_funcionarios_matricula') !== false) {
+        json_response(['sucesso' => false, 'mensagem' => EmployeeNc::IN_USE_MESSAGE], 400);
     }
     error_log('[FUNCIONARIO] Erro ao adicionar funcionário: ' . $e->getMessage());
     json_response(['sucesso' => false, 'mensagem' => public_error_message($e, 'Erro ao adicionar funcionário.')], 500);

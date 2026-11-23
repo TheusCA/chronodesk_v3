@@ -7,7 +7,9 @@ declare(strict_types=1);
 //
 // Sem banco:
 // 1. estrutura da migration 026, do rollback, das linhas do ensaio e da
-//    consulta de verificacao.
+//    consulta de verificacao;
+// 2. servidor: a regra do NC, a copia no lancamento lida do cadastro (nunca
+//    do corpo), NC_OBRIGATORIO, a leitura do NC para o formulario e os CSVs.
 // As consultas SQL rodam em MySQL no ensaio (scripts/ensaio-migration.sh) e na
 // integracao do lote. Nenhuma matricula real: so valores ficticios.
 //
@@ -108,5 +110,197 @@ assert_same([0, 0], [
     preg_match('/\b(matricula|employee_nc)\b/i', $ncLeft),
     preg_match('/\b(nome|employee_name|ad_login|reason|justification|note)\b/i', $checkSql),
 ], 'verificacao 026: nenhum NC, nome, login nem texto livre na saida (o NC so em contagem, formato e comparacao)');
+
+// ----------------------------------------------------------------------------
+// 2. Servidor: regra do NC, copia no lancamento, NC_OBRIGATORIO, leitura para o
+//    formulario e os CSVs (banco simulado; NC ficticio)
+// ----------------------------------------------------------------------------
+putenv('APP_ENV=development');
+putenv('APP_DEBUG=false');
+putenv('SECRET_KEY=qa-only-secret-key');
+putenv('MAIL_ENABLED=false');
+$errorLogFile = tempnam(sys_get_temp_dir(), 'qa-nc-');
+putenv('PHP_ERROR_LOG=' . $errorLogFile);
+register_shutdown_function(static function () use ($errorLogFile): void {
+    @unlink($errorLogFile);
+});
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$_SERVER['REMOTE_ADDR'] = '127.0.0.250';
+define('CHRONODESK_STATELESS', true);
+require_once $root . '/services/OperationalService.php';
+
+assert_same(['000123', '1', '123456789012', null, null, false, false, false, false, false, '42'], [
+    EmployeeNc::normalize(' 000123 '), EmployeeNc::normalize('1'), EmployeeNc::normalize('123456789012'),
+    EmployeeNc::normalize(''), EmployeeNc::normalize(null), EmployeeNc::normalize('1234567890123'),
+    EmployeeNc::normalize('12a'), EmployeeNc::normalize('-12'), EmployeeNc::normalize('1 2'), EmployeeNc::normalize(['12']),
+    EmployeeNc::normalize(42),
+], 'NC: so digitos, de 1 a 12, zero a esquerda preservado; vazio = sem NC; o resto e invalido');
+$requiredWith = static function (?string $value): bool {
+    $value === null ? putenv('NC_OBRIGATORIO') : putenv('NC_OBRIGATORIO=' . $value);
+    $result = EmployeeNc::required();
+    putenv('NC_OBRIGATORIO');
+    return $result;
+};
+assert_same([false, false, true, true, false, false], [$requiredWith(null), $requiredWith(''), $requiredWith('1'), $requiredWith('true'), $requiredWith('0'), $requiredWith('talvez')], 'NC_OBRIGATORIO: 1 ou true liga; ausente, vazio, 0 ou invalido desligam (so aviso)');
+assert_same([null, 'incluido', 'alterado', 'removido'], [EmployeeNc::changeKind('1', '1'), EmployeeNc::changeKind(null, '1'), EmployeeNc::changeKind('1', '2'), EmployeeNc::changeKind('1', null)], 'NC: tipo da mudanca para a auditoria (nunca o valor)');
+assert_same('NC do funcionario ID 7 alterado por lideranca', EmployeeNc::auditDetails(7, 'alterado', 'lideranca'), 'NC: auditoria so com o ID e o tipo');
+
+final class QaNcPdo extends PDO {
+    public array $employees = [];
+    public array $inserted = [];
+    public array $log = [];
+    public array $rows = [];
+    private bool $tx = false;
+
+    public function __construct() {
+    }
+
+    public function beginTransaction(): bool { return $this->tx = true; }
+    public function commit(): bool { $this->tx = false; return true; }
+    public function rollBack(): bool { $this->tx = false; $this->inserted = []; return true; }
+    public function inTransaction(): bool { return $this->tx; }
+    public function lastInsertId(?string $name = null): string|false { return '501'; }
+
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaNcStatement($this, (string)preg_replace('/\s+/', ' ', trim($query)));
+    }
+}
+
+final class QaNcStatement extends PDOStatement {
+    private array $result = [];
+
+    public function __construct(private QaNcPdo $db, private string $sql) {
+    }
+
+    public function execute(?array $params = null): bool {
+        $params ??= [];
+        $this->db->log[] = $this->sql;
+        $this->result = [];
+        if ($this->sql === 'SELECT id, nome AS name, LOWER(equipe) AS team, ad_login, access_role FROM funcionarios WHERE id = :id AND ativo = 1') {
+            $row = $this->db->employees[(int)$params[':id']] ?? null;
+            $this->result = $row === null ? [] : [['id' => (int)$params[':id'], 'name' => 'Ficticio ' . $params[':id'], 'team' => $row['team'], 'ad_login' => 'qa', 'access_role' => 'tecnico']];
+            return true;
+        }
+        if (preg_match('/^SELECT matricula FROM funcionarios WHERE id = :id( FOR UPDATE)?$/', $this->sql) === 1) {
+            $row = $this->db->employees[(int)$params[':id']] ?? null;
+            $this->result = $row === null ? [] : [['matricula' => $row['nc']]];
+            return true;
+        }
+        if (preg_match('/^INSERT INTO (portal_overtime_entries|portal_time_adjustments) /', $this->sql, $table) === 1) {
+            $this->db->inserted[] = ['table' => $table[1]] + $params;
+            return true;
+        }
+        if (strpos($this->sql, 'INSERT INTO portal_sync_queue') === 0) {
+            return true;
+        }
+        if (preg_match('/^SELECT id, employee_id, employee_name, team, (work_date|adjustment_date), /', $this->sql) === 1) {
+            $this->result = $this->db->rows;
+            return true;
+        }
+        throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $this->sql);
+    }
+
+    public function fetch(int $mode = PDO::FETCH_DEFAULT, int $cursorOrientation = PDO::FETCH_ORI_NEXT, int $cursorOffset = 0): mixed {
+        return array_shift($this->result) ?? false;
+    }
+
+    public function fetchColumn(int $column = 0): mixed {
+        $row = array_shift($this->result);
+        return $row === null ? false : array_values($row)[$column];
+    }
+
+    public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
+        $rows = $this->result;
+        $this->result = [];
+        return $rows;
+    }
+}
+
+$ncDb = static function (): QaNcPdo {
+    $pdo = new QaNcPdo();
+    $pdo->employees = [
+        11 => ['team' => 'n1', 'nc' => '900000011'],
+        12 => ['team' => 'n2', 'nc' => null],
+        13 => ['team' => 'critico', 'nc' => '000000013'],
+    ];
+    return $pdo;
+};
+$tecnico = static fn (int $id): array => ['role' => 'tecnico', 'employee_id' => $id, 'username' => 'qa.tecnico'];
+$gestao = ['role' => 'gestor', 'employee_id' => null, 'username' => 'qa.gestor'];
+$overtimeBody = ['work_date' => '2026-11-20', 'start_time' => '18:00', 'end_time' => '19:00', 'reason' => 'qa', 'justification' => 'qa'];
+$adjustmentBody = ['adjustment_date' => '2026-11-20', 'adjustment_type' => 'entry', 'correct_time' => '08:00', 'justification' => 'qa'];
+$launch = static function (string $kind, array $body, array $actor, ?string $required = null) use ($ncDb): array {
+    $pdo = $ncDb();
+    $required === null ? putenv('NC_OBRIGATORIO') : putenv('NC_OBRIGATORIO=' . $required);
+    try {
+        $service = new OperationalService($pdo, '2026-11-20');
+        $kind === 'overtime' ? $service->createOvertime($body, $actor) : $service->createTimeAdjustment($body, $actor);
+        $error = null;
+    } catch (Throwable $e) {
+        $error = get_class($e) . ': ' . $e->getMessage();
+    } finally {
+        putenv('NC_OBRIGATORIO');
+    }
+    return [$error, array_map(static fn (array $row): array => [$row['table'], $row[':employee_id'], array_key_exists(':employee_nc', $row) ? $row[':employee_nc'] : 'sem a coluna'], $pdo->inserted)];
+};
+assert_same([null, [['portal_overtime_entries', 11, '900000011']]], $launch('overtime', $overtimeBody + ['employee_nc' => '1', 'nc' => '2'], $tecnico(11)), 'hora extra: a copia do NC vem do cadastro, nunca do corpo (employee_nc e nc ignorados)');
+assert_same([null, [['portal_time_adjustments', 13, '000000013']]], $launch('adjustment', $adjustmentBody + ['employee_id' => 13, 'nc' => '2'], $gestao), 'correcao de ponto: a gestao lanca para outra pessoa com a copia do NC dela (zero a esquerda preservado)');
+assert_same([null, [['portal_overtime_entries', 12, null]]], $launch('overtime', $overtimeBody, $tecnico(12)), 'hora extra sem NC e sem NC_OBRIGATORIO: grava com a copia NULL (so aviso)');
+assert_same([null, [['portal_time_adjustments', 12, null]]], $launch('adjustment', $adjustmentBody, $tecnico(12), '0'), 'correcao sem NC com NC_OBRIGATORIO=0: grava (so aviso)');
+$refused = 'DomainException: Sua matrícula (NC) não está no cadastro. Peça à Liderança para incluir.';
+assert_same([[$refused, []], [$refused, []]], [$launch('overtime', $overtimeBody, $tecnico(12), '1'), $launch('adjustment', $adjustmentBody + ['employee_id' => 12], $gestao, 'true')], 'NC_OBRIGATORIO ligada: sem NC no cadastro, os dois lancamentos sao recusados (409) com a mensagem do pedido, nada gravado');
+assert_same([null, [['portal_overtime_entries', 11, '900000011']]], $launch('overtime', $overtimeBody, $tecnico(11), '1'), 'NC_OBRIGATORIO ligada: com NC, grava com a copia');
+$read = static function (array $query, array $actor, ?string $required = null) use ($ncDb): array|string {
+    $required === null ? putenv('NC_OBRIGATORIO') : putenv('NC_OBRIGATORIO=' . $required);
+    try {
+        return (new OperationalService($ncDb(), '2026-11-20'))->employeeNcForForm($query, $actor);
+    } catch (Throwable $e) {
+        return get_class($e) . ': ' . $e->getMessage();
+    } finally {
+        putenv('NC_OBRIGATORIO');
+    }
+};
+assert_same([
+    ['employee_id' => 11, 'nc' => '900000011', 'nc_required' => false],
+    ['employee_id' => 12, 'nc' => null, 'nc_required' => true],
+    ['employee_id' => 13, 'nc' => '000000013', 'nc_required' => false],
+    ['employee_id' => 11, 'nc' => '900000011', 'nc_required' => false],
+    'DomainException: Sessao sem colaborador vinculado.',
+    'InvalidArgumentException: Colaborador nao encontrado ou inativo.',
+], [
+    $read(['employee_id' => 13], $tecnico(11)),
+    $read([], $tecnico(12), '1'),
+    $read(['employee_id' => 13], $gestao),
+    $read(['employee_id' => 13], ['role' => 'somente_leitura', 'employee_id' => 11]),
+    $read([], ['role' => 'tecnico', 'employee_id' => null]),
+    $read(['employee_id' => 99], $gestao),
+], 'leitura do NC para o formulario: tecnico e somente leitura so o proprio (o employee_id do pedido e ignorado); a gestao, qualquer ativo; com a chave');
+$csvRow = OperationalService::overtimeCsvRow(['employee_id' => 11, 'nc' => '000000013', 'employee_name' => 'Ficticio', 'work_date' => '2026-11-20', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'reason' => 'qa', 'justification' => 'qa', 'total_minutes' => 60, 'status' => 'pending'], []);
+$csvOld = OperationalService::overtimeCsvRow(['employee_id' => 12, 'nc' => null, 'employee_name' => 'Ficticio', 'work_date' => '2026-11-20', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'reason' => 'qa', 'justification' => 'qa', 'total_minutes' => 60, 'status' => 'pending'], []);
+assert_same(['000000013', '', 'Ficticio', 10, 10], [$csvRow[0], $csvOld[0], $csvRow[1], count($csvRow), count(OperationalService::OVERTIME_CSV_HEADER)], 'CSV de horas extras: o NC na 1a coluna (vazio sem NC); a ordem e os outros campos nao mudam');
+$csvFor = static function (string $kind) use ($ncDb, $gestao): array {
+    $pdo = $ncDb();
+    $pdo->rows = [
+        ['id' => 2, 'employee_id' => 11, 'employee_name' => 'Ficticio 11', 'team' => 'n1', 'work_date' => '2026-11-20', 'adjustment_date' => '2026-11-20', 'adjustment_type' => 'entry', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'correct_time' => '08:00:00', 'recorded_time' => null, 'total_minutes' => 60, 'reason' => 'qa', 'justification' => 'qa', 'status' => 'pending', 'approved_by' => null, 'approved_at' => null, 'nc' => '900000011'],
+        ['id' => 1, 'employee_id' => 12, 'employee_name' => 'Ficticio 12', 'team' => 'n2', 'work_date' => '2026-11-19', 'adjustment_date' => '2026-11-19', 'adjustment_type' => 'entry', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'correct_time' => '08:00:00', 'recorded_time' => null, 'total_minutes' => 60, 'reason' => 'qa', 'justification' => 'qa', 'status' => 'pending', 'approved_by' => null, 'approved_at' => null, 'nc' => null],
+    ];
+    ob_start();
+    $service = new OperationalService($pdo, '2026-11-20');
+    $kind === 'overtime' ? @$service->streamOvertimeCsv(['from' => '2026-11-16', 'to' => '2026-11-20'], $gestao) : @$service->streamTimeAdjustmentsCsv(['from' => '2026-11-16', 'to' => '2026-11-20'], $gestao);
+    $out = (string)ob_get_clean();
+    $lines = array_values(array_filter(explode("\n", str_replace("\r", '', substr($out, 3)))));
+    $exportSql = array_values(array_filter($pdo->log, static fn (string $sql): bool => strpos($sql, ' AS nc FROM ') !== false));
+    return [array_map(static fn (string $line): string => explode(';', $line)[0], $lines), count($exportSql), $exportSql[0] ?? ''];
+};
+foreach (['overtime' => 'portal_overtime_entries', 'adjustment' => 'portal_time_adjustments'] as $kind => $table) {
+    [$firstColumn, $exportQueries, $exportSql] = $csvFor($kind);
+    assert_same([['NC', '900000011', ''], 1, true], [$firstColumn, $exportQueries, strpos($exportSql, "COALESCE({$table}.employee_nc, (SELECT f.matricula FROM funcionarios f WHERE f.id = {$table}.employee_id)) AS nc FROM {$table} WHERE") !== false], "CSV ({$kind}): a coluna NC com a copia ou, nas linhas antigas, o NC atual do cadastro, numa consulta so do export");
+}
+$operationalSource = (string)file_get_contents($root . '/services/OperationalService.php');
+assert_same([0, 2], [substr_count($operationalSource, "\$data['nc']") + substr_count($operationalSource, "\$data['employee_nc']"), substr_count($operationalSource, '$nc = $this->launchNc((int)$employee[\'id\']);')], 'servidor: o NC do lancamento nunca vem do corpo; os dois lancamentos leem do cadastro');
+foreach (['api/portal/overtime.php', 'api/portal/time_corrections.php'] as $endpoint) {
+    $source = (string)file_get_contents($root . '/' . $endpoint);
+    assert_same(true, strpos($source, "if ((\$_GET['nc'] ?? '') === '1') {\n            json_response(['sucesso' => true] + \$service->employeeNcForForm(\$_GET, \$actor));") !== false && strpos($source, '$actor = portal_actor($role);') < strpos($source, "employeeNcForForm"), "{$endpoint}: leitura do NC do formulario so com sessao e pelo perfil do ator");
+}
 
 echo "QA NC OK ({$GLOBALS['qa_checks']} verificacoes)\n";

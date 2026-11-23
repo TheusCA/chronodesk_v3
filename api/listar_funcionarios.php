@@ -74,6 +74,22 @@ if ($is_admin) {
     }
 }
 
+// [Lote NC, D-NC-3] NC (matricula) so para quem gerencia funcionarios
+// (Lideranca e admin). Sem a coluna (migration 026 ainda nao aplicada), o
+// campo fica de fora e a lista continua.
+$nc = null;
+if ($is_admin) {
+    try {
+        $nc = [];
+        foreach (get_db_connection()->query('SELECT id, matricula FROM funcionarios')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $nc[(int)$row['id']] = $row['matricula'] === null ? null : (string)$row['matricula'];
+        }
+    } catch (Throwable $e) {
+        error_log('[FUNCIONARIO] NC indisponivel: ' . get_class($e));
+        $nc = null;
+    }
+}
+
 if ($gerenciador) {
     foreach ($gerenciador->getFuncionarios() as $f) {
         $ativo = $f->ativo ?? true;
@@ -104,6 +120,9 @@ if ($gerenciador) {
         }
         if (is_array($arquivado_em)) {
             $item['arquivado_em'] = $ativo ? null : ($arquivado_em[(int)$f->id] ?? null);
+        }
+        if (is_array($nc)) {
+            $item['nc'] = $nc[(int)$f->id] ?? null;
         }
         if ($is_admin) {
             $item['ad_login'] = $f->ad_login ?? null;

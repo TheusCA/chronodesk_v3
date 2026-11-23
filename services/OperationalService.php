@@ -5,6 +5,7 @@ require_once __DIR__ . '/SharePointSyncService.php';
 require_once __DIR__ . '/ScheduleRulePlanner.php';
 require_once __DIR__ . '/PresenceEngine.php';
 require_once __DIR__ . '/PresenceRepository.php';
+require_once __DIR__ . '/EmployeeNc.php';
 require_once __DIR__ . '/PresenceCutoff.php';
 require_once __DIR__ . '/CyclePattern.php';
 
@@ -879,6 +880,7 @@ final class OperationalService {
 
     private function createOvertimeUnsafe(array $data, array $actor): int {
         $employee = $this->targetEmployee($data, $actor);
+        $nc = $this->launchNc((int)$employee['id']);
         $date = self::dateValue($data['work_date'] ?? null, 'Data');
         $start = $this->timeValue($data['start_time'] ?? null, 'Hora inicial');
         $end = $this->timeValue($data['end_time'] ?? null, 'Hora final');
@@ -890,10 +892,10 @@ final class OperationalService {
         $stmt = $this->pdo->prepare(
             'INSERT INTO portal_overtime_entries
                 (employee_id, employee_name, team, work_date, start_time, end_time, total_minutes,
-                 reason, justification, status, created_by, updated_by)
+                 reason, justification, status, created_by, updated_by, employee_nc)
              VALUES
                 (:employee_id, :employee_name, :team, :work_date, :start_time, :end_time, :total_minutes,
-                 :reason, :justification, "pending", :created_by, :updated_by)'
+                 :reason, :justification, "pending", :created_by, :updated_by, :employee_nc)'
         );
         $stmt->execute([
             ':employee_id' => $employee['id'],
@@ -907,6 +909,7 @@ final class OperationalService {
             ':justification' => $justification,
             ':created_by' => $username,
             ':updated_by' => $username,
+            ':employee_nc' => $nc,
         ]);
         $id = (int)$this->pdo->lastInsertId();
         $this->sync->enqueue($this->pdo, 'overtime', $id, [
@@ -939,6 +942,7 @@ final class OperationalService {
 
     private function createTimeAdjustmentUnsafe(array $data, array $actor): int {
         $employee = $this->targetEmployee($data, $actor);
+        $nc = $this->launchNc((int)$employee['id']);
         $date = self::dateValue($data['adjustment_date'] ?? null, 'Data');
         $type = (string)($data['adjustment_type'] ?? '');
         if (!in_array($type, ['entry', 'lunch_out', 'lunch_return', 'exit', 'absence', 'other'], true)) {
@@ -955,10 +959,10 @@ final class OperationalService {
         $stmt = $this->pdo->prepare(
             'INSERT INTO portal_time_adjustments
                 (employee_id, employee_name, team, adjustment_date, adjustment_type,
-                 correct_time, recorded_time, justification, status, created_by, updated_by)
+                 correct_time, recorded_time, justification, status, created_by, updated_by, employee_nc)
              VALUES
                 (:employee_id, :employee_name, :team, :adjustment_date, :adjustment_type,
-                 :correct_time, :recorded_time, :justification, "pending", :created_by, :updated_by)'
+                 :correct_time, :recorded_time, :justification, "pending", :created_by, :updated_by, :employee_nc)'
         );
         $stmt->execute([
             ':employee_id' => $employee['id'],
@@ -971,6 +975,7 @@ final class OperationalService {
             ':justification' => $justification,
             ':created_by' => $username,
             ':updated_by' => $username,
+            ':employee_nc' => $nc,
         ]);
         $id = (int)$this->pdo->lastInsertId();
         $this->sync->enqueue($this->pdo, 'time_adjustment', $id, [
@@ -990,6 +995,41 @@ final class OperationalService {
 
     public function decideTimeAdjustment(int $id, string $decision, array $actor): void {
         $this->decideWorkflow('portal_time_adjustments', 'time_adjustment', $id, $decision, $actor);
+    }
+
+    /**
+     * [Lote NC, D-NC-2 e D-NC-5] A copia do NC do lancamento: lida do cadastro
+     * pelo servidor, na transacao do lancamento (o corpo da requisicao nunca
+     * traz o NC). Sem NC e com NC_OBRIGATORIO ligada: recusa (409).
+     */
+    private function launchNc(int $employeeId): ?string {
+        $nc = (new EmployeeNc($this->pdo))->of($employeeId, true);
+        if ($nc === null && EmployeeNc::required()) {
+            throw new DomainException(EmployeeNc::REQUIRED_MESSAGE);
+        }
+        return $nc;
+    }
+
+    /**
+     * [Lote NC, D-NC-6] NC da pessoa do formulario de hora extra e de correcao
+     * de ponto (so leitura): tecnico e somente leitura, so o proprio; a gestao,
+     * qualquer cadastro ativo das equipes de lancamento. Devolve o ID, o NC
+     * (ou null) e se a chave NC_OBRIGATORIO esta ligada.
+     */
+    public function employeeNcForForm(array $query, array $actor): array {
+        if (in_array($actor['role'] ?? null, ['tecnico', 'somente_leitura'], true)) {
+            if (empty($actor['employee_id'])) {
+                throw new DomainException('Sessao sem colaborador vinculado.');
+            }
+            $employeeId = (int)$actor['employee_id'];
+        } else {
+            $employeeId = (int)$this->employee($query['employee_id'] ?? null)['id'];
+        }
+        return [
+            'employee_id' => $employeeId,
+            'nc' => (new EmployeeNc($this->pdo))->of($employeeId),
+            'nc_required' => EmployeeNc::required(),
+        ];
     }
 
     public function listPendingWorkflowApprovals(array $actor): array {
@@ -1240,7 +1280,7 @@ final class OperationalService {
      */
     public function streamOvertimeCsv(array $filters, array $actor): void {
         $totalsByEmployee = $this->overtimeTotalsForFilters($filters, $actor)['by_employee'];
-        $rows = $this->iterateWorkflowRecords('portal_overtime_entries', 'work_date', $filters, $actor);
+        $rows = $this->iterateWorkflowRecords('portal_overtime_entries', 'work_date', $filters, $actor, true, true);
 
         $filename = 'horas_extras_' . date('Ymd_His') . '.csv';
         header('Content-Type: text/csv; charset=utf-8');
@@ -1277,7 +1317,8 @@ final class OperationalService {
     public static function overtimeCsvRow(array $row, array $totalsByEmployee): array {
         $employeeTotals = $totalsByEmployee[(int)$row['employee_id']] ?? ['approved_minutes' => 0, 'pending_minutes' => 0];
         return [
-            '',
+            // [Lote NC, D-NC-7] A copia do lancamento; nas linhas antigas, o NC atual do cadastro.
+            (string)($row['nc'] ?? ''),
             $row['employee_name'],
             $row['work_date'],
             substr((string)$row['start_time'], 0, 5),
@@ -1291,7 +1332,7 @@ final class OperationalService {
     }
 
     public function streamTimeAdjustmentsCsv(array $filters, array $actor): void {
-        $rows = $this->iterateWorkflowRecords('portal_time_adjustments', 'adjustment_date', $filters, $actor);
+        $rows = $this->iterateWorkflowRecords('portal_time_adjustments', 'adjustment_date', $filters, $actor, true, true);
         $filename = 'correcao_ponto_' . date('Ymd_His') . '.csv';
         header('Content-Type: text/csv; charset=utf-8');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -1314,7 +1355,7 @@ final class OperationalService {
         ], ';', '"', '\\');
         foreach ($rows as $row) {
             $this->csvRow($handle, [
-                '',
+                (string)($row['nc'] ?? ''),
                 $row['employee_name'],
                 self::teamLabel($row['team']),
                 $row['adjustment_date'],
@@ -1348,9 +1389,10 @@ final class OperationalService {
         string $dateColumn,
         array $filters,
         array $actor,
-        bool $withStatus = true
+        bool $withStatus = true,
+        bool $withNc = false
     ): Generator {
-        [$sql, $params] = $this->workflowFilterSql($table, $dateColumn, $filters, $actor, $withStatus);
+        [$sql, $params] = $this->workflowFilterSql($table, $dateColumn, $filters, $actor, $withStatus, $withNc);
         return db_keyset_iterate(function (?array $lastRow, int $chunk) use ($sql, $params, $dateColumn): array {
             if ($lastRow !== null) {
                 $sql .= " AND ({$dateColumn} < :cursor_date OR ({$dateColumn} = :cursor_same_date AND id < :cursor_id))";
@@ -1373,10 +1415,16 @@ final class OperationalService {
         string $dateColumn,
         array $filters,
         array $actor,
-        bool $withStatus
+        bool $withStatus,
+        bool $withNc = false
     ): array {
         [$from, $to] = $this->period($filters, 366, true);
-        $sql = 'SELECT ' . $this->workflowColumns($table)
+        // [Lote NC, D-NC-7] So no export: o NC da copia do lancamento ou, nas
+        // linhas antigas, o atual do cadastro.
+        $ncColumn = $withNc
+            ? ", COALESCE({$table}.employee_nc, (SELECT f.matricula FROM funcionarios f WHERE f.id = {$table}.employee_id)) AS nc"
+            : '';
+        $sql = 'SELECT ' . $this->workflowColumns($table) . $ncColumn
             . " FROM {$table} WHERE {$dateColumn} BETWEEN :date_from AND :date_to";
         $params = [':date_from' => $from, ':date_to' => $to];
         $team = $this->team($filters['team'] ?? null, true);
