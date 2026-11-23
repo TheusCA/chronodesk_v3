@@ -1757,6 +1757,20 @@ Base da afirmação:
 | **Decisões (a aprovar)** | D-NC-1 a D-NC-9 (`docs/DESENHO_NC_E_ICONE.md`). |
 | **Validacao humana** | Pendente: revisão única no fim do lote. |
 
+
+### Lote NC revisto (sem zero à esquerda, importação de NCs e planilha de horas extras do RH) — 2026-11-23
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | O NC sem zero à esquerda (026, servidor e tela); a importação de NCs com prévia (planilha com NC e Nome completo, casando pelo nome com o cadastro ativo); a exportação de horas extras como a planilha `.xlsx` no modelo do RH, só com aprovados, bloqueada com aprovado sem NC. Entra no deploy 5. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `47e8b2d` (sem zero à esquerda), `8d66b45` (plano), `1b8f39f` (importação), `c5998bb` (planilha do RH), `c074112` (roteiro do deploy 5) e o commit destes docs. O push segue a autorização do lote anterior, só com a bateria final verde. |
+| **O que a IA alterou** | Migration 026 e a verificação; `services/EmployeeNc.php`, `services/EmployeeNcImport.php`, `services/SpreadsheetImportService.php`, `services/OvertimeRhSheet.php`, `services/XlsxWriter.php`, `services/OperationalService.php`; `api/portal/employee_nc_import.php`, `api/portal/overtime.php`, `api/configuracoes.php`, `api/salvar_configuracao.php`, `config.php`; `AdminPage.jsx`, `OperationalPages.jsx`, `NcImport.jsx`, `formSchemas.ts`, `employeeNc.ts`, `overtimeRh.ts`; `qa-nc.php`, `qa-overtime.php`, `qa-security.php`, `qa:employee-form`, `qa:operational`; `scripts/smoke-deploy1.sh`; `DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md`, `scripts/qa-deploy-runbook.php`; `docs/DESENHO_NC_E_ICONE.md`. |
+| **Dados pessoais** | O NC e o nome são dados pessoais: só fictícios no git, nos docs, nos QAs, no ensaio e no chat; o modelo do RH (com dados reais) só foi lido pela estrutura, fora do git. A auditoria da importação leva contagens e IDs, sem o NC; a da planilha, só contagens; quem está sem NC aparece pelo nome só na tela. |
+| **Validacao executada pela IA** | Ensaio da 026 nas duas variantes no MySQL 8.0.46 local; integração no MySQL local, 21/21; mutação por commit (7/7, 20/20, 29/29, 18/18; os sobreviventes da 1ª rodada viraram casos novos); o `.xlsx` gerado aberto e conferido pelo QA; navegador 1163/1163; trava com 520 verificações; bateria completa sozinha no último commit (no estado da sessão). |
+| **Achados** | O ícone veio de novo com o marcador `<A|B|C>`: ficou a B, já entregue. O `streamOvertimeCsv` ficou sem chamador (a decidir). `synced` fora da planilha a confirmar com o RH. |
+| **Decisões (a aprovar)** | D-NC-10 a D-NC-18 (`docs/DESENHO_NC_E_ICONE.md`). |
+| **Validacao humana** | Pendente: revisão única no fim do lote. |
+
 ---
 
 ## 5. Responsabilidade

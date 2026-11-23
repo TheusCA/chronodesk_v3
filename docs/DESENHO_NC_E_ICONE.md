@@ -111,3 +111,36 @@ O responsável reenviou o pedido com três mudanças sobre o lote já entregue (
 | D-NC-16 | O centro de custo fica no `config_sistema.json` (`centro_custo_horas_extras`, padrão `1.123.01  Suporte Tecnico`, com os dois espaços), editado pelo admin na aba Configurações (1 a 60 caracteres, sem caractere de controle); a auditoria da configuração leva o valor (não é dado pessoal) | Mesmo lugar das configurações de pausa |
 | D-NC-17 | O `XlsxWriter` ganha formato de número, fórmula, fonte (nome e tamanho) e a borda preta, só quando usados: a saída do Controle de CHG não muda | Uma dependência a menos; o QA confere a saída do CHG |
 | D-NC-18 | O nome em maiúsculas por uma tabela própria das letras acentuadas do português (sem o `mbstring`) | Pedido |
+
+## 6. Execução do pedido revisto (2026-11-23)
+
+**Commits** (branch `feat/employee-form-rhf-zod`, depois do `f93f789` enviado; nada enviado foi reescrito):
+
+| Commit | Conteúdo |
+|---|---|
+| `47e8b2d` | NC sem zero à esquerda: as três CHECK da 026, a verificação, o `EmployeeNc` e o schema da tela (D-NC-10) |
+| `8d66b45` | O plano da seção 5 |
+| `1b8f39f` | Importação de NCs com prévia: `SpreadsheetImportService::parseUploadMatrix`, `services/EmployeeNcImport.php`, `api/portal/employee_nc_import.php` (Liderança e admin, CSRF), `NcImport.jsx`; `qa-nc` seção 3, `qa-security` e `qa:employee-form` (D-NC-11 a D-NC-13) |
+| `c5998bb` | Planilha de horas extras do RH: `services/OvertimeRhSheet.php`, a prévia (`?export=preview`) e o `.xlsx` (`?format=xlsx`) no `overtime.php` (o `?format=csv` de horas extras dá 400), o centro de custo em Configurações, a prévia na tela (`overtimeRh.ts`); o `XlsxWriter` com formato de número, fórmula, fonte, borda preta e centro vertical; `qa-overtime` abre o `.xlsx` gerado (D-NC-14 a D-NC-18) |
+| `c074112` | Roteiro, folha e fumaça do deploy 5: a fumaça lê a prévia da planilha (a planilha dá 409 enquanto houver aprovado sem NC); as conferências da importação, da planilha e do centro de custo sem enviar nem salvar; o depois do deploy; a trava |
+| O último | Esta seção e o `REGISTRO_USO_IA.md` |
+
+**Ensaio da 026 com a regra nova** (MySQL 8.0.46 local, base fictícia `qa_nc`, as duas variantes): o mesmo resultado da seção 4 (migration 2x, rollback 1x e a 2ª parando, assinaturas iguais), agora com o NC fictício sem zero à esquerda.
+
+**Integração no MySQL 8.0.46 local** (`qa_nci`; dados e NC fictícios; transação desfeita): 21/21. Além dos 16 da seção 4: o NC com zero à esquerda recusado pelas CHECK; a importação grava só "entra" e "muda", e a 2ª vez com o mesmo arquivo não grava nada; a prévia da planilha do RH confere com as contagens do banco (aprovados, pendentes fora, outros, minutos); a planilha tem uma linha por aprovado e o total até a última linha; aprovado sem NC recusa a planilha (409).
+
+**O `.xlsx` no QA:** o `qa-overtime` abre o arquivo gerado (o ZIP sem compressão do `XlsxWriter`) e confere a aba única "Plan1", os seis cabeçalhos na ordem e com acento, H1 e a fórmula `SUM(E2:E<última>)` em `[h]:mm:ss`, o recálculo ao abrir, o estilo do cabeçalho (Aptos Narrow 11, negrito, fundo `00B0F0`, centralizado, borda fina preta), a ordem por data e nome, o nome em maiúsculas com acento, o centro de custo com os dois espaços, o NC como número, a data como número de data do Excel em `dd/mm/yyyy`, o total como fração do dia em `[h]:mm:ss`, a descrição com a justificativa quando o motivo é vazio (texto, nunca fórmula), o autofiltro `A1:F<última>`, as larguras, os formatos próprios a partir do id 164, que só os aprovados entram e que a saída do Controle de CHG continua igual byte a byte. O modelo do RH (com dados reais) só serviu para conferir o layout: nada dele está no git, nos docs ou nos QAs.
+
+**Mutação por commit** (no worktree, com a trava `mut_guard.php`):
+- `47e8b2d`: 7/7.
+- `1b8f39f`: 20/20. Na 1ª rodada, 17/20: o cabeçalho depois de linhas de título não era testado; um mutante não mudava nada (o grupo "igual" não existe em `todos`) e foi trocado por um que leva o "igual" para a gravação; a ordem da checagem de permissão do endpoint passava com `strpos` falso. Casos novos; commit refeito antes de qualquer envio.
+- `c5998bb`: 29/29. Na 1ª rodada, 28/29: o id do formato próprio abaixo de 164 (que o Excel lê como formato embutido) não era conferido; caso novo, commit refeito antes de qualquer envio.
+- `c074112`: 18/18. Um mutante não se aplicava na 1ª rodada (erro do script: fim de linha CRLF); corrigido, morto (pela paridade da folha).
+
+**Navegador:** 1163/1163. **Trava do roteiro:** 520 verificações; o pipeline que regera o roteiro e a folha do deploy 5 reproduz os arquivos do commit byte a byte. `qa-nc`: 63 verificações.
+
+**Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
+
+**Fica para decidir:** o `streamOvertimeCsv` e o `overtimeCsvRow` ficam sem chamador (o CSV de horas extras saiu do endpoint; os testes de injeção de fórmula deles continuam); retirá-los num lote próprio, se aprovado. O status `synced` fora da planilha (D-NC-14) a confirmar com o RH.
+
+**Não verificado aqui:** a planilha aberta no Excel do RH (o QA confere o XML; o layout foi comparado com o modelo pela estrutura) e o NC real dos cadastros (fica com a gestão, pela tela ou pela importação).
