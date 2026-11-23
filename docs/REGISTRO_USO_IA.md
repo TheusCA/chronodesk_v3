@@ -1771,6 +1771,20 @@ Base da afirmação:
 | **Decisões (a aprovar)** | D-NC-10 a D-NC-18 (`docs/DESENHO_NC_E_ICONE.md`). |
 | **Validacao humana** | Pendente: revisão única no fim do lote. |
 
+
+### Ajustes do Controle de CHG pedidos pelo Tools (layout do quadro e catálogo de carteiras) — 2026-11-23
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | O quadro do Controle de CHG quebrava o texto letra por letra num notebook com o menu aberto. Este lote traz o card compacto, o painel "Abrir" com os editores, colunas de no mínimo 18rem com rolagem e a visão Etapa. Traz também o catálogo de carteiras pela planilha base, com prévia, e a busca reversa do nome no formulário. Entra no deploy 5, sem migration. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `0cd0239` (plano), `f45f007` (layout), `426b814` (catálogo), `9920e19` (roteiro do deploy 5) e o commit destes docs. Sem push (pedido do responsável). |
+| **O que a IA alterou** | `ChgPage.jsx`, `ChgCard.jsx`, `ChgPanel.jsx`, `chgPanelModel.js`, `ChgViews.jsx`, `chg.css`, `ChgCatalogPanel.jsx`, `chgImportModel.js`, `chgFormModel.js`, `ChgForm.jsx`; `services/ChgCatalogImport.php`, `api/portal/chg_catalog_import.php`; `qa-chg.php`, `qa-security.php`, `qa:chg`, `qa:unsaved-changes`, o navegador (blocos 31 e 33) e o servidor de teste; `DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md`, `scripts/qa-deploy-runbook.php`; `docs/DESENHO_CHG.md` (seção 16). |
+| **Dados pessoais e sigilo** | A planilha base de carteiras tem endereços internos. Só foi lida na estação, fora do git, e só as contagens saíram dela. A importação lê só as colunas cod e carteira e nunca grava as outras. O relato e a captura do Tools ficaram fora dos docs. Nas capturas e nos QAs, só dados fictícios. A auditoria `CHG_CATALOGO` leva só contagens. |
+| **Validacao executada pela IA** | <ul><li>Navegador, bloco 33: 48 conferências (1280 a 1920 px, menu aberto e fechado, os dois temas).</li><li>Navegador, bloco 31: 14 conferências.</li><li>Integração no MySQL local: 7/7.</li><li>Catálogo da referência: 168 novas num catálogo vazio e 0 mudanças sobre ele mesmo.</li><li>Mutação por commit: 18/18, 22/22 e 11/11; os sobreviventes da 1ª rodada viraram casos novos.</li><li>CSS do CHG: 12679 de 25000 bytes.</li><li>Trava: 521 verificações.</li><li>Bateria completa sozinha no último commit: no estado da sessão.</li></ul> |
+| **Achados** | Sem um ajuste, o Esc no painel com um campo digitado gravava o campo, porque o aviso de descarte roubava o foco. Corrigido: o campo não grava quando o foco vai para o aviso ou para um controle de saída. O critério "texto com largura menor que 8rem" foi lido como texto quebrado numa caixa estreita (D-CHG-38). |
+| **Decisões (a aprovar)** | D-CHG-34 a D-CHG-41 (`docs/DESENHO_CHG.md`, seção 16). |
+| **Validacao humana** | Pendente: revisão única no fim do lote, com as capturas. |
+
 ---
 
 ## 5. Responsabilidade

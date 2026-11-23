@@ -1016,3 +1016,58 @@ Categorias da prévia (D-CHG-40):
 Arquivo sem nenhuma linha válida: recusado, para nunca desativar o catálogo inteiro. Repetir o mesmo arquivo dá tudo "sem mudança".
 
 **QA da importação:** com um catálogo fictício no QA. O catálogo da referência (168 carteiras) é importado sobre ele mesmo só na estação, fora do git, e o resultado vai só em contagens para os docs.
+
+### 16.1 Execução (2026-11-23)
+
+**Commits** (branch `feat/employee-form-rhf-zod`, depois do `b0354d8`; sem push):
+
+| Commit | Conteúdo |
+|---|---|
+| `0cd0239` | O plano desta seção (D-CHG-34 a D-CHG-41) |
+| `f45f007` | Layout: `ChgCard` compacto e `ChgCardBody` (o card inteiro) no `ChgPanel` (Drawer `max-w-4xl`, com a guarda), `chgPanelModel.js`, colunas de no mínimo 18rem com rolagem e cabeçalho fixo, `ChgStageView`; `qa:chg`, `qa:unsaved-changes` e o bloco 33 do navegador; os cards fictícios do pior caso no servidor de teste |
+| `426b814` | Catálogo: `services/ChgCatalogImport.php`, `api/portal/chg_catalog_import.php` (`chg.import`, CSRF), `ChgCatalogPanel.jsx`, a busca reversa no `ChgForm`; `qa-chg.php`, `qa-security.php`, `qa:chg` e o bloco 31 do navegador |
+| `9920e19` | Roteiro e folha do deploy 5 (sem migration) e a trava |
+| O último | Esta subseção e o `REGISTRO_USO_IA.md` |
+
+**CSS do Controle de CHG:** 12679 bytes, de 25000 (antes, 11502). Tokens do redesenho, sem atributo `style`.
+
+**Navegador:**
+- **Bloco 33 (novo), 48 conferências**, todas verdes. Nas 4 larguras (1280, 1366, 1440 e 1920 px), com o menu aberto e fechado e nos temas claro e escuro, quatro grupos de conferências:
+  - o quadro: 6 colunas de no mínimo 18rem, cabeçalho fixo, rolagem do quadro e nunca da página;
+  - os 6 cards, um por etapa, com 3 carteiras, 3 locais, 3 planos e 3 endpoints;
+  - o painel "Abrir" nas 6 etapas;
+  - a visão Etapa.
+
+  Em todos: nenhum texto quebrado numa caixa de menos de 8rem, nenhuma rolagem horizontal dentro de um card ou do painel e nenhum botão fora (D-CHG-38).
+- **Bloco 33, casos à parte:**
+  - o cabeçalho fixo ao rolar o quadro;
+  - o painel sujo pergunta no Esc, e o campo não grava ao perder o foco para o aviso;
+  - descartar não grava nada e devolve o foco ao "Abrir";
+  - sair do campo grava (`set_field` com a versão);
+  - arrastar para outra coluna continua.
+- **Bloco 31: 14 conferências**, com o painel do catálogo e a busca reversa no formulário real.
+
+**Capturas antes e depois** (dados fictícios; fora do git): 16 antes (o quadro nas 4 larguras, menu aberto e fechado, os dois temas) e 24 depois (as mesmas 16, mais o painel de 3 etapas e a visão Etapa em 1280 e 1920 px).
+
+**Integração no MySQL 8.0.46 local** (`qa_nci`; dados fictícios; transação desfeita): 7/7.
+- A prévia no banco: 1 nova, 1 renomeada, 1 reativada, 1 que sai e 3 recusadas.
+- Confirmar: a que sai fica inativa (não apagada), o código repetido não entra e a coluna extra não é gravada.
+- O mesmo arquivo de novo dá 0 mudanças.
+- As carteiras copiadas nos cards não mudam (assinatura).
+- O usuário da importação fica registrado.
+
+**Catálogo da referência** (fora do git, lido na estação por um leitor próprio, porque a estação não tem a extensão zip; só contagens): 168 linhas. Num catálogo vazio, 168 novas e 0 recusadas; importado sobre ele mesmo, **0 mudanças** (168 sem mudança). A planilha cabe nos limites do leitor do servidor: 5 colunas, a maior célula com 32 bytes, 23 KB.
+
+**Mutação por commit** (no worktree, com a trava `mut_guard.php`):
+- `f45f007`: 18/18. Os mutantes de CSS morreram no navegador: fatos em 4 colunas, contador quebrando, "Mover" mais largo que o card.
+- `426b814`: 22/22. Cobre a nova, a renomeada, a reativada, a que sai (e a inativa que não sai), o código repetido (que não entra nem tira a carteira do catálogo), o "123.0" do Excel, o arquivo sem linha válida, a trava, o cabeçalho, a permissão, a auditoria e a busca reversa (maiúsculas, nome repetido, inativa, código já preenchido). Na 1ª rodada, 20/22: o cabeçalho só com "cod" e as colunas extras numa linha recusada não eram testados. Casos novos; commit refeito antes de qualquer envio.
+- `9920e19`: 11/11.
+
+**Trava do roteiro:** 521 verificações. O pipeline que regera o roteiro e a folha do deploy 5 reproduz os arquivos do commit byte a byte.
+
+**Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
+
+**Não verificado aqui:**
+- a leitura do `.xlsx` real pelo leitor do servidor (`ZipArchive`; a estação não tem a extensão: os QAs usam a matriz já lida);
+- o quadro no notebook do Tools;
+- o arrastar com o mouse de verdade (o QA dispara os eventos de arrastar e soltar).
