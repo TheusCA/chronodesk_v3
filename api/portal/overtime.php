@@ -14,9 +14,25 @@ try {
         if (($_GET['nc'] ?? '') === '1') {
             json_response(['sucesso' => true] + $service->employeeNcForForm($_GET, $actor));
         }
+        // [Lote NC revisto, D-NC-14 e D-NC-15] A exportacao e o .xlsx no modelo
+        // do RH (o CSV de horas extras saiu): a previa antes de baixar.
+        if (($_GET['export'] ?? '') === 'preview') {
+            json_response(['sucesso' => true] + $service->overtimeRhPreview($_GET, $actor));
+        }
         if (($_GET['format'] ?? '') === 'csv') {
-            audit_log('OVERTIME_EXPORTED', 'Exportacao CSV de horas extras.', 'INFO');
-            $service->streamOvertimeCsv($_GET, $actor);
+            throw new InvalidArgumentException('A exportação de horas extras agora é a planilha .xlsx no modelo do RH.');
+        }
+        if (($_GET['format'] ?? '') === 'xlsx') {
+            $config = carregar_configuracao();
+            $export = $service->overtimeRhXlsx($_GET, $actor, (string)($config['centro_custo_horas_extras'] ?? OvertimeRhSheet::DEFAULT_COST_CENTER));
+            $p = $export['previa'];
+            audit_log('OVERTIME_EXPORTED', "Exportacao XLSX de horas extras (modelo do RH): aprovados {$p['aprovados']}, pendentes fora {$p['pendentes_fora']}, outros fora {$p['outros_fora']}, minutos {$p['total_minutos']}.", 'INFO');
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . $export['arquivo'] . '"');
+            header('Content-Length: ' . strlen($export['bytes']));
+            header('Cache-Control: no-store');
+            header('X-Content-Type-Options: nosniff');
+            echo $export['bytes'];
             exit;
         }
         $totals = $service->overtimeTotalsForFilters($_GET, $actor);

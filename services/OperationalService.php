@@ -6,6 +6,7 @@ require_once __DIR__ . '/ScheduleRulePlanner.php';
 require_once __DIR__ . '/PresenceEngine.php';
 require_once __DIR__ . '/PresenceRepository.php';
 require_once __DIR__ . '/EmployeeNc.php';
+require_once __DIR__ . '/OvertimeRhSheet.php';
 require_once __DIR__ . '/PresenceCutoff.php';
 require_once __DIR__ . '/CyclePattern.php';
 
@@ -1329,6 +1330,64 @@ final class OperationalService {
             self::minutesText((int)$employeeTotals['pending_minutes']),
             self::workflowStatusLabel($row['status']),
         ];
+    }
+
+    /**
+     * [Lote NC revisto, D-NC-14 e D-NC-15] Lancamentos de hora extra do
+     * periodo e dos filtros da tela (o tecnico, so os proprios), todos os
+     * status, com o NC da copia ou do cadastro: a exportacao do RH leva so os
+     * aprovados; a previa conta os que ficaram fora.
+     */
+    private function overtimeRhSplit(array $filters, array $actor): array {
+        $approved = [];
+        $pending = 0;
+        $others = 0;
+        foreach ($this->iterateWorkflowRecords('portal_overtime_entries', 'work_date', $filters, $actor, false, true) as $row) {
+            if ($row['status'] === 'approved') {
+                $approved[] = $row;
+            } elseif ($row['status'] === 'pending') {
+                $pending++;
+            } else {
+                $others++;
+            }
+        }
+        $missing = [];
+        foreach ($approved as $row) {
+            if (($row['nc'] ?? null) === null || $row['nc'] === '') {
+                $missing[(int)$row['employee_id']] = ['employee_id' => (int)$row['employee_id'], 'employee_name' => (string)$row['employee_name']];
+            }
+        }
+        usort($missing, static fn (array $a, array $b): int => strcmp(OvertimeRhSheet::upper($a['employee_name']), OvertimeRhSheet::upper($b['employee_name'])));
+        return [$approved, $pending, $others, $missing];
+    }
+
+    /** [D-NC-15] O que a exportacao do RH leva, antes de baixar. */
+    public function overtimeRhPreview(array $filters, array $actor): array {
+        [$from, $to] = $this->period($filters, 366, true);
+        [$approved, $pending, $others, $missing] = $this->overtimeRhSplit($filters, $actor);
+        $missingCount = count(array_filter($approved, static fn (array $row): bool => ($row['nc'] ?? null) === null || $row['nc'] === ''));
+        return [
+            'periodo' => ['from' => $from, 'to' => $to],
+            'arquivo' => OvertimeRhSheet::fileName($to),
+            'aprovados' => count($approved),
+            'pendentes_fora' => $pending,
+            'outros_fora' => $others,
+            'total_minutos' => array_sum(array_map(static fn (array $row): int => (int)$row['total_minutes'], $approved)),
+            'sem_nc' => ['lancamentos' => $missingCount, 'pessoas' => array_values($missing)],
+        ];
+    }
+
+    /**
+     * [D-NC-14] O .xlsx do RH. Aprovado sem NC: recusa (409) com a contagem;
+     * a previa mostra quem falta. Devolve o nome, os bytes e as contagens.
+     */
+    public function overtimeRhXlsx(array $filters, array $actor, string $costCenter): array {
+        $preview = $this->overtimeRhPreview($filters, $actor);
+        if ($preview['sem_nc']['lancamentos'] > 0) {
+            throw new DomainException($preview['sem_nc']['lancamentos'] . ' lançamento(s) aprovado(s) sem NC no cadastro: a planilha não sai. Veja quem falta na prévia da exportação.');
+        }
+        [$approved] = $this->overtimeRhSplit($filters, $actor);
+        return ['arquivo' => $preview['arquivo'], 'bytes' => OvertimeRhSheet::build($approved, $costCenter), 'previa' => $preview];
     }
 
     public function streamTimeAdjustmentsCsv(array $filters, array $actor): void {

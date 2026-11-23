@@ -24,6 +24,7 @@ import { runAction } from '../lib/actionRunner'
 import { formatDate, formatDateTime } from '../lib/format'
 import { reportFiltersSchema, scheduleRuleSchema } from '../lib/formSchemas'
 import { NC_REQUIRED_MESSAGE, workflowNcState } from '../lib/employeeNc'
+import { rhCanDownload, rhTotalLabel } from '../lib/overtimeRh'
 import { presenceCutoffNotice, presenceCutoffTitle, presenceLegendItem, rowPartialTime } from '../lib/presenceLegend'
 import { queryKeys } from '../lib/queryKeys'
 import { formValuesChanged } from '../lib/formDirty'
@@ -992,6 +993,21 @@ function WorkflowPage({ kind, session, notify }) {
   const ncInfo = ncEmployee && Number(ncResource.data?.employee_id) === Number(ncEmployee) ? ncResource.data : null
   const ncState = workflowNcState(ncInfo)
   const exportUrl = apiUrl(`${endpoint}${queryString({ ...filters, format: 'csv' })}`)
+  // [Lote NC revisto] Horas extras: a planilha do RH (.xlsx), com a prévia antes de baixar.
+  const rhUrl = apiUrl(`${endpoint}${queryString({ ...filters, format: 'xlsx' })}`)
+  const [rhPreview, setRhPreview] = useState(null)
+  const [rhLoading, setRhLoading] = useState(false)
+  useEffect(() => { setRhPreview(null) }, [filters])
+  async function loadRhPreview() {
+    setRhLoading(true)
+    try {
+      setRhPreview(await api(`${endpoint}${queryString({ ...filters, export: 'preview' })}`))
+    } catch (error) {
+      notify(error?.message || 'Não foi possível montar a prévia da planilha.', 'error')
+    } finally {
+      setRhLoading(false)
+    }
+  }
   const pendingTitleRef = useRef(null)
   const decision = useDecisionConfirm(notify, [resource.refresh])
 
@@ -1104,11 +1120,27 @@ function WorkflowPage({ kind, session, notify }) {
         </>
       )} />
       <SectionHeader
-        action={<a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha</a>}
+        action={overtime
+          ? <button className="btn-secondary gap-2" data-rh-export="" disabled={rhLoading} onClick={loadRhPreview} type="button"><Icon className="h-4 w-4" name="download" /> Exportar planilha do RH</button>
+          : <a className="btn-secondary gap-2" href={exportUrl}><Icon className="h-4 w-4" name="download" /> Exportar planilha</a>}
         description={`${formatDate(filters.from)} a ${formatDate(filters.to)}. Filtros, criação, aprovação e exportação CSV preservados.`}
         eyebrow="Workflow operacional"
         title={title}
       />
+      {overtime && rhPreview && (
+        <div className="space-y-3" data-rh-preview="">
+          <InlineAlert tone="info" title={`Planilha do RH: ${rhPreview.arquivo}`}>
+            {rhPreview.aprovados} aprovado(s) vão; {rhPreview.pendentes_fora} pendente(s) e {rhPreview.outros_fora} em outro status ficam fora. Total geral: {rhTotalLabel(rhPreview.total_minutos)}.
+          </InlineAlert>
+          {rhCanDownload(rhPreview)
+            ? <a className="btn-primary gap-2" data-rh-download="" href={rhUrl}><Icon className="h-4 w-4" name="download" /> Baixar {rhPreview.arquivo}</a>
+            : (
+              <InlineAlert tone="danger" title={`${rhPreview.sem_nc.lancamentos} lançamento(s) aprovado(s) sem NC: a planilha não sai`}>
+                Falta o NC no cadastro de: {rhPreview.sem_nc.pessoas.map((person) => person.employee_name).join(', ')}. Peça à Liderança para incluir (Funcionários).
+              </InlineAlert>
+            )}
+        </div>
+      )}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard detail={`Total de ${noun}s nos filtros`} icon={overtime ? 'timer' : 'edit'} label="Registros" value={items.length} />
         <MetricCard detail="Aguardam decisão de gestor/admin" icon="bell" label="Pendentes" tone="warning" value={pending.length} />

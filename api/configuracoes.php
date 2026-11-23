@@ -13,6 +13,7 @@ json_response([
         'duracao_pausa_minutos' => (int)($config['duracao_pausa_minutos'] ?? 20),
         'alerta_15minutos' => (bool)($config['alerta_15minutos'] ?? true),
         'alerta_20minutos' => (bool)($config['alerta_20minutos'] ?? true),
+        'centro_custo_horas_extras' => (string)($config['centro_custo_horas_extras'] ?? '1.123.01  Suporte Tecnico'),
         'local_admin_enabled' => ENABLE_LOCAL_ADMIN,
         'local_password_change_allowed' => ENABLE_LOCAL_ADMIN
             && ($_SESSION['admin_auth_type'] ?? '') === 'local',

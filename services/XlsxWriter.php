@@ -8,8 +8,14 @@ declare(strict_types=1);
  * formula); texto que comeca com =, +, -, @, tab ou CR ganha o quotePrefix
  * (Excel trata como texto, sem mostrar o apostrofo).
  *
- * Celula: string, int, float, null ou ['v' => valor, 's' => estilo]. Estilo:
- * bold, color (RRGGBB), fill (RRGGBB), border (bool), wrap, center, underline.
+ * Celula: string, int, float, null, ['v' => valor, 's' => estilo] ou
+ * ['f' => formula, 's' => estilo]. Estilo: bold, color (RRGGBB), fill
+ * (RRGGBB), border (true: a borda fina do Controle de CHG; 'black': a borda
+ * fina preta), wrap, center, vcenter, underline, font (['name' => ..., 'size'
+ * => ...]) e numFmt (codigo do formato, por exemplo '[h]:mm:ss').
+ * [Lote NC revisto, D-NC-17] fonte, formato de numero, borda preta, centro
+ * vertical e formula so entram no arquivo quando usados: a saida de quem nao
+ * usa (Controle de CHG) nao muda.
  * Opcoes da aba: cols (larguras), merges (['A1:B1']), autofilter ('A1:D9') e
  * links ([['ref' => 'B5', 'url' => 'https://...']], so http(s)).
  */
@@ -18,6 +24,9 @@ final class XlsxWriter {
     private array $fonts = [];
     private array $fills = [];
     private array $xfs = [];
+    private array $numFmts = [];
+    private bool $blackBorder = false;
+    private bool $formulas = false;
 
     public function __construct() {
         $this->fonts = ['' => 0];
@@ -51,6 +60,9 @@ final class XlsxWriter {
 
     private function fontId(array $style): int {
         $key = (empty($style['bold']) ? '' : 'b') . '|' . ($style['color'] ?? '') . '|' . (empty($style['underline']) ? '' : 'u');
+        if (isset($style['font'])) {
+            $key .= '|' . (string)$style['font']['name'] . '|' . (float)$style['font']['size'];
+        }
         if ($key === '||') {
             return 0;
         }
@@ -65,15 +77,30 @@ final class XlsxWriter {
     private function styleId(array $style, bool $quote): int {
         $font = $this->fontId($style);
         $fill = $this->fillId($style);
-        $key = implode('|', [$font, $fill, empty($style['border']) ? 0 : 1, empty($style['wrap']) ? 0 : 1, empty($style['center']) ? 0 : 1, $quote ? 1 : 0]);
+        $border = empty($style['border']) ? 0 : 1;
+        if (($style['border'] ?? null) === 'black') {
+            $this->blackBorder = true;
+            $border = 2;
+        }
+        $key = implode('|', [$font, $fill, $border, empty($style['wrap']) ? 0 : 1, empty($style['center']) ? 0 : 1, $quote ? 1 : 0]);
+        $numFmt = isset($style['numFmt']) ? ($this->numFmts[(string)$style['numFmt']] ??= 164 + count($this->numFmts)) : 0;
+        if ($numFmt > 0 || !empty($style['vcenter'])) {
+            $key .= '|' . $numFmt . '|' . (empty($style['vcenter']) ? 0 : 1);
+        }
         return $this->xfs[$key] ??= count($this->xfs);
     }
 
     private function cellXml(string $ref, mixed $cell): string {
         $style = [];
+        $cellArray = is_array($cell) ? $cell : null;
         if (is_array($cell)) {
             $style = $cell['s'] ?? [];
             $cell = $cell['v'] ?? null;
+        }
+        if (is_array($cellArray ?? null) && isset($cellArray['f'])) {
+            $this->formulas = true;
+            $id = $style === [] ? 0 : $this->styleId($style, false);
+            return "<c r=\"{$ref}\"" . ($id > 0 ? " s=\"{$id}\"" : '') . '><f>' . self::xml((string)$cellArray['f']) . '</f></c>';
         }
         if ($cell === null || $cell === '') {
             $id = $style === [] ? 0 : $this->styleId($style, false);
@@ -131,9 +158,9 @@ final class XlsxWriter {
     private function stylesXml(): string {
         $fonts = '';
         foreach (array_keys($this->fonts) as $key) {
-            [$bold, $color, $under] = array_pad(explode('|', (string)$key), 3, '');
-            $fonts .= '<font>' . ($bold === 'b' ? '<b/>' : '') . ($under === 'u' ? '<u/>' : '') . '<sz val="10"/>'
-                . '<color rgb="FF' . ($color !== '' ? $color : '000000') . '"/><name val="Verdana"/><family val="2"/></font>';
+            [$bold, $color, $under, $name, $size] = array_pad(explode('|', (string)$key), 5, '');
+            $fonts .= '<font>' . ($bold === 'b' ? '<b/>' : '') . ($under === 'u' ? '<u/>' : '') . '<sz val="' . ($size !== '' ? $size : '10') . '"/>'
+                . '<color rgb="FF' . ($color !== '' ? $color : '000000') . '"/><name val="' . self::xml($name !== '' ? $name : 'Verdana') . '"/><family val="2"/></font>';
         }
         $fills = '';
         foreach (array_keys($this->fills) as $key) {
@@ -147,18 +174,27 @@ final class XlsxWriter {
                 $xfs .= '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>';
                 continue;
             }
-            [$font, $fill, $border, $wrap, $center, $quote] = array_map('intval', explode('|', (string)$key));
-            $xfs .= '<xf numFmtId="0" fontId="' . $font . '" fillId="' . $fill . '" borderId="' . $border . '" xfId="0"'
+            [$font, $fill, $border, $wrap, $center, $quote, $numFmt, $vcenter] = array_map('intval', array_pad(explode('|', (string)$key), 8, '0'));
+            $xfs .= '<xf numFmtId="' . $numFmt . '" fontId="' . $font . '" fillId="' . $fill . '" borderId="' . $border . '" xfId="0"'
+                . ($numFmt > 0 ? ' applyNumberFormat="1"' : '')
                 . ($font > 0 ? ' applyFont="1"' : '') . ($fill > 0 ? ' applyFill="1"' : '') . ($border > 0 ? ' applyBorder="1"' : '')
-                . ($quote ? ' quotePrefix="1"' : '') . ' applyAlignment="1"><alignment vertical="top"'
+                . ($quote ? ' quotePrefix="1"' : '') . ' applyAlignment="1"><alignment vertical="' . ($vcenter ? 'center' : 'top') . '"'
                 . ($wrap ? ' wrapText="1"' : '') . ($center ? ' horizontal="center"' : '') . '/></xf>';
         }
         $side = '<color rgb="FF9BB7C4"/>';
+        $black = '<color rgb="FF000000"/>';
+        $numFmts = '';
+        foreach ($this->numFmts as $code => $id) {
+            $numFmts .= '<numFmt numFmtId="' . $id . '" formatCode="' . self::xml((string)$code) . '"/>';
+        }
+        $borders = '<border/><border><left style="thin">' . $side . '</left><right style="thin">' . $side . '</right><top style="thin">' . $side . '</top><bottom style="thin">' . $side . '</bottom><diagonal/></border>'
+            . ($this->blackBorder ? '<border><left style="thin">' . $black . '</left><right style="thin">' . $black . '</right><top style="thin">' . $black . '</top><bottom style="thin">' . $black . '</bottom><diagonal/></border>' : '');
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . ($numFmts !== '' ? '<numFmts count="' . count($this->numFmts) . '">' . $numFmts . '</numFmts>' : '')
             . '<fonts count="' . count($this->fonts) . '">' . $fonts . '</fonts>'
             . '<fills count="' . count($this->fills) . '">' . $fills . '</fills>'
-            . '<borders count="2"><border/><border><left style="thin">' . $side . '</left><right style="thin">' . $side . '</right><top style="thin">' . $side . '</top><bottom style="thin">' . $side . '</bottom><diagonal/></border></borders>'
+            . '<borders count="' . ($this->blackBorder ? 3 : 2) . '">' . $borders . '</borders>'
             . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
             . '<cellXfs count="' . count($this->xfs) . '">' . $xfs . '</cellXfs>'
             . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
@@ -190,7 +226,8 @@ final class XlsxWriter {
         $files['xl/styles.xml'] = $this->stylesXml();
         $files['xl/workbook.xml'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-            . '<sheets>' . $sheetEntries . '</sheets></workbook>';
+            . '<sheets>' . $sheetEntries . '</sheets>'
+            . ($this->formulas ? '<calcPr calcId="191029" fullCalcOnLoad="1"/>' : '') . '</workbook>';
         $files['xl/_rels/workbook.xml.rels'] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' . $workbookRels
             . '<Relationship Id="rId' . ($count + 1) . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';

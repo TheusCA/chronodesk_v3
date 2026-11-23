@@ -2216,6 +2216,25 @@ foreach (['he_tecnico_outro', 'cp_tecnico'] as $case) {
     assert_same([200, 1, '900000011', false], [$ncReadCases[$case]['status'], $body['employee_id'] ?? null, $body['nc'] ?? null, $body['nc_required'] ?? null], "NC {$case}: o tecnico le o proprio NC (o employee_id do pedido e ignorado)");
 }
 
+// [Lote NC revisto, D-NC-16] Centro de custo da planilha do RH na configuracao.
+$baseConfig = ['centro_custo_horas_extras' => '1.123.01  Suporte Tecnico', 'limite_pausa_por_equipe' => 2];
+assert_same([
+    [$baseConfig, null],
+    [['centro_custo_horas_extras' => '2.000.02  Outro'] + $baseConfig, null],
+    [null, 'Centro de custo: de 1 a 60 caracteres, sem quebra de linha.'],
+    [null, 'Centro de custo: de 1 a 60 caracteres, sem quebra de linha.'],
+    [null, 'Centro de custo: de 1 a 60 caracteres, sem quebra de linha.'],
+    [null, 'Centro de custo inválido.'],
+], [
+    configuracao_centro_custo_atualizada($baseConfig, ['limite_pausa_por_equipe' => 3]),
+    configuracao_centro_custo_atualizada($baseConfig, ['centro_custo_horas_extras' => ' 2.000.02  Outro ']),
+    configuracao_centro_custo_atualizada($baseConfig, ['centro_custo_horas_extras' => '   ']),
+    configuracao_centro_custo_atualizada($baseConfig, ['centro_custo_horas_extras' => str_repeat('x', 61)]),
+    configuracao_centro_custo_atualizada($baseConfig, ['centro_custo_horas_extras' => "a
+b"]),
+    configuracao_centro_custo_atualizada($baseConfig, ['centro_custo_horas_extras' => 12]),
+], 'centro de custo: ausente mantem; presente, de 1 a 60 caracteres sem quebra de linha (os espacos de dentro ficam)');
+
 // Criar tecnico ou tecnico na equipe Lideranca nao gera evento de perfil (QA 5).
 foreach (['lid_cria_tecnico', 'admin_lideranca_tecnico', 'login_tecnico'] as $case) {
     assert_same(false, strpos($employeeCases[$case]['log'], 'FUNCIONARIO_PERFIL_ALTERADO') !== false, "funcionario {$case}: sem evento de perfil");

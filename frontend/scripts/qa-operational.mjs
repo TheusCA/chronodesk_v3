@@ -372,4 +372,21 @@ for (const [Page, overtimeKind, label] of [[OvertimePage, true, 'Horas extras'],
   assert.doesNotMatch(workflowSource, /nc: ncInfo|employee_nc|\.\.\.form, nc/u, 'NC: o formulario nunca manda o NC (o servidor le do cadastro)')
 }
 
+// ---------------------------------------------------------------------------
+// [Lote NC revisto, D-NC-14 e D-NC-15] Horas extras: a planilha do RH com a
+// previa antes de baixar; a correcao de ponto continua no CSV.
+// ---------------------------------------------------------------------------
+{
+  const { rhCanDownload, rhTotalLabel } = await import(new URL('../src/lib/overtimeRh.ts', import.meta.url).href)
+  const base = { arquivo: 'Total H-E Suporte Tecnico BPM 11-2026.xlsx', aprovados: 3, pendentes_fora: 1, outros_fora: 2, total_minutos: 1650, sem_nc: { lancamentos: 0, pessoas: [] } }
+  assert.deepEqual([rhCanDownload(null), rhCanDownload(base), rhCanDownload({ ...base, sem_nc: { lancamentos: 2, pessoas: [{ employee_id: 1, employee_name: 'QA' }] } })], [false, true, false], 'planilha do RH: baixar so com a previa e sem aprovado sem NC')
+  assert.deepEqual([rhTotalLabel(1650), rhTotalLabel(59), rhTotalLabel(0), rhTotalLabel(1500)], ['27:30', '0:59', '0:00', '25:00'], 'planilha do RH: o total geral em horas acumuladas ([h]:mm)')
+  assert.match(workflowSource, /const rhUrl = apiUrl\(`\$\{endpoint\}\$\{queryString\(\{ \.\.\.filters, format: 'xlsx' \}\)\}`\)/u, 'planilha do RH: o .xlsx com os filtros da tela')
+  assert.match(workflowSource, /useEffect\(\(\) => \{ setRhPreview\(null\) \}, \[filters\]\)/u, 'planilha do RH: trocar os filtros apaga a previa')
+  assert.match(workflowSource, /setRhPreview\(await api\(`\$\{endpoint\}\$\{queryString\(\{ \.\.\.filters, export: 'preview' \}\)\}`\)\)/u, 'planilha do RH: a previa do servidor com os filtros da tela')
+  assert.match(workflowSource, /\{rhCanDownload\(rhPreview\)\n            \? <a className="btn-primary gap-2" data-rh-download="" href=\{rhUrl\}>/u, 'planilha do RH: o link de baixar so quando a planilha pode sair')
+  assert.match(workflowSource, /action=\{overtime\n          \? <button className="btn-secondary gap-2" data-rh-export=""[^\n]*Exportar planilha do RH<\/button>\n          : <a className="btn-secondary gap-2" href=\{exportUrl\}>/u, 'horas extras com a planilha do RH; a correcao de ponto continua no CSV')
+  assert.match(workflowSource, /Falta o NC no cadastro de: \{rhPreview\.sem_nc\.pessoas\.map\(\(person\) => person\.employee_name\)\.join\(', '\)\}/u, 'planilha do RH: quem falta pelo nome, so na tela')
+}
+
 console.log('Operational frontend QA OK')

@@ -365,4 +365,162 @@ $reportSource = (string)file_get_contents(__DIR__ . '/../api/download_relatorio.
 assert_same(true, strpos($reportSource, 'obter_metricas(true, $gravar_pausa_detalhada)') !== false, 'relatorio de pausas exporta todas as pausas');
 assert_same(false, strpos($reportSource, "\$metricas['pausas_detalhadas']") !== false, 'relatorio de pausas nao usa a amostra da tela');
 
+// ----------------------------------------------------------------------------
+// [Lote NC revisto, D-NC-14 a D-NC-18] Planilha de horas extras no modelo do
+// RH: o .xlsx gerado e aberto aqui (o ZIP do XlsxWriter e sem compressao) e
+// conferido celula a celula. Nomes e NC ficticios.
+// ----------------------------------------------------------------------------
+require_once __DIR__ . '/../services/OvertimeRhSheet.php';
+
+/** Entradas de um ZIP sem compressao (metodo 0), como o XlsxWriter grava. */
+function qa_zip_entries(string $zip): array {
+    $files = [];
+    $pos = 0;
+    while (substr($zip, $pos, 4) === "PK\x03\x04") {
+        $head = unpack('vversion/vflags/vmethod/vtime/vdate/Vcrc/Vcompressed/Vsize/vname/vextra', substr($zip, $pos + 4, 26));
+        assert_same(0, $head['method'], 'xlsx: entrada sem compressao');
+        $name = substr($zip, $pos + 30, $head['name']);
+        $files[$name] = substr($zip, $pos + 30 + $head['name'] + $head['extra'], $head['compressed']);
+        $pos += 30 + $head['name'] + $head['extra'] + $head['compressed'];
+    }
+    return $files;
+}
+
+function qa_xml(string $xml): SimpleXMLElement {
+    $node = simplexml_load_string($xml);
+    $node->registerXPathNamespace('x', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+    return $node;
+}
+
+$rhRows = [
+    ['id' => 3, 'employee_id' => 12, 'employee_name' => 'bruno ficticio', 'work_date' => '2026-11-18', 'nc' => '900000012', 'total_minutes' => 90, 'reason' => '', 'justification' => 'Justificativa QA', 'status' => 'approved'],
+    ['id' => 1, 'employee_id' => 11, 'employee_name' => 'Ana Lúcia Ficticia', 'work_date' => '2026-11-18', 'nc' => '900000011', 'total_minutes' => 60, 'reason' => 'Motivo QA', 'justification' => 'x', 'status' => 'approved'],
+    ['id' => 2, 'employee_id' => 13, 'employee_name' => 'Caio Ficticio', 'work_date' => '2026-11-16', 'nc' => '913', 'total_minutes' => 1500, 'reason' => '=1+1', 'justification' => '', 'status' => 'approved'],
+];
+$files = qa_zip_entries(OvertimeRhSheet::build($rhRows, OvertimeRhSheet::DEFAULT_COST_CENTER));
+$workbook = qa_xml($files['xl/workbook.xml']);
+$sheet = qa_xml($files['xl/worksheets/sheet1.xml']);
+$styles = qa_xml($files['xl/styles.xml']);
+assert_same(['Plan1'], array_map(static fn ($s): string => (string)$s['name'], $workbook->xpath('//x:sheets/x:sheet')), 'planilha do RH: uma aba so, "Plan1"');
+assert_same(1, count($workbook->xpath('//x:calcPr[@fullCalcOnLoad="1"]')), 'planilha do RH: o Excel calcula a formula do total ao abrir');
+$cell = static function (string $ref) use ($sheet): ?SimpleXMLElement {
+    $found = $sheet->xpath("//x:c[@r='{$ref}']");
+    return $found[0] ?? null;
+};
+$text = static fn (string $ref): string => (string)($cell($ref)?->is->t ?? '');
+$xfs = $styles->xpath('//x:cellXfs/x:xf');
+$fmtCodes = [];
+foreach ($styles->xpath('//x:numFmts/x:numFmt') as $fmt) {
+    $fmtCodes[(int)$fmt['numFmtId']] = (string)$fmt['formatCode'];
+}
+assert_same([164, 165], array_keys($fmtCodes), 'planilha do RH: formatos proprios a partir do id 164 (abaixo e formato embutido do Excel, que ignora o codigo)');
+$fonts = $styles->xpath('//x:fonts/x:font');
+$fills = $styles->xpath('//x:fills/x:fill');
+$borders = $styles->xpath('//x:borders/x:border');
+$styleOf = static function (string $ref) use ($cell, $xfs, $fmtCodes, $fonts, $fills, $borders): array {
+    $xf = $xfs[(int)($cell($ref)['s'] ?? 0)];
+    $font = $fonts[(int)$xf['fontId']];
+    $fill = $fills[(int)$xf['fillId']];
+    $border = $borders[(int)$xf['borderId']];
+    return [
+        'formato' => $fmtCodes[(int)$xf['numFmtId']] ?? (string)$xf['numFmtId'],
+        'fonte' => (string)$font->name['val'] . ' ' . (string)$font->sz['val'] . (isset($font->b) ? ' negrito' : ''),
+        'fundo' => (string)($fill->patternFill->fgColor['rgb'] ?? ''),
+        'borda' => (string)($border->left['style'] ?? '') . ' ' . (string)($border->left->color['rgb'] ?? ''),
+        'centro' => (string)($xf->alignment['horizontal'] ?? ''),
+    ];
+};
+assert_same(OvertimeRhSheet::HEADERS, array_map($text, ['A1', 'B1', 'C1', 'D1', 'E1', 'F1']), 'planilha do RH: os seis cabecalhos, nesta ordem, com acento');
+assert_same(['CENTRO DE CUSTO', 'NC', 'Nome completo', 'Data da realização', 'Total de Horas', 'Descrição'], OvertimeRhSheet::HEADERS, 'planilha do RH: o texto exato dos cabecalhos do pedido');
+assert_same(['Total de Horas Geral:', 'SUM(E2:E4)', '[h]:mm:ss', null], [$text('H1'), (string)$cell('I1')->f, $styleOf('I1')['formato'], $cell('G1')], 'planilha do RH: H1 com o rotulo, I1 com a soma de E2 ate a ultima linha em [h]:mm:ss, G1 vazia');
+assert_same(['formato' => '0', 'fonte' => 'Aptos Narrow 11 negrito', 'fundo' => 'FF00B0F0', 'borda' => 'thin FF000000', 'centro' => 'center'], $styleOf('C1'), 'planilha do RH: cabecalho em negrito, Aptos Narrow 11, fundo 00B0F0, centralizado, borda fina preta');
+// Ordem: data e depois nome (Caio em 16/11; Ana e Bruno em 18/11).
+assert_same(['CAIO FICTICIO', 'ANA LÚCIA FICTICIA', 'BRUNO FICTICIO'], [$text('C2'), $text('C3'), $text('C4')], 'planilha do RH: uma linha por lancamento, por data e depois nome, o nome em maiusculas (com acento)');
+assert_same(['1.123.01  Suporte Tecnico', '1.123.01  Suporte Tecnico'], [$text('A2'), $text('A4')], 'planilha do RH: centro de custo padrao com os dois espacos do modelo');
+assert_same([null, '913', null, '46342', null, '1.0416666666667'], [isset($cell('B2')['t']) ? (string)$cell('B2')['t'] : null, (string)$cell('B2')->v, isset($cell('D2')['t']) ? (string)$cell('D2')['t'] : null, (string)$cell('D2')->v, isset($cell('E2')['t']) ? (string)$cell('E2')['t'] : null, substr((string)$cell('E2')->v, 0, 15)], 'planilha do RH: NC como numero, data como numero de data do Excel e o total como fracao do dia (25 h)');
+assert_same(['dd/mm/yyyy', '[h]:mm:ss', 'Aptos Narrow 11', 'thin FF000000', 'center', 'center'], [$styleOf('D2')['formato'], $styleOf('E2')['formato'], $styleOf('B2')['fonte'], $styleOf('F2')['borda'], $styleOf('A2')['centro'], $styleOf('E3')['centro']], 'planilha do RH: data em dd/mm/yyyy, tempo em [h]:mm:ss, dados centralizados com borda fina, Aptos Narrow 11');
+assert_same(['=1+1', 'Motivo QA', 'Justificativa QA'], [$text('F2'), $text('F3'), $text('F4')], 'planilha do RH: a descricao e o motivo ou, vazio, a justificativa (texto, nunca formula)');
+assert_same([1, true], [count($xfs[(int)$cell('F2')['s']]->xpath('@quotePrefix')), (string)$cell('F2')['t'] === 'inlineStr'], 'planilha do RH: descricao que comeca com = fica texto (quotePrefix)');
+assert_same('A1:F4', (string)$sheet->autoFilter['ref'], 'planilha do RH: autofiltro de A1 ate F da ultima linha');
+$widths = [];
+foreach ($sheet->xpath('//x:cols/x:col') as $col) {
+    $widths[(int)$col['min']] = (float)$col['width'];
+}
+assert_same([1 => 22.4, 2 => 7.0, 3 => 45.1, 4 => 16.2, 5 => 13.1, 6 => 67.9, 8 => 18.7], $widths, 'planilha do RH: as larguras do modelo (A a F e H)');
+assert_same(['Total H-E Suporte Tecnico BPM 11-2026.xlsx', 46342, 'ÁÉÍÓÚÂÊÔÃÕÇ ABC'], [OvertimeRhSheet::fileName('2026-11-15'), OvertimeRhSheet::excelDate('2026-11-16'), OvertimeRhSheet::upper('áéíóúâêôãõç abc')], 'planilha do RH: nome do arquivo pelo mes do fim do periodo, data do Excel e maiusculas sem mbstring');
+$empty = qa_zip_entries(OvertimeRhSheet::build([], 'CC QA'));
+assert_same(['SUM(E2:E2)', 'A1:F1'], [(string)qa_xml($empty['xl/worksheets/sheet1.xml'])->xpath("//x:c[@r='I1']")[0]->f, (string)qa_xml($empty['xl/worksheets/sheet1.xml'])->autoFilter['ref']], 'planilha do RH: sem aprovados, so o cabecalho e o total zerado');
+// O que nao usa os recursos novos (Controle de CHG) sai igual, byte a byte.
+$chgLike = new XlsxWriter();
+$chgLike->addSheet('Aba', [[['v' => 'Titulo', 's' => ['bold' => true, 'fill' => 'DCE6F1', 'border' => true, 'center' => true]], ['v' => '=x', 's' => ['color' => 'FF0000', 'wrap' => true]], 12, 3.5, null], [['v' => 'link', 's' => ['underline' => true, 'color' => '0563C1']], '', ['v' => '', 's' => ['border' => true]], 'texto', -1]], ['cols' => [20, 30, 10], 'merges' => ['A3:B3'], 'autofilter' => 'A1:E2', 'links' => [['ref' => 'A2', 'url' => 'https://exemplo.invalid/x']]]);
+$chgLike->addSheet('Outra', [['x']]);
+assert_same('8a8227839363e9e4c7669a022124494c8d0ca60e015750521ce7bddaae682ce2', hash('sha256', $chgLike->build()), 'XlsxWriter: sem os recursos novos, a saida e a mesma de antes (Controle de CHG)');
+
+// So aprovados, pelo servico: a previa conta os que ficam fora; sem NC, a planilha nao sai.
+final class QaRhPdo extends PDO {
+    public array $rows = [];
+    public array $sql = [];
+    public function __construct() {
+    }
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaRhStatement($this, (string)preg_replace('/\s+/', ' ', trim($query)));
+    }
+}
+final class QaRhStatement extends PDOStatement {
+    private array $result = [];
+    public function __construct(private QaRhPdo $db, private string $query) {
+    }
+    public function execute(?array $params = null): bool {
+        $this->db->sql[] = $this->query;
+        if (strpos($this->query, ' FROM portal_overtime_entries WHERE work_date BETWEEN :date_from AND :date_to') === false) {
+            throw new PDOException('consulta nao prevista: ' . $this->query);
+        }
+        $this->result = isset($params[':cursor_id']) ? [] : $this->db->rows;
+        return true;
+    }
+    public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
+        return $this->result;
+    }
+}
+$rhDb = static function (array $rows): QaRhPdo {
+    $pdo = new QaRhPdo();
+    $pdo->rows = $rows;
+    return $pdo;
+};
+$mixed = array_merge($rhRows, [
+    ['id' => 4, 'employee_id' => 14, 'employee_name' => 'Pendente QA', 'work_date' => '2026-11-17', 'nc' => '914', 'total_minutes' => 30, 'reason' => 'p', 'justification' => 'p', 'status' => 'pending'],
+    ['id' => 5, 'employee_id' => 15, 'employee_name' => 'Rejeitado QA', 'work_date' => '2026-11-17', 'nc' => '915', 'total_minutes' => 30, 'reason' => 'r', 'justification' => 'r', 'status' => 'rejected'],
+    ['id' => 6, 'employee_id' => 16, 'employee_name' => 'Sincronizado QA', 'work_date' => '2026-11-17', 'nc' => '916', 'total_minutes' => 30, 'reason' => 's', 'justification' => 's', 'status' => 'synced'],
+    ['id' => 7, 'employee_id' => 17, 'employee_name' => 'Erro QA', 'work_date' => '2026-11-17', 'nc' => '917', 'total_minutes' => 30, 'reason' => 'e', 'justification' => 'e', 'status' => 'sync_error'],
+]);
+$gestor = ['role' => 'gestor', 'employee_id' => null, 'username' => 'qa.gestor'];
+$rhPdo = $rhDb($mixed);
+$rhService = new OperationalService($rhPdo, '2026-11-20');
+$rhPreview = $rhService->overtimeRhPreview(['competency' => '2026-11'], $gestor);
+assert_same(['arquivo' => 'Total H-E Suporte Tecnico BPM 11-2026.xlsx', 'aprovados' => 3, 'pendentes_fora' => 1, 'outros_fora' => 3, 'total_minutos' => 1650, 'sem_nc' => ['lancamentos' => 0, 'pessoas' => []]], array_diff_key($rhPreview, ['periodo' => true]), 'exportacao do RH, previa: so os aprovados vao; pendentes e os demais status (rejeitado, sincronizado, erro) contados como fora; o total geral');
+$rhExport = (new OperationalService($rhDb($mixed), '2026-11-20'))->overtimeRhXlsx(['competency' => '2026-11'], $gestor, 'CC QA');
+$exported = qa_xml(qa_zip_entries($rhExport['bytes'])['xl/worksheets/sheet1.xml']);
+$exportedNames = array_map(static fn ($c): string => (string)$c->is->t, $exported->xpath("//x:c[starts-with(@r, 'C') and @r != 'C1']"));
+assert_same([['CAIO FICTICIO', 'ANA LÚCIA FICTICIA', 'BRUNO FICTICIO'], 'CC QA', 'Total H-E Suporte Tecnico BPM 11-2026.xlsx'], [$exportedNames, (string)$exported->xpath("//x:c[@r='A2']")[0]->is->t, $rhExport['arquivo']], 'exportacao do RH: so os aprovados na planilha, com o centro de custo configurado');
+assert_same([true, false, true], [$rhPdo->sql !== [], strpos(implode("\n", $rhPdo->sql), 'AND status = :status') !== false, strpos(implode("\n", $rhPdo->sql), 'AS nc FROM portal_overtime_entries') !== false], 'exportacao do RH: le todos os status (a separacao e no PHP) e o NC da copia ou do cadastro');
+$noNc = $mixed;
+$noNc[1]['nc'] = null;
+$noNc[] = ['id' => 8, 'employee_id' => 11, 'employee_name' => 'Ana Lúcia Ficticia', 'work_date' => '2026-11-19', 'nc' => '', 'total_minutes' => 10, 'reason' => 'x', 'justification' => 'x', 'status' => 'approved'];
+$noNc[3]['nc'] = null;
+$missingPreview = (new OperationalService($rhDb($noNc), '2026-11-20'))->overtimeRhPreview(['competency' => '2026-11'], $gestor);
+$refused = '';
+try {
+    (new OperationalService($rhDb($noNc), '2026-11-20'))->overtimeRhXlsx(['competency' => '2026-11'], $gestor, 'CC QA');
+} catch (DomainException $e) {
+    $refused = $e->getMessage();
+}
+assert_same([['lancamentos' => 2, 'pessoas' => [['employee_id' => 11, 'employee_name' => 'Ana Lúcia Ficticia']]], '2 lançamento(s) aprovado(s) sem NC no cadastro: a planilha não sai. Veja quem falta na prévia da exportação.'], [$missingPreview['sem_nc'], $refused], 'exportacao do RH: aprovado sem NC (o pendente sem NC nao conta) recusa a planilha; a previa lista quem falta, uma vez por pessoa');
+$overtimeEndpoint = (string)file_get_contents(__DIR__ . '/../api/portal/overtime.php');
+assert_same([true, true, true, true], [
+    strpos($overtimeEndpoint, "if ((\$_GET['format'] ?? '') === 'csv') {\n            throw new InvalidArgumentException(") !== false,
+    strpos($overtimeEndpoint, "header('Content-Disposition: attachment; filename=\"' . \$export['arquivo'] . '\"');") !== false,
+    strpos($overtimeEndpoint, "audit_log('OVERTIME_EXPORTED', \"Exportacao XLSX de horas extras (modelo do RH): aprovados {\$p['aprovados']}, pendentes fora {\$p['pendentes_fora']}, outros fora {\$p['outros_fora']}, minutos {\$p['total_minutos']}.\", 'INFO');") !== false,
+    strpos($overtimeEndpoint, "(string)(\$config['centro_custo_horas_extras'] ?? OvertimeRhSheet::DEFAULT_COST_CENTER)") !== false,
+], 'exportacao do RH: o CSV de horas extras saiu, o .xlsx com o nome do modelo, a auditoria com o formato e as contagens, o centro de custo da configuracao');
+
 echo "QA overtime OK\n";

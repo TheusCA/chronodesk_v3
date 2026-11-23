@@ -457,6 +457,8 @@ function carregar_configuracao() {
         'duracao_pausa_minutos' => 20,
         'alerta_15minutos' => true,
         'alerta_20minutos' => true,
+        // [Lote NC revisto, D-NC-16] Centro de custo da planilha de horas extras do RH.
+        'centro_custo_horas_extras' => '1.123.01  Suporte Tecnico',
         'admin_username' => ADMIN_USERNAME
     ];
     
@@ -546,6 +548,29 @@ function configuracao_pausas_atualizada(array $atual, array $data): array {
         }
         $config[$campo] = (bool)$alerta;
     }
+    return [$config, null];
+}
+
+/**
+ * [Lote NC revisto, D-NC-16] Centro de custo da planilha de horas extras do
+ * RH: ausente no corpo mantem o gravado; presente, texto de 1 a 60
+ * caracteres, sem caractere de controle (os espacos de dentro ficam: o padrao
+ * tem dois). Devolve [configuracao, null] ou [null, mensagem do 400].
+ */
+function configuracao_centro_custo_atualizada(array $atual, array $data): array {
+    if (!array_key_exists('centro_custo_horas_extras', $data)) {
+        return [$atual, null];
+    }
+    $valor = $data['centro_custo_horas_extras'];
+    if (!is_string($valor)) {
+        return [null, 'Centro de custo inválido.'];
+    }
+    $valor = trim($valor);
+    if (preg_match('/^.{1,60}$/u', $valor) !== 1 || preg_match('/[\x00-\x1F\x7F]/', $valor) === 1) {
+        return [null, 'Centro de custo: de 1 a 60 caracteres, sem quebra de linha.'];
+    }
+    $config = $atual;
+    $config['centro_custo_horas_extras'] = $valor;
     return [$config, null];
 }
 

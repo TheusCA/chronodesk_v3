@@ -24,6 +24,12 @@ if (!is_array($data) || !$data) {
 if ($erro_configuracao !== null) {
     json_response(['sucesso' => false, 'mensagem' => $erro_configuracao], 400);
 }
+// [Lote NC revisto, D-NC-16] Centro de custo da planilha do RH (opcional no corpo).
+$centro_anterior = (string)($config['centro_custo_horas_extras'] ?? '');
+[$config, $erro_centro] = configuracao_centro_custo_atualizada($config, $data);
+if ($erro_centro !== null) {
+    json_response(['sucesso' => false, 'mensagem' => $erro_centro], 400);
+}
 $limite_pausa = $config['limite_pausa_por_equipe'];
 $duracao_minutos = $config['duracao_pausa_minutos'];
 
@@ -35,6 +41,9 @@ if (salvar_configuracao($config)) {
         $gerenciador->atualizar_configuracoes($limite_pausa, $duracao_minutos);
     }
     audit_log('CONFIGURACAO_ATUALIZADA', "Configuração de pausas atualizada: limite={$limite_pausa}, duração={$duracao_minutos}", 'WARNING');
+    if ((string)($config['centro_custo_horas_extras'] ?? '') !== $centro_anterior) {
+        audit_log('CONFIGURACAO_ATUALIZADA', 'Centro de custo da planilha de horas extras alterado para: ' . $config['centro_custo_horas_extras'], 'WARNING');
+    }
     
     json_response([
         'sucesso' => true,

@@ -252,6 +252,13 @@ function SettingsTab({ resource, notify }) {
         <input checked={form.alerta_20minutos} onChange={(event) => setForm({ ...form, alerta_20minutos: event.target.checked })} type="checkbox" />
         <span><strong>Alerta aos 20 minutos</strong><small>Marca pausas críticas e excedidas.</small></span>
       </label>
+      {/* [Lote NC revisto] Centro de custo da planilha de horas extras do RH (coluna A). */}
+      {typeof form.centro_custo_horas_extras === 'string' && (
+        <label className="label" data-cost-center="">Centro de custo (planilha de horas extras do RH)
+          <input className="field mt-2" maxLength="60" required value={form.centro_custo_horas_extras} onChange={(event) => setForm({ ...form, centro_custo_horas_extras: event.target.value })} />
+          <span className="mt-1 block text-xs text-muted">Vai na coluna A de cada linha da planilha. Os espaços de dentro contam.</span>
+        </label>
+      )}
         <InlineAlert tone="info" title="Segurança operacional">
           Esta tela não altera regras de autenticação, permissões ou auditoria. O backend continua validando os limites recebidos.
         </InlineAlert>
