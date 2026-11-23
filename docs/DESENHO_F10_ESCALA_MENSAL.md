@@ -1,6 +1,6 @@
 # Desenho do F10: escala mensal no portal (substitui o script e a planilha "Escala Home")
 
-**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8). **D-F10-19 revista em 2026-11-16** (Crítico com 2 PAs reservados, configurável, ocupados pelos papéis do 9.16; Híbrido na opção (c)). **F10-3 entregue em 2026-11-19, sem push** (plano revisto na 3.3.1, execução na 8.7, D-F10-32 a D-F10-41 a aprovar; vai no deploy 5).
+**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8). **D-F10-19 revista em 2026-11-16** (Crítico com 2 PAs reservados, configurável, ocupados pelos papéis do 9.16; Híbrido na opção (c)). **F10-3 entregue em 2026-11-19, sem push** (plano revisto na 3.3.1, execução na 8.7; vai no deploy 5). **F10-3 aprovado em 2026-11-23**, com D-F10-32 a D-F10-41 como estão na 8.7 (D-F10-34 inclusive: o reservado vazio não empresta). **Lote 8.8 (papel do dia do Crítico numa fonte só) aprovado em 2026-11-23 e entregue no mesmo dia**: entra no deploy 5, junto do F10-3; retira a D-F10-36.
 
 **Fontes lidas** (locais, fora do git, em `_referencias/`): o script `gerar_escala_home_V17_ARQUIVO_MENSAL.py` (1.660 linhas, lido inteiro) e a planilha `Escala Home - Base.xlsx`. A planilha tem nomes reais. Este documento traz só estrutura, regras e contagens: nenhum nome, login ou dado pessoal. As linhas citadas são do script V17.
 
@@ -258,7 +258,7 @@ Padrão por time, com a mesma âncora da CONFIG:
 | Mapa PA | O tipo do PA no cartão (Fixo, Fixo · empresta, Reservado ao Crítico), o ocupante do reservado no dia com o papel, o aviso de quem ficou sem PA e o inventário no diálogo do PA (gestão). **A fonte "escala do mês" fica para o F10-4** (depende do mês publicado) |
 | API | `portal/pa_map.php`: `inventory_save` e `preferences_save` (`pa_map.manage`, CSRF); auditoria `PA_INVENTARIO_ALTERADO` (WARNING) e `PA_PREFERENCIA_ALTERADA` (INFO), só com o PA e os IDs |
 
-**Achado:** o `OperationalService::engineSchedule` (a leitura de presença da tela Escala, do Calendário e do `mapPresence` do Mapa PA) **não passa o papel do dia** do 9.16 ao motor; só o `PresenceService` (Visão operacional e status) passa. Nessas telas, a pessoa do Crítico com papel aparece pela regra individual. No Mapa PA do F10-3, o reservado do Crítico usa a presença corrigida pelo papel (a mesma precedência), e o vínculo de alguém do Crítico continua pela regra individual. A correção do `engineSchedule` fica para um lote próprio, a aprovar (mexe na Escala, no Calendário e nos relatórios).
+**Achado:** o `OperationalService::engineSchedule` (a leitura de presença da tela Escala, do Calendário e do `mapPresence` do Mapa PA) **não passa o papel do dia** do 9.16 ao motor; só o `PresenceService` (Visão operacional e status) passa. Nessas telas, a pessoa do Crítico com papel aparece pela regra individual. No Mapa PA do F10-3, o reservado do Crítico usa a presença corrigida pelo papel (a mesma precedência), e o vínculo de alguém do Crítico continua pela regra individual. A correção do `engineSchedule` fica para um lote próprio, a aprovar (mexe na Escala, no Calendário e nos relatórios). **Aprovado e feito no 8.8 (2026-11-23)**, que também retira a correção local do reservado (D-F10-36).
 
 ### 3.4 Motor puro de distribuição de PA
 
@@ -894,3 +894,40 @@ Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL,
 - **Integração no MySQL 8.0.46 local** (`qa_f103i` = `qa_f103` + 022, dados fictícios, transação desfeita): 18/18. As restrições recusam linha a linha (reserva em flexível, empréstimo em flexível e no reservado, empréstimo 2: `3819`; tipo e reserva fora do ENUM: `1265`); preferência repetida `1062`, cadastro inexistente `1452`, PA com preferência não some `1451`; o serviço reserva e marca fixo, recusa reservar com vínculo e o Híbrido; preferências trocam o conjunto e recusam o Crítico e o reservado; a leitura põe no 1º reservado quem tem o papel presencial do dia (com regra remota) e deixa o 2º vazio; vínculo no reservado 409, o fixo aceita o 1º dono e recusa o 2º; nada fica gravado.
 - **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree): `45420db` 0, 30/30, 1153/1153 (repetida; ver o registro); `3983886` 0, 30/30, 1153/1153; `ea61e39` 0, 30/30, 1153/1153; `f448249` **saída 1**: 29/30 (o `qa:unsaved-changes` conferia a forma antiga da proteção do diálogo; corrigido no commit seguinte), navegador 1162/1162; o último commit: no resumo da entrega e no estado da sessão.
 - **Trava do roteiro:** 513 verificações; os 39 comandos do deploy 5 passam no `bash -n`.
+
+### 8.8 Lote 8.8: papel do dia do Crítico numa fonte só (achado da 3.3.1; 2026-11-23)
+
+**Pedido de 2026-11-23** (com a aprovação do F10-3 e das D-F10-32 a D-F10-41): corrigir o `OperationalService::engineSchedule` para passar o papel do dia (9.16) ao motor com a mesma precedência do `PresenceService` (ausência e exceção por data > papel > regra), para a Escala, o Calendário, os relatórios e o `mapPresence`; com a correção geral cobrindo o `mapPresence`, retirar a correção local do reservado no Mapa PA (D-F10-36), deixando uma fonte só. Casos que matem os mutantes: Crítico com papel presencial e regra remota, com papel remoto e regra presencial, exceção por data vencendo o papel e ausência vencendo tudo; e a mesma pessoa igual na Escala, no Calendário, na Visão operacional e no Mapa PA. Entra no deploy 5, sem migration nova. Push no fim, com a bateria verde.
+
+**Plano curto:**
+
+| Item | Como fica |
+|---|---|
+| `engineSchedule` | Lê os papéis, rodízios e trocas do período pelo `PresenceRepository::criticalRoleContext` (as mesmas três consultas do `PresenceService`, só com cadastro do Crítico na lista) e passa a jornada do dia ao motor (`shiftFor`). A precedência é a do motor, já usada pela Visão operacional: ausência de dia inteiro e exceção por data vencem o papel; o papel vence a regra |
+| Origem | `role` quando o papel decide (tela Escala: "Papel do Crítico"; Calendário: "Papel do dia: <papel> <início>–<fim>") |
+| `mapPresence` | Leva o papel do dia (`papel`: ID, ordem e rótulo) de quem tem papel, mesmo quando a exceção ou a ausência decidem; a Escala e os relatórios não levam o campo |
+| Mapa PA | O reservado do Crítico lê a presença e o papel do `mapPresence`: sem `PresenceRepository`, sem `criticalOnsite` (D-F10-36 retirada). O vínculo de alguém do Crítico no Mapa PA passa a seguir o papel também |
+| Antes do corte | O cálculo antigo do Calendário e dos relatórios (antes da data de corte) fica como está |
+| Deploy 5 | Sem migration nova. A fumaça passa a ler também o `calendar.php` e o `reports.php` (seis GET); o passo 12 confere uma pessoa do Crítico com papel igual na Escala, no Calendário e na Visão operacional; o aviso e a folha juntos; a trava confere |
+
+**Commits** (branch `feat/employee-form-rhf-zod`):
+
+| Commit | Conteúdo |
+|---|---|
+| `df207c9` | `engineSchedule` com o papel do dia; `mapPresence` com o papel; Mapa PA numa fonte só; "Papel do Crítico" na tela Escala; `qa-pa-conflicts` seção 7 (a mesma pessoa em cinco leituras) e o texto no `qa-calendar-presence` |
+| Este | Esta seção, a linha de estado e a nota na 3.3.1 |
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D-F10-42 | O `engineSchedule` lê o papel pelo `PresenceRepository` (as mesmas consultas e a mesma regra `CriticalRolePlanner::dayRole` do `PresenceService`) e entrega ao motor pelo `shiftFor`; a precedência é a do `PresenceEngine` | Uma regra para a Visão operacional e para as demais telas; nada de cópia da precedência |
+| D-F10-43 | Origem `role` no dia decidido pelo papel; tela Escala "Papel do Crítico"; Calendário "Papel do dia: <papel>" | Hoje o dia com papel aparecia como regra ou "sem regra" |
+| D-F10-44 | O papel do dia sai só no `mapPresence` (ID, ordem e rótulo), que o Mapa PA usa para a ordem do reservado; a Escala e os relatórios não ganham o campo | O Mapa PA lê papel e presença do mesmo cálculo (uma fonte só), sem campo novo nas outras respostas |
+| D-F10-45 | A D-F10-36 sai: o Mapa PA não lê papel nem corrige o dia do motor | Pedido do responsável: uma fonte só |
+| D-F10-46 | O cálculo antigo (antes da data de corte) não ganha o papel | Ele não muda desde o F5; os papéis do 9.16 existem desde o deploy 4 |
+| D-F10-47 | A fumaça do deploy passa a ler o `calendar.php` e o `reports.php` (seis GET) | São as duas leituras novas do papel que a fumaça não cobria |
+
+**Validação até aqui:**
+- **Mutação do commit 1** no worktree, com a trava `mut_guard.php`: 21/21 mortos. Entre eles: o papel ignorado no motor, os papéis nunca lidos, o papel do 1º dia em todos os dias, a origem `role` perdida, o papel em todas as respostas, o `mapPresence` sem o papel, a ordem do papel trocada pelo ID, o papel antes da exceção, a ausência sem vencer o papel, o papel remoto virando presencial, o reservado com remoto e a correção local de volta. Na 1ª rodada, 18/19: o desempate pelo ID do papel (dois papéis com a mesma ordem) não era testado; caso novo no mesmo commit, refeito antes de qualquer envio.
+- **Integração no MySQL 8.0.46 local** (`qa_f103i`, dados fictícios, transação desfeita): 26/26, com as 18 do F10-3 e oito novas. Dois cadastros fictícios do Crítico, um com papel presencial e regra remota e outro com papel remoto e regra presencial, aparecem iguais na Escala (origem `role`), no Calendário, nos relatórios, no `mapPresence` e na Visão operacional (10:00). No dia seguinte, a exceção remota vence o papel presencial; o `mapPresence` leva o papel. A base de ensaio tinha uma exceção de um dos cadastros no período; o script a retira na transação.
