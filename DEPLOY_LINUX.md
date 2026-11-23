@@ -5623,7 +5623,7 @@ responsavel.
 gestao, pela tela: marcar Tools e as equipes Critico e Hibrido, importar o
 Controle v5 e conferir os tecnicos de CHG.
 
-### Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022)
+### Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022; papel do dia do Critico numa fonte so, 8.8)
 
 **O que vai** (tudo depois do `f0844fd`, o commit do deploy 4):
 
@@ -5641,8 +5641,18 @@ Controle v5 e conferir os tecnicos de CHG.
   recebe vinculo; o PA fixo aceita um dono por data; o motor de distribuicao
   com os reservados pelos papeis (ainda sem uso em producao: o mes publicado
   e do F10-4). A licao do deploy 4 (umask) e os commits de docs.
-- **Nada muda para ninguem no deploy:** sem PA marcado, o Mapa PA fica como
-  hoje. A gestao marca os PAs pela tela depois (fim deste roteiro).
+- **Papel do dia do Critico numa fonte so (desenho do F10, 8.8, sem
+  migration):** a Escala, o Calendario, os relatorios e o Mapa PA passam a
+  mostrar cada pessoa do Critico pelo papel do dia (9.16), como a Visao
+  operacional ja mostrava: ausencia e excecao por data vencem o papel; o papel
+  vence a regra. Na Escala a origem aparece como "Papel do Critico"; no
+  Calendario, "Papel do dia: <papel>". O Mapa PA deixa de corrigir o dia por
+  conta propria (D-F10-36 retirada): le a presenca e o papel do mesmo calculo.
+  A fumaca passa a ler tambem o Calendario e os relatorios (seis GET).
+- **O que muda para quem usa:** so o Critico com papel no dia (Escala,
+  Calendario e relatorios iguais a Visao operacional). Sem PA marcado, o Mapa
+  PA fica como hoje. A gestao marca os PAs pela tela depois (fim deste
+  roteiro).
 
 **A 022 antes do merge:** o codigo do `f0844fd` le o inventario com a lista
 de colunas dele e nao le a tabela nova; o codigo novo le as duas. A
@@ -5693,7 +5703,8 @@ unico `git fetch` e o do passo 1, so do branch.
    (com ou sem emprestimo) ou reservado ao Critico, que passa a ocupar os PAs
    reservados pelos papeis do dia, e cada PA pode ter preferencias do grupo
    comum. Nada muda na atualizacao: a gestao marca os PAs pela tela depois.
-   Duvidas: <contato>."
+   A Escala, o Calendario e os relatorios passam a mostrar o Critico pelo
+   papel do dia, como a Visao operacional. Duvidas: <contato>."
 
 **1. Conferencia do ambiente (com o umask), producao no `f0844fd`, commit validado e a lista das migrations.**
 
@@ -5848,8 +5859,10 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
 ```
 
    Esperado: o mesmo do passo 9 do deploy 4 (`health: 200`, `QA timezone
-   (banco real) OK`, `FUMACA OK`). **PARE** com qualquer `PARE` ou codigo
-   diferente: nao reabra.
+   (banco real) OK`, `FUMACA OK`), agora com **seis** linhas `GET ...: 200`
+   na fumaca: as quatro de antes mais `GET /api/portal/calendar.php: 200` e
+   `GET /api/portal/reports.php: 200` (o papel do dia, 8.8, roda nas duas).
+   **PARE** com qualquer `PARE` ou codigo diferente: nao reabra.
 
 **10. A verificacao da 022 de novo, so leitura**, agora com o codigo novo no
 ar (a fumaca nao grava inventario nem preferencia): o mesmo comando do passo 3.
@@ -5881,8 +5894,15 @@ nada** (abra e feche sem gravar):
   com "Flexivel" no tipo, o emprestimo desligado, as preferencias do grupo
   comum (nenhuma marcada) e "Salvar inventario" e "Salvar preferencias"
   desligados (feche sem salvar).
+- **Escala, Calendario e Visao operacional (8.8):** escolha uma pessoa do
+  Critico com papel hoje (tela de papeis do Critico). Na Escala de hoje, a
+  origem "Papel do Critico" e a mesma situacao (presencial ou remoto) da Visao
+  operacional; no Calendario de hoje, "Papel do dia: <papel>". Com excecao ou
+  ausencia hoje, vale a excecao ou a ausencia nas tres telas. Nada de anotar
+  nome: so "igual" ou "diferente".
 
-**PARE** com tela em branco ou quebrada, ou item que nao aparece: avise.
+**PARE** com tela em branco ou quebrada, item que nao aparece ou a mesma
+pessoa diferente entre as telas: avise.
 
 **13. Medicao do polling**, alguns minutos depois da reabertura, 2 rodadas
 por endpoint, valendo a melhor, sessao de gestao, com o `HOST_HEADER` lido do
@@ -5897,7 +5917,10 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
    Esperado: p50 e p95 de cada rodada (anote a melhor de cada endpoint). O
    F10-3 nao muda o `status.php` nem o `dashboard.php`; o Mapa PA faz ate
    quatro leituras a mais (o inventario, as preferencias e, com alguem do
-   Critico no dia, os papeis), so com a tela aberta. **PARE se** o p95 passar
+   Critico no dia, os papeis), so com a tela aberta; a Escala, o Calendario e
+   os relatorios fazem tres leituras a mais com alguem do Critico no periodo
+   (8.8). O `dashboard.php` le a Visao operacional, que ja aplicava o papel:
+   sem mudanca. **PARE se** o p95 passar
    de 50 ms **e** de 20% acima da base do deploy 4: meca de novo e avise antes
    de qualquer reversao.
 

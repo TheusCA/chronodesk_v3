@@ -13,8 +13,10 @@
 # O que faz, nesta ordem:
 #   1. login de admin pelo login_ci.php (login e senha do AD lidos no
 #      terminal, a senha sem eco; nada em argumento de comando);
-#   2. GET de api/status.php, api/portal/schedules.php, api/portal/pa_map.php
-#      e api/portal/absences.php, esperado 200;
+#   2. GET de api/status.php, api/portal/schedules.php, api/portal/pa_map.php,
+#      api/portal/absences.php, api/portal/calendar.php e api/portal/reports.php
+#      (os dois ultimos desde o deploy 5: o papel do dia do Critico, 8.8, vale
+#      na Escala, no Calendario, nos relatorios e no Mapa PA), esperado 200;
 #   3. uma gravacao reversivel: lanca uma folga de teste de dia inteiro no
 #      proprio cadastro do admin, daqui a 30 dias, sem observacao, e a
 #      cancela (o registro fica como cancelado, com autoria);
@@ -91,7 +93,7 @@ echo "perfil da sessao: $PERFIL; cadastro identificado: $([ "${CADASTRO:-0}" -gt
 [ "${CADASTRO:-0}" -gt 0 ] || pare "sessao sem cadastro (funcionario_id)"
 
 # 2. Leituras com o codigo novo e o banco real
-for U in api/status.php api/portal/schedules.php api/portal/pa_map.php api/portal/absences.php; do
+for U in api/status.php api/portal/schedules.php api/portal/pa_map.php api/portal/absences.php api/portal/calendar.php api/portal/reports.php; do
     C=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $HOST" -b "$JAR" -c "$JAR" "$BASE/$U")
     echo "GET /$U: $C"
     [ "$C" = 200 ] || pare "GET /$U respondeu $C"

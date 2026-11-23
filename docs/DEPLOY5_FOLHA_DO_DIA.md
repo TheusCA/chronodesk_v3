@@ -1,8 +1,8 @@
-# Deploy 5 (F10-3): folha de execucao do dia
+# Deploy 5 (F10-3 e 8.8): folha de execucao do dia
 
-Gerada do roteiro "Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022)" do `DEPLOY_LINUX.md`: os mesmos comandos, na mesma ordem. O roteiro e a referencia: o detalhe de cada esperado esta la. Mudou o roteiro, muda esta folha no mesmo commit. (Ate 2026-11-19 esta folha so apontava para a do deploy 4 consolidado.)
+Gerada do roteiro "Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022; papel do dia do Critico numa fonte so, 8.8)" do `DEPLOY_LINUX.md`: os mesmos comandos, na mesma ordem. O roteiro e a referencia: o detalhe de cada esperado esta la. Mudou o roteiro, muda esta folha no mesmo commit. (Ate 2026-11-19 esta folha so apontava para a do deploy 4 consolidado.)
 
-**O que vai:** a migration 022 (inventario de PA: tipo, emprestimo, reserva do Critico e a tabela de preferencias; nenhuma linha muda), antes do merge; o codigo do F10-3 e a licao do deploy 4 (umask). Ninguem muda de PA no deploy: a gestao marca os PAs pela tela depois. O lockfile nao mudou desde o `f0844fd`: so o build. **Pre-requisito:** producao no `f0844fd`.
+**O que vai:** a migration 022 (inventario de PA: tipo, emprestimo, reserva do Critico e a tabela de preferencias; nenhuma linha muda), antes do merge; o codigo do F10-3, o papel do dia do Critico numa fonte so (8.8: a Escala, o Calendario, os relatorios e o Mapa PA mostram o Critico pelo papel do dia, como a Visao operacional; sem migration) e a licao do deploy 4 (umask). Ninguem muda de PA no deploy: a gestao marca os PAs pela tela depois. O lockfile nao mudou desde o `f0844fd`: so o build. **Pre-requisito:** producao no `f0844fd`.
 
 **Data, janela e quem acompanha: A DEFINIR.**
 
@@ -203,7 +203,7 @@ S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enable
 cd /var/www/chronodesk; runuser -u www-data -- php scripts/qa-timezone.php --db
 ```
 
-- [ ] **29.** (9) Esperado: `FUMACA OK`. **PARE se:** qualquer `PARE` ou falha da fumaca: nao reabra.
+- [ ] **29.** (9) Esperado: seis linhas `GET ...: 200` (com `calendar.php` e `reports.php`, 8.8) e `FUMACA OK`. **PARE se:** qualquer `PARE` ou falha da fumaca: nao reabra.
 
 ```bash
 cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enabled/chronodesk.conf); if [ -n "$S" ]; then env PHPLOG=/var/log/chronodesk/php_error.log bash scripts/smoke-deploy1.sh "$S"; else echo "PARE: ServerName nao encontrado no chronodesk.conf"; fi; unset S
@@ -227,7 +227,7 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
 
 ## 12. Conferencia na tela (como admin, Ctrl+F5 uma vez, sem salvar nada)
 
-Os itens do passo 12 do roteiro (Mapa de PA sem selo e com a legenda nova; o "Inventario do PA" no dialogo com os botoes de salvar desligados). **PARE** com tela em branco ou quebrada.
+Os itens do passo 12 do roteiro (Mapa de PA sem selo e com a legenda nova; o "Inventario do PA" no dialogo com os botoes de salvar desligados; uma pessoa do Critico com papel hoje igual na Escala, com a origem "Papel do Critico", no Calendario e na Visao operacional, 8.8, anotando so "igual" ou "diferente"). **PARE** com tela em branco ou quebrada, ou a mesma pessoa diferente entre as telas.
 
 ## 13. Medicao do polling (alguns minutos depois da reabertura; sessao de gestao; `HOST_HEADER` do `ServerName`)
 

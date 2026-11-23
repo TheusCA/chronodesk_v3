@@ -388,12 +388,12 @@ assert_same([true, true, true, true, true, true, true, 0], [
     strpos($smoke, "read -rsp 'Senha do AD: ' SMK_S") !== false,
     strpos($smoke, "trap 'rm -rf -- \"\${W:?}\"' EXIT") !== false,
     strpos($smoke, '--data-binary @-') !== false && strpos($smoke, '-H @"$HDR"') !== false,
-    strpos($smoke, 'for U in api/status.php api/portal/schedules.php api/portal/pa_map.php api/portal/absences.php; do') !== false,
+    strpos($smoke, 'for U in api/status.php api/portal/schedules.php api/portal/pa_map.php api/portal/absences.php api/portal/calendar.php api/portal/reports.php; do') !== false,
     strpos($smoke, '"action" => "create"') !== false && strpos($smoke, '"action" => "cancel"') !== false,
     strpos($smoke, "grep -vc '\\[AUTH_AD\\] Login bem-sucedido'") !== false,
     strpos($smoke, 'echo "FUMACA OK"') !== false,
     preg_match('/^[^\n#]*\bcurl\b[^\n]*(\s-u\s|--user|\s-d\s|--data\s|--data-raw|SMK_S)/m', str_replace("\\\n", ' ', $smoke)),
-], 'smoke-deploy1.sh: senha sem eco e fora do argv, cookie e token em diretorio temporario apagado, os quatro GET, lancar e cancelar, log do PHP e FUMACA OK');
+], 'smoke-deploy1.sh: senha sem eco e fora do argv, cookie e token em diretorio temporario apagado, os seis GET (com o Calendario e os relatorios desde o deploy 5, 8.8), lancar e cancelar, log do PHP e FUMACA OK');
 assert_same([1, 0, 0], [count($all('migrations/correcao_dados/biz02_01_registrar_corte.sql; unset P')), count(array_filter($commands, static fn (string $line, int $i): bool => $i > $recordLine && preg_match('/biz02_0[234]/', $line) === 1, ARRAY_FILTER_USE_BOTH)), preg_match('/\bSET @ignorar_guardas\b/', $text)], 'roteiro unico: no dia, so o script 1 do BIZ-02, sem ignorar guardas por comando');
 assert_same(true, strpos($prose, 'Corte do BIZ-02 com **`ABORTADO PELAS GUARDAS`** (passo 6c): pare') !== false, 'roteiro unico: regra de parada das guardas do BIZ-02');
 // Ensaio do BIZ-02 antes do dia (0n), na copia sistema_pausas_ensaio que o
@@ -1263,6 +1263,17 @@ assert_same([0, 0, 0, 0, 0, true], [
     preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet5)),
     strpos($sheet5, '..\\chronodesk-deploy5') !== false && strpos($sheet5, "`frontend: {$frontendCount4} scripts npm rodados (...): {$frontendCount4} OK, 0 com falha`") !== false,
 ], 'folha do deploy 5: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem sudo; o worktree e a contagem de scripts no item 0');
+// [8.8] Papel do dia do Critico numa fonte so, no mesmo deploy 5, sem migration
+// nova: o que vai, a fumaca com o Calendario e os relatorios (seis GET), a
+// conferencia na tela da mesma pessoa nas telas e o aviso; a folha junto.
+assert_same([true, true, true, true, true, true], [
+    strpos((string)strtok($runbook5, "\n"), '; papel do dia do Critico numa fonte so, 8.8)') !== false,
+    strpos($prose5, '**Papel do dia do Critico numa fonte so (desenho do F10, 8.8, sem') !== false && strpos($prose5, '(D-F10-36 retirada)') !== false,
+    strpos($prose5, 'agora com **seis** linhas `GET ...: 200`') !== false && strpos($prose5, '`GET /api/portal/calendar.php: 200`') !== false && strpos($prose5, '`GET /api/portal/reports.php: 200`') !== false,
+    strpos($prose5, '- **Escala, Calendario e Visao operacional (8.8):**') !== false && strpos($prose5, 'a mesma pessoa diferente entre as telas') !== false,
+    strpos($prose5, 'A Escala, o Calendario e os relatorios passam a mostrar o Critico pelo papel do dia, como a Visao operacional.') !== false,
+    strpos($sheet5, 'seis linhas `GET ...: 200` (com `calendar.php` e `reports.php`, 8.8) e `FUMACA OK`') !== false && strpos($sheet5, 'igual na Escala, com a origem "Papel do Critico", no Calendario e na Visao operacional, 8.8') !== false,
+], 'deploy 5 (8.8): titulo, o que vai, fumaca com seis GET, conferencia da mesma pessoa nas telas e aviso, no roteiro e na folha');
 
 // ----------------------------------------------------------------------------
 // 17. Licao do deploy 4 (19/11/2026): um filtro de resumo com "umask 077"
