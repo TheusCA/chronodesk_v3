@@ -95,7 +95,7 @@ echo "perfil da sessao: $PERFIL; cadastro identificado: $([ "${CADASTRO:-0}" -gt
 [ "${CADASTRO:-0}" -gt 0 ] || pare "sessao sem cadastro (funcionario_id)"
 
 # 2. Leituras com o codigo novo e o banco real
-for U in api/status.php api/portal/schedules.php api/portal/pa_map.php api/portal/absences.php api/portal/calendar.php api/portal/reports.php 'api/portal/overtime.php?format=csv' 'api/portal/time_corrections.php?format=csv'; do
+for U in api/status.php api/portal/schedules.php api/portal/pa_map.php api/portal/absences.php api/portal/calendar.php api/portal/reports.php 'api/portal/overtime.php?export=preview' 'api/portal/time_corrections.php?format=csv'; do
     C=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $HOST" -b "$JAR" -c "$JAR" "$BASE/$U")
     echo "GET /$U: $C"
     [ "$C" = 200 ] || pare "GET /$U respondeu $C"

@@ -5650,8 +5650,8 @@ Controle v5 e conferir os tecnicos de CHG.
   conta propria (D-F10-36 retirada): le a presenca e o papel do mesmo calculo.
   A fumaca passa a ler tambem o Calendario e os relatorios (seis GET).
 - **Migration 026 (lote NC):** `funcionarios` ganha o NC (`matricula`: a
-  matricula do cadastro Senior, so digitos, de 1 a 12, unica entre os
-  cadastros, NULL permitido; CHECK e indice unico) e `portal_overtime_entries`
+  matricula do cadastro Senior, so digitos, de 1 a 12, sem zero a
+  esquerda, unica entre os cadastros, NULL permitido; CHECK e indice unico) e `portal_overtime_entries`
   e `portal_time_adjustments` ganham a copia dele no lancamento
   (`employee_nc`, NULL nas linhas antigas; mesma regra de digitos). **Nenhuma
   linha muda:** todo cadastro fica sem NC ate a gestao preencher pela tela. As
@@ -5663,14 +5663,30 @@ Controle v5 e conferir os tecnicos de CHG.
   auditoria registra so que mudou), o aviso "N cadastro(s) ativo(s) sem NC" e
   o filtro "Sem NC" na lista; o NC da pessoa, so leitura, nos formularios de
   hora extra e de correcao de ponto; a copia do NC em cada lancamento, lida do
-  cadastro pelo servidor; a coluna NC dos dois CSVs com a copia (nas linhas
-  antigas, o NC atual do cadastro). A chave `NC_OBRIGATORIO` **fica
-  desligada** neste deploy (ausente no `.env`): sem NC, a tela so avisa.
+  cadastro pelo servidor; a coluna NC do CSV da correcao de ponto com a copia
+  (nas linhas antigas, o NC atual do cadastro). A chave `NC_OBRIGATORIO`
+  **fica desligada** neste deploy (ausente no `.env`): sem NC, a tela so avisa.
+- **Importacao de NCs com previa (lote NC revisto):** em Funcionarios, o
+  bloco "Importar NCs" le uma planilha (.xlsx ou .csv) com as colunas NC e
+  Nome completo, casa pelo nome com o cadastro ativo e mostra o que entra, o
+  que muda, o que nao casou e o NC repetido; nada grava sem "Confirmar
+  importacao"; repetir a mesma planilha nao muda nada; a auditoria registra so
+  contagens e IDs.
+- **Planilha de horas extras do RH (lote NC revisto):** a exportacao de horas
+  extras deixa de ser CSV e passa a ser o .xlsx no modelo do RH ("Total H-E
+  Suporte Tecnico BPM MM-AAAA.xlsx": aba Plan1, colunas A a F, o total geral
+  em I1), so com os aprovados do periodo, com a previa antes de baixar
+  (aprovados, pendentes fora, total geral). Aprovado sem NC bloqueia a
+  planilha (409) e a previa mostra quantos e quem, so na tela. O centro de
+  custo da coluna A fica em Configuracoes (padrao "1.123.01  Suporte
+  Tecnico", com dois espacos; ausente no `config_sistema.json`, vale o
+  padrao).
 - **Icone novo (opcao B, "chaves com pausa"):** a marca do topo e o favicon,
   com os links `?v=3`; o favicon nao depende do tema.
 - **O que muda para quem usa:** so o Critico com papel no dia (Escala,
   Calendario e relatorios iguais a Visao operacional), o campo e o aviso do
-  NC, o NC nos formularios e no CSV e o icone. Sem PA marcado, o Mapa PA fica
+  NC, o NC nos formularios e no CSV da correcao de ponto, a importacao de
+  NCs, a planilha de horas extras do RH no lugar do CSV e o icone. Sem PA marcado, o Mapa PA fica
   como hoje. A gestao marca os PAs e preenche os NC pela tela depois (fim
   deste roteiro).
 
@@ -5727,8 +5743,9 @@ unico `git fetch` e o do passo 1, so do branch.
    comum. Nada muda na atualizacao: a gestao marca os PAs pela tela depois.
    A Escala, o Calendario e os relatorios passam a mostrar o Critico pelo
    papel do dia, como a Visao operacional. O cadastro de funcionarios ganha
-   o NC (a matricula), que vai na hora extra e na correcao de ponto e na
-   planilha; o portal ganha um icone novo. Duvidas: <contato>."
+   o NC (a matricula), que vai na hora extra e na correcao de ponto; a
+   exportacao de horas extras passa a ser a planilha do RH (.xlsx, so
+   aprovados, e so sai com o NC de todos); o portal ganha um icone novo. Duvidas: <contato>."
 
 **1. Conferencia do ambiente (com o umask), producao no `f0844fd`, commit validado e a lista das migrations.**
 
@@ -5913,10 +5930,12 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
    (banco real) OK`, `FUMACA OK`), agora com **oito** linhas `GET ...: 200`
    na fumaca: as quatro de antes mais `GET /api/portal/calendar.php: 200` e
    `GET /api/portal/reports.php: 200` (o papel do dia, 8.8, roda nas duas) e
-   `GET /api/portal/overtime.php?format=csv: 200` e
-   `GET /api/portal/time_corrections.php?format=csv: 200` (o NC da 026 nos
-   dois CSVs; a saida vai para `/dev/null`, e cada um grava a auditoria de
-   exportacao de sempre).
+   `GET /api/portal/overtime.php?export=preview: 200` (a previa da planilha
+   do RH, so leitura e sem auditoria: a planilha em si da 409 enquanto houver
+   aprovado sem NC, por isso a fumaca le a previa) e
+   `GET /api/portal/time_corrections.php?format=csv: 200` (o NC da 026 no
+   CSV; a saida vai para `/dev/null`, e ele grava a auditoria de exportacao
+   de sempre).
    **PARE** com qualquer `PARE` ou codigo diferente: nao reabra.
 
 **10. As verificacoes da 022 e da 026 de novo, so leitura**, agora com o
@@ -5966,7 +5985,15 @@ nada** (abra e feche sem gravar):
 - **Funcionarios (lote NC):** o aviso "N cadastro(s) ativo(s) sem NC" (anote
   so o N; logo depois do deploy, todos os ativos); "Ver cadastros sem NC"
   aplica o filtro "Sem NC"; em "Adicionar funcionario", o campo NC obrigatorio;
-  em "Editar", o campo NC vazio (feche sem salvar).
+  em "Editar", o campo NC vazio (feche sem salvar); o bloco "Importar NCs"
+  com o botao "Confirmar importacao" desligado (nao envie planilha).
+- **Horas extras, planilha do RH (lote NC revisto):** "Exportar planilha do
+  RH" mostra a previa (anote so os numeros: aprovados, pendentes fora, total
+  geral); com aprovado sem NC (logo depois do deploy, todos), o aviso
+  vermelho "lancamento(s) aprovado(s) sem NC: a planilha nao sai" e nenhum
+  link de baixar. Nada de anotar nome.
+- **Configuracoes (lote NC revisto):** o campo "Centro de custo (planilha de
+  horas extras do RH)" com "1.123.01  Suporte Tecnico" (nao salve).
 - **Horas extras e Correcao de ponto (lote NC):** com um colaborador
   escolhido, o campo "NC (matricula)" com "Sem NC no cadastro" e o aviso
   amarelo "Sem NC no cadastro" (a chave desligada: o botao de enviar continua
@@ -6064,10 +6091,14 @@ verificacao so conta):
   O Hibrido fica com o PA fixo por pessoa (opcao (c)).
 - **Preferencias** do grupo comum (N1 e N2) por PA, se a gestao quiser
   reproduzir as do CONFIG PA da planilha.
-- **Preencher o NC** de cada cadastro ativo (Lideranca ou admin, em "Editar";
-  a matricula do cadastro Senior, so digitos). O NC nunca vai para o git, os
+- **Preencher o NC** de cada cadastro ativo (Lideranca ou admin, em "Editar",
+  ou pela importacao com previa em Funcionarios, com a planilha de NC e Nome
+  completo: confira a previa antes de confirmar; o que nao casou e o NC
+  repetido ficam fora e se corrigem em "Editar"; a matricula do cadastro
+  Senior, so digitos, sem zero a esquerda). O NC nunca vai para o git, os
   docs ou o chat; a verificacao da 026 so conta (`ativos_sem_nc`,
-  `nc_repetido = 0`).
+  `nc_repetido = 0`). A planilha de horas extras do RH so sai quando todos os
+  aprovados do periodo tiverem NC.
 - **Ligar a chave `NC_OBRIGATORIO`** so quando a verificacao da 026 der
   `ativos_sem_nc = 0`, com o responsavel, num passo combinado (a linha
   `NC_OBRIGATORIO=1` no `/var/www/.env`, com copia do `.env` antes, e a
