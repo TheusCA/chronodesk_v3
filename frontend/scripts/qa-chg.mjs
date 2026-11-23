@@ -46,7 +46,8 @@ registerHooks({
 const lib = await import(pathToFileURL(join(srcRoot, 'lib', 'chg.ts')).href)
 const { createElement: h } = await import('react')
 const { renderToStaticMarkup } = await import('react-dom/server')
-const { ChgCard } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'ChgCard.jsx')).href)
+const { ChgCard, ChgCardBody } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'ChgCard.jsx')).href)
+const { pendingFields, resetPendingFields } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'chgPanelModel.js')).href)
 const { formFromCard, payloadFromForm } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'chgFormModel.js')).href)
 const { ChgDashboard, ChgList } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'ChgViews.jsx')).href)
 const text = (html) => html.replace(/<!-- -->/gu, '').replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ').trim()
@@ -123,15 +124,33 @@ check(() => assert.deepEqual([lib.loadPrefs(broken), lib.savePrefs(broken, lib.E
 
 // 2. Card por etapa, com e sem permissão.
 const noop = () => Promise.resolve(null)
-const render = (card, canManage) => renderToStaticMarkup(h(ChgCard, { card, canManage, technicians: [{ id: 7, nome: 'Tecnico 07' }, { id: 8, nome: 'Tecnico 08' }], onAct: noop, onCopy: noop, onCopyTable: noop, onConfirm: noop, onEdit: noop, onDuplicate: noop, onInvalid: noop, drag: canManage ? { start: () => {} } : null }))
+// [D-CHG-35] O corpo inteiro (os editores da etapa) fica no painel "Abrir".
+const render = (card, canManage) => renderToStaticMarkup(h(ChgCardBody, { card, canManage, technicians: [{ id: 7, nome: 'Tecnico 07' }, { id: 8, nome: 'Tecnico 08' }], onAct: noop, onCopy: noop, onCopyTable: noop, onConfirm: noop, onInvalid: noop }))
+// [D-CHG-34] O card do quadro é compacto.
+const compact = (card, canManage) => renderToStaticMarkup(h(ChgCard, { card, canManage, onAct: noop, onCopy: noop, onCopyTable: noop, onOpen: noop, drag: canManage ? { start: () => {} } : null }))
 const editors = /<(input|select|textarea)\b|Mover para|Concluir execução|Reabrir execução|\+ Novo|Movido manualmente|aria-label="(Editar|Duplicar|Arquivar)"/u
 for (const card of cards) {
   const readonly = render(card, false)
-  check(() => assert.doesNotMatch(readonly, editors, `somente leitura (card ${card.id}, ${card.view.stage}): nenhum editor, mover, concluir nem arquivar`))
-  check(() => assert.ok(readonly.includes('aria-label="Copiar tabela"') && readonly.includes('draggable="false"'), `somente leitura (card ${card.id}): copiar liberado; arrastar não`))
+  check(() => assert.doesNotMatch(readonly, editors, `somente leitura (painel do card ${card.id}, ${card.view.stage}): nenhum editor, mover, concluir nem arquivar`))
+  check(() => assert.ok(readonly.includes('aria-label="Copiar tabela"'), `somente leitura (painel do card ${card.id}): copiar liberado`))
+  const small = compact(card, false)
+  check(() => assert.doesNotMatch(small, editors, `somente leitura (card ${card.id} no quadro): nenhum editor nem mover`))
+  check(() => assert.ok(small.includes('aria-label="Copiar tabela"') && small.includes('draggable="false"') && small.includes(`data-chg-open="${card.id}"`), `somente leitura (card ${card.id} no quadro): copiar e Abrir liberados; arrastar não`))
 }
+// Card compacto: carteira(s), CHG, tipo, prazos, situação, técnico e as ações
+// rápidas; nada de planos, endpoints, rollback nem tarefas dentro da coluna.
+for (const card of cards) {
+  const small = compact(card, true)
+  const inputs = (small.match(/<(input|textarea)\b/gu) || []).length
+  const selects = (small.match(/<select\b/gu) || []).length
+  check(() => assert.deepEqual([inputs, selects, /Planos da CHG|Tasks para encerramento|Link do endpoint|Endpoint do rollback|Início do rollback|Status do patch/u.test(small)], [0, 1, false], `card ${card.id} no quadro (${card.view.stage}): só o "Mover para"; sem planos, endpoints, rollback nem tarefas`))
+  check(() => assert.ok(['Tipo', 'Técnico', 'Início Service Desk', 'Fim Service Desk', 'data-chg-badge', `data-chg-move="${card.id}"`, `data-chg-copy-table="${card.id}"`, `data-chg-open="${card.id}"`, 'draggable="true"'].every((s) => small.includes(s)), `card ${card.id} no quadro: tipo, técnico, prazos, situação, mover, copiar a tabela, Abrir e arrastar`))
+}
+check(() => assert.ok(compact(byId[1], true).includes('aria-label="Copiar número da CHG"') && compact(byId[2], true).includes('Sem CHG'), 'card no quadro: copiar o número da CHG (ou "Sem CHG")'))
+check(() => assert.ok(/<h3 class="chg-card-title" title="9001 - Carteira Teste 01; [^"]+">9001 - Carteira Teste 01<span class="chg-col-count">\+1<\/span><\/h3>/u.test(compact(byId[1], true)), 'card no quadro: a 1ª carteira e "+N" (todas no title)'))
 const comite = render(byId[1], true)
-check(() => assert.ok(['Nº da CHG', 'Status da CHG', 'Técnico responsável', 'Aprovação Service', 'Planos da CHG · Plano 1', 'CHG aprovada. Inicia preparação 18/11 16h00 (faltam 28h00).', 'aria-label="Mover para outra coluna"', 'draggable="true"'].every((s) => comite.includes(s)), 'Comitê: CHG, status, planos, técnico, aprovação Service e o aviso do servidor'))
+check(() => assert.ok(['Nº da CHG', 'Status da CHG', 'Técnico responsável', 'Aprovação Service', 'Planos da CHG · Plano 1', 'CHG aprovada. Inicia preparação 18/11 16h00 (faltam 28h00).', 'aria-label="Mover para outra coluna"', 'data-chg-detail="1"'].every((s) => comite.includes(s)), 'painel do Comitê: CHG, status, planos, técnico, aprovação Service, mover e o aviso do servidor'))
+check(() => assert.ok(!/data-chg-(edit|move|card)=/u.test(comite) && (comite.match(/data-chg-field=""/gu) || []).length >= 4, 'painel: os campos que gravam ao sair marcados (data-chg-field); Editar, Duplicar e Arquivar ficam no rodapé do painel'))
 const exec = render(byId[3], true)
 check(() => assert.ok(exec.includes('<progress aria-label="Percentual do SLA" max="100" value="17">') && exec.includes('Rollback · Em andamento') && exec.includes('↶ Rollback · endpoint e início') && exec.includes('class="chg-tick chg-at-0 chg-tc-0 chg-tick-past"'), 'Execução: barra de SLA com marcas em 5 %, rollback primeiro no carrossel'))
 check(() => assert.ok(text(exec).includes('restam 20h00') && text(exec).includes('Rollback (Em andamento) iniciado 17/11 11h30'), 'Execução: "restam" e as linhas da tentativa atual, do servidor'))
@@ -147,6 +166,29 @@ check(() => assert.ok(render(byId[2], true).includes('Aguardando CHG') && render
 check(() => assert.ok(/<a aria-label="Abrir Planilha PAs" class="chg-icon-btn" href="https:\/\/planilha\.teste\/1" rel="noopener noreferrer" target="_blank"/u.test(comite), 'link da planilha: noopener noreferrer, nova aba'))
 check(() => assert.ok(comite.includes('Versao Teste 01') && !/href="\\\\/u.test(comite), 'caminho UNC da versão é texto, nunca link'))
 check(() => assert.ok(/Carteiras impactadas · 2: 9001 - Carteira Teste 01/u.test(text(comite)) && comite.includes('<details class="chg-details">'), 'carteiras expansíveis (details)'))
+
+// [D-CHG-35] Painel "Abrir": sujo = campo digitado e ainda não gravado
+// (diferente do carregado, sem os espaços das pontas); descartar devolve o
+// carregado ao campo (nada grava na saída).
+const fakeRoot = (fields) => ({ querySelectorAll: (selector) => (selector === '[data-chg-field]' ? fields : []) })
+const typed = { value: 'CTASK9', defaultValue: 'CTASK1' }
+const spaced = { value: ' CTASK2 ', defaultValue: 'CTASK2' }
+const same = { value: 'X', defaultValue: 'X' }
+check(() => assert.deepEqual([pendingFields(fakeRoot([typed, spaced, same])), pendingFields(null)], [[typed], []], 'painel: pendente só o campo com valor diferente do carregado'))
+resetPendingFields(fakeRoot([typed, same]))
+check(() => assert.deepEqual([typed.value, same.value], ['CTASK1', 'X'], 'painel: descartar devolve o valor carregado'))
+const panelSource = read('src/pages/chg/ChgPanel.jsx')
+check(() => assert.ok(panelSource.includes('const { requestLeave, dialogProps } = useUnsavedChangesGuard(dirty)') && panelSource.includes('<ConfirmDiscardDialog {...dialogProps} />') && panelSource.includes('size="max-w-4xl"') && panelSource.includes('onClose={() => leave(onClose)}') && panelSource.includes('resetPendingFields(bodyRef.current)'), 'painel: Drawer max-w-4xl com a guarda; fechar e Esc perguntam; descartar limpa os campos'))
+const cardSource = read('src/pages/chg/ChgCard.jsx')
+check(() => assert.ok(cardSource.includes(`const LEAVING = '[role="alertdialog"], [data-chg-leave], [aria-label="Fechar painel"]'`) && (cardSource.match(/onBlur=\{\(event\) => \{\n\s+if \(leaving\(event\)\) return/gu) || []).length === 2 && (cardSource.match(/event\.target\.defaultValue = event\.target\.value/gu) || []).length === 2 && (panelSource.match(/data-chg-leave=""/gu) || []).length === 3, 'painel: o campo não grava ao sair para o aviso, o X, Fechar, Editar ou Duplicar; gravando, o enviado vira o carregado'))
+const pageSource = read('src/pages/ChgPage.jsx')
+check(() => assert.ok(pageSource.includes("{ value: 'board', label: 'Quadro' }, { value: 'stage', label: 'Etapa' }, { value: 'list', label: 'Lista' }, { value: 'dash', label: 'Dashboard' }") && pageSource.includes('returnFocusRef={panelOpener}') && pageSource.includes('const panelCard = panelId === null ? null : cards.find((c) => c.id === panelId) || null'), 'seletor Quadro | Etapa | Lista | Dashboard; o painel lê o card do quadro (arquivado fecha) e devolve o foco a quem abriu'))
+check(() => assert.ok(pageSource.includes('onDragOver={canManage ?') && pageSource.includes('onDrop={canManage ?') && pageSource.includes("if (event.target.closest('input,select,button,textarea,a,summary'))"), 'quadro: arrastar entre etapas continua (sem começar num controle)'))
+const boardCss = read('src/pages/chg/chg.css')
+check(() => assert.ok(boardCss.includes('grid-auto-flow: column; grid-auto-columns: minmax(18rem, 1fr);') && boardCss.includes('overflow: auto; max-height: calc(100dvh - 8rem);') && /\.chg-col-head \{ position: sticky; top: 0;/u.test(boardCss) && boardCss.includes('.chg-stage-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));') && !boardCss.includes('--chg-cols'), 'quadro: colunas de no mínimo 18rem com rolagem e cabeçalho fixo; Etapa em grade de 18rem'))
+const { ChgStageView } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'ChgViews.jsx')).href)
+const stageHtml = renderToStaticMarkup(h(ChgStageView, { cards, stages: lib.STAGES, stage: 'exec', onStage: () => {}, cardProps: { canManage: true, onAct: noop, onCopy: noop, onCopyTable: noop, onOpen: noop }, drag: null }))
+check(() => assert.ok((stageHtml.match(/data-chg-stage-tab=/gu) || []).length === lib.STAGES.length && stageHtml.includes('data-chg-stage-tab="exec"') && /aria-pressed="true"[^>]*data-chg-stage-tab="exec"/u.test(stageHtml) && [...stageHtml.matchAll(/data-chg-stage="([a-z]+)"/gu)].every((m) => m[1] === 'exec') && stageHtml.includes('class="chg-stage-grid"'), 'visão Etapa: uma aba por etapa com a contagem, só os cards da etapa escolhida, em grade'))
 
 // 3. Formulário.
 const form = formFromCard(byId[2])
@@ -165,13 +207,13 @@ const dashHtml = renderToStaticMarkup(h(ChgDashboard, { cards: lib.filterCards(c
 check(() => assert.ok(dashHtml.includes('Sem técnico atribuído') && /class="chg-seg chg-tone-exec chg-w-\d+"/u.test(dashHtml) && !dashHtml.includes('style='), 'painel: barras em classes de 5 %, "Sem técnico" clicável'))
 
 // 4. Regras do redesenho e do módulo.
-const chgFiles = ['src/pages/ChgPage.jsx', 'src/pages/chg/ChgCard.jsx', 'src/pages/chg/ChgForm.jsx', 'src/pages/chg/ChgViews.jsx']
+const chgFiles = ['src/pages/ChgPage.jsx', 'src/pages/chg/ChgCard.jsx', 'src/pages/chg/ChgForm.jsx', 'src/pages/chg/ChgViews.jsx', 'src/pages/chg/ChgPanel.jsx']
 const sources = chgFiles.map(read).join('\n')
 check(() => assert.doesNotMatch(sources, /\bstyle=\{/u, 'sem atributo style no módulo'))
 check(() => assert.doesNotMatch(sources, /dangerouslySetInnerHTML|innerHTML/u, 'nada de HTML montado entra no DOM (a tabela copiada vai só para a área de transferência)'))
 check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('await api(`${ENDPOINT}?tabela=${card.id}`)') && !/tableHtml/u.test(read('src/lib/chg.ts')), 'tabela para copiar montada pelo servidor (sem cor solta no frontend)'))
 const css = read('src/pages/chg/chg.css')
-const rendered = [comite, exec, late, valid, done, manual, dashHtml].join('\n')
+const rendered = [comite, exec, late, valid, done, manual, dashHtml, ...cards.map((card) => compact(card, true))].join('\n')
 const used = new Set([...rendered.matchAll(/class="([^"]+)"/gu)].flatMap((m) => m[1].split(/\s+/u)).filter((c) => c.startsWith('chg-')))
 const missing = [...used].filter((c) => !new RegExp(`\\.${c}\\b`, 'u').test(css))
 check(() => assert.deepEqual(missing, [], 'toda classe chg- desenhada existe no CSS da rota'))
@@ -181,7 +223,7 @@ check(() => assert.ok(read('src/pages/ChgPage.jsx').includes("import './chg/chg.
 check(() => assert.ok(read('src/lib/navigation.ts').includes("{ path: '/chg', label: 'Controle de CHG', icon: 'file', module: 'chg' },") && read('src/components/PortalLayout.jsx').includes('if (item.module && session.modulos?.[item.module] !== true) return null') && read('src/App.jsx').includes("(!route?.module || session.modulos?.[route.module] === true)"), 'menu e rota atrás do interruptor (session.modulos.chg)'))
 check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('useResource(ENDPOINT, { intervalMs: REFRESH_MS })') && read('src/pages/ChgPage.jsx').includes('const REFRESH_MS = 30_000'), 'atualiza a cada 30 s (e ao voltar o foco, pelo useResource)'))
 check(() => assert.ok(read('src/pages/chg/ChgForm.jsx').includes('useUnsavedChangesGuard(dirty)') && read('src/pages/chg/ChgForm.jsx').includes('<ConfirmDiscardDialog {...dialogProps} />'), 'formulário com a guarda de alteração não salva'))
-check(() => assert.ok(existsSync(join(projectRoot, 'api', 'portal', 'chg.php')) && readdirSync(join(srcRoot, 'pages', 'chg')).sort().join(',') === 'ChgCard.jsx,ChgForm.jsx,ChgImportPanel.jsx,ChgViews.jsx,chg.css,chgFormModel.js,chgImportModel.js', 'arquivos do módulo'))
+check(() => assert.ok(existsSync(join(projectRoot, 'api', 'portal', 'chg.php')) && readdirSync(join(srcRoot, 'pages', 'chg')).sort().join(',') === 'ChgCard.jsx,ChgForm.jsx,ChgImportPanel.jsx,ChgPanel.jsx,ChgViews.jsx,chg.css,chgFormModel.js,chgImportModel.js,chgPanelModel.js', 'arquivos do módulo'))
 
 // 5. Importação do Controle v5 (só admin): prévia só com contagens.
 const importModel = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'chgImportModel.js')).href)

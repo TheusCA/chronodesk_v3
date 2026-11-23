@@ -12,7 +12,8 @@ import {
 import { ChgCard } from './chg/ChgCard'
 import { ChgForm } from './chg/ChgForm'
 import { ChgImportPanel } from './chg/ChgImportPanel'
-import { ChgDashboard, ChgList } from './chg/ChgViews'
+import { ChgPanel } from './chg/ChgPanel'
+import { ChgDashboard, ChgList, ChgStageView } from './chg/ChgViews'
 import './chg/chg.css'
 
 // [9.17] Controle de CHG (substitui o Controle de CHG v5.2). Todo perfil vê;
@@ -81,6 +82,11 @@ export function ChgPage({ notify }) {
   const [preview, setPreview] = useState(null)
   const [dropStage, setDropStage] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
+  // [D-CHG-35] Painel "Abrir": o ID do card (o card vem sempre do quadro, com
+  // a versão mais nova) e o botão que abriu, para o foco voltar a ele.
+  const [panelId, setPanelId] = useState(null)
+  const panelOpener = useRef(null)
+  const [stageView, setStageView] = useState('comite')
   const dragId = useRef(null)
 
   const cards = useMemo(() => data?.cards || [], [data])
@@ -190,20 +196,18 @@ export function ChgPage({ notify }) {
   const locais = uniqueSorted([...(data?.catalogos?.locais || []).map((l) => l.nome), ...cards.flatMap((c) => c.locais)])
   const cardProps = {
     canManage,
-    technicians,
     onAct: act,
     onCopy: copyValue,
     onCopyTable: copyTable,
-    onConfirm: setConfirm,
-    onEdit: (card) => setFormState({ mode: 'edit', card }),
-    onDuplicate: openDuplicate,
-    onInvalid: (message) => notify(message, 'error'),
+    onOpen: (card, opener) => { panelOpener.current = opener; setPanelId(card.id) },
   }
+  // Arquivado (ou fora do quadro): o painel fecha.
+  const panelCard = panelId === null ? null : cards.find((c) => c.id === panelId) || null
 
   return (
     <div className="chg-page" data-chg-page="" data-chg-can-manage={canManage ? '1' : '0'}>
       <div className="chg-toolbar">
-        <Segmented label="Visualização" onChange={setView} options={[{ value: 'board', label: 'Quadro' }, { value: 'list', label: 'Lista' }, { value: 'dash', label: 'Dashboard' }]} value={view} />
+        <Segmented label="Visualização" onChange={setView} options={[{ value: 'board', label: 'Quadro' }, { value: 'stage', label: 'Etapa' }, { value: 'list', label: 'Lista' }, { value: 'dash', label: 'Dashboard' }]} value={view} />
         <div className="chg-toolbar-actions">
           <a className="btn-secondary chg-btn" data-chg-export="" download href={apiUrl(`portal/chg_export.php?ids=${exportIds}`)}>Exportar Excel</a>
           {data?.can_import === true && <button className="btn-secondary chg-btn" data-chg-import-open="" onClick={() => setImportOpen(true)} type="button">Importar do Controle v5</button>}
@@ -237,7 +241,9 @@ export function ChgPage({ notify }) {
       <p className="text-sm text-muted" data-chg-count="">{list.length} de {cards.length}</p>
 
       {view === 'board' && (
-        <section aria-label="Quadro" className={`chg-board chg-board-${stages.length}`} data-chg-board="">
+        // [D-CHG-36] Colunas de no mínimo 18rem; o quadro rola na horizontal
+        // (e na vertical, com o cabeçalho da coluna fixo).
+        <section aria-label="Quadro" className="chg-board" data-chg-board="">
           {stages.map((stage) => {
             const stageCards = list.filter((c) => c.view.stage === stage.key).sort(sortByWindow)
             return (
@@ -260,6 +266,7 @@ export function ChgPage({ notify }) {
           })}
         </section>
       )}
+      {view === 'stage' && <ChgStageView cardProps={cardProps} cards={list} drag={drag} onStage={setStageView} stage={stages.some((s) => s.key === stageView) ? stageView : stages[0].key} stages={stages} />}
       {view === 'list' && <ChgList cards={list} />}
       {view === 'dash' && <ChgDashboard cards={list} onOpen={(card) => (canManage ? setFormState({ mode: 'edit', card }) : (setView('board'), updateFilters({ tecnico: NO_TECH })))} withDone={filters.fechadas} />}
 
@@ -274,6 +281,23 @@ export function ChgPage({ notify }) {
           solicitantes={solicitantes}
           technicians={technicians}
           title={formState.mode === 'edit' ? 'Editar atualização' : formState.mode === 'duplicate' ? 'Duplicar atualização' : 'Nova atualização'}
+        />
+      )}
+      {panelCard && (
+        <ChgPanel
+          card={panelCard}
+          canManage={canManage}
+          key={panelCard.id}
+          onAct={act}
+          onClose={() => setPanelId(null)}
+          onConfirm={setConfirm}
+          onCopy={copyValue}
+          onCopyTable={copyTable}
+          onDuplicate={openDuplicate}
+          onEdit={(card) => setFormState({ mode: 'edit', card })}
+          onInvalid={(message) => notify(message, 'error')}
+          returnFocusRef={panelOpener}
+          technicians={technicians}
         />
       )}
       {importOpen && <ChgImportPanel notify={notify} onClose={() => setImportOpen(false)} onDone={refresh} />}

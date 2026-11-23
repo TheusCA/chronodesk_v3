@@ -9,6 +9,9 @@ import {
 // etapa, o selo, o aviso e a barra de SLA vêm prontos do servidor (card.view).
 // Sem can_manage, só leitura: nenhum editor, sem mover nem arrastar; copiar
 // continua liberado.
+// [Ajustes do CHG, D-CHG-34] No quadro, o card é compacto (ChgCard: carteira,
+// CHG, tipo, prazos, situação, técnico e as ações rápidas); planos, endpoints,
+// rollback e tarefas ficam no painel "Abrir" (ChgCardBody, no ChgPanel).
 
 const PATCH_CLASS = { sucesso: 'chg-ps-ok', parcial: 'chg-ps-parcial', erro: 'chg-ps-erro' }
 
@@ -44,6 +47,13 @@ function CopyLine({ label, value, link = false, onCopy }) {
   )
 }
 
+// [D-CHG-35] Saindo do campo para o aviso de descarte ou para um controle que
+// fecha o painel (X, Fechar, Editar, Duplicar), o campo não grava: fica
+// pendente e a guarda pergunta. Gravando, o valor enviado passa a ser o
+// carregado (o campo deixa de contar como pendente).
+const LEAVING = '[role="alertdialog"], [data-chg-leave], [aria-label="Fechar painel"]'
+const leaving = (event) => Boolean(event.relatedTarget?.closest?.(LEAVING))
+
 /** Campo de texto que grava ao sair (como o v5.2), recarregado a cada versão do card. */
 function BlurInput({ card, label, value, onSave, upper = false, maxLength = 40, placeholder = '' }) {
   return (
@@ -51,12 +61,17 @@ function BlurInput({ card, label, value, onSave, upper = false, maxLength = 40, 
       <span className="label">{label}</span>
       <input
         className="field"
+        data-chg-field=""
         defaultValue={value || ''}
         key={`${card.id}-${card.row_version}-${label}`}
         maxLength={maxLength}
         onBlur={(event) => {
+          if (leaving(event)) return
           const next = upper ? event.target.value.trim().toUpperCase() : event.target.value.trim()
-          if (next !== String(value || '')) onSave(next)
+          if (next !== String(value || '')) {
+            event.target.defaultValue = event.target.value
+            onSave(next)
+          }
         }}
         onInput={upper ? (event) => { event.target.value = event.target.value.toUpperCase() } : undefined}
         placeholder={placeholder}
@@ -73,11 +88,13 @@ function MaskInput({ card, label, value, dateOnly = null, allowDateOnly = false,
       <span className={dateOnly ? 'label chg-hour-pending' : 'label'}>{label}</span>
       <input
         className="field"
+        data-chg-field=""
         defaultValue={initial}
         inputMode="numeric"
         key={`${card.id}-${card.row_version}-${label}`}
         maxLength={16}
         onBlur={(event) => {
+          if (leaving(event)) return
           const raw = event.target.value.trim()
           if (raw === initial) return
           const parsed = parseMask(raw, allowDateOnly)
@@ -86,6 +103,7 @@ function MaskInput({ card, label, value, dateOnly = null, allowDateOnly = false,
             onInvalid(allowDateOnly ? 'Informe a data e a hora (dd/mm/aaaa hh:mm), ou deixe somente a data enquanto agenda o patch.' : 'Data e hora inválidas. Use dd/mm/aaaa hh:mm.')
             return
           }
+          event.target.defaultValue = event.target.value
           onSave(parsed)
         }}
         onFocus={(event) => {
@@ -320,7 +338,8 @@ function Impact({ card }) {
   )
 }
 
-export function ChgCard({ card, canManage, technicians, onAct, onCopy, onCopyTable, onConfirm, onEdit, onDuplicate, onInvalid, drag = null }) {
+/** O card inteiro, com os editores da etapa: o conteúdo do painel "Abrir". */
+export function ChgCardBody({ card, canManage, technicians, onAct, onCopy, onCopyTable, onConfirm, onInvalid }) {
   const { view } = card
   const stage = view.stage
   const editable = canManage
@@ -367,14 +386,7 @@ export function ChgCard({ card, canManage, technicians, onAct, onCopy, onCopyTab
   }
 
   return (
-    <article
-      aria-label={`${STAGE_TITLE[stage]}: ${card.carteiras[0] ? carteiraLabel(card.carteiras[0]) : 'Carteira não informada'}`}
-      className={`chg-card ${rollbackTone}${view.late ? ' chg-card-late' : ''}`}
-      data-chg-card={card.id}
-      data-chg-stage={stage}
-      draggable={editable && Boolean(drag)}
-      onDragStart={editable && drag ? (event) => drag.start(event, card) : undefined}
-    >
+    <div className={`chg-detail ${rollbackTone}${view.late ? ' chg-card-late' : ''}`} data-chg-detail={card.id} data-chg-stage={stage}>
       <div className="chg-card-top">
         {chgRef}
         <span className={`chg-pill chg-tone-${view.badge.tone}`} data-chg-badge="">{view.badge.text}</span>
@@ -403,16 +415,65 @@ export function ChgCard({ card, canManage, technicians, onAct, onCopy, onCopyTab
       <div className="chg-foot">
         <span className="chg-who"><span aria-hidden="true" className="chg-av">{initials(card.solicitante)}</span><span>{card.solicitante || 'Sem solicitante'}</span></span>
         <span className="chg-acts">
-          {editable && (
-            <select aria-label="Mover para outra coluna" className="field chg-move" data-chg-move={card.id} onChange={(event) => { const value = event.target.value; event.target.value = ''; if (value) onAct(card, 'move', { stage: value }) }} value="">
-              <option disabled value="">Mover para…</option>
-              {STAGES.filter((s) => s.key !== stage).map((s) => <option key={s.key} value={s.key}>{s.title}</option>)}
-            </select>
-          )}
+          {editable && <MoveSelect card={card} onAct={onAct} />}
+          <button aria-label="Copiar tabela" className="chg-icon-btn" onClick={() => onCopyTable(card)} title="Copiar tabela" type="button"><Icon className="h-4 w-4" name="file" /></button>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/** Mover para outra etapa: o select do card compacto e do painel. */
+function MoveSelect({ card, onAct, marker = false }) {
+  return (
+    <select aria-label="Mover para outra coluna" className="field chg-move" data-chg-move={marker ? card.id : undefined} onChange={(event) => { const value = event.target.value; event.target.value = ''; if (value) onAct(card, 'move', { stage: value }) }} value="">
+      <option disabled value="">Mover para…</option>
+      {STAGES.filter((s) => s.key !== card.view.stage).map((s) => <option key={s.key} value={s.key}>{s.title}</option>)}
+    </select>
+  )
+}
+
+/**
+ * [D-CHG-34] Card compacto do quadro e da visão Etapa: carteira(s), número da
+ * CHG, tipo, prazos, situação e técnico; as ações rápidas (mover, copiar a
+ * tabela, copiar a CHG) e "Abrir", que leva ao painel com os editores.
+ */
+export function ChgCard({ card, canManage, onAct, onCopy, onCopyTable, onOpen, drag = null }) {
+  const { view } = card
+  const stage = view.stage
+  const editable = canManage
+  const first = card.carteiras[0] ? carteiraLabel(card.carteiras[0]) : 'Carteira não informada'
+  const tech = tecnicoName(card)
+  return (
+    <article
+      aria-label={`${STAGE_TITLE[stage]}: ${first}`}
+      className={`chg-card ${card.rollback ? 'chg-tone-pink' : `chg-tone-${stage}`}${view.late ? ' chg-card-late' : ''}`}
+      data-chg-card={card.id}
+      data-chg-stage={stage}
+      draggable={editable && Boolean(drag)}
+      onDragStart={editable && drag ? (event) => drag.start(event, card) : undefined}
+    >
+      <div className="chg-card-top">
+        {card.chg_numero
+          ? <span className="chg-card-top"><strong>{card.chg_numero}</strong><CopyButton label="número da CHG" onCopy={onCopy} value={card.chg_numero} /></span>
+          : <span className="chg-none">{stage === 'cancel' ? 'Solicitação' : 'Sem CHG'}</span>}
+        <span className={`chg-pill chg-tone-${view.badge.tone}`} data-chg-badge="">{view.badge.text}</span>
+        {card.rollback && stage !== 'exec' && <span className="chg-pill chg-tone-pink">Rollback · {ROLLBACK_LABELS[card.rollback.status]}</span>}
+        {view.is_manual && editable && <button className="chg-mtag" data-chg-auto={card.id} onClick={() => onAct(card, 'auto')} title={`Etapa definida manualmente. Clique para voltar à etapa automática (${STAGE_TITLE[view.auto_stage]}).`} type="button">Movido manualmente ↺</button>}
+      </div>
+      <h3 className="chg-card-title" title={card.carteiras.map(carteiraLabel).join('; ')}>{first}{card.carteiras.length > 1 && <span className="chg-col-count">+{card.carteiras.length - 1}</span>}</h3>
+      {stage === 'exec' && <SlaBar sla={view.sla} />}
+      <dl className="chg-kv">
+        <div><dt>Tipo</dt><dd>{TIPO_LABELS[card.tipo]}</dd></div>
+        <div><dt>Técnico</dt><dd>{tech || 'Sem técnico'}</dd></div>
+        <div><dt>Início Service Desk</dt><dd>{shortLabel(card.sd_inicio)}</dd></div>
+        <div><dt>Fim Service Desk</dt><dd>{shortLabel(card.sd_fim)}</dd></div>
+      </dl>
+      <div className="chg-foot chg-foot-compact">
+        {editable && <MoveSelect card={card} marker onAct={onAct} />}
+        <span className="chg-acts">
+          <button className="btn-secondary chg-btn" data-chg-open={card.id} onClick={(event) => onOpen(card, event.currentTarget)} type="button">Abrir</button>
           <button aria-label="Copiar tabela" className="chg-icon-btn" data-chg-copy-table={card.id} onClick={() => onCopyTable(card)} title="Copiar tabela" type="button"><Icon className="h-4 w-4" name="file" /></button>
-          {editable && <button aria-label="Duplicar" className="chg-icon-btn" onClick={() => onDuplicate(card)} title="Duplicar" type="button"><Icon className="h-4 w-4" name="upload" /></button>}
-          {editable && <button aria-label="Editar" className="chg-icon-btn" data-chg-edit={card.id} onClick={() => onEdit(card)} title="Editar" type="button"><Icon className="h-4 w-4" name="edit" /></button>}
-          {editable && <button aria-label="Arquivar" className="chg-icon-btn" onClick={() => onConfirm({ title: 'Arquivar atualização?', description: 'O card sai do quadro (fica guardado no banco). A ação é registrada.', confirmLabel: 'Arquivar', run: () => onAct(card, 'archive') })} title="Arquivar" type="button"><Icon className="h-4 w-4" name="trash" /></button>}
         </span>
       </div>
     </article>

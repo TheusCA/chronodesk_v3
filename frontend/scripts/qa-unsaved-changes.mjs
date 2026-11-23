@@ -763,4 +763,18 @@ for (const file of ['src/components/ui/Dialog.jsx', 'src/components/ui/ConfirmDi
   }
 }
 
+// [Ajustes do CHG, D-CHG-35] Painel "Abrir" do Controle de CHG: os campos que
+// gravam ao sair; sujo = digitado e ainda nao gravado; fechar, Esc, Editar e
+// Duplicar perguntam; descartar devolve o valor carregado antes de fechar.
+{
+  const panelSource = read('src/pages/chg/ChgPanel.jsx')
+  assert.match(panelSource, /const recompute = useCallback\(\(\) => setDirty\(pendingFields\(bodyRef\.current\)\.length > 0\), \[\]\)/, 'CHG, painel: sujo = campo pendente (digitado e nao gravado)')
+  assert.match(panelSource, /const \{ requestLeave, dialogProps \} = useUnsavedChangesGuard\(dirty\)/, 'CHG, painel: protecao ligada ao sujo')
+  assert.match(panelSource, /const leave = \(action\) => requestLeave\(\(\) => \{\n\s*resetPendingFields\(bodyRef\.current\)\n\s*action\(\)/, 'CHG, painel: descartar limpa os campos antes de sair (nada grava na saida)')
+  assert.match(panelSource, /onClose=\{\(\) => leave\(onClose\)\}/, 'CHG, painel: Esc, clique fora e o X perguntam')
+  assert.equal((panelSource.match(/onClick=\{\(\) => leave\(/g) || []).length, 3, 'CHG, painel: Fechar, Duplicar e Editar perguntam')
+  assert.match(panelSource, /<\/Drawer>\n\s*<ConfirmDiscardDialog \{\.\.\.dialogProps\} \/>/, 'CHG, painel: aviso de descarte fora do Drawer')
+  assert.match(panelSource, /onBlur=\{recompute\} onInput=\{recompute\}/, 'CHG, painel: o sujo e recalculado ao digitar e ao sair do campo')
+}
+
 console.log('Unsaved changes QA OK')

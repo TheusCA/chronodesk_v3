@@ -248,6 +248,28 @@ const chgFixtures = () => [
   { id: 3, ...chgBase, sd_inicio: `${DAY} 08:00:00`, sd_fim: '2026-10-29 08:00:00', attempts: [{ attempt_no: 1, patch_status: null, reagendando: false, registered_at: null, endpoints: [{ url: 'https://endpoint.teste/3', start_at: `${DAY} 09:00:00`, start_date: null }] }] },
   { id: 4, ...chgBase, sd_inicio: '2026-10-27 08:00:00', sd_fim: '2026-10-28 08:00:00', attempts: [{ attempt_no: 1, patch_status: 'parcial', reagendando: false, registered_at: null, endpoints: [{ url: 'https://endpoint.teste/4', start_at: '2026-10-27 09:00:00', start_date: null }] }] },
 ]
+// [Ajustes do CHG, layout] Um card por etapa com 3 carteiras, 3 locais, 3
+// planos e 3 endpoints de links longos (e o rollback na execucao): o pior caso
+// do quadro. useChg({ rich: true }). Dados ficticios.
+const chgLong = (n) => `https://endpoint-de-teste-com-nome-comprido.exemplo.invalid/caminho/longo/sem-espaco/${n}`
+const chgRich = {
+  ...chgBase,
+  descricao: 'Descricao de teste mais longa, com varias palavras para ocupar duas linhas no card do quadro',
+  versao: 'servidor-de-teste/pasta-de-versoes/versao-de-teste-com-nome-comprido-2026.11.23',
+  carteiras: [{ codigo: '9001', nome: 'Carteira Teste 01 com Nome Comprido', pas: 12 }, { codigo: '9002', nome: 'Carteira Teste 02', pas: 8 }, { codigo: '9003', nome: 'Carteira Teste 03 Segunda Fase', pas: 4 }],
+  locais: ['Local Teste 01', 'Local Teste 02', 'Local Teste 03'],
+  plans: [1, 2, 3].map((n) => ({ implantacao: `CTASK000010${n}`, backup: `CTASK000020${n}`, rollback: `CTASK000030${n}`, task_impl: 'pendente', task_bkp: 'pendente', task_roll: 'pendente' })),
+  attempts: [{ attempt_no: 1, patch_status: null, reagendando: false, registered_at: null, endpoints: [1, 2, 3].map((n) => ({ url: chgLong(n), start_at: `${DAY} 0${n + 7}:00:00`, start_date: null })) }],
+}
+const chgRichFixtures = () => [
+  { id: 11, ...chgRich, chg_status: 'pendente', sd_inicio: '2026-10-30 20:00:00', sd_fim: '2026-10-31 20:00:00' },
+  { id: 12, ...chgRich, chg_status: 'pendente', stage_manual: 'prep', stage_manual_auto: 'comite', sd_inicio: '2026-10-30 20:00:00', sd_fim: '2026-10-31 20:00:00' },
+  { id: 13, ...chgRich, sd_inicio: `${DAY} 08:00:00`, sd_fim: '2026-10-29 08:00:00', rollback: { url: chgLong('rollback'), start_at: `${DAY} 11:00:00`, status: 'em_andamento' } },
+  { id: 14, ...chgRich, sd_inicio: '2026-10-27 08:00:00', sd_fim: '2026-10-28 08:00:00', attempts: [{ ...chgRich.attempts[0], patch_status: 'parcial' }] },
+  { id: 15, ...chgRich, concluida: true, concluida_em: `${DAY} 10:00:00`, sd_inicio: '2026-10-27 08:00:00', sd_fim: '2026-10-28 08:00:00', attempts: [{ ...chgRich.attempts[0], patch_status: 'sucesso' }] },
+  { id: 16, ...chgRich, chg_status: 'cancelada', sd_inicio: '2026-10-30 20:00:00', sd_fim: '2026-10-31 20:00:00' },
+]
+let chgUseRich = false
 function chgPhp(script, input) {
   const code = `require 'security.php'; require 'services/ChgService.php'; $s = (new ReflectionClass('ChgService'))->newInstanceWithoutConstructor(); $now = new DateTimeImmutable('${CHG_NOW}'); $in = json_decode(stream_get_contents(STDIN), true); ${script}`
   return JSON.parse(execFileSync(process.env.PHP_BIN || 'php', ['-r', code], { cwd: projectRoot, encoding: 'utf8', input: JSON.stringify(input), stdio: ['pipe', 'pipe', 'ignore'] }))
@@ -255,7 +277,7 @@ function chgPhp(script, input) {
 const chgPresent = (cards) => chgPhp('echo json_encode(array_map(fn ($c) => $s->present($c, $now), $in));', cards)
 function chgResponse(method, body) {
   if (!chgOn) return [404, { sucesso: false, mensagem: 'Recurso não encontrado.' }]
-  chgCards ??= chgPresent(chgFixtures())
+  chgCards ??= chgPresent(chgUseRich ? chgRichFixtures() : chgFixtures())
   if (method === 'GET') return [200, { sucesso: true, now: CHG_NOW, cards: chgCards, catalogos: { carteiras: [{ id: 1, codigo: '9001', nome: 'Carteira Teste 01', ativo: true }], locais: [{ id: 1, nome: 'Local Teste 01', ativo: true }] }, tecnicos: each((nome, id) => ({ id, nome })), can_manage: chgCanManage, can_import: chgCanImport }]
   if (!chgCanManage) return [403, { sucesso: false, mensagem: 'Somente administradores, Liderança e o grupo Tools alteram o Controle de CHG.' }]
   const card = chgCards.find((item) => item.id === Number(body?.id))
@@ -453,7 +475,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false, canImport = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCanImport = canImport; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, useSeatSetup: (on) => { seatSetup = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false, canImport = false, rich = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCanImport = canImport; chgUseRich = rich; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, useSeatSetup: (on) => { seatSetup = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 

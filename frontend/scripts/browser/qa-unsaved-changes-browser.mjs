@@ -3214,7 +3214,8 @@ async function brandIcons(page, port) {
   report('Marca: a placa muda de cor entre os dois temas', new Set(seen).size === 2, JSON.stringify(seen))
 }
 
-// [9.17] Controle de CHG: menu so com o interruptor; somente leitura x grupo
+// [9.17] Controle de CHG (o editar foi para o painel "Abrir", D-CHG-35: no
+// quadro, o "Mover para" de cada card e o "Nova atualizacao"): menu so com o interruptor; somente leitura x grupo
 // Tools (can_manage do servidor); mover pelo select (o corpo leva a versao);
 // formulario com a guarda; 390 px sem rolagem lateral; alvos de 40 px; nada
 // com atributo style; os dois temas.
@@ -3263,7 +3264,7 @@ async function chg917(page, port, mock) {
     for (const width of [1366, 390]) {
       await goto(page, port, '/chg', width)
       await page.waitFor(`!!document.querySelector('[data-chg-move]')`)
-      await expectChg(`grupo Tools em ${width} px: editores, mover e arrastar; sem rolagem lateral; alvos de 40 px`, { editores: (n) => n > 5, arrastaveis: (n) => n >= 3, somente_leitura: false, com_style: 0, lateral: false, menor_alvo: (h) => h >= 40, etapa_1: 'comite' })
+      await expectChg(`grupo Tools em ${width} px: editores, mover e arrastar; sem rolagem lateral; alvos de 40 px`, { editores: (n) => n >= 5, arrastaveis: (n) => n >= 3, somente_leitura: false, com_style: 0, lateral: false, menor_alvo: (h) => h >= 40, etapa_1: 'comite' })
     }
     await goto(page, port, '/chg', 1366)
     await page.waitFor(`!!document.querySelector('[data-chg-move="1"]')`)
@@ -3299,6 +3300,151 @@ async function chg917(page, port, mock) {
     await page.waitFor(`!!document.querySelector('[data-chg-import]')`)
     const panel = await page.evaluate(`(() => ({ arquivos: document.querySelectorAll('[data-chg-import] input[type="file"]').length, previa_desligada: document.querySelector('[data-chg-import-preview]').disabled, lateral: document.documentElement.scrollWidth > innerWidth }))()`)
     report('Controle de CHG: com can_import, "Importar do Controle v5" abre o painel com os dois arquivos e a previa desligada (390 px, sem rolagem lateral)', panel.arquivos === 2 && panel.previa_desligada && !panel.lateral, JSON.stringify(panel))
+  } finally {
+    mock.useChg({ on: false })
+    mock.useAdminSession()
+  }
+}
+
+// 33. [Ajustes do CHG, D-CHG-34 a D-CHG-37] Layout do quadro com o pior caso
+// (um card por etapa com 3 carteiras, 3 locais, 3 planos e 3 endpoints de
+// links longos; rollback na execucao): 1280, 1366, 1440 e 1920 px, menu
+// aberto e fechado, tema claro e escuro, no quadro, no painel "Abrir" e na
+// visao Etapa. Falha com texto quebrado em caixa de menos de 8rem (texto em
+// mais de uma linha numa caixa estreita: o "letra por letra"), rolagem
+// horizontal dentro de um card ou do painel, ou botao fora do card, do painel
+// ou da tela. Dados ficticios.
+const CHG_LAYOUT = (rootsExpression) => `(() => {
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+  const roots = ${rootsExpression}
+  const narrow = []
+  const scrolling = []
+  const outside = []
+  for (const root of roots) {
+    root.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    const box = root.getBoundingClientRect()
+    const board = root.closest('[data-chg-board]')
+    const area = board ? board.getBoundingClientRect() : { left: 0, right: innerWidth }
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const el = node.parentElement
+      if (!node.textContent.trim() || !el || el.closest('select, option, [hidden]') || el.offsetParent === null) continue
+      const range = document.createRange()
+      range.selectNodeContents(node)
+      const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top))).size
+      let block = el
+      while (block !== root && getComputedStyle(block).display.startsWith('inline')) block = block.parentElement
+      const width = block.getBoundingClientRect().width
+      if (lines > 1 && width < 8 * rem) narrow.push(node.textContent.trim().slice(0, 24) + ' (' + Math.round(width) + ' px)')
+    }
+    for (const el of [root, ...root.querySelectorAll('*')]) {
+      if (['SELECT', 'INPUT', 'TEXTAREA'].includes(el.tagName)) continue
+      const overflowX = getComputedStyle(el).overflowX
+      if ((el === root || overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth + 1) scrolling.push(String(el.className || el.tagName).slice(0, 40))
+    }
+    for (const control of root.querySelectorAll('button, select, a.chg-icon-btn, input')) {
+      if (control.offsetParent === null) continue
+      const r = control.getBoundingClientRect()
+      if (r.left < box.left - 1 || r.right > box.right + 1 || r.left < Math.max(0, area.left) - 1 || r.right > Math.min(innerWidth, area.right) + 1) outside.push((control.getAttribute('aria-label') || control.textContent || control.tagName).trim().slice(0, 24))
+    }
+  }
+  return { roots: roots.length, narrow: narrow.slice(0, 5), scrolling: scrolling.slice(0, 5), outside: outside.slice(0, 5) }
+})()`
+const layoutOk = (state, roots) => state.roots === roots && !state.narrow.length && !state.scrolling.length && !state.outside.length
+const CHG_RICH_IDS = [11, 12, 13, 14, 15, 16]
+const CHG_PANEL = `document.querySelector('[data-chg-panel]')?.closest('[role="dialog"]')`
+
+async function chgLayout(page, port, mock) {
+  const posts = (action) => mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/chg.php' && r.body?.action === action)
+  const openChg = async (width) => {
+    await goto(page, port, '/chg', width)
+    await page.waitFor(`document.querySelectorAll('[data-chg-card]').length > 0`)
+    await page.evaluate(`(() => { const box = document.querySelector('[data-chg-fechadas]'); if (box && !box.checked) box.click() })()`)
+    await page.waitFor(`document.querySelectorAll('[data-chg-card]').length === ${CHG_RICH_IDS.length}`)
+  }
+  try {
+    mock.useChg({ on: true, canManage: true, rich: true })
+    for (const width of [1280, 1366, 1440, 1920]) {
+      for (const menu of ['aberto', 'fechado']) {
+        for (const theme of ['light', 'dark']) {
+          await openChg(width)
+          if (menu === 'fechado') {
+            await page.click(`document.querySelector('[aria-label="Minimizar menu lateral"]')`)
+            await sleep(300)
+          }
+          await page.evaluate(`document.documentElement.dataset.theme = '${theme}'`)
+          await sleep(150)
+          const label = `${width} px, menu ${menu}, tema ${theme === 'light' ? 'claro' : 'escuro'}`
+          const board = await page.evaluate(`(() => { const b = document.querySelector('[data-chg-board]'); const cols = [...b.querySelectorAll('[data-chg-col]')]; const rem = parseFloat(getComputedStyle(document.documentElement).fontSize); return { colunas: cols.length, menor: Math.min(...cols.map((c) => Math.round(c.getBoundingClientRect().width / rem * 10) / 10)), cabecalho_fixo: cols.every((c) => getComputedStyle(c.querySelector('.chg-col-head')).position === 'sticky'), rola: b.scrollWidth > b.clientWidth, pagina_lateral: document.documentElement.scrollWidth > innerWidth, com_style: document.querySelectorAll('[data-chg-page] [style]').length } })()`)
+          const cardsState = await page.evaluate(CHG_LAYOUT(`[...document.querySelectorAll('[data-chg-board] [data-chg-card]')]`))
+          report(`CHG, quadro ${label}: 6 colunas de no minimo 18rem com o cabecalho fixo, o quadro rola (a pagina nao); nos cards, nenhum texto quebrado em menos de 8rem, sem rolagem e nenhum botao fora`, board.colunas === 6 && board.menor >= 17.9 && board.cabecalho_fixo && board.rola === board.colunas * 18 * 16 > (await page.evaluate(`document.querySelector('[data-chg-board]').clientWidth`)) && !board.pagina_lateral && board.com_style === 0 && layoutOk(cardsState, 6), JSON.stringify({ board, cardsState }))
+          const panels = []
+          for (const id of CHG_RICH_IDS) {
+            await page.click(`document.querySelector('[data-chg-open="${id}"]')`)
+            await page.waitFor(`!!document.querySelector('[data-chg-panel="${id}"]')`)
+            await sleep(200)
+            const state = await page.evaluate(CHG_LAYOUT(`[${CHG_PANEL}]`))
+            const wide = await page.evaluate(`Math.round(${CHG_PANEL}.getBoundingClientRect().width)`)
+            panels.push({ id, ok: layoutOk(state, 1), wide, state })
+            await page.press('Escape')
+            await page.waitFor(`!document.querySelector('[data-chg-panel]')`)
+          }
+          report(`CHG, painel "Abrir" ${label}: nas 6 etapas, sem texto quebrado em menos de 8rem, sem rolagem lateral e nenhum botao fora; limpo, o Esc fecha direto`, panels.every((p) => p.ok), JSON.stringify(panels.filter((p) => !p.ok)))
+        }
+      }
+      // Visao Etapa: uma etapa por vez, cards em grade na largura toda.
+      await openChg(width)
+      await page.click(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Etapa')`)
+      await page.waitFor(`!!document.querySelector('[data-chg-stage-view]')`)
+      const stages = []
+      for (const key of ['comite', 'prep', 'exec', 'valid', 'done', 'cancel']) {
+        await page.click(`document.querySelector('[data-chg-stage-tab="${key}"]')`)
+        await sleep(150)
+        const state = await page.evaluate(CHG_LAYOUT(`[...document.querySelectorAll('[data-chg-stage-view] [data-chg-card]')]`))
+        const only = await page.evaluate(`[...document.querySelectorAll('[data-chg-stage-view] [data-chg-card]')].every((c) => c.dataset.chgStage === '${key}') && document.querySelector('[data-chg-stage-tab="${key}"]').getAttribute('aria-pressed') === 'true'`)
+        stages.push({ key, ok: only && layoutOk(state, 1), state })
+      }
+      report(`CHG, visao Etapa ${width} px: uma etapa por vez (a aba marcada), o card dela sem texto quebrado em menos de 8rem, sem rolagem e nenhum botao fora; sem rolagem lateral na pagina`, stages.every((s) => s.ok) && !(await page.evaluate(`document.documentElement.scrollWidth > innerWidth`)), JSON.stringify(stages.filter((s) => !s.ok)))
+    }
+
+    // Cabecalho da coluna fixo ao rolar o quadro na vertical (tela baixa).
+    await openChg(1366)
+    await page.send('Emulation.setDeviceMetricsOverride', { width: 1366, height: 560, deviceScaleFactor: 1, mobile: false })
+    await sleep(300)
+    const sticky = await page.evaluate(`(() => { const b = document.querySelector('[data-chg-board]'); b.scrollIntoView({ block: 'start' }); b.scrollTop = 200; const head = document.querySelector('[data-chg-col="exec"] .chg-col-head'); return { rolou: b.scrollTop > 0, topo_quadro: Math.round(b.getBoundingClientRect().top), topo_cabecalho: Math.round(head.getBoundingClientRect().top) } })()`)
+    report('CHG, quadro: rolando o quadro na vertical, o cabecalho da coluna fica no topo', sticky.rolou && Math.abs(sticky.topo_cabecalho - sticky.topo_quadro) <= 2, JSON.stringify(sticky))
+
+    // Painel: sujo pergunta; o campo nao grava na saida; descartar nada grava;
+    // o foco volta para o "Abrir"; gravar ao sair continua; drag entre etapas.
+    await openChg(1366)
+    const setFieldBefore = posts('set_field').length
+    await page.click(`document.querySelector('[data-chg-open="11"]')`)
+    await page.waitFor(`!!document.querySelector('[data-chg-panel="11"]')`)
+    await page.click(`document.querySelector('[data-chg-panel="11"] [data-chg-field]')`)
+    await page.typeText('9')
+    await page.press('Escape')
+    await sleep(250)
+    const asked = await page.evaluate(`({ aviso: !!document.querySelector('[role="alertdialog"]'), painel: !!document.querySelector('[data-chg-panel="11"]') })`)
+    report('CHG, painel sujo: o Esc pergunta antes de descartar e o painel continua aberto; o campo nao grava ao perder o foco para o aviso', asked.aviso && asked.painel && posts('set_field').length === setFieldBefore, JSON.stringify(asked))
+    await page.click(`${button('Descartar alterações')} || ${button('Sair sem salvar')} || [...document.querySelectorAll('[role="alertdialog"] button')].at(-1)`)
+    await sleep(300)
+    const discarded = await page.evaluate(`({ painel: !!document.querySelector('[data-chg-panel]'), foco: document.activeElement?.dataset?.chgOpen ?? document.activeElement?.tagName })`)
+    report('CHG, painel: descartar fecha sem gravar nada e o foco volta para o "Abrir" do card', !discarded.painel && discarded.foco === '11' && posts('set_field').length === setFieldBefore, JSON.stringify(discarded))
+    await page.click(`document.querySelector('[data-chg-open="11"]')`)
+    await page.waitFor(`!!document.querySelector('[data-chg-panel="11"]')`)
+    await page.click(`document.querySelector('[data-chg-panel="11"] [data-chg-field]')`)
+    await page.typeText('7')
+    await page.press('Tab')
+    await sleep(300)
+    const saved = posts('set_field').at(-1)
+    await page.press('Escape')
+    await sleep(300)
+    report('CHG, painel: sair do campo grava (set_field com a versao do card); depois, o Esc fecha sem perguntar', posts('set_field').length === setFieldBefore + 1 && saved?.body?.field === 'chg_numero' && saved?.body?.row_version === 1 && /7$/.test(saved?.body?.value || '') && !(await page.evaluate(`!!document.querySelector('[data-chg-panel]') || !!document.querySelector('[role="alertdialog"]')`)), JSON.stringify(saved?.body))
+    const movesBefore = posts('move').length
+    await page.evaluate(`(() => { const card = document.querySelector('[data-chg-card="11"]'); const target = document.querySelector('[data-chg-col="prep"]'); const data = new DataTransfer(); card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer: data })); target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: data })); target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: data })) })()`)
+    await sleep(500)
+    const dropped = posts('move').at(-1)
+    report('CHG, quadro: arrastar o card para outra coluna continua (move com a etapa da coluna)', posts('move').length === movesBefore + 1 && dropped?.body?.id === 11 && dropped?.body?.stage === 'prep', JSON.stringify(dropped?.body))
   } finally {
     mock.useChg({ on: false })
     mock.useAdminSession()
@@ -3413,6 +3559,7 @@ try {
     [30, 'Papeis do Critico: hoje, previa, rodizio e troca (9.16)', () => criticalRoles916(page, mock.port, mock)],
     [31, 'Controle de CHG: somente leitura x Tools, mover e formulario (9.17)', () => chg917(page, mock.port, mock)],
     [32, 'Mapa PA: inventario e reservados do Critico (F10-3)', () => paInventoryF103(page, mock.port, mock)],
+    [33, 'Controle de CHG: quadro compacto, painel Abrir e Etapa (ajustes do Tools)', () => chgLayout(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

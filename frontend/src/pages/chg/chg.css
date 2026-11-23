@@ -61,26 +61,45 @@
 .chg-filters .field { min-height: 40px; }
 .chg-check { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 40px; font-size: 0.875rem; color: rgb(var(--ink-2)); }
 
-/* Quadro: 6 colunas no largo; abaixo de 1280 px, seções empilhadas. */
+/* Quadro [D-CHG-36]: abaixo de 1280 px, seções empilhadas; no largo, colunas
+   de no mínimo 18rem lado a lado, o quadro rola na horizontal (e na vertical,
+   até a altura da tela) e o cabeçalho de cada coluna fica fixo. */
 .chg-board { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
 @media (min-width: 1280px) {
-  .chg-board { grid-template-columns: repeat(var(--chg-cols, 4), minmax(0, 1fr)); }
-  .chg-board-6 { --chg-cols: 6; }
-  .chg-board-4 { --chg-cols: 4; }
+  .chg-board {
+    grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(18rem, 1fr); align-items: start;
+    overflow: auto; max-height: calc(100dvh - 8rem); overscroll-behavior: contain; padding-bottom: 0.25rem;
+  }
+  .chg-col-head { position: sticky; top: 0; z-index: 1; margin: -0.6rem -0.6rem 0; padding: 0.6rem; background: rgb(var(--surface-2)); border-radius: 0.75rem 0.75rem 0 0; }
 }
 .chg-col { border: 1px solid rgb(var(--line)); border-top: 3px solid rgb(var(--chg-c)); border-radius: 0.75rem; background: rgb(var(--surface-2)); padding: 0.6rem; min-width: 0; display: grid; gap: 0.6rem; align-content: start; }
 /* Itens de grid sem largura mínima automática: nada passa da coluna. */
-.chg-col, .chg-card, .chg-inline, .chg-carousel { grid-template-columns: minmax(0, 1fr); }
-.chg-card > *, .chg-inline > *, .chg-carousel > *, .chg-col > * { min-width: 0; }
+.chg-col, .chg-card, .chg-detail, .chg-inline, .chg-carousel { grid-template-columns: minmax(0, 1fr); }
+.chg-card > *, .chg-detail > *, .chg-inline > *, .chg-carousel > *, .chg-col > * { min-width: 0; }
 .chg-col-drop { outline: 2px dashed rgb(var(--focus)); outline-offset: 2px; }
 .chg-col-head { display: grid; gap: 0.15rem; }
 .chg-col-title { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-weight: 600; color: rgb(var(--ink)); }
-.chg-col-count { font-size: 0.8125rem; border-radius: 999px; padding: 0 0.5rem; background: rgb(var(--surface)); border: 1px solid rgb(var(--line)); color: rgb(var(--ink-2)); }
+.chg-col-count { white-space: nowrap; font-size: 0.8125rem; border-radius: 999px; padding: 0 0.5rem; background: rgb(var(--surface)); border: 1px solid rgb(var(--line)); color: rgb(var(--ink-2)); }
 .chg-col-hint { font-size: 0.8125rem; color: rgb(var(--muted)); }
 .chg-empty { font-size: 0.8125rem; color: rgb(var(--muted)); padding: 0.75rem; border: 1px dashed rgb(var(--line)); border-radius: 0.5rem; }
 
 /* Card */
-.chg-card { border: 1px solid rgb(var(--line)); border-left: 4px solid rgb(var(--chg-c)); border-radius: 0.75rem; background: rgb(var(--surface)); padding: 0.75rem; display: grid; gap: 0.6rem; min-width: 0; overflow-wrap: anywhere; }
+.chg-card, .chg-detail { border: 1px solid rgb(var(--line)); border-left: 4px solid rgb(var(--chg-c)); border-radius: 0.75rem; background: rgb(var(--surface)); padding: 0.75rem; display: grid; gap: 0.6rem; min-width: 0; overflow-wrap: anywhere; }
+/* Card compacto [D-CHG-34]: um fato por linha, rótulo à esquerda e valor à direita. */
+.chg-kv { display: grid; gap: 0.3rem; font-size: 0.8125rem; }
+.chg-kv > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.25rem 0.75rem; }
+.chg-kv dt { color: rgb(var(--muted)); }
+.chg-kv dd { color: rgb(var(--ink)); font-weight: 600; text-align: right; margin-left: auto; }
+.chg-foot-compact .chg-move { flex: 1 1 10rem; max-width: none; }
+.chg-card .chg-card-title { display: flex; align-items: baseline; gap: 0.4rem; }
+/* Painel "Abrir" [D-CHG-35] e visão Etapa [D-CHG-37]. */
+.chg-panel-body { display: grid; gap: 0.75rem; }
+.chg-stage-view { display: grid; gap: 0.75rem; }
+.chg-stage-tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.chg-stage-tab { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 40px; padding: 0 0.75rem; border-radius: 0.6rem; border: 1px solid rgb(var(--line)); border-top: 3px solid rgb(var(--chg-c)); background: rgb(var(--surface)); color: rgb(var(--ink-2)); font-size: 0.875rem; font-weight: 600; }
+.chg-stage-tab[aria-pressed='true'] { background: rgb(var(--chg-cbg)); color: rgb(var(--chg-c)); border-color: rgb(var(--chg-c) / 0.5); }
+.chg-stage-tab:focus-visible { outline: 2px solid rgb(var(--focus)); outline-offset: 2px; }
+.chg-stage-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); align-items: start; }
 .chg-card-late { border-color: rgb(var(--danger-line)); }
 .chg-card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .chg-card-title { font-weight: 600; color: rgb(var(--ink)); }

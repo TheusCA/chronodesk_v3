@@ -1,5 +1,6 @@
 import { Table } from '../../components/ui/Table'
 import { CHG_LABELS, SERVICE_LABELS, STAGE_TITLE, carteiraLabel, dashboard, dateTimeLabel, initials, shortLabel, sortByWindow, tecnicoName } from '../../lib/chg'
+import { ChgCard } from './ChgCard'
 
 // [9.17] Lista (renderList) e painel por técnico (renderDash) do v5.2. As
 // barras usam larguras em passos de 5 % (sem atributo style); o número exato
@@ -81,5 +82,29 @@ export function ChgDashboard({ cards, withDone, onOpen }) {
         <Table caption="Detalhe por técnico" cards columns={columns} rowKey={(r) => r.key} rows={data.rows} />
       </section>
     </div>
+  )
+}
+
+/**
+ * [Ajustes do CHG, D-CHG-37] Visão Etapa: uma etapa por vez na largura toda,
+ * com os cards compactos numa grade que se ajusta à largura.
+ */
+export function ChgStageView({ cards, stages, stage, onStage, cardProps, drag }) {
+  const current = stages.find((s) => s.key === stage) || stages[0]
+  const stageCards = cards.filter((c) => c.view.stage === current.key).sort(sortByWindow)
+  return (
+    <section aria-label="Etapa" className="chg-stage-view" data-chg-stage-view="">
+      <div aria-label="Etapa" className="chg-stage-tabs" role="group">
+        {stages.map((s) => (
+          <button aria-pressed={s.key === current.key} className={`chg-stage-tab chg-tone-${s.key}`} data-chg-stage-tab={s.key} key={s.key} onClick={() => onStage(s.key)} type="button">
+            {s.title}<span className="chg-col-count">{cards.filter((c) => c.view.stage === s.key).length}</span>
+          </button>
+        ))}
+      </div>
+      <p className="chg-col-hint">{current.hint}</p>
+      {stageCards.length
+        ? <div className="chg-stage-grid">{stageCards.map((card) => <ChgCard card={card} drag={drag} key={card.id} {...cardProps} />)}</div>
+        : <p className="chg-empty">{current.empty}</p>}
+    </section>
   )
 }
