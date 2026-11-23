@@ -295,12 +295,12 @@ const createIssues = (overrides) => {
   const result = employeeCreateSchema.safeParse({ ...validCreate, ...overrides })
   return result.success ? [] : result.error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message }))
 }
-assert.deepEqual([employeeCreateSchema.safeParse(validCreate).data?.nc, employeeCreateSchema.safeParse({ ...validCreate, nc: ' 000123 ' }).data?.nc, employeeCreateSchema.safeParse({ ...validCreate, nc: '123456789012' }).success], ['900000001', '000123', true], 'NC no cadastro novo: digitos com zero a esquerda, ate 12, sem espacos')
+assert.deepEqual([employeeCreateSchema.safeParse(validCreate).data?.nc, employeeCreateSchema.safeParse({ ...validCreate, nc: ' 123 ' }).data?.nc, employeeCreateSchema.safeParse({ ...validCreate, nc: '123456789012' }).success], ['900000001', '123', true], 'NC no cadastro novo: digitos, ate 12, sem espacos')
 for (const nc of ['', null, undefined, '   ']) {
   assert.deepEqual(createIssues({ nc }), [{ path: 'nc', message: NC_MISSING_MESSAGE }], `NC ${JSON.stringify(nc)} no cadastro novo: obrigatorio`)
 }
-for (const nc of ['12a', '1234567890123', '-1', '1 2', '1.0']) {
-  assert.deepEqual(createIssues({ nc }), [{ path: 'nc', message: NC_INVALID_MESSAGE }], `NC ${JSON.stringify(nc)}: so digitos, de 1 a 12`)
+for (const nc of ['12a', '1234567890123', '-1', '1 2', '1.0', '0123', '0', ' 000123 ']) {
+  assert.deepEqual(createIssues({ nc }), [{ path: 'nc', message: NC_INVALID_MESSAGE }], `NC ${JSON.stringify(nc)}: so digitos, de 1 a 12, sem zero a esquerda`)
 }
 const editNoNc = employeeFormSchema.safeParse(validEmployee)
 const editNc = employeeFormSchema.safeParse({ ...validEmployee, nc: ' 42 ' })

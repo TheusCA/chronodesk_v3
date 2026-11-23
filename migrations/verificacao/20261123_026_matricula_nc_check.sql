@@ -57,9 +57,9 @@ SET @problemas_026_sql := IF(
     @tem_026 = 3,
     'SELECT
         (SELECT COUNT(*) - COUNT(DISTINCT matricula) FROM funcionarios WHERE matricula IS NOT NULL) AS nc_repetido,
-        (SELECT COUNT(*) FROM funcionarios WHERE matricula IS NOT NULL AND NOT REGEXP_LIKE(matricula, ''^[0-9]{1,12}$'', ''c'')) AS nc_fora_do_formato,
-        (SELECT COUNT(*) FROM portal_overtime_entries WHERE employee_nc IS NOT NULL AND NOT REGEXP_LIKE(employee_nc, ''^[0-9]{1,12}$'', ''c''))
-          + (SELECT COUNT(*) FROM portal_time_adjustments WHERE employee_nc IS NOT NULL AND NOT REGEXP_LIKE(employee_nc, ''^[0-9]{1,12}$'', ''c'')) AS copias_fora_do_formato,
+        (SELECT COUNT(*) FROM funcionarios WHERE matricula IS NOT NULL AND NOT REGEXP_LIKE(matricula, ''^[1-9][0-9]{0,11}$'', ''c'')) AS nc_fora_do_formato,
+        (SELECT COUNT(*) FROM portal_overtime_entries WHERE employee_nc IS NOT NULL AND NOT REGEXP_LIKE(employee_nc, ''^[1-9][0-9]{0,11}$'', ''c''))
+          + (SELECT COUNT(*) FROM portal_time_adjustments WHERE employee_nc IS NOT NULL AND NOT REGEXP_LIKE(employee_nc, ''^[1-9][0-9]{0,11}$'', ''c'')) AS copias_fora_do_formato,
         (SELECT COUNT(*) FROM portal_overtime_entries o JOIN funcionarios f ON f.id = o.employee_id
           WHERE o.employee_nc IS NOT NULL AND NOT (o.employee_nc <=> f.matricula))
           + (SELECT COUNT(*) FROM portal_time_adjustments t JOIN funcionarios f ON f.id = t.employee_id

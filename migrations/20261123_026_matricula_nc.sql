@@ -7,7 +7,7 @@
 -- copia NULL (o CSV usa o NC atual do cadastro nessas linhas).
 --
 -- 1. funcionarios.matricula VARCHAR(12) NULL (ALGORITHM=INSTANT), so digitos,
---    de 1 a 12 (ck_funcionarios_matricula, ALGORITHM=COPY: o MySQL confere as
+--    de 1 a 12, sem zero a esquerda (ck_funcionarios_matricula, ALGORITHM=COPY: o MySQL confere as
 --    linhas que existem, com a manutencao ligada) e unica entre os cadastros
 --    (uq_funcionarios_matricula; varios NULL continuam permitidos).
 -- 2. portal_overtime_entries.employee_nc e portal_time_adjustments.employee_nc
@@ -45,7 +45,7 @@ SET @add_matricula_sql := IF(
     @has_matricula = 0,
     'ALTER TABLE funcionarios
         ADD COLUMN matricula VARCHAR(12) NULL DEFAULT NULL
-        COMMENT ''NC: matricula do cadastro Senior (so digitos, 1 a 12); NULL = sem NC'',
+        COMMENT ''NC: matricula do cadastro Senior (so digitos, 1 a 12, sem zero a esquerda); NULL = sem NC'',
         ALGORITHM=INSTANT',
     'SELECT 1'
 );
@@ -61,7 +61,7 @@ SET @has_matricula_check := (
 SET @add_matricula_check_sql := IF(
     @has_matricula_check = 0,
     'ALTER TABLE funcionarios
-        ADD CONSTRAINT ck_funcionarios_matricula CHECK (matricula IS NULL OR REGEXP_LIKE(matricula, ''^[0-9]{1,12}$'', ''c'')),
+        ADD CONSTRAINT ck_funcionarios_matricula CHECK (matricula IS NULL OR REGEXP_LIKE(matricula, ''^[1-9][0-9]{0,11}$'', ''c'')),
         ALGORITHM=COPY',
     'SELECT 1'
 );
@@ -107,7 +107,7 @@ SET @has_overtime_nc_check := (
 SET @add_overtime_nc_check_sql := IF(
     @has_overtime_nc_check = 0,
     'ALTER TABLE portal_overtime_entries
-        ADD CONSTRAINT ck_overtime_employee_nc CHECK (employee_nc IS NULL OR REGEXP_LIKE(employee_nc, ''^[0-9]{1,12}$'', ''c'')),
+        ADD CONSTRAINT ck_overtime_employee_nc CHECK (employee_nc IS NULL OR REGEXP_LIKE(employee_nc, ''^[1-9][0-9]{0,11}$'', ''c'')),
         ALGORITHM=COPY',
     'SELECT 1'
 );
@@ -139,7 +139,7 @@ SET @has_adjustment_nc_check := (
 SET @add_adjustment_nc_check_sql := IF(
     @has_adjustment_nc_check = 0,
     'ALTER TABLE portal_time_adjustments
-        ADD CONSTRAINT ck_time_adjustment_employee_nc CHECK (employee_nc IS NULL OR REGEXP_LIKE(employee_nc, ''^[0-9]{1,12}$'', ''c'')),
+        ADD CONSTRAINT ck_time_adjustment_employee_nc CHECK (employee_nc IS NULL OR REGEXP_LIKE(employee_nc, ''^[1-9][0-9]{0,11}$'', ''c'')),
         ALGORITHM=COPY',
     'SELECT 1'
 );

@@ -2159,7 +2159,8 @@ $ncCases = qa_run_endpoints($qaDir, [
     'novo_nc_invalido' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $ncBodyNew(['nc' => '12a']), $ncDb),
     'novo_nc_longo' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $ncBodyNew(['nc' => '1234567890123']), $ncDb),
     'novo_nc_em_uso' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $ncBodyNew(['nc' => '900000033']), $ncDb),
-    'novo_ok' => $employeeSpec('adicionar_funcionario.php', $leaderSession, $ncBodyNew(['nc' => ' 000123 ']), $ncDb),
+    'novo_ok' => $employeeSpec('adicionar_funcionario.php', $leaderSession, $ncBodyNew(['nc' => ' 987654321 ']), $ncDb),
+    'novo_nc_zero' => $employeeSpec('adicionar_funcionario.php', QA_ADMIN_SESSION, $ncBodyNew(['nc' => '0987']), $ncDb),
     'edita_sem_nc' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva']), $ncDb),
     'edita_mesmo_nc' => $employeeSpec('atualizar_funcionario.php', QA_ADMIN_SESSION, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'nc' => '900000011']), $ncDb),
     'edita_troca_nc' => $employeeSpec('atualizar_funcionario.php', $leaderSession, $employeeBody(['funcionario_id' => 1, 'id' => 1, 'ad_login' => 'joao.silva', 'nc' => '900000012']), $ncDb),
@@ -2172,7 +2173,7 @@ $ncCases = qa_run_endpoints($qaDir, [
     'lista_tecnico' => ['endpoint' => 'api/listar_funcionarios.php', 'method' => 'GET', 'session' => qa_ci_session(1, 'joao.silva', 'tecnico'), 'db' => $ncDb],
 ]);
 $ncWrote = static fn (array $result): bool => preg_match('/\[QA_WRITE\] (UPDATE funcionarios SET matricula|INSERT INTO funcionarios id=banco)/', $result['log']) === 1;
-foreach (['novo_sem_nc' => 'NC obrigatório', 'novo_nc_invalido' => 'NC inválido', 'novo_nc_longo' => 'NC inválido', 'novo_nc_em_uso' => 'já está em outro cadastro', 'edita_apaga_nc' => 'não pode ser apagado', 'edita_nc_em_uso' => 'já está em outro cadastro', 'edita_nc_invalido' => 'NC inválido'] as $case => $message) {
+foreach (['novo_sem_nc' => 'NC obrigatório', 'novo_nc_invalido' => 'NC inválido', 'novo_nc_longo' => 'NC inválido', 'novo_nc_zero' => 'sem zero à esquerda', 'novo_nc_em_uso' => 'já está em outro cadastro', 'edita_apaga_nc' => 'não pode ser apagado', 'edita_nc_em_uso' => 'já está em outro cadastro', 'edita_nc_invalido' => 'NC inválido'] as $case => $message) {
     assert_same([400, true, false, false], [$ncCases[$case]['status'], strpos($ncCases[$case]['body'], $message) !== false, $ncWrote($ncCases[$case]), strpos($ncCases[$case]['log'], 'FUNCIONARIO_NC_ALTERADO') !== false], "NC {$case}: 400 com a mensagem, nada gravado nem auditado");
 }
 assert_same([200, true, true, false], [
@@ -2180,7 +2181,7 @@ assert_same([200, true, true, false], [
     preg_match('/\[QA_WRITE\] INSERT INTO funcionarios id=banco coluna_id=nao perfil=tecnico login=nc\.novo [^
 ]* nc=preenchido/', $ncCases['novo_ok']['log']) === 1,
     strpos($ncCases['novo_ok']['log'], '[QA_AUDIT] FUNCIONARIO_NC_ALTERADO [WARNING]: NC do funcionario ID 30 incluido por lideranca') !== false,
-    strpos($ncCases['novo_ok']['log'] . $ncCases['novo_ok']['body'], '000123') !== false,
+    strpos($ncCases['novo_ok']['log'] . $ncCases['novo_ok']['body'], '987654321') !== false,
 ], 'NC no cadastro novo: gravado no INSERT e auditado so com o ID (o valor nunca no log, na auditoria nem na resposta)');
 assert_same([[200, false, false], [200, false, false]], [
     [$ncCases['edita_sem_nc']['status'], strpos($ncCases['edita_sem_nc']['log'], 'matricula') !== false, strpos($ncCases['edita_sem_nc']['log'], 'FUNCIONARIO_NC_ALTERADO') !== false],

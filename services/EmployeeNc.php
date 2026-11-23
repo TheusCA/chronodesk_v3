@@ -4,15 +4,15 @@ declare(strict_types=1);
 /**
  * [Lote NC, 2026-11-23] NC: a matricula do cadastro Senior, um numero fixo
  * por pessoa (migration 026; docs/DESENHO_NC_E_ICONE.md). So digitos, de 1 a
- * 12, unico entre os cadastros; NULL = sem NC. A copia em cada lancamento de
+ * 12, sem zero a esquerda, unico entre os cadastros; NULL = sem NC. A copia em cada lancamento de
  * hora extra e de correcao de ponto vem do cadastro, lida pelo servidor na
  * mesma transacao: nunca do navegador (D-NC-2). O valor nunca vai para log
  * nem auditoria (D-NC-3).
  */
 final class EmployeeNc {
     public const REQUIRED_MESSAGE = 'Sua matrícula (NC) não está no cadastro. Peça à Liderança para incluir.';
-    public const INVALID_MESSAGE = 'NC inválido: use só dígitos, de 1 a 12.';
-    public const MISSING_MESSAGE = 'NC obrigatório: informe a matrícula do cadastro Senior (só dígitos, de 1 a 12).';
+    public const INVALID_MESSAGE = 'NC inválido: use só dígitos, de 1 a 12, sem zero à esquerda.';
+    public const MISSING_MESSAGE = 'NC obrigatório: informe a matrícula do cadastro Senior (só dígitos, de 1 a 12, sem zero à esquerda).';
     public const IN_USE_MESSAGE = 'Este NC já está em outro cadastro (ativo ou arquivado).';
     public const CLEAR_MESSAGE = 'O NC não pode ser apagado pela tela: corrija o número.';
 
@@ -23,9 +23,9 @@ final class EmployeeNc {
     }
 
     /**
-     * NC do corpo da requisicao: texto so de digitos (de 1 a 12) ou null
-     * (vazio). false = invalido. Numero inteiro e aceito como texto; zero a
-     * esquerda e preservado.
+     * NC do corpo da requisicao: texto so de digitos (de 1 a 12, sem zero a
+     * esquerda) ou null (vazio). false = invalido. Numero inteiro e aceito como
+     * texto. Zero a esquerda e recusado (o NC sai como numero na planilha do RH).
      */
     public static function normalize(mixed $value): string|null|false {
         if ($value === null) {
@@ -41,7 +41,7 @@ final class EmployeeNc {
         if ($value === '') {
             return null;
         }
-        return preg_match('/^[0-9]{1,12}$/D', $value) === 1 ? $value : false;
+        return preg_match('/^[1-9][0-9]{0,11}$/D', $value) === 1 ? $value : false;
     }
 
     /**

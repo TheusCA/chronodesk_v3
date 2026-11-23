@@ -32,14 +32,14 @@ const employeeIdSchema = z.preprocess(
     .max(EMPLOYEE_ID_MAX, `ID deve ser no máximo ${EMPLOYEE_ID_MAX}.`),
 )
 
-// [Lote NC] NC: a matrícula do cadastro Senior, só dígitos, de 1 a 12 (o
-// servidor confere de novo, com a unicidade). Vazio = sem NC.
-export const NC_INVALID_MESSAGE = 'NC inválido: use só dígitos, de 1 a 12.'
-export const NC_MISSING_MESSAGE = 'NC obrigatório: informe a matrícula do cadastro Senior (só dígitos, de 1 a 12).'
+// [Lote NC] NC: a matrícula do cadastro Senior, só dígitos, de 1 a 12, sem
+// zero à esquerda (o servidor confere de novo, com a unicidade). Vazio = sem NC.
+export const NC_INVALID_MESSAGE = 'NC inválido: use só dígitos, de 1 a 12, sem zero à esquerda.'
+export const NC_MISSING_MESSAGE = 'NC obrigatório: informe a matrícula do cadastro Senior (só dígitos, de 1 a 12, sem zero à esquerda).'
 export const NC_CLEAR_MESSAGE = 'O NC não pode ser apagado pela tela: corrija o número.'
 const ncSchema = z.preprocess(
   (value) => String(value ?? '').trim(),
-  z.string().regex(/^[0-9]{0,12}$/, NC_INVALID_MESSAGE),
+  z.string().regex(/^(?:[1-9][0-9]{0,11})?$/, NC_INVALID_MESSAGE),
 )
 
 const employeeTimeSchema = z.string({ error: 'Informe o horário.' })

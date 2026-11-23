@@ -40,7 +40,7 @@ $migration = qa_sql_without_comments((string)file_get_contents($root . '/migrati
 $rollback = qa_sql_without_comments((string)file_get_contents($root . '/migrations/rollback/20261123_026_matricula_nc_down.sql'));
 $lines = (string)file_get_contents($root . '/migrations/rollback/20261123_026_ensaio_linhas_nc.sql');
 $check = (string)file_get_contents($root . '/migrations/verificacao/20261123_026_matricula_nc_check.sql');
-$digits = "REGEXP_LIKE(%s, ''^[0-9]{1,12}$'', ''c'')";
+$digits = "REGEXP_LIKE(%s, ''^[1-9][0-9]{0,11}$'', ''c'')";
 
 assert_same(1, substr_count($migration, "SET time_zone = 'America/Sao_Paulo';"), 'migration 026: fuso da sessao (A4)');
 foreach ([['funcionarios', 'matricula', 'has_matricula'], ['portal_overtime_entries', 'employee_nc', 'has_overtime_nc'], ['portal_time_adjustments', 'employee_nc', 'has_adjustment_nc']] as [$table, $column, $flag]) {
@@ -56,7 +56,7 @@ assert_same([1, 1, 1, 3], [
     substr_count($migration, 'ADD CONSTRAINT ck_overtime_employee_nc CHECK (employee_nc IS NULL OR ' . sprintf($digits, 'employee_nc') . ')'),
     substr_count($migration, 'ADD CONSTRAINT ck_time_adjustment_employee_nc CHECK (employee_nc IS NULL OR ' . sprintf($digits, 'employee_nc') . ')'),
     substr_count($migration, 'ALGORITHM=COPY'),
-], 'migration 026: so digitos, de 1 a 12, sensivel a caixa, nos tres lugares (COPY explicito: o MySQL confere as linhas)');
+], 'migration 026: so digitos, de 1 a 12, sem zero a esquerda, nos tres lugares (COPY explicito: o MySQL confere as linhas)');
 foreach (['ck_funcionarios_matricula', 'ck_overtime_employee_nc', 'ck_time_adjustment_employee_nc'] as $constraint) {
     assert_same(1, substr_count($migration, "CONSTRAINT_TYPE = 'CHECK' AND CONSTRAINT_NAME = '{$constraint}'"), "migration 026: {$constraint} so se nao existir");
 }
@@ -95,6 +95,7 @@ foreach (['colunas_026', 'checks_026', 'indice_026', 'copias_de_rollback_026', '
     assert_same(1, preg_match('/AS ' . $count . '(,|;|\'|$|\s)/m', $check), "verificacao 026: conta {$count}");
 }
 $checkSql = qa_sql_without_comments($check);
+assert_same([3, 0], [substr_count($checkSql, "REGEXP_LIKE(") === 3 ? substr_count($checkSql, "''^[1-9][0-9]{0,11}$'', ''c'')") : -1, substr_count($checkSql, '[0-9]{1,12}')], 'verificacao 026: as contagens de formato com a mesma regra da migration (sem zero a esquerda)');
 // Lista branca dos usos do NC na verificacao: nome da coluna no
 // information_schema, IS (NOT) NULL, COUNT(DISTINCT), REGEXP_LIKE e a
 // comparacao da copia com o cadastro. Qualquer outro uso (exibir, concatenar,
@@ -129,12 +130,12 @@ $_SERVER['REMOTE_ADDR'] = '127.0.0.250';
 define('CHRONODESK_STATELESS', true);
 require_once $root . '/services/OperationalService.php';
 
-assert_same(['000123', '1', '123456789012', null, null, false, false, false, false, false, '42'], [
-    EmployeeNc::normalize(' 000123 '), EmployeeNc::normalize('1'), EmployeeNc::normalize('123456789012'),
+assert_same(['123', '1', '123456789012', null, null, false, false, false, false, false, '42', false, false], [
+    EmployeeNc::normalize(' 123 '), EmployeeNc::normalize('1'), EmployeeNc::normalize('123456789012'),
     EmployeeNc::normalize(''), EmployeeNc::normalize(null), EmployeeNc::normalize('1234567890123'),
     EmployeeNc::normalize('12a'), EmployeeNc::normalize('-12'), EmployeeNc::normalize('1 2'), EmployeeNc::normalize(['12']),
-    EmployeeNc::normalize(42),
-], 'NC: so digitos, de 1 a 12, zero a esquerda preservado; vazio = sem NC; o resto e invalido');
+    EmployeeNc::normalize(42), EmployeeNc::normalize('0123'), EmployeeNc::normalize('0'),
+], 'NC: so digitos, de 1 a 12, sem zero a esquerda; vazio = sem NC; o resto e invalido');
 $requiredWith = static function (?string $value): bool {
     $value === null ? putenv('NC_OBRIGATORIO') : putenv('NC_OBRIGATORIO=' . $value);
     $result = EmployeeNc::required();
@@ -221,7 +222,7 @@ $ncDb = static function (): QaNcPdo {
     $pdo->employees = [
         11 => ['team' => 'n1', 'nc' => '900000011'],
         12 => ['team' => 'n2', 'nc' => null],
-        13 => ['team' => 'critico', 'nc' => '000000013'],
+        13 => ['team' => 'critico', 'nc' => '913'],
     ];
     return $pdo;
 };
@@ -244,7 +245,7 @@ $launch = static function (string $kind, array $body, array $actor, ?string $req
     return [$error, array_map(static fn (array $row): array => [$row['table'], $row[':employee_id'], array_key_exists(':employee_nc', $row) ? $row[':employee_nc'] : 'sem a coluna'], $pdo->inserted)];
 };
 assert_same([null, [['portal_overtime_entries', 11, '900000011']]], $launch('overtime', $overtimeBody + ['employee_nc' => '1', 'nc' => '2'], $tecnico(11)), 'hora extra: a copia do NC vem do cadastro, nunca do corpo (employee_nc e nc ignorados)');
-assert_same([null, [['portal_time_adjustments', 13, '000000013']]], $launch('adjustment', $adjustmentBody + ['employee_id' => 13, 'nc' => '2'], $gestao), 'correcao de ponto: a gestao lanca para outra pessoa com a copia do NC dela (zero a esquerda preservado)');
+assert_same([null, [['portal_time_adjustments', 13, '913']]], $launch('adjustment', $adjustmentBody + ['employee_id' => 13, 'nc' => '2'], $gestao), 'correcao de ponto: a gestao lanca para outra pessoa com a copia do NC dela (o NC do cadastro, nunca o do corpo)');
 assert_same([null, [['portal_overtime_entries', 12, null]]], $launch('overtime', $overtimeBody, $tecnico(12)), 'hora extra sem NC e sem NC_OBRIGATORIO: grava com a copia NULL (so aviso)');
 assert_same([null, [['portal_time_adjustments', 12, null]]], $launch('adjustment', $adjustmentBody, $tecnico(12), '0'), 'correcao sem NC com NC_OBRIGATORIO=0: grava (so aviso)');
 $refused = 'DomainException: Sua matrícula (NC) não está no cadastro. Peça à Liderança para incluir.';
@@ -263,7 +264,7 @@ $read = static function (array $query, array $actor, ?string $required = null) u
 assert_same([
     ['employee_id' => 11, 'nc' => '900000011', 'nc_required' => false],
     ['employee_id' => 12, 'nc' => null, 'nc_required' => true],
-    ['employee_id' => 13, 'nc' => '000000013', 'nc_required' => false],
+    ['employee_id' => 13, 'nc' => '913', 'nc_required' => false],
     ['employee_id' => 11, 'nc' => '900000011', 'nc_required' => false],
     'DomainException: Sessao sem colaborador vinculado.',
     'InvalidArgumentException: Colaborador nao encontrado ou inativo.',
@@ -275,9 +276,9 @@ assert_same([
     $read([], ['role' => 'tecnico', 'employee_id' => null]),
     $read(['employee_id' => 99], $gestao),
 ], 'leitura do NC para o formulario: tecnico e somente leitura so o proprio (o employee_id do pedido e ignorado); a gestao, qualquer ativo; com a chave');
-$csvRow = OperationalService::overtimeCsvRow(['employee_id' => 11, 'nc' => '000000013', 'employee_name' => 'Ficticio', 'work_date' => '2026-11-20', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'reason' => 'qa', 'justification' => 'qa', 'total_minutes' => 60, 'status' => 'pending'], []);
+$csvRow = OperationalService::overtimeCsvRow(['employee_id' => 11, 'nc' => '913', 'employee_name' => 'Ficticio', 'work_date' => '2026-11-20', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'reason' => 'qa', 'justification' => 'qa', 'total_minutes' => 60, 'status' => 'pending'], []);
 $csvOld = OperationalService::overtimeCsvRow(['employee_id' => 12, 'nc' => null, 'employee_name' => 'Ficticio', 'work_date' => '2026-11-20', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'reason' => 'qa', 'justification' => 'qa', 'total_minutes' => 60, 'status' => 'pending'], []);
-assert_same(['000000013', '', 'Ficticio', 10, 10], [$csvRow[0], $csvOld[0], $csvRow[1], count($csvRow), count(OperationalService::OVERTIME_CSV_HEADER)], 'CSV de horas extras: o NC na 1a coluna (vazio sem NC); a ordem e os outros campos nao mudam');
+assert_same(['913', '', 'Ficticio', 10, 10], [$csvRow[0], $csvOld[0], $csvRow[1], count($csvRow), count(OperationalService::OVERTIME_CSV_HEADER)], 'CSV de horas extras: o NC na 1a coluna (vazio sem NC); a ordem e os outros campos nao mudam');
 $csvFor = static function (string $kind) use ($ncDb, $gestao): array {
     $pdo = $ncDb();
     $pdo->rows = [
