@@ -10,6 +10,7 @@ import {
   techFilterOptions, uniqueSorted,
 } from '../lib/chg'
 import { ChgCard } from './chg/ChgCard'
+import { ChgCatalogPanel } from './chg/ChgCatalogPanel'
 import { ChgForm } from './chg/ChgForm'
 import { ChgImportPanel } from './chg/ChgImportPanel'
 import { ChgPanel } from './chg/ChgPanel'
@@ -82,6 +83,7 @@ export function ChgPage({ notify }) {
   const [preview, setPreview] = useState(null)
   const [dropStage, setDropStage] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
+  const [catalogOpen, setCatalogOpen] = useState(false)
   // [D-CHG-35] Painel "Abrir": o ID do card (o card vem sempre do quadro, com
   // a versão mais nova) e o botão que abriu, para o foco voltar a ele.
   const [panelId, setPanelId] = useState(null)
@@ -210,6 +212,7 @@ export function ChgPage({ notify }) {
         <Segmented label="Visualização" onChange={setView} options={[{ value: 'board', label: 'Quadro' }, { value: 'stage', label: 'Etapa' }, { value: 'list', label: 'Lista' }, { value: 'dash', label: 'Dashboard' }]} value={view} />
         <div className="chg-toolbar-actions">
           <a className="btn-secondary chg-btn" data-chg-export="" download href={apiUrl(`portal/chg_export.php?ids=${exportIds}`)}>Exportar Excel</a>
+          {data?.can_import === true && <button className="btn-secondary chg-btn" data-chg-catalog-open="" onClick={() => setCatalogOpen(true)} type="button">Catálogo de carteiras</button>}
           {data?.can_import === true && <button className="btn-secondary chg-btn" data-chg-import-open="" onClick={() => setImportOpen(true)} type="button">Importar do Controle v5</button>}
           {canManage && <button className="btn-primary chg-btn" data-chg-new="" onClick={() => setFormState({ mode: 'new', card: null })} type="button">Nova atualização</button>}
         </div>
@@ -300,6 +303,7 @@ export function ChgPage({ notify }) {
           technicians={technicians}
         />
       )}
+      {catalogOpen && <ChgCatalogPanel carteiras={data?.catalogos?.carteiras} notify={notify} onClose={() => setCatalogOpen(false)} onDone={refresh} />}
       {importOpen && <ChgImportPanel notify={notify} onClose={() => setImportOpen(false)} onDone={refresh} />}
       {confirm && (
         <ConfirmActionDialog busy={confirmBusy} busyLabel="Aguarde..." confirmLabel={confirm.confirmLabel} description={confirm.description} onCancel={() => setConfirm(null)} onConfirm={runConfirm} title={confirm.title} />

@@ -47,3 +47,28 @@ export function summaryRows(result) {
   const fields = Object.entries(result.campos_descartados || {}).map(([field, value]) => [`Campo descartado: ${field}`, value])
   return [...counts, ...fields]
 }
+
+// [Ajustes do CHG, D-CHG-39 e D-CHG-40] Prévia da importação do catálogo de
+// carteiras pela planilha: os grupos, as contagens e quando dá para confirmar.
+export const CATALOG_GROUPS = [
+  { key: 'novas', label: 'Novas' },
+  { key: 'renomeadas', label: 'Renomeadas' },
+  { key: 'reativadas', label: 'Reativadas' },
+  { key: 'sem_mudanca', label: 'Sem mudança' },
+  { key: 'sairam', label: 'Saíram (ficam inativas)' },
+  { key: 'recusadas', label: 'Recusadas' },
+]
+
+export function catalogSummaryRows(result) {
+  return [['Linhas lidas', result?.resumo?.linhas ?? 0], ...CATALOG_GROUPS.map((g) => [g.label, result?.resumo?.[g.key] ?? 0])]
+}
+
+/** Confirmar só com alguma carteira válida e alguma mudança. */
+export function catalogCanConfirm(preview) {
+  return Boolean(preview?.pode_confirmar) && Number(preview?.mudancas) > 0
+}
+
+export function catalogCounts(carteiras) {
+  const list = carteiras || []
+  return { ativas: list.filter((c) => c.ativo).length, inativas: list.filter((c) => !c.ativo).length }
+}

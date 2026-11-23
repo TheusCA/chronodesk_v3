@@ -4,7 +4,7 @@ import { Drawer } from '../../components/ui/Drawer'
 import { Field } from '../../components/ui/Field'
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import { CHG_LABELS, PLAN_FIELDS, SERVICE_LABELS, TIPO_LABELS, maskDigits, parseMask, pasSum, plus24h, toMask } from '../../lib/chg'
-import { emptyPlan, formFromCard, payloadFromForm } from './chgFormModel'
+import { catalogCodeForName, emptyPlan, formFromCard, payloadFromForm } from './chgFormModel'
 
 // [9.17] Formulário do card (novo, editar, duplicar) no Drawer, com a guarda
 // de alteração não salva do portal. Início do Service Desk vem da sugestão e
@@ -90,7 +90,7 @@ export function ChgForm({ title, card, legacyName = null, catalog, technicians, 
                 <Field help={!c.sem_codigo && c.codigo && !catalogByCode.has(c.codigo.trim()) ? 'Código fora da lista padrão. Informe ou ajuste o nome.' : null} label={`Código da carteira ${i + 1}`}>
                   <input disabled={c.sem_codigo} inputMode="numeric" list="chg-codigos" maxLength={10} onChange={(e) => { const codigo = e.target.value.replace(/\D/g, ''); const nome = catalogByCode.get(codigo); setCarteira(i, nome ? { codigo, nome } : { codigo }) }} placeholder={c.sem_codigo ? 'Sem código' : 'Ex.: 372'} value={c.codigo} />
                 </Field>
-                <Field label={`Nome da carteira ${i + 1} *`}><input list="chg-nomes" maxLength={120} onChange={(e) => setCarteira(i, { nome: e.target.value })} value={c.nome} /></Field>
+                <Field label={`Nome da carteira ${i + 1} *`}><input list="chg-nomes" maxLength={120} onChange={(e) => { const nome = e.target.value; const codigo = !c.sem_codigo && !c.codigo.trim() ? catalogCodeForName(catalog?.carteiras, nome) : ''; setCarteira(i, codigo ? { nome, codigo } : { nome }) }} value={c.nome} /></Field>
                 <Field label="PAs (opcional)"><input inputMode="numeric" maxLength={5} onChange={(e) => setCarteira(i, { pas: e.target.value.replace(/\D/g, '') })} value={c.pas} /></Field>
                 <label className="chg-check"><input checked={c.sem_codigo} onChange={(e) => setCarteira(i, { sem_codigo: e.target.checked, codigo: e.target.checked ? '' : c.codigo })} type="checkbox" />Esta carteira não tem código</label>
                 <button className="btn-secondary chg-btn" disabled={form.carteiras.length === 1} onClick={() => set({ carteiras: form.carteiras.filter((_, k) => k !== i) })} type="button">Remover carteira {i + 1}</button>

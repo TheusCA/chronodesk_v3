@@ -1856,6 +1856,8 @@ $matrix = [
     'api/portal/chg_export.php GET' => [['env' => $chgOn], $expect['TODOS']],
     // [9.17.7] Importar do Controle v5: so o admin (chg.import), antes de ler o corpo.
     'api/portal/chg_import.php POST' => [['env' => $chgOn, 'content_type' => $json, 'body' => '{"action":"preview"}'], $expect['ADMIN']],
+    // [Ajustes do CHG, D-CHG-39] Catalogo de carteiras pela planilha: so o admin (chg.import), antes do CSRF e do arquivo.
+    'api/portal/chg_catalog_import.php POST' => [['env' => $chgOn, 'content_type' => 'multipart/form-data', 'body' => 'x'], $expect['ADMIN']],
     // F2: presenca para qualquer perfil autenticado (desenho, secao 3.2).
     'api/portal/presence.php GET' => [[], $expect['TODOS']],
     'api/portal/sdk_responsibles.php GET' => [[], $expect['TODOS']],
@@ -1935,11 +1937,14 @@ $chgCases = qa_run_endpoints($qaDir, [
     'leitura_tools' => $chgPost($roleSessions['somente_leitura'], [4]),
     'desligado_get' => ['endpoint' => 'api/portal/chg.php', 'method' => 'GET', 'session' => QA_ADMIN_SESSION, 'db' => QA_DB],
     'desligado_export' => ['endpoint' => 'api/portal/chg_export.php', 'method' => 'GET', 'session' => QA_ADMIN_SESSION, 'db' => QA_DB, 'env' => ['CHG_MODULE_ENABLED' => 'talvez']],
+    'desligado_catalogo' => ['endpoint' => 'api/portal/chg_catalog_import.php', 'method' => 'POST', 'content_type' => 'multipart/form-data', 'body' => 'x', 'session' => QA_ADMIN_SESSION, 'db' => QA_DB],
+    'catalogo_lideranca' => ['endpoint' => 'api/portal/chg_catalog_import.php', 'method' => 'POST', 'content_type' => 'multipart/form-data', 'body' => 'x', 'session' => $roleSessions['lideranca'], 'db' => QA_DB, 'env' => $chgOn],
 ]);
 assert_same([400, 400], [$chgCases['tecnico_tools']['status'], $chgCases['gestor_tools']['status']], 'CHG: tecnico e gestor no grupo Tools passam da permissao (o 400 e do formulario vazio)');
 assert_same([403, 403], [$chgCases['tecnico_fora']['status'], $chgCases['leitura_tools']['status']], 'CHG: fora do Tools 403; somente leitura no Tools tambem 403 (D-CHG-14)');
 assert_same([true, true], [strpos($chgCases['tecnico_fora']['log'], '[QA_AUDIT] CHG_NEGADO [WARNING]: Perfil tecnico sem permissao tentou acao=update') !== false, strpos($chgCases['leitura_tools']['log'], '[QA_AUDIT] CHG_NEGADO [WARNING]: Perfil somente_leitura sem permissao') !== false], 'CHG: recusa auditada so com o perfil e a acao');
-assert_same([404, 404], [$chgCases['desligado_get']['status'], $chgCases['desligado_export']['status']], 'CHG: modulo desligado (ausente ou invalido) responde 404 (D-CHG-17)');
+assert_same([404, 404, 404], [$chgCases['desligado_get']['status'], $chgCases['desligado_export']['status'], $chgCases['desligado_catalogo']['status']], 'CHG: modulo desligado (ausente ou invalido) responde 404 (D-CHG-17), tambem na importacao do catalogo');
+assert_same([403, true], [$chgCases['catalogo_lideranca']['status'], strpos($chgCases['catalogo_lideranca']['log'], '[QA_AUDIT] CHG_NEGADO [WARNING]: Perfil lideranca sem permissao tentou importar o catalogo de carteiras') !== false], 'CHG: catalogo de carteiras so com chg.import (Lideranca 403, recusa auditada so com o perfil)');
 
 // [pos-deploy A1] Download do relatorio como admin, pela CLI (QA_RESULT) e
 // pelo servidor embutido (cabecalhos). Com ZipArchive (o servidor), o corpo e

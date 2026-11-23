@@ -3300,6 +3300,27 @@ async function chg917(page, port, mock) {
     await page.waitFor(`!!document.querySelector('[data-chg-import]')`)
     const panel = await page.evaluate(`(() => ({ arquivos: document.querySelectorAll('[data-chg-import] input[type="file"]').length, previa_desligada: document.querySelector('[data-chg-import-preview]').disabled, lateral: document.documentElement.scrollWidth > innerWidth }))()`)
     report('Controle de CHG: com can_import, "Importar do Controle v5" abre o painel com os dois arquivos e a previa desligada (390 px, sem rolagem lateral)', panel.arquivos === 2 && panel.previa_desligada && !panel.lateral, JSON.stringify(panel))
+    // [Ajustes do CHG, D-CHG-39 e D-CHG-41] Catalogo de carteiras (so com
+    // can_import): o painel com as contagens e a previa desligada sem arquivo.
+    await page.press('Escape')
+    await sleep(250)
+    await page.click(`document.querySelector('[data-chg-catalog-open]')`)
+    await page.waitFor(`!!document.querySelector('[data-chg-catalog]')`)
+    const catalogPanel = await page.evaluate(`(() => ({ contagens: document.querySelector('[data-chg-catalog-counts]')?.textContent || '', arquivo: document.querySelector('[data-chg-catalog-file]')?.getAttribute('accept'), previa_desligada: document.querySelector('[data-chg-catalog-preview]').disabled, lateral: document.documentElement.scrollWidth > innerWidth }))()`)
+    report('Controle de CHG: com can_import, "Catalogo de carteiras" abre o painel com as contagens, a planilha .xlsx ou .csv e a previa desligada sem arquivo (390 px, sem rolagem lateral)', catalogPanel.contagens === '1 carteira(s) ativa(s) e 0 inativa(s) no catálogo.' && catalogPanel.arquivo === '.xlsx,.csv' && catalogPanel.previa_desligada && !catalogPanel.lateral, JSON.stringify(catalogPanel))
+    await page.press('Escape')
+    await sleep(250)
+    // Busca reversa: o nome igual ao do catalogo (outra caixa) preenche o codigo vazio.
+    await page.click(`document.querySelector('[data-chg-new]')`)
+    await page.waitFor(`!!document.querySelector('[data-chg-carteira="0"]')`)
+    await page.click(`[...document.querySelectorAll('[data-chg-carteira="0"] input')][1]`)
+    await page.typeText('carteira TESTE 01')
+    const reverse = await page.evaluate(`(() => { const inputs = [...document.querySelectorAll('[data-chg-carteira="0"] input')]; return { codigo: inputs[0].value, nome: inputs[1].value } })()`)
+    report('Controle de CHG: no formulario, o nome igual ao de uma carteira do catalogo (sem diferenca de maiusculas) preenche o codigo vazio; o nome fica como digitado', reverse.codigo === '9001' && reverse.nome === 'carteira TESTE 01', JSON.stringify(reverse))
+    await page.press('Escape')
+    await sleep(250)
+    await page.click(`${button('Descartar alterações')} || ${button('Sair sem salvar')} || [...document.querySelectorAll('[role="alertdialog"] button')].at(-1)`)
+    await sleep(250)
   } finally {
     mock.useChg({ on: false })
     mock.useAdminSession()

@@ -68,3 +68,15 @@ export function payloadFromForm(form) {
     plans: form.plans.map((p) => ({ ...p, implantacao: p.implantacao.trim().toUpperCase(), backup: p.backup.trim().toUpperCase(), rollback: p.rollback.trim().toUpperCase() })),
   }, null]
 }
+
+/**
+ * [Ajustes do CHG, D-CHG-41] Busca reversa do v5.2: o nome digitado igual ao
+ * de uma carteira ativa do catálogo (sem diferença de maiúsculas e dos espaços
+ * das pontas) dá o código; nome de mais de uma carteira ativa, nenhum.
+ */
+export function catalogCodeForName(carteiras, nome) {
+  const key = String(nome || '').trim().toLocaleLowerCase('pt-BR')
+  if (!key) return ''
+  const hits = (carteiras || []).filter((c) => c.ativo && String(c.nome).trim().toLocaleLowerCase('pt-BR') === key)
+  return hits.length === 1 ? hits[0].codigo : ''
+}

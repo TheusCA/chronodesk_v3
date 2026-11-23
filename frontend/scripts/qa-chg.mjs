@@ -223,7 +223,7 @@ check(() => assert.ok(read('src/pages/ChgPage.jsx').includes("import './chg/chg.
 check(() => assert.ok(read('src/lib/navigation.ts').includes("{ path: '/chg', label: 'Controle de CHG', icon: 'file', module: 'chg' },") && read('src/components/PortalLayout.jsx').includes('if (item.module && session.modulos?.[item.module] !== true) return null') && read('src/App.jsx').includes("(!route?.module || session.modulos?.[route.module] === true)"), 'menu e rota atrás do interruptor (session.modulos.chg)'))
 check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('useResource(ENDPOINT, { intervalMs: REFRESH_MS })') && read('src/pages/ChgPage.jsx').includes('const REFRESH_MS = 30_000'), 'atualiza a cada 30 s (e ao voltar o foco, pelo useResource)'))
 check(() => assert.ok(read('src/pages/chg/ChgForm.jsx').includes('useUnsavedChangesGuard(dirty)') && read('src/pages/chg/ChgForm.jsx').includes('<ConfirmDiscardDialog {...dialogProps} />'), 'formulário com a guarda de alteração não salva'))
-check(() => assert.ok(existsSync(join(projectRoot, 'api', 'portal', 'chg.php')) && readdirSync(join(srcRoot, 'pages', 'chg')).sort().join(',') === 'ChgCard.jsx,ChgForm.jsx,ChgImportPanel.jsx,ChgPanel.jsx,ChgViews.jsx,chg.css,chgFormModel.js,chgImportModel.js,chgPanelModel.js', 'arquivos do módulo'))
+check(() => assert.ok(existsSync(join(projectRoot, 'api', 'portal', 'chg.php')) && readdirSync(join(srcRoot, 'pages', 'chg')).sort().join(',') === 'ChgCard.jsx,ChgCatalogPanel.jsx,ChgForm.jsx,ChgImportPanel.jsx,ChgPanel.jsx,ChgViews.jsx,chg.css,chgFormModel.js,chgImportModel.js,chgPanelModel.js', 'arquivos do módulo'))
 
 // 5. Importação do Controle v5 (só admin): prévia só com contagens.
 const importModel = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'chgImportModel.js')).href)
@@ -239,5 +239,32 @@ check(() => assert.deepEqual(readOk, [null, { items: [] }], 'arquivo da importa�
 const importHtml = renderToStaticMarkup(h(ChgImportPanel, { notify: () => {}, onClose: () => {}, onDone: () => {} }))
 check(() => assert.ok(importHtml.includes('Importar do Controle v5') && (importHtml.match(/type="file"/gu) || []).length === 2 && /data-chg-import-preview="" disabled=""/u.test(importHtml) && !importHtml.includes('data-chg-import-confirm'), 'painel da importação: dois arquivos; prévia desligada sem arquivo; confirmar só depois da prévia'))
 check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('{data?.can_import === true && <button className="btn-secondary chg-btn" data-chg-import-open=""'), 'importar só com can_import do servidor (admin)'))
+
+// 6. [Ajustes do CHG, D-CHG-39 a D-CHG-41] Catálogo de carteiras pela
+// planilha (só admin) e a busca reversa do formulário. Dados fictícios.
+const { catalogCodeForName } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'chgFormModel.js')).href)
+const catalogFixture = [
+  { id: 1, codigo: '9001', nome: 'Carteira Teste 01', ativo: true },
+  { id: 2, codigo: '9002', nome: 'Carteira Repetida', ativo: true },
+  { id: 3, codigo: '9003', nome: 'Carteira Repetida', ativo: true },
+  { id: 4, codigo: '9004', nome: 'Carteira Inativa', ativo: false },
+]
+check(() => assert.deepEqual([
+  catalogCodeForName(catalogFixture, 'Carteira Teste 01'),
+  catalogCodeForName(catalogFixture, '  carteira TESTE 01 '),
+  catalogCodeForName(catalogFixture, 'Carteira Teste 0'),
+  catalogCodeForName(catalogFixture, 'Carteira Repetida'),
+  catalogCodeForName(catalogFixture, 'Carteira Inativa'),
+  catalogCodeForName(catalogFixture, ''),
+  catalogCodeForName(null, 'Carteira Teste 01'),
+], ['9001', '9001', '', '', '', '', ''], 'busca reversa: o nome igual ao de uma carteira ativa (sem diferença de maiúsculas e espaços das pontas) dá o código; parcial, repetido ou inativo, nenhum'))
+const formSource = read('src/pages/chg/ChgForm.jsx')
+check(() => assert.ok(formSource.includes("const codigo = !c.sem_codigo && !c.codigo.trim() ? catalogCodeForName(catalog?.carteiras, nome) : ''; setCarteira(i, codigo ? { nome, codigo } : { nome })") && formSource.includes('const nome = catalogByCode.get(codigo); setCarteira(i, nome ? { codigo, nome } : { codigo })'), 'formulário: o nome preenche o código só com o código vazio e "sem código" desmarcado; o código continua preenchendo o nome'))
+check(() => assert.deepEqual([importModel.catalogCanConfirm({ pode_confirmar: true, mudancas: 2 }), importModel.catalogCanConfirm({ pode_confirmar: true, mudancas: 0 }), importModel.catalogCanConfirm({ pode_confirmar: false, mudancas: 3 }), importModel.catalogCanConfirm(null), importModel.catalogCounts(catalogFixture)], [true, false, false, false, { ativas: 3, inativas: 1 }], 'catálogo: confirmar só com carteira válida e alguma mudança; as contagens de ativas e inativas'))
+check(() => assert.deepEqual(importModel.catalogSummaryRows({ resumo: { linhas: 9, novas: 1, renomeadas: 2, reativadas: 0, sem_mudanca: 3, sairam: 1, recusadas: 2 } }), [['Linhas lidas', 9], ['Novas', 1], ['Renomeadas', 2], ['Reativadas', 0], ['Sem mudança', 3], ['Saíram (ficam inativas)', 1], ['Recusadas', 2]], 'catálogo: as linhas da prévia'))
+const { ChgCatalogPanel } = await import(pathToFileURL(join(srcRoot, 'pages', 'chg', 'ChgCatalogPanel.jsx')).href)
+const catalogHtml = renderToStaticMarkup(h(ChgCatalogPanel, { carteiras: catalogFixture, notify: () => {}, onClose: () => {}, onDone: () => {} }))
+check(() => assert.ok(catalogHtml.includes('Catálogo de carteiras') && catalogHtml.includes('3 carteira(s) ativa(s) e 1 inativa(s) no catálogo.') && /accept="\.xlsx,\.csv"/u.test(catalogHtml) && /data-chg-catalog-preview="" disabled=""/u.test(catalogHtml) && !catalogHtml.includes('data-chg-catalog-confirm'), 'painel do catálogo: contagens, planilha .xlsx ou .csv, prévia desligada sem arquivo, confirmar só depois da prévia'))
+check(() => assert.ok(read('src/pages/ChgPage.jsx').includes('{data?.can_import === true && <button className="btn-secondary chg-btn" data-chg-catalog-open=""') && read('src/pages/chg/ChgCatalogPanel.jsx').includes("const ENDPOINT = 'portal/chg_catalog_import.php'") && read('src/pages/chg/ChgCatalogPanel.jsx').includes('disabled={busy || !catalogCanConfirm(preview)}'), 'catálogo: só com can_import (admin); a planilha vai ao endpoint do catálogo; confirmar com a prévia válida'))
 
 console.log(`QA do Controle de CHG (frontend) OK (${checks} conferências)`)

@@ -802,4 +802,159 @@ $guardAt = strpos($importApi, 'if (!ChgAccess::canImport($role)) {');
 assert_same(true, $guardAt !== false && $guardAt < strpos($importApi, '$data = portal_json_input(ChgImport::MAX_BYTES);') && strpos($importApi, "audit_log('CHG_NEGADO'") > $guardAt && strpos($importApi, "if (!chg_module_enabled()) {") < $guardAt, 'importar, endpoint: so o admin (403 auditado antes de ler o corpo), CSRF, limite de 2 MB e desligado = 404');
 assert_same(1, preg_match("/audit_log\\('CHG_IMPORTADO', 'Importacao do Controle v5: novos ' \\. \\\$c\\['novos'\\]/", $importApi), 'importar, endpoint: auditoria so com as contagens');
 
+// ----------------------------------------------------------------------------
+// [Ajustes do CHG, D-CHG-39 e D-CHG-40] Importacao do catalogo de carteiras
+// pela planilha: cabecalho "cod" e "carteira" (as demais colunas ignoradas),
+// previa com novas, renomeadas, reativadas, sem mudanca, as que sairam e as
+// recusadas; confirmar grava so isso; o mesmo arquivo de novo da 0 mudancas.
+// Catalogo e planilha ficticios.
+// ----------------------------------------------------------------------------
+require_once __DIR__ . '/../services/ChgCatalogImport.php';
+
+final class QaCatalogPdo extends PDO {
+    public array $rows = [];
+    public array $sql = [];
+    public array $writes = [];
+    public bool $tx = false;
+    public int $nextId = 100;
+    public function __construct() {
+    }
+    public function inTransaction(): bool {
+        return $this->tx;
+    }
+    public function beginTransaction(): bool {
+        $this->tx = true;
+        return true;
+    }
+    public function commit(): bool {
+        $this->tx = false;
+        return true;
+    }
+    public function rollBack(): bool {
+        $this->tx = false;
+        return true;
+    }
+    public function query(string $query, ?int $fetchMode = null, mixed ...$args): PDOStatement|false {
+        $this->sql[] = $query;
+        return new QaCatalogStatement($this, $query);
+    }
+    public function prepare(string $query, array $options = []): PDOStatement|false {
+        return new QaCatalogStatement($this, $query);
+    }
+}
+final class QaCatalogStatement extends PDOStatement {
+    public function __construct(private QaCatalogPdo $db, private string $query) {
+    }
+    public function fetchAll(int $mode = PDO::FETCH_DEFAULT, mixed ...$args): array {
+        return array_map(static fn (array $r): array => ['id' => $r['id'], 'codigo' => $r['codigo'], 'nome' => $r['nome'], 'ativo' => $r['ativo']], $this->db->rows);
+    }
+    public function execute(?array $params = null): bool {
+        if (str_starts_with($this->query, 'INSERT')) {
+            $this->db->writes[] = ['insert', $params[':codigo'], $params[':nome'], $params[':actor']];
+            $this->db->rows[] = ['id' => $this->db->nextId++, 'codigo' => $params[':codigo'], 'nome' => $params[':nome'], 'ativo' => 1];
+            return true;
+        }
+        $this->db->writes[] = ['update', $params[':id'], $params[':nome'], $params[':ativo']];
+        foreach ($this->db->rows as $i => $row) {
+            if ($row['id'] === $params[':id']) {
+                $this->db->rows[$i] = ['nome' => $params[':nome'], 'ativo' => $params[':ativo']] + $row;
+            }
+        }
+        return true;
+    }
+}
+
+$catalogDb = static function (): QaCatalogPdo {
+    $pdo = new QaCatalogPdo();
+    $pdo->rows = [
+        ['id' => 1, 'codigo' => '9001', 'nome' => 'Carteira Teste 01', 'ativo' => 1],
+        ['id' => 2, 'codigo' => '9002', 'nome' => 'Carteira Teste 02', 'ativo' => 1],
+        ['id' => 3, 'codigo' => '9003', 'nome' => 'Carteira Teste 03', 'ativo' => 0],
+        ['id' => 4, 'codigo' => '9004', 'nome' => 'Carteira Teste 04', 'ativo' => 0],
+        ['id' => 5, 'codigo' => '9005', 'nome' => 'Carteira Teste 05', 'ativo' => 1],
+        ['id' => 6, 'codigo' => '9006', 'nome' => 'Carteira Teste 06', 'ativo' => 1],
+        ['id' => 7, 'codigo' => '9007', 'nome' => 'Carteira Teste 07', 'ativo' => 1],
+        ['id' => 8, 'codigo' => '9008', 'nome' => 'Carteira Teste 08', 'ativo' => 1],
+    ];
+    return $pdo;
+};
+// A planilha base: colunas extras (endereco, banco) que nunca sao gravadas.
+$sheet = [
+    ['Catalogo de teste'],
+    ['Cód', 'Carteira ', 'tab_filha', 'ip', 'banco'],
+    ['9001', 'Carteira Teste 01', 'tab_qa', '192.0.2.10', 'banco_qa'],
+    ['9002.0', 'Carteira Teste 02 Renomeada', 'tab_qa', '192.0.2.11', 'banco_qa'],
+    ['9003', 'Carteira Teste 03', 'tab_qa', '192.0.2.12', 'banco_qa'],
+    ['9004', 'Carteira Teste 04 Nova Fase', '', '', ''],
+    ['9010', 'Carteira Teste 10', 'tab_qa', '192.0.2.13', 'banco_qa'],
+    ['9011', 'Carteira Teste 11', '', '', ''],
+    ['9011', 'Carteira Teste 11 Outra', '', '', ''],
+    ['abc', 'Carteira Sem Codigo', 'tab_qa', '192.0.2.14', 'banco_qa'],
+    ['9012', '', '', '', ''],
+    ['9013', str_repeat('x', 121), '', '', ''],
+    ['', '', '', '', ''],
+    ['9006', 'Carteira Teste 06', '', '', ''],
+    ['9008', 'Carteira Teste 08', '', '', ''],
+    ['9008', 'Carteira Teste 08 Outra', '', '', ''],
+];
+$catalogPreview = (new ChgCatalogImport($catalogDb(), 'qa.admin'))->preview($sheet);
+assert_same(['linhas' => 13, 'novas' => 1, 'renomeadas' => 2, 'reativadas' => 1, 'sem_mudanca' => 2, 'sairam' => 2, 'recusadas' => 7], $catalogPreview['resumo'], 'catalogo, previa: as contagens por grupo (a linha de titulo e a vazia fora)');
+assert_same([[['codigo' => '9010', 'nome' => 'Carteira Teste 10']], [['codigo' => '9002', 'nome_atual' => 'Carteira Teste 02', 'nome' => 'Carteira Teste 02 Renomeada'], ['codigo' => '9004', 'nome_atual' => 'Carteira Teste 04', 'nome' => 'Carteira Teste 04 Nova Fase']], [['codigo' => '9003', 'nome' => 'Carteira Teste 03']], [['codigo' => '9005', 'nome' => 'Carteira Teste 05'], ['codigo' => '9007', 'nome' => 'Carteira Teste 07']]], [$catalogPreview['novas'], $catalogPreview['renomeadas'], $catalogPreview['reativadas'], $catalogPreview['sairam']], 'catalogo, previa: nova; renomeada (o "9002.0" do Excel vira 9002; a inativa renomeada volta); reativada (mesmo nome, inativa); as ativas fora do arquivo saem');
+assert_same([[8, '9011', 'código repetido na planilha'], [9, '9011', 'código repetido na planilha'], [10, 'abc', 'código não numérico'], [11, '9012', 'sem nome'], [12, '9013', 'nome acima de 120 caracteres'], [15, '9008', 'código repetido na planilha'], [16, '9008', 'código repetido na planilha']], array_map(static fn (array $r): array => [$r['linha'], $r['codigo'], $r['motivo']], $catalogPreview['recusadas']), 'catalogo, previa: recusadas com a linha e o motivo (codigo repetido: as duas linhas)');
+assert_same([true, 6, false], [$catalogPreview['pode_confirmar'], $catalogPreview['mudancas'], array_key_exists('todos', $catalogPreview)], 'catalogo, previa: pode confirmar, 6 mudancas, sem a lista interna');
+$previewEncoded = json_encode($catalogPreview);
+assert_same([false, false, false], [str_contains($previewEncoded, '192.0.2'), str_contains($previewEncoded, 'banco_qa'), str_contains($previewEncoded, 'tab_qa')], 'catalogo: as colunas extras nunca saem na previa');
+$writeDb = $catalogDb();
+$writeDb->writes = [];
+$catalogResult = (new ChgCatalogImport($writeDb, 'qa.admin'))->confirm($sheet);
+assert_same([
+    ['insert', '9010', 'Carteira Teste 10', 'qa.admin'],
+    ['update', 2, 'Carteira Teste 02 Renomeada', 1],
+    ['update', 4, 'Carteira Teste 04 Nova Fase', 1],
+    ['update', 3, 'Carteira Teste 03', 1],
+    ['update', 5, 'Carteira Teste 05', 0],
+    ['update', 7, 'Carteira Teste 07', 0],
+], $writeDb->writes, 'catalogo, confirmar: insere a nova, renomeia (e reativa), reativa e desativa as que sairam; nada apagado, as sem mudanca e as recusadas intocadas');
+assert_same([true, false, 6], [str_ends_with((string)end($writeDb->sql), ' FOR UPDATE'), $writeDb->tx, $catalogResult['mudancas']], 'catalogo, confirmar: le o catalogo travado, numa transacao propria fechada');
+assert_same(['9006' => 1, '9008' => ['Carteira Teste 08', 1], '9011' => 0], ['9006' => (int)array_values(array_filter($writeDb->rows, static fn ($r) => $r['codigo'] === '9006'))[0]['ativo'], '9008' => [array_values(array_filter($writeDb->rows, static fn ($r) => $r['codigo'] === '9008'))[0]['nome'], (int)array_values(array_filter($writeDb->rows, static fn ($r) => $r['codigo'] === '9008'))[0]['ativo']], '9011' => count(array_filter($writeDb->rows, static fn ($r) => $r['codigo'] === '9011'))], 'catalogo: o codigo repetido no arquivo nao entra; a carteira do catalogo com codigo repetido nao muda nem sai; a sem mudanca continua ativa');
+$writeDb->writes = [];
+$again = (new ChgCatalogImport($writeDb, 'qa.admin'))->confirm($sheet);
+assert_same([[], 0, 0, 0, 0, 0], [$writeDb->writes, $again['mudancas'], $again['resumo']['novas'], $again['resumo']['renomeadas'], $again['resumo']['reativadas'], $again['resumo']['sairam']], 'catalogo: o mesmo arquivo de novo nao grava nada (idempotente)');
+// O catalogo importado sobre ele mesmo: 0 mudancas.
+$selfDb = $catalogDb();
+$selfSheet = array_merge([['cod', 'carteira']], array_map(static fn (array $r): array => [$r['codigo'], $r['nome']], array_filter($selfDb->rows, static fn (array $r): bool => $r['ativo'] === 1)));
+$self = (new ChgCatalogImport($selfDb, 'qa.admin'))->preview($selfSheet);
+assert_same([0, 6, 0], [$self['mudancas'], $self['resumo']['sem_mudanca'], $self['resumo']['recusadas']], 'catalogo: as ativas importadas sobre o proprio catalogo dao 0 mudancas');
+$refusedConfirm = '';
+$emptyDb = $catalogDb();
+try {
+    (new ChgCatalogImport($emptyDb, 'qa.admin'))->confirm([['cod', 'carteira'], ['x', 'Sem codigo']]);
+} catch (InvalidArgumentException $e) {
+    $refusedConfirm = $e->getMessage();
+}
+assert_same([ChgCatalogImport::EMPTY_MESSAGE, [], false], [$refusedConfirm, $emptyDb->writes, $emptyDb->tx], 'catalogo: arquivo sem linha valida nao confirma (nunca desativa o catalogo inteiro) e desfaz a transacao');
+$noHeader = '';
+try {
+    (new ChgCatalogImport($catalogDb(), 'qa.admin'))->preview([['codigo', 'nome'], ['9001', 'X']]);
+} catch (InvalidArgumentException $e) {
+    $noHeader = $e->getMessage();
+}
+$onlyCod = '';
+try {
+    (new ChgCatalogImport($catalogDb(), 'qa.admin'))->preview([['cod', 'nome'], ['9001', 'X']]);
+} catch (InvalidArgumentException $e) {
+    $onlyCod = $e->getMessage();
+}
+$late = (new ChgCatalogImport($catalogDb(), 'qa.admin'))->preview([['cod', 'observacao'], ['cod', 'carteira'], ['9001', 'Carteira Teste 01']]);
+assert_same([ChgCatalogImport::HEADER_MESSAGE, 1, 0], [$onlyCod, $late['resumo']['sem_mudanca'], $late['resumo']['recusadas']], 'catalogo: o cabecalho e a 1a linha com cod E carteira (so cod nao basta)');
+assert_same([ChgCatalogImport::HEADER_MESSAGE, 'cod', '9002', '9002', null, null, null], [$noHeader, ChgCatalogImport::normalize('  CÓD '), ChgCatalogImport::code('9002.0'), ChgCatalogImport::code(' 9002 '), ChgCatalogImport::code('12345678901'), ChgCatalogImport::code('9.5'), ChgCatalogImport::code('')], 'catalogo: cabecalho obrigatorio; codigo so com digitos, de 1 a 10');
+assert_same('Importacao do catalogo de carteiras: 13 linha(s); novas 1, renomeadas 2, reativadas 1, sem mudanca 2, sairam 2, recusadas 7', ChgCatalogImport::auditDetails($catalogResult, 'confirm'), 'catalogo: auditoria so com as contagens');
+$catalogApi = (string)file_get_contents(__DIR__ . '/../api/portal/chg_catalog_import.php');
+assert_same([true, true, true, true], [
+    strpos($catalogApi, 'if (!ChgAccess::canImport($role)) {') !== false && strpos($catalogApi, 'if (!ChgAccess::canImport($role)) {') < strpos($catalogApi, 'require_csrf_token();'),
+    strpos($catalogApi, "audit_log('CHG_CATALOGO', ChgCatalogImport::auditDetails(\$result, \$action), \$action === 'confirm' ? 'WARNING' : 'INFO');") !== false,
+    strpos($catalogApi, 'if (!chg_module_enabled()) {') !== false,
+    strpos($catalogApi, '->parseUploadMatrix(') !== false,
+], 'catalogo, endpoint: interruptor, chg.import antes do CSRF e do arquivo, a planilha pelo leitor do portal, auditoria CHG_CATALOGO');
+
 echo 'QA do Controle de CHG OK (' . $GLOBALS['qa_checks'] . " conferencias)\n";
