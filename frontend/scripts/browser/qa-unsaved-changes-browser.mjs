@@ -3527,8 +3527,11 @@ async function paInventoryF103(page, port, mock) {
     await sleep(300)
     const asked = await page.evaluate(`[...document.querySelectorAll('[role="alertdialog"], [role="dialog"]')].some((el) => /Descartar/.test(el.textContent))`)
     report('Mapa PA, inventario sujo: fechar pergunta antes de descartar (17f)', asked)
-    await page.evaluate(`[...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Descartar')?.click()`)
+    // O botao do aviso e "Descartar alteracoes": antes, o texto "Descartar" nao
+    // achava nada e o inventario ficava sujo para o bloco seguinte.
+    await page.evaluate(`[...document.querySelectorAll('[role="alertdialog"] button')].find((b) => b.textContent.trim() === 'Descartar alterações')?.click()`)
     await sleep(300)
+    report('Mapa PA, inventario sujo: descartar fecha o aviso e o dialogo (nada fica sujo para o proximo bloco)', await page.evaluate(`!document.querySelector('[role="alertdialog"]') && !document.querySelector('[data-seat-save]')`))
   } finally {
     mock.useSeatSetup(false)
   }
