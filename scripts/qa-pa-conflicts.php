@@ -25,6 +25,12 @@ declare(strict_types=1);
 //    outro PA (com trava) e fora do Mapa; 400 para inativo; decisao 8 do F4;
 //    remove em transacao com PA e colaborador (DF11).
 //
+// 6. [F10-3] Inventario, reservados do Critico pelos papeis e preferencias.
+// 7. [8.8] Papel do dia do Critico (9.16) numa fonte so: a mesma pessoa igual
+//    na Escala, no Calendario, nos relatorios, na Visao operacional e no Mapa
+//    PA (papel presencial x regra remota, papel remoto x regra presencial,
+//    excecao por data vencendo o papel e ausencia vencendo tudo).
+//
 // Nao acessa banco (usa um banco simulado) nem os arquivos de estado da aplicacao.
 //
 // Uso: php scripts/qa-pa-conflicts.php
@@ -66,6 +72,7 @@ function assert_same($expected, $actual, string $message): void {
 
 require_once $root . '/config.php';
 require_once $root . '/services/PaMapService.php';
+require_once $root . '/services/PresenceService.php';
 
 // ----------------------------------------------------------------------------
 // Banco simulado: so as consultas do mapa e do motor; qualquer outra para.
@@ -85,6 +92,8 @@ final class QaPaPdo extends PDO {
     public array $roles = [];
     public array $rotations = [];
     public array $overrides = [];
+    // [8.8] Secao 7: corte do motor (Calendario e relatorios).
+    public ?string $cutoff = null;
     public array $log = [];
     public array $written = [];
     public array $transactions = [];
@@ -143,7 +152,12 @@ final class QaPaStatement extends PDOStatement {
         $db->log[] = $sql . (isset($params[':table_name']) ? ' #' . $params[':table_name'] : '');
         $this->rows = [];
         if (strpos($sql, 'portal_presence_cutoff') !== false || ($params[':table_name'] ?? '') === 'portal_presence_cutoff') {
-            throw new PDOException('SQLSTATE[HY000]: banco simulado: o Mapa PA nao le a data de corte (DF1)');
+            if ($db->cutoff === null) {
+                throw new PDOException('SQLSTATE[HY000]: banco simulado: o Mapa PA nao le a data de corte (DF1)');
+            }
+            // [8.8] So a secao 7 (Calendario e relatorios) tem corte.
+            $this->rows[] = strpos($sql, 'information_schema') !== false ? ['total' => 1] : ['cutoff_date' => $db->cutoff];
+            return true;
         }
         if ($sql === 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name') {
             $this->rows[] = ['total' => $db->tables[$params[':table_name']] ?? 0];
@@ -328,7 +342,7 @@ final class QaPaStatement extends PDOStatement {
             }
             return true;
         }
-        if ($this->f103($sql, $params)) {
+        if ($this->f103($sql, $params) || ($db->cutoff !== null && $this->crossViews($sql, $params))) {
             return true;
         }
         throw new PDOException('SQLSTATE[HY000]: banco simulado: consulta nao prevista: ' . $sql);
@@ -432,6 +446,95 @@ final class QaPaStatement extends PDOStatement {
         }
         if ($sql === 'SELECT id, employee_id, starts_on, ends_on, role_id, reason FROM portal_critical_role_overrides WHERE starts_on <= :date_to AND ends_on >= :date_from ORDER BY employee_id, starts_on') {
             $this->rows = array_values(array_filter($db->overrides, static fn (array $o): bool => $o['starts_on'] <= $params[':date_to'] && $o['ends_on'] >= $params[':date_from']));
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * [8.8] Secao 7: as consultas da Escala, do Calendario, dos relatorios e
+     * do PresenceService (Visao operacional), so com o corte ligado.
+     */
+    private function crossViews(string $sql, array $params): bool {
+        $db = $this->pdo;
+        foreach (['FROM portal_overtime_entries', 'FROM portal_time_adjustments', 'FROM portal_oncall_shifts', 'FROM portal_calendar_events'] as $empty) {
+            if (strpos($sql, $empty) !== false) {
+                return true;
+            }
+        }
+        $active = static fn (array $employee): bool => (int)$employee['ativo'] === 1;
+        $mapped = static fn (array $employee): bool => (int)$employee['ativo'] === 1 && $employee['fora_mapa_escala'] === 0;
+        // Escala: regras so dos ativos, Lideranca implicita, ausencias e cadastros sem o arquivado.
+        if (strpos($sql, 'SELECT r.id, r.employee_id, f.nome AS employee_name, f.ad_login, LOWER(f.equipe) AS team, r.rule_type, r.rule_config, r.effective_from, r.effective_until, r.created_by, r.updated_by, r.created_at, r.updated_at FROM portal_schedule_rules r JOIN funcionarios f ON f.id = r.employee_id AND f.ativo = 1 AND f.fora_mapa_escala = 0 WHERE') === 0) {
+            foreach ($db->rules as $id => $rule) {
+                $employee = $db->employees[$rule['employee_id']];
+                if ($mapped($employee) && in_array($employee['equipe'], ['n1', 'n2', 'critico', 'hibrido'], true)) {
+                    $this->rows[] = ['id' => $id, 'employee_id' => $rule['employee_id'], 'employee_name' => $employee['nome'], 'ad_login' => 'qa.' . $rule['employee_id'], 'team' => $employee['equipe'],
+                        'rule_type' => $rule['rule_type'], 'rule_config' => $rule['rule_config'] ?? null, 'effective_from' => $rule['effective_from'], 'effective_until' => $rule['effective_until'],
+                        'created_by' => 'qa', 'updated_by' => 'qa', 'created_at' => '2026-09-01 08:00:00', 'updated_at' => '2026-09-01 08:00:00'];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, nome AS employee_name, ad_login, equipe, jornada_entrada, jornada_saida FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 0') === 0) {
+            foreach ($db->employees as $id => $row) {
+                if ($mapped($row) && $row['equipe'] === 'lideranca') {
+                    $this->rows[] = ['id' => $id, 'employee_name' => $row['nome'], 'ad_login' => 'qa.' . $id, 'equipe' => $row['equipe'], 'jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00'];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT a.employee_id, a.starts_on, a.ends_on, a.period_type, a.start_time, a.end_time FROM portal_absences a JOIN funcionarios f ON f.id = a.employee_id AND ') === 0) {
+            $withArchived = strpos($sql, '(f.ativo = 1 OR f.arquivado_em IS NOT NULL)') !== false;
+            foreach ($db->absences as $row) {
+                $employee = $db->employees[$row['employee_id']];
+                if (($active($employee) || ($withArchived && $employee['arquivado_em'] !== null)) && $row['starts_on'] <= $params[':date_to'] && $row['ends_on'] >= $params[':date_from']) {
+                    $this->rows[] = array_intersect_key($row, array_flip(['employee_id', 'starts_on', 'ends_on', 'period_type', 'start_time', 'end_time']));
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, nome AS employee_name, equipe FROM funcionarios WHERE ativo = 1 AND fora_mapa_escala = 0') === 0) {
+            foreach ($db->employees as $id => $row) {
+                if ($mapped($row)) {
+                    $this->rows[] = ['id' => $id, 'employee_name' => $row['nome'], 'equipe' => $row['equipe']];
+                }
+            }
+            usort($this->rows, static fn (array $a, array $b): int => [$a['employee_name'], $a['id']] <=> [$b['employee_name'], $b['id']]);
+            return true;
+        }
+        // PresenceService (Visao operacional): as 4 consultas do PresenceRepository.
+        if (strpos($sql, 'SELECT id, nome, equipe, jornada_entrada, jornada_saida, almoco_inicio, almoco_fim, fora_mapa_escala FROM funcionarios WHERE ativo = 1') === 0) {
+            foreach ($db->employees as $id => $row) {
+                if ($active($row)) {
+                    $this->rows[] = ['id' => $id, 'nome' => $row['nome'], 'equipe' => $row['equipe'], 'jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00',
+                        'almoco_inicio' => '12:00:00', 'almoco_fim' => '13:00:00', 'fora_mapa_escala' => $row['fora_mapa_escala']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT id, employee_id, rule_type, rule_config, effective_from, effective_until FROM portal_schedule_rules WHERE effective_from <= :date_to') === 0) {
+            foreach ($db->rules as $id => $rule) {
+                if ($rule['effective_from'] <= $params[':date_to'] && ($rule['effective_until'] === null || $rule['effective_until'] >= $params[':date_from'])) {
+                    $this->rows[] = ['id' => $id] + $rule + ['rule_config' => null];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, 'SELECT employee_id, exception_date, exception_type FROM portal_schedule_exceptions WHERE exception_date BETWEEN :date_from AND :date_to') === 0) {
+            foreach ($db->exceptions as $row) {
+                if ($row['exception_date'] >= $params[':date_from'] && $row['exception_date'] <= $params[':date_to']) {
+                    $this->rows[] = ['employee_id' => $row['employee_id'], 'exception_date' => $row['exception_date'], 'exception_type' => $row['exception_type']];
+                }
+            }
+            return true;
+        }
+        if (strpos($sql, "SELECT id, employee_id, starts_on, ends_on, period_type, start_time, end_time, category FROM portal_absences WHERE status = 'approved'") === 0) {
+            foreach ($db->absences as $index => $row) {
+                if ($row['starts_on'] <= $params[':date_to'] && $row['ends_on'] >= $params[':date_from']) {
+                    $this->rows[] = ['id' => $index + 1] + array_intersect_key($row, array_flip(['employee_id', 'starts_on', 'ends_on', 'period_type', 'start_time', 'end_time', 'category']));
+                }
+            }
             return true;
         }
         return false;
@@ -1082,5 +1185,91 @@ assert_same('DomainException: 1 colaborador(es) fora do grupo comum (N1 e N2): a
 assert_same([[6], [2], 2, [[1, 5], [1, 6]], ['begin', 'commit']], [$swap['added'], $swap['removed'], $swap['total'], $pdo->preferences, $pdo->transactions], 'preferencias: troca o conjunto (inclui 6, retira 2) numa transacao');
 [$clear, $pdo] = $prefSave(['pa_number' => '1732', 'employee_ids' => []]);
 assert_same([[], [2, 5], []], [$clear['added'], $clear['removed'], $pdo->preferences], 'preferencias: lista vazia retira todas');
+
+// ----------------------------------------------------------------------------
+// 7. [8.8] Papel do dia do Critico numa fonte so (engineSchedule): a mesma
+// pessoa igual na Escala, no Calendario, nos relatorios, na Visao operacional
+// (PresenceService) e no Mapa PA, em 18/11 (quarta). Alem da massa do F10-3:
+// 38 regra presencial com troca para Abertura home (papel remoto vence a
+// regra presencial); 39 regra presencial com troca para Presencial A e
+// excecao remota (a excecao vence o papel presencial); 40 regra presencial,
+// troca para Presencial A, excecao presencial e ausencia do dia todo (a
+// ausencia vence tudo).
+// ----------------------------------------------------------------------------
+$crossDb = static function () use ($f103Db): QaPaPdo {
+    $pdo = $f103Db();
+    $pdo->cutoff = '2026-11-16';
+    // Ordem do papel diferente do ID (a mesma ordem relativa da massa do F10-3).
+    foreach ($pdo->roles as $index => $role) {
+        $pdo->roles[$index]['sort_order'] = 10 * $role['sort_order'];
+    }
+    foreach ([38 => 'Critico Lambda', 39 => 'Critico Mi', 40 => 'Critico Ni'] as $id => $nome) {
+        $pdo->employees[$id] = ['nome' => $nome, 'equipe' => 'critico', 'ativo' => 1, 'arquivado_em' => null, 'fora_mapa_escala' => 0];
+        $pdo->rules[100 + $id * 10] = ['employee_id' => $id, 'rule_type' => 'always_onsite', 'rule_config' => null, 'effective_from' => '2026-01-05', 'effective_until' => null];
+    }
+    $pdo->overrides[] = ['id' => 3, 'employee_id' => 38, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-18', 'role_id' => 3, 'reason' => 'troca'];
+    $pdo->overrides[] = ['id' => 4, 'employee_id' => 39, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-18', 'role_id' => 1, 'reason' => 'troca'];
+    $pdo->overrides[] = ['id' => 5, 'employee_id' => 40, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-18', 'role_id' => 1, 'reason' => 'troca'];
+    $pdo->exceptions[239] = ['employee_id' => 39, 'exception_date' => '2026-11-18', 'exception_type' => 'remote'];
+    $pdo->exceptions[240] = ['employee_id' => 40, 'exception_date' => '2026-11-18', 'exception_type' => 'onsite'];
+    $pdo->absences[] = ['employee_id' => 40, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-18', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'category' => 'folga', 'reason' => 'observacao ficticia'];
+    return $pdo;
+};
+$criticalIds = range(30, 40);
+$pick = static function (array $rows, string $idKey, string $valueKey) use ($criticalIds): array {
+    $out = [];
+    foreach ($rows as $row) {
+        if (in_array((int)$row[$idKey], $criticalIds, true)) {
+            $out[(int)$row[$idKey]] = $row[$valueKey];
+        }
+    }
+    ksort($out);
+    return $out;
+};
+$expected = [30 => 'onsite', 31 => 'onsite', 32 => 'onsite', 33 => 'absence', 34 => 'onsite', 35 => 'onsite', 36 => 'absence', 37 => 'onsite', 38 => 'remote', 39 => 'remote', 40 => 'absence'];
+$period = ['from' => '2026-11-18', 'to' => '2026-11-18'];
+$admin = ['role' => 'admin', 'employee_id' => null];
+$escala = (new OperationalService($crossDb(), $today))->scheduleData($period)['generated'];
+$calendar = array_values(array_filter((new OperationalService($crossDb(), $today))->listCalendar($period + ['type' => 'schedule'], $admin)['items'], static fn (array $event): bool => $event['event_type'] === 'schedule'));
+$report = (new OperationalService($crossDb(), $today))->report($period)['schedule'];
+$mapDays = (new OperationalService($crossDb(), $today))->mapPresence('2026-11-18', '2026-11-18', $admin)['days'];
+$situacao = ['presencial' => 'onsite', 'remoto' => 'remote', 'ausente' => 'absence'];
+$now = new DateTimeImmutable('2026-11-18 10:00:00', new DateTimeZone('America/Sao_Paulo'));
+$operational = array_map(static fn (array $row): string => $situacao[$row['situacao']] ?? $row['situacao'], array_intersect_key((new PresenceService($crossDb()))->technicianPresence($now, [], $admin), array_flip($criticalIds)));
+ksort($operational);
+assert_same($expected, $pick($escala, 'employee_id', 'presence_type'), 'Escala: papel presencial vence a regra remota (31, 35), papel remoto vence a regra presencial (38), excecao vence o papel (37, 39), ausencia vence tudo (36, 40)');
+assert_same($expected, $pick($calendar, 'employee_id', 'status'), 'Calendario: o mesmo dia da Escala para cada pessoa do Critico');
+assert_same($expected, $pick($report, 'employee_id', 'presence_type'), 'relatorios: o mesmo dia da Escala para cada pessoa do Critico');
+assert_same($expected, $operational, 'Visao operacional (PresenceService, 10:00): o mesmo dia da Escala para cada pessoa do Critico');
+assert_same($expected, $pick($mapDays, 'employee_id', 'presence_type'), 'Mapa PA (mapPresence): o mesmo dia da Escala para cada pessoa do Critico');
+$crossView = $list([], $admin, true, $crossDb());
+$occupants = array_filter(array_column(array_filter($crossView['pas'], static fn (array $pa): bool => array_key_exists('reserved_occupant', $pa)), 'reserved_occupant'));
+$seated = array_merge(array_column($occupants, 'employee_id'), array_column($crossView['critical_seating']['without_seat'], 'employee_id'));
+sort($seated);
+assert_same([array_keys(array_filter($expected, static fn (string $type): bool => $type === 'onsite')), 6], [$seated, $crossView['critical_seating']['onsite']], 'Mapa PA: os presenciais do Critico nos reservados (ocupantes e sem assento) sao os presenciais da Escala');
+assert_same(
+    [30 => 'rule', 31 => 'role', 32 => 'role', 33 => 'absence', 34 => 'exception', 35 => 'role', 36 => 'absence', 37 => 'exception', 38 => 'role', 39 => 'exception', 40 => 'absence'],
+    $pick($escala, 'employee_id', 'source'),
+    'Escala: origem "role" quando o papel decide; excecao e ausencia continuam com a propria origem'
+);
+$byId = array_column($calendar, null, 'employee_id');
+$mapById = array_column($mapDays, null, 'employee_id');
+assert_same(
+    ['Papel do dia: Abertura home 07:00–17:00', 'Exceção de escala', 'Sempre presencial', ['id' => 3, 'sort_order' => 30, 'label' => 'Abertura home 07:00–17:00'], ['id' => 1, 'sort_order' => 10, 'label' => 'Presencial A 08:00–17:00'], false],
+    [$byId[38]['description'], $byId[39]['description'], $byId[30]['description'], $mapById[38]['papel'], $mapById[39]['papel'], array_key_exists('papel', $mapById[30])],
+    'Calendario com o rotulo do papel; mapPresence com o papel do dia (id, ordem e rotulo) so de quem tem papel, mesmo quando a excecao decide'
+);
+assert_same([false, false], [array_key_exists('papel', array_column($escala, null, 'employee_id')[38]), array_key_exists('papel', array_column($report, null, 'employee_id')[38])], 'Escala e relatorios nao levam o papel (so o mapPresence, para a ordem dos reservados)');
+// Dois dias: o papel de cada dia (32: Abertura home no rodizio em 17/11, troca para Presencial B em 18/11; regra presencial).
+$twoDays = array_values(array_filter((new OperationalService($crossDb(), $today))->scheduleData(['from' => '2026-11-17', 'to' => '2026-11-18'])['generated'], static fn (array $row): bool => $row['employee_id'] === 32));
+assert_same([['2026-11-17', 'remote', 'role'], ['2026-11-18', 'onsite', 'role']], array_map(static fn (array $row): array => [$row['date'], $row['presence_type'], $row['source']], $twoDays), 'Escala em dois dias: o papel de cada dia (rodizio remoto em 17/11 vence a regra presencial; troca presencial em 18/11)');
+// Empate na ordem do papel (Presencial A e B com a mesma ordem): desempata o ID do papel, nao o nome.
+$tie = $crossDb();
+$tie->roles[1]['sort_order'] = $tie->roles[0]['sort_order'];
+$tie->employees[31]['nome'] = 'Critico Zz';
+$tieView = array_column($list([], $admin, true, $tie)['pas'], null, 'pa_number');
+assert_same([31, 35], [$tieView['1723']['reserved_occupant']['employee_id'], $tieView['1722']['reserved_occupant']['employee_id']], 'Mapa PA: papeis com a mesma ordem desempatam pelo ID do papel (vindo do mapPresence), depois pelo nome');
+$paSource = (string)file_get_contents($root . '/services/PaMapService.php');
+assert_same([0, 0, 0], [substr_count($paSource, 'PresenceRepository'), substr_count($paSource, 'criticalRole'), substr_count($paSource, 'criticalOnsite')], 'Mapa PA: uma fonte so (D-F10-36 retirada): nao le papel nem corrige o dia do motor');
 
 echo "QA PA conflicts OK ({$checks} verificacoes)\n";

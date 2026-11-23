@@ -4,6 +4,7 @@ require_once __DIR__ . '/PortalTeams.php';
 require_once __DIR__ . '/SharePointSyncService.php';
 require_once __DIR__ . '/ScheduleRulePlanner.php';
 require_once __DIR__ . '/PresenceEngine.php';
+require_once __DIR__ . '/PresenceRepository.php';
 require_once __DIR__ . '/PresenceCutoff.php';
 require_once __DIR__ . '/CyclePattern.php';
 
@@ -1870,6 +1871,12 @@ final class OperationalService {
      * $withAbsenceCategory: [F5] so para o Calendario, que decide quem ve a
      * categoria (P9): a linha leva tambem 'ausencias' do motor, com ela; o
      * listCalendar nunca devolve esse campo.
+     * [8.8] Papel do dia do Critico (9.16): a mesma precedencia do
+     * PresenceService (ausencia e excecao por data > papel > regra), pela
+     * jornada do dia (PresenceRepository::shiftFor), para a Escala, o
+     * Calendario, os relatorios e o mapPresence; origem 'role'.
+     * $withRole: so o mapPresence leva o papel do dia ('papel': id, ordem e
+     * rotulo), que o Mapa PA usa para ordenar os reservados do Critico.
      */
     private function engineSchedule(
         string $from,
@@ -1881,7 +1888,8 @@ final class OperationalService {
         bool $withArchived = false,
         bool $withAbsenceCategory = false,
         bool $withPartial = false,
-        ?array $screenEmployees = null
+        ?array $screenEmployees = null,
+        bool $withRole = false
     ): array {
         $rulesByEmployee = [];
         foreach ($rules as $rule) {
@@ -1895,6 +1903,7 @@ final class OperationalService {
         }
         $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId, $withArchived, $withAbsenceCategory);
         $employees = $screenEmployees ?? $this->scheduleScreenEmployees($team, $employeeId, $withArchived);
+        $roleDays = PresenceRepository::criticalRoleDays((new PresenceRepository($this->pdo))->criticalRoleContext($employees, $from, $to), $from, $to);
         $items = [];
         $end = self::dateValue($to, 'Fim');
         for ($date = self::dateValue($from, 'Inicio'); $date <= $end; $date = $date->modify('+1 day')) {
@@ -1914,7 +1923,8 @@ final class OperationalService {
                     $absences[] = ['origem' => 'ausencia'] + $absence;
                 }
                 $employeeRules = $rulesByEmployee[$employee['id']] ?? [];
-                $presence = PresenceEngine::dayPresence($employee, $dateKey, $employeeRules, $exception, $absences);
+                $role = $roleDays[$key] ?? null;
+                $presence = PresenceEngine::dayPresence(PresenceRepository::shiftFor($employee, $dateKey, $role), $dateKey, $employeeRules, $exception, $absences);
                 if ($presence['escala']['situacao'] === 'dia_nao_util') {
                     continue;
                 }
@@ -1928,6 +1938,7 @@ final class OperationalService {
                     $presence['situacao'] === 'ausente' => $absences[0]['origem'] === 'excecao' ? 'exception' : 'absence',
                     $presence['escala']['fonte'] === 'excecao' => 'exception',
                     $presence['escala']['fonte'] === 'implicita' => 'implicit',
+                    $presence['escala']['fonte'] === 'papel' => 'role',
                     $presence['escala']['fonte'] === 'regra' => 'rule',
                     default => 'none',
                 };
@@ -1951,7 +1962,8 @@ final class OperationalService {
                     'detalhe' => $presence['detalhe'],
                     'escala' => $presence['escala'],
                 ] + ($withAbsenceCategory ? ['ausencias' => $presence['ausencias']] : [])
-                  + ($withPartial ? self::partialField($presence) : []);
+                  + ($withPartial ? self::partialField($presence) : [])
+                  + ($withRole && $role !== null ? ['papel' => ['id' => $role['id'], 'sort_order' => $role['sort_order'], 'label' => CriticalRolePlanner::label($role)]] : []);
             }
         }
         return $items;
@@ -1984,6 +1996,9 @@ final class OperationalService {
             $suffix = $categoryLabel === '' ? '' : ' · ' . $categoryLabel;
             if ($row['source'] === 'exception') {
                 $description = 'Exceção de escala' . $suffix;
+            } elseif ($row['source'] === 'role') {
+                // [8.8] Papel do dia do Critico (9.16): o rotulo do motor ("papel: ...").
+                $description = 'Papel do dia' . substr((string)$row['escala']['rule_label'], strlen('papel')) . $suffix;
             } elseif ($row['presence_type'] === 'absence') {
                 $description = $categoryLabel;
             } else {
@@ -2028,7 +2043,7 @@ final class OperationalService {
         $days = [];
         $screen = $this->scheduleScreenEmployees(null, null, true);
         $employees = array_column($screen, 'archived_on', 'id');
-        foreach ($this->engineSchedule($from, $to, null, null, $rules, $exceptions, true, true, true, $screen) as $row) {
+        foreach ($this->engineSchedule($from, $to, null, null, $rules, $exceptions, true, true, true, $screen, true) as $row) {
             $visible = self::seesPersonalText($actor, $row['employee_id']);
             $category = $visible ? self::calendarAbsenceCategory($row['ausencias']) : null;
             $absences = [];
@@ -2056,7 +2071,8 @@ final class OperationalService {
                 'detalhe' => $row['detalhe'],
                 'absences' => $absences,
             ] + (isset($row['parcial']) ? ['parcial' => $row['parcial']] : [])
-              + ($category === null ? [] : ['categoria' => self::absenceCategoryLabel($category)]);
+              + ($category === null ? [] : ['categoria' => self::absenceCategoryLabel($category)])
+              + (isset($row['papel']) ? ['papel' => $row['papel']] : []);
         }
         return ['days' => $days, 'employees' => $employees];
     }

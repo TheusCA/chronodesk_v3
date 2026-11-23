@@ -482,6 +482,7 @@ assert.match(operationalSource, /<InlineAlert tone="info" title=\{cutoffTitle\}>
 assert.doesNotMatch(operationalSource, /title="Escala dividida na data de corte"/, 'relatório: sem o título fixo')
 assert.match(operationalSource, /return 'Regra de escala'\n\}/, 'tela Escala: origem "Regra de escala" para qualquer regra (ajuste e)')
 assert.match(operationalSource, /if \(item\.source === 'implicit'\) return 'Regra fixa da Liderança'/, 'tela Escala: "Regra fixa da Liderança" mantida')
+assert.match(operationalSource, /if \(item\.source === 'role'\) return 'Papel do Crítico'\n  if \(item\.source === 'none'\)/, '[8.8] tela Escala: origem "Papel do Crítico" para o papel do dia (9.16), antes de "Sem regra cadastrada"')
 assert.doesNotMatch(operationalSource, /export function CalendarPage|portal\/calendar\.php/, 'L-13: sem a CalendarPage duplicada')
 assert.match(appSource, /<LoadingState label="Carregando módulo\.\.\." \/>/, 'L-14: "Carregando módulo..." com acento')
 assert.doesNotMatch(appSource, /Ã/, 'L-14: sem texto quebrado no App')

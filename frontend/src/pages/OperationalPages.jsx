@@ -189,6 +189,8 @@ function scheduleSourceLabel(item) {
   if (item.presence_type === 'absence') return item.source === 'absence' ? 'Ausência lançada' : 'Exceção de ausência'
   if (item.source === 'exception') return `Exceção: ${item.label}`
   if (item.source === 'implicit') return 'Regra fixa da Liderança'
+  // [8.8] Papel do dia do Crítico (9.16): vence a regra; exceção e ausência vêm antes.
+  if (item.source === 'role') return 'Papel do Crítico'
   if (item.source === 'none') return 'Sem regra cadastrada'
   // [F5, ajuste e] Qualquer regra (dias pares, ciclo, dias fixos...).
   return 'Regra de escala'

@@ -4,7 +4,6 @@ require_once __DIR__ . '/PortalTeams.php';
 require_once __DIR__ . '/OperationalService.php';
 require_once __DIR__ . '/PaInventoryRules.php';
 require_once __DIR__ . '/PaDistributionEngine.php';
-require_once __DIR__ . '/PresenceRepository.php';
 
 final class PaMapService {
     public const MAX_PAYLOAD_BYTES = 32768;
@@ -710,36 +709,33 @@ final class PaMapService {
      * [D-F10-19 revista] Quem ocupa os PAs reservados ao Critico na data: as
      * pessoas do Critico presenciais no motor, na ordem do papel do dia (9.16;
      * sem papel por ultimo), pela regra unica do motor (reservedSeating).
-     * Papeis so com alguem do Critico presencial (tres consultas). Devolve o
-     * ocupante por PA reservado (null = reservado e vazio), quantos assentos,
-     * quantos presenciais e quem ficou sem assento (so ID e nome).
+     * [8.8] Uma fonte so: a presenca e o papel vem do mapPresence, que ja
+     * aplica o papel com a precedencia do PresenceService (ausencia e excecao
+     * por data > papel > regra); o Mapa PA nao le papel nem corrige o dia.
+     * Devolve o ocupante por PA reservado (null = reservado e vazio), quantos
+     * assentos, quantos presenciais e quem ficou sem assento (so ID e nome).
      */
     private function criticalSeating(array $inventory, string $date, array $presence): array {
         $reserved = array_values(array_filter($inventory, static fn (array $pa): bool => ($pa['reserved_team'] ?? null) === PortalTeams::CRITICAL));
         usort($reserved, [PaInventoryRules::class, 'inventoryOrder']);
-        $critical = [];
+        $onsite = [];
         foreach ($presence['days'] as $day) {
-            if ($day['date'] === $date && PortalTeams::normalize((string)($day['team'] ?? '')) === PortalTeams::CRITICAL) {
-                $critical[(int)$day['employee_id']] = $day;
+            if ($day['date'] === $date && PortalTeams::normalize((string)($day['team'] ?? '')) === PortalTeams::CRITICAL && $day['presence_type'] === 'onsite') {
+                $onsite[(int)$day['employee_id']] = $day;
             }
         }
-        $roles = [];
-        if ($critical !== []) {
-            $repository = new PresenceRepository($this->pdo);
-            $people = array_map(static fn (int $id): array => ['id' => $id, 'team' => PortalTeams::CRITICAL], array_keys($critical));
-            $roles = PresenceRepository::criticalRoleDays($repository->criticalRoleContext($people, $date, $date), $date, $date);
-        }
-        // Precedencia do 9.16 no dia: ausencia e excecao por data > papel > regra.
-        $onsite = array_filter($critical, static fn (array $day): bool => self::criticalOnsite($day, $roles[$day['employee_id'] . ':' . $date] ?? null));
-        $ordered = PaDistributionEngine::orderReservedPeople(array_map(static function (array $day) use ($roles, $date): array {
-            $role = $roles[$day['employee_id'] . ':' . $date] ?? null;
-            return ['employee_id' => (int)$day['employee_id'], 'name' => (string)$day['employee_name'], 'role_order' => $role['sort_order'] ?? null, 'role_id' => $role['id'] ?? null];
-        }, array_values($onsite)));
+        $ordered = PaDistributionEngine::orderReservedPeople(array_map(static fn (array $day): array => [
+            'employee_id' => (int)$day['employee_id'],
+            'name' => (string)$day['employee_name'],
+            'role_order' => $day['papel']['sort_order'] ?? null,
+            'role_id' => $day['papel']['id'] ?? null,
+        ], array_values($onsite)));
         $seating = PaDistributionEngine::reservedSeating(array_column($reserved, 'pa_number'), $ordered);
-        $person = static function (int $id) use ($onsite, $roles, $date): array {
-            $role = $roles[$id . ':' . $date] ?? null;
-            return ['employee_id' => $id, 'employee_name' => (string)$onsite[$id]['employee_name'], 'role_label' => $role === null ? null : CriticalRolePlanner::label($role)];
-        };
+        $person = static fn (int $id): array => [
+            'employee_id' => $id,
+            'employee_name' => (string)$onsite[$id]['employee_name'],
+            'role_label' => $onsite[$id]['papel']['label'] ?? null,
+        ];
         $byPa = [];
         foreach ($seating['occupants'] as $pa => $id) {
             $byPa[(string)$pa] = $id === null ? null : $person($id);
@@ -750,19 +746,6 @@ final class PaMapService {
             'onsite' => count($onsite),
             'without_seat' => array_map($person, $seating['without_seat']),
         ];
-    }
-
-    /**
-     * Presencial no dia para o assento reservado: o dia do motor sem o papel
-     * (a leitura do mapa nao aplica o 9.16) corrigido pelo papel do dia. A
-     * ausencia de dia inteiro e a excecao por data vencem o papel; sem elas,
-     * o tipo do papel decide; sem papel, o dia do motor.
-     */
-    private static function criticalOnsite(array $day, ?array $role): bool {
-        if ($day['presence_type'] === 'absence' || ($day['source'] ?? null) === 'exception' || $role === null) {
-            return $day['presence_type'] === 'onsite';
-        }
-        return ($role['presence_type'] ?? null) === 'onsite';
     }
 
     private function assignmentsForMap(string $date, ?string $team, array $presence): array {
