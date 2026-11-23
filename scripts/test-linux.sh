@@ -86,6 +86,10 @@ echo "== PHP PA inventory QA =="
 # Inventario de PA completo e preferencias (F10-3): migration 022; sem banco.
 php scripts/qa-pa-inventory.php
 
+echo "== PHP NC QA =="
+# NC (matricula) no cadastro, na hora extra e na correcao de ponto: migration 026; sem banco.
+php scripts/qa-nc.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php

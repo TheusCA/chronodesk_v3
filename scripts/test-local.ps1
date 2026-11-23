@@ -222,6 +222,14 @@ if (!$phpExecutable) {
         Pass "QA do inventario de PA concluido"
     }
 
+    # Sem banco: NC (matricula) no cadastro, na hora extra e na correcao de ponto: migration 026.
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-nc.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA do NC falhou"
+    } else {
+        Pass "QA do NC concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {

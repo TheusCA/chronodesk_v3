@@ -5623,7 +5623,7 @@ responsavel.
 gestao, pela tela: marcar Tools e as equipes Critico e Hibrido, importar o
 Controle v5 e conferir os tecnicos de CHG.
 
-### Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022; papel do dia do Critico numa fonte so, 8.8)
+### Deploy 5 (F10-3: inventario de PA completo, reservados do Critico e preferencias; migration 022; papel do dia do Critico numa fonte so, 8.8; NC na hora extra e na correcao de ponto, migration 026)
 
 **O que vai** (tudo depois do `f0844fd`, o commit do deploy 4):
 
@@ -5649,16 +5649,27 @@ Controle v5 e conferir os tecnicos de CHG.
   Calendario, "Papel do dia: <papel>". O Mapa PA deixa de corrigir o dia por
   conta propria (D-F10-36 retirada): le a presenca e o papel do mesmo calculo.
   A fumaca passa a ler tambem o Calendario e os relatorios (seis GET).
+- **Migration 026 (lote NC):** `funcionarios` ganha o NC (`matricula`: a
+  matricula do cadastro Senior, so digitos, de 1 a 12, unica entre os
+  cadastros, NULL permitido; CHECK e indice unico) e `portal_overtime_entries`
+  e `portal_time_adjustments` ganham a copia dele no lancamento
+  (`employee_nc`, NULL nas linhas antigas; mesma regra de digitos). **Nenhuma
+  linha muda:** todo cadastro fica sem NC ate a gestao preencher pela tela. As
+  colunas entram com `ALGORITHM=INSTANT`, as tres CHECK com `ALGORITHM=COPY`
+  (o MySQL confere as linhas) e o indice unico com `INPLACE`, por isso com a
+  manutencao ligada. Rollback para se ja existir copia `*_bkp_026`.
 - **O que muda para quem usa:** so o Critico com papel no dia (Escala,
   Calendario e relatorios iguais a Visao operacional). Sem PA marcado, o Mapa
   PA fica como hoje. A gestao marca os PAs pela tela depois (fim deste
   roteiro).
 
-**A 022 antes do merge:** o codigo do `f0844fd` le o inventario com a lista
-de colunas dele e nao le a tabela nova; o codigo novo le as duas. A
-verificacao vem logo depois; **PARE no primeiro numero fora do esperado**.
-Rollback em degraus: codigo e `app/` primeiro (passo 14); depois, so com
-aprovacao, a 022 (passo 15).
+**A 022 e a 026 antes do merge:** o codigo do `f0844fd` le o inventario e o
+cadastro com a lista de colunas dele, nao le a tabela nova e grava os
+lancamentos sem a copia do NC (que fica NULL); o codigo novo le e grava as
+colunas novas. Cada verificacao vem logo depois da sua migration; **PARE no
+primeiro numero fora do esperado**. Rollback em degraus: codigo e `app/`
+primeiro (passo 14); depois, so com aprovacao, a 022 (passo 15) e a 026
+(passo 16).
 
 **O lockfile nao mudou** desde o `f0844fd`: o build roda sem `npm ci`.
 
@@ -5668,7 +5679,7 @@ passo 1 da PARE).
 
 **Data, janela e quem acompanha: A DEFINIR** com o responsavel. A janela e a
 do deploy 4 sem as quatro migrations nem o passo do Controle de CHG: a 022
-leva segundos.
+e a 026 levam segundos.
 
 **Shell root, sem `sudo`**, como nos deploys 1 a 4: `sudo -i` e todos os
 comandos nele; o que roda como `www-data` usa `runuser -u www-data --`. O 1o
@@ -5712,51 +5723,56 @@ unico `git fetch` e o do passo 1, so do branch.
 R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; umask 022 && [ "$(umask)" = 0022 ] && echo "OK umask $(umask) (arquivos novos legiveis pelo www-data)" || { echo "BLOQUEADO umask $(umask)"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
 cd /var/www/chronodesk; install -d -o root -g root -m 700 /var/backups/chronodesk; H=$(git rev-parse HEAD); if [ "$H" = "f0844fdd350f3da53f08b422005caa8a5909b662" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy5-commit >/dev/null; echo "HEAD de producao: f0844fd (OK, gravado em pre-deploy5-commit)"; else echo "PARE: HEAD de producao $(git rev-parse --short HEAD), nao o f0844fd"; fi; echo "branch: $(git rev-parse --abbrev-ref HEAD)"; echo "alteracoes locais: $(git status --porcelain | wc -l)"; unset H
 cd /var/www/chronodesk; git fetch origin feat/employee-form-rhf-zod && K=$(git rev-parse origin/feat/employee-form-rhf-zod) && if [ "$K" = "<commit validado na estacao>" ]; then echo "$K" | tee /var/backups/chronodesk/deploy5-commit; else echo "PARE: origin/feat/employee-form-rhf-zod ($K) nao e o commit validado na estacao"; fi; unset K
-cd /var/www/chronodesk; D5=$(cat /var/backups/chronodesk/deploy5-commit); git cat-file -e "$D5^{commit}" && git cat-file -e "$D5:scripts/smoke-deploy1.sh" && git cat-file -e "$D5:migrations/20261119_022_pa_inventory.sql" && git merge-base --is-ancestor HEAD "$D5" && echo "fast-forward OK: $(git rev-list --count HEAD.."$D5") commits a aplicar" || echo "PARE: deploy5-commit ausente, sem o smoke-deploy1.sh, sem a 022 ou o HEAD nao e ancestral dele"; L=$(git diff --name-only HEAD "$D5" -- migrations | sort | tr '\n' ' '); [ "$L" = "migrations/20261119_022_pa_inventory.sql migrations/rollback/20261119_022_ensaio_linhas_inv.sql migrations/rollback/20261119_022_pa_inventory_down.sql migrations/verificacao/20261119_022_pa_inventory_check.sql " ] && echo "migrations alteradas: exatamente as 4 esperadas (022)" || echo "PARE: migrations alteradas diferentes das esperadas: $L"; echo "lockfile alterado: $(git diff --name-only HEAD "$D5" -- frontend/package-lock.json | wc -l)"; unset D5 L
+cd /var/www/chronodesk; D5=$(cat /var/backups/chronodesk/deploy5-commit); git cat-file -e "$D5^{commit}" && git cat-file -e "$D5:scripts/smoke-deploy1.sh" && git cat-file -e "$D5:migrations/20261119_022_pa_inventory.sql" && git cat-file -e "$D5:migrations/20261123_026_matricula_nc.sql" && git merge-base --is-ancestor HEAD "$D5" && echo "fast-forward OK: $(git rev-list --count HEAD.."$D5") commits a aplicar" || echo "PARE: deploy5-commit ausente, sem o smoke-deploy1.sh, sem a 022 ou a 026, ou o HEAD nao e ancestral dele"; L=$(git diff --name-only HEAD "$D5" -- migrations | sort | tr '\n' ' '); [ "$L" = "migrations/20261119_022_pa_inventory.sql migrations/20261123_026_matricula_nc.sql migrations/rollback/20261119_022_ensaio_linhas_inv.sql migrations/rollback/20261119_022_pa_inventory_down.sql migrations/rollback/20261123_026_ensaio_linhas_nc.sql migrations/rollback/20261123_026_matricula_nc_down.sql migrations/verificacao/20261119_022_pa_inventory_check.sql migrations/verificacao/20261123_026_matricula_nc_check.sql " ] && echo "migrations alteradas: exatamente as 8 esperadas (022 e 026)" || echo "PARE: migrations alteradas diferentes das esperadas: $L"; echo "lockfile alterado: $(git diff --name-only HEAD "$D5" -- frontend/package-lock.json | wc -l)"; unset D5 L
 ```
 
    Esperado: `ambiente: OK` (nove linhas `OK`, com `OK umask 0022`);
    `HEAD de producao: f0844fd (OK, ...)`, `branch:
    codex/modernizacao-ui-backend`, `alteracoes locais: 0`; o hash do commit
    validado gravado em `deploy5-commit`; `fast-forward OK` (anote o numero de
-   commits); `migrations alteradas: exatamente as 4 esperadas (022)` (a
-   migration, o rollback, as linhas do ensaio e a verificacao); `lockfile
+   commits); `migrations alteradas: exatamente as 8 esperadas (022 e 026)` (de
+   cada uma, a migration, o rollback, as linhas do ensaio e a verificacao); `lockfile
    alterado: 0`. **PARE** com qualquer `PARE`, alteracao local ou outro HEAD.
 
 **2. Ensaio do codigo do commit gravado**, como no deploy 4: o commit inteiro
-em `/tmp`, dono `www-data`, e **todos** os QAs PHP do repositorio (23, com o
-`qa-pa-inventory`). Nenhum QA do ensaio toca o banco real.
+em `/tmp`, dono `www-data`, e **todos** os QAs PHP do repositorio (24, com o
+`qa-pa-inventory` e o `qa-nc`). Nenhum QA do ensaio toca o banco real.
 
 ```bash
 [ ! -e /tmp/.env ] && echo "/tmp/.env ausente: OK" || echo "PARE: existe /tmp/.env; o ensaio leria esse arquivo"
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); Q=$(mktemp -d /tmp/ensaio-deploy5-qa.XXXXXX); export Q; bash -o pipefail -c 'git archive "$D5" | tar -x -C "$Q"' && chown -R www-data: "$Q" && echo "extraido em $Q" || echo "PARE: falha ao extrair o deploy5-commit"
 find "$Q" -name '*.php' -not -path '*/node_modules/*' -exec runuser -u www-data -- php -l {} \; | grep -v '^No syntax errors' ; echo "fim do php -l"
-[ ! -e /tmp/.env ] && for q in qa-smoke qa-auth qa-timezone qa-overtime qa-schedule-history qa-schedule-legacy-output qa-presence-engine qa-absences qa-calendar-text qa-archive qa-presence-cutoff qa-pa-conflicts qa-operational-view qa-employee-lunch qa-pa-distribution qa-paridade-escala qa-rotation-teams qa-critico-hibrido qa-critical-roles qa-chg qa-pa-inventory qa-security qa-deploy-runbook; do printf '%s: ' "$q"; runuser -u www-data -- php "$Q/scripts/$q.php" >/dev/null 2>&1 && echo OK || echo FALHOU; done
+[ ! -e /tmp/.env ] && for q in qa-smoke qa-auth qa-timezone qa-overtime qa-schedule-history qa-schedule-legacy-output qa-presence-engine qa-absences qa-calendar-text qa-archive qa-presence-cutoff qa-pa-conflicts qa-operational-view qa-employee-lunch qa-pa-distribution qa-paridade-escala qa-rotation-teams qa-critico-hibrido qa-critical-roles qa-chg qa-pa-inventory qa-nc qa-security qa-deploy-runbook; do printf '%s: ' "$q"; runuser -u www-data -- php "$Q/scripts/$q.php" >/dev/null 2>&1 && echo OK || echo FALHOU; done
 for Q in /tmp/ensaio-deploy5-qa.??????; do [ -d "$Q" ] && rm -r -- "$Q" && echo "removido: $Q"; done; echo "ensaios restantes: $(ls -d /tmp/ensaio-deploy5-qa.?????? 2>/dev/null | wc -l)"; unset Q D5
 ```
 
    Esperado: `/tmp/.env ausente: OK`; `extraido em ...`; nenhuma linha antes
-   de `fim do php -l`; os 23 QAs com `OK`; `removido: ...` e `ensaios
+   de `fim do php -l`; os 24 QAs com `OK`; `removido: ...` e `ensaios
    restantes: 0`. **PARE** com qualquer `FALHOU` (rode o QA de novo sem o
    `>/dev/null` e envie so o nome e a ultima linha).
 
-**3. O "antes" da 022 no banco real**, com o portal no ar (so leitura, so
-contagens): a verificacao da 022 do commit gravado. O mesmo comando volta no
-passo 10.
+**3. O "antes" da 022 e da 026 no banco real**, com o portal no ar (so
+leitura, so contagens): as verificacoes da 022 e da 026 do commit gravado. Os
+mesmos comandos voltam no passo 10.
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261119_022_pa_inventory_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas' || echo "PARE: a verificacao da 022 falhou"; unset P D5
+cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas' || echo "PARE: a verificacao da 026 falhou"; unset P D5
 ```
 
    Esperado: `colunas_022 = 0`, `checks_022 = 0`, `tabela_022 = 0`,
    `copias_de_rollback_022 = 0` e "022 ausente" (duas vezes); anote as linhas
-   e as assinaturas do inventario e dos vinculos: sao a referencia dos passos
-   7 e 10. **PARE** com copia de rollback maior que 0, outro numero ou erro do
-   MySQL.
+   e as assinaturas do inventario e dos vinculos; na da 026, `colunas_026 =
+   0`, `checks_026 = 0`, `indice_026 = 0`, `copias_de_rollback_026 = 0` e
+   "026 ausente" (duas vezes); anote as linhas e as assinaturas do cadastro,
+   das horas extras e das correcoes. As assinaturas das duas sao a referencia
+   dos passos 7 e 10. **PARE** com copia de rollback maior que 0, outro numero
+   ou erro do MySQL.
 
-**4. Ensaio da 022 no MySQL do servidor**, com o portal no ar, num banco
+**4. Ensaio da 022 e da 026 no MySQL do servidor**, com o portal no ar, num banco
 descartavel `ensaio_<nome>` que o proprio script cria e apaga (copia
-`funcionarios`, o inventario e os vinculos com os dados; o `audit_log` so na
+`funcionarios`, o inventario e os vinculos com os dados, e na 026 as horas
+extras e as correcoes; o `audit_log` so na
 estrutura; mostra so estrutura, contagens e assinaturas). Duas variantes:
 **(a)** migration 2x, rollback 2x; **(b)** com as linhas do ensaio
 (ficticias, so em banco `ensaio_*`; no preparo, a propria 022), para o
@@ -5766,6 +5782,8 @@ rollback com dados. O script e as migrations vem do commit gravado.
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); EV=$(mktemp -d /root/ensaio-deploy5.XXXXXX); export EV; git cat-file -e "$D5^{commit}" && bash -o pipefail -c 'git archive "$D5" migrations scripts/ensaio-migration.sh | tar -x -C "$EV"' && echo "extraido em $EV" || echo "PARE: falha ao extrair as migrations do deploy5-commit"; unset D5
 env DADOS=portal_pa_inventory,portal_pa_assignments VERIFICA="$EV/migrations/verificacao/20261119_022_pa_inventory_check.sql" bash "$EV/scripts/ensaio-migration.sh" d5_022 "$EV/migrations/20261119_022_pa_inventory.sql" "$EV/migrations/rollback/20261119_022_pa_inventory_down.sql" audit_log
 env PREPARO="$EV/migrations/20261119_022_pa_inventory.sql" DADOS=portal_pa_inventory,portal_pa_assignments VERIFICA="$EV/migrations/verificacao/20261119_022_pa_inventory_check.sql" bash "$EV/scripts/ensaio-migration.sh" d5_022_rollback "$EV/migrations/rollback/20261119_022_ensaio_linhas_inv.sql" "$EV/migrations/rollback/20261119_022_pa_inventory_down.sql" audit_log
+env DADOS=portal_overtime_entries,portal_time_adjustments VERIFICA="$EV/migrations/verificacao/20261123_026_matricula_nc_check.sql" bash "$EV/scripts/ensaio-migration.sh" d5_026 "$EV/migrations/20261123_026_matricula_nc.sql" "$EV/migrations/rollback/20261123_026_matricula_nc_down.sql" audit_log
+env PREPARO="$EV/migrations/20261123_026_matricula_nc.sql" DADOS=portal_overtime_entries,portal_time_adjustments VERIFICA="$EV/migrations/verificacao/20261123_026_matricula_nc_check.sql" bash "$EV/scripts/ensaio-migration.sh" d5_026_rollback "$EV/migrations/rollback/20261123_026_ensaio_linhas_nc.sql" "$EV/migrations/rollback/20261123_026_matricula_nc_down.sql" audit_log
 case "$EV" in /root/ensaio-deploy5.*) rm -r "$EV" && echo "removido: $EV";; *) echo "PARE: diretorio do ensaio inesperado";; esac; unset EV
 ```
 
@@ -5785,6 +5803,18 @@ case "$EV" in /root/ensaio-deploy5.*) rm -r "$EV" && echo "removido: $EV";; *) e
      contagens de problema em 0 (menos marcacoes se a copia tiver menos de 3
      PAs sem vinculo vigente ou futuro, ou nenhum cadastro do grupo comum); o
      1o rollback `OK` (`copias_de_rollback_022 = 2`) e o 2o para de proposito.
+   - **026 (a)** `d5_026`: `-> migration, 1a vez: OK` e `2a vez: OK`, com
+     `colunas_026 = 3`, `checks_026 = 3`, `indice_026 = 1`, `ativos_com_nc =
+     0` e as contagens de problema em 0; `-> rollback, 1a vez: OK`, com
+     `colunas_026 = 0`, `copias_de_rollback_026 = 3` e "026 ausente"; a 2a vez
+     para de proposito (`rollback_026 abortado: ja existe copia *_bkp_026
+     ...`); assinaturas do cadastro, das horas extras e das correcoes iguais
+     nos cinco estados.
+   - **026 (b)** `d5_026_rollback`: depois das linhas ficticias (NC `9` mais o
+     ID com 8 digitos, nunca uma matricula real), `ativos_com_nc = 3` (menos
+     com menos de 3 cadastros ativos), as copias nos lancamentos desses
+     cadastros e as contagens de problema em 0; o 1o rollback `OK`
+     (`copias_de_rollback_026 = 3`) e o 2o para de proposito.
 
    No fim, `removido: /root/ensaio-deploy5.<sufixo>`. **PARE** com `Preparo
    falhou`, `FALHOU` em etapa que nao seja o 2o rollback, ou assinatura
@@ -5812,20 +5842,28 @@ S=$(awk 'tolower($1) == "servername" {print $2; exit}' /etc/apache2/sites-enable
    Esperado: `arquivo de manutencao: presente`; `copia do app/: ...` (anote);
    `portal visto de fora (manutencao): 503`. **PARE** como no deploy 4.
 
-**7. A 022, antes do merge**, do commit gravado, e a verificacao dela. **PARE
-no numero fora do esperado**: fique em manutencao; o codigo ainda e o do
-`f0844fd`, que nao le a 022 (o rollback, passo 15, so com aprovacao).
+**7. A 022 e a 026, antes do merge**, do commit gravado, cada uma com a
+verificacao logo depois. **PARE no numero fora do esperado**: fique em
+manutencao; o codigo ainda e o do `f0844fd`, que nao le nenhuma das duas (os
+rollbacks, passos 15 e 16, so com aprovacao).
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D5:migrations/20261119_022_pa_inventory.sql" && bash -o pipefail -c 'git show "$D5:migrations/20261119_022_pa_inventory.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "022 aplicada" || echo "PARE: a 022 nao foi aplicada"; unset P D5
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261119_022_pa_inventory_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D5
+cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; git cat-file -e "$D5:migrations/20261123_026_matricula_nc.sql" && bash -o pipefail -c 'git show "$D5:migrations/20261123_026_matricula_nc.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "026 aplicada" || echo "PARE: a 026 nao foi aplicada"; unset P D5
+cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D5
 ```
 
    Esperado: `022 aplicada`; a verificacao com `colunas_022 = 3`,
    `checks_022 = 2`, `tabela_022 = 1`, `copias_de_rollback_022 = 0`, todos os
    PAs ativos `flexible` (`fixos = 0`, `reservados_critico = 0`,
    `fixos_que_emprestam = 0`), `reservados_hibrido = 0`, `preferencias = 0`,
-   as contagens de problema em 0 e as assinaturas iguais as do passo 3.
+   as contagens de problema em 0 e as assinaturas iguais as do passo 3;
+   `026 aplicada`; a verificacao com `colunas_026 = 3`, `checks_026 = 3`,
+   `indice_026 = 1`, `copias_de_rollback_026 = 0`, `ativos_com_nc = 0` (todos
+   sem NC ate a gestao preencher), `horas_extras_com_copia = 0`,
+   `correcoes_com_copia = 0`, as contagens de problema em 0 e as assinaturas
+   iguais as do passo 3.
 
 **8. `git merge --ff-only` do commit gravado**, o build, a leitura pelo
 `www-data` (licao do deploy 4) e o QA do bundle:
@@ -5864,11 +5902,13 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
    `GET /api/portal/reports.php: 200` (o papel do dia, 8.8, roda nas duas).
    **PARE** com qualquer `PARE` ou codigo diferente: nao reabra.
 
-**10. A verificacao da 022 de novo, so leitura**, agora com o codigo novo no
-ar (a fumaca nao grava inventario nem preferencia): o mesmo comando do passo 3.
+**10. As verificacoes da 022 e da 026 de novo, so leitura**, agora com o
+codigo novo no ar (a fumaca nao grava inventario, preferencia, NC nem
+lancamento): os mesmos comandos do passo 3.
 
 ```bash
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261119_022_pa_inventory_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas' || echo "PARE: a verificacao da 022 falhou"; unset P D5
+cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas' || echo "PARE: a verificacao da 026 falhou"; unset P D5
 ```
 
    Esperado: os mesmos numeros do passo 7 (e as assinaturas iguais as do
@@ -5926,13 +5966,16 @@ cd /var/www/chronodesk; S=$(awk 'tolower($1) == "servername" {print $2; exit}' /
 
 **Rollback em degraus** (so se preciso, cada degrau so com aprovacao do
 responsavel): **codigo e `app/` primeiro** (passo 14); depois, se preciso, a
-022 (passo 15). O rollback da 022 so roda com o codigo do `f0844fd` no ar
-(que nao le a 022): a guarda do comando confere antes de tocar no banco, e o
-rollback para sozinho se ja houver copia `*_bkp_022`.
+022 (passo 15) e a 026 (passo 16), em qualquer ordem. Os dois rollbacks so
+rodam com o codigo do `f0844fd` no ar (que nao le nenhuma das duas): a guarda
+de cada comando confere antes de tocar no banco, e cada rollback para sozinho
+se ja houver copia `*_bkp_022` ou `*_bkp_026`.
 
 **14. Rollback de codigo.** O `app/` volta da copia do passo 6, sem `npm`. A
 022 fica: o codigo do `f0844fd` nao le as colunas nem a tabela novas (o tipo,
-a reserva e as preferencias gravados ficam guardados, sem efeito).
+a reserva e as preferencias gravados ficam guardados, sem efeito). A 026
+tambem fica: o codigo do `f0844fd` nao le o NC (os NC gravados ficam
+guardados, sem efeito; o lancamento novo fica com a copia NULL).
 
 ```bash
 cd /var/www/chronodesk; git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy5-commit)" && echo "codigo anterior no ar: $(git rev-parse --short HEAD)"
@@ -5957,6 +6000,21 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
    assinaturas do inventario e dos vinculos iguais as do passo 3. **PARE** com
    `PARE` (`rollback_022 abortado: ja existe copia *_bkp_022`: confira e
    renomeie as copias antes) e avise.
+
+**16. Rollback da 026 (so depois do passo 14, e so com aprovacao: o NC dos
+cadastros e as copias dos lancamentos vao para as copias `*_bkp_026`).** Para
+de proposito se ja houver copia de um rollback anterior.
+
+```bash
+cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; [ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy5-commit)" ] && git cat-file -e "$D5:migrations/rollback/20261123_026_matricula_nc_down.sql" && bash -o pipefail -c 'git show "$D5:migrations/rollback/20261123_026_matricula_nc_down.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas' && echo "rollback da 026 aplicado" || echo "PARE: o codigo no ar nao e o f0844fd ou o rollback da 026 falhou"; unset P D5
+cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D5
+```
+
+   Esperado: `rollback da 026 aplicado`; a verificacao com `colunas_026 = 0`,
+   `indice_026 = 0`, `copias_de_rollback_026 = 3`, "026 ausente" e as
+   assinaturas do cadastro, das horas extras e das correcoes iguais as do
+   passo 3. **PARE** com `PARE` (`rollback_026 abortado: ja existe copia
+   *_bkp_026`: confira e renomeie as copias antes) e avise.
 
 **Depois do deploy, com a gestao** (pela tela, sem comando; quem prefere qual
 PA e quem esta em cada equipe nunca vao para o git nem para o chat; a

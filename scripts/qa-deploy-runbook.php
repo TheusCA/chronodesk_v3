@@ -257,7 +257,9 @@ assert_same($migrationsDeploy4, array_values(array_intersect($migrationsDeploy4,
 $repoMigrations = array_values(array_diff($repoMigrations, $migrationsDeploy4));
 // [F10-3, 2026-11-19] Migrations posteriores ao deploy 4 consolidado (executado
 // em 19/11/2026 com o f0844fd): vao no deploy 5 (secao 18), nesta ordem.
-$migrationsAfterDeploy4 = ['20261119_022_pa_inventory.sql'];
+// [Lote NC, 2026-11-23] A 026 (NC no cadastro e nos lancamentos) vai no mesmo
+// deploy 5, depois da 022 (a 023 fica reservada ao F10-4).
+$migrationsAfterDeploy4 = ['20261119_022_pa_inventory.sql', '20261123_026_matricula_nc.sql'];
 assert_same($migrationsAfterDeploy4, array_values(array_intersect($migrationsAfterDeploy4, $repoMigrations)), 'migrations posteriores ao deploy 4: cada uma existe no repositorio');
 $repoMigrations = array_values(array_diff($repoMigrations, $migrationsAfterDeploy4));
 $expectedSorted = $deploy1Migrations;
@@ -330,7 +332,7 @@ $qasAfterDeploy3 = ['qa-rotation-teams', 'qa-critico-hibrido', 'qa-critical-role
 assert_same($qasAfterDeploy3, array_values(array_intersect($qasAfterDeploy3, $repoQas)), 'QAs criados depois do deploy 3: cada um existe no repositorio');
 // [F10-3, 2026-11-19] O deploy 4 consolidado rodou com o f0844fd e fica como
 // foi: os QAs criados depois dele vao no deploy 5 (secao 18).
-$qasAfterDeploy4 = ['qa-pa-inventory'];
+$qasAfterDeploy4 = ['qa-pa-inventory', 'qa-nc'];
 assert_same($qasAfterDeploy4, array_values(array_intersect($qasAfterDeploy4, $repoQas)), 'QAs criados depois do deploy 4: cada um existe no repositorio');
 $repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2, $qasAfterDeploy3, $qasAfterDeploy4));
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');
@@ -947,7 +949,7 @@ foreach ($migrationsDeploy4 as $file) {
 $migrationFiles4 = [];
 foreach (['', 'rollback/', 'verificacao/'] as $dir) {
     foreach (glob($root . '/migrations/' . $dir . '*.sql') ?: [] as $path) {
-        if (preg_match('/^2026111[5-9]_|^20261[12]\d{2}_|^2027/', basename($path)) === 1 && preg_match('/_022_/', basename($path)) === 0) {
+        if (preg_match('/^2026111[5-9]_|^20261[12]\d{2}_|^2027/', basename($path)) === 1 && preg_match('/_(022|026)_/', basename($path)) === 0) {
             $migrationFiles4[] = 'migrations/' . $dir . basename($path);
         }
     }
@@ -1180,13 +1182,13 @@ assert_same([[$record5], 0, 2, 3], [$fetch5, preg_match('/\bgit pull\b|(^|\s)(--
 assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin feat\/employee-form-rhf-zod && K=\$\(git rev-parse origin\/feat\/employee-form-rhf-zod\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy5-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands5[$record5] ?? ''), 'deploy 5: fetch so do branch e grava so o commit validado na estacao');
 $migrationFiles5 = [];
 foreach (['', 'rollback/', 'verificacao/'] as $dir) {
-    foreach (glob($root . '/migrations/' . $dir . '*_022_*.sql') ?: [] as $path) {
+    foreach (array_merge(glob($root . '/migrations/' . $dir . '*_022_*.sql') ?: [], glob($root . '/migrations/' . $dir . '*_026_*.sql') ?: []) as $path) {
         $migrationFiles5[] = 'migrations/' . $dir . basename($path);
     }
 }
 sort($migrationFiles5, SORT_STRING);
-assert_same(4, count($migrationFiles5), 'repositorio: a 022 tem quatro arquivos (migration, rollback, linhas do ensaio e verificacao)');
-assert_same(true, strpos($commands5[$check5] ?? '', 'git cat-file -e "$D5:migrations/' . $migrationsAfterDeploy4[0] . '" && ') !== false && strpos($commands5[$check5], 'L=$(git diff --name-only HEAD "$D5" -- migrations | sort | tr \'\n\' \' \'); [ "$L" = "' . implode(' ', $migrationFiles5) . ' " ] && echo "migrations alteradas: exatamente as 4 esperadas (022)" || echo "PARE: ') !== false && strpos($commands5[$check5], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D5" -- frontend/package-lock.json | wc -l)"') !== false, 'deploy 5: a lista exata dos arquivos da 022 e o lockfile conferidos logo depois de gravar');
+assert_same(8, count($migrationFiles5), 'repositorio: a 022 e a 026 tem quatro arquivos cada (migration, rollback, linhas do ensaio e verificacao)');
+assert_same(true, strpos($commands5[$check5] ?? '', 'git cat-file -e "$D5:migrations/' . $migrationsAfterDeploy4[0] . '" && git cat-file -e "$D5:migrations/' . $migrationsAfterDeploy4[1] . '" && ') !== false && strpos($commands5[$check5], 'L=$(git diff --name-only HEAD "$D5" -- migrations | sort | tr \'\n\' \' \'); [ "$L" = "' . implode(' ', $migrationFiles5) . ' " ] && echo "migrations alteradas: exatamente as 8 esperadas (022 e 026)" || echo "PARE: ') !== false && strpos($commands5[$check5], 'echo "lockfile alterado: $(git diff --name-only HEAD "$D5" -- frontend/package-lock.json | wc -l)"') !== false, 'deploy 5: a lista exata dos arquivos da 022 e da 026 e o lockfile conferidos logo depois de gravar');
 
 // Ensaio do codigo: todos os QAs PHP do repositorio, como www-data, sem /tmp/.env.
 $qaArchive5 = $first5('Q=$(mktemp -d /tmp/ensaio-deploy5-qa.XXXXXX)');
@@ -1204,6 +1206,10 @@ assert_same([$qaArchive5], array_keys(array_filter($commands5, static fn (string
 // A 022: o "antes", os dois ensaios, a aplicacao com a verificacao, o merge depois, a verificacao de novo.
 $verify5 = 'cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp \'Senha root do MySQL: \' P; echo; export P; bash -o pipefail -c \'git show "$D5:migrations/verificacao/20261119_022_pa_inventory_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas\' || echo "PARE: a verificacao da 022 falhou"; unset P D5';
 $verifies5 = array_keys(array_filter($commands5, static fn (string $line): bool => $line === $verify5));
+$verify26 = str_replace(['20261119_022_pa_inventory_check', 'a verificacao da 022 falhou'], ['20261123_026_matricula_nc_check', 'a verificacao da 026 falhou'], $verify5);
+$verifies26 = array_keys(array_filter($commands5, static fn (string $line): bool => $line === $verify26));
+$ensaioA26 = $first5('bash "$EV/scripts/ensaio-migration.sh" d5_026 ');
+$ensaioB26 = $first5('bash "$EV/scripts/ensaio-migration.sh" d5_026_rollback ');
 $evExtract5 = $first5('EV=$(mktemp -d /root/ensaio-deploy5.XXXXXX)');
 $ensaioA5 = $first5('bash "$EV/scripts/ensaio-migration.sh" d5_022 ');
 $ensaioB5 = $first5('bash "$EV/scripts/ensaio-migration.sh" d5_022_rollback ');
@@ -1211,10 +1217,13 @@ $evClean5 = $first5('case "$EV" in /root/ensaio-deploy5.*) rm -r "$EV"');
 assert_same([
     'env DADOS=portal_pa_inventory,portal_pa_assignments VERIFICA="$EV/migrations/verificacao/20261119_022_pa_inventory_check.sql" bash "$EV/scripts/ensaio-migration.sh" d5_022 "$EV/migrations/20261119_022_pa_inventory.sql" "$EV/migrations/rollback/20261119_022_pa_inventory_down.sql" audit_log',
     'env PREPARO="$EV/migrations/20261119_022_pa_inventory.sql" DADOS=portal_pa_inventory,portal_pa_assignments VERIFICA="$EV/migrations/verificacao/20261119_022_pa_inventory_check.sql" bash "$EV/scripts/ensaio-migration.sh" d5_022_rollback "$EV/migrations/rollback/20261119_022_ensaio_linhas_inv.sql" "$EV/migrations/rollback/20261119_022_pa_inventory_down.sql" audit_log',
-    [$evExtract5 + 1, $ensaioA5 + 1, $ensaioB5 + 1],
-], [$commands5[$ensaioA5] ?? '', $commands5[$ensaioB5] ?? '', [$ensaioA5, $ensaioB5, $evClean5]], 'deploy 5: os ensaios (a) e (b) da 022 com o inventario e os vinculos com dados, do commit gravado, em sequencia');
+    'env DADOS=portal_overtime_entries,portal_time_adjustments VERIFICA="$EV/migrations/verificacao/20261123_026_matricula_nc_check.sql" bash "$EV/scripts/ensaio-migration.sh" d5_026 "$EV/migrations/20261123_026_matricula_nc.sql" "$EV/migrations/rollback/20261123_026_matricula_nc_down.sql" audit_log',
+    'env PREPARO="$EV/migrations/20261123_026_matricula_nc.sql" DADOS=portal_overtime_entries,portal_time_adjustments VERIFICA="$EV/migrations/verificacao/20261123_026_matricula_nc_check.sql" bash "$EV/scripts/ensaio-migration.sh" d5_026_rollback "$EV/migrations/rollback/20261123_026_ensaio_linhas_nc.sql" "$EV/migrations/rollback/20261123_026_matricula_nc_down.sql" audit_log',
+    [$evExtract5 + 1, $ensaioA5 + 1, $ensaioB5 + 1, $ensaioA26 + 1, $ensaioB26 + 1],
+], [$commands5[$ensaioA5] ?? '', $commands5[$ensaioB5] ?? '', $commands5[$ensaioA26] ?? '', $commands5[$ensaioB26] ?? '', [$ensaioA5, $ensaioB5, $ensaioA26, $ensaioB26, $evClean5]], 'deploy 5: os ensaios (a) e (b) da 022 (inventario e vinculos com dados) e da 026 (horas extras e correcoes com dados), do commit gravado, em sequencia');
 $apply5 = $all5('| docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot sistema_pausas');
 $applyMigration5 = array_values(array_filter($apply5, static fn (int $i): bool => strpos($commands5[$i], 'git show "$D5:migrations/20261119_022_pa_inventory.sql"') !== false));
+$applyMigration26 = array_values(array_filter($apply5, static fn (int $i): bool => strpos($commands5[$i], 'git show "$D5:migrations/20261123_026_matricula_nc.sql"') !== false));
 $merge5 = $first5('git merge --ff-only "$D5"');
 $build5 = $first5('cd /var/www/chronodesk/frontend && if [ "$(git diff --name-only "$(cat /var/backups/chronodesk/pre-deploy5-commit)" HEAD -- package-lock.json | wc -l)" = 0 ]; then echo "lockfile sem mudanca: so o build"; npm run build; else echo "lockfile alterado: npm ci e build"; npm ci && npm run build; fi');
 $bundle5 = $first5('cd /var/www/chronodesk/frontend && npm run -s qa:bundle');
@@ -1231,18 +1240,23 @@ $polling5 = $all5('bash scripts/medir-polling.sh');
 $checkout5 = $first5('git checkout --detach "$(cat /var/backups/chronodesk/pre-deploy5-commit)"');
 $appBack5 = $first5('A=/var/backups/chronodesk/app-antes-deploy5; X=/var/backups/chronodesk/app-deploy5-retirado-');
 $rollback5 = $first5('git show "$D5:migrations/rollback/20261119_022_pa_inventory_down.sql" | docker exec');
-assert_same(1, count($applyMigration5), 'deploy 5: a 022 aplicada uma vez, do commit gravado');
+$rollback26 = $first5('git show "$D5:migrations/rollback/20261123_026_matricula_nc_down.sql" | docker exec');
+assert_same([1, 1, 4], [count($applyMigration5), count($applyMigration26), count($apply5)], 'deploy 5: a 022 e a 026 aplicadas uma vez cada, do commit gravado (e so os dois rollbacks alem delas)');
+assert_same(true, strpos($commands5[$applyMigration26[0] ?? -1] ?? '', "git cat-file -e \"\$D5:migrations/20261123_026_matricula_nc.sql\" && bash -o pipefail -c 'git show") !== false && strpos($commands5[$applyMigration26[0]], 'echo "026 aplicada" || echo "PARE: a 026 nao foi aplicada"; unset P D5') !== false && strpos($commands5[($applyMigration26[0] ?? -2) + 1] ?? '', 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql"') !== false && $applyMigration26[0] === $applyMigration5[0] + 2, 'deploy 5: a 026 logo depois da 022 e da verificacao dela, com cat-file e pipefail, e a verificacao da 026 logo depois');
+assert_same([2, true, true], [count($verifies26), ($verifies26[0] ?? -1) === ($verifies5[0] ?? -2) + 1, ($verifies26[1] ?? -1) === ($verifies5[1] ?? -2) + 1], 'deploy 5: a verificacao da 026 no "antes" e de novo depois da fumaca, logo depois da da 022');
+assert_same(true, strpos($commands5[$rollback26] ?? '', '[ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy5-commit)" ] && ') !== false && strpos($commands5[$rollback26], 'echo "rollback da 026 aplicado" || echo "PARE: ') !== false && strpos($commands5[$rollback26 + 1] ?? '', 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql"') !== false && $rollback26 > $rollback5 + 1, 'deploy 5: rollback da 026 so com o codigo do f0844fd no ar, com a verificacao depois, no passo 16');
 assert_same([1, 1], [count(array_filter($all5('git merge'), static fn (int $i): bool => strpos($commands5[$i], 'merge-base') === false)), substr_count($text5, 'git merge --ff-only')], 'deploy 5: um merge so (--ff-only), no comando dele, com o HEAD conferido');
 assert_same(true, strpos($commands5[$merge5] ?? '', '[ "$(git rev-parse HEAD)" = "$D5" ] && echo "HEAD = deploy5-commit" || echo "PARE: ') !== false, 'deploy 5: o HEAD conferido logo depois do merge');
 assert_same(true, strpos($commands5[$applyMigration5[0]] ?? '', "git cat-file -e \"\$D5:migrations/20261119_022_pa_inventory.sql\" && bash -o pipefail -c 'git show") !== false && strpos($commands5[$applyMigration5[0]], 'echo "022 aplicada" || echo "PARE: a 022 nao foi aplicada"; unset P D5') !== false && strpos($commands5[($applyMigration5[0] ?? -2) + 1] ?? '', 'git show "$D5:migrations/verificacao/20261119_022_pa_inventory_check.sql"') !== false, 'deploy 5: a 022 com cat-file e pipefail, e a verificacao logo depois');
-$order5 = [$check5, $qaArchive5, $qaLoop5, $qaSweep5, $verifies5[0] ?? -1, $evExtract5, $evClean5, $space5, $backup5, $maintOn5, $appCopy5, $applyMigration5[0] ?? -1, $merge5, $build5, $bundle5, $health5, $tz5, $smoke5, $verifies5[1] ?? -1, $maintOff5, min($polling5 ?: [-1]), max($polling5 ?: [-1]), $checkout5, $appBack5, $rollback5];
+$order5 = [$check5, $qaArchive5, $qaLoop5, $qaSweep5, $verifies5[0] ?? -1, $verifies26[0] ?? -1, $evExtract5, $evClean5, $space5, $backup5, $maintOn5, $appCopy5, $applyMigration5[0] ?? -1, $applyMigration26[0] ?? -1, $merge5, $build5, $bundle5, $health5, $tz5, $smoke5, $verifies5[1] ?? -1, $verifies26[1] ?? -1, $maintOff5, min($polling5 ?: [-1]), max($polling5 ?: [-1]), $checkout5, $appBack5, $rollback5, $rollback26];
 $sortedOrder5 = $order5;
 sort($sortedOrder5);
-assert_same([$sortedOrder5, true, 2], [$order5, !in_array(-1, $order5, true) && count(array_unique($order5)) === count($order5), count($verifies5)], 'deploy 5: gravar, ensaio do codigo, o "antes", os ensaios, espaco e backup, manutencao e copia do app/, a 022, merge, build e qa:bundle, recarga, health, fuso, fumaca, a verificacao de novo, reabertura, polling e o rollback (codigo e depois a 022), nesta ordem');
+assert_same([$sortedOrder5, true, 2], [$order5, !in_array(-1, $order5, true) && count(array_unique($order5)) === count($order5), count($verifies5)], 'deploy 5: gravar, ensaio do codigo, o "antes" (022 e 026), os ensaios, espaco e backup, manutencao e copia do app/, a 022 e a 026, merge, build e qa:bundle, recarga, health, fuso, fumaca, as verificacoes de novo, reabertura, polling e os rollbacks (codigo, a 022 e a 026), nesta ordem');
 assert_same([$backup5, $build5 + 2, $bundle5 + 1, $appBack5, $appBack5 + 1, 2, 3],[$space5 + 1, $bundle5, $reloads5[0] ?? -1, $checkout5 + 1, $reloads5[1] ?? -1, count($reloads5), count($polling5)], 'deploy 5: pares colados (espaco e backup, build, leitura e qa:bundle, recargas, checkout e app/) e o polling dos tres endpoints');
 assert_same(true, strpos($commands5[$rollback5] ?? '', '[ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy5-commit)" ] && ') !== false && strpos($commands5[$rollback5], 'echo "rollback da 022 aplicado" || echo "PARE: ') !== false && strpos($commands5[$rollback5 + 1] ?? '', 'git show "$D5:migrations/verificacao/20261119_022_pa_inventory_check.sql"') !== false && count(array_filter($all5('npm '), static fn (int $i): bool => $i >= $checkout5)) === 0, 'deploy 5: rollback da 022 so com o codigo do f0844fd no ar, com a verificacao depois; o rollback do codigo sem npm');
 assert_same([$qaSweep5, $evClean5, $maintOff5], array_keys(array_filter($commands5, static fn (string $line): bool => preg_match('/\brm\b/', $line) === 1)), 'deploy 5: so tres remocoes (o ensaio do codigo pelo padrao do mktemp, o das migrations guardado por case e o arquivo-sinal)');
 assert_same(0, preg_match('/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|REPLACE|GRANT)\b/', implode("\n", array_filter($commands5, static fn (string $line): bool => strpos($line, 'mysql') !== false && strpos($line, 'mysqldump') === false))), 'deploy 5: nenhum comando de escrita digitado no MySQL (so os arquivos do commit)');
+assert_same(true, strpos($prose5, '**A 022 e a 026 antes do merge:**') !== false && strpos($prose5, '- **Migration 026 (lote NC):**') !== false && strpos($prose5, 'NC ficticio') === false && strpos($prose5, '(NC `9` mais o ID com 8 digitos, nunca uma matricula real)') !== false && strpos($prose5, '**16. Rollback da 026') !== false, 'deploy 5 (lote NC): o que vai com a 026, as duas antes do merge, o ensaio (b) com NC ficticio e o passo 16');
 assert_same([0, 0], [substr_count($text5, 'CHG_MODULE_ENABLED'), preg_match('/_(021|020|024|025)_/', $text5)], 'deploy 5: sem o passo do Controle de CHG e sem migration do deploy 4');
 assert_same(true, strpos($prose5, '`frontend: ' . $frontendCount4 . ' scripts npm rodados (...): ' . $frontendCount4 . ' OK, 0 com falha`') !== false && strpos($prose5, 'Data, janela e quem acompanha: A DEFINIR') !== false && strpos($prose5, '**Nenhum filtro de saida com `umask`**') !== false, 'deploy 5: contagem atual de scripts npm, A DEFINIR e o aviso do filtro de saida (licao do deploy 4)');
 
@@ -1267,7 +1281,7 @@ assert_same([0, 0, 0, 0, 0, true], [
 // nova: o que vai, a fumaca com o Calendario e os relatorios (seis GET), a
 // conferencia na tela da mesma pessoa nas telas e o aviso; a folha junto.
 assert_same([true, true, true, true, true, true], [
-    strpos((string)strtok($runbook5, "\n"), '; papel do dia do Critico numa fonte so, 8.8)') !== false,
+    strpos((string)strtok($runbook5, "\n"), '; papel do dia do Critico numa fonte so, 8.8;') !== false,
     strpos($prose5, '**Papel do dia do Critico numa fonte so (desenho do F10, 8.8, sem') !== false && strpos($prose5, '(D-F10-36 retirada)') !== false,
     strpos($prose5, 'agora com **seis** linhas `GET ...: 200`') !== false && strpos($prose5, '`GET /api/portal/calendar.php: 200`') !== false && strpos($prose5, '`GET /api/portal/reports.php: 200`') !== false,
     strpos($prose5, '- **Escala, Calendario e Visao operacional (8.8):**') !== false && strpos($prose5, 'a mesma pessoa diferente entre as telas') !== false,
