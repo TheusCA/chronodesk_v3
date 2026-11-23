@@ -81,9 +81,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Login de métricas - Portal SDK</title>
-    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.ico?v=2'); ?>" sizes="32x32">
-    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.svg?v=2'); ?>" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="<?php echo sanitize_attr(get_base_path() . '/app/apple-touch-icon.png?v=2'); ?>">
+    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.ico?v=3'); ?>" sizes="32x32">
+    <link rel="icon" href="<?php echo sanitize_attr(get_base_path() . '/app/favicon.svg?v=3'); ?>" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="<?php echo sanitize_attr(get_base_path() . '/app/apple-touch-icon.png?v=3'); ?>">
     <link rel="stylesheet" href="<?php echo sanitize_attr(get_base_path() . '/static/css/style.css'); ?>">
     <link rel="stylesheet" href="<?php echo sanitize_attr(get_base_path() . '/static/css/login.css'); ?>">
     <script src="<?php echo sanitize_attr(get_base_path() . '/static/js/theme.js'); ?>" defer></script>

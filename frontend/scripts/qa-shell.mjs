@@ -136,15 +136,20 @@ for (const path of ['/pausas', '/dashboard', '/admin', '/mapa-pa', '/chamados-cr
   // anel e barras em currentColor do text-action-ink, ponto na cor da situação "Em pausa".
   const brand = read('src/components/BrandMark.jsx')
   const favicon = read('public/favicon.svg')
+  // [Marca B, 2026-11-23] As chaves (dois paths) e as duas barras da pausa, com
+  // o mesmo traço e as mesmas medidas do favicon.svg.
+  const attr = (tag, name) => tag.match(new RegExp(`\\b${name}="([^"]+)"`, 'u'))?.[1]
   const shapes = (source) => ({
-    ring: source.match(/<path[^>]*d="([^"]+)"/u)?.[1],
-    bars: [...source.matchAll(/<rect[^>]*?x="([\d.]+)"[^>]*?y="([\d.]+)"|<rect[^>]*?y="([\d.]+)"[^>]*?x="([\d.]+)"/gu)].length,
-    dot: source.match(/<circle[^>]*cx="(\d+)"[^>]*cy="(\d+)"[^>]*r="(\d+)"/u)?.slice(1).join(','),
+    braces: [...source.matchAll(/<path [^>]*\bd="([^"]+)"/gu)].map((match) => match[1]),
+    stroke: source.match(/stroke-?[wW]idth="([\d.]+)"/u)?.[1],
+    bars: [...source.matchAll(/<rect [^>]*\by="23"[^>]*>/gu)].map((match) => ['x', 'y', 'width', 'height', 'rx'].map((name) => attr(match[0], name)).join(',')),
+    tile: (source.match(/<rect [^>]*\bheight="64"[^>]*>/u) || [''])[0].includes('rx="14"'),
   })
-  assert.deepEqual(shapes(brand), shapes(favicon), 'BrandMark: o anel, as duas barras e o ponto do favicon.svg')
+  assert.deepEqual(shapes(brand), shapes(favicon), 'BrandMark: as chaves, o traço, as duas barras e a placa do favicon.svg (opção B)')
+  assert.deepEqual([shapes(brand).braces.length, shapes(brand).bars.length, shapes(brand).tile], [2, 2, true], 'BrandMark: duas chaves, duas barras e a placa com cantos')
   assert.match(brand, /<rect className="fill-action" height="64" rx="14" width="64" \/>/u, 'BrandMark: a placa 64 x 64 com rx 14 no token do bg-action')
-  assert.match(brand, /<g className="text-action-ink">[\s\S]*stroke="currentColor"[\s\S]*fill="currentColor"[\s\S]*fill="currentColor"[\s\S]*<\/g>/u, 'BrandMark: anel e barras em currentColor do text-action-ink')
-  assert.match(brand, /<circle className="fill-pause-line" cx="44" cy="20" data-brand-dot="" r="4" \/>/u, 'BrandMark: o ponto no token da situação "Em pausa"')
+  assert.match(brand, /<g className="text-action-ink" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4\.5">[\s\S]*?<\/g>/u, 'BrandMark: as chaves em currentColor do text-action-ink')
+  assert.match(brand, /<g className="fill-pause-line" data-brand-pause="">\s*<rect height="18" rx="2\.5" width="5" x="25\.5" y="23" \/>\s*<rect height="18" rx="2\.5" width="5" x="33\.5" y="23" \/>\s*<\/g>/u, 'BrandMark: as barras da pausa no token da situação "Em pausa" (pause-line)')
 }
 
 // ---------------------------------------------------------------------------

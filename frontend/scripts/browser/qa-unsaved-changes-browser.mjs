@@ -3170,8 +3170,8 @@ async function brandIcons(page, port) {
     }
     return out
   })()`)
-  const expected = [['icon', '/app/favicon.ico?v=2', /^image\//], ['icon', '/app/favicon.svg?v=2', /^image\/svg\+xml/], ['apple-touch-icon', '/app/apple-touch-icon.png?v=2', /^image\/png/]]
-  report('Marca: os tres links do icone, na ordem, com ?v=2', JSON.stringify(icons.map((i) => [i.rel, i.href])) === JSON.stringify(expected.map(([rel, href]) => [rel, href])), JSON.stringify(icons))
+  const expected = [['icon', '/app/favicon.ico?v=3', /^image\//], ['icon', '/app/favicon.svg?v=3', /^image\/svg\+xml/], ['apple-touch-icon', '/app/apple-touch-icon.png?v=3', /^image\/png/]]
+  report('Marca: os tres links do icone, na ordem, com ?v=3', JSON.stringify(icons.map((i) => [i.rel, i.href])) === JSON.stringify(expected.map(([rel, href]) => [rel, href])), JSON.stringify(icons))
   report('Marca: cada icone responde 200 com o tipo de imagem certo (com nosniff, tipo errado quebra o icone)', icons.length === 3 && icons.every((i, n) => i.status === 200 && expected[n][2].test(i.tipo || '') && i.bytes > 0), JSON.stringify(icons))
   const brandState = `(() => {
     const mark = [...document.querySelectorAll('[data-brand-mark]')].find((el) => el.getBoundingClientRect().width > 0)
@@ -3182,7 +3182,7 @@ async function brandIcons(page, port) {
       visivel: !!box && box.width >= 28 && box.height >= 28 && box.top >= 0 && box.top < innerHeight,
       tag: mark?.tagName.toLowerCase(),
       placa: getComputedStyle(mark.querySelector('rect')).fill === rgb('--action'),
-      ponto: getComputedStyle(mark.querySelector('[data-brand-dot]')).fill === rgb('--pause-line'),
+      ponto: [...mark.querySelectorAll('[data-brand-pause] rect')].length === 2 && [...mark.querySelectorAll('[data-brand-pause] rect')].every((bar) => getComputedStyle(bar).fill === rgb('--pause-line')),
       simbolo: getComputedStyle(mark.querySelector('g')).color === rgb('--action-ink'),
       corPlaca: getComputedStyle(mark.querySelector('rect')).fill,
       nome: /Portal SDK/.test(mark.parentElement?.textContent ?? ''),

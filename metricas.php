@@ -20,9 +20,9 @@ verificar_login();
     // Calcular caminho base
     $base_path_metricas = get_base_path();
     ?>
-    <link rel="icon" href="<?php echo sanitize_attr($base_path_metricas . '/app/favicon.ico?v=2'); ?>" sizes="32x32">
-    <link rel="icon" href="<?php echo sanitize_attr($base_path_metricas . '/app/favicon.svg?v=2'); ?>" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="<?php echo sanitize_attr($base_path_metricas . '/app/apple-touch-icon.png?v=2'); ?>">
+    <link rel="icon" href="<?php echo sanitize_attr($base_path_metricas . '/app/favicon.ico?v=3'); ?>" sizes="32x32">
+    <link rel="icon" href="<?php echo sanitize_attr($base_path_metricas . '/app/favicon.svg?v=3'); ?>" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="<?php echo sanitize_attr($base_path_metricas . '/app/apple-touch-icon.png?v=3'); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path_metricas . '/static/css/style.css?v=' . time()); ?>" type="text/css">
     <link rel="stylesheet" href="<?php echo htmlspecialchars($base_path_metricas . '/static/css/metricas.css?v=' . time()); ?>" type="text/css">
     <script src="<?php echo htmlspecialchars($base_path_metricas . '/static/js/csrf_fetch.js'); ?>"></script>
