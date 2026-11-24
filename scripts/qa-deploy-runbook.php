@@ -1201,7 +1201,7 @@ assert_same([true, 0, 0], [
     strpos($runbook5, "O deploy 5 fica congelado no `babcdd9`
    (decisao do responsavel, 2026-11-24), publicado em
    `codex/modernizacao-ui-backend`.") !== false && strpos($runbook5, 'git worktree add --detach ..\chronodesk-deploy5 origin/codex/modernizacao-ui-backend;') !== false,
-    preg_match('/_027_|critical_grid|Escala do Critico/', $runbook5),
+    preg_match('/\b027\b|critical_grid|Escala do Critico|feriado/i', $runbook5),
     substr_count($runbook5, 'feat/employee-form-rhf-zod'),
 ], 'deploy 5: congelado no babcdd9, lendo o codex; sem a 027 nem a Escala do Critico (vao no deploy 6)');
 $migrationFiles5 = [];
