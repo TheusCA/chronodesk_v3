@@ -1,6 +1,6 @@
-# Escala do Crítico em grade semanal (deploy 5)
+# Escala do Crítico em grade semanal (deploy 6)
 
-**Estado:** pedido da Liderança em 2026-11-24; plano curto e execução neste documento; decisões D-ESC-1 em diante a aprovar. Parte do 9.16 (migration 024, `CriticalRolePlanner`, `CriticalRoleService`, `CriticalRoles.jsx`). Migration nova: **027** (a 023 fica com o F10-4). Entra no deploy 5 (ainda sem data). Sem push.
+**Estado:** pedido da Liderança em 2026-11-24; plano curto e execução neste documento; decisões D-ESC-1 em diante a aprovar. Parte do 9.16 (migration 024, `CriticalRolePlanner`, `CriticalRoleService`, `CriticalRoles.jsx`). Migration nova: **027** (a 023 fica com o F10-4). Entra no **deploy 6** (sem data): o deploy 5 ficou congelado no `babcdd9` (decisão do responsável, 2026-11-24), sem nada deste lote. Sem push.
 
 **LGPD e sigilo:** as referências (`_referencias/critico/`, planilha e captura) têm nomes reais: só a estrutura e as cores foram usadas; nada delas no git, nos docs, nos QAs nem nas capturas. Os testes e as capturas usam nomes fictícios. A categoria da ausência segue a P9: quem não é Liderança nem admin vê só "Férias", "Banco de horas", "Feriado" ou "Ausente".
 
@@ -24,7 +24,7 @@
 | 3 | Servidor: vagas no planner e no serviço, cor do papel, `banco_horas`, feriados (serviço, endpoint, permissão `feriados.manage`) e o feriado no motor e em todas as telas que leem o motor |
 | 4 | Servidor: grade do mês (`critical_grid.php`: GET do mês, prévia e gravação do dia, desfazer, `.xlsx`) |
 | 5 | Telas: Escala do Crítico, cor e vagas nos papéis, feriados em Configurações, banco de horas em Ausências; QA do frontend e bloco do navegador |
-| 6 | Roteiro e folha do deploy 5 com a 027, e a trava |
+| 6 | Roteiro e folha do deploy 5 com a 027, e a trava (desfeito: a 027 foi para o deploy 6, abaixo) |
 | 7 | Docs: execução, validação e registro |
 
 Mutação por commit (worktree, `mut_guard.php`); bateria completa sozinha no último commit; capturas com dados fictícios em 1366 e 1920 px, nos dois temas, no celular, como técnico e como Liderança, com o diálogo do dia aberto.
@@ -75,17 +75,22 @@ Mutação por commit (worktree, `mut_guard.php`); bateria completa sozinha no ú
 | `b1f4485` | Servidor: feriado no motor (`scheduleForDay`, `hasShiftOn`, `shiftFor` com o feriado) e em todas as telas que o leem (presença, `status.php`, Visão operacional sem papel vago, regra de pausa, Escala, relatórios, Calendário com o evento do feriado, Mapa PA com o motivo `feriado`); `HolidayService` e `holidays.php` com `row_version`; permissão `feriados.manage`; vagas no planner e no serviço (o papel vago contado por vaga); cor do papel (ausente na edição mantém); `banco_horas`. Uma consulta de feriados a mais por carga: os QAs de contagem passam de 4 para 5 (presença, status, Visão operacional) e o do Mapa PA de 13 para 15 |
 | `a0c263c` | Servidor: `CriticalGridService` e `critical_grid.php` (mês em 8 consultas fixas, célula pelo motor, privacidade, versão, prévia, gravação com 409, desfazer) e `CriticalGridSheet` (o `.xlsx`) |
 | `e0f9a54` | Telas: Escala do Crítico, cor e vagas nos papéis, feriados em Configurações, banco de horas em Ausências, feriado no Calendário e no Mapa PA; `qa:critical-grid`, bloco 34 do navegador, servidor simulado com a grade fictícia |
-| `c6cbab9` | Roteiro e folha do deploy 5 com a 027 (passos 1 a 4, 7, 8, 10, 12 e o rollback 17) e a trava |
+| `c6cbab9` | Roteiro e folha do deploy 5 com a 027 e a trava; **desfeito no `39a7e45`** (`git revert`, sem reescrever nada), quando o deploy 5 ficou congelado no `babcdd9` |
 | `d0cce66` | Achados das capturas: o resumo repetia "Home" e "Presencial" (papel e contagem) e a célula não ocupava a altura da linha com ausência parcial |
-| O último | Esta seção, os contratos dos dois endpoints novos e o `REGISTRO_USO_IA.md` |
+| `86b4f9b` | Esta seção, os contratos dos dois endpoints novos e o `REGISTRO_USO_IA.md` |
+| `39a7e45` | `git revert` do `c6cbab9`: o roteiro, a folha e a trava do deploy 5 voltam a ser os do `babcdd9` |
+| `4d70149` | Deploy 5 congelado no `babcdd9` e lido do `origin/codex/modernizacao-ui-backend` (item 0 e passo 1; o `feat` segue no `f0844fd`); a trava confere o congelamento |
+| `10d6d37` | Roteiro, folha e trava do **deploy 6** (seção nova depois do deploy 5; 39 comandos, os do deploy 5 com `D6` e a base `babcdd9`, só a 027); a 027 e o `qa-critical-grid` fora das listas dos deploys 1 a 5; a contagem de scripts npm dos deploys 4 e 5 fixa em 30 |
+| `bb4d9d1` | Trava: o deploy 5 congelado também recusa a 027 e os feriados citados na prosa (sobrevivente da mutação) |
+| O último | A ida para o deploy 6 neste documento e no registro |
 
 **Ensaio da 027 no MySQL 8.0.46 local** (base `qa_esc`: cópia da `qa_nci` com 5 pessoas fictícias do Crítico, 5 papéis, um rodízio e uma troca): (a) migration 2x e rollback 2x, saída 0: depois da 027, `colunas_027 = 1`, `checks_027 = 2`, `tabela_027 = 1`, `enum_027 = 1`, `papeis_com_cor = 4` (de 5: o papel "Plantao extra" fica sem cor), assinaturas iguais nos cinco estados, o 2º rollback para de propósito; (b) com as linhas de ensaio, `feriados = 1`, `ausencias_banco_horas = 1`, `papeis_com_cor = 5`; o rollback leva a ausência a `outro` (só a assinatura das ausências muda) e o 2º para. À parte: o rollback para com rodízio de papel repetido sem mudar nada; sem a 027, o papel repetido e a cor fora da paleta dão erro 3819 (CHECK). Na 1ª rodada, a mensagem do `SIGNAL` passou de 128 caracteres (erro 1648): encurtada antes do commit.
 
 **Integração no MySQL 8.0.46 local** (`qa_esci` = `qa_esc` + 027; transação desfeita no fim; serviços de verdade): 26/26. Rodízio com Presencial x2 aceito; cor fora da paleta recusada; feriado cadastrado e a data repetida 409; Visão operacional sem escalados nem papel vago no feriado; um evento de feriado no Calendário; a grade com 5 semanas, o feriado e a cor; gravar banco de horas (ausência aprovada, dia inteiro, com autoria), a versão velha 409 com a contagem, a troca (motivo `troca`), a troca sobreposta 409, a exceção presencial, os três desfazer (a exceção sai, a troca sai inteira, a ausência fica cancelada), o gestor 403, a privacidade do técnico e o `.xlsx`.
 
-**QAs:** `qa-critical-grid` 141 conferências (seções 1 a 3); `qa-critical-roles` 159; `qa:critical-grid` 113 (contraste da paleta ≥ 4,5:1 nos dois temas para os 16 tons); `qa:critical-roles` 41; trava do roteiro 525; bloco 34 do navegador 17/17.
+**QAs:** `qa-critical-grid` 141 conferências (seções 1 a 3); `qa-critical-roles` 159; `qa:critical-grid` 113 (contraste da paleta ≥ 4,5:1 nos dois temas para os 16 tons); `qa:critical-roles` 41; trava do roteiro 556 (depois do deploy 6); bloco 34 do navegador 17/17.
 
-**Mutação** (worktree, `mut_guard.php`): `3e128bb` 21/21 (na 1ª rodada 19/21: a condição da parada das vagas e a guarda da cópia da cor não eram conferidas; casos novos, commit refeito antes de qualquer envio); `b1f4485` 31/31; `a0c263c` 34/34 (na 1ª rodada 30/34: ausência no feriado, troca para o mesmo papel do rodízio e duas conferências estruturais frouxas; casos novos e um mutante equivalente trocado, commit refeito antes de qualquer envio); `e0f9a54` 29/29 (na 1ª rodada 28/29: o ícone visível da troca; caso novo, commit refeito); `c6cbab9` 17/17; `d0cce66` 3/3.
+**Mutação** (worktree, `mut_guard.php`): `3e128bb` 21/21 (na 1ª rodada 19/21: a condição da parada das vagas e a guarda da cópia da cor não eram conferidas; casos novos, commit refeito antes de qualquer envio); `b1f4485` 31/31; `a0c263c` 34/34 (na 1ª rodada 30/34: ausência no feriado, troca para o mesmo papel do rodízio e duas conferências estruturais frouxas; casos novos e um mutante equivalente trocado, commit refeito antes de qualquer envio); `e0f9a54` 29/29 (na 1ª rodada 28/29: o ícone visível da troca; caso novo, commit refeito); `c6cbab9` 17/17 (desfeito); `d0cce66` 3/3; `4d70149`, `10d6d37` e `bb4d9d1` juntos 21/21 (na 1ª rodada 19/21: a prosa do deploy 5 citando a 027 passava, caso novo no `bb4d9d1`; um mutante não aplicou por erro do próprio script de mutação e foi refeito).
 
 **Capturas** (dados fictícios, servidor simulado): 32, em 1366 e 1920 px nos dois temas, no celular (390 px), como técnico e como Liderança, com o diálogo do dia aberto, mais o resumo, a visão Semana, os feriados em Configurações e a cor do papel. Ficam no scratchpad da sessão (`esc/capturas`).
 
