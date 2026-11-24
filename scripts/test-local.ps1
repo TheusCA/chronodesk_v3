@@ -230,6 +230,14 @@ if (!$phpExecutable) {
         Pass "QA do NC concluido"
     }
 
+    # Sem banco: Escala do Critico em grade (migration 027, feriados, vagas, grade do mes).
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-critical-grid.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA da Escala do Critico falhou"
+    } else {
+        Pass "QA da Escala do Critico concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {

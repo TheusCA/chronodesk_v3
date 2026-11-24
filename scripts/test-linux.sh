@@ -90,6 +90,10 @@ echo "== PHP NC QA =="
 # NC (matricula) no cadastro, na hora extra e na correcao de ponto: migration 026; sem banco.
 php scripts/qa-nc.php
 
+echo "== PHP critical grid QA =="
+# Escala do Critico em grade (migration 027, feriados, vagas, grade do mes); sem banco.
+php scripts/qa-critical-grid.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php
