@@ -1858,6 +1858,10 @@ $matrix = [
     'api/portal/chg_import.php POST' => [['env' => $chgOn, 'content_type' => $json, 'body' => '{"action":"preview"}'], $expect['ADMIN']],
     // [Ajustes do CHG, D-CHG-39] Catalogo de carteiras pela planilha: so o admin (chg.import), antes do CSRF e do arquivo.
     'api/portal/chg_catalog_import.php POST' => [['env' => $chgOn, 'content_type' => 'multipart/form-data', 'body' => 'x'], $expect['ADMIN']],
+    // [D-ESC-1] Escala do Critico em grade: leitura e .xlsx para todos; previa e gravacao com escalas.manage.
+    'api/portal/critical_grid.php GET' => [[], $expect['TODOS']],
+    'api/portal/critical_grid.php POST preview' => [['content_type' => $json, 'body' => '{"action":"preview"}'], $expect['ADMIN_LIDERANCA']],
+    'api/portal/critical_grid.php POST apply' => [['content_type' => $json, 'body' => '{"action":"apply"}'], $expect['ADMIN_LIDERANCA']],
     // [D-ESC-16] Feriados: leitura para todos; gravar com feriados.manage (admin e Lideranca).
     'api/portal/holidays.php GET' => [[], $expect['TODOS']],
     'api/portal/holidays.php POST save' => [['content_type' => $json, 'body' => '{"action":"save"}'], $expect['ADMIN_LIDERANCA']],

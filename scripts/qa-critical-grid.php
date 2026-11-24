@@ -174,6 +174,13 @@ final class QaGridStatement extends PDOStatement {
         $this->rows = [];
         $one = static fn (array $row): bool => !isset($p[':employee_id']) || (int)$row['employee_id'] === (int)$p[':employee_id'];
         switch (true) {
+            case $sql === 'SELECT id FROM funcionarios WHERE id = :id FOR UPDATE':
+                foreach ($db->employees as $r) {
+                    if ((int)$r['id'] === (int)$p[':id']) {
+                        $this->rows[] = ['id' => $r['id']];
+                    }
+                }
+                return true;
             case str_contains($sql, 'FROM funcionarios WHERE ativo = 1'):
                 $this->rows = array_values(array_filter($db->employees, static fn (array $r): bool => (int)$r['ativo'] === 1 && (!isset($p[':employee_id']) || (int)$r['id'] === (int)$p[':employee_id'])));
                 return true;
@@ -252,7 +259,7 @@ final class QaGridStatement extends PDOStatement {
 
 function qa_grid_db(): QaGridPdo {
     $db = new QaGridPdo();
-    foreach ([901 => 'Pessoa Ficticia Um', 902 => 'Pessoa Ficticia Dois', 903 => 'Pessoa Ficticia Tres', 904 => 'Pessoa Ficticia Quatro', 905 => 'Pessoa Ficticia Cinco'] as $id => $name) {
+    foreach ([901 => 'Ana Ficticia', 902 => 'Bruno Ficticio', 903 => 'Carla Ficticia', 904 => 'Diego Ficticio', 905 => 'Ana Ruiz Ficticia'] as $id => $name) {
         $db->employees[] = ['id' => $id, 'nome' => $name, 'equipe' => 'critico', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '18:00:00', 'almoco_inicio' => '12:00:00', 'almoco_fim' => '13:00:00', 'fora_mapa_escala' => 0, 'ativo' => 1];
     }
     $db->employees[] = ['id' => 11, 'nome' => 'Tecnico Ficticio N1', 'equipe' => 'n1', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '17:00:00', 'almoco_inicio' => '12:00:00', 'almoco_fim' => '13:00:00', 'fora_mapa_escala' => 0, 'ativo' => 1];
@@ -264,7 +271,7 @@ function qa_grid_db(): QaGridPdo {
         4 => ['id' => 4, 'name' => 'Home', 'presence_type' => 'remote', 'work_start' => '08:00:00', 'work_end' => '18:00:00', 'active' => 1, 'sort_order' => 4, 'color_token' => null],
     ];
     // Rodizio com vagas: Presencial x2 (D-ESC-15), 5 pessoas, 5 vagas.
-    $db->rotations[] = ['id' => 1, 'effective_from' => '2026-11-02', 'period' => 'week', 'anchor_date' => '2026-11-02', 'roles' => '[1, 1, 2, 3, 4]', 'employees' => '[901, 902, 903, 904, 905]'];
+    $db->rotations[] = ['id' => 1, 'effective_from' => '2026-11-02', 'period' => 'week', 'anchor_date' => '2026-11-02', 'roles' => '[1, 1, 2, 3, 4]', 'employees' => '[901, 902, 903, 904, 905]', 'updated_by' => 'qa.rodizio', 'updated_at' => '2026-11-01 09:00:00'];
     $db->holidays[30] = ['id' => 30, 'holiday_date' => '2026-11-20', 'name' => 'Feriado Ficticio', 'scope' => 'todos', 'row_version' => 1, 'updated_by' => 'qa', 'updated_at' => null];
     return $db;
 }
@@ -396,6 +403,199 @@ $list = $service->list(['year' => '2026'], 'tecnico');
 assert_same([false, 1, 'Feriado Ficticio'], [$list['can_manage'], count($list['items']), $list['items'][0]['name']], 'feriados: qualquer perfil le o ano; so a gestao do pedido grava');
 assert_same('400: Ano inválido.', $outcome(fn () => $service->list(['year' => '26'], 'tecnico')), 'feriados: ano invalido 400');
 $endpoint = (string)file_get_contents($root . '/api/portal/holidays.php');
-assert_same(true, strpos($endpoint, "if (!portal_role_can(\$role, 'feriados.manage')) {") < strpos($endpoint, '$data = portal_json_input();'), 'feriados: o perfil e conferido antes de ler o corpo (CSRF e JSON no portal_json_input)');
+assert_same([1, true], [substr_count($endpoint, 'portal_json_input('), strpos($endpoint, "if (!portal_role_can(\$role, 'feriados.manage')) {") < strpos($endpoint, 'portal_json_input(')], 'feriados: o perfil e conferido antes de ler o corpo (CSRF e JSON no portal_json_input)');
+
+// ----------------------------------------------------------------------------
+// 3. Grade do mes (critical_grid.php): semanas, pessoas, celulas pelo motor,
+//    privacidade da ausencia, versao, resumo, previa, 409 e o .xlsx
+// ----------------------------------------------------------------------------
+require_once $root . '/services/CriticalGridService.php';
+require_once $root . '/services/CriticalGridSheet.php';
+
+/** Base do mes de novembro: ausencias, excecao, troca e o feriado de 20/11 (tudo ficticio). */
+function qa_grid_month_db(): QaGridPdo {
+    $db = qa_grid_db();
+    $absence = static fn (int $id, int $employee, string $category, string $from, string $to, string $period = 'full_day', ?string $start = null, ?string $end = null): array => ['id' => $id, 'employee_id' => $employee, 'category' => $category, 'starts_on' => $from, 'ends_on' => $to, 'period_type' => $period, 'start_time' => $start, 'end_time' => $end, 'created_by' => 'qa.lider', 'updated_by' => null, 'updated_at' => '2026-11-10 10:00:00'];
+    $db->absences = [
+        $absence(70, 901, 'banco_horas', '2026-11-18', '2026-11-19'),
+        $absence(71, 902, 'ferias', '2026-11-23', '2026-11-23'),
+        $absence(72, 903, 'folga', '2026-11-24', '2026-11-24'),
+        $absence(73, 904, 'compromisso', '2026-11-17', '2026-11-17', 'interval', '14:00:00', '16:00:00'),
+    ];
+    $db->exceptions = [['id' => 80, 'employee_id' => 905, 'exception_date' => '2026-11-25', 'exception_type' => 'remote', 'created_by' => 'qa.lider', 'updated_at' => '2026-11-11 10:00:00']];
+    $db->overrides = [['id' => 90, 'employee_id' => 903, 'starts_on' => '2026-11-26', 'ends_on' => '2026-11-26', 'role_id' => 2, 'reason' => 'troca', 'updated_by' => 'qa.troca', 'updated_at' => '2026-11-12 10:00:00']];
+    return $db;
+}
+$lider = ['role' => 'lideranca', 'username' => 'qa.lider', 'employee_id' => null];
+$tecnico = ['role' => 'tecnico', 'username' => 'qa.tec', 'employee_id' => 901];
+$gridOf = static fn (QaGridPdo $db, array $actor, string $month = '2026-11'): array => (new CriticalGridService($db, '2026-11-19'))->month(['month' => $month], $actor);
+
+// 3a. Semanas (seg a sex com dia util do mes) e pessoas.
+$weekStarts = static fn (int $year, int $month): array => array_column(CriticalGridService::weeks($year, $month), 'start');
+assert_same([['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23', '2026-11-30'], [45, 49]], [$weekStarts(2026, 11), [CriticalGridService::weeks(2026, 11)[0]['iso'], CriticalGridService::weeks(2026, 11)[4]['iso']]], 'semanas: novembro de 2026 comeca no domingo (1a semana em 02/11) e termina numa segunda (semana de 30/11)');
+$january = CriticalGridService::weeks(2026, 1);
+assert_same([['2026-08-03', '2026-08-10', '2026-08-17', '2026-08-24', '2026-08-31'], '2026-01-26'], [$weekStarts(2026, 8), end($january)['start']], 'semanas: mes que comeca no sabado e mes que termina no sabado');
+$grid = $gridOf(qa_grid_month_db(), $lider);
+assert_same(['2026-11', 'Novembro 2026', '2026-10', '2026-12', true], [$grid['month']['key'], $grid['month']['label'], $grid['month']['prev'], $grid['month']['next'], $grid['can_manage']], 'mes: titulo, anterior e proximo; Lideranca edita');
+assert_same(['2026-12', '2027-01'], [$gridOf(qa_grid_month_db(), $lider, '2026-12')['month']['prev'] === '2026-11' ? '2026-12' : 'x', $gridOf(qa_grid_month_db(), $lider, '2026-12')['month']['next']], 'mes: dezembro vira para janeiro do ano seguinte');
+assert_same([false, true, false], array_map(static fn (array $w): bool => $w['current'], [$grid['weeks'][1], $grid['weeks'][2], $grid['weeks'][3]]), 'semanas: so a semana de hoje (19/11) aberta');
+assert_same([[901, 'Ana F.'], [902, 'Bruno'], [903, 'Carla'], [904, 'Diego'], [905, 'Ana R.']], array_map(static fn (array $p): array => [$p['id'], $p['short_name']], $grid['people']), 'pessoas: na ordem do rodizio; nome curto, com a inicial quando o 1o nome repete (D-ESC-4)');
+$outsiders = qa_grid_month_db();
+$outsiders->employees[] = ['id' => 950, 'nome' => 'Fora Do Mapa', 'equipe' => 'critico', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '18:00:00', 'almoco_inicio' => '12:00:00', 'almoco_fim' => '13:00:00', 'fora_mapa_escala' => 1, 'ativo' => 1];
+$outsiders->employees[] = ['id' => 951, 'nome' => 'Zeca Fora Do Rodizio', 'equipe' => 'critico', 'jornada_entrada' => '09:00:00', 'jornada_saida' => '18:00:00', 'almoco_inicio' => '12:00:00', 'almoco_fim' => '13:00:00', 'fora_mapa_escala' => 0, 'ativo' => 1];
+$outsiders->rules[] = ['id' => 2, 'employee_id' => 951, 'rule_type' => 'always_remote', 'rule_config' => null, 'effective_from' => '2026-01-01', 'effective_until' => null];
+$withOutsiders = $gridOf($outsiders, $lider);
+assert_same([6, 951, 'Home 09:00–18:00', 'regra'], [count($withOutsiders['people']), end($withOutsiders['people'])['id'], $withOutsiders['cells']['951:2026-11-19']['label'], $withOutsiders['cells']['951:2026-11-19']['source']], 'pessoas: fora do Mapa fica de fora; quem nao esta no rodizio vem depois, pela regra individual');
+
+// 3b. Celulas (pelo motor, precedencia D-ESC-2) para a Lideranca.
+$cell = static fn (array $grid, int $id, string $date): array => $grid['cells'][$id . ':' . $date];
+$view = static fn (array $c): array => [$c['label'], $c['tone'], $c['source'], $c['marker']];
+assert_same(['Abertura home 07:00–17:00', 'papel-verde', 'rodizio', null], $view($cell($grid, 901, '2026-11-16')), 'celula: papel do rodizio com a cor do papel');
+assert_same(['Presencial 08:00–18:00', 'papel-azul', 'rodizio', null], $view($cell($grid, 904, '2026-11-16')), 'celula: Presencial x2 (vaga 1)');
+assert_same(['Presencial 08:00–18:00', 'papel-azul', 'rodizio', null], $view($cell($grid, 905, '2026-11-16')), 'celula: Presencial x2 (vaga 2)');
+assert_same(['Home 08:00–18:00', 'papel-areia', 'rodizio', null], $view($cell($grid, 903, '2026-11-16')), 'celula: papel sem cor na areia');
+assert_same(['Banco de horas', 'banco', 'ausencia', null], $view($cell($grid, 901, '2026-11-18')), 'celula: banco de horas no lugar do papel');
+assert_same(['Férias', 'ferias', 'ausencia', null], $view($cell($grid, 902, '2026-11-23')), 'celula: ferias');
+assert_same(['Folga', 'ausente', 'ausencia', null], $view($cell($grid, 903, '2026-11-24')), 'celula: a Lideranca ve a categoria (Folga)');
+assert_same(['Feriado', 'feriado', 'feriado', null, 'Feriado: Feriado Ficticio'], array_merge($view($cell($grid, 902, '2026-11-20')), [$cell($grid, 902, '2026-11-20')['detail']]), 'celula: feriado no lugar do papel, com o nome no detalhe');
+assert_same(['Home (exceção)', 'papel-lilas', 'excecao', 'excecao'], $view($cell($grid, 905, '2026-11-25')), 'celula: excecao por data com o icone (nao vem do rodizio)');
+$holidayAbsence = qa_grid_month_db();
+$holidayAbsence->absences[] = ['id' => 74, 'employee_id' => 903, 'category' => 'ferias', 'starts_on' => '2026-11-20', 'ends_on' => '2026-11-20', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'created_by' => 'qa', 'updated_by' => null, 'updated_at' => null];
+assert_same(['Férias', 'ferias', 'ausencia', null], $view($cell($gridOf($holidayAbsence, $lider), 903, '2026-11-20')), 'celula: ausencia de dia inteiro vence o feriado (D-ESC-2)');
+assert_same(['Abertura home 07:00–17:00', 'papel-verde', 'troca', 'troca', 'qa.troca'], array_merge($view($cell($grid, 903, '2026-11-26')), [$cell($grid, 903, '2026-11-26')['last_change']['by']]), 'celula: troca pontual com o icone e quem alterou');
+assert_same(['Presencial 08:00–18:00', 'Ausente 14:00–16:00 (Compromisso)'], [$cell($grid, 904, '2026-11-17')['label'], $cell($grid, 904, '2026-11-17')['detail']], 'celula: ausencia parcial deixa o papel e marca o horario');
+assert_same(['qa.rodizio', 'qa.lider'], [$cell($grid, 901, '2026-11-16')['last_change']['by'], $cell($grid, 901, '2026-11-18')['last_change']['by']], 'celula: quem alterou por ultimo (rodizio e ausencia)');
+assert_same([false, true], [$cell($grid, 901, '2026-12-01')['in_month'], $cell($grid, 901, '2026-11-30')['in_month']], 'celula: dias de dezembro na ultima semana ficam fora do mes');
+assert_same([['troca' => ['id' => 90, 'starts_on' => '2026-11-26', 'ends_on' => '2026-11-26']], ['ausencia' => ['id' => 70, 'starts_on' => '2026-11-18', 'ends_on' => '2026-11-19']], ['excecao' => ['id' => 80, 'date' => '2026-11-25']]], [$cell($grid, 903, '2026-11-26')['refs'], $cell($grid, 901, '2026-11-19')['refs'], $cell($grid, 905, '2026-11-25')['refs']], 'celula: o que desfazer, so para a gestao');
+assert_same(6, count($grid['absence_choices']), 'gestao: as seis categorias de ausencia, com o banco de horas');
+
+// 3c. Privacidade (D-ESC-5): o tecnico ve so Ferias, Banco de horas, Feriado ou Ausente; nada de refs nem observacao.
+$seen = $gridOf(qa_grid_month_db(), $tecnico);
+assert_same([false, 'Ausente', 'Banco de horas', 'Férias', 'Feriado', 'Ausente 14:00–16:00', [], [], []], [
+    $seen['can_manage'], $cell($seen, 903, '2026-11-24')['label'], $cell($seen, 901, '2026-11-18')['label'], $cell($seen, 902, '2026-11-23')['label'],
+    $cell($seen, 902, '2026-11-20')['label'], $cell($seen, 904, '2026-11-17')['detail'], $cell($seen, 903, '2026-11-26')['refs'], $seen['absence_choices'], $seen['exception_choices'],
+], 'privacidade: tecnico sem a categoria (Folga vira Ausente), sem o tipo da parcial e sem o que desfazer');
+$json = (string)json_encode($seen, JSON_UNESCAPED_UNICODE);
+assert_same([0, 0, 0], [substr_count($json, 'Folga'), substr_count($json, 'Compromisso'), preg_match('/"note"|"reason"/', $json)], 'privacidade: nenhuma categoria escondida nem observacao em lugar nenhum da resposta');
+
+// 3d. Resumo do mes (so os dias do mes).
+$summary = array_column($grid['summary'], null, 'employee_id');
+$row = $summary[901];
+assert_same([2, 1], [$row['absent'], $row['holiday']], 'resumo: ausencias e feriado contados a parte');
+assert_same($row['onsite'] + $row['home'] + $row['absent'] + $row['holiday'], 21, 'resumo: os 21 dias uteis de novembro de 2026 numa conta so');
+assert_same((int)round(100 * $row['onsite'] / ($row['onsite'] + $row['home'])), $row['onsite_pct'], 'resumo: % presencial = presencial / (presencial + home)');
+assert_same(array_sum($row['roles']), $row['onsite'] + $row['home'], 'resumo: dias por papel = dias trabalhados (sem excecao nem regra para 901)');
+
+// 3e. Carga fixa (D-ESC-3): 8 consultas para 5 ou 25 pessoas; sem observacao nem relogio do banco.
+$counts = [];
+foreach ([0, 20] as $extra) {
+    $db = qa_grid_month_db();
+    for ($i = 0; $i < $extra; $i++) {
+        $db->employees[] = ['id' => 1000 + $i, 'nome' => 'Extra ' . $i, 'equipe' => 'critico', 'jornada_entrada' => '08:00:00', 'jornada_saida' => '18:00:00', 'almoco_inicio' => '12:00:00', 'almoco_fim' => '13:00:00', 'fora_mapa_escala' => 0, 'ativo' => 1];
+    }
+    $gridOf($db, $lider);
+    $counts[] = count($db->statements);
+    $sql = implode("\n", $db->statements);
+}
+assert_same([8, 8, 0], [$counts[0], $counts[1], preg_match('/\bnote\b|\bnome\b.*portal_absences|NOW\(\)|CURDATE|SELECT \*/i', $sql)], 'carga: 8 consultas fixas, qualquer que seja o numero de pessoas, sem observacao nem relogio do banco');
+
+// 3f. Versao da celula (D-ESC-6): muda com a troca do dia, fica igual nos outros dias.
+$before = $gridOf(qa_grid_month_db(), $lider);
+$changed = qa_grid_month_db();
+$changed->overrides[] = ['id' => 91, 'employee_id' => 902, 'starts_on' => '2026-11-17', 'ends_on' => '2026-11-17', 'role_id' => 4, 'reason' => 'troca', 'updated_by' => 'qa', 'updated_at' => '2026-11-13 10:00:00'];
+$after = $gridOf($changed, $lider);
+assert_same([true, false], [$cell($before, 902, '2026-11-17')['version'] !== $cell($after, 902, '2026-11-17')['version'], $cell($before, 902, '2026-11-16')['version'] !== $cell($after, 902, '2026-11-16')['version']], 'versao: so o dia que mudou muda');
+$sameRole = qa_grid_month_db();
+$sameRole->overrides[] = ['id' => 92, 'employee_id' => 904, 'starts_on' => '2026-11-16', 'ends_on' => '2026-11-16', 'role_id' => 1, 'reason' => 'cobertura', 'updated_by' => 'qa', 'updated_at' => '2026-11-13 10:00:00'];
+$sameRoleGrid = $gridOf($sameRole, $lider);
+assert_same([true, 'troca'], [$cell($sameRoleGrid, 904, '2026-11-16')['version'] !== $cell($before, 904, '2026-11-16')['version'], $cell($sameRoleGrid, 904, '2026-11-16')['marker']], 'versao: muda com a troca mesmo para o papel que o rodizio ja dava');
+$sameAuthor = qa_grid_month_db();
+$sameAuthor->absences[0]['updated_at'] = '2026-11-15 08:00:00';
+assert_same(true, $cell($gridOf($sameAuthor, $lider), 901, '2026-11-18')['version'] !== $cell($before, 901, '2026-11-18')['version'], 'versao: muda tambem quando a ausencia e editada');
+
+// 3g. Previa (D-ESC-11) e os 409.
+$service = new CriticalGridService(qa_grid_month_db(), '2026-11-19');
+$try = static function (callable $call): string {
+    try {
+        $call();
+        return 'ok';
+    } catch (PortalForbiddenException $e) {
+        return '403: ' . $e->getMessage();
+    } catch (InvalidArgumentException $e) {
+        return '400: ' . $e->getMessage();
+    } catch (DomainException $e) {
+        return '409: ' . $e->getMessage();
+    }
+};
+$preview = $service->preview(['employee_id' => 905, 'from' => '2026-11-23', 'to' => '2026-11-24', 'change' => ['type' => 'absence', 'category' => 'banco_horas']], $lider);
+assert_same(['Seg 23/11: Abertura home 07:00–17:00 → Banco de horas', 'Ter 24/11: Abertura home 07:00–17:00 → Banco de horas'], array_column($preview['changes'], 'text'), 'previa: antes -> depois por dia');
+$role = $service->preview(['employee_id' => 901, 'from' => '2026-11-20', 'to' => '2026-11-24', 'change' => ['type' => 'role', 'role_id' => 1]], $lider);
+assert_same(['2026-11-23', '2026-11-24'], array_column($role['changes'], 'date'), 'previa: a troca so nos dias uteis sem feriado (D-ESC-12)');
+assert_same('Seg 23/11: Fechamento home 10:30–20:30 → Presencial 08:00–18:00', $role['changes'][0]['text'], 'previa: trocar o papel do dia');
+$exception = $service->preview(['employee_id' => 902, 'from' => '2026-11-16', 'to' => '2026-11-17', 'change' => ['type' => 'exception', 'exception_type' => 'onsite']], $lider);
+assert_same('Seg 16/11: Fechamento home 10:30–20:30 → Presencial (exceção)', $exception['changes'][0]['text'], 'previa: excecao presencial forcada');
+$undo = $service->preview(['employee_id' => 903, 'from' => '2026-11-26', 'to' => '2026-11-26', 'change' => ['type' => 'undo', 'target' => 'troca', 'ref_id' => 90]], $lider);
+assert_same(['Qui 26/11: Abertura home 07:00–17:00 → Presencial 08:00–18:00'], array_column($undo['changes'], 'text'), 'previa: desfazer a troca volta ao rodizio');
+$undoAbsence = $service->preview(['employee_id' => 901, 'from' => '2026-11-19', 'to' => '2026-11-19', 'change' => ['type' => 'undo', 'target' => 'ausencia', 'ref_id' => 70]], $lider);
+assert_same(['2026-11-18', '2026-11-19'], array_column($undoAbsence['changes'], 'date'), 'previa: desfazer a ausencia cobre o registro inteiro (D-ESC-10)');
+$lonely = qa_grid_month_db();
+foreach ([901, 902, 903, 904] as $index => $id) {
+    $lonely->absences[] = ['id' => 200 + $index, 'employee_id' => $id, 'category' => 'ferias', 'starts_on' => '2026-11-27', 'ends_on' => '2026-11-27', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'created_by' => 'qa', 'updated_by' => null, 'updated_at' => null];
+}
+$alone = (new CriticalGridService($lonely, '2026-11-19'))->preview(['employee_id' => 905, 'from' => '2026-11-27', 'to' => '2026-11-27', 'change' => ['type' => 'absence', 'category' => 'folga']], $lider);
+assert_same(['Sex 27/11: o Crítico fica sem ninguém disponível.'], array_column($alone['warnings'], 'text'), 'previa: aviso quando o Critico fica sem ninguem no dia (deixa salvar)');
+assert_same([], $preview['warnings'], 'previa: sem aviso quando sobra alguem');
+assert_same('409: 1 troca(s) já cobrem o período: desfaça antes.', $try(fn () => $service->preview(['employee_id' => 903, 'from' => '2026-11-25', 'to' => '2026-11-27', 'change' => ['type' => 'role', 'role_id' => 1]], $lider)), 'previa: troca sobreposta 409 com a contagem');
+assert_same('409: Já existe ausência aprovada do colaborador em 23/11/2026 (dia todo).', $try(fn () => $service->preview(['employee_id' => 902, 'from' => '2026-11-23', 'to' => '2026-11-23', 'change' => ['type' => 'absence', 'category' => 'folga']], $lider)), 'previa: ausencia sobreposta 409 (a regra das ausencias)');
+assert_same('409: Esta troca não cobre mais o dia: recarregue a tela.', $try(fn () => $service->preview(['employee_id' => 903, 'from' => '2026-11-25', 'to' => '2026-11-25', 'change' => ['type' => 'undo', 'target' => 'troca', 'ref_id' => 90]], $lider)), 'previa: desfazer troca que nao cobre o dia 409');
+assert_same('403: ' . CriticalGridService::FORBIDDEN_MESSAGE, $try(fn () => $service->preview(['employee_id' => 905, 'from' => '2026-11-23', 'change' => ['type' => 'absence', 'category' => 'ferias']], ['role' => 'gestor'])), 'previa: gestor 403 (so Lideranca e admin)');
+assert_same('400: Até 31 dias por vez.', $try(fn () => $service->preview(['employee_id' => 905, 'from' => '2026-11-01', 'to' => '2026-12-02', 'change' => ['type' => 'absence', 'category' => 'ferias']], $lider)), 'previa: ate 31 dias (32 recusa)');
+assert_same('400: Tipo de ausência inválido.', $try(fn () => $service->preview(['employee_id' => 905, 'from' => '2026-11-23', 'change' => ['type' => 'absence', 'category' => 'atestado']], $lider)), 'previa: atestado nao e categoria (D-ESC-8)');
+assert_same('400: Desfazer vale para um dia por vez.', $try(fn () => $service->preview(['employee_id' => 903, 'from' => '2026-11-25', 'to' => '2026-11-26', 'change' => ['type' => 'undo', 'target' => 'troca', 'ref_id' => 90]], $lider)), 'previa: desfazer so de um dia');
+assert_same('409: Só cadastros ativos do Crítico têm escala nesta tela.', $try(fn () => $service->preview(['employee_id' => 11, 'from' => '2026-11-23', 'change' => ['type' => 'absence', 'category' => 'ferias']], $lider)), 'previa: N1 fora da tela');
+$stale = new CriticalGridService(qa_grid_month_db(), '2026-11-19');
+assert_same('409: 1 dia(s) mudaram desde que a tela carregou: recarregue e repita.', $try(fn () => $stale->apply(['employee_id' => 905, 'from' => '2026-11-23', 'to' => '2026-11-24', 'change' => ['type' => 'absence', 'category' => 'ferias'], 'versions' => ['2026-11-23' => 'velha', '2026-11-24' => $cell($grid, 905, '2026-11-24')['version']]], $lider)), 'gravar: versao velha de um dia 409 com a contagem, antes de gravar');
+assert_same('400: Versões dos dias ausentes: recarregue a tela.', $try(fn () => $stale->apply(['employee_id' => 905, 'from' => '2026-11-23', 'change' => ['type' => 'absence', 'category' => 'ferias']], $lider)), 'gravar: sem as versoes 400');
+$gridSource = (string)file_get_contents($root . '/services/CriticalGridService.php');
+$applyBody = substr($gridSource, (int)strpos($gridSource, 'public function apply('), 2600);
+$order = [strpos($applyBody, '$this->lockEmployee('), strpos($applyBody, '$this->load('), strpos($applyBody, 'throw new DomainException(sprintf(self::STALE_MESSAGE'), strpos($applyBody, '$this->write(')];
+assert_same([false, true], [in_array(false, $order, true), $order[0] < $order[1] && $order[1] < $order[2] && $order[2] < $order[3]], 'gravar: trava o colaborador, carrega, confere as versoes e so entao grava');
+$endpoint = (string)file_get_contents($root . '/api/portal/critical_grid.php');
+assert_same([1, true], [substr_count($endpoint, 'portal_json_input('), strpos($endpoint, "if (!portal_role_can(\$role, 'escalas.manage')) {") < strpos($endpoint, 'portal_json_input(')], 'endpoint: o perfil e conferido antes de ler o corpo (uma leitura so, depois)');
+
+// 3h. O .xlsx (D-ESC-19): aba do mes, blocos por semana, cores da planilha, resumo e legenda.
+function qa_zip_entries(string $zip): array {
+    $files = [];
+    $pos = 0;
+    while (substr($zip, $pos, 4) === "PK\x03\x04") {
+        $head = unpack('vversion/vflags/vmethod/vtime/vdate/Vcrc/Vcompressed/Vsize/vname/vextra', substr($zip, $pos + 4, 26));
+        $name = substr($zip, $pos + 30, $head['name']);
+        $files[$name] = substr($zip, $pos + 30 + $head['name'] + $head['extra'], $head['compressed']);
+        $pos += 30 + $head['name'] + $head['extra'] + $head['compressed'];
+    }
+    return $files;
+}
+$files = qa_zip_entries(CriticalGridSheet::build($seen));
+$sheet = $files['xl/worksheets/sheet1.xml'];
+assert_same([1, 1, 1], [
+    substr_count($files['xl/workbook.xml'], 'name="Novembro 2026"'),
+    substr_count($sheet, '<t xml:space="preserve">Novembro 2026</t>'),
+    substr_count($sheet, '<mergeCell ref="A1:F1"/>'),
+], 'xlsx: aba e titulo do mes, titulo mesclado');
+assert_same([5, 1, 1], [
+    preg_match_all('/<t xml:space="preserve">Semana \d+  \(Início: \d{2}\/\d{2}\/2026\)<\/t>/u', $sheet),
+    substr_count($sheet, '<t xml:space="preserve">Semana 45  (Início: 02/11/2026)</t>'),
+    substr_count($sheet, "<t xml:space=\"preserve\">Seg\n(16/11)</t>"),
+], 'xlsx: um bloco por semana, com o cabecalho do dia');
+assert_same([0, 0], [substr_count($sheet, 'Folga'), substr_count($sheet, 'Compromisso')], 'xlsx: a mesma privacidade da tela (o tecnico exporta o que ve)');
+assert_same([1, 1, 1, 1], [
+    substr_count($files['xl/styles.xml'], 'rgb="FF92CDDC"'),
+    substr_count($files['xl/styles.xml'], 'rgb="FFFFFF00"'),
+    substr_count($sheet, '<t xml:space="preserve">Resumo do mês</t>'),
+    substr_count($sheet, '<t xml:space="preserve">% presencial</t>'),
+], 'xlsx: cores da planilha (feriado e banco de horas) e o resumo');
+assert_same([1, 1], [substr_count($sheet, '<t xml:space="preserve">Legenda</t>'), substr_count($sheet, '<t xml:space="preserve">Banco de horas</t>') >= 1 ? 1 : 0], 'xlsx: legenda com as cores fixas');
+assert_same('Escala Critico Marco 2026.xlsx', CriticalGridSheet::fileName('Março 2026'), 'xlsx: nome do arquivo sem acento');
+assert_same(true, strpos($endpoint, "audit_log('ESCALA_CRITICO_EXPORTADA', 'Exportacao XLSX da Escala do Critico: mes ' . \$grid['month']['key'] . ', pessoas ' . count(\$grid['people'])") !== false, 'xlsx: auditoria so com o mes e contagens');
 
 echo 'QA critical grid OK (' . $GLOBALS['qa_checks'] . " verificacoes)\n";
