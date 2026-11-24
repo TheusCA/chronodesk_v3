@@ -6096,9 +6096,33 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
    passo 3. **PARE** com `PARE` (`rollback_026 abortado: ja existe copia
    *_bkp_026`: confira e renomeie as copias antes) e avise.
 
-**Depois do deploy, com a gestao** (pela tela, sem comando; quem prefere qual
-PA e quem esta em cada equipe nunca vao para o git nem para o chat; a
-verificacao so conta):
+**Depois do deploy, com a gestao** (pela tela, sem comando, exceto a
+verificacao da 026 do primeiro item; quem prefere qual PA e quem esta em cada
+equipe nunca vao para o git nem para o chat; a verificacao so conta):
+
+- **Primeiro, logo depois da reabertura (passo 11) e das conferencias do
+  passo 12, que nao salvam nada, e antes de qualquer exportacao de horas
+  extras: importar os NCs em Funcionarios com a planilha de horas extras do
+  RH** (Lideranca ou admin, no bloco "Importar NCs"; o modelo do RH serve: a
+  importacao acha as colunas NC e "Nome completo " mesmo com o centro de custo
+  e o total ao lado). **A previa primeiro:** anote so as contagens (o que
+  entra, o que muda, o que nao casou e o NC repetido) e so depois "Confirmar
+  importacao"; o que nao casou e o NC repetido ficam fora e se corrigem em
+  "Editar". Depois, o comando da verificacao da 026 de novo (o mesmo dos
+  passos 7 e 10; o responsavel, no shell root, so leitura): anote
+  `ativos_sem_nc` e confira
+  `nc_repetido = 0` e as contagens de problema em 0. A planilha tem nomes e
+  NCs reais: fica fora do git, dos docs e do chat. Enquanto houver aprovado
+  sem NC no periodo, a planilha de horas extras do RH nao sai (409) e a
+  previa mostra quem falta.
+
+```bash
+cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas' || echo "PARE: a verificacao da 026 falhou"; unset P D5
+```
+
+   Esperado: `ativos_sem_nc` (anote), `nc_repetido = 0` e as contagens de
+   problema em 0. **PARE** com `nc_repetido` ou contagem de problema diferente
+   de 0: nao exporte horas extras e avise.
 
 - **Marcar os 2 PAs reservados ao Critico** (D-F10-19 revista; N = 2,
   configuravel pelo numero de PAs marcados), no "Inventario do PA" de cada um
@@ -6111,7 +6135,8 @@ verificacao so conta):
   O Hibrido fica com o PA fixo por pessoa (opcao (c)).
 - **Preferencias** do grupo comum (N1 e N2) por PA, se a gestao quiser
   reproduzir as do CONFIG PA da planilha.
-- **Preencher o NC** de cada cadastro ativo (Lideranca ou admin, em "Editar",
+- **Preencher o NC** de cada cadastro ativo que a importacao do primeiro item
+  nao cobriu (Lideranca ou admin, em "Editar",
   ou pela importacao com previa em Funcionarios, com a planilha de NC e Nome
   completo: confira a previa antes de confirmar; o que nao casou e o NC
   repetido ficam fora e se corrigem em "Editar"; a matricula do cadastro

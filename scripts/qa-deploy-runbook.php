@@ -1243,7 +1243,10 @@ $rollback5 = $first5('git show "$D5:migrations/rollback/20261119_022_pa_inventor
 $rollback26 = $first5('git show "$D5:migrations/rollback/20261123_026_matricula_nc_down.sql" | docker exec');
 assert_same([1, 1, 4], [count($applyMigration5), count($applyMigration26), count($apply5)], 'deploy 5: a 022 e a 026 aplicadas uma vez cada, do commit gravado (e so os dois rollbacks alem delas)');
 assert_same(true, strpos($commands5[$applyMigration26[0] ?? -1] ?? '', "git cat-file -e \"\$D5:migrations/20261123_026_matricula_nc.sql\" && bash -o pipefail -c 'git show") !== false && strpos($commands5[$applyMigration26[0]], 'echo "026 aplicada" || echo "PARE: a 026 nao foi aplicada"; unset P D5') !== false && strpos($commands5[($applyMigration26[0] ?? -2) + 1] ?? '', 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql"') !== false && $applyMigration26[0] === $applyMigration5[0] + 2, 'deploy 5: a 026 logo depois da 022 e da verificacao dela, com cat-file e pipefail, e a verificacao da 026 logo depois');
-assert_same([2, true, true], [count($verifies26), ($verifies26[0] ?? -1) === ($verifies5[0] ?? -2) + 1, ($verifies26[1] ?? -1) === ($verifies5[1] ?? -2) + 1], 'deploy 5: a verificacao da 026 no "antes" e de novo depois da fumaca, logo depois da da 022');
+// [Acertos do lote NC] A terceira, no depois do deploy: logo depois da
+// reabertura, a importacao de NCs pela planilha do RH e a 026 conta
+// ativos_sem_nc, antes de qualquer exportacao de horas extras.
+assert_same([3, true, true, true], [count($verifies26), ($verifies26[0] ?? -1) === ($verifies5[0] ?? -2) + 1, ($verifies26[1] ?? -1) === ($verifies5[1] ?? -2) + 1, ($verifies26[2] ?? -1) > $rollback26], 'deploy 5: a verificacao da 026 no "antes", de novo depois da fumaca, logo depois da da 022, e no depois do deploy, depois da importacao de NCs');
 assert_same(true, strpos($commands5[$rollback26] ?? '', '[ "$(git rev-parse HEAD)" = "$(cat /var/backups/chronodesk/pre-deploy5-commit)" ] && ') !== false && strpos($commands5[$rollback26], 'echo "rollback da 026 aplicado" || echo "PARE: ') !== false && strpos($commands5[$rollback26 + 1] ?? '', 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql"') !== false && $rollback26 > $rollback5 + 1, 'deploy 5: rollback da 026 so com o codigo do f0844fd no ar, com a verificacao depois, no passo 16');
 assert_same([1, 1], [count(array_filter($all5('git merge'), static fn (int $i): bool => strpos($commands5[$i], 'merge-base') === false)), substr_count($text5, 'git merge --ff-only')], 'deploy 5: um merge so (--ff-only), no comando dele, com o HEAD conferido');
 assert_same(true, strpos($commands5[$merge5] ?? '', '[ "$(git rev-parse HEAD)" = "$D5" ] && echo "HEAD = deploy5-commit" || echo "PARE: ') !== false, 'deploy 5: o HEAD conferido logo depois do merge');
@@ -1334,6 +1337,19 @@ assert_same([true, true, true, true, true, true, 0], [
     strpos($sheet5, 'O admin importa a planilha base de carteiras em "Catalogo de carteiras" (previa, depois confirmar; a planilha tem enderecos internos e fica fora do git, dos docs e do chat; so as contagens no chat).') !== false,
     count(array_filter($commands5, static fn (string $line): bool => preg_match('/chg_catalog_import|Carteiras\.xlsx|_referencias/i', $line) === 1)),
 ], 'deploy 5 (ajustes do CHG): o que vai sem migration, o aviso, a conferencia sem enviar nem salvar e o depois com a importacao pelo admin, na folha junto; nenhum comando importa o catalogo');
+// [Acertos do lote NC] Depois do deploy, primeiro: logo depois da reabertura,
+// a importacao de NCs em Funcionarios com a planilha de horas extras do RH,
+// a previa antes de confirmar, antes de qualquer exportacao de horas extras;
+// a 026 conta ativos_sem_nc. Na folha junto. Nenhum comando importa NC.
+$afterStart5 = (int)strpos($prose5, '**Depois do deploy, com a gestao**');
+$importNc5 = '- **Primeiro, logo depois da reabertura (passo 11) e das conferencias do passo 12, que nao salvam nada, e antes de qualquer exportacao de horas extras: importar os NCs em Funcionarios com a planilha de horas extras do RH**';
+assert_same([true, true, true, true, true], [
+    $afterStart5 > 0 && strpos($prose5, $importNc5) > $afterStart5 && strpos($prose5, $importNc5) < strpos($prose5, '- **Marcar os 2 PAs reservados ao Critico**'),
+    strpos($prose5, '**A previa primeiro:** anote so as contagens (o que entra, o que muda, o que nao casou e o NC repetido) e so depois "Confirmar importacao"') !== false,
+    strpos($prose5, 'anote `ativos_sem_nc` e confira `nc_repetido = 0`') !== false && strpos($prose5, 'A planilha tem nomes e NCs reais: fica fora do git, dos docs e do chat.') !== false,
+    strpos($sheet5, 'e **antes de qualquer exportacao de horas extras**: importar os NCs em Funcionarios ("Importar NCs", Lideranca ou admin) com a planilha de horas extras do RH') !== false && strpos($sheet5, '**A previa primeiro:**') !== false,
+    strpos($sheet5, '(depois do deploy, importacao de NCs) Esperado: `ativos_sem_nc` (anote), `nc_repetido = 0`') !== false,
+], 'deploy 5 (acertos do lote NC): no depois do deploy, primeiro a importacao de NCs pela planilha de horas extras do RH, com a previa, antes de qualquer exportacao; a 026 conta ativos_sem_nc; a folha junto');
 
 // ----------------------------------------------------------------------------
 // 17. Licao do deploy 4 (19/11/2026): um filtro de resumo com "umask 077"

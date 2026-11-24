@@ -339,6 +339,14 @@ cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit);
 cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas'; unset P D5
 ```
 
-## Depois do deploy, com a gestao (pela tela, sem comando)
+## Depois do deploy, com a gestao (pela tela, sem comando, exceto a verificacao da 026 do item 49)
+
+Primeiro, logo depois da reabertura (passo 11) e das conferencias do passo 12, que nao salvam nada, e **antes de qualquer exportacao de horas extras**: importar os NCs em Funcionarios ("Importar NCs", Lideranca ou admin) com a planilha de horas extras do RH (o modelo do RH serve). **A previa primeiro:** anote so as contagens (entra, muda, nao casou, NC repetido) e so depois "Confirmar importacao"; o que nao casou e o NC repetido se corrigem em "Editar". A planilha tem nomes e NCs reais: fica fora do git, dos docs e do chat. Depois, a verificacao da 026 de novo (o responsavel, no shell root, so leitura):
+
+- [ ] **49.** (depois do deploy, importacao de NCs) Esperado: `ativos_sem_nc` (anote), `nc_repetido = 0` e as contagens de problema em 0. **PARE se:** `PARE: a verificacao da 026 falhou`, ou `nc_repetido` ou contagem de problema diferente de 0 (nao exporte horas extras; avise).
+
+```bash
+cd /var/www/chronodesk; export D5=$(cat /var/backups/chronodesk/deploy5-commit); read -rsp 'Senha root do MySQL: ' P; echo; export P; bash -o pipefail -c 'git show "$D5:migrations/verificacao/20261123_026_matricula_nc_check.sql" | docker exec -i -e MYSQL_PWD="$P" Chrono_Desk_DB mysql -uroot --table sistema_pausas' || echo "PARE: a verificacao da 026 falhou"; unset P D5
+```
 
 Os itens do fim do roteiro: marcar os 2 PAs reservados ao Critico (antes, encerrar os vinculos e retirar as preferencias desses PAs), os PAs fixos com o vinculo do dono e o "Empresta", e as preferencias do grupo comum. A verificacao da 022 conta (`reservados_critico`, `fixos`, `fixos_que_emprestam`, `preferencias`) e as contagens de problema ficam em 0. Quem prefere qual PA nunca vai para o git nem para o chat. Preencher o NC dos cadastros ativos (Lideranca ou admin, em "Editar" ou pela importacao com previa em Funcionarios); a verificacao da 026 conta `ativos_sem_nc`. A planilha de horas extras do RH so sai com o NC de todos os aprovados do periodo. O admin importa a planilha base de carteiras em "Catalogo de carteiras" (previa, depois confirmar; a planilha tem enderecos internos e fica fora do git, dos docs e do chat; so as contagens no chat). A chave `NC_OBRIGATORIO` so depois, com `ativos_sem_nc = 0`, num passo combinado com o responsavel. Nenhum NC vai para o git, os docs nem o chat.
