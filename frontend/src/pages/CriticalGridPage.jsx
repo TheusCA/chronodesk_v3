@@ -135,8 +135,8 @@ function MonthSummary({ grid }) {
             <tr>
               <th scope="col">Técnico</th>
               {used.map((role) => <th key={role.id} scope="col">{role.name}</th>)}
-              <th scope="col">Home</th>
-              <th scope="col">Presencial</th>
+              <th scope="col">Dias home</th>
+              <th scope="col">Dias presencial</th>
               <th scope="col">% presencial</th>
             </tr>
           </thead>

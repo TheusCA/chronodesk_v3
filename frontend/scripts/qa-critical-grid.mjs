@@ -153,6 +153,8 @@ check(() => assert.match(viewer, /href="\/api\/portal\/critical_grid\.php\?month
 check(() => assert.match(viewer, /<section aria-label="Ana Ficticia, Semana 47 \(Início: 16\/11\/2026\)" class="esc-card">/u, 'celular: um cartão por pessoa com os 5 dias'))
 check(() => assert.match(viewer, /<th scope="col">Presencial<\/th><th scope="col">Abertura home<\/th>/u, 'resumo do mês com os papéis'))
 check(() => assert.match(text(viewer), /Resumo do mês .* % presencial Ana F\./u, 'resumo por pessoa com o % presencial'))
+check(() => assert.match(viewer, /<th scope="col">Home<\/th><th scope="col">Dias home<\/th><th scope="col">Dias presencial<\/th><th scope="col">% presencial<\/th>/u, 'resumo: a coluna do papel Home e as contagens de dias com nomes diferentes'))
+check(() => assert.match(css, /\.esc-row > \[role='gridcell'\] \{ display: flex; \}\n\.esc-row > \[role='gridcell'\] > \.esc-cell \{ flex: 1; \}/u,'célula ocupa a altura toda da linha (a linha com ausência parcial fica mais alta)'))
 check(() => assert.match(leader, /class="esc-cell esc-tone-ausente"[^>]*><span class="esc-cell-label">Folga/u, 'Liderança: a categoria da ausência'))
 check(() => assert.match(leader, /aria-label="Ter 17\/11: Presencial 08:00–18:00, Ausente 14:00–16:00 \(Compromisso\)"/u, 'Liderança: ausência parcial com o tipo'))
 check(() => assert.equal((viewer.match(/role="grid"/gu) ?? []).length, 5, 'grade com papel de grid por semana (teclado: setas)'))

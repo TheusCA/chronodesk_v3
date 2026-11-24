@@ -94,6 +94,8 @@
 
 .esc-grid { display: grid; grid-template-columns: minmax(8.5rem, 11rem) repeat(5, minmax(8.5rem, 1fr)); gap: 1px; background: rgb(var(--line)); overflow-x: auto; }
 .esc-row { display: contents; }
+.esc-row > [role='gridcell'] { display: flex; }
+.esc-row > [role='gridcell'] > .esc-cell { flex: 1; }
 .esc-grid-large .esc-cell { min-height: 4.75rem; font-size: 1rem; }
 .esc-grid-head, .esc-grid-name { padding: 0.45rem 0.6rem; font-size: 0.8125rem; font-weight: 600; background: rgb(var(--esc-day-bg)); color: rgb(var(--esc-day-ink)); display: flex; align-items: center; }
 .esc-grid-head { justify-content: center; text-align: center; }
