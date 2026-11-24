@@ -1,6 +1,6 @@
 # Desenho do F10: escala mensal no portal (substitui o script e a planilha "Escala Home")
 
-**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8). **D-F10-19 revista em 2026-11-16** (Crítico com 2 PAs reservados, configurável, ocupados pelos papéis do 9.16; Híbrido na opção (c)). **F10-3 entregue em 2026-11-19, sem push** (plano revisto na 3.3.1, execução na 8.7; vai no deploy 5). **F10-3 aprovado em 2026-11-23**, com D-F10-32 a D-F10-41 como estão na 8.7 (D-F10-34 inclusive: o reservado vazio não empresta). **Lote 8.8 (papel do dia do Crítico numa fonte só) aprovado em 2026-11-23 e entregue no mesmo dia**: entra no deploy 5, junto do F10-3; retira a D-F10-36.
+**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8). **D-F10-19 revista em 2026-11-16** (Crítico com 2 PAs reservados, configurável, ocupados pelos papéis do 9.16; Híbrido na opção (c)). **F10-3 entregue em 2026-11-19, sem push** (plano revisto na 3.3.1, execução na 8.7; vai no deploy 5). **F10-3 aprovado em 2026-11-23**, com D-F10-32 a D-F10-41 como estão na 8.7 (D-F10-34 inclusive: o reservado vazio não empresta). **Lote 8.8 (papel do dia do Crítico numa fonte só) aprovado em 2026-11-23 e entregue no mesmo dia**: entra no deploy 5, junto do F10-3; retira a D-F10-36. **D-F10-42 a D-F10-47 (8.8) aprovadas em 2026-11-24, como estão.**
 
 **Fontes lidas** (locais, fora do git, em `_referencias/`): o script `gerar_escala_home_V17_ARQUIVO_MENSAL.py` (1.660 linhas, lido inteiro) e a planilha `Escala Home - Base.xlsx`. A planilha tem nomes reais. Este documento traz só estrutura, regras e contagens: nenhum nome, login ou dado pessoal. As linhas citadas são do script V17.
 
@@ -919,7 +919,7 @@ Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL,
 | `9c4002f` | Roteiro e folha do deploy 5 com o 8.8 (o que vai, aviso, fumaça com seis GET, conferência da mesma pessoa nas telas, nota do polling); `smoke-deploy1.sh` com o `calendar.php` e o `reports.php`; a trava |
 | O último | A validação abaixo e o `REGISTRO_USO_IA.md` |
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-11-24, como estão):**
 
 | # | Decisão | Por quê |
 |---|---|---|

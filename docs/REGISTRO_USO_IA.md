@@ -1741,7 +1741,7 @@ Base da afirmação:
 | **O que a IA alterou** | `services/OperationalService.php` (`engineSchedule` com o papel; origem `role`; `mapPresence` com o papel; descrição do Calendário); `services/PaMapService.php` (o reservado lê o `mapPresence`, sem o `PresenceRepository`); `frontend/src/pages/OperationalPages.jsx` ("Papel do Crítico"); `scripts/qa-pa-conflicts.php` (seção 7 e o simulador das leituras da Escala, do Calendário, dos relatórios e do `PresenceService`); `frontend/scripts/qa-calendar-presence.mjs`; `scripts/smoke-deploy1.sh` (seis GET); `DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md` e `scripts/qa-deploy-runbook.php`; desenho do F10 (8.8, estado e 3.3.1). |
 | **Dados pessoais** | Nenhum no git: testes e integração com dados fictícios; a conferência na tela do deploy anota só "igual" ou "diferente". |
 | **Validacao executada pela IA** | Integração no MySQL 8.0.46 local, 26/26, numa transação desfeita (dados fictícios); mutação do commit 1, 21/21 (18/19 na 1ª rodada: caso novo do desempate pelo ID do papel, no mesmo commit, antes de qualquer envio); mutação do commit 3, 15/15; trava com 514 verificações; bateria completa sozinha no último commit (no estado da sessão). |
-| **Decisões (a aprovar)** | D-F10-42 a D-F10-47 (desenho do F10, 8.8). |
+| **Decisões** | D-F10-42 a D-F10-47 (desenho do F10, 8.8): aprovadas em 2026-11-24, como estão. |
 | **Validacao humana** | F10-3 e D-F10-32 a D-F10-41 aprovados em 2026-11-23; o 8.8 pendente de revisão. |
 
 ### Lote NC (matrícula na hora extra e na correção de ponto) e ícone novo — 2026-11-23
@@ -1754,7 +1754,7 @@ Base da afirmação:
 | **Dados pessoais** | O NC é dado pessoal: nenhum NC real no git, nos docs, nos QAs, no ensaio nem no chat (só fictícios); a auditoria registra que o NC mudou, por ID, sem o valor; a lista só traz o NC para Liderança e admin; a verificação só conta. |
 | **Validacao executada pela IA** | Ensaio da 026 nas duas variantes no MySQL 8.0.46 local (dados fictícios); integração no MySQL local, 16/16; mutação por commit (24/24, 29/29, 21/21, 12/12, 15/15; os sobreviventes da 1ª rodada viraram casos novos); navegador 1163/1163; trava com 519 verificações; bateria completa sozinha no último commit (no estado da sessão). |
 | **Achados** | Sem push próprio: a resposta do responsável ligou o push deste lote à autorização do lote anterior, com a bateria verde. O pedido do ícone veio com o marcador `<A|B|C>`; o responsável escolheu a B. |
-| **Decisões (a aprovar)** | D-NC-1 a D-NC-9 (`docs/DESENHO_NC_E_ICONE.md`). |
+| **Decisões** | D-NC-1 a D-NC-9 (`docs/DESENHO_NC_E_ICONE.md`): aprovadas em 2026-11-24, como estão. |
 | **Validacao humana** | Pendente: revisão única no fim do lote. |
 
 
@@ -1768,7 +1768,7 @@ Base da afirmação:
 | **Dados pessoais** | O NC e o nome são dados pessoais: só fictícios no git, nos docs, nos QAs, no ensaio e no chat; o modelo do RH (com dados reais) só foi lido pela estrutura, fora do git. A auditoria da importação leva contagens e IDs, sem o NC; a da planilha, só contagens; quem está sem NC aparece pelo nome só na tela. |
 | **Validacao executada pela IA** | Ensaio da 026 nas duas variantes no MySQL 8.0.46 local; integração no MySQL local, 21/21; mutação por commit (7/7, 20/20, 29/29, 18/18; os sobreviventes da 1ª rodada viraram casos novos); o `.xlsx` gerado aberto e conferido pelo QA; navegador 1163/1163; trava com 520 verificações; bateria completa sozinha no último commit (no estado da sessão). |
 | **Achados** | O ícone veio de novo com o marcador `<A|B|C>`: ficou a B, já entregue. O `streamOvertimeCsv` ficou sem chamador (a decidir). `synced` fora da planilha a confirmar com o RH. |
-| **Decisões (a aprovar)** | D-NC-10 a D-NC-18 (`docs/DESENHO_NC_E_ICONE.md`). |
+| **Decisões** | D-NC-10 a D-NC-18 (`docs/DESENHO_NC_E_ICONE.md`): aprovadas em 2026-11-24, como estão. |
 | **Validacao humana** | Pendente: revisão única no fim do lote. |
 
 
@@ -1784,6 +1784,21 @@ Base da afirmação:
 | **Achados** | Sem um ajuste, o Esc no painel com um campo digitado gravava o campo, porque o aviso de descarte roubava o foco. Corrigido: o campo não grava quando o foco vai para o aviso ou para um controle de saída. O critério "texto com largura menor que 8rem" foi lido como texto quebrado numa caixa estreita (D-CHG-38). |
 | **Decisões (a aprovar)** | D-CHG-34 a D-CHG-41 (`docs/DESENHO_CHG.md`, seção 16). |
 | **Validacao humana** | Pendente: revisão única no fim do lote, com as capturas. |
+
+
+### Acertos do lote NC (cabeçalho do RH, CSV sem chamador, importação no depois do deploy 5) — 2026-11-24
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Dois acertos pequenos do lote NC antes do lote do CHG: o cabeçalho da coluna C da planilha de horas extras do RH igual ao modelo ("Nome completo ", com o espaço no fim) e a retirada do CSV de horas extras que ficou sem chamador. No roteiro do deploy 5, a importação de NCs pela planilha do RH logo depois da reabertura, antes de qualquer exportação. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `2cd4f7d` (cabeçalho), `d74a9be` (CSV retirado), `3f890ba` (roteiro e folha do deploy 5) e o commit destes docs. Sem push. |
+| **O que a IA alterou** | `services/OvertimeRhSheet.php`, `services/OperationalService.php`; `scripts/qa-overtime.php`, `scripts/qa-nc.php`, `scripts/qa-security.php`, `scripts/qa-deploy-runbook.php`; `DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md`; `docs/DESENHO_NC_E_ICONE.md` (seção 7 e aprovações), `docs/DESENHO_F10_ESCALA_MENSAL.md` (aprovação da 8.8). |
+| **Dados pessoais** | Nenhum dado real lido nem gravado. O roteiro diz que a planilha do RH (nomes e NCs reais) fica fora do git, dos docs e do chat; só contagens. |
+| **Validacao executada pela IA** | Mutação no worktree `chronodesk-nc-acertos`, com a trava `mut_guard.php`: 32/32, 9/9 e 11/11. Trava do roteiro com 522 conferências. Bateria completa sozinha no último commit (resultado no resumo da entrega e no estado da sessão). |
+| **Worktrees** | Removidos com autorização (`git worktree remove`, no Git do Windows): `chronodesk-88-c1` e `chronodesk-88-c3`, limpos; `wt-mut` (scratchpad de outra sessão) com `--force`, porque tinha resíduo de mutação antiga (6 arquivos de docs e QA modificados e 2 arquivos vazios `.descartado`). Antes, o diff e os 2 arquivos foram copiados para o scratchpad desta sessão. |
+| **Achados** | Nenhum novo. Decisão pequena a confirmar: a importação vem depois das conferências do passo 12, que não salvam nada (desenho NC, seção 7). |
+| **Decisões** | D-F10-42 a D-F10-47, D-NC-1 a D-NC-9 e D-NC-10 a D-NC-18 aprovadas em 2026-11-24, como estão. |
+| **Validacao humana** | Pendente: revisão dos acertos. |
 
 ---
 

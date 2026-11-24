@@ -1,6 +1,6 @@
 # Lote NC e ícone novo (deploy 5)
 
-**Estado:** pedido em 2026-11-23, depois do lote 8.8; plano e execução neste documento; **entregue em 2026-11-23** (seção 4), D-NC-1 a D-NC-9 a aprovar; entra no deploy 5. Sem push próprio: o push do `codex/modernizacao-ui-backend` vai junto da autorização do lote anterior, só com a bateria final verde (resposta do responsável em 2026-11-23).
+**Estado:** pedido em 2026-11-23, depois do lote 8.8; plano e execução neste documento; **entregue em 2026-11-23** (seção 4); pedido revisto entregue (seção 6). **D-NC-1 a D-NC-9 e D-NC-10 a D-NC-18 aprovadas em 2026-11-24, como estão**; acertos de 2026-11-24 na seção 7. Entra no deploy 5. Sem push próprio: o push do `codex/modernizacao-ui-backend` vai junto da autorização do lote anterior, só com a bateria final verde (resposta do responsável em 2026-11-23).
 
 **LGPD:** o NC é a matrícula da pessoa (cadastro Senior). Nenhum NC real entra no git, nos docs, nos QAs nem no chat: só valores fictícios e contagens.
 
@@ -27,7 +27,7 @@
 | 6 | Roteiro e folha do deploy 5 (o que vai, conferência na tela, fumaça) e a trava |
 | 7 | Docs: execução, validação e o registro de uso de IA |
 
-## 3. Decisões de implementação (a aprovar)
+## 3. Decisões de implementação (aprovadas em 2026-11-24, como estão)
 
 | # | Decisão | Por quê |
 |---|---|---|
@@ -98,7 +98,7 @@ O responsável reenviou o pedido com três mudanças sobre o lote já entregue (
 | 5 | Roteiro, folha e trava do deploy 5 (a fumaça passa a ler a prévia da exportação) |
 | 6 | Docs: execução, validação e registro |
 
-**Decisões de implementação (a aprovar):**
+**Decisões de implementação (aprovadas em 2026-11-24, como estão):**
 
 | # | Decisão | Por quê |
 |---|---|---|
@@ -141,6 +141,23 @@ O responsável reenviou o pedido com três mudanças sobre o lote já entregue (
 
 **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
 
-**Fica para decidir:** o `streamOvertimeCsv` e o `overtimeCsvRow` ficam sem chamador (o CSV de horas extras saiu do endpoint; os testes de injeção de fórmula deles continuam); retirá-los num lote próprio, se aprovado. O status `synced` fora da planilha (D-NC-14) a confirmar com o RH.
+**Fica para decidir:** ~~o `streamOvertimeCsv` e o `overtimeCsvRow` sem chamador~~ (retirados em 2026-11-24, seção 7). O status `synced` fora da planilha (D-NC-14) a confirmar com o RH.
 
 **Não verificado aqui:** a planilha aberta no Excel do RH (o QA confere o XML; o layout foi comparado com o modelo pela estrutura) e o NC real dos cadastros (fica com a gestão, pela tela ou pela importação).
+
+## 7. Acertos do lote NC (2026-11-24)
+
+Pedido do responsável em 2026-11-24, antes do lote do CHG: dois acertos pequenos, cada um num commit, e o roteiro do deploy 5; a mesma bateria no fim. Na mesma resposta, D-F10-42 a D-F10-47, D-NC-1 a D-NC-9 e D-NC-10 a D-NC-18 aprovadas como estão, e autorizada a remoção dos worktrees `wt-mut`, `chronodesk-88-c1` e `chronodesk-88-c3`.
+
+| Commit | Conteúdo |
+|---|---|
+| `2cd4f7d` | Cabeçalho da coluna C da planilha do RH igual ao modelo, **"Nome completo " com o espaço no fim** (o pedido de 2026-11-23 trazia sem o espaço; o modelo é a referência). `OvertimeRhSheet::HEADERS`; o `qa-overtime` confere o texto exato, a célula C1 do `.xlsx` gerado e o `xml:space="preserve"` que faz o Excel guardar o espaço. A importação de NCs já aceitava o cabeçalho com o espaço (compara sem acento, caixa e espaço) |
+| `d74a9be` | Removidos o `streamOvertimeCsv`, o `OVERTIME_CSV_HEADER`, o `overtimeCsvRow` e o `minutesText`, que só existiam para eles. O `?format=csv` do `overtime.php` continua dando 400 com a mensagem. Nos QAs: saem os casos do CSV de horas extras (`qa-overtime` e `qa-nc`); o rótulo do status, que segue no CSV de correção de ponto, passa a ser testado direto; a conferência estrutural "percorre o filtro inteiro, sem a lista da tela" passa para a planilha do RH; o `qa-security` conta 8 `fputcsv` |
+| `3f890ba` | Roteiro e folha do deploy 5, "Depois do deploy": **primeiro**, logo depois da reabertura (passo 11) e das conferências do passo 12, que não salvam nada, e antes de qualquer exportação de horas extras, importar os NCs em Funcionários com a planilha de horas extras do RH, **a prévia primeiro**; depois, a verificação da 026 de novo (a mesma dos passos 7 e 10, só leitura) conta `ativos_sem_nc` e confere `nc_repetido = 0`. Na folha, o item 49 com o comando. A trava confere o item no começo do "Depois do deploy" e a terceira verificação da 026 (522 conferências) |
+| O último | Esta seção, as aprovações e o `REGISTRO_USO_IA.md` |
+
+**Mutação** (worktree `chronodesk-nc-acertos`, trava `mut_guard.php`): `2cd4f7d` 32/32 (os 29 do commit 4 do pedido revisto, com o texto do cabeçalho ajustado, e três novos: sem o espaço, com dois espaços e a célula sem `xml:space="preserve"`); `d74a9be` 9/9 (o cabeçalho e o método do CSV de volta, a planilha pela lista da tela, o `?format=csv` sem o 400, três rótulos de status, o CSV de correção sem o NC e um `fputcsv` a mais); `3f890ba` 11/11 (no roteiro e na folha: depois da exportação, sem o "Primeiro", sem a prévia primeiro, sem conferir o `nc_repetido`, o comando sem o `PARE`, a planilha no chat, o item sem "PARE se" e o comando fora da folha).
+
+**Decisão pequena, a confirmar:** "logo depois da reabertura" ficou depois das conferências do passo 12, que não salvam nada. Com a importação antes delas, o aviso "N cadastro(s) ativo(s) sem NC" do passo 12 deixaria de mostrar todos os ativos, como a folha espera.
+
+**Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
