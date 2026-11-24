@@ -13,7 +13,8 @@ require_once __DIR__ . '/XlsxWriter.php';
  */
 final class OvertimeRhSheet {
     public const SHEET = 'Plan1';
-    public const HEADERS = ['CENTRO DE CUSTO', 'NC', 'Nome completo', 'Data da realização', 'Total de Horas', 'Descrição'];
+    /** Como no modelo do RH, com o espaco no fim de "Nome completo " (o modelo e a referencia). */
+    public const HEADERS = ['CENTRO DE CUSTO', 'NC', 'Nome completo ', 'Data da realização', 'Total de Horas', 'Descrição'];
     public const DEFAULT_COST_CENTER = '1.123.01  Suporte Tecnico';
     public const TOTAL_LABEL = 'Total de Horas Geral:';
     public const TIME_FORMAT = '[h]:mm:ss';

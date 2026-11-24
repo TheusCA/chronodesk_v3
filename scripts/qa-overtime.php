@@ -431,7 +431,8 @@ $styleOf = static function (string $ref) use ($cell, $xfs, $fmtCodes, $fonts, $f
     ];
 };
 assert_same(OvertimeRhSheet::HEADERS, array_map($text, ['A1', 'B1', 'C1', 'D1', 'E1', 'F1']), 'planilha do RH: os seis cabecalhos, nesta ordem, com acento');
-assert_same(['CENTRO DE CUSTO', 'NC', 'Nome completo', 'Data da realização', 'Total de Horas', 'Descrição'], OvertimeRhSheet::HEADERS, 'planilha do RH: o texto exato dos cabecalhos do pedido');
+assert_same(['CENTRO DE CUSTO', 'NC', 'Nome completo ', 'Data da realização', 'Total de Horas', 'Descrição'], OvertimeRhSheet::HEADERS, 'planilha do RH: o texto exato dos cabecalhos do modelo, com o espaco no fim de "Nome completo "');
+assert_same(['Nome completo ', 'Nome completo ', 1], [$text('C1'), OvertimeRhSheet::HEADERS[2], substr_count($files['xl/worksheets/sheet1.xml'], '<c r="C1" s="1" t="inlineStr"><is><t xml:space="preserve">Nome completo </t></is></c>')], 'planilha do RH: C1 do .xlsx gerado com o espaco no fim, igual ao modelo, e o xml:space="preserve" que faz o Excel guardar o espaco');
 assert_same(['Total de Horas Geral:', 'SUM(E2:E4)', '[h]:mm:ss', null], [$text('H1'), (string)$cell('I1')->f, $styleOf('I1')['formato'], $cell('G1')], 'planilha do RH: H1 com o rotulo, I1 com a soma de E2 ate a ultima linha em [h]:mm:ss, G1 vazia');
 assert_same(['formato' => '0', 'fonte' => 'Aptos Narrow 11 negrito', 'fundo' => 'FF00B0F0', 'borda' => 'thin FF000000', 'centro' => 'center'], $styleOf('C1'), 'planilha do RH: cabecalho em negrito, Aptos Narrow 11, fundo 00B0F0, centralizado, borda fina preta');
 // Ordem: data e depois nome (Caio em 16/11; Ana e Bruno em 18/11).
