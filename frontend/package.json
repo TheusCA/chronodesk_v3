@@ -28,6 +28,7 @@
     "qa:rotation-teams": "node scripts/qa-rotation-teams.mjs",
     "qa:critico-hibrido": "node scripts/qa-critico-hibrido.mjs",
     "qa:critical-roles": "node scripts/qa-critical-roles.mjs",
+    "qa:critical-grid": "node scripts/qa-critical-grid.mjs",
     "qa:chg": "node scripts/qa-chg.mjs",
     "qa:schedule-form": "node scripts/qa-schedule-form.mjs",
     "qa:schedule-rules": "node scripts/qa-schedule-rules.mjs",

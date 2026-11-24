@@ -133,16 +133,23 @@ const sumOf = (pattern) => assets.filter((name) => pattern.test(name)).reduce((t
 // CSS do resto do portal continua com o limite de 70 KB.
 const chgCss = assets.filter((name) => /^ChgPage-[\w-]+\.css$/.test(name))
 assert.equal(chgCss.length, 1, 'Orçamento: o CSS do Controle de CHG num arquivo só, da rota')
+// [D-ESC-14] O CSS da Escala do Crítico (src/pages/criticalGrid/criticalGrid.css,
+// importado pela página e pela amostra de cor carregada sob demanda) também
+// sai num arquivo à parte, com limite próprio.
+const gridCss = assets.filter((name) => /^criticalGrid-[\w-]+\.css$/.test(name))
+assert.equal(gridCss.length, 1, 'Orçamento: o CSS da Escala do Crítico num arquivo só')
 const measured = {
   entryJs: sizeOf(entryJs),
-  css: assets.filter((name) => /\.css$/.test(name) && !chgCss.includes(name)).reduce((total, name) => total + sizeOf(name), 0),
+  css: assets.filter((name) => /\.css$/.test(name) && !chgCss.includes(name) && !gridCss.includes(name)).reduce((total, name) => total + sizeOf(name), 0),
   fonts: sumOf(/\.woff2$/),
   chgCss: sizeOf(chgCss[0]),
+  gridCss: sizeOf(gridCss[0]),
 }
-for (const [key, limit] of Object.entries({ ...BUDGET, chgCss: 25_000 })) {
+for (const [key, limit] of Object.entries({ ...BUDGET, chgCss: 25_000, gridCss: 15_000 })) {
   assert.ok(measured[key] <= limit, `Orçamento do build: ${key} com ${measured[key]} bytes (limite ${limit})`)
 }
 assert.doesNotMatch(readFileSync(join(appRoot, 'assets', entryJs), 'utf8'), /chg-kpi|chg-board/, 'Orçamento: as classes do Controle de CHG fora do JS de entrada')
+assert.doesNotMatch(readFileSync(join(appRoot, 'assets', entryJs), 'utf8'), /esc-tone-|esc-grid/, 'Orçamento: as classes da Escala do Crítico fora do JS de entrada')
 assert.ok(measured.fonts > 0, 'Orçamento: as fontes do portal estão no build')
 assert.deepEqual(assets.filter((name) => /\.(woff|ttf|otf|eot)$/.test(name)), [], 'Fontes só em woff2')
 
@@ -176,4 +183,4 @@ const pngInfo = (name) => { const png = readFileSync(join(appRoot, name)); retur
 assert.deepEqual([pngInfo('favicon.png'), pngInfo('apple-touch-icon.png')], [[64, 64, 6], [180, 180, 2]], 'Marca: favicon.png 64 px com transparência; apple-touch-icon.png 180 px opaco (o iOS arredonda)')
 assert.deepEqual([0, 1, 2].map((i) => ico.readUInt32BE(ico.readUInt32LE(6 + 16 * i + 12))), [0x89504e47, 0x89504e47, 0x89504e47], 'Marca: as três entradas do favicon.ico em PNG')
 
-console.log(`Bundle frontend QA OK (JS de entrada ${measured.entryJs} de ${BUDGET.entryJs} bytes, CSS ${measured.css} de ${BUDGET.css}, CSS do CHG ${measured.chgCss} de 25000, fontes ${measured.fonts} de ${BUDGET.fonts})`)
+console.log(`Bundle frontend QA OK (JS de entrada ${measured.entryJs} de ${BUDGET.entryJs} bytes, CSS ${measured.css} de ${BUDGET.css}, CSS do CHG ${measured.chgCss} de 25000, CSS da Escala do Crítico ${measured.gridCss} de 15000, fontes ${measured.fonts} de ${BUDGET.fonts})`)

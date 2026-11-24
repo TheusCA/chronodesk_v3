@@ -223,6 +223,8 @@ export const ABSENCE_CATEGORIES = [
   { value: 'ausencia_justificada', label: 'Ausência justificada' },
   { value: 'compromisso', label: 'Compromisso' },
   { value: 'outro', label: 'Outro' },
+  // [D-ESC-18] Migration 027.
+  { value: 'banco_horas', label: 'Banco de horas' },
 ] as const
 export const ABSENCE_RETROACTIVE_MESSAGE = 'Data anterior a hoje: só administradores e Liderança lançam ausência retroativa.'
 
@@ -265,7 +267,7 @@ export function absenceFormSchema({ today, canRetroactive, workday = null }: Abs
     period_type: z.enum(['full_day', 'from_time', 'interval'], { error: 'Tipo de período inválido.' }),
     start_time: z.string().default(''),
     end_time: z.string().default(''),
-    category: z.enum(['folga', 'ferias', 'ausencia_justificada', 'compromisso', 'outro'], { error: 'Selecione a categoria.' }),
+    category: z.enum(['folga', 'ferias', 'ausencia_justificada', 'compromisso', 'outro', 'banco_horas'], { error: 'Selecione a categoria.' }),
     // Caracteres como o servidor conta (pontos de código UTF-8), não unidades UTF-16.
     note: z.string().default('').transform((value) => value.trim())
       .refine((value) => Array.from(value).length <= ABSENCE_NOTE_MAX_CHARS, `A observação pode ter no máximo ${ABSENCE_NOTE_MAX_CHARS} caracteres.`),

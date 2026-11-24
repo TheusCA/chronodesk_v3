@@ -19,6 +19,8 @@ const typeLabels = {
   oncall: 'Plantão',
   war_room: 'War Room',
   absence: 'Ausência',
+  // [D-ESC-17] Feriado: um evento por data, sem pessoa.
+  holiday: 'Feriado',
 }
 
 // [R1, D-R0-4] Tons por token. Ausência no vermelho de ausente (o mesmo da
@@ -34,6 +36,7 @@ const typeTones = {
   oncall: 'border-ok-line bg-ok-bg text-ok',
   war_room: 'border-danger bg-danger-bg text-danger',
   absence: 'border-absent-line bg-absent-bg text-absent',
+  holiday: 'border-info-line bg-info-bg text-info',
 }
 
 const statusLabels = {

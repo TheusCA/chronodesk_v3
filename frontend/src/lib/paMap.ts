@@ -60,6 +60,8 @@ const REASON_LABELS: Record<string, string> = {
   inativo: 'Inativo',
   arquivado: 'Arquivado',
   fim_de_semana: 'Fim de semana',
+  // [D-ESC-17] Feriado: dia sem expediente para todos.
+  feriado: 'Feriado',
   sem_situacao: 'Sem situação',
 }
 

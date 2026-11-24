@@ -110,7 +110,6 @@ for (const [route, permission] of [
   ['/metricas', 'metricas.read'],
   ['/admin', 'operacao.approve'],
   ['/relatorios', 'relatorios.read'],
-  ['/configuracoes', 'configuracoes.manage'],
 ]) {
   assert.match(
     navigationSource,
@@ -118,6 +117,10 @@ for (const [route, permission] of [
     `RBAC preservado na navegacao: ${route} exige ${permission}`,
   )
 }
+
+// [D-ESC-16] Configurações: o admin (configuracoes.manage) ou a Liderança só pelos feriados (feriados.manage).
+assert.match(navigationSource, /path: '\/configuracoes'.*anyPermission: \['configuracoes\.manage', 'feriados\.manage'\]/, 'RBAC preservado na navegacao: /configuracoes exige configuracoes.manage ou feriados.manage')
+assert.match(navigationSource, /path: '\/escala-critico', label: 'Escala do Crítico'/, 'Escala do Crítico no menu Escalas, para todos (D-ESC-1)')
 
 for (const [value, label] of [
   ['even_days', 'Dias pares'],

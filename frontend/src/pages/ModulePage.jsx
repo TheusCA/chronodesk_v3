@@ -4,6 +4,8 @@ import { apiUrl } from '../lib/api'
 import { formatDate, formatDateTime } from '../lib/format'
 import { EmptyState, ErrorState, LoadingState } from '../components/ui/States'
 import { TruncationNotice } from '../components/ui/Primitives'
+import { hasPermission } from '../lib/roles'
+import { HolidaysPanel } from './HolidaysPanel'
 
 const modules = {
   '/calendario': { endpoint: 'portal/calendar.php', noun: 'evento', columns: ['title', 'type', 'starts_at', 'status'] },
@@ -86,9 +88,13 @@ export function ReportsPage() {
   )
 }
 
-export function SettingsPage({ session }) {
+export function SettingsPage({ session, notify }) {
+  // [D-ESC-16] A Liderança abre Configurações só pelos feriados.
+  const admin = hasPermission(session, 'configuracoes.manage')
   return (
     <div className="grid gap-5 md:grid-cols-2">
+      {hasPermission(session, 'feriados.manage') && <HolidaysPanel notify={notify} />}
+      {admin && (<>
       <section className="card">
         <p className="text-sm text-muted">Perfil ativo</p>
         <h2 className="mt-2 text-xl font-semibold capitalize text-ink">{session.role?.replace('_', ' ')}</h2>
@@ -99,6 +105,7 @@ export function SettingsPage({ session }) {
         <h2 className="mt-2 text-xl font-semibold text-ink">Polling seguro</h2>
         <p className="mt-3 text-sm text-muted">O sino consulta notificações internas sem expor tokens ou segredos no navegador.</p>
       </section>
+      </>)}
     </div>
   )
 }

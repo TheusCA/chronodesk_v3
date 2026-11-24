@@ -23,7 +23,7 @@ assert.equal(packageJson.scripts['qa:unsaved-changes'], 'node scripts/qa-unsaved
 // [R2] 21: entrou o qa:primitives (componentes de components/ui e alvo de 40 px).
 // [R3] 22: entrou o qa:shell (casca: "Ir para o conteúdo", título, marca, contador e iniciais).
 // [R4c] 23: entrou o qa:approvals (Aprovações: filtro por tipo e um botão principal por vez).
-assert.equal(Object.keys(packageJson.scripts).filter((name) => name.startsWith('qa:')).length, 27, 'Bateria com 27 qa:* ([F10-2] qa:rotation-teams; [F9] qa:critico-hibrido; [9.16] qa:critical-roles; [9.17] qa:chg)')
+assert.equal(Object.keys(packageJson.scripts).filter((name) => name.startsWith('qa:')).length, 28, 'Bateria com 28 qa:* ([F10-2] qa:rotation-teams; [F9] qa:critico-hibrido; [9.16] qa:critical-roles; [9.17] qa:chg; [D-ESC] qa:critical-grid)')
 
 // Navegador simulado: location e history que se atualizam no pushState, e
 // listeners contados por tipo.

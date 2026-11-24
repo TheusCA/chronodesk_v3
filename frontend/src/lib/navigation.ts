@@ -5,6 +5,7 @@ export type Permission =
   | 'relatorios.read'
   | 'configuracoes.manage'
   | 'integracoes.manage'
+  | 'feriados.manage'
 
 export type NavigationSection = {
   section: string
@@ -15,6 +16,8 @@ export type NavigationRoute = {
   label: string
   icon: string
   permission?: Permission
+  // [D-ESC-16] Basta uma das permissões (Configurações: o admin, ou a Liderança só nos feriados).
+  anyPermission?: Permission[]
   // [9.17] Módulo ligado por interruptor do servidor (session.modulos).
   module?: 'chg'
 }
@@ -35,6 +38,8 @@ export const navigation: NavigationItem[] = [
   { section: 'Escalas' },
   { path: '/escala-turnos', label: 'Escalas de Sábado', icon: 'clock' },
   { path: '/escala-presencial', label: 'Escala presencial', icon: 'building' },
+  // [D-ESC-1] Escala do Crítico em grade: todos os perfis veem.
+  { path: '/escala-critico', label: 'Escala do Crítico', icon: 'calendar' },
   { path: '/ausencias', label: 'Ausências', icon: 'userMinus' },
   { path: '/plantonistas', label: 'Plantonistas', icon: 'phone' },
   { path: '/sobreavisos', label: 'Sobreavisos', icon: 'radio' },
@@ -47,7 +52,7 @@ export const navigation: NavigationItem[] = [
   { section: 'Conhecimento e plataforma' },
   { path: '/documentacao', label: 'Documentação', icon: 'book' },
   { path: '/relatorios', label: 'Relatórios', icon: 'file', permission: 'relatorios.read' },
-  { path: '/configuracoes', label: 'Configurações', icon: 'settings', permission: 'configuracoes.manage' },
+  { path: '/configuracoes', label: 'Configurações', icon: 'settings', anyPermission: ['configuracoes.manage', 'feriados.manage'] },
   { path: '/integracoes', label: 'Integrações', icon: 'plug', permission: 'integracoes.manage' },
 ]
 
@@ -60,6 +65,7 @@ export const pageMetadata: PageMetadata = {
   '/tecnicos': ['Técnicos', 'Diretório operacional da equipe.'],
   '/escala-turnos': ['Escalas de Sábado', 'Publicações da escala de sábado disponíveis para consulta da equipe.'],
   '/escala-presencial': ['Escala presencial', 'Presença por data, equipe e colaborador.'],
+  '/escala-critico': ['Escala do Crítico', 'Papéis, ausências e feriados do Crítico, semana a semana.'],
   '/ausencias': ['Ausências', 'Folgas, férias, ausências justificadas e compromissos.'],
   '/horas-extras': ['Horas extras', 'Solicitações e aprovações de horas adicionais.'],
   '/correcao-ponto': ['Correção de ponto', 'Solicitações de ajuste de marcação.'],
@@ -73,4 +79,12 @@ export const pageMetadata: PageMetadata = {
   '/relatorios': ['Relatórios', 'Relatórios operacionais e auditoria.'],
   '/configuracoes': ['Configurações', 'Preferências e informações de segurança.'],
   '/integracoes': ['Integrações', 'Estado das conexões com plataformas externas.'],
+}
+
+// Rota permitida para o conjunto de permissões da sessão (permission e anyPermission).
+export function routeAllowed(item: Pick<NavigationRoute, 'permission' | 'anyPermission'> | undefined, permissions: Set<string>): boolean {
+  if (!item) return true
+  if (item.permission && !permissions.has(item.permission)) return false
+  if (item.anyPermission && !item.anyPermission.some((permission) => permissions.has(permission))) return false
+  return true
 }

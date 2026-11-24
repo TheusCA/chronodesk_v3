@@ -7,7 +7,7 @@ import { LoadingState } from './components/ui/States'
 import { LoginPage } from './pages/LoginPage'
 import { api, post, setCsrfToken } from './lib/api'
 import { FEEDBACK_DURATION_MS } from './lib/actionFeedback'
-import { navigation } from './lib/navigation'
+import { navigation, routeAllowed } from './lib/navigation'
 import { useRouter } from './lib/router'
 import { useLivePauses } from './hooks/useLivePauses'
 import { hasPermission } from './lib/roles'
@@ -33,6 +33,7 @@ const TimeCorrectionPage = lazyPage(() => import('./pages/OperationalPages'), 'T
 const PausasPage = lazyPage(() => import('./pages/PausasPage'), 'PausasPage')
 const TechniciansPage = lazyPage(() => import('./pages/TechniciansPage'), 'TechniciansPage')
 const ChgPage = lazyPage(() => import('./pages/ChgPage'), 'ChgPage')
+const CriticalGridPage = lazyPage(() => import('./pages/CriticalGridPage'), 'CriticalGridPage')
 
 // [EE5] Ajuda do campo de justificativa de derrubar pausa (vai para a auditoria).
 const FORCE_END_NOTE_HELP = 'Não inclua informações pessoais ou de saúde.'
@@ -168,7 +169,7 @@ export default function App() {
   const permissions = useMemo(() => new Set(session.permissions), [session.permissions])
   const route = navigation.find((item) => item.path === router.path)
   // [9.17] Módulo desligado (session.modulos): a rota não existe para a tela.
-  const allowed = (!route?.permission || permissions.has(route.permission)) && (!route?.module || session.modulos?.[route.module] === true)
+  const allowed = routeAllowed(route, permissions) && (!route?.module || session.modulos?.[route.module] === true)
   const funcionarioId = session.ci.funcionario_id
   // [R4b] Modo painel da Visão operacional (/app/dashboard?painel=1): a tela
   // fixa, sem a casca. Mesma permissão e mesmos dados da tela normal.
@@ -237,6 +238,8 @@ export default function App() {
     content = <CalendarPage session={session} notify={notify} />
   } else if (router.path === '/escala-presencial') {
     content = <SchedulePage session={session} notify={notify} />
+  } else if (router.path === '/escala-critico') {
+    content = <CriticalGridPage notify={notify} />
   } else if (router.path === '/ausencias') {
     content = <AbsencesPage session={session} notify={notify} />
   } else if (router.path === '/tecnicos') {
@@ -260,7 +263,7 @@ export default function App() {
   } else if (router.path === '/documentacao') {
     content = <DocumentsPage notify={notify} />
   } else if (router.path === '/configuracoes') {
-    content = <SettingsPage session={session} />
+    content = <SettingsPage notify={notify} session={session} />
   } else if (route) {
     content = <ModulePage path={router.path} />
   } else {

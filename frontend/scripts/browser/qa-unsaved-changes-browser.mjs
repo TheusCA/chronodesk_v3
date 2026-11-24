@@ -3472,6 +3472,157 @@ async function chgLayout(page, port, mock) {
   }
 }
 
+// 34. [Escala do Crítico em grade, D-ESC-1 a D-ESC-20] A grade do mês com os
+// dados fictícios (critical-grid-fixture.mjs): o técnico só lê (painel de
+// leitura, sem o diálogo de edição); teclado (setas e Enter); celular em
+// cartões; a Liderança abre o diálogo do dia, a prévia do servidor libera o
+// salvar, a gravação leva a versão de cada dia, o 409 recarrega, o desfazer
+// pede confirmação, a saída com alteração pede para descartar; Shift+clique
+// seleciona o intervalo; Configurações com os feriados só para quem pode.
+async function criticalGrid(page, port, mock) {
+  const posts = (action) => mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/critical_grid.php' && r.body?.action === action)
+  const gets = () => mock.requests.filter((r) => r.method === 'GET' && r.key === 'portal/critical_grid.php').length
+  const CELL = (employee, date) => `document.querySelector('.esc-grid [data-esc-date="${date}"][data-esc-cell^="${employee}:"]')`
+  const ROW = { 901: 0, 902: 1, 903: 2, 904: 3, 905: 4 }
+  const cell = (id, date) => CELL(ROW[id], date)
+  const setInput = async (expression, value) => {
+    await page.evaluate(`(() => { const field = ${expression}; const select = field instanceof HTMLSelectElement; Object.getOwnPropertyDescriptor(select ? HTMLSelectElement.prototype : HTMLInputElement.prototype, 'value').set.call(field, ${JSON.stringify(value)}); field.dispatchEvent(new Event(select ? 'change' : 'input', { bubbles: true })) })()`)
+    await sleep(150)
+  }
+  const shiftClick = async (expression) => {
+    await page.evaluate(`(() => { const el = ${expression}; el.scrollIntoView({ block: 'center' }); el.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true })) })()`)
+    await sleep(250)
+  }
+  const dialogTitle = `document.querySelector('[role="dialog"] h2')?.textContent || ''`
+  try {
+    // Técnico: só lê.
+    mock.useTechnicianSession()
+    await goto(page, port, '/escala-critico', 1366)
+    await page.waitFor(`!!document.querySelector('[data-esc-page] .esc-grid')`)
+    const view = await page.evaluate(`(() => ({
+      titulo: document.querySelector('[data-esc-title]').textContent,
+      aberta: [...document.querySelectorAll('details.esc-week')].filter((d) => d.open).map((d) => d.dataset.escWeek).join(','),
+      hoje: document.querySelectorAll('.esc-cell.esc-today').length,
+      legenda: document.querySelectorAll('[data-esc-legend] .esc-legend-item').length,
+      folga: document.body.textContent.includes('Folga'),
+      lateral: document.documentElement.scrollWidth > innerWidth,
+      exportar: document.querySelector('[data-esc-export]').getAttribute('href'),
+      fundo: getComputedStyle(${cell(902, '2026-11-20')}).backgroundColor,
+    }))()`)
+    report('Escala do Critico (tecnico, 1366 px): titulo do mes, so a semana atual aberta, hoje destacado, legenda das 8 cores, sem rolagem lateral, exportar do mes', view.titulo === 'Novembro 2026' && view.aberta === '47' && view.hoje >= 5 && view.legenda === 8 && !view.lateral && view.exportar === '/api/portal/critical_grid.php?month=2026-11&format=xlsx', JSON.stringify(view))
+    report('Escala do Critico: o feriado com a cor propria (CSS da rota carregado) e o tecnico sem a categoria da ausencia', view.fundo !== 'rgba(0, 0, 0, 0)' && view.fundo !== '' && !view.folga, JSON.stringify({ fundo: view.fundo, folga: view.folga }))
+    await page.evaluate(`document.querySelector('details[data-esc-week="48"]').open = true`)
+    await sleep(150)
+    await page.click(cell(903, '2026-11-26'))
+    await page.waitFor(`!!document.querySelector('[data-esc-readout]')`)
+    const readout = await page.evaluate(`({ texto: document.querySelector('[data-esc-readout]').textContent.replace(/\\s+/g, ' '), edicao: !!document.querySelector('[data-esc-dialog]') })`)
+    report('Escala do Critico: o tecnico abre o painel de leitura (papel, origem Troca, quem alterou), sem o dialogo de edicao', /Abertura home 07:00–17:00.*Origem\s*Troca.*Alterado por\s*qa\.troca/.test(readout.texto) && !readout.edicao, JSON.stringify(readout))
+    await page.press('Escape')
+    await sleep(250)
+    const back = await page.evaluate(`({ dialogo: !!document.querySelector('[role="dialog"]'), foco: document.activeElement?.dataset?.escDate || '' })`)
+    report('Escala do Critico: Esc fecha a leitura e o foco volta para o dia', !back.dialogo && back.foco === '2026-11-26', JSON.stringify(back))
+    // Teclado: setas entre as células e Enter abre o dia.
+    await page.evaluate(`${cell(901, '2026-11-16')}.focus()`)
+    await page.press('ArrowRight')
+    await page.press('ArrowDown')
+    const moved = await page.evaluate(`({ data: document.activeElement?.dataset?.escDate, linha: document.activeElement?.dataset?.escCell })`)
+    report('Escala do Critico: setas andam entre as celulas (direita e baixo)', moved.data === '2026-11-17' && moved.linha === '1:1', JSON.stringify(moved))
+    // Enter de verdade (keyDown com o texto gera a ativação do botão, como o teclado).
+    await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: String.fromCharCode(13) })
+    await page.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 })
+    await page.waitFor(`!!document.querySelector('[data-esc-readout]')`)
+    const entered = await page.evaluate(`[...document.querySelectorAll('[role="dialog"]')].map((d) => d.querySelector('h2')?.textContent || '').join(' | ')`)
+    report('Escala do Critico: Enter abre o dia', entered.includes('Bruno Ficticio · Ter 17/11'), entered)
+    await page.press('Escape')
+    await sleep(200)
+    // Celular: cartões por pessoa, sem a grade e sem rolagem lateral.
+    await goto(page, port, '/escala-critico', 390)
+    await page.waitFor(`!!document.querySelector('[data-esc-page]')`)
+    const phone = await page.evaluate(`(() => {
+      const week = [...document.querySelectorAll('details.esc-week')].find((d) => d.open)
+      return { grade: getComputedStyle(week.querySelector('.esc-grid')).display, cartoes: [...week.querySelectorAll('.esc-card')].filter((c) => c.offsetParent !== null).length, dias: week.querySelector('.esc-card').querySelectorAll('.esc-cell').length, lateral: document.documentElement.scrollWidth > innerWidth }
+    })()`)
+    report('Escala do Critico (celular, 390 px): um cartao por pessoa com os 5 dias, sem a grade e sem rolagem lateral', phone.grade === 'none' && phone.cartoes === 5 && phone.dias === 5 && !phone.lateral, JSON.stringify(phone))
+
+    // Liderança: o diálogo do dia.
+    mock.useLeadershipSession()
+    await goto(page, port, '/escala-critico', 1366)
+    await page.waitFor(`!!document.querySelector('[data-esc-page] .esc-grid')`)
+    await page.evaluate(`document.querySelector('details[data-esc-week="48"]').open = true`)
+    await sleep(150)
+    await page.click(cell(905, '2026-11-23'))
+    await page.waitFor(`!!document.querySelector('[data-esc-dialog]')`)
+    const opened = await page.evaluate(`({ salvar: document.querySelector('[data-esc-save]')?.disabled, modos: [...document.querySelectorAll('[data-esc-dialog] .segmented-option')].map((b) => b.textContent.trim()).join('|') })`)
+    report('Escala do Critico (Lideranca): o dialogo do dia com trocar o papel, ausencia e excecao; salvar desligado antes da previa', opened.salvar === true && opened.modos === 'Trocar o papel|Ausência|Exceção', JSON.stringify(opened))
+    await page.click(`[...document.querySelectorAll('[data-esc-dialog] .segmented-option')].find((b) => b.textContent.trim() === 'Ausência')`)
+    await setInput(`document.querySelector('[data-esc-category]')`, 'banco_horas')
+    await page.press('Escape')
+    await page.waitFor(`!!document.querySelector('[role="alertdialog"]')`)
+    report('Escala do Critico: sair com alteracao pede para descartar (17f)', true)
+    await page.click(button('Continuar editando'))
+    await sleep(200)
+    const previewsBefore = posts('preview').length
+    await page.click(`document.querySelector('[data-esc-preview-run]')`)
+    await page.waitFor(`!!document.querySelector('[data-esc-preview]') && !document.querySelector('[data-esc-save]').disabled`)
+    const preview = posts('preview').at(-1)
+    const effect = await page.evaluate(`document.querySelector('[data-esc-preview]').textContent.replace(/\\s+/g, ' ')`)
+    report('Escala do Critico: a previa vem do servidor (ausencia de banco de horas, so este dia) e mostra antes -> depois e o aviso do "1 disponivel"', posts('preview').length === previewsBefore + 1 && preview.body.change.type === 'absence' && preview.body.change.category === 'banco_horas' && preview.body.from === '2026-11-23' && preview.body.to === '2026-11-23' && /Seg 23\/11: Abertura home 07:00–17:00 → Banco de horas/.test(effect) && /Sem ninguém disponível/.test(effect), effect)
+    const getsBefore = gets()
+    await page.click(`document.querySelector('[data-esc-save]')`)
+    await page.waitFor(`!document.querySelector('[data-esc-dialog]')`)
+    const applied = posts('apply').at(-1)
+    report('Escala do Critico: salvar grava com a versao de cada dia, fecha o dialogo e recarrega a grade', JSON.stringify(applied?.body?.versions) === JSON.stringify({ '2026-11-23': 'v1-905-2026-11-23' }) && gets() > getsBefore, JSON.stringify(applied?.body))
+    // 409 de versão velha: aviso e grade recarregada.
+    mock.refuseGridApply(409, '1 dia(s) mudaram desde que a tela carregou: recarregue e repita.')
+    await page.evaluate(`document.querySelector('details[data-esc-week="48"]').open = true`)
+    await page.click(cell(904, '2026-11-24'))
+    await page.waitFor(`!!document.querySelector('[data-esc-dialog]')`)
+    await setInput(`document.querySelector('[data-esc-role]')`, '1')
+    await page.click(`document.querySelector('[data-esc-preview-run]')`)
+    await page.waitFor(`!document.querySelector('[data-esc-save]').disabled`)
+    const getsBefore409 = gets()
+    await page.click(`document.querySelector('[data-esc-save]')`)
+    await page.waitFor(`[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('mudaram desde que a tela carregou'))`)
+    await sleep(300)
+    report('Escala do Critico: 409 de versao velha avisa com a contagem e recarrega a grade', gets() > getsBefore409)
+    // Desfazer a troca: prévia e confirmação.
+    await page.evaluate(`document.querySelector('details[data-esc-week="48"]').open = true`)
+    await page.click(cell(903, '2026-11-26'))
+    await page.waitFor(`!!document.querySelector('[data-esc-dialog]')`)
+    await page.click(`[...document.querySelectorAll('[data-esc-dialog] .segmented-option')].find((b) => b.textContent.trim() === 'Desfazer')`)
+    await page.click(`document.querySelector('[data-esc-preview-run]')`)
+    await page.waitFor(`!document.querySelector('[data-esc-undo-run]').disabled`)
+    await page.click(`document.querySelector('[data-esc-undo-run]')`)
+    await page.waitFor(`!!document.querySelector('[role="alertdialog"]')`)
+    report('Escala do Critico: desfazer pede confirmacao', (await page.evaluate(`document.querySelector('[role="alertdialog"] h2').textContent`)) === 'Desfazer?')
+    await page.click(button('Desfazer', `document.querySelector('[role="alertdialog"]')`))
+    await page.waitFor(`!document.querySelector('[data-esc-dialog]')`)
+    const undone = posts('apply').at(-1)
+    report('Escala do Critico: o desfazer grava a troca do dia pelo id do registro', undone?.body?.change?.type === 'undo' && undone.body.change.target === 'troca' && undone.body.change.ref_id === 90, JSON.stringify(undone?.body))
+    // Shift+clique: o intervalo de uma pessoa.
+    await page.evaluate(`document.querySelector('details[data-esc-week="47"]').open = true`)
+    await shiftClick(cell(902, '2026-11-16'))
+    const firstShift = await page.evaluate(`({ dialogo: !!document.querySelector('[data-esc-dialog]'), selecionadas: document.querySelectorAll('.esc-grid .esc-cell.esc-selected').length })`)
+    await shiftClick(cell(902, '2026-11-18'))
+    await page.waitFor(`!!document.querySelector('[data-esc-dialog]')`)
+    const range = await page.evaluate(`({ titulo: ${dialogTitle}, selecionadas: document.querySelectorAll('.esc-grid .esc-cell.esc-selected').length, ate: document.querySelector('[data-esc-until]').value })`)
+    report('Escala do Critico: Shift+clique marca o 1o dia e o 2o abre o dialogo do intervalo (Seg 16/11 a Qua 18/11)', !firstShift.dialogo && firstShift.selecionadas === 1 && /Seg 16\/11 a Qua 18\/11/.test(range.titulo) && range.selecionadas === 3 && range.ate === '2026-11-18', JSON.stringify({ firstShift, range }))
+    await page.press('Escape')
+    await sleep(250)
+    // Configurações: a Liderança vê só os feriados.
+    await goto(page, port, '/configuracoes', 1366)
+    await page.waitFor(`!!document.querySelector('[data-holidays]')`)
+    const settings = await page.evaluate(`({ feriado: document.querySelector('[data-holidays-list]')?.textContent.replace(/\\s+/g, ' ').trim(), admin: document.body.textContent.includes('Polling seguro'), formulario: !!document.querySelector('[data-holiday-form]') })`)
+    report('Configuracoes (Lideranca): so os feriados, com o formulario; sem os cartoes do admin', /20\/11\/2026 · Feriado Ficticio/.test(settings.feriado || '') && !settings.admin && settings.formulario, JSON.stringify(settings))
+    mock.useTechnicianSession()
+    await goto(page, port, '/configuracoes', 1366)
+    report('Configuracoes (tecnico): sem acesso', !(await page.evaluate(`!!document.querySelector('[data-holidays]')`)))
+  } finally {
+    mock.refuseGridApply(null)
+    mock.useAdminSession()
+  }
+}
+
 // 32. [F10-3] Mapa PA com o inventario: os reservados do Critico com a pessoa
 // do papel do dia (D-F10-19 revista), o aviso de quem ficou sem PA reservado,
 // o diálogo do reservado sem o formulario do vinculo, o inventario (tipo,
@@ -3584,6 +3735,7 @@ try {
     [31, 'Controle de CHG: somente leitura x Tools, mover e formulario (9.17)', () => chg917(page, mock.port, mock)],
     [32, 'Mapa PA: inventario e reservados do Critico (F10-3)', () => paInventoryF103(page, mock.port, mock)],
     [33, 'Controle de CHG: quadro compacto, painel Abrir e Etapa (ajustes do Tools)', () => chgLayout(page, mock.port, mock)],
+    [34, 'Escala do Critico em grade: leitura, teclado, celular, dialogo do dia e feriados (D-ESC)', () => criticalGrid(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

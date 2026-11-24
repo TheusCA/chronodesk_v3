@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { ConfirmDiscardDialog } from '../components/ui/ConfirmDiscardDialog'
 import { Drawer } from '../components/ui/Drawer'
 import { Field } from '../components/ui/Field'
@@ -14,11 +14,16 @@ import { formatDate } from '../lib/format'
 import { hasPermission } from '../lib/roles'
 import { OVERRIDE_MAX_DAYS, PERIOD_OPTIONS, PRESENCE_LABELS, REASON_LABELS, anchorFor, changePoints, moveItem, roleLabel, toggleId, validShift } from '../lib/criticalRoles'
 import { isCriticalTeam } from '../lib/teams'
+import { removeAt, slotsSummary } from '../lib/criticalGrid'
+
+// [D-ESC-13] Cor do papel: componentes carregados sob demanda (CSS da paleta fora do CSS principal).
+const RoleColorPicker = lazy(() => import('./criticalGrid/RoleColor').then((module) => ({ default: module.RoleColorPicker })))
+const RoleSwatch = lazy(() => import('./criticalGrid/RoleColor').then((module) => ({ default: module.RoleSwatch })))
 
 const ENDPOINT = 'portal/critical_roles.php'
 
 function emptyRole() {
-  return { role_id: null, name: '', presence_type: 'remote', work_start: '07:00', work_end: '17:00', active: true, sort_order: 0 }
+  return { role_id: null, name: '', presence_type: 'remote', work_start: '07:00', work_end: '17:00', active: true, sort_order: 0, color_token: '' }
 }
 
 // Papéis: lista e formulário (criar ou editar).
@@ -31,7 +36,7 @@ function RolesPanel({ roles, canManage, notify, onChanged, onDirty }) {
   async function save() {
     setBusy(true)
     await runAction({
-      action: () => post(ENDPOINT, { action: 'save_role', ...form, sort_order: Number(form.sort_order) || 0 }),
+      action: () => post(ENDPOINT, { action: 'save_role', ...form, sort_order: Number(form.sort_order) || 0, color_token: form.color_token || '' }),
       notify,
       onSuccess: () => { setForm(null); onDirty(false); onChanged() },
     })
@@ -42,6 +47,7 @@ function RolesPanel({ roles, canManage, notify, onChanged, onDirty }) {
     { key: 'nome', label: 'Papel', render: (role) => <span className="flex flex-wrap items-center gap-2"><strong>{role.name}</strong>{!role.active && <Tag tone="neutral">Desativado</Tag>}</span> },
     { key: 'tipo', label: 'Presença', render: (role) => <Tag tone={role.presence_type === 'onsite' ? 'success' : 'info'}>{PRESENCE_LABELS[role.presence_type]}</Tag> },
     { key: 'jornada', label: 'Jornada', className: 'whitespace-nowrap', render: (role) => `${role.work_start}–${role.work_end}` },
+    { key: 'cor', label: 'Cor', render: (role) => <Suspense fallback={<span className="text-xs text-muted">…</span>}><RoleSwatch token={role.color_token} /></Suspense> },
     { key: 'acoes', label: 'Ações', render: (role) => (canManage ? <button className="table-action" data-role-edit={role.id} onClick={() => setForm({ ...role, role_id: role.id })} type="button">Editar</button> : <span className="text-xs text-muted">—</span>) },
   ]
 
@@ -68,6 +74,9 @@ function RolesPanel({ roles, canManage, notify, onChanged, onDirty }) {
             <Field label="Fim da jornada">
               <input onChange={(event) => update({ work_end: event.target.value })} type="time" value={form.work_end} />
             </Field>
+            <Suspense fallback={<span className="text-xs text-muted">Carregando cores…</span>}>
+              <RoleColorPicker onChange={(color_token) => update({ color_token })} value={form.color_token} />
+            </Suspense>
             <Field help="Menor aparece primeiro." label="Ordem">
               <input inputMode="numeric" max="999" min="0" onChange={(event) => update({ sort_order: event.target.value })} type="number" value={form.sort_order} />
             </Field>
@@ -111,6 +120,35 @@ function OrderedPicker({ legend, items, selected, onChange, kind }) {
           {others.map((item) => <button className="btn-secondary btn-sm" data-pick={item.id} key={item.id} onClick={() => onChange(toggleId(selected, item.id))} type="button">+ {item.label}</button>)}
         </div>
       )}
+    </fieldset>
+  )
+}
+
+// [D-ESC-15] Vagas do rodízio: o mesmo papel pode entrar mais de uma vez
+// ("Presencial x2"); as vagas ficam na ordem, com setas e "Tirar" pela posição.
+function SlotPicker({ legend, roles, slots, onChange }) {
+  const byId = new Map(roles.map((role) => [role.id, role]))
+  return (
+    <fieldset className="space-y-2" data-ordered-picker="vagas">
+      <legend className="text-sm font-semibold text-ink">{legend}</legend>
+      <ol className="space-y-1">
+        {slots.map((id, index) => {
+          const label = byId.get(id)?.label ?? `ID ${id}`
+          return (
+            <li className="flex flex-wrap items-center gap-2 rounded-md border border-line px-2 py-1" data-picked-slot={id} key={`${id}-${index}`}>
+              <span className="min-w-6 text-xs text-muted">{index + 1}.</span>
+              <span className="flex-1 text-sm">{label}</span>
+              <button aria-label={`Subir a vaga ${index + 1} (${label})`} className="btn-secondary btn-sm" disabled={index === 0} onClick={() => onChange(moveItem(slots, index, -1))} type="button">↑</button>
+              <button aria-label={`Descer a vaga ${index + 1} (${label})`} className="btn-secondary btn-sm" disabled={index === slots.length - 1} onClick={() => onChange(moveItem(slots, index, 1))} type="button">↓</button>
+              <button aria-label={`Tirar a vaga ${index + 1} (${label})`} className="btn-secondary btn-sm" onClick={() => onChange(removeAt(slots, index))} type="button">Tirar</button>
+            </li>
+          )
+        })}
+      </ol>
+      <div className="flex flex-wrap gap-2">
+        {roles.map((role) => <button className="btn-secondary btn-sm" data-pick-slot={role.id} key={role.id} onClick={() => onChange([...slots, role.id])} type="button">+ {role.label}</button>)}
+      </div>
+      {slots.length > 0 && <p className="text-xs text-muted" data-slots-summary="">Vagas: {slotsSummary(slots, new Map(roles.map((role) => [role.id, role.name]))).join(', ')}</p>}
     </fieldset>
   )
 }
@@ -164,6 +202,7 @@ function RotationPanel({ data, people, canManage, canRetroactive, notify, onChan
           { key: 'desde', label: 'Desde', className: 'whitespace-nowrap', render: (rotation) => formatDate(rotation.effective_from) },
           { key: 'periodo', label: 'Troca', render: (rotation) => <Tag tone={rotation.is_current ? 'success' : 'neutral'}>{rotation.period === 'week' ? 'Por semana' : 'Por mês'}</Tag> },
           { key: 'pessoas', label: 'Pessoas', render: (rotation) => rotation.employees.map((id) => nameById.get(id) || `ID ${id}`).join(', ') },
+          { key: 'vagas', label: 'Vagas', render: (rotation) => slotsSummary(rotation.roles, new Map(data.roles.map((role) => [role.id, role.name]))).join(', ') },
           { key: 'aviso', label: 'Situação', render: (rotation) => (rotation.invalid_people > 0 ? <Tag tone="danger">{rotation.invalid_people} fora do Crítico</Tag> : <span className="text-xs text-muted">—</span>) },
         ]} rowKey={(rotation) => rotation.id} rows={data.rotations} />
       )}
@@ -180,9 +219,9 @@ function RotationPanel({ data, people, canManage, canRetroactive, notify, onChan
           <Segmented label="Troca de papel" onChange={(period) => update({ period, anchor_date: anchorFor(period, form.effective_from) })} options={PERIOD_OPTIONS} value={form.period} />
           <div className="grid gap-4 sm:grid-cols-2">
             <OrderedPicker items={people} kind="pessoas" legend="Pessoas, na ordem" onChange={(employees) => update({ employees })} selected={form.employees} />
-            <OrderedPicker items={activeRoles.map((role) => ({ id: role.id, label: roleLabel(role) }))} kind="papeis" legend="Papéis, na ordem" onChange={(roles) => update({ roles })} selected={form.roles} />
+            <SlotPicker legend="Vagas (papéis), na ordem" onChange={(roles) => update({ roles })} roles={activeRoles.map((role) => ({ id: role.id, name: role.name, label: roleLabel(role) }))} slots={form.roles} />
           </div>
-          <p className="text-xs text-muted">No período 1, a 1ª pessoa fica com o 1º papel; a cada período, todos avançam uma posição. Pessoa a mais fica pelo cadastro; papel sem pessoa aparece como vago.</p>
+          <p className="text-xs text-muted">No período 1, a 1ª pessoa fica com a 1ª vaga; a cada período, todos avançam uma posição. O mesmo papel pode ocupar mais de uma vaga (Presencial x2). Pessoa a mais fica pelo cadastro; vaga sem pessoa aparece como papel vago.</p>
           {preview && (
             <div className={`space-y-3 rounded-lg border p-3 ${fresh ? 'border-line bg-surface' : 'border-warn-line bg-warn-bg'}`} data-rotation-preview="">
               <p className="text-xs font-semibold text-muted">Prévia das próximas 8 semanas (calculada pelo servidor; só os dias em que algum papel muda)</p>

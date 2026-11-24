@@ -7,10 +7,11 @@ import { createServer } from 'node:http'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { dirname, extname, join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { criticalGridFixture, criticalGridPreview } from './critical-grid-fixture.mjs'
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
 
-const ADMIN_PERMISSIONS = ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end', 'escalas.retroativa', 'ausencias.retroativa', 'admin.manage', 'configuracoes.manage', 'integracoes.manage', 'usuarios_locais.manage', 'perfis.promote', 'escalas.lideranca', 'funcionarios.fora_mapa', 'funcionarios.restaurar']
+const ADMIN_PERMISSIONS = ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'pausas.force_end', 'feriados.manage', 'escalas.retroativa', 'ausencias.retroativa', 'admin.manage', 'configuracoes.manage', 'integracoes.manage', 'usuarios_locais.manage', 'perfis.promote', 'escalas.lideranca', 'funcionarios.fora_mapa', 'funcionarios.restaurar']
 const NAMES = ['Tecnico 01 Sobrenome', 'Tecnico 02 Com Um Nome Bem Comprido', 'Tecnico 03 Sobrenome', 'Tecnico 04 Sobrenome']
 const TEAMS = ['n1', 'n2', 'n1', 'n2']
 export const DAY = '2026-10-28'
@@ -309,8 +310,30 @@ const GET = {
   'configuracoes.php': { sucesso: true, configuracoes: { limite_pausa_por_equipe: 2, duracao_pausa_minutos: 20, alerta_15minutos: true, alerta_20minutos: true, local_admin_enabled: false, local_password_change_allowed: false } },
 }
 
+// [Escala do Crítico em grade] A grade fictícia (critical-grid-fixture.mjs):
+// quem tem escalas.manage recebe a versão da Liderança. gridApplyRefusal: o
+// próximo apply responde com ele (409 de versão velha, por exemplo).
+let gridApplyRefusal = null
+const gridHolidays = [{ id: 30, date: '2026-11-20', name: 'Feriado Ficticio', scope: 'todos', row_version: 1 }]
+function criticalGridResponse(method, key, body) {
+  const permissions = GET['session.php'].permissions || []
+  if (key === 'portal/holidays.php') {
+    if (method === 'GET') return [200, { sucesso: true, year: 2026, can_manage: permissions.includes('feriados.manage'), items: gridHolidays }]
+    return permissions.includes('feriados.manage') ? [200, { sucesso: true, mensagem: 'Feriado salvo.', id: 31, row_version: 1, created: true }] : [403, { sucesso: false, mensagem: 'Apenas administradores e Liderança alteram os feriados.' }]
+  }
+  if (method === 'GET') return [200, criticalGridFixture({ manager: permissions.includes('escalas.manage') })]
+  if (!permissions.includes('escalas.manage')) return [403, { sucesso: false, mensagem: 'Apenas administradores e Liderança alteram a escala do Crítico.' }]
+  if (body?.action === 'preview') return [200, criticalGridPreview(body)]
+  if (body?.action === 'apply') {
+    if (gridApplyRefusal) { const refusal = gridApplyRefusal; gridApplyRefusal = null; return refusal }
+    return [200, { ...criticalGridPreview(body), mensagem: 'Escala do dia salva.' }]
+  }
+  return [400, { sucesso: false, mensagem: 'Ação da Escala do Crítico inválida.' }]
+}
+
 function apiResponse(method, key, search, body) {
   if (key === 'status.php' && method === 'GET') return [200, pausedStatus()]
+  if (key === 'portal/critical_grid.php' || key === 'portal/holidays.php') return criticalGridResponse(method, key, body)
   if (key === 'portal/chg.php') return chgResponse(method, body)
   // [9.17.7] Importar: so contagens, como o servidor.
   if (key === 'portal/chg_import.php') return chgCanImport ? [200, { sucesso: true, mensagem: 'Importação concluída.', contagens: { novos: (body?.dados?.items ?? []).length, atualizados: 0, iguais: 0 }, campos_descartados: {} }] : [403, { sucesso: false, mensagem: 'Somente administradores importam do Controle v5.' }]
@@ -437,7 +460,7 @@ function apiResponse(method, key, search, body) {
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' }
 
 // Sessao de Lideranca: sem as permissoes so de admin (por exemplo, funcionarios.fora_mapa).
-const LEADERSHIP_SESSION = { sucesso: true, csrf_token: 'teste', role: 'lideranca', permissions: ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage'], ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' }, gestor: { autenticado: true, admin: false, username: 'lider.qa', role: 'lideranca' } }
+const LEADERSHIP_SESSION = { sucesso: true, csrf_token: 'teste', role: 'lideranca', permissions: ['portal.read', 'pausas.use', 'metricas.read', 'relatorios.read', 'documentacao.edit', 'avisos.manage', 'operacao.approve', 'ausencias.manage', 'funcionarios.manage', 'escalas.manage', 'pa_map.manage', 'feriados.manage'], ci: { autenticado: false, funcionario_id: 0, nome: '', username: '' }, gestor: { autenticado: true, admin: false, username: 'lider.qa', role: 'lideranca' } }
 const ADMIN_SESSION = GET['session.php']
 // [R4a] Sessao de tecnico (CI), para iniciar a propria pausa na tela de Pausas.
 const TECHNICIAN_SESSION = { sucesso: true, csrf_token: 'teste', role: 'tecnico', permissions: ['portal.read', 'pausas.use'], ci: { autenticado: true, funcionario_id: 3, nome: NAMES[2], username: 'tecnico.3' }, gestor: { autenticado: false, admin: false, username: '', role: null } }
@@ -475,7 +498,7 @@ export function startMockServer(appDir) {
   })
   return new Promise((resolve, reject) => {
     server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false, canImport = false, rich = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCanImport = canImport; chgUseRich = rich; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, useSeatSetup: (on) => { seatSetup = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
+    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests, useChg: ({ on = false, canManage = false, canImport = false, rich = false } = {}) => { chgOn = on; chgCanManage = canManage; chgCanImport = canImport; chgUseRich = rich; chgCards = null }, restoreRotationTeams, restoreCriticalRoles, useCriticalTeam: (on) => { criticalTeam = on }, useSeatSetup: (on) => { seatSetup = on }, setVacantCriticalRoles: (items) => { vacantCriticalRoles = items }, useLeadershipSession: () => { GET['session.php'] = LEADERSHIP_SESSION }, useAdminSession: () => { GET['session.php'] = ADMIN_SESSION }, useTechnicianSession: () => { GET['session.php'] = TECHNICIAN_SESSION }, refuseGridApply: (status, mensagem) => { gridApplyRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setStatusEmployees: (value) => { extraStatus = value }, restoreRules: () => removedRules.clear(), keepOnlyRule: (employeeId) => { for (const rule of scheduleRules) if (rule.employee_id !== employeeId) removedRules.add(rule.employee_id) }, decideElsewhere: (key, id) => decisions.set(`${key}:${id}`, 'approved'), refuseDecision: (key, id, status, mensagem) => refusals.set(`${key}:${id}`, [status, { sucesso: false, mensagem }]), restoreDecisions: () => { decisions.clear(); refusals.clear(); decidedPauses.clear(); decisionDelay = 0 }, setPausedEmployee: (value) => { pausedEmployee = value }, refuseForceEnd: (status, mensagem) => { forceEndRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restoreDocuments: () => { removedDocuments.clear(); documentRefusal = null }, removeDocumentElsewhere: (id) => removedDocuments.add(id), refuseDocument: (status, mensagem) => { documentRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setScheduleExceptions: (items) => { scheduleExceptions = items.map((item) => ({ ...item })); scheduleLookupRefusal = null }, scheduleExceptions: () => scheduleExceptions, refuseScheduleLookup: (status, mensagem) => { scheduleLookupRefusal = status ? [status, { sucesso: false, mensagem }] : null }, restorePaAssignments: () => { removedPaAssignments.clear(); paRemoveRefusal = null }, refusePaRemove: (status, mensagem) => { paRemoveRefusal = status ? [status, { sucesso: false, mensagem }] : null }, setDecisionDelay: (ms) => { decisionDelay = ms }, close: () => new Promise((done) => server.close(done)) }))
   })
 }
 
