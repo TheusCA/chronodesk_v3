@@ -25,7 +25,7 @@
  * @param string $password  Senha do Windows
  * @return array|false      Array com dados do usuário AD em caso de sucesso, false em falha
  */
-function autenticar_ad(string $username, string $password) {
+function autenticar_ad(string $username, #[\SensitiveParameter] string $password) {
     if (!function_exists('ldap_connect')) {
         error_log('[AUTH_AD] Extensão PHP LDAP não está habilitada.');
         if (function_exists('audit_log')) {
@@ -407,7 +407,7 @@ function tentar_vincular_funcionario_ad(array $ad_user): ?array {
  * @param string $password   Senha do Windows
  * @return array             ['sucesso' => bool, 'funcionario' => array|null, 'mensagem' => string]
  */
-function autenticar_ci_via_ad(string $username, string $password): array {
+function autenticar_ci_via_ad(string $username, #[\SensitiveParameter] string $password): array {
     // 1. Validar no AD
     $ad_user = autenticar_ad($username, $password);
     if (!$ad_user) {

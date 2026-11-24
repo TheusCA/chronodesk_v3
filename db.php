@@ -52,7 +52,9 @@ function db_is_unknown_time_zone_error(PDOException $e): bool {
  */
 function db_connect(array $options = [], ?callable $factory = null, ?array $time_zones = null): PDO {
     $dsn = 'mysql:host=' . DB_HOST . ';port=' . DB_PORT . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
-    $factory = $factory ?? static function (string $dsn, string $user, string $pass, array $options): PDO {
+    // Senha marcada como sensivel: no stack trace de uma falha de conexao ela
+    // vira SensitiveParameterValue, nunca o texto (scripts/qa-security.php, 12).
+    $factory = $factory ?? static function (string $dsn, string $user, #[\SensitiveParameter] string $pass, array $options): PDO {
         return new PDO($dsn, $user, $pass, $options);
     };
 

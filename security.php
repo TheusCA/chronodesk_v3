@@ -180,11 +180,11 @@ function validate_motivo_pausa($motivo, $equipe = null) {
 // SENHAS
 // ============================================
 
-function hash_password($password) {
+function hash_password(#[\SensitiveParameter] $password) {
     return password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
 }
 
-function verify_password($password, $hash) {
+function verify_password(#[\SensitiveParameter] $password, #[\SensitiveParameter] $hash) {
     return password_verify($password, $hash);
 }
 
@@ -200,7 +200,7 @@ function generate_csrf_token() {
     return $_SESSION['csrf_token'];
 }
 
-function verify_csrf_token($token) {
+function verify_csrf_token(#[\SensitiveParameter] $token) {
     if (session_status() === PHP_SESSION_NONE) session_start();
     if (!isset($_SESSION['csrf_token']) || empty($token)) return false;
     return hash_equals($_SESSION['csrf_token'], $token);

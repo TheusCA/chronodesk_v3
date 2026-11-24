@@ -39,7 +39,7 @@ final class EnvAdCredentialProvider implements AdCredentialProvider {
         return 'env';
     }
 
-    private static function assertCredentialValues(string $username, string $password): void {
+    private static function assertCredentialValues(string $username, #[\SensitiveParameter] string $password): void {
         if (
             strlen($username) > 512
             || preg_match('/[\x00-\x1F\x7F]/', $username) === 1

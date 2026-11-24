@@ -9,7 +9,7 @@ class Usuario {
     }
 
     // Criar novo usuário
-    public function criar($username, $password, $role = 'gestor') {
+    public function criar($username, #[\SensitiveParameter] $password, $role = 'gestor') {
         try {
             $username = normalizar_samaccountname($username);
             if ($username === null) {
@@ -127,7 +127,7 @@ class Usuario {
         }
     }
 
-    public function atualizarSenhaPorUsername($username, $password) {
+    public function atualizarSenhaPorUsername($username, #[\SensitiveParameter] $password) {
         $username = normalizar_samaccountname($username);
         if ($username === null) {
             throw new InvalidArgumentException('Usuário inválido.');
@@ -150,7 +150,7 @@ class Usuario {
     }
 
     // Autenticar usuário
-    public function autenticar($username, $password) {
+    public function autenticar($username, #[\SensitiveParameter] $password) {
         $username = normalizar_samaccountname($username);
         if ($username === null) {
             return false;

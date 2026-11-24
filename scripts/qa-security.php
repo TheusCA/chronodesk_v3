@@ -3775,4 +3775,121 @@ foreach (['index.php', 'login.php', 'admin_login.php', 'admin_logout.php', 'admi
     assert_same(true, strpos($testLocal, "@{ Url = \"\$BaseUrl/{$page}\"; Expect = @(302) }") !== false, "test-local.ps1: GET /{$page} com 302");
 }
 
+// ============================================================================
+// 12. Senha e segredo recebidos por parametro: #[\SensitiveParameter]
+//     (achado de 2026-11-24: a senha do banco era argumento comum da fabrica
+//     do db.php e aparecia, truncada, no stack trace)
+// ============================================================================
+// Varredura por token do PHP em todo o codigo do portal (fora frontend, app,
+// vendor, _referencias e os QAs): todo parametro de funcao, metodo, closure ou
+// arrow function cujo nome sugere segredo tem o atributo, salvo as excecoes
+// abaixo (nome parecido, valor que nao e segredo). Lista exata dos protegidos:
+// parametro novo com nome de segredo exige revisao.
+function qa_secret_parameters(string $source): array {
+    $tokens = qa_significant_tokens($source);
+    $found = [];
+    $class = '';
+    for ($i = 0, $n = count($tokens); $i < $n; $i++) {
+        $token = $tokens[$i];
+        if (is_array($token) && in_array($token[0], [T_CLASS, T_INTERFACE, T_TRAIT], true) && is_array($tokens[$i + 1] ?? null) && $tokens[$i + 1][0] === T_STRING) {
+            $class = $tokens[$i + 1][1] . '::';
+        }
+        if (!is_array($token) || !in_array($token[0], [T_FUNCTION, T_FN], true)) {
+            continue;
+        }
+        $name = '{closure}';
+        $j = $i + 1;
+        if (qa_token_text($tokens[$j] ?? '') === '&') {
+            $j++;
+        }
+        if (is_array($tokens[$j] ?? null) && $tokens[$j][0] === T_STRING) {
+            $name = $class . $tokens[$j][1];
+            $j++;
+        }
+        if (qa_token_text($tokens[$j] ?? '') !== '(') {
+            continue;
+        }
+        $depth = 0;
+        $sensitive = false;
+        for (; $j < $n; $j++) {
+            $text = qa_token_text($tokens[$j]);
+            if ($text === '(' || $text === '[' || (is_array($tokens[$j]) && $tokens[$j][0] === T_ATTRIBUTE)) {
+                $depth++;
+            } elseif ($text === ')' || $text === ']') {
+                $depth--;
+                if ($depth === 0) {
+                    break;
+                }
+            } elseif ($depth === 2 && is_array($tokens[$j]) && $tokens[$j][0] === T_NAME_FULLY_QUALIFIED && $tokens[$j][1] === '\\SensitiveParameter') {
+                $sensitive = true;
+            } elseif ($depth === 1 && $text === ',') {
+                $sensitive = false;
+            } elseif ($depth === 1 && is_array($tokens[$j]) && $tokens[$j][0] === T_VARIABLE
+                && preg_match('/pass|senha|secret|segredo|token|pwd|credential|api_?key|chave|cookie|hash/i', $tokens[$j][1]) === 1) {
+                $found[] = [$name, $tokens[$j][1], $sensitive];
+            }
+        }
+    }
+    return $found;
+}
+$secretNotSensitive = [
+    'security.php {closure} $token' => 'publico de aviso (all, n1, ...), nao e segredo',
+    'services/AdCredentialProvider.php RuntimeFileAdCredentialProvider::__construct $passwordPath' => 'caminho do arquivo da senha, nao a senha',
+];
+$secretSites = [];
+$secretMissing = [];
+$secretIterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+foreach ($secretIterator as $file) {
+    $path = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
+    if ($file->getExtension() !== 'php' || preg_match('#^(\.git|frontend|app|vendor|node_modules|_referencias)/|^scripts/qa-#', $path)) {
+        continue;
+    }
+    foreach (qa_secret_parameters((string)file_get_contents($file->getPathname())) as [$function, $parameter, $sensitive]) {
+        $site = "{$path} {$function} {$parameter}";
+        if ($sensitive) {
+            $secretSites[] = $site;
+        } elseif (!isset($secretNotSensitive[$site])) {
+            $secretMissing[] = $site;
+        }
+    }
+}
+sort($secretSites);
+assert_same([], $secretMissing, 'parametro com nome de senha ou segredo sem #[\SensitiveParameter]');
+assert_same([
+    'auth_ldap.php autenticar_ad $password',
+    'auth_ldap.php autenticar_ci_via_ad $password',
+    'classes/Usuario.php Usuario::atualizarSenhaPorUsername $password',
+    'classes/Usuario.php Usuario::autenticar $password',
+    'classes/Usuario.php Usuario::criar $password',
+    'db.php {closure} $pass',
+    'security.php hash_password $password',
+    'security.php verify_csrf_token $token',
+    'security.php verify_password $hash',
+    'security.php verify_password $password',
+    'services/AdCredentialProvider.php EnvAdCredentialProvider::assertCredentialValues $password',
+], $secretSites, 'parametros de senha ou segredo protegidos (ponto novo exige revisao)');
+
+// O varredor enxerga o atributo de verdade: um parametro sem ele, ou com
+// outro atributo, conta como faltando.
+assert_same([['f', '$senha', false], ['f', '$token', true], ['{closure}', '$secret', false]], qa_secret_parameters('<?php function f($senha, #[\SensitiveParameter] $token) {} $g = fn (#[Deprecated] $secret) => 1;'), 'varredor: atributo por parametro');
+
+// Prova pelo efeito: falha real de conexao pela fabrica padrao do db.php
+// (banco inexistente na porta 1, ou sem o driver), com argumentos no trace.
+// A senha (DB_PASS do QA) nao aparece em nenhum quadro, nem no texto do trace.
+$ignoreArgs = ini_get('zend.exception_ignore_args');
+ini_set('zend.exception_ignore_args', '0');
+require_once __DIR__ . '/../db.php';
+$connectionError = null;
+try {
+    db_connect([PDO::ATTR_TIMEOUT => 2], null, ['+00:00']);
+} catch (PDOException $e) {
+    $connectionError = $e;
+}
+ini_set('zend.exception_ignore_args', (string)$ignoreArgs);
+assert_same(true, $connectionError instanceof PDOException && DB_PASS === 'qa-sem-banco', 'db.php: conexao falha no QA, com a senha conhecida do QA');
+$factoryFrames = array_values(array_filter($connectionError->getTrace(), static fn (array $frame): bool => strpos($frame['function'], '{closure') === 0));
+assert_same(true, count($factoryFrames) === 1 && count($factoryFrames[0]['args'] ?? []) === 4, 'db.php: quadro da fabrica padrao no trace, com os argumentos');
+assert_same(true, $factoryFrames[0]['args'][2] instanceof SensitiveParameterValue, 'db.php: senha da fabrica vira SensitiveParameterValue no trace');
+assert_same(false, strpos(var_export(array_column($connectionError->getTrace(), 'args'), true), 'qa-sem-banco') !== false || strpos($connectionError->getTraceAsString(), 'qa-sem') !== false, 'db.php: senha fora dos argumentos e do texto do trace');
+
 echo "qa-security OK\n";
