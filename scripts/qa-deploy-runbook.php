@@ -1179,7 +1179,16 @@ $check5 = $first5('git merge-base --is-ancestor HEAD "$D5"');
 $fetch5 = array_keys(array_filter($commands5, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
 assert_same(true, $prod5 === 1 && strpos($prose5, '**Pre-requisito: producao no `f0844fd`**') !== false, 'deploy 5: producao no f0844fd (o commit do deploy 4), gravado como ponto de volta');
 assert_same([[$record5], 0, 2, 3], [$fetch5, preg_match('/\bgit pull\b|(^|\s)(--force|-f)(\s|$)/m', $text5), $record5, $check5], 'deploy 5: um fetch so, sem pull nem --force; gravar e conferir logo depois');
-assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin feat\/employee-form-rhf-zod && K=\$\(git rev-parse origin\/feat\/employee-form-rhf-zod\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy5-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands5[$record5] ?? ''), 'deploy 5: fetch so do branch e grava so o commit validado na estacao');
+assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin codex\/modernizacao-ui-backend && K=\$\(git rev-parse origin\/codex\/modernizacao-ui-backend\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy5-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands5[$record5] ?? ''), 'deploy 5: fetch so do branch codex (o deploy 5 congelado no babcdd9) e grava so o commit validado na estacao');
+// [2026-11-24] O deploy 5 fica congelado no babcdd9, publicado no codex: o
+// item 0 e o fetch leem o codex; a 027 (Escala do Critico) vai no deploy 6.
+assert_same([true, 0, 0], [
+    strpos($runbook5, "O deploy 5 fica congelado no `babcdd9`
+   (decisao do responsavel, 2026-11-24), publicado em
+   `codex/modernizacao-ui-backend`.") !== false && strpos($runbook5, 'git worktree add --detach ..\chronodesk-deploy5 origin/codex/modernizacao-ui-backend;') !== false,
+    preg_match('/_027_|critical_grid|Escala do Critico/', $runbook5),
+    substr_count($runbook5, 'feat/employee-form-rhf-zod'),
+], 'deploy 5: congelado no babcdd9, lendo o codex; sem a 027 nem a Escala do Critico (vao no deploy 6)');
 $migrationFiles5 = [];
 foreach (['', 'rollback/', 'verificacao/'] as $dir) {
     foreach (array_merge(glob($root . '/migrations/' . $dir . '*_022_*.sql') ?: [], glob($root . '/migrations/' . $dir . '*_026_*.sql') ?: []) as $path) {

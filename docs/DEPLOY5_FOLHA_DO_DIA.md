@@ -14,7 +14,7 @@ Gerada do roteiro "Deploy 5 (F10-3: inventario de PA completo, reservados do Cri
 
 ## 0. Antes do dia, na estacao
 
-- [ ] **0.** O responsavel publica o `feat/employee-form-rhf-zod`. Depois, a bateria completa sozinha (nada pesado em paralelo): `git fetch origin; git worktree add --detach ..\chronodesk-deploy5 origin/feat/employee-form-rhf-zod; Set-Location ..\chronodesk-deploy5\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`. Esperado: `Validacao local concluida com sucesso`, `frontend: 30 scripts npm rodados (...): 30 OK, 0 com falha`, navegador com `falharam: 0` e o hash completo: anote como `<commit validado na estacao>`. Qualquer falha: nao ha deploy com esse commit.
+- [ ] **0.** O deploy 5 fica congelado no `babcdd9`, publicado em `codex/modernizacao-ui-backend`. A bateria completa sozinha (nada pesado em paralelo): `git fetch origin; git worktree add --detach ..\chronodesk-deploy5 origin/codex/modernizacao-ui-backend; Set-Location ..\chronodesk-deploy5\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`. Esperado: `Validacao local concluida com sucesso`, `frontend: 30 scripts npm rodados (...): 30 OK, 0 com falha`, navegador com `falharam: 0` e o hash completo: anote como `<commit validado na estacao>`. Qualquer falha: nao ha deploy com esse commit.
 - [ ] **0b.** Na vespera, o aviso a Lideranca e a gestao do roteiro (passo 0b), com a data e a janela preenchidas; sem nome, hostname nem endereco.
 
 ## 1. Conferencia do ambiente (com o umask), producao no f0844fd, commit validado e a lista das migrations
@@ -34,7 +34,7 @@ cd /var/www/chronodesk; install -d -o root -g root -m 700 /var/backups/chronodes
 - [ ] **3.** (1) Esperado: antes, troque `<commit validado na estacao>` (item 0). O hash completo impresso (gravado em `deploy5-commit`). **PARE se:** `PARE: origin/... nao e o commit validado na estacao` ou erro do `fetch`.
 
 ```bash
-cd /var/www/chronodesk; git fetch origin feat/employee-form-rhf-zod && K=$(git rev-parse origin/feat/employee-form-rhf-zod) && if [ "$K" = "<commit validado na estacao>" ]; then echo "$K" | tee /var/backups/chronodesk/deploy5-commit; else echo "PARE: origin/feat/employee-form-rhf-zod ($K) nao e o commit validado na estacao"; fi; unset K
+cd /var/www/chronodesk; git fetch origin codex/modernizacao-ui-backend && K=$(git rev-parse origin/codex/modernizacao-ui-backend) && if [ "$K" = "<commit validado na estacao>" ]; then echo "$K" | tee /var/backups/chronodesk/deploy5-commit; else echo "PARE: origin/codex/modernizacao-ui-backend ($K) nao e o commit validado na estacao"; fi; unset K
 ```
 
 - [ ] **4.** (1) Esperado: `fast-forward OK: <N> commits a aplicar` (anote), `migrations alteradas: exatamente as 8 esperadas (022 e 026)` e `lockfile alterado: 0` (com `1`, anote: o build faz o `npm ci`). **PARE se:** linha `PARE` (sem a 022 ou a 026, HEAD nao ancestral, ou outra lista de migrations).
