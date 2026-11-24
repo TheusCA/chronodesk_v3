@@ -156,6 +156,20 @@ final class OperationalService {
             $parts = PresenceCutoff::split($from, $to, $this->presenceCutoff());
         }
 
+        // [D-ESC-17] Feriado: um evento por data, para todos os perfis (so o
+        // nome do feriado; nenhum dado de pessoa). Sem filtro de status.
+        if ((!$type || $type === 'holiday') && !$status) {
+            foreach ((new PresenceRepository($this->pdo))->holidaysByDate($from, $to) as $date => $holiday) {
+                $events[] = $this->calendarRow('holiday', [
+                    'id' => $holiday['id'],
+                    'title' => PresenceEngine::holidayLabel($holiday),
+                    'starts_at' => $date . ' 00:00:00',
+                    'ends_at' => $date . ' 23:59:59',
+                    'status' => 'holiday',
+                ]);
+            }
+        }
+
         if (!$type || $type === 'manual') {
             $sql = 'SELECT id, title, description, type, starts_at, ends_at, team,
                            related_username, status
@@ -1951,7 +1965,10 @@ final class OperationalService {
         }
         $absenceMap = $this->scheduleBlockingAbsences($from, $to, $team, $employeeId, $withArchived, $withAbsenceCategory);
         $employees = $screenEmployees ?? $this->scheduleScreenEmployees($team, $employeeId, $withArchived);
-        $roleDays = PresenceRepository::criticalRoleDays((new PresenceRepository($this->pdo))->criticalRoleContext($employees, $from, $to), $from, $to);
+        $repository = new PresenceRepository($this->pdo);
+        $roleDays = PresenceRepository::criticalRoleDays($repository->criticalRoleContext($employees, $from, $to), $from, $to);
+        // [D-ESC-17] Feriado: dia sem expediente (sai como o fim de semana).
+        $holidays = $repository->holidaysByDate($from, $to);
         $items = [];
         $end = self::dateValue($to, 'Fim');
         for ($date = self::dateValue($from, 'Inicio'); $date <= $end; $date = $date->modify('+1 day')) {
@@ -1972,7 +1989,7 @@ final class OperationalService {
                 }
                 $employeeRules = $rulesByEmployee[$employee['id']] ?? [];
                 $role = $roleDays[$key] ?? null;
-                $presence = PresenceEngine::dayPresence(PresenceRepository::shiftFor($employee, $dateKey, $role), $dateKey, $employeeRules, $exception, $absences);
+                $presence = PresenceEngine::dayPresence(PresenceRepository::shiftFor($employee, $dateKey, $role, $holidays[$dateKey] ?? null), $dateKey, $employeeRules, $exception, $absences);
                 if ($presence['escala']['situacao'] === 'dia_nao_util') {
                     continue;
                 }
@@ -2122,7 +2139,8 @@ final class OperationalService {
               + ($category === null ? [] : ['categoria' => self::absenceCategoryLabel($category)])
               + (isset($row['papel']) ? ['papel' => $row['papel']] : []);
         }
-        return ['days' => $days, 'employees' => $employees];
+        // [D-ESC-17] Os feriados do periodo: o Mapa PA mostra o motivo do dia sem situacao.
+        return ['days' => $days, 'employees' => $employees, 'holidays' => (new PresenceRepository($this->pdo))->holidaysByDate($from, $to)];
     }
 
     /**
@@ -2637,6 +2655,8 @@ final class OperationalService {
             'ausencia_justificada' => 'Ausência justificada',
             'compromisso' => 'Compromisso',
             'outro' => 'Outro',
+            // [D-ESC-18] Migration 027.
+            'banco_horas' => 'Banco de horas',
             default => 'Ausência',
         };
     }

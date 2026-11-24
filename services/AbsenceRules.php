@@ -20,6 +20,8 @@ final class AbsenceRules {
         'ausencia_justificada' => 'Ausência justificada',
         'compromisso' => 'Compromisso',
         'outro' => 'Outro',
+        // [D-ESC-18] Migration 027.
+        'banco_horas' => 'Banco de horas',
     ];
     public const PERIOD_TYPES = ['full_day', 'from_time', 'interval'];
     public const MAX_DAYS = 366;

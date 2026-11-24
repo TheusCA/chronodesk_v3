@@ -29,6 +29,8 @@ final class CriticalRolePlanner {
     public const PERIODS = ['week', 'month'];
     public const PRESENCE_TYPES = ['onsite', 'remote'];
     public const REASONS = ['troca', 'cobertura', 'outro'];
+    /** [D-ESC-13] Paleta fechada da cor do papel (a mesma CHECK da 027); nulo = areia na tela. */
+    public const COLORS = ['azul', 'verde', 'pessego', 'lilas', 'amarelo', 'turquesa', 'cinza', 'areia'];
     public const MAX_ITEMS = 20;
     public const MAX_OVERRIDE_DAYS = 31;
     public const PREVIEW_WEEKS = 8;
@@ -122,9 +124,11 @@ final class CriticalRolePlanner {
     }
 
     /**
-     * Papeis vagos na data (AD-PC-2): do rodizio vigente, os papeis sem pessoa
+     * Papeis vagos na data (AD-PC-2): do rodizio vigente, as vagas sem pessoa
      * na posicao ou com pessoa fora de $activeEmployeeIds (arquivada ou que
-     * saiu do Critico), menos os cobertos por troca pontual. Dia nao util: [].
+     * saiu do Critico), menos as cobertas por troca pontual. [D-ESC-15] Com o
+     * mesmo papel em mais de uma vaga, a conta e por vaga: o papel aparece uma
+     * vez para cada vaga sem ninguem. Dia nao util: [].
      */
     public static function vacantRoleIds(array $rotations, array $overrides, string $date, array $activeEmployeeIds): array {
         if (!PresenceEngine::isBusinessDay($date)) {
@@ -135,26 +139,27 @@ final class CriticalRolePlanner {
             return [];
         }
         $active = array_flip(array_map('intval', $activeEmployeeIds));
-        $covered = [];
+        $filled = [];
         foreach ($activeEmployeeIds as $employeeId) {
             $role = self::overrideAt($overrides, (int)$employeeId, $date);
             if ($role !== null) {
-                $covered[(int)$role['role_id']] = true;
+                $filled[(int)$role['role_id']] = ($filled[(int)$role['role_id']] ?? 0) + 1;
             }
         }
-        $holders = [];
         foreach (array_map('intval', $rotation['employees']) as $employeeId) {
             $override = self::overrideAt($overrides, $employeeId, $date);
             $roleId = self::rotationRoleId($rotation, $employeeId, $date);
             if ($roleId !== null && isset($active[$employeeId]) && $override === null) {
-                $holders[$roleId] = true;
+                $filled[$roleId] = ($filled[$roleId] ?? 0) + 1;
             }
         }
         $vacant = [];
         foreach (array_map('intval', $rotation['roles']) as $roleId) {
-            if (!isset($holders[$roleId]) && !isset($covered[$roleId])) {
-                $vacant[] = $roleId;
+            if (($filled[$roleId] ?? 0) > 0) {
+                $filled[$roleId]--;
+                continue;
             }
+            $vacant[] = $roleId;
         }
         return $vacant;
     }
@@ -189,18 +194,38 @@ final class CriticalRolePlanner {
 
     /** Lista de IDs (1 a 20, inteiros >= 1, sem repeticao) ou null. */
     public static function idList(mixed $value): ?array {
+        return self::ids($value, false);
+    }
+
+    /**
+     * [D-ESC-15] Vagas do rodizio: 1 a 20 IDs de papel, inteiros >= 1, o mesmo
+     * papel pode repetir (Presencial x2). Ou null.
+     */
+    public static function slotList(mixed $value): ?array {
+        return self::ids($value, true);
+    }
+
+    private static function ids(mixed $value, bool $repeat): ?array {
         if (!is_array($value) || !array_is_list($value) || $value === [] || count($value) > self::MAX_ITEMS) {
             return null;
         }
         $ids = [];
         foreach ($value as $item) {
             $id = is_int($item) || (is_string($item) && ctype_digit($item)) ? (int)$item : 0;
-            if ($id < 1 || in_array($id, $ids, true)) {
+            if ($id < 1 || (!$repeat && in_array($id, $ids, true))) {
                 return null;
             }
             $ids[] = $id;
         }
         return $ids;
+    }
+
+    /** [D-ESC-13] Cor valida da paleta, ou null (sem cor). Outro valor: false. */
+    public static function colorToken(mixed $value): string|false|null {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        return is_string($value) && in_array($value, self::COLORS, true) ? $value : false;
     }
 
     /** Linhas do banco no formato das funcoes acima (horas em HH:MM, listas de IDs). */
@@ -213,6 +238,8 @@ final class CriticalRolePlanner {
             'work_end' => substr((string)$row['work_end'], 0, 5),
             'active' => (int)$row['active'] === 1,
             'sort_order' => (int)$row['sort_order'],
+            // [D-ESC-13] Cor da paleta (027); sem a coluna ou nula, null.
+            'color_token' => isset($row['color_token']) && in_array($row['color_token'], self::COLORS, true) ? (string)$row['color_token'] : null,
         ];
     }
 

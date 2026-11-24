@@ -368,7 +368,7 @@ foreach ([1, 50] as $size) {
         $allSql .= implode("\n", $pdo->statements) . "\n";
     }
 }
-assert_same([4, 4, 4, 4], $counts, 'N+1: 4 consultas para 1 e 50 cadastros, no resumo e na lista');
+assert_same([5, 5, 5, 5], $counts, 'N+1: 5 consultas (as 4 de sempre e os feriados, D-ESC-17) para 1 e 50 cadastros, no resumo e na lista');
 assert_same(0, preg_match('/presence_cutoff|cutoff_date|NOW\(\)|CURRENT_DATE|CURDATE|CURRENT_TIMESTAMP/i', $allSql), 'consultas: sem a data de corte (DV3) e sem relogio do banco');
 assert_same(0, preg_match('/\bnote\b|\breason\b|SELECT \*/i', $allSql), 'consultas: sem observacao nem SELECT *');
 

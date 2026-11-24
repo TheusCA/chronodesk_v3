@@ -151,7 +151,7 @@ assert_same([40, '2026-11-16', '2027-01-08', ['11' => 1, '12' => 3], [4]], [coun
 assert_same([true, false, false, false, false], [CriticalRolePlanner::validShift('07:00', '17:00'), CriticalRolePlanner::validShift('17:00', '07:00'), CriticalRolePlanner::validShift('08:00', '08:00'), CriticalRolePlanner::validShift('24:00', '25:00'), CriticalRolePlanner::validShift('7:00', '17:00')], 'jornada do papel: HH:MM, inicio antes do fim, sem cruzar a meia-noite');
 assert_same([[3, 1], null, null, null, null, [5]], [CriticalRolePlanner::idList([3, '1']), CriticalRolePlanner::idList([1, 1]), CriticalRolePlanner::idList([]), CriticalRolePlanner::idList(range(1, 21)), CriticalRolePlanner::idList([0]), CriticalRolePlanner::idList(['5'])], 'listas do rodizio: 1 a 20 IDs positivos, sem repetir');
 assert_same(['Abertura home 07:00–17:00', 'X 06:30–16:30'], [CriticalRolePlanner::label($roles[3]), CriticalRolePlanner::label(['name' => 'X', 'work_start' => '06:30:00', 'work_end' => '16:30:00'])], 'rotulo do papel: nome e jornada em HH:MM (tambem a hora do banco)');
-assert_same(['id' => 9, 'name' => 'X', 'presence_type' => 'remote', 'work_start' => '07:00', 'work_end' => '17:00', 'active' => true, 'sort_order' => 2], CriticalRolePlanner::roleView(['id' => '9', 'name' => 'X', 'presence_type' => 'remote', 'work_start' => '07:00:00', 'work_end' => '17:00:00', 'active' => '1', 'sort_order' => '2']), 'linha do papel: horas em HH:MM e tipos');
+assert_same(['id' => 9, 'name' => 'X', 'presence_type' => 'remote', 'work_start' => '07:00', 'work_end' => '17:00', 'active' => true, 'sort_order' => 2, 'color_token' => null], CriticalRolePlanner::roleView(['id' => '9', 'name' => 'X', 'presence_type' => 'remote', 'work_start' => '07:00:00', 'work_end' => '17:00:00', 'active' => '1', 'sort_order' => '2']), 'linha do papel: horas em HH:MM e tipos (sem a coluna da 027, sem cor)');
 assert_same([3, 1], CriticalRolePlanner::rotationView(['id' => 1, 'effective_from' => '2026-11-16', 'period' => 'week', 'anchor_date' => '2026-11-16', 'roles' => '[3, 1]', 'employees' => '[11]'])['roles'], 'linha do rodizio: listas lidas do JSON, na ordem');
 
 // ----------------------------------------------------------------------------
@@ -305,8 +305,8 @@ final class QaRolesStatement extends PDOStatement {
             case $sql === 'INSERT INTO audit_log (user_ip, username, action, details, severity) VALUES (?, ?, ?, ?, ?)':
                 $db->audits[] = ['action' => $p[2], 'details' => $p[3]];
                 return;
-            case $sql === 'SELECT id, name, presence_type, work_start, work_end, active, sort_order FROM portal_critical_roles ORDER BY sort_order, id':
-            case $sql === 'SELECT id, name, presence_type, work_start, work_end, active, sort_order FROM portal_critical_roles ORDER BY sort_order, id FOR UPDATE':
+            case $sql === 'SELECT id, name, presence_type, work_start, work_end, active, sort_order, color_token FROM portal_critical_roles ORDER BY sort_order, id':
+            case $sql === 'SELECT id, name, presence_type, work_start, work_end, active, sort_order, color_token FROM portal_critical_roles ORDER BY sort_order, id FOR UPDATE':
                 $this->rows = $sorted($db->roles, static fn (array $r): array => [$r['sort_order'], $r['id']]);
                 return;
             case $sql === 'SELECT id, effective_from, period, anchor_date, roles, employees FROM portal_critical_role_rotations ORDER BY effective_from':
@@ -350,11 +350,11 @@ final class QaRolesStatement extends PDOStatement {
                 $this->rows = [['n' => count(array_filter($db->roles, static fn (array $r): bool => $r['active'] === 1 && $r['id'] !== (int)$p[':id']))]];
                 return;
             case str_starts_with($sql, 'INSERT INTO portal_critical_roles '):
-                $db->roles[$db->nextId] = ['id' => $db->nextId, 'name' => $p[':name'], 'presence_type' => $p[':presence_type'], 'work_start' => $p[':work_start'], 'work_end' => $p[':work_end'], 'active' => $p[':active'], 'sort_order' => $p[':sort_order']];
+                $db->roles[$db->nextId] = ['id' => $db->nextId, 'name' => $p[':name'], 'presence_type' => $p[':presence_type'], 'work_start' => $p[':work_start'], 'work_end' => $p[':work_end'], 'active' => $p[':active'], 'sort_order' => $p[':sort_order'], 'color_token' => $p[':color_token'] ?? null];
                 $db->nextId++;
                 return;
             case str_starts_with($sql, 'UPDATE portal_critical_roles SET '):
-                $db->roles[(int)$p[':id']] = ['name' => $p[':name'], 'presence_type' => $p[':presence_type'], 'work_start' => $p[':work_start'], 'work_end' => $p[':work_end'], 'active' => $p[':active'], 'sort_order' => $p[':sort_order']] + $db->roles[(int)$p[':id']];
+                $db->roles[(int)$p[':id']] = ['name' => $p[':name'], 'presence_type' => $p[':presence_type'], 'work_start' => $p[':work_start'], 'work_end' => $p[':work_end'], 'active' => $p[':active'], 'sort_order' => $p[':sort_order']] + (array_key_exists(':color_token', $p) ? ['color_token' => $p[':color_token']] : []) + $db->roles[(int)$p[':id']];
                 return;
             case $sql === 'SELECT id FROM portal_critical_role_rotations WHERE effective_from = :effective_from FOR UPDATE':
                 foreach ($db->rotations as $r) {
@@ -508,6 +508,20 @@ foreach ([1, 2, 3] as $id) {
     $pdo->roles[$id]['active'] = 1;
 }
 assert_same('400: Papel inválido.', $save(['role_id' => 'x', 'name' => 'W']), 'papel: id invalido 400');
+// [D-ESC-13] Cor do papel: paleta fechada; ausente na edicao mantem a gravada; vazia limpa.
+assert_same('ok', $save(['name' => 'Cor nova', 'color_token' => 'turquesa']), 'cor: papel novo com cor da paleta');
+$colored = end($pdo->roles);
+assert_same('turquesa', $colored['color_token'], 'cor: gravada');
+assert_same('400: Cor do papel: escolha uma da paleta.', $save(['name' => 'Cor hex', 'color_token' => '#ff0000']), 'cor: hex fora da paleta 400');
+assert_same('400: Cor do papel: escolha uma da paleta.', $save(['name' => 'Cor roxa', 'color_token' => 'roxo']), 'cor: nome fora da paleta 400');
+assert_same('ok', $save(['role_id' => $colored['id'], 'name' => 'Cor nova']), 'cor: editar sem a cor');
+assert_same('turquesa', $pdo->roles[$colored['id']]['color_token'], 'cor: ausente na edicao mantem a gravada (9.12.1)');
+assert_same('ok', $save(['role_id' => $colored['id'], 'name' => 'Cor nova', 'color_token' => '']), 'cor: vazia limpa');
+assert_same(null, $pdo->roles[$colored['id']]['color_token'], 'cor: limpa (a tela mostra areia)');
+assert_same(['azul', null, false, false, 'areia'], [CriticalRolePlanner::colorToken('azul'), CriticalRolePlanner::colorToken(null), CriticalRolePlanner::colorToken('AZUL'), CriticalRolePlanner::colorToken(7), CriticalRolePlanner::colorToken('areia')], 'cor: so as 8 da paleta, em minusculas');
+assert_same('lilas', CriticalRolePlanner::roleView(['id' => 1, 'name' => 'H', 'presence_type' => 'remote', 'work_start' => '07:00:00', 'work_end' => '17:00:00', 'active' => 1, 'sort_order' => 1, 'color_token' => 'lilas'])['color_token'], 'cor: lida na linha do papel');
+assert_same(null, CriticalRolePlanner::roleView(['id' => 1, 'name' => 'H', 'presence_type' => 'remote', 'work_start' => '07:00:00', 'work_end' => '17:00:00', 'active' => 1, 'sort_order' => 1, 'color_token' => '#123456'])['color_token'], 'cor: valor fora da paleta no banco vira sem cor');
+$pdo->roles[$colored['id']]['active'] = 0;
 
 // Rodizio: validacoes, previa e gravacao.
 $rotation = ['effective_from' => '2026-11-23', 'period' => 'week', 'anchor_date' => '2026-11-23', 'roles' => [1, 3, 4], 'employees' => [11, 12, 13]];
@@ -516,13 +530,19 @@ assert_same('400: Âncora do rodízio semanal: uma segunda-feira.', $try(['ancho
 assert_same('400: Âncora do rodízio mensal: o dia 1 do mês.', $try(['period' => 'month', 'anchor_date' => '2026-11-23']), 'rodizio: ancora mensal fora do dia 1 400');
 assert_same('400: Período do rodízio: semana ou mês.', $try(['period' => 'dia']), 'rodizio: periodo fora da lista 400');
 assert_same('400: Pessoas do rodízio: de 1 a 20, sem repetir.', $try(['employees' => [11, 11]]), 'rodizio: pessoa repetida 400');
-assert_same('400: Papéis do rodízio: de 1 a 20, sem repetir.', $try(['roles' => []]), 'rodizio: sem papel 400');
+assert_same('400: Vagas do rodízio: de 1 a 20 (o mesmo papel pode repetir).', $try(['roles' => []]), 'rodizio: sem papel 400 (D-ESC-15: vagas)');
 assert_same('409: 1 papel(is) do rodízio inexistente(s) ou desativado(s): revise a lista.', $try(['roles' => [1, 5]]), 'rodizio: papel desativado 409');
 assert_same('409: 2 pessoa(s) do rodízio arquivada(s) ou fora do Crítico: revise a lista.', $try(['employees' => [11, 15, 21]]), 'rodizio: arquivado e N1 409 com a contagem (9.16.4)');
 $preview = $service->previewRotation(['employees' => [11, 12, 16]] + $rotation, 'lideranca');
 assert_same([false, false, 0, 0, 40, ['11' => 1, '12' => 3, '16' => 4]], [$preview['replaces'], $preview['retroactive'], $preview['extra_people'], $preview['vacant_roles'], count($preview['preview']), $preview['preview'][0]['roles']], 'rodizio: previa de 8 semanas; Critico com acento entra');
 assert_same([[], []], [$pdo->rotations, array_filter($pdo->audits, static fn (array $a): bool => str_starts_with($a['action'], 'RODIZIO'))], 'rodizio: a previa nao grava');
 assert_same([1, 2], [$service->previewRotation(['employees' => [11, 12, 13, 14]] + $rotation, 'lideranca')['extra_people'], $service->previewRotation(['employees' => [11]] + $rotation, 'lideranca')['vacant_roles']], 'rodizio: a previa conta pessoa a mais e papel vago (AD-PC-2)');
+// [D-ESC-15] Vagas: o mesmo papel em mais de uma vaga (Presencial x2); pessoas continuam sem repetir.
+assert_same([[1, 1, 3], null, [2]], [CriticalRolePlanner::slotList([1, '1', 3]), CriticalRolePlanner::slotList([1, 0]), CriticalRolePlanner::slotList(['2'])], 'vagas: o papel pode repetir; IDs positivos');
+assert_same([null, null], [CriticalRolePlanner::slotList(array_fill(0, 21, 1)), CriticalRolePlanner::idList([1, 1])], 'vagas: ate 20; as pessoas (idList) continuam sem repetir');
+$slots = $service->previewRotation(['roles' => [1, 1, 3, 4], 'employees' => [11, 12, 13, 16]] + $rotation, 'lideranca');
+assert_same([0, 0, ['11' => 1, '12' => 1, '13' => 3, '16' => 4]], [$slots['extra_people'], $slots['vacant_roles'], $slots['preview'][0]['roles']], 'vagas: previa com Presencial x2, sem pessoa a mais nem vaga sem pessoa');
+assert_same('409: 1 papel(is) do rodízio inexistente(s) ou desativado(s): revise a lista.', $try(['roles' => [5, 5, 1]]), 'vagas: papel desativado conta uma vez, mesmo repetido');
 assert_same('ok', $try([]), 'rodizio: Lideranca salva');
 $saved = end($pdo->rotations);
 assert_same(['2026-11-23', 'week', '[1,3,4]', '[11,12,13]'], [$saved['effective_from'], $saved['period'], $saved['roles'], $saved['employees']], 'rodizio: versao gravada com as listas na ordem');

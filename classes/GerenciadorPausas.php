@@ -812,14 +812,15 @@ class GerenciadorPausas {
         $membros = array_filter($this->funcionarios, static fn ($f): bool => ($f->ativo ?? true) && PortalTeams::normalize($f->equipe) === $equipe);
         $dia = $agora->format('Y-m-d');
         $hora = $agora->format('H:i');
-        [$excecoes, $ausencias, $papeis] = $this->leituras_do_dia($membros, $dia);
+        [$excecoes, $ausencias, $papeis, $feriado] = $this->leituras_do_dia($membros, $dia);
         $situacao = [];
         foreach ($membros as $f) {
             $id = (int)$f->id;
             $excecao = $excecoes[$id . ':' . $dia] ?? null;
             $jornada = PresenceRepository::shiftFor(['id' => $id, 'work_start' => $f->jornada_entrada, 'work_end' => $f->jornada_saida], $dia, $papeis[$id . ':' . $dia] ?? null);
             $situacao[$id] = [
-                'in_shift' => PresenceEngine::hasShiftOn($dia, $excecao) && PauseRules::inShift($jornada['work_start'], $jornada['work_end'], $hora),
+                // [D-ESC-17] Feriado: ninguem no turno (nao conta no "1 disponivel").
+                'in_shift' => PresenceEngine::hasShiftOn($dia, $excecao, $feriado) && PauseRules::inShift($jornada['work_start'], $jornada['work_end'], $hora),
                 'paused' => $f->em_pausa === true,
                 'absent' => self::ausente_agora($jornada, $agora, $excecao, $ausencias[$id] ?? []),
             ];
@@ -836,21 +837,29 @@ class GerenciadorPausas {
      */
     private function leituras_do_dia(array $membros, string $dia): array {
         if ($membros === []) {
-            return [[], [], []];
+            return [[], [], [], null];
         }
         if (!$this->pdo) {
             error_log('[PAUSA] Excecoes e ausencias indisponiveis (sem banco) para a regra de disponibilidade.');
-            return [[], [], []];
+            return [[], [], [], null];
         }
         try {
             $repositorio = new PresenceRepository($this->pdo);
             $cadastros = array_map(static fn ($f): array => ['id' => (int)$f->id, 'team' => PortalTeams::normalize($f->equipe)], array_values($membros));
             $papeis = PresenceRepository::criticalRoleDays($repositorio->criticalRoleContext($cadastros, $dia, $dia), $dia, $dia);
-            return [$repositorio->exceptionsByDay($dia, $dia), $repositorio->absencesByEmployee($dia, $dia), $papeis];
+            $lidas = [$repositorio->exceptionsByDay($dia, $dia), $repositorio->absencesByEmployee($dia, $dia), $papeis];
         } catch (Throwable $e) {
             error_log('[PAUSA] Excecoes e ausencias indisponiveis para a regra de disponibilidade: ' . get_class($e));
-            return [[], [], []];
+            return [[], [], [], null];
         }
+        // [D-ESC-17] O feriado a parte: falha nele nao derruba as outras leituras.
+        try {
+            $lidas[] = $repositorio->holidaysByDate($dia, $dia)[$dia] ?? null;
+        } catch (Throwable $e) {
+            error_log('[PAUSA] Feriados indisponiveis para a regra de disponibilidade: ' . get_class($e));
+            $lidas[] = null;
+        }
+        return $lidas;
     }
 
     /**

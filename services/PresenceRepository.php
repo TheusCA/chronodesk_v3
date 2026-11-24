@@ -60,13 +60,37 @@ final class PresenceRepository {
      * dia, a do cadastro; [9.16] com papel do Critico (troca pontual ou
      * rodizio, de criticalRoleDays), a jornada do papel e o papel, que o motor
      * le como a escala do dia (origem 'papel'). Funcao pura sobre o cadastro
-     * carregado.
+     * carregado. [D-ESC-17] Com $holiday (do holidaysByDate), o motor le o dia
+     * como feriado (dia sem expediente), na frente do papel e da regra.
      */
-    public static function shiftFor(array $employee, string $date, ?array $role = null): array {
+    public static function shiftFor(array $employee, string $date, ?array $role = null, ?array $holiday = null): array {
+        if ($holiday !== null) {
+            $employee = ['holiday' => $holiday] + $employee;
+        }
         if ($role === null) {
             return $employee;
         }
         return ['work_start' => $role['work_start'], 'work_end' => $role['work_end'], 'critical_role' => $role] + $employee;
+    }
+
+    /**
+     * [D-ESC-16, D-ESC-17] Feriados de [de, ate] por data (uma consulta): data
+     * => ['id', 'name']. Sem a tabela (antes da 027) ou com falha de leitura:
+     * nenhum feriado, com log (o motor segue como antes).
+     */
+    public function holidaysByDate(string $from, string $to): array {
+        try {
+            $stmt = $this->pdo->prepare('SELECT id, holiday_date, name FROM portal_holidays WHERE holiday_date BETWEEN :date_from AND :date_to ORDER BY holiday_date');
+            $stmt->execute([':date_from' => $from, ':date_to' => $to]);
+            $holidays = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $holidays[(string)$row['holiday_date']] = ['id' => (int)$row['id'], 'name' => (string)$row['name']];
+            }
+            return $holidays;
+        } catch (PDOException $e) {
+            error_log('[PRESENCA] Feriados indisponiveis; dias pelo calendario de sempre: ' . get_class($e));
+            return [];
+        }
     }
 
     /**
@@ -87,7 +111,7 @@ final class PresenceRepository {
         }
         try {
             $roles = [];
-            foreach ($this->pdo->query('SELECT id, name, presence_type, work_start, work_end, active, sort_order FROM portal_critical_roles ORDER BY sort_order, id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            foreach ($this->pdo->query('SELECT id, name, presence_type, work_start, work_end, active, sort_order, color_token FROM portal_critical_roles ORDER BY sort_order, id')->fetchAll(PDO::FETCH_ASSOC) as $row) {
                 $roles[(int)$row['id']] = CriticalRolePlanner::roleView($row);
             }
             $stmt = $this->pdo->prepare('SELECT id, effective_from, period, anchor_date, roles, employees FROM portal_critical_role_rotations WHERE effective_from <= :date_to ORDER BY effective_from');

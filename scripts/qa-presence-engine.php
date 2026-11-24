@@ -364,10 +364,10 @@ foreach ([[1, '2026-10-05'], [50, '2026-10-05'], [50, '2027-01-05']] as [$size, 
     $counts[] = count($pdo->statements);
     assert_same($size * ((new DateTimeImmutable('2026-10-05'))->diff(new DateTimeImmutable($to))->days + 1), count($result['days']), "periodo: uma linha por colaborador e dia ({$size}, ate {$to})");
 }
-assert_same([4, 4, 4], $counts, 'N+1: 4 comandos para 1 e 50 colaboradores e para 1 e 93 dias');
+assert_same([5, 5, 5], $counts, 'N+1: 5 comandos (os 4 de sempre e os feriados, D-ESC-17) para 1 e 50 colaboradores e para 1 e 93 dias');
 $pdo = presence_db(50);
 (new PresenceService($pdo))->attachToStatus(['n1' => [], 'n2' => []], at('2026-10-05 10:00'));
-assert_same(4, count($pdo->statements), 'status.php: 4 comandos a mais por requisicao');
+assert_same(5, count($pdo->statements), 'status.php: 5 comandos a mais por requisicao (com os feriados, D-ESC-17)');
 $allSql = implode("\n", $pdo->statements);
 assert_same(0, preg_match('/NOW\(\)|CURRENT_DATE|CURDATE|CURRENT_TIMESTAMP/i', $allSql), 'repositorio: sem relogio do banco');
 assert_same(0, preg_match('/\bnote\b|\breason\b|\babsence_type\b|SELECT \*/i', $allSql), 'repositorio: sem observacao, motivo, categoria nem SELECT *');
@@ -538,7 +538,7 @@ assert_same('Presencial (sempre presencial) · Ausente a partir de 14:00', $atta
 $pdo = presence_db(50);
 (new PresenceService($pdo))->period(['from' => '2026-10-05'], at('2026-10-05 10:00'), [], ['role' => 'admin']);
 $absenceSql = implode("\n", array_filter($pdo->statements, static fn (string $sql): bool => strpos($sql, 'portal_absences') !== false));
-assert_same([4, true, 0], [count($pdo->statements), strpos($absenceSql, 'ORDER BY id') !== false, preg_match('/\bnote\b|\breason\b/i', $absenceSql)], 'repositorio: ainda 4 comandos; ausencias por id, sem observacao');
+assert_same([5, true, 0], [count($pdo->statements), strpos($absenceSql, 'ORDER BY id') !== false, preg_match('/\bnote\b|\breason\b/i', $absenceSql)], 'repositorio: 5 comandos (os 4 de sempre e os feriados, D-ESC-17); ausencias por id, sem observacao');
 $presenceSource = (string)file_get_contents(__DIR__ . '/../api/portal/presence.php');
 assert_same(true, strpos($presenceSource, '$viewer = portal_actor(require_portal_auth());') !== false && strpos($presenceSource, ", \$viewer));") !== false, 'presence.php: passa quem consulta (P9)');
 

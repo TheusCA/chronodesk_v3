@@ -953,6 +953,8 @@ function portal_permissions_for_role(?string $role): array {
         // [9.17] Controle de CHG: escrever. Quem esta no grupo Tools tambem
         // escreve (por pessoa: ChgAccess::canManage), menos o somente leitura.
         'chg.manage',
+        // [D-ESC-16] Feriados (027): cadastrar, alterar e remover.
+        'feriados.manage',
     ]);
     $permissions = [
         'admin' => array_merge($lideranca, [

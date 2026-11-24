@@ -944,7 +944,8 @@ final class PaMapService {
      * vigente (nao a copia gravada), ausencia do F3 e da excecao antiga,
      * parcial e categoria pela P9. Sem dia no motor, presence = null e o
      * motivo (DF6): 'inativo' (inativo antigo, fora do motor), 'arquivado'
-     * (data do arquivamento ou depois), 'fim_de_semana' ou 'sem_situacao'.
+     * (data do arquivamento ou depois), 'fim_de_semana', 'feriado' (D-ESC-17)
+     * ou 'sem_situacao'.
      * Os campos de antes (schedule_rule_type e label, active_on_date,
      * presence_status) continuam, calculados pelo motor; a copia
      * (schedule_rule_config) sai da resposta.
@@ -961,6 +962,8 @@ final class PaMapService {
                 !array_key_exists($employeeId, $presence['employees']) => 'inativo',
                 $archivedOn !== null && $date >= $archivedOn => 'arquivado',
                 !PresenceEngine::isBusinessDay($date) => 'fim_de_semana',
+                // [D-ESC-17] Feriado: dia sem expediente para todos.
+                isset($presence['holidays'][$date]) => 'feriado',
                 default => 'sem_situacao',
             };
         }

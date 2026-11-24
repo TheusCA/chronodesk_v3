@@ -74,6 +74,7 @@ final class PresenceService {
         $exceptions = $this->repository->exceptionsByDay($from, $to, $employeeId);
         $absences = $this->repository->absencesByEmployee($from, $to, $employeeId);
         $roleDays = PresenceRepository::criticalRoleDays($this->repository->criticalRoleContext($employees, $from, $to), $from, $to);
+        $holidays = $this->repository->holidaysByDate($from, $to);
         $seesAllCategories = portal_role_is_manager($viewer['role'] ?? null);
         $viewerEmployeeId = (int)($viewer['employee_id'] ?? 0);
 
@@ -87,7 +88,7 @@ final class PresenceService {
                 $exception = $exceptions[$id . ':' . $dateKey] ?? null;
                 $showCategory = $seesAllCategories || ($viewerEmployeeId > 0 && $viewerEmployeeId === $id);
                 $dayAbsences = self::absencesForDay($dateKey, $exception, $absences[$id] ?? [], $showCategory);
-                $employee = PresenceRepository::shiftFor($employee, $dateKey, $roleDays[$id . ':' . $dateKey] ?? null);
+                $employee = PresenceRepository::shiftFor($employee, $dateKey, $roleDays[$id . ':' . $dateKey] ?? null, $holidays[$dateKey] ?? null);
                 $presence = $dateKey === $today
                     ? PresenceEngine::nowPresence($employee, $now, $rules[$id] ?? [], $exception, $dayAbsences, $pauseState === null ? null : self::pause($pauseState[$id] ?? null))
                     : PresenceEngine::dayPresence($employee, $dateKey, $rules[$id] ?? [], $exception, $dayAbsences);
@@ -124,6 +125,7 @@ final class PresenceService {
         $exceptions = $this->repository->exceptionsByDay($today, $today);
         $absences = $this->repository->absencesByEmployee($today, $today);
         $roleDays = PresenceRepository::criticalRoleDays($this->repository->criticalRoleContext(array_values($employees), $today, $today), $today, $today);
+        $holiday = $this->repository->holidaysByDate($today, $today)[$today] ?? null;
 
         foreach (PortalTeams::WORK_TEAMS as $team) {
             foreach ($status[$team] ?? [] as $index => $item) {
@@ -136,7 +138,7 @@ final class PresenceService {
                 $exception = $exceptions[$id . ':' . $today] ?? null;
                 $start = is_string($item['inicio_pausa'] ?? null) ? date_create_immutable($item['inicio_pausa']) : false;
                 $presence = PresenceEngine::nowPresence(
-                    PresenceRepository::shiftFor($employee, $today, $roleDays[$id . ':' . $today] ?? null),
+                    PresenceRepository::shiftFor($employee, $today, $roleDays[$id . ':' . $today] ?? null, $holiday),
                     $now,
                     $rules[$id] ?? [],
                     $exception,
@@ -185,7 +187,8 @@ final class PresenceService {
         }
         $common = array_merge(...array_map(static fn (string $team): array => $byTeam[$team], PortalTeams::COMMON_GROUP));
         $vacant = [];
-        if ($context !== null) {
+        // [D-ESC-17] Feriado: nenhum papel vago (dia sem expediente).
+        if ($context !== null && ($context['holiday'] ?? null) === null) {
             $today = $now->format('Y-m-d');
             foreach (CriticalRolePlanner::vacantRoleIds($context['rotations'], $context['overrides'], $today, $context['employee_ids']) as $roleId) {
                 if (isset($context['roles'][$roleId])) {
@@ -245,6 +248,10 @@ final class PresenceService {
         $mapped = array_values(array_filter($employees, static fn (array $employee): bool => !$employee['outside_map'] && $employee['team'] !== null));
         $context = $this->repository->criticalRoleContext($mapped, $today, $today);
         $roleDays = PresenceRepository::criticalRoleDays($context, $today, $today);
+        $holiday = $this->repository->holidaysByDate($today, $today)[$today] ?? null;
+        if ($context !== null) {
+            $context['holiday'] = $holiday;
+        }
         $presences = [];
         foreach ($employees as $employee) {
             if ($employee['outside_map'] || $employee['team'] === null) {
@@ -255,7 +262,7 @@ final class PresenceService {
             $presences[$id] = [
                 'team' => $employee['team'],
                 'presence' => PresenceEngine::nowPresence(
-                    PresenceRepository::shiftFor($employee, $today, $roleDays[$id . ':' . $today] ?? null),
+                    PresenceRepository::shiftFor($employee, $today, $roleDays[$id . ':' . $today] ?? null, $holiday),
                     $now,
                     $rules[$id] ?? [],
                     $exception,

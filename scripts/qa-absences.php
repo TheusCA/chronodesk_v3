@@ -388,7 +388,7 @@ assert_same([2], $ids($service->list(['team' => 'n2'], $actor('gestor'))), 'list
 assert_same([4, 1], $ids($service->list(['employee_id' => '1'], $actor('gestor'))), 'lista: gestao filtra colaborador');
 assert_same('texto livre A', $service->list([], $actor('gestor'))['items'][3]['note'], 'lista: gestao ve a observacao (note)');
 assert_same(false, array_key_exists('reason', $service->list([], $actor('gestor'))['items'][0]), 'lista: coluna crua reason fora da resposta');
-assert_same([['value' => 'folga', 'label' => 'Folga'], ['value' => 'ferias', 'label' => 'Férias'], ['value' => 'ausencia_justificada', 'label' => 'Ausência justificada'], ['value' => 'compromisso', 'label' => 'Compromisso'], ['value' => 'outro', 'label' => 'Outro']], $service->list([], $actor('gestor'))['categories'], 'lista: cinco categorias (D4)');
+assert_same([['value' => 'folga', 'label' => 'Folga'], ['value' => 'ferias', 'label' => 'Férias'], ['value' => 'ausencia_justificada', 'label' => 'Ausência justificada'], ['value' => 'compromisso', 'label' => 'Compromisso'], ['value' => 'outro', 'label' => 'Outro'], ['value' => 'banco_horas', 'label' => 'Banco de horas']], $service->list([], $actor('gestor'))['categories'], 'lista: cinco categorias (D4) e o banco de horas (D-ESC-18)');
 foreach (['tecnico', 'somente_leitura'] as $role) {
     $pdo = qa_db();
     $result = qa_service($pdo)->list(['employee_id' => '2', 'status' => 'all'], $actor($role, 1));

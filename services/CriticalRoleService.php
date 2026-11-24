@@ -97,6 +97,12 @@ final class CriticalRoleService {
                 throw new InvalidArgumentException('Ordem do papel: de 0 a 999.');
             }
             $roleId = $this->optionalId($data['role_id'] ?? null, 'Papel');
+            // [D-ESC-13] Cor da paleta; ausente na edicao mantem a gravada (9.12.1).
+            $colorSent = array_key_exists('color_token', $data);
+            $color = CriticalRolePlanner::colorToken($colorSent ? $data['color_token'] : null);
+            if ($color === false) {
+                throw new InvalidArgumentException('Cor do papel: escolha uma da paleta.');
+            }
             $this->assertNameFree($name, $roleId);
             $params = [':name' => $name, ':presence_type' => $presence, ':work_start' => $start . ':00', ':work_end' => $end . ':00', ':active' => $active ? 1 : 0, ':sort_order' => $order, ':updated_by' => $actor];
             if ($roleId === null) {
@@ -104,10 +110,10 @@ final class CriticalRoleService {
                     throw new InvalidArgumentException('Papel novo começa ativo.');
                 }
                 $stmt = $this->pdo->prepare(
-                    'INSERT INTO portal_critical_roles (name, presence_type, work_start, work_end, active, sort_order, created_by, updated_by)
-                     VALUES (:name, :presence_type, :work_start, :work_end, :active, :sort_order, :created_by, :updated_by)'
+                    'INSERT INTO portal_critical_roles (name, presence_type, work_start, work_end, active, sort_order, color_token, created_by, updated_by)
+                     VALUES (:name, :presence_type, :work_start, :work_end, :active, :sort_order, :color_token, :created_by, :updated_by)'
                 );
-                $stmt->execute($params + [':created_by' => $actor]);
+                $stmt->execute($params + [':color_token' => $color, ':created_by' => $actor]);
                 $roleId = (int)$this->pdo->lastInsertId();
                 $this->audit('PAPEL_CRITICO_CRIADO', "papel_id={$roleId}", 'INFO');
                 return ['role_id' => $roleId, 'created' => true];
@@ -118,9 +124,9 @@ final class CriticalRoleService {
             }
             $stmt = $this->pdo->prepare(
                 'UPDATE portal_critical_roles SET name = :name, presence_type = :presence_type, work_start = :work_start,
-                 work_end = :work_end, active = :active, sort_order = :sort_order, updated_by = :updated_by WHERE id = :id'
+                 work_end = :work_end, active = :active, sort_order = :sort_order,' . ($colorSent ? ' color_token = :color_token,' : '') . ' updated_by = :updated_by WHERE id = :id'
             );
-            $stmt->execute($params + [':id' => $roleId]);
+            $stmt->execute($params + [':id' => $roleId] + ($colorSent ? [':color_token' => $color] : []));
             $this->audit('PAPEL_CRITICO_ATUALIZADO', "papel_id={$roleId}; ativo=" . ($active ? 'sim' : 'nao'), 'INFO');
             return ['role_id' => $roleId, 'created' => false];
         });
@@ -272,16 +278,17 @@ final class CriticalRoleService {
         if (!is_string($anchor) || !CriticalRolePlanner::validAnchor($period, $anchor)) {
             throw new InvalidArgumentException($period === 'week' ? 'Âncora do rodízio semanal: uma segunda-feira.' : 'Âncora do rodízio mensal: o dia 1 do mês.');
         }
-        $roleIds = CriticalRolePlanner::idList($data['roles'] ?? null);
+        // [D-ESC-15] Vagas: o mesmo papel pode repetir (Presencial x2).
+        $roleIds = CriticalRolePlanner::slotList($data['roles'] ?? null);
         if ($roleIds === null) {
-            throw new InvalidArgumentException('Papéis do rodízio: de 1 a ' . CriticalRolePlanner::MAX_ITEMS . ', sem repetir.');
+            throw new InvalidArgumentException('Vagas do rodízio: de 1 a ' . CriticalRolePlanner::MAX_ITEMS . ' (o mesmo papel pode repetir).');
         }
         $employeeIds = CriticalRolePlanner::idList($data['employees'] ?? null);
         if ($employeeIds === null) {
             throw new InvalidArgumentException('Pessoas do rodízio: de 1 a ' . CriticalRolePlanner::MAX_ITEMS . ', sem repetir.');
         }
         $roles = $this->roles(true);
-        $missing = count(array_filter($roleIds, static fn (int $id): bool => !isset($roles[$id]) || $roles[$id]['active'] !== true));
+        $missing = count(array_filter(array_unique($roleIds), static fn (int $id): bool => !isset($roles[$id]) || $roles[$id]['active'] !== true));
         if ($missing > 0) {
             throw new DomainException("{$missing} papel(is) do rodízio inexistente(s) ou desativado(s): revise a lista.");
         }
@@ -302,7 +309,7 @@ final class CriticalRoleService {
     /** Papeis por id; com $lock, travados. */
     private function roles(bool $lock = false): array {
         $rows = $this->pdo->query(
-            'SELECT id, name, presence_type, work_start, work_end, active, sort_order FROM portal_critical_roles ORDER BY sort_order, id' . ($lock ? ' FOR UPDATE' : '')
+            'SELECT id, name, presence_type, work_start, work_end, active, sort_order, color_token FROM portal_critical_roles ORDER BY sort_order, id' . ($lock ? ' FOR UPDATE' : '')
         )->fetchAll();
         $roles = [];
         foreach ($rows as $row) {

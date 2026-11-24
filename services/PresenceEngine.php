@@ -56,13 +56,19 @@ final class PresenceEngine {
      * para todos (P3). A Lideranca tem escala implicita presencial (P12).
      *
      * Devolve ['situacao' => 'presencial'|'remoto'|'sem_escala'|'dia_nao_util',
-     *          'fonte' => 'excecao'|'implicita'|'papel'|'regra'|'nenhuma',
+     *          'fonte' => 'excecao'|'feriado'|'implicita'|'papel'|'regra'|'nenhuma',
      *          'rule_type' => ?string, 'rule_label' => string].
      */
     public static function scheduleForDay(array $employee, string $date, array $rules, ?array $exception): array {
         $type = (string)($exception['exception_type'] ?? '');
         if (isset(self::WORK_EXCEPTIONS[$type])) {
             return self::schedule(self::WORK_EXCEPTIONS[$type], 'excecao', null, self::EXCEPTION_LABELS[$type]);
+        }
+        // [D-ESC-17] Feriado: dia sem expediente para todos (como o fim de
+        // semana; exceção de trabalho por data continua valendo, acima).
+        $holiday = $employee['holiday'] ?? null;
+        if (is_array($holiday)) {
+            return self::schedule('dia_nao_util', 'feriado', null, self::holidayLabel($holiday));
         }
         if (!self::isBusinessDay($date)) {
             return self::schedule('dia_nao_util', 'nenhuma', null, 'Fim de semana');
@@ -129,7 +135,7 @@ final class PresenceEngine {
             return self::result('ausente', 'ausencia', 'Ausente (dia todo)', $schedule, $items, false);
         }
         if ($schedule['situacao'] === 'dia_nao_util') {
-            return self::result('fora_expediente', 'expediente', 'Fim de semana', $schedule, $items, false);
+            return self::result('fora_expediente', 'expediente', $schedule['rule_label'], $schedule, $items, false);
         }
         return self::result($schedule['situacao'], 'regra_escala', self::scheduleDetail($schedule) . self::partialMarker($absences, null), $schedule, $items, false);
     }
@@ -173,7 +179,7 @@ final class PresenceEngine {
             }
         }
         if ($schedule['situacao'] === 'dia_nao_util') {
-            return self::result('fora_expediente', 'expediente', 'Fim de semana', $schedule, $items, $inLunch);
+            return self::result('fora_expediente', 'expediente', $schedule['rule_label'], $schedule, $items, $inLunch);
         }
         if ($workStart !== null && $workEnd !== null && ($time < $workStart || $time >= $workEnd)) {
             return self::result('fora_expediente', 'expediente', 'Expediente ' . $workStart . '–' . $workEnd, $schedule, $items, $inLunch);
@@ -260,8 +266,18 @@ final class PresenceEngine {
      * [D-F9-27 revista] Dia com jornada: dia util ou excecao de trabalho por
      * data (o sabado de plantao), como na escala do dia (scheduleForDay).
      */
-    public static function hasShiftOn(string $date, ?array $exception): bool {
-        return isset(self::WORK_EXCEPTIONS[(string)($exception['exception_type'] ?? '')]) || self::isBusinessDay($date);
+    public static function hasShiftOn(string $date, ?array $exception, ?array $holiday = null): bool {
+        if (isset(self::WORK_EXCEPTIONS[(string)($exception['exception_type'] ?? '')])) {
+            return true;
+        }
+        // [D-ESC-17] Feriado: ninguem no turno, salvo excecao de trabalho.
+        return $holiday === null && self::isBusinessDay($date);
+    }
+
+    /** [D-ESC-17] "Feriado: <nome>" (o nome do cadastro de feriados, sem dado de pessoa). */
+    public static function holidayLabel(array $holiday): string {
+        $name = trim((string)($holiday['name'] ?? ''));
+        return $name === '' ? 'Feriado' : 'Feriado: ' . $name;
     }
 
     /** Ciclo valido ou null: pattern de 2 a 20 posicoes onsite/remote e ancora em dia util. */
