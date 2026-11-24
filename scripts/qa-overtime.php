@@ -92,40 +92,17 @@ assert_same(['approved_minutes' => 0, 'pending_minutes' => 0], $totals['by_emplo
 assert_same(['approved_minutes' => 0, 'pending_minutes' => 0], $totals['by_employee'][4], 'status sem gravador fica fora dos totais');
 assert_same(['approved_minutes' => 0, 'pending_minutes' => 0, 'by_employee' => []], OperationalService::overtimeTotals([]), 'sem linhas, totais zerados');
 
-// Totais aceitam um gerador: o CSV percorre o filtro em paginas.
+// Totais aceitam um gerador: os totais do filtro percorrem as linhas em paginas.
 $generator = (static function () use ($rows): Generator {
     yield from $rows;
 })();
 assert_same($totals, OperationalService::overtimeTotals($generator), 'totais iguais a partir de gerador');
 
-// Linha do CSV: colunas e totais do colaborador no filtro inteiro.
-assert_same(
-    ['NC', 'Nome completo', 'Data da realizacao', 'Hora de entrada', 'Hora de saida', 'Descricao', 'Total de Horas', 'Total aprovado', 'Total pendente', 'Status'],
-    OperationalService::OVERTIME_CSV_HEADER,
-    'cabecalho do CSV: sete colunas originais, dois totais e status'
-);
-$csvRow = OperationalService::overtimeCsvRow([
-    'employee_id' => 1, 'employee_name' => 'Colaborador QA', 'work_date' => '2026-10-05',
-    'start_time' => '22:00:00', 'end_time' => '02:00:00', 'reason' => 'Janela de mudanca',
-    'justification' => 'x', 'total_minutes' => 240, 'status' => 'rejected',
-], $totals['by_employee']);
-assert_same(['', 'Colaborador QA', '2026-10-05', '22:00', '02:00', 'Janela de mudanca', '04:00', '02:30', '01:00', 'Rejeitado'], $csvRow, 'linha rejeitada mostra status e nao altera os totais');
-$csvRow = OperationalService::overtimeCsvRow([
-    'employee_id' => 9, 'employee_name' => 'Sem totais', 'work_date' => '2026-10-05',
-    'start_time' => '18:00:00', 'end_time' => '19:00:00', 'reason' => '', 'justification' => 'Justificativa',
-    'total_minutes' => 60, 'status' => 'approved',
-], []);
-assert_same(['', 'Sem totais', '2026-10-05', '18:00', '19:00', 'Justificativa', '01:00', '00:00', '00:00', 'Aprovado'], $csvRow, 'colaborador sem totais sai zerado; descricao cai para a justificativa');
-
-// Status sem gravador aparece pelo nome, nunca em branco.
-foreach (['pending' => 'Pendente', 'synced' => 'Sincronizado', 'sync_error' => 'Erro de sincronizacao', '' => 'Sem status'] as $status => $label) {
-    $csvRow = OperationalService::overtimeCsvRow([
-        'employee_id' => 4, 'employee_name' => 'Status QA', 'work_date' => '2026-10-05',
-        'start_time' => '18:00:00', 'end_time' => '18:15:00', 'reason' => 'x',
-        'justification' => 'x', 'total_minutes' => 15, 'status' => $status,
-    ], $totals['by_employee']);
-    assert_same($label, $csvRow[9], "coluna Status do CSV para \"{$status}\"");
-    assert_same(['00:00', '00:00'], [$csvRow[7], $csvRow[8]], "status \"{$status}\" do colaborador 4 fora dos totais");
+// Status sem gravador aparece pelo nome, nunca em branco (o rotulo segue no
+// CSV de correcao de ponto; o CSV de horas extras saiu no lote NC revisto).
+$statusLabel = new ReflectionMethod(OperationalService::class, 'workflowStatusLabel');
+foreach (['pending' => 'Pendente', 'approved' => 'Aprovado', 'rejected' => 'Rejeitado', 'synced' => 'Sincronizado', 'sync_error' => 'Erro de sincronizacao', '' => 'Sem status'] as $status => $label) {
+    assert_same($label, $statusLabel->invoke(null, $status), "rotulo do status \"{$status}\" no CSV");
 }
 
 // ----------------------------------------------------------------------------
@@ -351,10 +328,11 @@ assert_same(
 );
 
 // Estrutural: nenhuma exportacao volta a usar a lista limitada.
-$overtimeCsv = substr($serviceSource, (int)strpos($serviceSource, 'public function streamOvertimeCsv'), 900);
+$overtimeRhExport = substr($serviceSource, (int)strpos($serviceSource, 'private function overtimeRhSplit'), 900);
 $adjustmentCsv = substr($serviceSource, (int)strpos($serviceSource, 'public function streamTimeAdjustmentsCsv'), 400);
-assert_same(true, strpos($overtimeCsv, 'iterateWorkflowRecords') !== false, 'CSV de horas extras percorre o filtro inteiro');
-assert_same(false, strpos($overtimeCsv, 'listOvertime') !== false, 'CSV de horas extras nao usa a lista da tela');
+assert_same([false, false, false], [strpos($serviceSource, 'streamOvertimeCsv') !== false, strpos($serviceSource, 'OVERTIME_CSV_HEADER') !== false, strpos($serviceSource, 'overtimeCsvRow') !== false], 'o CSV de horas extras saiu do servico (a exportacao e a planilha do RH)');
+assert_same(true, strpos($overtimeRhExport, 'iterateWorkflowRecords') !== false, 'planilha do RH percorre o filtro inteiro');
+assert_same(false, strpos($overtimeRhExport, 'listOvertime') !== false, 'planilha do RH nao usa a lista da tela');
 assert_same(true, strpos($adjustmentCsv, 'iterateWorkflowRecords') !== false, 'CSV de correcao de ponto percorre o filtro inteiro');
 assert_same(false, strpos($adjustmentCsv, 'listTimeAdjustments') !== false, 'CSV de correcao de ponto nao usa a lista da tela');
 $criticalSource = (string)file_get_contents(__DIR__ . '/../services/CriticalIncidentService.php');

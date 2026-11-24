@@ -1243,7 +1243,7 @@ foreach ($csvIterator as $csvFile) {
         $offset = $i;
     }
 }
-assert_same([['fputcsv' => 9, 'fgetcsv' => 5, 'str_getcsv' => 0, 'setCsvControl' => 0], 14, []], [$csvCallsByFunction, $csvCallCount, $csvCallsWithoutEscape], 'CSV fora de scripts/: 9 fputcsv e 5 fgetcsv, todas com o escape \'\\\\\' explicito (PHP 8.4); nenhum str_getcsv nem setCsvControl');
+assert_same([['fputcsv' => 8, 'fgetcsv' => 5, 'str_getcsv' => 0, 'setCsvControl' => 0], 13, []], [$csvCallsByFunction, $csvCallCount, $csvCallsWithoutEscape], 'CSV fora de scripts/: 8 fputcsv (o CSV de horas extras saiu no lote NC revisto) e 5 fgetcsv, todas com o escape \'\\\\\' explicito (PHP 8.4); nenhum str_getcsv nem setCsvControl');
 
 foreach ([
     'services/OperationalService.php',

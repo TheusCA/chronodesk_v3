@@ -278,10 +278,9 @@ assert_same([
     $read([], ['role' => 'tecnico', 'employee_id' => null]),
     $read(['employee_id' => 99], $gestao),
 ], 'leitura do NC para o formulario: tecnico e somente leitura so o proprio (o employee_id do pedido e ignorado); a gestao, qualquer ativo; com a chave');
-$csvRow = OperationalService::overtimeCsvRow(['employee_id' => 11, 'nc' => '913', 'employee_name' => 'Ficticio', 'work_date' => '2026-11-20', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'reason' => 'qa', 'justification' => 'qa', 'total_minutes' => 60, 'status' => 'pending'], []);
-$csvOld = OperationalService::overtimeCsvRow(['employee_id' => 12, 'nc' => null, 'employee_name' => 'Ficticio', 'work_date' => '2026-11-20', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'reason' => 'qa', 'justification' => 'qa', 'total_minutes' => 60, 'status' => 'pending'], []);
-assert_same(['913', '', 'Ficticio', 10, 10], [$csvRow[0], $csvOld[0], $csvRow[1], count($csvRow), count(OperationalService::OVERTIME_CSV_HEADER)], 'CSV de horas extras: o NC na 1a coluna (vazio sem NC); a ordem e os outros campos nao mudam');
-$csvFor = static function (string $kind) use ($ncDb, $gestao): array {
+// O CSV de horas extras saiu (lote NC revisto: a planilha do RH, com o NC
+// conferido no qa-overtime); fica o CSV de correcao de ponto.
+$csvFor = static function () use ($ncDb, $gestao): array {
     $pdo = $ncDb();
     $pdo->rows = [
         ['id' => 2, 'employee_id' => 11, 'employee_name' => 'Ficticio 11', 'team' => 'n1', 'work_date' => '2026-11-20', 'adjustment_date' => '2026-11-20', 'adjustment_type' => 'entry', 'start_time' => '18:00:00', 'end_time' => '19:00:00', 'correct_time' => '08:00:00', 'recorded_time' => null, 'total_minutes' => 60, 'reason' => 'qa', 'justification' => 'qa', 'status' => 'pending', 'approved_by' => null, 'approved_at' => null, 'nc' => '900000011'],
@@ -289,14 +288,14 @@ $csvFor = static function (string $kind) use ($ncDb, $gestao): array {
     ];
     ob_start();
     $service = new OperationalService($pdo, '2026-11-20');
-    $kind === 'overtime' ? @$service->streamOvertimeCsv(['from' => '2026-11-16', 'to' => '2026-11-20'], $gestao) : @$service->streamTimeAdjustmentsCsv(['from' => '2026-11-16', 'to' => '2026-11-20'], $gestao);
+    @$service->streamTimeAdjustmentsCsv(['from' => '2026-11-16', 'to' => '2026-11-20'], $gestao);
     $out = (string)ob_get_clean();
     $lines = array_values(array_filter(explode("\n", str_replace("\r", '', substr($out, 3)))));
     $exportSql = array_values(array_filter($pdo->log, static fn (string $sql): bool => strpos($sql, ' AS nc FROM ') !== false));
     return [array_map(static fn (string $line): string => explode(';', $line)[0], $lines), count($exportSql), $exportSql[0] ?? ''];
 };
-foreach (['overtime' => 'portal_overtime_entries', 'adjustment' => 'portal_time_adjustments'] as $kind => $table) {
-    [$firstColumn, $exportQueries, $exportSql] = $csvFor($kind);
+foreach (['adjustment' => 'portal_time_adjustments'] as $kind => $table) {
+    [$firstColumn, $exportQueries, $exportSql] = $csvFor();
     assert_same([['NC', '900000011', ''], 1, true], [$firstColumn, $exportQueries, strpos($exportSql, "COALESCE({$table}.employee_nc, (SELECT f.matricula FROM funcionarios f WHERE f.id = {$table}.employee_id)) AS nc FROM {$table} WHERE") !== false], "CSV ({$kind}): a coluna NC com a copia ou, nas linhas antigas, o NC atual do cadastro, numa consulta so do export");
 }
 $operationalSource = (string)file_get_contents($root . '/services/OperationalService.php');

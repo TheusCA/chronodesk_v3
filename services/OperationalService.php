@@ -1274,65 +1274,6 @@ final class OperationalService {
     }
 
     /**
-     * [BIZ-01][PERF-02] Todas as linhas do filtro, em paginas, sem limite. Os
-     * totais por colaborador cobrem o filtro inteiro e sao calculados antes da
-     * primeira linha: "Total aprovado" e "Total pendente"; rejeitado fica fora
-     * dos dois e aparece identificado na coluna Status.
-     */
-    public function streamOvertimeCsv(array $filters, array $actor): void {
-        $totalsByEmployee = $this->overtimeTotalsForFilters($filters, $actor)['by_employee'];
-        $rows = $this->iterateWorkflowRecords('portal_overtime_entries', 'work_date', $filters, $actor, true, true);
-
-        $filename = 'horas_extras_' . date('Ymd_His') . '.csv';
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Cache-Control: no-store');
-        header('X-Content-Type-Options: nosniff');
-        $handle = fopen('php://output', 'wb');
-        fwrite($handle, "\xEF\xBB\xBF");
-        fputcsv($handle, self::OVERTIME_CSV_HEADER, ';', '"', '\\');
-        foreach ($rows as $row) {
-            $this->csvRow($handle, self::overtimeCsvRow($row, $totalsByEmployee));
-        }
-        fclose($handle);
-    }
-
-    public const OVERTIME_CSV_HEADER = [
-        'NC',
-        'Nome completo',
-        'Data da realizacao',
-        'Hora de entrada',
-        'Hora de saida',
-        'Descricao',
-        'Total de Horas',
-        'Total aprovado',
-        'Total pendente',
-        'Status',
-    ];
-
-    /**
-     * Uma linha do CSV de horas extras. Os dois totais sao do colaborador no
-     * filtro inteiro e se repetem em cada linha dele, como o antigo "Total
-     * Realizado", que somava todos os status.
-     */
-    public static function overtimeCsvRow(array $row, array $totalsByEmployee): array {
-        $employeeTotals = $totalsByEmployee[(int)$row['employee_id']] ?? ['approved_minutes' => 0, 'pending_minutes' => 0];
-        return [
-            // [Lote NC, D-NC-7] A copia do lancamento; nas linhas antigas, o NC atual do cadastro.
-            (string)($row['nc'] ?? ''),
-            $row['employee_name'],
-            $row['work_date'],
-            substr((string)$row['start_time'], 0, 5),
-            substr((string)$row['end_time'], 0, 5),
-            $row['reason'] ?: $row['justification'],
-            self::minutesText((int)$row['total_minutes']),
-            self::minutesText((int)$employeeTotals['approved_minutes']),
-            self::minutesText((int)$employeeTotals['pending_minutes']),
-            self::workflowStatusLabel($row['status']),
-        ];
-    }
-
-    /**
      * [Lote NC revisto, D-NC-14 e D-NC-15] Lancamentos de hora extra do
      * periodo e dos filtros da tela (o tecnico, so os proprios), todos os
      * status, com o NC da copia ou do cadastro: a exportacao do RH leva so os
@@ -2710,10 +2651,6 @@ final class OperationalService {
             'other' => 'Outro',
             default => 'Ajuste',
         };
-    }
-
-    private static function minutesText(int $minutes): string {
-        return sprintf('%02d:%02d', intdiv(max(0, $minutes), 60), max(0, $minutes) % 60);
     }
 
     private function reportRows(string $table, string $dateColumn, string $from, string $to, ?string $team, ?int $employeeId): array {
