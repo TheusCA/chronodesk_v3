@@ -1194,13 +1194,22 @@ $check5 = $first5('git merge-base --is-ancestor HEAD "$D5"');
 $fetch5 = array_keys(array_filter($commands5, static fn (string $line): bool => preg_match('/\bgit fetch\b/', $line) === 1));
 assert_same(true, $prod5 === 1 && strpos($prose5, '**Pre-requisito: producao no `f0844fd`**') !== false, 'deploy 5: producao no f0844fd (o commit do deploy 4), gravado como ponto de volta');
 assert_same([[$record5], 0, 2, 3], [$fetch5, preg_match('/\bgit pull\b|(^|\s)(--force|-f)(\s|$)/m', $text5), $record5, $check5], 'deploy 5: um fetch so, sem pull nem --force; gravar e conferir logo depois');
-assert_same(1, preg_match('/^cd \/var\/www\/chronodesk; git fetch origin codex\/modernizacao-ui-backend && K=\$\(git rev-parse origin\/codex\/modernizacao-ui-backend\) && if \[ "\$K" = "<commit validado na estacao>" \]; then echo "\$K" \| tee \/var\/backups\/chronodesk\/deploy5-commit; else echo "PARE: [^"]+"; fi; unset K$/', $commands5[$record5] ?? ''), 'deploy 5: fetch so do branch codex (o deploy 5 congelado no babcdd9) e grava so o commit validado na estacao');
+// [2026-11-25] O codex ja tem o deploy 6 depois do babcdd9: o deploy 5 usa o
+// hash fixo (item 0 e comando 3), confere que ele esta no codex e grava so ele.
+$frozen5 = 'babcdd9bde06a9cc6b7b160139dda4e67240aba4';
+assert_same('cd /var/www/chronodesk; K=' . $frozen5 . '; git fetch origin codex/modernizacao-ui-backend && git cat-file -e "$K^{commit}" && git merge-base --is-ancestor "$K" origin/codex/modernizacao-ui-backend && echo "$K" | tee /var/backups/chronodesk/deploy5-commit || echo "PARE: o babcdd9 nao esta no origin/codex/modernizacao-ui-backend (ou o fetch falhou)"; unset K', $commands5[$record5] ?? '', 'deploy 5: fetch so do branch codex, confere que o babcdd9 (hash fixo) esta nele e grava so o babcdd9');
+assert_same([0, 0, 1, 1], [
+    substr_count($runbook5, '<commit validado na estacao>'),
+    preg_match('/rev-parse origin\/codex/', $runbook5),
+    substr_count($runbook5, 'git worktree add --detach ..\chronodesk-deploy5 ' . $frozen5 . ';'),
+    substr_count($runbook5, 'o hash completo no fim igual a `' . $frozen5 . '`'),
+], 'deploy 5: item 0 no hash fixo do babcdd9, sem a ponta do branch nem hash a preencher');
 // [2026-11-24] O deploy 5 fica congelado no babcdd9, publicado no codex: o
 // item 0 e o fetch leem o codex; a 027 (Escala do Critico) vai no deploy 6.
 assert_same([true, 0, 0], [
     strpos($runbook5, "O deploy 5 fica congelado no `babcdd9`
    (decisao do responsavel, 2026-11-24), publicado em
-   `codex/modernizacao-ui-backend`.") !== false && strpos($runbook5, 'git worktree add --detach ..\chronodesk-deploy5 origin/codex/modernizacao-ui-backend;') !== false,
+   `codex/modernizacao-ui-backend`.") !== false && strpos($runbook5, 'git worktree add --detach ..\chronodesk-deploy5 babcdd9bde06a9cc6b7b160139dda4e67240aba4;') !== false,
     preg_match('/\b027\b|critical_grid|Escala do Critico|feriado/i', $runbook5),
     substr_count($runbook5, 'feat/employee-form-rhf-zod'),
 ], 'deploy 5: congelado no babcdd9, lendo o codex; sem a 027 nem a Escala do Critico (vao no deploy 6)');
@@ -1304,6 +1313,14 @@ assert_same([0, 0, 0, 0, 0, true], [
     preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet5)),
     strpos($sheet5, '..\\chronodesk-deploy5') !== false && strpos($sheet5, "`frontend: {$frontendCount4} scripts npm rodados (...): {$frontendCount4} OK, 0 com falha`") !== false,
 ], 'folha do deploy 5: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem sudo; o worktree e a contagem de scripts no item 0');
+// [2026-11-25] Folha no hash fixo do babcdd9: item 0 e comando 3, nada a preencher.
+assert_same([0, 0, 1, 1, 1], [
+    substr_count($sheet5, '<commit validado na estacao>'),
+    preg_match('/rev-parse origin\/codex|chronodesk-deploy5 origin\//', $sheet5),
+    substr_count($sheet5, 'git worktree add --detach ..\chronodesk-deploy5 ' . $frozen5 . ';'),
+    substr_count($sheet5, 'navegador com `falharam: 0` e o hash completo igual a `' . $frozen5 . '`. Qualquer falha ou outro hash: nao ha deploy.'),
+    substr_count($sheet5, '- [ ] **3.** (1) Esperado: o hash completo do `babcdd9` impresso (gravado em `deploy5-commit`); nada a preencher. **PARE se:** `PARE: o babcdd9 nao esta no origin/...`'),
+], 'folha do deploy 5: item 0 e comando 3 no hash fixo do babcdd9, sem a ponta do branch nem hash a preencher');
 // [8.8] Papel do dia do Critico numa fonte so, no mesmo deploy 5, sem migration
 // nova: o que vai, a fumaca com o Calendario e os relatorios (seis GET), a
 // conferencia na tela da mesma pessoa nas telas e o aviso; a folha junto.

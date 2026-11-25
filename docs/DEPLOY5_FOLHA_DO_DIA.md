@@ -14,7 +14,7 @@ Gerada do roteiro "Deploy 5 (F10-3: inventario de PA completo, reservados do Cri
 
 ## 0. Antes do dia, na estacao
 
-- [ ] **0.** O deploy 5 fica congelado no `babcdd9`, publicado em `codex/modernizacao-ui-backend`. A bateria completa sozinha (nada pesado em paralelo): `git fetch origin; git worktree add --detach ..\chronodesk-deploy5 origin/codex/modernizacao-ui-backend; Set-Location ..\chronodesk-deploy5\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`. Esperado: `Validacao local concluida com sucesso`, `frontend: 30 scripts npm rodados (...): 30 OK, 0 com falha`, navegador com `falharam: 0` e o hash completo: anote como `<commit validado na estacao>`. Qualquer falha: nao ha deploy com esse commit.
+- [ ] **0.** O deploy 5 fica congelado no `babcdd9`, publicado em `codex/modernizacao-ui-backend`, pelo hash fixo (o branch ja tem o deploy 6 depois dele). A bateria completa sozinha (nada pesado em paralelo): `git fetch origin; git worktree add --detach ..\chronodesk-deploy5 babcdd9bde06a9cc6b7b160139dda4e67240aba4; Set-Location ..\chronodesk-deploy5\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`. Esperado: `Validacao local concluida com sucesso`, `frontend: 30 scripts npm rodados (...): 30 OK, 0 com falha`, navegador com `falharam: 0` e o hash completo igual a `babcdd9bde06a9cc6b7b160139dda4e67240aba4`. Qualquer falha ou outro hash: nao ha deploy.
 - [ ] **0b.** Na vespera, o aviso a Lideranca e a gestao do roteiro (passo 0b), com a data e a janela preenchidas; sem nome, hostname nem endereco.
 
 ## 1. Conferencia do ambiente (com o umask), producao no f0844fd, commit validado e a lista das migrations
@@ -31,10 +31,10 @@ R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o sh
 cd /var/www/chronodesk; install -d -o root -g root -m 700 /var/backups/chronodesk; H=$(git rev-parse HEAD); if [ "$H" = "f0844fdd350f3da53f08b422005caa8a5909b662" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy5-commit >/dev/null; echo "HEAD de producao: f0844fd (OK, gravado em pre-deploy5-commit)"; else echo "PARE: HEAD de producao $(git rev-parse --short HEAD), nao o f0844fd"; fi; echo "branch: $(git rev-parse --abbrev-ref HEAD)"; echo "alteracoes locais: $(git status --porcelain | wc -l)"; unset H
 ```
 
-- [ ] **3.** (1) Esperado: antes, troque `<commit validado na estacao>` (item 0). O hash completo impresso (gravado em `deploy5-commit`). **PARE se:** `PARE: origin/... nao e o commit validado na estacao` ou erro do `fetch`.
+- [ ] **3.** (1) Esperado: o hash completo do `babcdd9` impresso (gravado em `deploy5-commit`); nada a preencher. **PARE se:** `PARE: o babcdd9 nao esta no origin/...` ou erro do `fetch`.
 
 ```bash
-cd /var/www/chronodesk; git fetch origin codex/modernizacao-ui-backend && K=$(git rev-parse origin/codex/modernizacao-ui-backend) && if [ "$K" = "<commit validado na estacao>" ]; then echo "$K" | tee /var/backups/chronodesk/deploy5-commit; else echo "PARE: origin/codex/modernizacao-ui-backend ($K) nao e o commit validado na estacao"; fi; unset K
+cd /var/www/chronodesk; K=babcdd9bde06a9cc6b7b160139dda4e67240aba4; git fetch origin codex/modernizacao-ui-backend && git cat-file -e "$K^{commit}" && git merge-base --is-ancestor "$K" origin/codex/modernizacao-ui-backend && echo "$K" | tee /var/backups/chronodesk/deploy5-commit || echo "PARE: o babcdd9 nao esta no origin/codex/modernizacao-ui-backend (ou o fetch falhou)"; unset K
 ```
 
 - [ ] **4.** (1) Esperado: `fast-forward OK: <N> commits a aplicar` (anote), `migrations alteradas: exatamente as 8 esperadas (022 e 026)` e `lockfile alterado: 0` (com `1`, anote: o build faz o `npm ci`). **PARE se:** linha `PARE` (sem a 022 ou a 026, HEAD nao ancestral, ou outra lista de migrations).

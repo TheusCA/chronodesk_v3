@@ -5729,8 +5729,8 @@ comando e a conferencia do ambiente, com o `umask 022` (licao do deploy 4);
 **Sem valor real**: a senha do root do MySQL e lida sem eco e apagada no fim
 do comando; o `ServerName` e lido do `chronodesk.conf` na hora (tambem o
 `HOST_HEADER` do polling); as consultas devolvem so contagens e assinaturas.
-Onde aparece `<commit validado na estacao>`, o hash completo anotado no item
-0. Cada comando em **uma linha**. **Nenhum filtro de saida com `umask`** (o
+O commit do deploy 5 e fixo (`babcdd9`, hash completo no comando 3): nenhum
+hash a preencher. Cada comando em **uma linha**. **Nenhum filtro de saida com `umask`** (o
 incidente do deploy 4): so os comandos deste roteiro.
 
 **Regras de parada:** qualquer linha com `PARE`, ou saida diferente do
@@ -5739,14 +5739,16 @@ unico `git fetch` e o do passo 1, so do branch.
 
 0. **Antes do dia, na estacao.** O deploy 5 fica congelado no `babcdd9`
    (decisao do responsavel, 2026-11-24), publicado em
-   `codex/modernizacao-ui-backend`. A bateria completa sobre o commit do
-   branch, sozinha (nada pesado em paralelo):
-   `git fetch origin; git worktree add --detach ..\chronodesk-deploy5 origin/codex/modernizacao-ui-backend; Set-Location ..\chronodesk-deploy5\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`.
+   `codex/modernizacao-ui-backend`. O branch ja tem commits depois dele
+   (deploy 6): o deploy 5 usa o **hash fixo** `babcdd9bde06a9cc6b7b160139dda4e67240aba4`,
+   nunca a ponta do branch (aprovado em 2026-11-25). A bateria completa sobre
+   esse commit, sozinha (nada pesado em paralelo):
+   `git fetch origin; git worktree add --detach ..\chronodesk-deploy5 babcdd9bde06a9cc6b7b160139dda4e67240aba4; Set-Location ..\chronodesk-deploy5\frontend; npm ci; Set-Location ..; $env:CHROME_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -SkipHttp -Browser; git rev-parse HEAD`.
    Esperado: `Validacao local concluida com sucesso`, a linha
    `frontend: 30 scripts npm rodados (...): 30 OK, 0 com falha` (lint,
    typecheck, build e 27 `qa:*`), o roteiro de navegador com `falharam: 0` e
-   o hash completo no fim: anote como `<commit validado na estacao>`.
-   Qualquer falha: nao ha deploy com esse commit.
+   o hash completo no fim igual a `babcdd9bde06a9cc6b7b160139dda4e67240aba4`.
+   Qualquer falha ou outro hash: nao ha deploy.
 
 0b. **Aviso a Lideranca e a gestao, na vespera** (pelo canal de sempre; sem
    nome, sem hostname, sem endereco): "Em <data>, entre <inicio> e <fim>, o
@@ -5768,14 +5770,14 @@ unico `git fetch` e o do passo 1, so do branch.
 ```bash
 R=OK; [ "$(id -u)" = 0 ] && echo "OK id -u = 0" || { echo "BLOQUEADO id -u (o shell nao e root)"; R=PARE; }; bash -c 'exit 0' && echo "OK bash -c" || { echo "BLOQUEADO bash -c"; R=PARE; }; tar -czf - -C /etc hostname 2>/dev/null | tar -tzf - >/dev/null 2>&1 && echo "OK tar com gzip" || { echo "BLOQUEADO tar com gzip"; R=PARE; }; [ "$(find /etc/hostname -maxdepth 0 -exec echo ok \; 2>/dev/null)" = ok ] && echo "OK find -exec" || { echo "BLOQUEADO find -exec"; R=PARE; }; runuser -u www-data -- php -v >/dev/null 2>&1 && echo "OK runuser -u www-data -- php -v" || { echo "BLOQUEADO runuser -u www-data -- php -v"; R=PARE; }; [ "$(runuser -u www-data -- php -r '$p = proc_open([PHP_BINARY, "-v"], [1 => ["pipe", "w"]], $x); if (!is_resource($p)) { exit(1); } stream_get_contents($x[1]); echo proc_close($p) === 0 ? "ok" : "falha";' 2>/dev/null)" = ok ] && echo "OK php filho como www-data (proc_open, como no qa-security)" || { echo "BLOQUEADO php filho como www-data"; R=PARE; }; npm -v >/dev/null 2>&1 && echo "OK npm -v" || { echo "BLOQUEADO npm -v"; R=PARE; }; git -C /var/www/chronodesk rev-parse --git-dir >/dev/null 2>&1 && echo "OK git no clone" || { echo "BLOQUEADO git no clone"; R=PARE; }; umask 022 && [ "$(umask)" = 0022 ] && echo "OK umask $(umask) (arquivos novos legiveis pelo www-data)" || { echo "BLOQUEADO umask $(umask)"; R=PARE; }; [ "$R" = OK ] && echo "ambiente: OK" || echo "PARE: ambiente com BLOQUEADO"; unset R
 cd /var/www/chronodesk; install -d -o root -g root -m 700 /var/backups/chronodesk; H=$(git rev-parse HEAD); if [ "$H" = "f0844fdd350f3da53f08b422005caa8a5909b662" ]; then echo "$H" | tee /var/backups/chronodesk/pre-deploy5-commit >/dev/null; echo "HEAD de producao: f0844fd (OK, gravado em pre-deploy5-commit)"; else echo "PARE: HEAD de producao $(git rev-parse --short HEAD), nao o f0844fd"; fi; echo "branch: $(git rev-parse --abbrev-ref HEAD)"; echo "alteracoes locais: $(git status --porcelain | wc -l)"; unset H
-cd /var/www/chronodesk; git fetch origin codex/modernizacao-ui-backend && K=$(git rev-parse origin/codex/modernizacao-ui-backend) && if [ "$K" = "<commit validado na estacao>" ]; then echo "$K" | tee /var/backups/chronodesk/deploy5-commit; else echo "PARE: origin/codex/modernizacao-ui-backend ($K) nao e o commit validado na estacao"; fi; unset K
+cd /var/www/chronodesk; K=babcdd9bde06a9cc6b7b160139dda4e67240aba4; git fetch origin codex/modernizacao-ui-backend && git cat-file -e "$K^{commit}" && git merge-base --is-ancestor "$K" origin/codex/modernizacao-ui-backend && echo "$K" | tee /var/backups/chronodesk/deploy5-commit || echo "PARE: o babcdd9 nao esta no origin/codex/modernizacao-ui-backend (ou o fetch falhou)"; unset K
 cd /var/www/chronodesk; D5=$(cat /var/backups/chronodesk/deploy5-commit); git cat-file -e "$D5^{commit}" && git cat-file -e "$D5:scripts/smoke-deploy1.sh" && git cat-file -e "$D5:migrations/20261119_022_pa_inventory.sql" && git cat-file -e "$D5:migrations/20261123_026_matricula_nc.sql" && git merge-base --is-ancestor HEAD "$D5" && echo "fast-forward OK: $(git rev-list --count HEAD.."$D5") commits a aplicar" || echo "PARE: deploy5-commit ausente, sem o smoke-deploy1.sh, sem a 022 ou a 026, ou o HEAD nao e ancestral dele"; L=$(git diff --name-only HEAD "$D5" -- migrations | sort | tr '\n' ' '); [ "$L" = "migrations/20261119_022_pa_inventory.sql migrations/20261123_026_matricula_nc.sql migrations/rollback/20261119_022_ensaio_linhas_inv.sql migrations/rollback/20261119_022_pa_inventory_down.sql migrations/rollback/20261123_026_ensaio_linhas_nc.sql migrations/rollback/20261123_026_matricula_nc_down.sql migrations/verificacao/20261119_022_pa_inventory_check.sql migrations/verificacao/20261123_026_matricula_nc_check.sql " ] && echo "migrations alteradas: exatamente as 8 esperadas (022 e 026)" || echo "PARE: migrations alteradas diferentes das esperadas: $L"; echo "lockfile alterado: $(git diff --name-only HEAD "$D5" -- frontend/package-lock.json | wc -l)"; unset D5 L
 ```
 
    Esperado: `ambiente: OK` (nove linhas `OK`, com `OK umask 0022`);
    `HEAD de producao: f0844fd (OK, ...)`, `branch:
-   codex/modernizacao-ui-backend`, `alteracoes locais: 0`; o hash do commit
-   validado gravado em `deploy5-commit`; `fast-forward OK` (anote o numero de
+   codex/modernizacao-ui-backend`, `alteracoes locais: 0`; o hash completo do
+   `babcdd9` gravado em `deploy5-commit` (ele esta no `origin/codex`); `fast-forward OK` (anote o numero de
    commits); `migrations alteradas: exatamente as 8 esperadas (022 e 026)` (de
    cada uma, a migration, o rollback, as linhas do ensaio e a verificacao); `lockfile
    alterado: 0`. **PARE** com qualquer `PARE`, alteracao local ou outro HEAD.
