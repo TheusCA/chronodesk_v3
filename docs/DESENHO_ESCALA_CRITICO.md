@@ -105,3 +105,14 @@ Mutação por commit (worktree, `mut_guard.php`); bateria completa sozinha no ú
 - **Achado (2), senha no stack trace: corrigido** no `5d5e521` (`#[\SensitiveParameter]` na fábrica de conexão do `db.php` e em todo parâmetro de senha ou segredo do portal: `autenticar_ad`, `autenticar_ci_via_ad`, `Usuario::criar`, `Usuario::atualizarSenhaPorUsername`, `Usuario::autenticar`, `hash_password`, `verify_password` (senha e hash), `verify_csrf_token`, `EnvAdCredentialProvider::assertCredentialValues`). `qa-security` seção 12: varredura por token com a lista exata dos protegidos e prova pelo efeito (falha real de conexão; a senha do QA fora dos argumentos e do texto do trace). Mutação 16/16. Como fica depois do `974ac69`, vai no **deploy 6** (só código; nota no roteiro).
 - **Achado (1), remoção da exceção fora da `portal_sync_queue`: pendência registrada, sem mudança** (junto da 17h, consumidor da fila A CONFIRMAR).
 - **Capturas:** as 32 (fictícias) em `_referencias\critico\capturas-2026-11-24\`.
+
+### 5.2 Revisão do 7538bd2 e achados das capturas (2026-11-25)
+
+- **Deploy 5 no hash fixo** (`64ba784`, aprovado): o item 0 (worktree da bateria), o comando 3 (confere com `merge-base --is-ancestor` que o `babcdd9` está no `origin/codex` e grava o hash completo no `deploy5-commit`) e a folha usam o `babcdd9`, nunca a ponta do branch, que já tem o deploy 6. A trava cobre os dois (mutação 17/17). O código do deploy 5 não muda.
+- **Correção** (`6abab6c`):
+  - **Prévia presa ao pedido.** O `preview` devolve `request_key` (`pessoa|de|ate|tipo|valor`). O diálogo só mostra a prévia e só liga Salvar/Desfazer com a chave dos parâmetros atuais. Trocar de aba, de opção ou de dia descarta a prévia; uma resposta atrasada de um pedido antigo nunca vale; o diálogo remonta quando muda a pessoa ou o dia. O efeito de "Seg 23/11" na captura do desfazer da ausência vinha do servidor simulado (texto fixo); agora ele calcula os dias do pedido e devolve a chave.
+  - **Mês com todas as semanas abertas**, como na planilha, com "Recolher todas"/"Expandir todas"; a semana atual continua destacada.
+  - **Célula do feriado:** "Feriado" e só o nome embaixo. O motor e as outras telas seguem com "Feriado: <nome>".
+  - QAs: `qa-critical-grid` 144, `qa:critical-grid` 124, bloco 34 do navegador 23. Mutação: 6/6 (PHP), 11/11 (frontend), 2/3 no navegador; o sobrevivente (recolher sem remontar os blocos) era equivalente: a remontagem foi retirada antes do envio.
+- **Capturas novas** (16, fictícias): o Mês aberto, recolhido e com o feriado, e o diálogo nas abas Trocar o papel, Ausência, Exceção e Desfazer (antes e depois da prévia), nos dois temas, em `_referencias\critico\capturas-2026-11-25\`.
+- Vai no **deploy 6**, junto com o `5d5e521`.

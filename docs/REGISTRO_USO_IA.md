@@ -1826,6 +1826,18 @@ Base da afirmação:
 | **Validacao executada pela IA** | `qa-security` (varredura por token e prova pelo efeito), `qa-auth`, `qa-timezone`; mutação no worktree `chronodesk-mut-sp` com `mut_guard.php`: 16/16; bateria completa sozinha no último commit (no estado da sessão). |
 | **Validacao humana** | Pendente. |
 
+### Deploy 5 no hash fixo e achados das capturas da Escala do Crítico — 2026-11-25
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Revisão do `7538bd2`: o deploy 5 lido pelo hash fixo do `babcdd9` (o `codex` já tem o deploy 6 depois dele) e três achados das capturas da Escala do Crítico (prévia de outro pedido no diálogo do dia, semanas abertas no Mês, célula do feriado). |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `64ba784` (roteiro, folha e trava do deploy 5), `6abab6c` (Escala do Crítico, deploy 6) e o commit destes docs. |
+| **O que a IA alterou** | `DEPLOY_LINUX.md`, `docs/DEPLOY5_FOLHA_DO_DIA.md`, `scripts/qa-deploy-runbook.php`; `services/CriticalGridService.php`, `frontend/src/lib/criticalGrid.ts`, `DayDialog.jsx`, `CriticalGridPage.jsx`; servidor simulado (prévia calculada e atraso), `qa-critical-grid.php`, `qa:critical-grid`, bloco 34; `docs/API_CONTRACTS_FRONTEND.md`; `docs/DESENHO_ESCALA_CRITICO.md` (5.2). |
+| **Dados pessoais** | Nenhum dado real. Capturas só com dados fictícios do servidor simulado, fora do git. |
+| **Validacao executada pela IA** | Trava 558, mutação 17/17; `qa-critical-grid` 144, `qa:critical-grid` 124, bloco 34 23/23; mutação 6/6, 11/11 e 2/3 no navegador (o sobrevivente, equivalente, levou à retirada da remontagem antes do envio); 16 capturas conferidas; bateria completa sozinha no último commit (no estado da sessão). |
+| **Achados** | O efeito errado da captura vinha do servidor simulado, mas o diálogo tinha duas brechas reais: a resposta atrasada de um pedido antigo valia para a opção nova, e o estado não era limpo ao trocar de dia sem fechar o diálogo. |
+| **Validacao humana** | Pendente. |
+
 ---
 
 ## 5. Responsabilidade
