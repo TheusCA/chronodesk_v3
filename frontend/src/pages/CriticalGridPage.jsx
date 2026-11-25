@@ -165,6 +165,9 @@ export function CriticalGridPage({ notify }) {
   const [weekIndex, setWeekIndex] = useState(null)
   const [selection, setSelection] = useState(null)
   const [dialog, setDialog] = useState(null)
+  // [Achado das capturas, 2026-11-25] No Mês, todas as semanas abertas, como
+  // na planilha; "Recolher todas"/"Expandir todas" vale para todas.
+  const [weeksOpen, setWeeksOpen] = useState(true)
   const returnRef = useRef(null)
   const resource = useResource(`portal/critical_grid.php${month ? `?month=${month}` : ''}`)
   const grid = resource.data
@@ -192,6 +195,9 @@ export function CriticalGridPage({ notify }) {
         </div>
         <div className="esc-toolbar-group">
           <Segmented label="Visão" onChange={setView} options={VIEW_OPTIONS} value={view} />
+          {view === 'month' && (
+            <button aria-expanded={weeksOpen} className="btn-secondary" data-esc-toggle-weeks="" onClick={() => setWeeksOpen((value) => !value)} type="button">{weeksOpen ? 'Recolher todas' : 'Expandir todas'}</button>
+          )}
           {view === 'week' && (
             <select aria-label="Semana" data-esc-week-pick="" onChange={(event) => setWeekIndex(Number(event.target.value))} value={Math.min(chosenWeek, grid.weeks.length - 1)}>
               {grid.weeks.map((week, index) => <option key={week.start} value={index}>{weekTitle(week)}</option>)}
@@ -208,12 +214,12 @@ export function CriticalGridPage({ notify }) {
       </div>
       {grid.people.length === 0 ? <EmptyState description="Ninguém ativo na equipe Crítico." title="Sem pessoas no Crítico" /> : (
         <>
-          {weeks.map((week) => <WeekBlock grid={grid} key={week.start} large={view === 'week'} onOpen={open} onSelect={setSelection} open={view === 'week' || week.current} selection={selection} week={week} />)}
+          {weeks.map((week) => <WeekBlock grid={grid} key={week.start} large={view === 'week'} onOpen={open} onSelect={setSelection} open={view === 'week' || weeksOpen} selection={selection} week={week} />)}
           <MonthSummary grid={grid} />
         </>
       )}
       {dialog && grid.can_manage && (
-        <DayDialog grid={grid} notify={notify} onClose={close} onSaved={async () => { close(); await resource.refresh() }} returnFocusRef={returnRef} selection={dialog} />
+        <DayDialog grid={grid} key={`${dialog.employeeId}:${dialog.from}:${dialog.to}`} notify={notify} onClose={close} onSaved={async () => { close(); await resource.refresh() }} returnFocusRef={returnRef} selection={dialog} />
       )}
       {dialog && !grid.can_manage && person && (
         <Dialog onClose={close} returnFocusRef={returnRef} size="max-w-md" title={`${person.name} · ${dayLabel(dialog.from)}`}>

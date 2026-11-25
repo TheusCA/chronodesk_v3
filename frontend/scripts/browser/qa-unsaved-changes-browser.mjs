@@ -3508,9 +3508,20 @@ async function criticalGrid(page, port, mock) {
       lateral: document.documentElement.scrollWidth > innerWidth,
       exportar: document.querySelector('[data-esc-export]').getAttribute('href'),
       fundo: getComputedStyle(${cell(902, '2026-11-20')}).backgroundColor,
+      atual: [...document.querySelectorAll('details.esc-week.esc-week-current')].map((d) => d.dataset.escWeek).join(','),
+      feriado: [...${cell(902, '2026-11-20')}.querySelectorAll('span')].map((s) => s.textContent).join('|'),
     }))()`)
-    report('Escala do Critico (tecnico, 1366 px): titulo do mes, so a semana atual aberta, hoje destacado, legenda das 8 cores, sem rolagem lateral, exportar do mes', view.titulo === 'Novembro 2026' && view.aberta === '47' && view.hoje >= 5 && view.legenda === 8 && !view.lateral && view.exportar === '/api/portal/critical_grid.php?month=2026-11&format=xlsx', JSON.stringify(view))
+    report('Escala do Critico (tecnico, 1366 px): titulo do mes, todas as semanas abertas (como a planilha) com a atual destacada, hoje destacado, legenda das 8 cores, sem rolagem lateral, exportar do mes', view.titulo === 'Novembro 2026' && view.aberta === '45,46,47,48,49' && view.atual === '47' && view.hoje >= 5 && view.legenda === 8 && !view.lateral && view.exportar === '/api/portal/critical_grid.php?month=2026-11&format=xlsx', JSON.stringify(view))
     report('Escala do Critico: o feriado com a cor propria (CSS da rota carregado) e o tecnico sem a categoria da ausencia', view.fundo !== 'rgba(0, 0, 0, 0)' && view.fundo !== '' && !view.folga, JSON.stringify({ fundo: view.fundo, folga: view.folga }))
+    report('Escala do Critico: a celula do feriado so com "Feriado" e o nome embaixo (sem repetir "Feriado:")', view.feriado === 'Feriado|Feriado Ficticio', view.feriado)
+    // Recolher e expandir todas as semanas do mês.
+    await page.click(`document.querySelector('[data-esc-toggle-weeks]')`)
+    await sleep(200)
+    const folded = await page.evaluate(`({ abertas: [...document.querySelectorAll('details.esc-week')].filter((d) => d.open).length, botao: document.querySelector('[data-esc-toggle-weeks]').textContent, expandido: document.querySelector('[data-esc-toggle-weeks]').getAttribute('aria-expanded'), atual: document.querySelector('details.esc-week-current')?.dataset.escWeek })`)
+    await page.click(`document.querySelector('[data-esc-toggle-weeks]')`)
+    await sleep(200)
+    const unfolded = await page.evaluate(`({ abertas: [...document.querySelectorAll('details.esc-week')].filter((d) => d.open).length, botao: document.querySelector('[data-esc-toggle-weeks]').textContent })`)
+    report('Escala do Critico: "Recolher todas" fecha as 5 semanas (a atual continua destacada) e "Expandir todas" abre de novo', folded.abertas === 0 && folded.botao === 'Expandir todas' && folded.expandido === 'false' && folded.atual === '47' && unfolded.abertas === 5 && unfolded.botao === 'Recolher todas', JSON.stringify({ folded, unfolded }))
     await page.evaluate(`document.querySelector('details[data-esc-week="48"]').open = true`)
     await sleep(150)
     await page.click(cell(903, '2026-11-26'))
@@ -3599,6 +3610,43 @@ async function criticalGrid(page, port, mock) {
     await page.waitFor(`!document.querySelector('[data-esc-dialog]')`)
     const undone = posts('apply').at(-1)
     report('Escala do Critico: o desfazer grava a troca do dia pelo id do registro', undone?.body?.change?.type === 'undo' && undone.body.change.target === 'troca' && undone.body.change.ref_id === 90, JSON.stringify(undone?.body))
+    // [Achado das capturas, 2026-11-25] A prévia do desfazer da ausência é a dos
+    // dias dela, com a chave do pedido; trocar de aba descarta a prévia.
+    const tab = (label) => page.click(`[...document.querySelectorAll('[data-esc-dialog] .segmented-option')].find((b) => b.textContent.trim() === '${label}')`)
+    const dialogState = `({ previa: document.querySelector('[data-esc-preview]')?.getAttribute('data-esc-preview') ?? null, efeitos: [...document.querySelectorAll('[data-esc-effect]')].map((li) => li.textContent).join(' | '), salvar: document.querySelector('[data-esc-save]')?.disabled ?? null, desfazer: document.querySelector('[data-esc-undo-run]')?.disabled ?? null })`
+    await page.click(cell(901, '2026-11-19'))
+    await page.waitFor(`!!document.querySelector('[data-esc-dialog]')`)
+    await tab('Desfazer')
+    await sleep(150)
+    await page.click(`document.querySelector('[data-esc-preview-run]')`)
+    await page.waitFor(`!!document.querySelector('[data-esc-preview]')`)
+    const undoAbsence = await page.evaluate(dialogState)
+    await tab('Trocar o papel')
+    await sleep(150)
+    const otherTab = await page.evaluate(dialogState)
+    await tab('Desfazer')
+    await sleep(150)
+    const backTab = await page.evaluate(dialogState)
+    report('Escala do Critico: desfazer a ausencia (18/11 a 19/11) mostra o efeito desses dias, com a chave do pedido, e libera o Desfazer', undoAbsence.previa === '901|2026-11-19|2026-11-19|undo|ausencia:70' && undoAbsence.efeitos === 'Qua 18/11: Banco de horas → Abertura home 07:00–17:00 | Qui 19/11: Banco de horas → Abertura home 07:00–17:00' && undoAbsence.desfazer === false, JSON.stringify(undoAbsence))
+    report('Escala do Critico: trocar de aba descarta a previa (outra aba sem efeito e com o salvar desligado; de volta ao Desfazer, sem previa e desligado)', otherTab.previa === null && otherTab.salvar === true && backTab.previa === null && backTab.desfazer === true, JSON.stringify({ otherTab, backTab }))
+    // Resposta atrasada de um pedido antigo: a opção mudou antes de ela chegar.
+    await tab('Ausência')
+    await setInput(`document.querySelector('[data-esc-until]')`, '2026-11-19')
+    mock.setGridPreviewDelay(700)
+    await page.click(`document.querySelector('[data-esc-preview-run]')`)
+    await setInput(`document.querySelector('[data-esc-category]')`, 'folga')
+    await sleep(1100)
+    mock.setGridPreviewDelay(0)
+    const late = await page.evaluate(dialogState)
+    report('Escala do Critico: a previa atrasada de outra opcao (ferias) nao aparece nem liga o salvar quando a opcao atual e folga', late.previa === null && late.salvar === true && posts('preview').at(-1)?.body?.change?.category === 'ferias', JSON.stringify(late))
+    await page.click(`document.querySelector('[data-esc-preview-run]')`)
+    await page.waitFor(`!!document.querySelector('[data-esc-preview]')`)
+    const fresh = await page.evaluate(dialogState)
+    report('Escala do Critico: a previa da opcao atual (folga) liga o salvar', fresh.previa === '901|2026-11-19|2026-11-19|absence|folga' && fresh.salvar === false, JSON.stringify(fresh))
+    await page.press('Escape')
+    await page.waitFor(`!!document.querySelector('[role="alertdialog"]')`)
+    await page.click(button('Descartar alterações'))
+    await page.waitFor(`!document.querySelector('[data-esc-dialog]')`)
     // Shift+clique: o intervalo de uma pessoa.
     await page.evaluate(`document.querySelector('details[data-esc-week="47"]').open = true`)
     await shiftClick(cell(902, '2026-11-16'))

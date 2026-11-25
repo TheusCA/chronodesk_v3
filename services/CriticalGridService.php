@@ -112,7 +112,33 @@ final class CriticalGridService {
         $loaded = $this->load($request['from'], $request['to']);
         $person = $this->criticalPerson($loaded, $request['employee_id']);
         [$days, $simulated] = $this->simulate($loaded, $request);
-        return $this->effects($loaded, $simulated, $person, $days);
+        return $this->effects($loaded, $simulated, $person, $days) + ['request_key' => self::requestKey($request)];
+    }
+
+    /**
+     * [Achado das capturas, 2026-11-25] Na celula do feriado o rotulo ja e
+     * "Feriado": o detalhe e so o nome do cadastro (nada de "Feriado: <nome>").
+     */
+    private static function holidayName(?array $holiday): ?string {
+        $name = trim((string)($holiday['name'] ?? ''));
+        return $name === '' ? null : $name;
+    }
+
+    /**
+     * Chave do pedido da previa (achado das capturas, 2026-11-25): a tela so
+     * liga o salvar com a previa cuja chave e a dos parametros atuais. Formato
+     * igual ao de previewKey() em frontend/src/lib/criticalGrid.ts:
+     * pessoa|de|ate|tipo|valor (papel, categoria, excecao ou alvo:registro).
+     */
+    public static function requestKey(array $request): string {
+        $change = $request['change'];
+        $value = match ($change['type']) {
+            'role' => (string)$change['role_id'],
+            'absence' => $change['category'],
+            'exception' => $change['exception_type'],
+            'undo' => $change['target'] . ':' . $change['ref_id'],
+        };
+        return implode('|', [(string)$request['employee_id'], $request['from'], $request['to'], $change['type'], $value]);
     }
 
     /**
@@ -368,7 +394,7 @@ final class CriticalGridService {
             $cell = ['kind' => 'ausencia', 'label' => self::absenceLabel($category, $manager), 'tone' => self::absenceTone($category), 'source' => 'ausencia']
                 + ['last_change' => $full !== [] ? self::change($full[0]['updated_by'] ?? null ?: $full[0]['created_by'], $full[0]['updated_at'] ?? null) : self::change($exception['created_by'] ?? null, $exception['updated_at'] ?? null)] + $cell;
         } elseif ($fonte === 'feriado') {
-            $cell = ['kind' => 'feriado', 'label' => 'Feriado', 'tone' => 'feriado', 'source' => 'feriado', 'detail' => $presence['escala']['rule_label']] + $cell;
+            $cell = ['kind' => 'feriado', 'label' => 'Feriado', 'tone' => 'feriado', 'source' => 'feriado', 'detail' => self::holidayName($holiday)] + $cell;
         } elseif ($fonte === 'excecao') {
             $type = (string)$exception['exception_type'];
             $cell = ['kind' => 'excecao', 'label' => self::WORK_EXCEPTION_LABELS[$type] ?? 'Exceção', 'tone' => $type === 'remote' ? 'papel-lilas' : 'papel-azul', 'source' => 'excecao', 'marker' => 'excecao', 'presence_type' => $type === 'remote' ? 'remote' : 'onsite', 'hours' => $hours, 'last_change' => self::change($exception['created_by'] ?? null, $exception['updated_at'] ?? null)] + $cell;
@@ -386,7 +412,7 @@ final class CriticalGridService {
             $cell['detail'] = 'Ausente ' . $span . ($manager ? ' (' . AbsenceRules::CATEGORIES[$partial[0]['category']] . ')' : '');
         }
         if ($cell['kind'] === 'feriado' && $holiday !== null) {
-            $cell['detail'] = PresenceEngine::holidayLabel($holiday);
+            $cell['detail'] = self::holidayName($holiday);
         }
         $refs = [];
         if ($override !== null) {

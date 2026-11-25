@@ -8,7 +8,7 @@ import { InlineAlert } from '../../components/ui/Primitives'
 import { useUnsavedChangesGuard } from '../../hooks/useUnsavedChangesGuard'
 import { post } from '../../lib/api'
 import { runAction } from '../../lib/actionRunner'
-import { SOURCE_LABELS, changeLabel, dayLabel, toneClass, versionsFor } from '../../lib/criticalGrid'
+import { SOURCE_LABELS, changeLabel, dayLabel, previewFor, previewKey, toneClass, versionsFor } from '../../lib/criticalGrid'
 
 const ENDPOINT = 'portal/critical_grid.php'
 const UNDO_LABELS = { troca: 'Desfazer a troca', ausencia: 'Desfazer a ausência', excecao: 'Desfazer a exceção' }
@@ -52,7 +52,10 @@ export function DayDialog({ grid, selection, notify, onClose, onSaved, returnFoc
   const activeRoles = grid.roles.filter((role) => role.active)
   const initial = { mode: 'role', role_id: '', until: selection.to, category: 'ferias', exception_type: 'onsite', target: undoTargets[0] || '' }
   const [form, setForm] = useState(initial)
-  const [preview, setPreview] = useState(null)
+  // [Achado das capturas, 2026-11-25] A prévia guardada vale só para a chave do
+  // pedido (pessoa, dias, aba e opção): trocar de aba, de opção ou de dia a
+  // descarta, e uma resposta atrasada de outro pedido nunca liga o salvar.
+  const [storedPreview, setPreview] = useState(null)
   const [busy, setBusy] = useState(false)
   const [confirmUndo, setConfirmUndo] = useState(false)
   const headingRef = useRef(null)
@@ -69,14 +72,23 @@ export function DayDialog({ grid, selection, notify, onClose, onSaved, returnFoc
   const range = form.mode === 'undo' ? { from: selection.from, to: selection.from } : { from: selection.from, to: form.until }
   const body = () => ({ employee_id: selection.employeeId, ...range, change: change() })
   const incomplete = (form.mode === 'role' && !form.role_id) || (form.mode === 'undo' && !form.target) || !range.to || range.to < range.from
+  const currentKey = incomplete ? '' : previewKey(body())
+  const preview = previewFor(storedPreview, currentKey)
 
   async function runPreview() {
     setBusy(true)
-    await runAction({ action: () => post(ENDPOINT, { action: 'preview', ...body() }), notify, successMessage: null, onSuccess: (result) => setPreview(result) })
+    const requested = previewKey(body())
+    await runAction({
+      action: () => post(ENDPOINT, { action: 'preview', ...body() }),
+      notify,
+      successMessage: null,
+      onSuccess: (result) => setPreview(result?.request_key === requested ? result : null),
+    })
     setBusy(false)
   }
 
   async function save() {
+    if (!preview) return
     setBusy(true)
     const versions = versionsFor(grid.cells, selection.employeeId, range.from, range.to)
     await runAction({
@@ -150,9 +162,9 @@ export function DayDialog({ grid, selection, notify, onClose, onSaved, returnFoc
           )}
         </div>
         {preview && (
-          <div className="space-y-2 rounded-lg border border-line bg-surface-2 p-3" data-esc-preview="">
+          <div className="space-y-2 rounded-lg border border-line bg-surface-2 p-3" data-esc-preview={preview.request_key}>
             <p className="text-xs font-semibold text-muted">Efeito (calculado pelo servidor)</p>
-            <ul className="esc-effects">{preview.changes.map((item) => <li key={item.date}>{item.text}</li>)}</ul>
+            <ul className="esc-effects">{preview.changes.map((item) => <li data-esc-effect={item.date} key={item.date}>{item.text}</li>)}</ul>
             {preview.warnings.length > 0 && (
               <InlineAlert title="Sem ninguém disponível" tone="warning">
                 {preview.warnings.map((item) => item.text).join(' ')} Dá para salvar mesmo assim.

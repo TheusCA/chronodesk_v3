@@ -18,7 +18,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
 import { contrast } from './lib/contrast.mjs'
-import { criticalGridFixture } from './browser/lib/critical-grid-fixture.mjs'
+import { criticalGridFixture, criticalGridPreview } from './browser/lib/critical-grid-fixture.mjs'
 
 const frontendRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const projectRoot = join(frontendRoot, '..')
@@ -131,18 +131,24 @@ const render = (data) => {
   return renderToStaticMarkup(h(CriticalGridPage, { notify: () => {} }))
 }
 const viewer = render(criticalGridFixture({ manager: false }))
+const pageSource = read('src/pages/CriticalGridPage.jsx')
 const leader = render(criticalGridFixture({ manager: true }))
 check(() => assert.match(viewer, /<h2 class="esc-title" data-esc-title="">Novembro 2026<\/h2>/u, 'título do mês'))
 check(() => assert.equal((viewer.match(/<details class="esc-week/gu) ?? []).length, 5, 'um bloco por semana'))
-check(() => assert.match(viewer, /<details class="esc-week esc-week-current" data-esc-week="47" open="">/u, 'a semana atual aberta'))
-check(() => assert.doesNotMatch(viewer, /data-esc-week="46" open=""/u, 'as outras semanas fechadas'))
+check(() => assert.match(viewer, /<details class="esc-week esc-week-current" data-esc-week="47" open="">/u, 'a semana atual aberta e destacada'))
+// [Achado das capturas, 2026-11-25] No Mês, todas as semanas abertas, como na planilha.
+check(() => assert.equal((viewer.match(/<details class="esc-week[^"]*" data-esc-week="\d+" open="">/gu) ?? []).length, 5, 'Mês: todas as semanas abertas por padrão'))
+check(() => assert.match(viewer, /<button aria-expanded="true" class="btn-secondary" data-esc-toggle-weeks="" type="button">Recolher todas<\/button>/u, 'Mês: "Recolher todas" com aria-expanded'))
+check(() => assert.match(pageSource, /\{weeksOpen \? 'Recolher todas' : 'Expandir todas'\}/u, 'Mês: o botão alterna "Recolher todas" e "Expandir todas"'))
+check(() => assert.match(pageSource, /key=\{week\.start\} large=\{view === 'week'\} onOpen=\{open\} onSelect=\{setSelection\} open=\{view === 'week' \|\| weeksOpen\}/u, 'Mês: recolher e expandir valem para todas as semanas'))
 check(() => assert.match(viewer, /<summary>Semana 47 \(Início: 16\/11\/2026\)<\/summary>/u, 'título da semana'))
 check(() => assert.match(viewer, /class="esc-grid-head esc-today" role="columnheader">Qui \(19\/11\)/u, 'hoje destacado no cabeçalho'))
 check(() => assert.match(viewer, /class="esc-cell esc-tone-banco esc-today"[^>]*data-esc-cell="0:3"/u, 'hoje destacado na célula'))
 check(() => assert.match(viewer, /aria-label="Qui 26\/11: Abertura home 07:00–17:00, veio de troca"/u, 'ícone da troca com nome para leitor de tela'))
 check(() => assert.match(viewer, /aria-label="Qua 25\/11: Home \(exceção\) 08:00–18:00, veio de exceção"/u, 'ícone da exceção'))
 check(() => assert.deepEqual([(viewer.match(/<span aria-hidden="true" class="esc-cell-marker" title="veio de troca">⇄<\/span>/gu) ?? []).length, (viewer.match(/<span aria-hidden="true" class="esc-cell-marker" title="veio de exceção">✎<\/span>/gu) ?? []).length], [2, 2], 'ícone discreto na célula (grade e cartão do celular) quando o dia veio de troca ou exceção'))
-check(() => assert.match(viewer, /class="esc-cell esc-tone-feriado"[^>]*><span class="esc-cell-label">Feriado<\/span><span class="esc-cell-detail">Feriado: Feriado Ficticio<\/span>/u, 'feriado na cor própria, com o nome'))
+check(() => assert.match(viewer, /class="esc-cell esc-tone-feriado"[^>]*><span class="esc-cell-label">Feriado<\/span><span class="esc-cell-detail">Feriado Ficticio<\/span><\/button>/u, 'feriado na cor própria: "Feriado" e o nome embaixo, sem repetir "Feriado:"'))
+check(() => assert.doesNotMatch(viewer, /esc-cell-detail">Feriado:/u, 'feriado: o detalhe nunca repete "Feriado:"'))
 check(() => assert.match(viewer, /class="esc-cell esc-tone-banco"[^>]*><span class="esc-cell-label">Banco de horas/u, 'banco de horas na cor própria'))
 check(() => assert.match(viewer, /class="esc-cell esc-tone-ausente"[^>]*><span class="esc-cell-label">Ausente/u, 'quem só vê: a folga aparece como Ausente (o servidor manda assim)'))
 check(() => assert.doesNotMatch(viewer, /Folga|Compromisso/u, 'quem só vê: nenhuma categoria escondida na tela'))
@@ -175,13 +181,27 @@ const dialogSource = read('src/pages/criticalGrid/DayDialog.jsx')
 check(() => assert.match(dialogSource, /\{ value: 'role', label: 'Trocar o papel' \},\s+\{ value: 'absence', label: 'Ausência' \},\s+\{ value: 'exception', label: 'Exceção' \},\s+\.\.\.\(undoTargets\.length > 0 \? \[\{ value: 'undo', label: 'Desfazer' \}\] : \[\]\),/u, 'diálogo: trocar o papel, ausência, exceção e desfazer só com registro no dia'))
 check(() => assert.match(dialogSource, /const undoTargets = single \? Object\.keys\(cell\.refs \|\| \{\}\) : \[\]/u, 'desfazer só de um dia, com o que o servidor mandou'))
 check(() => assert.match(dialogSource, /data-esc-save="" disabled=\{busy \|\| !preview\}/u, 'salvar só depois da prévia do servidor (D-ESC-11)'))
+// [Achado das capturas, 2026-11-25] A prévia vale só para a chave do pedido atual.
+check(() => assert.match(dialogSource, /const currentKey = incomplete \? '' : previewKey\(body\(\)\)\n  const preview = previewFor\(storedPreview, currentKey\)/u, 'diálogo: a prévia mostrada e o salvar dependem da chave do pedido atual'))
+check(() => assert.match(dialogSource, /const requested = previewKey\(body\(\)\)[\s\S]*onSuccess: \(result\) => setPreview\(result\?\.request_key === requested \? result : null\),/u, 'diálogo: só guarda a prévia que o servidor devolveu para a chave pedida'))
+check(() => assert.match(dialogSource, /async function save\(\) \{\n    if \(!preview\) return/u, 'diálogo: salvar sem a prévia da chave atual não grava'))
+check(() => assert.match(pageSource, /<DayDialog grid=\{grid\} key=\{`\$\{dialog\.employeeId\}:\$\{dialog\.from\}:\$\{dialog\.to\}`\}/u, 'diálogo remonta (estado limpo) quando muda a pessoa ou o dia'))
+const undoKey = lib.previewKey({ employee_id: 901, from: '2026-11-19', to: '2026-11-19', change: { type: 'undo', target: 'ausencia', ref_id: 70 } })
+check(() => assert.deepEqual([
+  undoKey,
+  lib.previewKey({ employee_id: 905, from: '2026-11-23', to: '2026-11-24', change: { type: 'absence', category: 'banco_horas' } }),
+  lib.previewKey({ employee_id: 901, from: '2026-11-20', to: '2026-11-24', change: { type: 'role', role_id: 1 } }),
+  lib.previewKey({ employee_id: 902, from: '2026-11-16', to: '2026-11-17', change: { type: 'exception', exception_type: 'onsite' } }),
+], ['901|2026-11-19|2026-11-19|undo|ausencia:70', '905|2026-11-23|2026-11-24|absence|banco_horas', '901|2026-11-20|2026-11-24|role|1', '902|2026-11-16|2026-11-17|exception|onsite'], 'chave do pedido no formato do servidor (as mesmas do qa-critical-grid.php)'))
+const undoPreview = criticalGridPreview({ employee_id: 901, from: '2026-11-19', to: '2026-11-19', change: { type: 'undo', target: 'ausencia', ref_id: 70 } })
+check(() => assert.deepEqual([lib.previewFor(undoPreview, undoKey) === undoPreview, lib.previewFor(undoPreview, '901|2026-11-19|2026-11-19|undo|troca:70'), lib.previewFor(undoPreview, '901|2026-11-23|2026-11-23|role|1'), lib.previewFor(null, undoKey), lib.previewFor({ changes: [] }, undoKey)], [true, null, null, null, null], 'prévia de outra aba, opção ou dia (ou sem chave) não vale'))
+check(() => assert.deepEqual(undoPreview.changes.map((item) => item.text), ['Qua 18/11: Banco de horas → Abertura home 07:00–17:00', 'Qui 19/11: Banco de horas → Abertura home 07:00–17:00'], 'servidor simulado: desfazer a ausência mostra os dias dela, nunca outro dia'))
 check(() => assert.match(dialogSource, /setConfirmUndo\(true\)/u, 'desfazer pede confirmação (D-ESC-10)'))
 check(() => assert.match(dialogSource, /const guard = useUnsavedChangesGuard\(dirty\)/u, 'proteção de alteração não salva'))
 check(() => assert.match(dialogSource, /action: 'apply', \.\.\.body\(\), versions \}/u, 'a gravação manda a versão de cada dia (409 se mudou)'))
 check(() => assert.match(dialogSource, /onError: \(\) => onSaved\(\),/u, 'erro (409) recarrega a grade'))
 check(() => assert.match(dialogSource, /max=\{addDays\(selection\.from, 30\)\}/u, 'até 31 dias por vez'))
 check(() => assert.ok(opened.includes('data-esc-dialog') || opened.includes('document is not defined') || opened.includes('createPortal'), 'diálogo monta (ou depende do DOM do navegador, conferido no roteiro de navegador)'))
-const pageSource = read('src/pages/CriticalGridPage.jsx')
 check(() => assert.match(pageSource, /\{dialog && grid\.can_manage && \(\s+<DayDialog/u, 'diálogo de edição só para quem pode (o servidor confere de novo)'))
 check(() => assert.match(pageSource, /\{dialog && !grid\.can_manage && person && \(\s+<Dialog/u, 'quem só vê: painel de leitura'))
 check(() => assert.match(pageSource, /if \(event\.shiftKey\) \{\s+const next = extendSelection\(selection, person\.id, date\)/u, 'Shift+clique estende a seleção'))

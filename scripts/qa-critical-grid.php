@@ -457,7 +457,7 @@ assert_same(['Home 08:00–18:00', 'papel-areia', 'rodizio', null], $view($cell(
 assert_same(['Banco de horas', 'banco', 'ausencia', null], $view($cell($grid, 901, '2026-11-18')), 'celula: banco de horas no lugar do papel');
 assert_same(['Férias', 'ferias', 'ausencia', null], $view($cell($grid, 902, '2026-11-23')), 'celula: ferias');
 assert_same(['Folga', 'ausente', 'ausencia', null], $view($cell($grid, 903, '2026-11-24')), 'celula: a Lideranca ve a categoria (Folga)');
-assert_same(['Feriado', 'feriado', 'feriado', null, 'Feriado: Feriado Ficticio'], array_merge($view($cell($grid, 902, '2026-11-20')), [$cell($grid, 902, '2026-11-20')['detail']]), 'celula: feriado no lugar do papel, com o nome no detalhe');
+assert_same(['Feriado', 'feriado', 'feriado', null, 'Feriado Ficticio'], array_merge($view($cell($grid, 902, '2026-11-20')), [$cell($grid, 902, '2026-11-20')['detail']]), 'celula: feriado no lugar do papel; o detalhe so com o nome, sem repetir "Feriado:" (achado das capturas)');
 assert_same(['Home (exceção)', 'papel-lilas', 'excecao', 'excecao'], $view($cell($grid, 905, '2026-11-25')), 'celula: excecao por data com o icone (nao vem do rodizio)');
 $holidayAbsence = qa_grid_month_db();
 $holidayAbsence->absences[] = ['id' => 74, 'employee_id' => 903, 'category' => 'ferias', 'starts_on' => '2026-11-20', 'ends_on' => '2026-11-20', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'created_by' => 'qa', 'updated_by' => null, 'updated_at' => null];
@@ -538,6 +538,19 @@ $undo = $service->preview(['employee_id' => 903, 'from' => '2026-11-26', 'to' =>
 assert_same(['Qui 26/11: Abertura home 07:00–17:00 → Presencial 08:00–18:00'], array_column($undo['changes'], 'text'), 'previa: desfazer a troca volta ao rodizio');
 $undoAbsence = $service->preview(['employee_id' => 901, 'from' => '2026-11-19', 'to' => '2026-11-19', 'change' => ['type' => 'undo', 'target' => 'ausencia', 'ref_id' => 70]], $lider);
 assert_same(['2026-11-18', '2026-11-19'], array_column($undoAbsence['changes'], 'date'), 'previa: desfazer a ausencia cobre o registro inteiro (D-ESC-10)');
+// [Achado das capturas, 2026-11-25] A previa devolve a chave do pedido
+// (pessoa|de|ate|tipo|valor, a mesma de previewKey() da tela): a tela so liga
+// o salvar com a previa da chave atual. A do desfazer da ausencia fala dos
+// dias da ausencia, nunca de outro dia.
+assert_same([
+    '905|2026-11-23|2026-11-24|absence|banco_horas',
+    '901|2026-11-20|2026-11-24|role|1',
+    '902|2026-11-16|2026-11-17|exception|onsite',
+    '903|2026-11-26|2026-11-26|undo|troca:90',
+    '901|2026-11-19|2026-11-19|undo|ausencia:70',
+], array_column([$preview, $role, $exception, $undo, $undoAbsence], 'request_key'), 'previa: a chave do pedido, por tipo (a mesma da tela)');
+assert_same(['Qua 18/11: Banco de horas → Abertura home 07:00–17:00', 'Qui 19/11: Banco de horas → Abertura home 07:00–17:00'], array_column($undoAbsence['changes'], 'text'), 'previa: desfazer a ausencia mostra os dias dela, do banco de horas ao papel do rodizio');
+assert_same('905|2026-11-23|2026-11-23|absence|ferias', CriticalGridService::requestKey(['employee_id' => 905, 'from' => '2026-11-23', 'to' => '2026-11-23', 'change' => ['type' => 'absence', 'category' => 'ferias']]), 'previa: a chave muda com o dia e a opcao');
 $lonely = qa_grid_month_db();
 foreach ([901, 902, 903, 904] as $index => $id) {
     $lonely->absences[] = ['id' => 200 + $index, 'employee_id' => $id, 'category' => 'ferias', 'starts_on' => '2026-11-27', 'ends_on' => '2026-11-27', 'period_type' => 'full_day', 'start_time' => null, 'end_time' => null, 'created_by' => 'qa', 'updated_by' => null, 'updated_at' => null];

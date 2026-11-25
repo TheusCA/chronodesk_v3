@@ -126,6 +126,33 @@ export function versionsFor(cells: Record<string, GridCell>, employeeId: number,
   return versions
 }
 
+export type GridChange =
+  | { type: 'role', role_id: number }
+  | { type: 'absence', category: string }
+  | { type: 'exception', exception_type: string }
+  | { type: 'undo', target: string, ref_id: number | undefined }
+
+export type PreviewRequest = { employee_id: number, from: string, to: string, change: GridChange }
+
+// [Achado das capturas, 2026-11-25] Chave do pedido da prévia, no mesmo formato
+// de CriticalGridService::requestKey (pessoa|de|ate|tipo|valor). A prévia só
+// vale (e o salvar só liga) quando a chave devolvida pelo servidor é a dos
+// parâmetros atuais do diálogo.
+export function previewKey(request: PreviewRequest): string {
+  const { change } = request
+  const value = change.type === 'role' ? String(change.role_id)
+    : change.type === 'absence' ? change.category
+      : change.type === 'exception' ? change.exception_type
+        : `${change.target}:${change.ref_id ?? ''}`
+  return [String(request.employee_id), request.from, request.to, change.type, value].join('|')
+}
+
+// Prévia que vale para o pedido atual: a devolvida para a chave atual, nunca a
+// de outra aba, opção ou dia (nem uma resposta atrasada de um pedido antigo).
+export function previewFor<T extends { request_key?: unknown }>(preview: T | null, currentKey: string): T | null {
+  return preview !== null && preview.request_key === currentKey ? preview : null
+}
+
 // "Quem alterou por último": "qa.lider em 12/11/2026 10:00".
 export function changeLabel(change: GridCell['last_change']): string {
   if (!change) return '—'

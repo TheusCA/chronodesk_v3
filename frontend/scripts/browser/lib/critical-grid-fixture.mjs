@@ -47,7 +47,7 @@ export function criticalGridFixture({ manager = true, today = '2026-11-19', vers
         let cell = roleCell(role)
         let refs = {}
         if (date === '2026-11-20') {
-          cell = { kind: 'feriado', label: 'Feriado', tone: 'feriado', source: 'feriado', marker: null, presence_type: null, hours: null, detail: 'Feriado: Feriado Ficticio', role_id: null, last_change: null }
+          cell = { kind: 'feriado', label: 'Feriado', tone: 'feriado', source: 'feriado', marker: null, presence_type: null, hours: null, detail: 'Feriado Ficticio', role_id: null, last_change: null }
         } else if (person.id === 901 && (date === '2026-11-18' || date === '2026-11-19')) {
           cell = { kind: 'ausencia', label: 'Banco de horas', tone: 'banco', source: 'ausencia', marker: null, presence_type: null, hours: null, detail: null, role_id: null, last_change: { by: 'qa.lider', at: '2026-11-10 10:00:00' } }
           refs = { ausencia: { id: 70, starts_on: '2026-11-18', ends_on: '2026-11-19' } }
@@ -93,12 +93,43 @@ export function criticalGridFixture({ manager = true, today = '2026-11-19', vers
   }
 }
 
-// Prévia fictícia do POST preview (o formato do CriticalGridService::preview).
+// Prévia fictícia do POST preview (o formato do CriticalGridService::preview):
+// os dias do pedido (o desfazer cobre o registro inteiro), o antes pela grade
+// fictícia, o depois pela mudança e a chave do pedido (request_key), no mesmo
+// formato do servidor e de previewKey() da tela.
+const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const AFTER_LABELS = { ferias: 'Férias', banco_horas: 'Banco de horas', folga: 'Folga', ausencia_justificada: 'Ausência justificada', compromisso: 'Compromisso', outro: 'Outro', onsite: 'Presencial (exceção)', remote: 'Home (exceção)', training: 'Treinamento' }
+
+function rotationLabel(employeeId, date) {
+  const position = PEOPLE.findIndex((person) => person.id === employeeId)
+  const week = WEEKS.findIndex((monday) => date >= monday && date <= addDays(monday, 6))
+  return ROLES.find((role) => role.id === SLOTS[(Math.max(position, 0) + Math.max(week, 0)) % SLOTS.length]).label
+}
+
 export function criticalGridPreview(body) {
-  const label = body?.change?.type === 'absence' ? 'Banco de horas' : body?.change?.type === 'exception' ? 'Presencial (exceção)' : 'Presencial 08:00–18:00'
+  const change = body?.change ?? {}
+  const cells = criticalGridFixture().cells
+  let { from, to } = body ?? {}
+  if (change.type === 'undo') {
+    const ref = cells[`${body.employee_id}:${from}`]?.refs?.[change.target]
+    from = ref?.starts_on ?? ref?.date ?? from
+    to = ref?.ends_on ?? ref?.date ?? to
+  }
+  const changes = []
+  for (let date = from; date && date <= to; date = addDays(date, 1)) {
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay()
+    if (weekday === 0 || weekday === 6) continue
+    const before = cells[`${body.employee_id}:${date}`]?.label ?? 'Sem escala'
+    const after = change.type === 'role' ? ROLES.find((role) => role.id === Number(change.role_id))?.label
+      : change.type === 'undo' ? rotationLabel(body.employee_id, date)
+        : AFTER_LABELS[change.category ?? change.exception_type] ?? 'Outro'
+    changes.push({ date, before, after, text: `${WEEKDAYS[weekday]} ${date.slice(8, 10)}/${date.slice(5, 7)}: ${before} → ${after}` })
+  }
+  const value = change.type === 'role' ? String(change.role_id) : change.type === 'absence' ? change.category : change.type === 'exception' ? change.exception_type : `${change.target}:${change.ref_id ?? ''}`
   return {
     sucesso: true,
-    changes: [{ date: body?.from || '2026-11-23', before: 'Abertura home 07:00–17:00', after: label, text: `Seg 23/11: Abertura home 07:00–17:00 → ${label}` }],
+    changes,
     warnings: body?.employee_id === 905 ? [{ date: '2026-11-27', text: 'Sex 27/11: o Crítico fica sem ninguém disponível.' }] : [],
+    request_key: [String(body?.employee_id), body?.from, body?.to, change.type, value].join('|'),
   }
 }
