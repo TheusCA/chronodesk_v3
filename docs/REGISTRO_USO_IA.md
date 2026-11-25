@@ -1838,6 +1838,17 @@ Base da afirmação:
 | **Achados** | O efeito errado da captura vinha do servidor simulado, mas o diálogo tinha duas brechas reais: a resposta atrasada de um pedido antigo valia para a opção nova, e o estado não era limpo ao trocar de dia sem fechar o diálogo. |
 | **Validacao humana** | Pendente. |
 
+### Escala do Crítico na direção "Mesa clara" (cores minimalistas) — 2026-11-25
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Pedido do responsável ao ver as capturas: a grade da Escala do Crítico combina com o portal (tinta suave, faixa de 3px, paleta dessaturada, cabeçalhos discretos); o Excel não muda. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `cc5c2c4` e o commit destes docs. Sem push (não autorizado nesta rodada). |
+| **O que a IA alterou** | `criticalGrid.css`, `CriticalGridPage.jsx`, `DayDialog.jsx`, `lib/criticalGrid.ts` (título da semana); `qa:critical-grid` (contraste no fundo misturado) e o bloco 34; `docs/DESENHO_ESCALA_CRITICO.md` (5.3). |
+| **Dados pessoais** | Nenhum. As capturas usam só dados fictícios e ficam fora do git. |
+| **Validacao executada pela IA** | `qa:critical-grid` 154; bloco 34 24/24; `qa:bundle` e `qa:contrast` verdes; mutação 15/15 e 2/2 no navegador, mais um mutante de contraste; 22 capturas conferidas; bateria completa sozinha no último commit (no estado da sessão). |
+| **Validacao humana** | Pendente. |
+
 ---
 
 ## 5. Responsabilidade

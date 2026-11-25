@@ -116,3 +116,14 @@ Mutação por commit (worktree, `mut_guard.php`); bateria completa sozinha no ú
   - QAs: `qa-critical-grid` 144, `qa:critical-grid` 124, bloco 34 do navegador 23. Mutação: 6/6 (PHP), 11/11 (frontend), 2/3 no navegador; o sobrevivente (recolher sem remontar os blocos) era equivalente: a remontagem foi retirada antes do envio.
 - **Capturas novas** (16, fictícias): o Mês aberto, recolhido e com o feriado, e o diálogo nas abas Trocar o papel, Ausência, Exceção e Desfazer (antes e depois da prévia), nos dois temas, em `_referencias\critico\capturas-2026-11-25\`.
 - Vai no **deploy 6**, junto com o `5d5e521`.
+
+### 5.3 Cores minimalistas, direção "Mesa clara" (2026-11-25, `cc5c2c4`)
+
+Pedido do responsável ao ver as capturas: a grade combina com o resto do portal. A planilha define só **qual** cor é de qual papel; o tom é o do portal. Isso **muda a D-ESC-14** na tela (antes, os tons aproximavam o preenchimento da planilha); o Excel exportado continua com as cores da planilha (`CriticalGridSheet`).
+
+- **Célula:** superfície do portal com tinta suave da cor do papel (12% no claro, 22% no escuro) e faixa de 3px à esquerda; texto na tinta do portal (Ausente e Sem escala em `muted`); sem bordas grossas.
+- **Paleta dessaturada**, na mesma ordem de matiz: ardósia, sálvia, argila, lavanda acinzentada, mostarda, petróleo claro, grafite e areia; banco de horas no âmbar da pausa; férias areia; feriado neutro com hachura diagonal leve; ausente cinza.
+- **Semana:** cabeçalho discreto "Semana 47 · 16/11 a 20/11" em `ink-2` com fio fino e o marcador "atual" na cor de ação. Título do mês como `section-title`. Hoje: contorno de 2px na cor de ação. Legenda com pontos de cor. Resumo com cabeçalho em `ink-2` e zebra suave. Leitura do dia no mesmo estilo.
+- **QA:** `qa:critical-grid` 154. O contraste (>= 4,5:1) do rótulo e do detalhe é medido sobre o fundo misturado (superfície do `index.css` + tinta), nos dois temas, com a hachura no pior caso. Bloco 34 do navegador: 24. Mutação: 15/15 e 2/2 no navegador, mais um mutante de contraste nos dois blocos do escuro (3,45:1, morto). CSS da rota: 7953 de 15000 bytes.
+- **Capturas:** 22 (Mês, Semana, resumo, leitura do técnico, diálogo nas abas, celular; 1366, 1920 e 390 px; claro e escuro) em `_referencias\critico\capturas-2026-11-25\mesa-clara\`. Ficaram numa subpasta para não sobrescrever as 16 de antes, que têm os mesmos nomes.
+- Vai no **deploy 6**.
