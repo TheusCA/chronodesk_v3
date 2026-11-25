@@ -1847,7 +1847,8 @@ Base da afirmação:
 | **O que a IA alterou** | `criticalGrid.css`, `CriticalGridPage.jsx`, `DayDialog.jsx`, `lib/criticalGrid.ts` (título da semana); `qa:critical-grid` (contraste no fundo misturado) e o bloco 34; `docs/DESENHO_ESCALA_CRITICO.md` (5.3). |
 | **Dados pessoais** | Nenhum. As capturas usam só dados fictícios e ficam fora do git. |
 | **Validacao executada pela IA** | `qa:critical-grid` 154; bloco 34 24/24; `qa:bundle` e `qa:contrast` verdes; mutação 15/15 e 2/2 no navegador, mais um mutante de contraste; 22 capturas conferidas; bateria completa sozinha no último commit (no estado da sessão). |
-| **Validacao humana** | Pendente. |
+| **Ajustes da revisão** | `9b006f0`: hoje só com o fio no cabeçalho e a coluna com metade da tinta (sem contorno nas células); espaço reservado para o ícone de troca/exceção. `qa:critical-grid` 160, bloco 34 24/24, mutação 7/7 e 2/2; 4 capturas em `mesa-clara-v2`. Push autorizado com a bateria verde. |
+| **Validacao humana** | D-ESC-14 revista aprovada em 2026-11-25; os ajustes aguardam revisão. |
 
 ---
 

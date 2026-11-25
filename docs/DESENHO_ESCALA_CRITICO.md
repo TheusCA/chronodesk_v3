@@ -127,3 +127,11 @@ Pedido do responsável ao ver as capturas: a grade combina com o resto do portal
 - **QA:** `qa:critical-grid` 154. O contraste (>= 4,5:1) do rótulo e do detalhe é medido sobre o fundo misturado (superfície do `index.css` + tinta), nos dois temas, com a hachura no pior caso. Bloco 34 do navegador: 24. Mutação: 15/15 e 2/2 no navegador, mais um mutante de contraste nos dois blocos do escuro (3,45:1, morto). CSS da rota: 7953 de 15000 bytes.
 - **Capturas:** 22 (Mês, Semana, resumo, leitura do técnico, diálogo nas abas, celular; 1366, 1920 e 390 px; claro e escuro) em `_referencias\critico\capturas-2026-11-25\mesa-clara\`. Ficaram numa subpasta para não sobrescrever as 16 de antes, que têm os mesmos nomes.
 - Vai no **deploy 6**.
+
+### 5.4 Revisão da Mesa clara (2026-11-25, `9b006f0`)
+
+- **D-ESC-14 revista APROVADA:** a tela fica no estilo Mesa clara e o Excel com as cores da planilha.
+- **Hoje:** sem contorno nas células. A cor de ação é a tinta escura, e o contorno de 2px nas 5 células voltava a parecer o quadro preto. Fica só o fio de ação no cabeçalho do dia, e a coluna leva metade da tinta (6% no claro, 11% no escuro).
+- **Ícone de troca/exceção:** a célula com ícone reserva o canto direito (1,25rem; 1,5rem no cartão do celular), e o ícone não encosta mais no rótulo.
+- **QA:** `qa:critical-grid` 160; bloco 34 24/24 (célula de hoje sem contorno, fio no cabeçalho e distância do ícone ao rótulo). Mutação 7/7 e 2/2 no navegador.
+- **Capturas:** 4, em `_referencias\critico\capturas-2026-11-25\mesa-clara-v2\` (a semana atual e a célula com ícone, claro e escuro).
