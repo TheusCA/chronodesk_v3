@@ -136,7 +136,15 @@ for (const [name, theme, portal, alpha] of [['claro', light, portalLight, tintLi
 check(() => assert.ok(tintLight >= 0.1 && tintLight <= 0.15 && tintDark >= 0.18 && tintDark <= 0.25, 'tinta suave: 10-15% no claro, 18-25% no escuro'))
 check(() => assert.doesNotMatch(css, /255 255 0|--esc-(title|week|day)-bg|--esc-bg:|--esc-ink:/u, 'sem o amarelo neon, sem faixa cheia de título/semana/dia e sem fundo ou texto colorido por tom'))
 check(() => assert.match(css, /\.esc-cell, \.esc-chip \{\n  background: linear-gradient\(rgb\(var\(--esc-stripe\) \/ var\(--esc-tint\)\), rgb\(var\(--esc-stripe\) \/ var\(--esc-tint\)\)\), rgb\(var\(--surface\)\);\n  box-shadow: inset 3px 0 0 rgb\(var\(--esc-stripe\)\);\n  color: rgb\(var\(--ink\)\);\n\}/u, 'célula: superfície com a tinta do papel, faixa de 3px à esquerda e texto na tinta do portal'))
-check(() => assert.match(css, /\.esc-cell\.esc-today \{ outline: 2px solid rgb\(var\(--action\)\); outline-offset: -2px; \}/u, 'hoje: contorno fino (2px) na cor de ação'))
+// [2026-11-25, revisão] Hoje: sem contorno nas células (a cor de ação é a tinta
+// escura e voltava a parecer o quadro preto); só o fio no cabeçalho do dia e a
+// coluna com metade da tinta.
+check(() => assert.match(css, /\.esc-cell\.esc-today \{ --esc-tint: calc\(var\(--esc-tint-today\)\); \}/u, 'hoje: a coluna com a tinta mais fraca'))
+check(() => assert.doesNotMatch(css, /\.esc-cell\.esc-today \{[^}]*(outline|box-shadow)/u, 'hoje: nenhum contorno nas células'))
+check(() => assert.match(css, /\.esc-grid-head\.esc-today \{ color: rgb\(var\(--ink\)\); box-shadow: inset 0 -2px 0 rgb\(var\(--action\)\); \}/u, 'hoje: o fio de ação no cabeçalho do dia'))
+check(() => assert.deepEqual([tint(/(?:^|\n):root \{[^}]*--esc-tint-today: ([\d.]+);/u), tint(/(?:^|\n):root\[data-theme='dark'\] \{[^}]*--esc-tint-today: ([\d.]+);/u), tint(/:root:not\(\[data-theme='light'\]\) \{[^}]*--esc-tint-today: ([\d.]+);/u)], [0.06, 0.11, 0.11], 'hoje: metade da tinta (6% claro, 11% escuro, sistema e botão)'))
+// Ícone de troca/exceção: espaço reservado à direita para não encostar no rótulo.
+check(() => assert.match(css, /\.esc-cell\.esc-has-marker \{ padding-right: 1\.25rem; \}\n\.esc-card \.esc-cell\.esc-has-marker \{ padding-right: 1\.5rem; \}/u, 'célula com ícone reserva o canto direito (grade e cartão)'))
 check(() => assert.match(css, /\.esc-cell\.esc-tone-feriado, \.esc-chip\.esc-tone-feriado \{\n  background:\n    repeating-linear-gradient\(135deg,/u, 'feriado com hachura diagonal leve'))
 check(() => assert.match(css, /\.esc-legend-item::before \{ content: ''; width: 0\.6rem; height: 0\.6rem; border-radius: 999px; background: rgb\(var\(--esc-stripe\)\); \}/u, 'legenda: ponto de cor com o rótulo'))
 check(() => assert.match(css, /\.esc-summary tbody tr:nth-child\(even\) \{ background: rgb\(var\(--surface-2\) \/ 0\.5\); \}/u, 'resumo com zebra suave'))
@@ -177,6 +185,8 @@ check(() => assert.match(viewer, /class="esc-cell esc-tone-banco esc-today"[^>]*
 check(() => assert.match(viewer, /aria-label="Qui 26\/11: Abertura home 07:00–17:00, veio de troca"/u, 'ícone da troca com nome para leitor de tela'))
 check(() => assert.match(viewer, /aria-label="Qua 25\/11: Home \(exceção\) 08:00–18:00, veio de exceção"/u, 'ícone da exceção'))
 check(() => assert.deepEqual([(viewer.match(/<span aria-hidden="true" class="esc-cell-marker" title="veio de troca">⇄<\/span>/gu) ?? []).length, (viewer.match(/<span aria-hidden="true" class="esc-cell-marker" title="veio de exceção">✎<\/span>/gu) ?? []).length], [2, 2], 'ícone discreto na célula (grade e cartão do celular) quando o dia veio de troca ou exceção'))
+check(() => assert.match(viewer, /class="esc-cell esc-tone-papel-verde esc-has-marker"[^>]*data-esc-date="2026-11-26"/u, 'a célula com ícone leva a classe que reserva o espaço'))
+check(() => assert.equal((viewer.match(/esc-has-marker/gu) ?? []).length, 4, 'só as células com ícone (2 na grade, 2 no cartão)'))
 check(() => assert.match(viewer, /class="esc-cell esc-tone-feriado"[^>]*><span class="esc-cell-label">Feriado<\/span><span class="esc-cell-detail">Feriado Ficticio<\/span><\/button>/u, 'feriado na cor própria: "Feriado" e o nome embaixo, sem repetir "Feriado:"'))
 check(() => assert.doesNotMatch(viewer, /esc-cell-detail">Feriado:/u, 'feriado: o detalhe nunca repete "Feriado:"'))
 check(() => assert.match(viewer, /class="esc-cell esc-tone-banco"[^>]*><span class="esc-cell-label">Banco de horas/u, 'banco de horas na cor própria'))

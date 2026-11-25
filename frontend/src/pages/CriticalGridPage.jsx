@@ -17,7 +17,7 @@ const MARKERS = { troca: { text: '⇄', label: 'veio de troca' }, excecao: { tex
 // Uma célula: o botão do dia (Enter abre; setas andam; Shift+clique ou arrastar seleciona).
 function DayCell({ cell, date, today, selected, onPick, onDrag, onKeyNav, position, cardDay = false }) {
   const marker = cell.marker ? MARKERS[cell.marker] : null
-  const classes = ['esc-cell', toneClass(cell.tone), date === today ? 'esc-today' : '', selected ? 'esc-selected' : '', cell.in_month ? '' : 'esc-outside'].filter(Boolean).join(' ')
+  const classes = ['esc-cell', toneClass(cell.tone), date === today ? 'esc-today' : '', selected ? 'esc-selected' : '', marker ? 'esc-has-marker' : '', cell.in_month ? '' : 'esc-outside'].filter(Boolean).join(' ')
   return (
     <button
       aria-label={`${dayLabel(date)}: ${cell.label}${cell.hours && !cell.label.includes(cell.hours) ? ` ${cell.hours}` : ''}${marker ? `, ${marker.label}` : ''}${cell.detail ? `, ${cell.detail}` : ''}`}

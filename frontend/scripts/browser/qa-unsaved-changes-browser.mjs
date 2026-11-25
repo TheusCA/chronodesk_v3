@@ -3508,7 +3508,9 @@ async function criticalGrid(page, port, mock) {
       lateral: document.documentElement.scrollWidth > innerWidth,
       exportar: document.querySelector('[data-esc-export]').getAttribute('href'),
       fundo: getComputedStyle(${cell(902, '2026-11-20')}).backgroundImage,
-      hojeContorno: (() => { const c = getComputedStyle(document.querySelector('.esc-grid .esc-cell.esc-today')); return c.outlineWidth + ' ' + c.outlineStyle })(),
+      hojeContorno: (() => { const c = getComputedStyle(document.querySelector('.esc-grid .esc-cell.esc-today')); return c.outlineStyle + ' ' + c.boxShadow })(),
+      hojeCabecalho: getComputedStyle(document.querySelector('.esc-grid-head.esc-today')).boxShadow,
+      marcador: (() => { const el = ${cell(903, '2026-11-26')}; const m = el.querySelector('.esc-cell-marker').getBoundingClientRect(); const l = el.querySelector('.esc-cell-label').getBoundingClientRect(); return Math.round(m.left - l.right) })(),
       faixa: getComputedStyle(${cell(901, '2026-11-16')}).boxShadow,
       tituloFundo: getComputedStyle(document.querySelector('[data-esc-title]')).backgroundColor,
       semanaFundo: getComputedStyle(document.querySelector('details.esc-week > summary')).backgroundColor,
@@ -3517,7 +3519,7 @@ async function criticalGrid(page, port, mock) {
     }))()`)
     report('Escala do Critico (tecnico, 1366 px): titulo do mes, todas as semanas abertas (como a planilha) com a atual destacada, hoje destacado, legenda das 8 cores, sem rolagem lateral, exportar do mes', view.titulo === 'Novembro 2026' && view.aberta === '45,46,47,48,49' && view.atual === '47' && view.hoje >= 5 && view.legenda === 8 && !view.lateral && view.exportar === '/api/portal/critical_grid.php?month=2026-11&format=xlsx', JSON.stringify(view))
     report('Escala do Critico: o feriado com a hachura leve (CSS da rota carregado) e o tecnico sem a categoria da ausencia', /repeating-linear-gradient/.test(view.fundo) && !view.folga, JSON.stringify({ fundo: view.fundo, folga: view.folga }))
-    report('Escala do Critico (Mesa clara): hoje com contorno de 2px, celula com a faixa de 3px a esquerda, titulo e semana sem faixa cheia', view.hojeContorno === '2px solid' && / 3px 0px 0px 0px inset$/.test(view.faixa) && view.tituloFundo === 'rgba(0, 0, 0, 0)' && view.semanaFundo === 'rgba(0, 0, 0, 0)', JSON.stringify({ hoje: view.hojeContorno, faixa: view.faixa, titulo: view.tituloFundo, semana: view.semanaFundo }))
+    report('Escala do Critico (Mesa clara): hoje so com o fio no cabecalho (celula sem contorno), icone da troca sem encostar no rotulo, celula com a faixa de 3px a esquerda, titulo e semana sem faixa cheia', /^none .* 3px 0px 0px 0px inset$/.test(view.hojeContorno) && / 0px -2px 0px 0px inset$/.test(view.hojeCabecalho) && view.marcador >= 2 && / 3px 0px 0px 0px inset$/.test(view.faixa) && view.tituloFundo === 'rgba(0, 0, 0, 0)' && view.semanaFundo === 'rgba(0, 0, 0, 0)', JSON.stringify({ hoje: view.hojeContorno, cabecalho: view.hojeCabecalho, marcador: view.marcador, faixa: view.faixa, titulo: view.tituloFundo, semana: view.semanaFundo }))
     report('Escala do Critico: a celula do feriado so com "Feriado" e o nome embaixo (sem repetir "Feriado:")', view.feriado === 'Feriado|Feriado Ficticio', view.feriado)
     // Recolher e expandir todas as semanas do mês.
     await page.click(`document.querySelector('[data-esc-toggle-weeks]')`)

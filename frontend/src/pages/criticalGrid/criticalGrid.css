@@ -11,6 +11,7 @@
    planilha (CriticalGridSheet). Canais "R G B", como os tokens do redesenho. */
 :root {
   --esc-tint: 0.12;
+  --esc-tint-today: 0.06;
   --esc-papel-azul: 91 112 131;      /* ardósia #5B7083 */
   --esc-papel-verde: 110 139 99;     /* sálvia #6E8B63 */
   --esc-papel-pessego: 176 122 85;   /* argila #B07A55 */
@@ -28,6 +29,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --esc-tint: 0.22;
+    --esc-tint-today: 0.11;
     --esc-papel-azul: 141 163 184;
     --esc-papel-verde: 157 184 146;
     --esc-papel-pessego: 217 162 125;
@@ -45,6 +47,7 @@
 }
 :root[data-theme='dark'] {
   --esc-tint: 0.22;
+  --esc-tint-today: 0.11;
   --esc-papel-azul: 141 163 184;
   --esc-papel-verde: 157 184 146;
   --esc-papel-pessego: 217 162 125;
@@ -123,7 +126,11 @@
 .esc-cell-label { font-weight: 600; }
 .esc-cell-detail { font-size: 0.75rem; color: rgb(var(--ink-2)); }
 .esc-cell-marker { position: absolute; top: 0.2rem; right: 0.3rem; font-size: 0.7rem; font-weight: 600; color: rgb(var(--muted)); }
-.esc-cell.esc-today { outline: 2px solid rgb(var(--action)); outline-offset: -2px; }
+/* Hoje: só o cabeçalho do dia tem o fio de ação; a coluna fica levemente
+   mais clara (a tinta do papel cai pela metade), sem contorno nas células. */
+.esc-cell.esc-today { --esc-tint: calc(var(--esc-tint-today)); }
+.esc-cell.esc-has-marker { padding-right: 1.25rem; }
+.esc-card .esc-cell.esc-has-marker { padding-right: 1.5rem; }
 .esc-cell.esc-selected { box-shadow: inset 3px 0 0 rgb(var(--esc-stripe)), inset 0 0 0 2px rgb(var(--focus)); }
 .esc-cell.esc-outside { opacity: 0.45; cursor: default; }
 
