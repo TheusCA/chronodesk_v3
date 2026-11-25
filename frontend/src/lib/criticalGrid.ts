@@ -56,9 +56,13 @@ export function dayHeader(date: string): string {
   return `${WEEKDAYS[(day.getUTCDay() + 6) % 7]} (${date.slice(8, 10)}/${date.slice(5, 7)})`
 }
 
-// "Semana 47 (Início: 16/11/2026)".
+// "Semana 47 · 16/11 a 20/11" (seg a sex). [2026-11-25] Cabeçalho discreto,
+// como os de seção do portal; o Excel segue com o título da planilha.
 export function weekTitle(week: Pick<GridWeek, 'iso' | 'start'>): string {
-  return `Semana ${week.iso} (Início: ${week.start.slice(8, 10)}/${week.start.slice(5, 7)}/${week.start.slice(0, 4)})`
+  const end = new Date(`${week.start}T12:00:00Z`)
+  end.setUTCDate(end.getUTCDate() + 4)
+  const friday = end.toISOString().slice(0, 10)
+  return `Semana ${week.iso} · ${week.start.slice(8, 10)}/${week.start.slice(5, 7)} a ${friday.slice(8, 10)}/${friday.slice(5, 7)}`
 }
 
 // "Qui 19/11".

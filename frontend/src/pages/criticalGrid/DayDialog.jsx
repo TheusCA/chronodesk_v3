@@ -28,7 +28,7 @@ function shortDate(date) {
 export function DayReadout({ cell, personName, date }) {
   return (
     <div className="esc-readonly space-y-3" data-esc-readout="">
-      <div className={`rounded-lg border px-3 py-2 text-center font-semibold ${toneClass(cell.tone)}`}>{cell.label}</div>
+      <div className={`esc-chip ${toneClass(cell.tone)}`}>{cell.label}</div>
       <dl>
         <dt>Técnico</dt><dd>{personName}</dd>
         <dt>Dia</dt><dd>{dayLabel(date)}</dd>

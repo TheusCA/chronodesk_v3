@@ -69,7 +69,7 @@ const check = (fn) => { fn(); checks++ }
 check(() => assert.deepEqual([lib.toneClass('papel-azul'), lib.toneClass('banco'), lib.toneClass('x" onclick="'), lib.toneClass(undefined)], ['esc-tone-papel-azul', 'esc-tone-banco', 'esc-tone-sem', 'esc-tone-sem'], 'cor: só tons conhecidos viram classe (nada solto no class)'))
 check(() => assert.deepEqual([lib.colorClass('verde'), lib.colorClass(null), lib.colorClass('#ff0000')], ['esc-tone-papel-verde', 'esc-tone-papel-areia', 'esc-tone-papel-areia'], 'cor do papel: sem cor ou fora da paleta = areia'))
 check(() => assert.deepEqual([lib.dayHeader('2026-11-16'), lib.dayHeader('2026-11-20'), lib.dayLabel('2026-11-19')], ['Seg (16/11)', 'Sex (20/11)', 'Qui 19/11'], 'cabeçalho do dia e rótulo curto'))
-check(() => assert.equal(lib.weekTitle({ iso: 47, start: '2026-11-16' }), 'Semana 47 (Início: 16/11/2026)', 'título da semana como a planilha'))
+check(() => assert.equal(lib.weekTitle({ iso: 47, start: '2026-11-16' }), 'Semana 47 · 16/11 a 20/11', 'título da semana discreto (seg a sex)'))
 check(() => assert.deepEqual(lib.slotsSummary([1, 1, 2, 3, 4], new Map([[1, 'Presencial'], [2, 'Abertura home'], [3, 'Fechamento home'], [4, 'Home']])), ['Presencial x2', 'Abertura home', 'Fechamento home', 'Home'], 'vagas: "Presencial x2" (D-ESC-15)'))
 check(() => assert.deepEqual([lib.removeAt([1, 1, 2], 0), lib.removeAt([1, 1, 2], 2)], [[1, 2], [1, 1]], 'vagas: tirar pela posição (a outra vaga do mesmo papel fica)'))
 check(() => assert.deepEqual([lib.moveFocus(0, 0, 'ArrowRight', 5), lib.moveFocus(0, 4, 'ArrowRight', 5), lib.moveFocus(0, 2, 'ArrowDown', 5), lib.moveFocus(4, 2, 'ArrowDown', 5), lib.moveFocus(2, 3, 'Home', 5), lib.moveFocus(2, 1, 'End', 5), lib.moveFocus(1, 1, 'ArrowUp', 5), lib.moveFocus(1, 1, 'ArrowLeft', 5), lib.moveFocus(1, 1, 'Tab', 5)], [[0, 1], [0, 4], [1, 2], [4, 2], [2, 0], [2, 4], [0, 1], [1, 0], [1, 1]], 'teclado: setas entre as células, sem sair da semana'))
@@ -101,21 +101,50 @@ const block = (pattern) => {
 const light = block(/(?:^|\n):root \{([^}]*)\}/u)
 const darkSystem = block(/@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme='light'\]\) \{([^}]*)\}/u)
 const darkChosen = block(/(?:^|\n):root\[data-theme='dark'\] \{([^}]*)\}/u)
-const tones = [...lib.COLOR_TOKENS.map((token) => `papel-${token}`), ...lib.FIXED_TONES.map((item) => item.tone), 'sem', 'title', 'week', 'day']
+// [2026-11-25, "Mesa clara"] Cada tom só define a cor do papel (a faixa); a
+// célula é a superfície do portal com --esc-tint dessa cor, e o texto é a
+// tinta do portal. O contraste é medido no fundo misturado, com os tokens reais
+// do index.css (superfície, ink, ink-2 e muted) nos dois temas.
+const tones = [...lib.COLOR_TOKENS.map((token) => `papel-${token}`), ...lib.FIXED_TONES.map((item) => item.tone), 'sem']
+const tint = (pattern) => Number(css.match(pattern)?.[1] ?? NaN)
+const tintLight = tint(/(?:^|\n):root \{[^}]*--esc-tint: ([\d.]+);/u)
+const tintDark = tint(/(?:^|\n):root\[data-theme='dark'\] \{[^}]*--esc-tint: ([\d.]+);/u)
+const tintDarkSystem = tint(/:root:not\(\[data-theme='light'\]\) \{[^}]*--esc-tint: ([\d.]+);/u)
+const portalCss = read('src/index.css').replace(/\/\*[\s\S]*?\*\//gu, '')
+const portalBlock = (pattern) => Object.fromEntries([...(portalCss.match(pattern)?.[1] ?? '').matchAll(/--([a-z0-9-]+):\s*(\d+) (\d+) (\d+);/gu)].map(([, name, r, g, b]) => [name, [Number(r), Number(g), Number(b)]]))
+const portalLight = portalBlock(/(?:^|\n):root \{\s*color-scheme: light;([^}]*)\}/u)
+const portalDark = portalBlock(/(?:^|\n):root\[data-theme='dark'\] \{([^}]*)\}/u)
+const mix = (base, color, alpha) => base.map((channel, index) => Math.round(channel * (1 - alpha) + color[index] * alpha))
 check(() => assert.deepEqual(darkSystem, darkChosen, 'tema escuro pelo sistema e pelo botão iguais'))
-check(() => assert.equal(Object.keys(light).length, tones.length * 2, 'um fundo e um texto por tom'))
-for (const [name, theme] of [['claro', light], ['escuro', darkChosen]]) {
+check(() => assert.deepEqual([Object.keys(light).sort(), tintLight, tintDark, tintDarkSystem], [tones.sort(), 0.12, 0.22, 0.22], 'uma cor por tom; tinta de 12% no claro e 22% no escuro (sistema e botão)'))
+check(() => assert.ok(['surface', 'ink', 'ink-2', 'muted'].every((name) => portalLight[name] && portalDark[name]), 'tokens do portal lidos nos dois temas'))
+for (const [name, theme, portal, alpha] of [['claro', light, portalLight, tintLight], ['escuro', darkChosen, portalDark, tintDark]]) {
   for (const tone of tones) {
-    check(() => {
-      const ratio = contrast(theme[`${tone}-ink`], theme[`${tone}-bg`])
-      assert.ok(ratio >= 4.5, `${name}: texto do tom ${tone} com ${ratio.toFixed(2)}:1 (mínimo 4,5:1)`)
-    })
+    // Pior caso: o feriado leva a hachura (mais 16% da cor nos fios).
+    const background = tone === 'feriado' ? mix(mix(portal.surface, theme[tone], alpha), theme[tone], 0.16) : mix(portal.surface, theme[tone], alpha)
+    const label = ['ausente', 'sem'].includes(tone) ? 'muted' : 'ink'
+    for (const [text, role] of [[label, 'rótulo'], ['ink-2', 'detalhe']]) {
+      check(() => {
+        const ratio = contrast(portal[text], background)
+        assert.ok(ratio >= 4.5, `${name}: ${role} (${text}) no tom ${tone} com ${ratio.toFixed(2)}:1 (mínimo 4,5:1)`)
+      })
+    }
   }
 }
+// Nada do preenchimento forte da planilha: tinta suave (até 25%), sem o
+// amarelo neon do banco de horas nem a faixa azul do título e das semanas.
+check(() => assert.ok(tintLight >= 0.1 && tintLight <= 0.15 && tintDark >= 0.18 && tintDark <= 0.25, 'tinta suave: 10-15% no claro, 18-25% no escuro'))
+check(() => assert.doesNotMatch(css, /255 255 0|--esc-(title|week|day)-bg|--esc-bg:|--esc-ink:/u, 'sem o amarelo neon, sem faixa cheia de título/semana/dia e sem fundo ou texto colorido por tom'))
+check(() => assert.match(css, /\.esc-cell, \.esc-chip \{\n  background: linear-gradient\(rgb\(var\(--esc-stripe\) \/ var\(--esc-tint\)\), rgb\(var\(--esc-stripe\) \/ var\(--esc-tint\)\)\), rgb\(var\(--surface\)\);\n  box-shadow: inset 3px 0 0 rgb\(var\(--esc-stripe\)\);\n  color: rgb\(var\(--ink\)\);\n\}/u, 'célula: superfície com a tinta do papel, faixa de 3px à esquerda e texto na tinta do portal'))
+check(() => assert.match(css, /\.esc-cell\.esc-today \{ outline: 2px solid rgb\(var\(--action\)\); outline-offset: -2px; \}/u, 'hoje: contorno fino (2px) na cor de ação'))
+check(() => assert.match(css, /\.esc-cell\.esc-tone-feriado, \.esc-chip\.esc-tone-feriado \{\n  background:\n    repeating-linear-gradient\(135deg,/u, 'feriado com hachura diagonal leve'))
+check(() => assert.match(css, /\.esc-legend-item::before \{ content: ''; width: 0\.6rem; height: 0\.6rem; border-radius: 999px; background: rgb\(var\(--esc-stripe\)\); \}/u, 'legenda: ponto de cor com o rótulo'))
+check(() => assert.match(css, /\.esc-summary tbody tr:nth-child\(even\) \{ background: rgb\(var\(--surface-2\) \/ 0\.5\); \}/u, 'resumo com zebra suave'))
+check(() => assert.match(css, /\.esc-week > summary \{[^}]*color: rgb\(var\(--ink-2\)\); border-bottom: 1px solid rgb\(var\(--line\)\); \}/u, 'semana: cabeçalho discreto em ink-2 com fio fino'))
 const planner = readFileSync(join(projectRoot, 'services', 'CriticalRolePlanner.php'), 'utf8')
 check(() => assert.deepEqual([...lib.COLOR_TOKENS], JSON.parse(`[${planner.match(/public const COLORS = \[([^\]]*)\];/u)[1].replaceAll("'", '"')}]`), 'paleta da tela = paleta do servidor (D-ESC-13)'))
-for (const tone of tones.filter((item) => !['title', 'week', 'day'].includes(item))) {
-  check(() => assert.match(css, new RegExp(`\\.esc-tone-${tone} \\{ --esc-bg: var\\(--esc-${tone}-bg\\); --esc-ink: var\\(--esc-${tone}-ink\\); \\}`, 'u'), `classe do tom ${tone}`))
+for (const tone of tones) {
+  check(() => assert.match(css, new RegExp(`\\.esc-tone-${tone} \\{ --esc-stripe: var\\(--esc-${tone}\\); \\}`, 'u'), `classe do tom ${tone}`))
 }
 const newSources = ['src/pages/CriticalGridPage.jsx', 'src/pages/criticalGrid/DayDialog.jsx', 'src/pages/criticalGrid/RoleColor.jsx', 'src/pages/HolidaysPanel.jsx'].map(read).join('\n')
 check(() => assert.doesNotMatch(newSources, /\sstyle=\{|dangerouslySetInnerHTML|#[0-9a-fA-F]{6}\b/u, 'sem atributo style, sem HTML cru e sem hex nas telas novas (CSP)'))
@@ -133,7 +162,6 @@ const render = (data) => {
 const viewer = render(criticalGridFixture({ manager: false }))
 const pageSource = read('src/pages/CriticalGridPage.jsx')
 const leader = render(criticalGridFixture({ manager: true }))
-check(() => assert.match(viewer, /<h2 class="esc-title" data-esc-title="">Novembro 2026<\/h2>/u, 'título do mês'))
 check(() => assert.equal((viewer.match(/<details class="esc-week/gu) ?? []).length, 5, 'um bloco por semana'))
 check(() => assert.match(viewer, /<details class="esc-week esc-week-current" data-esc-week="47" open="">/u, 'a semana atual aberta e destacada'))
 // [Achado das capturas, 2026-11-25] No Mês, todas as semanas abertas, como na planilha.
@@ -141,7 +169,9 @@ check(() => assert.equal((viewer.match(/<details class="esc-week[^"]*" data-esc-
 check(() => assert.match(viewer, /<button aria-expanded="true" class="btn-secondary" data-esc-toggle-weeks="" type="button">Recolher todas<\/button>/u, 'Mês: "Recolher todas" com aria-expanded'))
 check(() => assert.match(pageSource, /\{weeksOpen \? 'Recolher todas' : 'Expandir todas'\}/u, 'Mês: o botão alterna "Recolher todas" e "Expandir todas"'))
 check(() => assert.match(pageSource, /key=\{week\.start\} large=\{view === 'week'\} onOpen=\{open\} onSelect=\{setSelection\} open=\{view === 'week' \|\| weeksOpen\}/u, 'Mês: recolher e expandir valem para todas as semanas'))
-check(() => assert.match(viewer, /<summary>Semana 47 \(Início: 16\/11\/2026\)<\/summary>/u, 'título da semana'))
+check(() => assert.match(viewer, /<summary><span>Semana 47 · 16\/11 a 20\/11<\/span><span class="esc-week-badge">atual<\/span><\/summary>/u, 'título da semana discreto, com o marcador "atual" só na semana atual'))
+check(() => assert.equal((viewer.match(/esc-week-badge/gu) ?? []).length, 1, 'um só marcador "atual"'))
+check(() => assert.match(viewer, /<h2 class="section-title esc-title" data-esc-title="">Novembro 2026<\/h2>/u, 'título do mês no estilo dos títulos de página, sem faixa'))
 check(() => assert.match(viewer, /class="esc-grid-head esc-today" role="columnheader">Qui \(19\/11\)/u, 'hoje destacado no cabeçalho'))
 check(() => assert.match(viewer, /class="esc-cell esc-tone-banco esc-today"[^>]*data-esc-cell="0:3"/u, 'hoje destacado na célula'))
 check(() => assert.match(viewer, /aria-label="Qui 26\/11: Abertura home 07:00–17:00, veio de troca"/u, 'ícone da troca com nome para leitor de tela'))
@@ -156,7 +186,7 @@ check(() => assert.match(viewer, /class="esc-cell esc-tone-papel-azul esc-outsid
 check(() => assert.equal((viewer.match(/class="esc-legend-item esc-tone-/gu) ?? []).length, 8, 'legenda: os 4 papéis com a cor e as 4 cores fixas'))
 check(() => assert.match(text(viewer), /⇄ troca · ✎ exceção/u, 'legenda dos ícones'))
 check(() => assert.match(viewer, /href="\/api\/portal\/critical_grid\.php\?month=2026-11&amp;format=xlsx"[^>]*>Exportar Excel/u, 'exportar o mês (o que cada um vê)'))
-check(() => assert.match(viewer, /<section aria-label="Ana Ficticia, Semana 47 \(Início: 16\/11\/2026\)" class="esc-card">/u, 'celular: um cartão por pessoa com os 5 dias'))
+check(() => assert.match(viewer, /<section aria-label="Ana Ficticia, Semana 47 · 16\/11 a 20\/11" class="esc-card">/u, 'celular: um cartão por pessoa com os 5 dias'))
 check(() => assert.match(viewer, /<th scope="col">Presencial<\/th><th scope="col">Abertura home<\/th>/u, 'resumo do mês com os papéis'))
 check(() => assert.match(text(viewer), /Resumo do mês .* % presencial Ana F\./u, 'resumo por pessoa com o % presencial'))
 check(() => assert.match(viewer, /<th scope="col">Home<\/th><th scope="col">Dias home<\/th><th scope="col">Dias presencial<\/th><th scope="col">% presencial<\/th>/u, 'resumo: a coluna do papel Home e as contagens de dias com nomes diferentes'))

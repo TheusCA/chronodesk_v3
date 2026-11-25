@@ -1,127 +1,145 @@
 /* [Escala do Crítico em grade, D-ESC-13 e D-ESC-14] CSS só desta rota e da
    amostra de cor do papel (o Vite gera um arquivo à parte, com limite próprio
-   no qa:bundle). Os tons aproximam as cores da planilha da Liderança e têm
-   versão no tema escuro; o contraste do texto sobre o fundo (>= 4,5:1) é
-   conferido no qa:critical-grid nos dois temas. Sem atributo style (CSP):
-   cada tom é uma classe esc-tone-<tom>. Canais "R G B", como os tokens do
-   redesenho. */
+   no qa:bundle). Sem atributo style (CSP): cada tom é uma classe
+   esc-tone-<tom>, que só define a cor do papel (--esc-stripe).
+   [2026-11-25, pedido do responsável] Direção "Mesa clara": a planilha define
+   QUAL cor é de qual papel; o tom é o do portal. A célula é a superfície do
+   portal com uma tinta suave da cor do papel (--esc-tint: 12% no claro, 22% no
+   escuro) e uma faixa de 3px à esquerda; o texto fica na tinta do portal. O
+   contraste do texto sobre o fundo misturado (>= 4,5:1) é conferido no
+   qa:critical-grid nos dois temas. O Excel exportado segue com as cores da
+   planilha (CriticalGridSheet). Canais "R G B", como os tokens do redesenho. */
 :root {
-  --esc-papel-azul-bg: 197 217 241; --esc-papel-azul-ink: 25 52 88;
-  --esc-papel-verde-bg: 235 241 222; --esc-papel-verde-ink: 50 82 31;
-  --esc-papel-pessego-bg: 252 228 214; --esc-papel-pessego-ink: 117 55 16;
-  --esc-papel-lilas-bg: 204 192 218; --esc-papel-lilas-ink: 56 37 84;
-  --esc-papel-amarelo-bg: 255 242 204; --esc-papel-amarelo-ink: 102 75 0;
-  --esc-papel-turquesa-bg: 218 238 243; --esc-papel-turquesa-ink: 12 80 90;
-  --esc-papel-cinza-bg: 231 230 230; --esc-papel-cinza-ink: 56 56 56;
-  --esc-papel-areia-bg: 238 230 216; --esc-papel-areia-ink: 86 70 43;
-  --esc-banco-bg: 255 255 0; --esc-banco-ink: 72 64 0;
-  --esc-ferias-bg: 255 235 156; --esc-ferias-ink: 102 75 0;
-  --esc-feriado-bg: 146 205 220; --esc-feriado-ink: 10 55 65;
-  --esc-ausente-bg: 217 217 217; --esc-ausente-ink: 48 48 48;
-  --esc-sem-bg: 247 247 245; --esc-sem-ink: 82 82 82;
-  --esc-title-bg: 31 78 120; --esc-title-ink: 255 255 255;
-  --esc-week-bg: 40 105 165; --esc-week-ink: 255 255 255;
-  --esc-day-bg: 217 234 247; --esc-day-ink: 31 31 31;
+  --esc-tint: 0.12;
+  --esc-papel-azul: 91 112 131;      /* ardósia #5B7083 */
+  --esc-papel-verde: 110 139 99;     /* sálvia #6E8B63 */
+  --esc-papel-pessego: 176 122 85;   /* argila #B07A55 */
+  --esc-papel-lilas: 125 111 148;    /* lavanda acinzentada #7D6F94 */
+  --esc-papel-amarelo: 166 138 62;   /* mostarda #A68A3E */
+  --esc-papel-turquesa: 84 128 126;  /* petróleo claro #54807E */
+  --esc-papel-cinza: 122 119 112;    /* grafite #7A7770 */
+  --esc-papel-areia: 160 142 102;    /* areia #A08E66 */
+  --esc-banco: 201 149 46;           /* âmbar da pausa #C9952E */
+  --esc-ferias: 160 142 102;         /* areia #A08E66 */
+  --esc-feriado: 138 135 127;        /* neutro #8A877F */
+  --esc-ausente: 154 150 141;        /* cinza #9A968D */
+  --esc-sem: 207 203 194;            /* fio do portal #CFCBC2 */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --esc-papel-azul-bg: 28 48 78; --esc-papel-azul-ink: 196 218 245;
-    --esc-papel-verde-bg: 33 52 30; --esc-papel-verde-ink: 205 230 190;
-    --esc-papel-pessego-bg: 70 40 26; --esc-papel-pessego-ink: 250 214 192;
-    --esc-papel-lilas-bg: 52 40 72; --esc-papel-lilas-ink: 222 208 240;
-    --esc-papel-amarelo-bg: 66 56 18; --esc-papel-amarelo-ink: 250 232 170;
-    --esc-papel-turquesa-bg: 18 56 62; --esc-papel-turquesa-ink: 186 232 240;
-    --esc-papel-cinza-bg: 54 54 54; --esc-papel-cinza-ink: 225 225 225;
-    --esc-papel-areia-bg: 62 54 40; --esc-papel-areia-ink: 235 222 198;
-    --esc-banco-bg: 92 88 0; --esc-banco-ink: 255 250 160;
-    --esc-ferias-bg: 82 68 20; --esc-ferias-ink: 255 232 150;
-    --esc-feriado-bg: 16 70 82; --esc-feriado-ink: 190 236 246;
-    --esc-ausente-bg: 64 64 64; --esc-ausente-ink: 230 230 230;
-    --esc-sem-bg: 34 34 32; --esc-sem-ink: 190 190 186;
-    --esc-title-bg: 22 52 82; --esc-title-ink: 235 242 250;
-    --esc-week-bg: 30 70 110; --esc-week-ink: 235 242 250;
-    --esc-day-bg: 30 44 58; --esc-day-ink: 222 232 242;
+    --esc-tint: 0.22;
+    --esc-papel-azul: 141 163 184;
+    --esc-papel-verde: 157 184 146;
+    --esc-papel-pessego: 217 162 125;
+    --esc-papel-lilas: 171 160 194;
+    --esc-papel-amarelo: 214 190 112;
+    --esc-papel-turquesa: 141 189 186;
+    --esc-papel-cinza: 171 167 159;
+    --esc-papel-areia: 199 181 140;
+    --esc-banco: 242 194 122;
+    --esc-ferias: 199 181 140;
+    --esc-feriado: 171 167 159;
+    --esc-ausente: 138 134 126;
+    --esc-sem: 81 80 74;
   }
 }
 :root[data-theme='dark'] {
-  --esc-papel-azul-bg: 28 48 78; --esc-papel-azul-ink: 196 218 245;
-  --esc-papel-verde-bg: 33 52 30; --esc-papel-verde-ink: 205 230 190;
-  --esc-papel-pessego-bg: 70 40 26; --esc-papel-pessego-ink: 250 214 192;
-  --esc-papel-lilas-bg: 52 40 72; --esc-papel-lilas-ink: 222 208 240;
-  --esc-papel-amarelo-bg: 66 56 18; --esc-papel-amarelo-ink: 250 232 170;
-  --esc-papel-turquesa-bg: 18 56 62; --esc-papel-turquesa-ink: 186 232 240;
-  --esc-papel-cinza-bg: 54 54 54; --esc-papel-cinza-ink: 225 225 225;
-  --esc-papel-areia-bg: 62 54 40; --esc-papel-areia-ink: 235 222 198;
-  --esc-banco-bg: 92 88 0; --esc-banco-ink: 255 250 160;
-  --esc-ferias-bg: 82 68 20; --esc-ferias-ink: 255 232 150;
-  --esc-feriado-bg: 16 70 82; --esc-feriado-ink: 190 236 246;
-  --esc-ausente-bg: 64 64 64; --esc-ausente-ink: 230 230 230;
-  --esc-sem-bg: 34 34 32; --esc-sem-ink: 190 190 186;
-  --esc-title-bg: 22 52 82; --esc-title-ink: 235 242 250;
-  --esc-week-bg: 30 70 110; --esc-week-ink: 235 242 250;
-  --esc-day-bg: 30 44 58; --esc-day-ink: 222 232 242;
+  --esc-tint: 0.22;
+  --esc-papel-azul: 141 163 184;
+  --esc-papel-verde: 157 184 146;
+  --esc-papel-pessego: 217 162 125;
+  --esc-papel-lilas: 171 160 194;
+  --esc-papel-amarelo: 214 190 112;
+  --esc-papel-turquesa: 141 189 186;
+  --esc-papel-cinza: 171 167 159;
+  --esc-papel-areia: 199 181 140;
+  --esc-banco: 242 194 122;
+  --esc-ferias: 199 181 140;
+  --esc-feriado: 171 167 159;
+  --esc-ausente: 138 134 126;
+  --esc-sem: 81 80 74;
 }
 
-.esc-tone-papel-azul { --esc-bg: var(--esc-papel-azul-bg); --esc-ink: var(--esc-papel-azul-ink); }
-.esc-tone-papel-verde { --esc-bg: var(--esc-papel-verde-bg); --esc-ink: var(--esc-papel-verde-ink); }
-.esc-tone-papel-pessego { --esc-bg: var(--esc-papel-pessego-bg); --esc-ink: var(--esc-papel-pessego-ink); }
-.esc-tone-papel-lilas { --esc-bg: var(--esc-papel-lilas-bg); --esc-ink: var(--esc-papel-lilas-ink); }
-.esc-tone-papel-amarelo { --esc-bg: var(--esc-papel-amarelo-bg); --esc-ink: var(--esc-papel-amarelo-ink); }
-.esc-tone-papel-turquesa { --esc-bg: var(--esc-papel-turquesa-bg); --esc-ink: var(--esc-papel-turquesa-ink); }
-.esc-tone-papel-cinza { --esc-bg: var(--esc-papel-cinza-bg); --esc-ink: var(--esc-papel-cinza-ink); }
-.esc-tone-papel-areia { --esc-bg: var(--esc-papel-areia-bg); --esc-ink: var(--esc-papel-areia-ink); }
-.esc-tone-banco { --esc-bg: var(--esc-banco-bg); --esc-ink: var(--esc-banco-ink); }
-.esc-tone-ferias { --esc-bg: var(--esc-ferias-bg); --esc-ink: var(--esc-ferias-ink); }
-.esc-tone-feriado { --esc-bg: var(--esc-feriado-bg); --esc-ink: var(--esc-feriado-ink); }
-.esc-tone-ausente { --esc-bg: var(--esc-ausente-bg); --esc-ink: var(--esc-ausente-ink); }
-.esc-tone-sem { --esc-bg: var(--esc-sem-bg); --esc-ink: var(--esc-sem-ink); }
-[class*='esc-tone-'] { background: rgb(var(--esc-bg)); color: rgb(var(--esc-ink)); border-color: rgb(var(--esc-ink) / 0.28); }
+.esc-tone-papel-azul { --esc-stripe: var(--esc-papel-azul); }
+.esc-tone-papel-verde { --esc-stripe: var(--esc-papel-verde); }
+.esc-tone-papel-pessego { --esc-stripe: var(--esc-papel-pessego); }
+.esc-tone-papel-lilas { --esc-stripe: var(--esc-papel-lilas); }
+.esc-tone-papel-amarelo { --esc-stripe: var(--esc-papel-amarelo); }
+.esc-tone-papel-turquesa { --esc-stripe: var(--esc-papel-turquesa); }
+.esc-tone-papel-cinza { --esc-stripe: var(--esc-papel-cinza); }
+.esc-tone-papel-areia { --esc-stripe: var(--esc-papel-areia); }
+.esc-tone-banco { --esc-stripe: var(--esc-banco); }
+.esc-tone-ferias { --esc-stripe: var(--esc-ferias); }
+.esc-tone-feriado { --esc-stripe: var(--esc-feriado); }
+.esc-tone-ausente { --esc-stripe: var(--esc-ausente); }
+.esc-tone-sem { --esc-stripe: var(--esc-sem); }
 
-.esc-swatch { display: inline-block; width: 1.1rem; height: 1.1rem; border-radius: 0.3rem; border: 1px solid; vertical-align: middle; }
+/* Superfície com a tinta do papel e a faixa de 3px (célula e leitura do dia). */
+.esc-cell, .esc-chip {
+  background: linear-gradient(rgb(var(--esc-stripe) / var(--esc-tint)), rgb(var(--esc-stripe) / var(--esc-tint))), rgb(var(--surface));
+  box-shadow: inset 3px 0 0 rgb(var(--esc-stripe));
+  color: rgb(var(--ink));
+}
+.esc-cell.esc-tone-feriado, .esc-chip.esc-tone-feriado {
+  background:
+    repeating-linear-gradient(135deg, rgb(var(--esc-stripe) / 0.16) 0 1px, transparent 1px 7px),
+    linear-gradient(rgb(var(--esc-stripe) / var(--esc-tint)), rgb(var(--esc-stripe) / var(--esc-tint))), rgb(var(--surface));
+}
+.esc-cell.esc-tone-ausente .esc-cell-label, .esc-chip.esc-tone-ausente, .esc-cell.esc-tone-sem .esc-cell-label { color: rgb(var(--muted)); }
+.esc-chip { border-radius: 0.5rem; padding: 0.5rem 0.75rem; text-align: center; font-weight: 600; }
+
+.esc-swatch { display: inline-block; width: 0.9rem; height: 0.9rem; border-radius: 999px; background: rgb(var(--esc-stripe)); vertical-align: middle; }
 
 .esc-page { display: grid; gap: 1rem; min-width: 0; }
 .esc-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .esc-toolbar-group { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-.esc-title { border-radius: 0.75rem; padding: 0.6rem 1rem; font-size: 1.35rem; font-weight: 600; text-align: center; background: rgb(var(--esc-title-bg)); color: rgb(var(--esc-title-ink)); }
-.esc-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.6rem; align-items: center; font-size: 0.8125rem; color: rgb(var(--ink-2)); }
-.esc-legend-item { display: inline-flex; align-items: center; gap: 0.35rem; border: 1px solid; border-radius: 999px; padding: 0.15rem 0.6rem; font-weight: 600; }
+.esc-legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; align-items: center; font-size: 0.8125rem; color: rgb(var(--ink-2)); }
+.esc-legend-item { display: inline-flex; align-items: center; gap: 0.4rem; }
+.esc-legend-item::before { content: ''; width: 0.6rem; height: 0.6rem; border-radius: 999px; background: rgb(var(--esc-stripe)); }
+.esc-legend-item.esc-tone-feriado::before { background: repeating-linear-gradient(135deg, rgb(var(--esc-stripe)) 0 1px, transparent 1px 3px); box-shadow: inset 0 0 0 1px rgb(var(--esc-stripe)); }
 
 .esc-week { border: 1px solid rgb(var(--line)); border-radius: 0.75rem; background: rgb(var(--surface)); overflow: hidden; }
-.esc-week > summary { cursor: pointer; list-style: none; padding: 0.45rem 0.9rem; font-weight: 600; text-align: center; background: rgb(var(--esc-week-bg)); color: rgb(var(--esc-week-ink)); }
+.esc-week > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.9rem; font-size: 0.875rem; font-weight: 600; color: rgb(var(--ink-2)); border-bottom: 1px solid rgb(var(--line)); }
+.esc-week:not([open]) > summary { border-bottom: 0; }
 .esc-week > summary::-webkit-details-marker { display: none; }
-.esc-week > summary:focus-visible { outline: 3px solid rgb(var(--focus)); outline-offset: -3px; }
-.esc-week-current > summary::after { content: ' · semana atual'; font-weight: 500; }
+.esc-week > summary::before { content: '›'; color: rgb(var(--muted)); transition: transform 120ms; }
+.esc-week[open] > summary::before { transform: rotate(90deg); }
+.esc-week > summary:focus-visible { outline: 2px solid rgb(var(--focus)); outline-offset: -2px; }
+.esc-week-badge { border: 1px solid rgb(var(--action)); border-radius: 999px; padding: 0 0.45rem; font-size: 0.6875rem; font-weight: 600; line-height: 1.4; color: rgb(var(--action)); }
 
 .esc-grid { display: grid; grid-template-columns: minmax(8.5rem, 11rem) repeat(5, minmax(8.5rem, 1fr)); gap: 1px; background: rgb(var(--line)); overflow-x: auto; }
 .esc-row { display: contents; }
 .esc-row > [role='gridcell'] { display: flex; }
 .esc-row > [role='gridcell'] > .esc-cell { flex: 1; }
 .esc-grid-large .esc-cell { min-height: 4.75rem; font-size: 1rem; }
-.esc-grid-head, .esc-grid-name { padding: 0.45rem 0.6rem; font-size: 0.8125rem; font-weight: 600; background: rgb(var(--esc-day-bg)); color: rgb(var(--esc-day-ink)); display: flex; align-items: center; }
-.esc-grid-head { justify-content: center; text-align: center; }
-.esc-grid-head.esc-today { box-shadow: inset 0 -3px 0 rgb(var(--action)); }
-.esc-grid-name { background: rgb(var(--surface-2)); color: rgb(var(--ink)); }
+.esc-grid-head, .esc-grid-name { padding: 0.45rem 0.6rem; font-size: 0.8125rem; font-weight: 600; background: rgb(var(--surface)); color: rgb(var(--ink-2)); display: flex; align-items: center; }
+.esc-grid-head { justify-content: center; text-align: center; font-size: 0.75rem; }
+.esc-grid-head.esc-today { color: rgb(var(--ink)); box-shadow: inset 0 -2px 0 rgb(var(--action)); }
+.esc-grid-name { color: rgb(var(--ink)); }
 
-.esc-cell { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; min-height: 3.25rem; width: 100%; padding: 0.35rem 0.5rem; border: 0; font-size: 0.875rem; line-height: 1.25; text-align: center; cursor: pointer; user-select: none; }
-.esc-cell:hover { filter: brightness(0.96); }
-.esc-cell:focus-visible { outline: 3px solid rgb(var(--focus)); outline-offset: -3px; z-index: 1; }
+.esc-cell { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; min-height: 3.25rem; width: 100%; padding: 0.35rem 0.5rem 0.35rem 0.7rem; border: 0; font-size: 0.875rem; line-height: 1.25; text-align: center; cursor: pointer; user-select: none; }
+.esc-cell:hover { box-shadow: inset 3px 0 0 rgb(var(--esc-stripe)), inset 0 0 0 1px rgb(var(--line-strong)); }
+.esc-cell:focus-visible { outline: 2px solid rgb(var(--focus)); outline-offset: -2px; z-index: 1; }
 .esc-cell-label { font-weight: 600; }
-.esc-cell-detail { font-size: 0.75rem; opacity: 0.9; }
-.esc-cell-marker { position: absolute; top: 0.2rem; right: 0.3rem; font-size: 0.7rem; font-weight: 600; opacity: 0.85; }
-.esc-cell.esc-today { box-shadow: inset 0 0 0 3px rgb(var(--action)); }
-.esc-cell.esc-selected { box-shadow: inset 0 0 0 3px rgb(var(--focus)); }
+.esc-cell-detail { font-size: 0.75rem; color: rgb(var(--ink-2)); }
+.esc-cell-marker { position: absolute; top: 0.2rem; right: 0.3rem; font-size: 0.7rem; font-weight: 600; color: rgb(var(--muted)); }
+.esc-cell.esc-today { outline: 2px solid rgb(var(--action)); outline-offset: -2px; }
+.esc-cell.esc-selected { box-shadow: inset 3px 0 0 rgb(var(--esc-stripe)), inset 0 0 0 2px rgb(var(--focus)); }
 .esc-cell.esc-outside { opacity: 0.45; cursor: default; }
 
 .esc-cards { display: none; }
 .esc-card { display: grid; gap: 0.35rem; padding: 0.6rem; background: rgb(var(--surface)); }
 .esc-card-name { font-weight: 600; color: rgb(var(--ink)); }
-.esc-card .esc-cell { flex-direction: row; justify-content: space-between; min-height: 2.75rem; border-radius: 0.5rem; text-align: left; }
-.esc-card-day { font-size: 0.75rem; font-weight: 600; min-width: 4.5rem; }
+.esc-card .esc-cell { flex-direction: row; justify-content: space-between; min-height: 2.75rem; border-radius: 0.375rem; text-align: left; }
+.esc-card-day { font-size: 0.75rem; font-weight: 600; min-width: 4.5rem; color: rgb(var(--ink-2)); }
 
+/* Resumo do mês como as tabelas do portal: cabeçalho em ink-2, zebra suave. */
 .esc-summary { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-.esc-summary th, .esc-summary td { border: 1px solid rgb(var(--line)); padding: 0.35rem 0.55rem; text-align: center; }
-.esc-summary th { background: rgb(var(--esc-day-bg)); color: rgb(var(--esc-day-ink)); }
-.esc-summary td:first-child, .esc-summary th:first-child { text-align: left; }
+.esc-summary th, .esc-summary td { border-bottom: 1px solid rgb(var(--line)); padding: 0.5rem 0.75rem; text-align: center; }
+.esc-summary th { background: rgb(var(--surface-2)); color: rgb(var(--ink-2)); font-size: 0.75rem; font-weight: 600; }
+.esc-summary td { color: rgb(var(--ink-2)); }
+.esc-summary tbody tr:nth-child(even) { background: rgb(var(--surface-2) / 0.5); }
+.esc-summary td:first-child, .esc-summary th:first-child { text-align: left; color: rgb(var(--ink)); }
 
 .esc-effects { display: grid; gap: 0.25rem; font-size: 0.875rem; }
 .esc-readonly dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.35rem 0.9rem; font-size: 0.9rem; }

@@ -92,7 +92,7 @@ function WeekBlock({ week, grid, open, selection, onSelect, onOpen, large = fals
 
   return (
     <details className={`esc-week${week.current ? ' esc-week-current' : ''}`} data-esc-week={week.iso} open={open} ref={containerRef}>
-      <summary>{weekTitle(week)}</summary>
+      <summary><span>{weekTitle(week)}</span>{week.current && <span className="esc-week-badge">atual</span>}</summary>
       <div className={`esc-grid${large ? ' esc-grid-large' : ''}`} role="grid" aria-label={weekTitle(week)}>
         <div className="esc-grid-head" role="columnheader">Técnico</div>
         {week.days.map((date) => <div className={`esc-grid-head${date === grid.today ? ' esc-today' : ''}`} key={date} role="columnheader">{dayHeader(date)}</div>)}
@@ -206,7 +206,7 @@ export function CriticalGridPage({ notify }) {
           <a className="btn-secondary" data-esc-export="" download href={apiUrl(`portal/critical_grid.php?month=${grid.month.key}&format=xlsx`)}>Exportar Excel</a>
         </div>
       </div>
-      <h2 className="esc-title" data-esc-title="">{grid.month.label}</h2>
+      <h2 className="section-title esc-title" data-esc-title="">{grid.month.label}</h2>
       <div aria-label="Legenda das cores" className="esc-legend" data-esc-legend="" role="list">
         {legendRoles.map((role) => <span className={`esc-legend-item ${toneClass(`papel-${role.color_token || 'areia'}`)}`} key={role.id} role="listitem">{role.label}</span>)}
         {FIXED_TONES.map((item) => <span className={`esc-legend-item ${toneClass(item.tone)}`} key={item.tone} role="listitem">{item.label}</span>)}
