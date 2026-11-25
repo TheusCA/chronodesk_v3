@@ -1782,7 +1782,7 @@ Base da afirmação:
 | **Dados pessoais e sigilo** | A planilha base de carteiras tem endereços internos. Só foi lida na estação, fora do git, e só as contagens saíram dela. A importação lê só as colunas cod e carteira e nunca grava as outras. O relato e a captura do Tools ficaram fora dos docs. Nas capturas e nos QAs, só dados fictícios. A auditoria `CHG_CATALOGO` leva só contagens. |
 | **Validacao executada pela IA** | <ul><li>Navegador, bloco 33: 48 conferências (1280 a 1920 px, menu aberto e fechado, os dois temas).</li><li>Navegador, bloco 31: 14 conferências.</li><li>Integração no MySQL local: 7/7.</li><li>Catálogo da referência: 168 novas num catálogo vazio e 0 mudanças sobre ele mesmo.</li><li>Mutação por commit: 18/18, 22/22 e 11/11; os sobreviventes da 1ª rodada viraram casos novos.</li><li>CSS do CHG: 12679 de 25000 bytes.</li><li>Trava: 521 verificações.</li><li>Bateria completa sozinha no último commit: no estado da sessão.</li></ul> |
 | **Achados** | Sem um ajuste, o Esc no painel com um campo digitado gravava o campo, porque o aviso de descarte roubava o foco. Corrigido: o campo não grava quando o foco vai para o aviso ou para um controle de saída. O critério "texto com largura menor que 8rem" foi lido como texto quebrado numa caixa estreita (D-CHG-38). |
-| **Decisões (a aprovar)** | D-CHG-34 a D-CHG-41 (`docs/DESENHO_CHG.md`, seção 16). |
+| **Decisões** | D-CHG-34 a D-CHG-41 (`docs/DESENHO_CHG.md`, seção 16), aprovadas em 2026-11-24, como estão. |
 | **Validacao humana** | Pendente: revisão única no fim do lote, com as capturas. |
 
 
@@ -1812,8 +1812,19 @@ Base da afirmação:
 | **Validacao executada pela IA** | Ensaio da 027 nas variantes a e b no MySQL 8.0.46 local, mais a parada do rollback com papel repetido; integração no MySQL local, 26/26; `qa-critical-grid` 141, `qa:critical-grid` 113 (contraste dos 16 tons nos dois temas), trava 556, bloco 34 do navegador 17/17; mutação por commit (21/21, 31/31, 34/34, 29/29, 17/17, 3/3 e 21/21 nos roteiros dos deploys 5 e 6; os sobreviventes da 1ª rodada viraram casos novos, com os commits refeitos antes de qualquer envio); 32 capturas com dados fictícios; bateria completa sozinha no último commit (no resumo da entrega). |
 | **Segredos** | **Incidente:** no ensaio local, um erro de conexão sem tratamento (o PHP da estação sem o `pdo_mysql` carregado) imprimiu na saída da sessão os primeiros 15 caracteres da senha do root do MySQL **local de ensaio** (contêiner do WSL), porque o `db.php` passa a senha como argumento comum numa chamada interna. Nada foi gravado em arquivo. Recomendado trocar essa senha local; proposta de `#[\SensitiveParameter]` no `db.php` num lote próprio. |
 | **Achados** | A remoção da exceção pelo diálogo não entra na fila de sincronização, como a gravação (17h segue A CONFIRMAR); a mensagem do `SIGNAL` do MySQL tem limite de 128 caracteres (achado no ensaio, corrigido antes do commit); o CSS principal estava em 68,4 de 70 KB: a grade tem CSS só da rota (7,9 KB, limite próprio de 15 KB). |
-| **Decisões (a aprovar)** | D-ESC-1 a D-ESC-20 (`docs/DESENHO_ESCALA_CRITICO.md`); a confirmar a D-ESC-8 (atestado e treinamento). |
+| **Decisões** | D-ESC-1 a D-ESC-20 (`docs/DESENHO_ESCALA_CRITICO.md`), aprovadas em 2026-11-24, como estão, inclusive a D-ESC-8. O achado do `db.php` foi corrigido no `5d5e521` (entrada seguinte); a remoção da exceção fora da fila fica como pendência. |
 | **Validacao humana** | Pendente: revisão única no fim do lote, com as capturas. |
+
+### Senha e segredo fora do stack trace (`#[\SensitiveParameter]`) — 2026-11-24
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Corrigir o achado da Escala do Crítico: a fábrica de conexão do `db.php` recebia a senha do banco como argumento comum, e ela aparecia truncada no stack trace de um erro de conexão. Pedido do responsável: o atributo nessa chamada e em toda função do portal que receba senha ou segredo por parâmetro. Vai no **deploy 6** (fica depois do `974ac69`). |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `5d5e521` (código e QA) e o commit destes docs. |
+| **O que a IA alterou** | `db.php`, `auth_ldap.php`, `classes/Usuario.php`, `security.php`, `services/AdCredentialProvider.php` (11 parâmetros, listados no commit); `scripts/qa-security.php` (seção 12); `DEPLOY_LINUX.md` (nota no deploy 6); `docs/DESENHO_ESCALA_CRITICO.md` (5.1). |
+| **Dados pessoais e segredos** | Nenhum. O QA usa a senha fictícia do próprio QA. A senha do MySQL local de ensaio exposta no incidente segue com a recomendação de troca. |
+| **Validacao executada pela IA** | `qa-security` (varredura por token e prova pelo efeito), `qa-auth`, `qa-timezone`; mutação no worktree `chronodesk-mut-sp` com `mut_guard.php`: 16/16; bateria completa sozinha no último commit (no estado da sessão). |
+| **Validacao humana** | Pendente. |
 
 ---
 

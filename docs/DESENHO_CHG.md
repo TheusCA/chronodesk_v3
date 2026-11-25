@@ -1023,7 +1023,7 @@ Arquivo sem nenhuma linha válida: recusado, para nunca desativar o catálogo in
 
 | Commit | Conteúdo |
 |---|---|
-| `0cd0239` | O plano desta seção (D-CHG-34 a D-CHG-41) |
+| `0cd0239` | O plano desta seção (D-CHG-34 a D-CHG-41, aprovadas em 2026-11-24, como estão) |
 | `f45f007` | Layout: `ChgCard` compacto e `ChgCardBody` (o card inteiro) no `ChgPanel` (Drawer `max-w-4xl`, com a guarda), `chgPanelModel.js`, colunas de no mínimo 18rem com rolagem e cabeçalho fixo, `ChgStageView`; `qa:chg`, `qa:unsaved-changes` e o bloco 33 do navegador; os cards fictícios do pior caso no servidor de teste |
 | `426b814` | Catálogo: `services/ChgCatalogImport.php`, `api/portal/chg_catalog_import.php` (`chg.import`, CSRF), `ChgCatalogPanel.jsx`, a busca reversa no `ChgForm`; `qa-chg.php`, `qa-security.php`, `qa:chg` e o bloco 31 do navegador |
 | `9920e19` | Roteiro e folha do deploy 5 (sem migration) e a trava |

@@ -1,6 +1,6 @@
 # Escala do Crítico em grade semanal (deploy 6)
 
-**Estado:** pedido da Liderança em 2026-11-24; plano curto e execução neste documento; decisões D-ESC-1 em diante a aprovar. Parte do 9.16 (migration 024, `CriticalRolePlanner`, `CriticalRoleService`, `CriticalRoles.jsx`). Migration nova: **027** (a 023 fica com o F10-4). Entra no **deploy 6** (sem data): o deploy 5 ficou congelado no `babcdd9` (decisão do responsável, 2026-11-24), sem nada deste lote. Sem push.
+**Estado:** pedido da Liderança em 2026-11-24; plano curto e execução neste documento; **D-ESC-1 a D-ESC-20 aprovadas em 2026-11-24, como estão** (inclusive a D-ESC-8); revisão na seção 5.1. Parte do 9.16 (migration 024, `CriticalRolePlanner`, `CriticalRoleService`, `CriticalRoles.jsx`). Migration nova: **027** (a 023 fica com o F10-4). Entra no **deploy 6** (sem data): o deploy 5 ficou congelado no `babcdd9` (decisão do responsável, 2026-11-24), sem nada deste lote. Sem push.
 
 **LGPD e sigilo:** as referências (`_referencias/critico/`, planilha e captura) têm nomes reais: só a estrutura e as cores foram usadas; nada delas no git, nos docs, nos QAs nem nas capturas. Os testes e as capturas usam nomes fictícios. A categoria da ausência segue a P9: quem não é Liderança nem admin vê só "Férias", "Banco de horas", "Feriado" ou "Ausente".
 
@@ -41,7 +41,7 @@ Mutação por commit (worktree, `mut_guard.php`); bateria completa sozinha no ú
 | Escala do Crítico (nova) | Célula "Feriado" na cor própria | `qa-critical-grid.php` |
 | Presença (`presence.php`) | Situação do dia como fim de semana, com o detalhe do feriado | `qa-holidays.php` (dayPresence) |
 
-## 4. Decisões de implementação (a aprovar)
+## 4. Decisões de implementação (aprovadas em 2026-11-24, como estão)
 
 | # | Decisão | Por quê |
 |---|---|---|
@@ -52,7 +52,7 @@ Mutação por commit (worktree, `mut_guard.php`); bateria completa sozinha no ú
 | D-ESC-5 | Privacidade: só `escalas.manage` (Liderança e admin) vê a categoria da ausência; os demais veem "Férias", "Banco de horas" ou "Ausente" (e "Feriado"). Observação nunca vai na grade nem no `.xlsx`. "Quem alterou por último" (login) para todos | Pedido; a mesma regra na tela e no Excel |
 | D-ESC-6 | Versão por célula: hash curto do que decide o dia (troca, ausências, exceção, feriado, papel do rodízio). A gravação manda a versão de cada dia; o servidor recalcula com o colaborador travado e devolve 409 com a contagem de dias que mudaram. Os feriados têm `row_version` na tabela | O dia junta três tabelas; o hash cobre todas sem coluna nova nelas |
 | D-ESC-7 | "Trocar o papel" grava a troca pontual do 9.16 (motivo `troca`), só este dia ou até dd/mm (até 31 dias); com troca no período, 409 "N troca(s) já cobrem o período" | Reaproveita a regra e a auditoria do 9.16 |
-| D-ESC-8 | "Marcar ausência" grava pelo `AbsenceService::create` (dia inteiro, aprovada, mesmas regras de conflito e de retroativa). Categorias: Férias, Banco de horas, Folga, Ausência justificada, Compromisso, Outro. **A confirmar:** "Atestado" é lançado como Ausência justificada (sem dado de saúde no portal) e "Treinamento" é a exceção `training` que já existe (dia trabalhado, presencial), não uma ausência | O pedido cita atestado e treinamento, que não existem como categoria; a 027 só traz o banco de horas |
+| D-ESC-8 | "Marcar ausência" grava pelo `AbsenceService::create` (dia inteiro, aprovada, mesmas regras de conflito e de retroativa). Categorias: Férias, Banco de horas, Folga, Ausência justificada, Compromisso, Outro. **Confirmado em 2026-11-24:** "Atestado" é lançado como Ausência justificada (sem dado de saúde no portal) e "Treinamento" é a exceção `training` que já existe (dia trabalhado, presencial), não uma ausência | O pedido cita atestado e treinamento, que não existem como categoria; a 027 só traz o banco de horas |
 | D-ESC-9 | "Exceção do dia": presencial ou home forçado (e treinamento, D-ESC-8), pela exceção por data que já existe, uma por dia útil do intervalo | Mesmas regras (L9, P7) |
 | D-ESC-10 | "Desfazer" no dia: a troca que cobre o dia sai inteira (a prévia mostra o intervalo dela); a ausência é cancelada inteira (fica no histórico como cancelada); a exceção daquele dia sai. Com confirmação | O registro é um só; desfazer metade criaria outro sem pedido |
 | D-ESC-11 | Prévia do servidor antes de salvar: por dia, "antes → depois" ("Qui 19/11: Home 10:30–20:30 → Banco de horas") e o aviso quando o Crítico fica sem ninguém disponível no dia (ninguém presencial ou remoto, fora ausência de dia inteiro); salva com o aviso | Pedido; o aviso não bloqueia, como hoje |
@@ -92,8 +92,16 @@ Mutação por commit (worktree, `mut_guard.php`); bateria completa sozinha no ú
 
 **Mutação** (worktree, `mut_guard.php`): `3e128bb` 21/21 (na 1ª rodada 19/21: a condição da parada das vagas e a guarda da cópia da cor não eram conferidas; casos novos, commit refeito antes de qualquer envio); `b1f4485` 31/31; `a0c263c` 34/34 (na 1ª rodada 30/34: ausência no feriado, troca para o mesmo papel do rodízio e duas conferências estruturais frouxas; casos novos e um mutante equivalente trocado, commit refeito antes de qualquer envio); `e0f9a54` 29/29 (na 1ª rodada 28/29: o ícone visível da troca; caso novo, commit refeito); `c6cbab9` 17/17 (desfeito); `d0cce66` 3/3; `4d70149`, `10d6d37` e `bb4d9d1` juntos 21/21 (na 1ª rodada 19/21: a prosa do deploy 5 citando a 027 passava, caso novo no `bb4d9d1`; um mutante não aplicou por erro do próprio script de mutação e foi refeito).
 
-**Capturas** (dados fictícios, servidor simulado): 32, em 1366 e 1920 px nos dois temas, no celular (390 px), como técnico e como Liderança, com o diálogo do dia aberto, mais o resumo, a visão Semana, os feriados em Configurações e a cor do papel. Ficam no scratchpad da sessão (`esc/capturas`).
+**Capturas** (dados fictícios, servidor simulado): 32, em 1366 e 1920 px nos dois temas, no celular (390 px), como técnico e como Liderança, com o diálogo do dia aberto, mais o resumo, a visão Semana, os feriados em Configurações e a cor do papel. Copiadas em 2026-11-24 para `_referencias\critico\capturas-2026-11-24\` (fora do git), para a revisão do responsável.
 
 **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
 
 **Decisões a confirmar:** D-ESC-8 (atestado como Ausência justificada; treinamento como a exceção `training`). **Achados fora do escopo, não corrigidos:** (1) a remoção da exceção pelo diálogo (D-ESC-10) não entra na fila de sincronização (`portal_sync_queue`), como a gravação; o consumidor da fila segue A CONFIRMAR (17h); (2) no `db.php`, a senha do banco passa como argumento comum numa chamada interna e aparece truncada no stack trace de um erro de conexão sem tratamento (visto no ensaio local; o portal trata o erro e não mostra o trace). Proposta: `#[\SensitiveParameter]` nessa chamada, num lote próprio.
+
+### 5.1 Revisão do responsável (2026-11-24)
+
+- **D-ESC-1 a D-ESC-20 aprovadas como estão**, inclusive a D-ESC-8: atestado lançado como Ausência justificada (sem dado de saúde no portal); treinamento como a exceção `training`.
+- **Deploy:** o lote segue no **deploy 6** (confirmado pelo responsável em 2026-11-24, depois de uma mensagem que o citava no deploy 5); o deploy 5 continua congelado no `babcdd9`.
+- **Achado (2), senha no stack trace: corrigido** no `5d5e521` (`#[\SensitiveParameter]` na fábrica de conexão do `db.php` e em todo parâmetro de senha ou segredo do portal: `autenticar_ad`, `autenticar_ci_via_ad`, `Usuario::criar`, `Usuario::atualizarSenhaPorUsername`, `Usuario::autenticar`, `hash_password`, `verify_password` (senha e hash), `verify_csrf_token`, `EnvAdCredentialProvider::assertCredentialValues`). `qa-security` seção 12: varredura por token com a lista exata dos protegidos e prova pelo efeito (falha real de conexão; a senha do QA fora dos argumentos e do texto do trace). Mutação 16/16. Como fica depois do `974ac69`, vai no **deploy 6** (só código; nota no roteiro).
+- **Achado (1), remoção da exceção fora da `portal_sync_queue`: pendência registrada, sem mudança** (junto da 17h, consumidor da fila A CONFIRMAR).
+- **Capturas:** as 32 (fictícias) em `_referencias\critico\capturas-2026-11-24\`.

@@ -6193,6 +6193,12 @@ limpeza de `/var/backups/chronodesk` (`deploy5-<data>`, com dados pessoais,
   nao entra no "pelo menos 1 disponivel", nao gera papel vago), em todas as
   telas que leem o motor; o ciclo e o rodizio continuam contando o dia. O
   banco de horas entra nas Ausencias.
+- **Senha fora do stack trace (achado de 2026-11-24, `5d5e521`):** a fabrica
+  de conexao do `db.php` e as funcoes que recebem senha ou segredo por
+  parametro (login no AD, usuario local, hash e conferencia de senha, token
+  CSRF, credencial de servico do AD) marcam o parametro com
+  `#[\SensitiveParameter]`: num erro, o trace mostra `SensitiveParameterValue`
+  no lugar do valor. So codigo; nada muda para quem usa.
 - **O que muda para quem usa:** a tela nova (Escala do Critico), a cor dos
   papeis, o banco de horas nas Ausencias e o bloco de feriados em
   Configuracoes, que passa a abrir tambem para a Lideranca (so os feriados).
