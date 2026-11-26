@@ -1850,6 +1850,19 @@ Base da afirmação:
 | **Ajustes da revisão** | `9b006f0`: hoje só com o fio no cabeçalho e a coluna com metade da tinta (sem contorno nas células); espaço reservado para o ícone de troca/exceção. `qa:critical-grid` 160, bloco 34 24/24, mutação 7/7 e 2/2; 4 capturas em `mesa-clara-v2`. Push autorizado com a bateria verde. |
 | **Validacao humana** | D-ESC-14 revista aprovada em 2026-11-25; os ajustes aguardam revisão. |
 
+### Escala do mês no portal (F10-4, F10-5, F10-6 e a importação da planilha Base; migration 023) — 2026-11-26
+
+| Campo | Conteudo |
+|---|---|
+| **Finalidade** | Prioridade do responsável: a escala Home mensal no portal, que vai substituir o script V17 e a planilha, num deploy 7 próprio a partir do `65af3da`, com a paridade com o script e a planilha Base. |
+| **Branch e commits** | `feat/employee-form-rhf-zod`: `d4886e4`, `81dbc97`, `e7d1ca8`, `d657a70`, `425fc6f`, `6c910d4` (o commit do deploy 7) e os de documentos e da trava depois dele. |
+| **O que a IA alterou** | Migration 023 com rollback, verificação e linhas do ensaio; `MonthlySchedulePlanner`, `MonthlyScheduleService`, `MonthlyScheduleSheet`, `EscalaBaseWorkbook`, `EscalaBaseImport`; `api/portal/monthly_schedule.php` e `monthly_schedule_import.php`; `OperationalService::monthPresence`, `PaMapService` (fonte do mês), `security.php` (duas permissões); `scripts/paridade-escala-mensal.php` (usa a classe do leitor); a tela `MonthlySchedulePage.jsx`, `lib/monthlySchedule.ts`, o Mapa PA, a navegação e o CSS da rota da Escala do Crítico; QAs `qa-monthly-schedule.php` e `qa:monthly-schedule` (novos) e os ajustes nos simuladores e na trava; o servidor simulado e o bloco 35; roteiro e folha do deploy 7 (`DEPLOY_LINUX.md`, `docs/DEPLOY7_FOLHA_DO_DIA.md`) e a seção 20 da trava; `docs/DESENHO_F10_ESCALA_MENSAL.md` (8.9). |
+| **Dados pessoais e sigilo** | A planilha Base, o script V17 e o casamento (`_referencias/`, com nomes reais) foram lidos só na estação; a saída foi só contagens. A comparação com o `build_pa_assignments` real usou arquivos intermediários com nomes só no scratchpad, esvaziados no fim. Os QAs, a integração e as capturas usam só nomes fictícios. As linhas da escala guardam só IDs; sem categoria de ausência nem observação; auditoria só com IDs e contagens. |
+| **Validacao executada pela IA** | Ensaio da 023 (a) e (b) no MySQL 8.0.46 local: OK; integração no MySQL local 31/31 (escala do mês) e 20/20 (importação); paridade: dezembro 276/276 no status e 0 diferenças de PA contra o `build_pa_assignments` real em out, nov e dez (832 células); mutação por commit (32/32, 17/17, 14/14, 18/18 + 2/2 + 2/2, com os sobreviventes da 1ª rodada como casos novos e os commits refeitos antes de qualquer envio); bloco 35 7/7; trava 570; 18 capturas fictícias; bateria completa sozinha no `6c910d4` e no último commit (no estado da sessão). |
+| **Achados** | A verificação da 023 contava FKs e CHECKs que o RENAME leva para as cópias; a lista de migrations do roteiro, derivada da do deploy 6, ficava fora da ordem do `sort` (daria PARE no dia); nas capturas, a semana curta desalinhava a grade e a grade sumia no celular. Todos corrigidos antes do commit. Pendente do responsável: o `employee_id` no casamento (0 de 23) para a paridade com o portal real. |
+| **Decisões (a aprovar)** | D-F10-48 a D-F10-62 (`docs/DESENHO_F10_ESCALA_MENSAL.md`, 8.9). |
+| **Validacao humana** | Pendente: revisão única no fim do lote, com as capturas. |
+
 ---
 
 ## 5. Responsabilidade

@@ -1,6 +1,6 @@
 # Desenho do F10: escala mensal no portal (substitui o script e a planilha "Escala Home")
 
-**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8). **D-F10-19 revista em 2026-11-16** (Crítico com 2 PAs reservados, configurável, ocupados pelos papéis do 9.16; Híbrido na opção (c)). **F10-3 entregue em 2026-11-19, sem push** (plano revisto na 3.3.1, execução na 8.7; vai no deploy 5). **F10-3 aprovado em 2026-11-23**, com D-F10-32 a D-F10-41 como estão na 8.7 (D-F10-34 inclusive: o reservado vazio não empresta). **Lote 8.8 (papel do dia do Crítico numa fonte só) aprovado em 2026-11-23 e entregue no mesmo dia**: entra no deploy 5, junto do F10-3; retira a D-F10-36. **D-F10-42 a D-F10-47 (8.8) aprovadas em 2026-11-24, como estão.**
+**Estado:** desenho aprovado em 2026-11-13 (`69f504e`), com as decisões D-F10-1 a D-F10-18 como recomendadas; a D-F10-19 fica com o responsável, a responder antes do F10-3. Lote F10-1 (`968e9b1`, `665b219`, `fdefa83`) aprovado em 2026-11-13, com a proposta da 8.4 (seção 8). **D-F10-19 revista em 2026-11-16** (Crítico com 2 PAs reservados, configurável, ocupados pelos papéis do 9.16; Híbrido na opção (c)). **F10-3 entregue em 2026-11-19, sem push** (plano revisto na 3.3.1, execução na 8.7; vai no deploy 5). **F10-3 aprovado em 2026-11-23**, com D-F10-32 a D-F10-41 como estão na 8.7 (D-F10-34 inclusive: o reservado vazio não empresta). **Lote 8.8 (papel do dia do Crítico numa fonte só) aprovado em 2026-11-23 e entregue no mesmo dia**: entra no deploy 5, junto do F10-3; retira a D-F10-36. **D-F10-42 a D-F10-47 (8.8) aprovadas em 2026-11-24, como estão.** **F10-4, F10-5, F10-6 e a importação da planilha Base entregues em 2026-11-26** (seção 8.9; deploy 7, commit `6c910d4`; D-F10-48 a D-F10-62 a aprovar).
 
 **Fontes lidas** (locais, fora do git, em `_referencias/`): o script `gerar_escala_home_V17_ARQUIVO_MENSAL.py` (1.660 linhas, lido inteiro) e a planilha `Escala Home - Base.xlsx`. A planilha tem nomes reais. Este documento traz só estrutura, regras e contagens: nenhum nome, login ou dado pessoal. As linhas citadas são do script V17.
 
@@ -936,3 +936,88 @@ Quem não é convertível fica como está, com a regra individual: FIXO SEMANAL,
 - **Mutação do commit 3** (`9c4002f`) no worktree: 15/15 mortos (a fumaça sem o Calendário ou sem os relatórios, o título e o que vai sem o 8.8, a D-F10-36 sem a retirada, o esperado com quatro GET ou sem o `reports.php`, o passo 12 e o PARE sem a mesma pessoa nas telas, o aviso sem o 8.8, a folha sem os seis GET, sem a conferência, com um e-mail ou com um comando a mais, e o roteiro com uma migration nova). Na 1ª rodada, 3 mutantes não se aplicaram (erro do script de mutação: `\n` entre aspas simples e um texto que aparece duas vezes); corrigidos, 3/3.
 - **Trava do roteiro:** 514 verificações (513 + a do 8.8 no deploy 5). `qa-pa-conflicts`: 144 verificações (132 + 12 da seção 7).
 - **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha, no worktree do último commit): no resumo da entrega e no estado da sessão.
+
+### 8.9 Lotes F10-4, F10-5, F10-6 e a importação da planilha Base (2026-11-26)
+
+**Pedido de 2026-11-26** (prioridade): a escala Home mensal no portal, num deploy 7 próprio a partir do `65af3da` (os deploys 5 e 6 ficam congelados), pelo desenho aprovado (D-F10-1 a D-F10-47) e com a paridade com o V17 e a planilha Base de `_referencias` (nada dela no git, nos docs, nos QAs ou nas capturas). Plano curto da 3.5 a 3.7 revisado direto para a implementação; uma parada só, no fim.
+
+**Plano curto (o que mudou em relação à 3.5 a 3.7):**
+
+| Item | Como ficou |
+|---|---|
+| Migration 023 | As quatro tabelas da 3.5, mais `row_version` no mês e `source` com `role` e `none` (o papel do dia do Crítico, 8.8). Só CREATE TABLE; rollback por RENAME |
+| Prévia e publicação | Como a 3.5. O RESUMO de cada dia vai nas contagens da revisão (só números e status); a leitura junta pela revisão vigente no dia |
+| Feriado (D-F10-4 a) | A presença da escala do mês ignora o feriado (o rodízio conta o dia, como o script e a D-F9-30); a tela e o Excel só marcam a data |
+| Grupo comum | N1 e N2 com o grupo `comum` (F9, D-F9-12); o Crítico entra no reservado pelo papel do dia (8.8, D-F10-34) |
+| Telas | Uma página "Escala do mês" com a grade por semana e o RESUMO (as abas PA diário, mapa por semana e resumo de PA da 3.7 ficam no Excel); as travas têm o servidor pronto, sem tela neste lote |
+| Exportação | As 6 abas do script pelo `XlsxWriter` (sem o `ZipArchive`; D-F10-9 a) |
+| Importação | Nova (não estava na 3.7): a planilha Base para os cadastros do portal, com prévia obrigatória |
+
+**Commits** (branch `feat/employee-form-rhf-zod`):
+
+| Commit | Conteúdo |
+|---|---|
+| `d4886e4` | Migration 023, rollback, verificação e linhas do ensaio; `qa-monthly-schedule.php` (estrutura) nos dois runners; a trava separa a 023 e o QA novo dos deploys 5 e 6 |
+| `81dbc97` | `MonthlySchedulePlanner` (puro), `MonthlyScheduleService`, `api/portal/monthly_schedule.php`, `OperationalService::monthPresence`; permissões `escala_mensal.publish` e `escala_mensal.import`; o `distribute` em produção pelo planner |
+| `e7d1ca8` | Os sobreviventes da mutação dos dois commits anteriores |
+| `d657a70` | `MonthlyScheduleSheet` (as 6 abas) e o `formato=xlsx` |
+| `425fc6f` | `EscalaBaseWorkbook` (o leitor e a tradução das abas, saídos da paridade do F10-1 para uma fonte só), `EscalaBaseImport` e `api/portal/monthly_schedule_import.php` |
+| `6c910d4` | A tela "Escala do mês", a fonte "escala do mês" no Mapa PA, o servidor simulado e o bloco 35 do navegador. **É o commit do deploy 7** |
+| os seguintes | Roteiro, folha e trava do deploy 7; esta seção e o `REGISTRO_USO_IA.md` (só documentos e a trava) |
+
+**Ensaio da 023 no MySQL 8.0.46 local** (contêiner do WSL; base fictícia `qa_esci`; `scripts/ensaio-migration.sh` do repositório; `DADOS=funcionarios,portal_pa_inventory`). Só contagens e assinaturas:
+
+| Variante | Resultado |
+|---|---|
+| (a) `f10_023` | migration 2x `OK` (`tabelas_023 = 4`, `fks_023 = 4`, `checks_023 = 7`; meses, revisões, linhas e travas em 0; problemas em 0); rollback 1x `OK` (`copias_de_rollback_023 = 4`, "023 ausente"); a 2ª para de propósito (`rollback_023 abortado`); assinaturas dos cadastros (19 linhas) e do inventário (16) iguais nos cinco estados |
+| (b) `f10_023_rollback` | linhas do ensaio 2x: meses 1, revisões 1, linhas 1, travas 1, problemas 0 (iguais na 2ª); rollback 1x `OK` (4 cópias), a 2ª para; assinaturas iguais às do estado inicial |
+
+Achado no ensaio (corrigido antes do commit): a verificação contava as FKs e as CHECKs pelo nome, e o RENAME do rollback as leva junto para as cópias; passou a contar só nas tabelas vivas.
+
+**Integração no MySQL 8.0.46 local** (`qa_f10` = `qa_esci` + 022 + 023, dados fictícios, transação desfeita):
+- escala do mês: **31/31** (prévia sem gravar e determinística; técnico 403; mês passado 409; publicar com hash errado e com revisão errada 409; publicar grava as linhas da prévia; a 2ª publicação com a revisão velha 409; leitura sem categoria; ausência nova vira divergência "ausente com PA"; regerar de amanhã com as células que mudam, revisão 2 como WARNING, o dia anterior fica da revisão 1; nada é apagado; trava 403 para o técnico, recusada para hoje, PA travado com a fonte `lock`; paridade só admin, sem nome; o Excel do mês publicado com os 16 PAs; mês sem publicação 409; o RESUMO de cada dia pela revisão vigente);
+- importação: **20/20**, com uma planilha Base e um casamento sintéticos (nomes fictícios): prévia sem gravar; 3 times, 3 membros e 1 sem casamento; 3 regras; 2 dias de HOME e 1 férias (a de novembro, no passado, fica fora); o PA que a gestão já marcou vira conflito e não é sobrescrito; o ocupante Híbrido vira conflito (opção c); o PA com outro dono no banco fica inteiro em conflito; a virada; a confirmação grava; **a 2ª prévia e a 2ª confirmação não têm nada a gravar**; a escala do mês com o que foi importado dá a origem "time" e um time em HOME por dia.
+
+**Paridade** (planilha Base de `_referencias`, só contagens):
+
+| Comparação | out/2026 | nov/2026 | dez/2026 |
+|---|---|---|---|
+| Status: HISTÓRICO x configuração atual no motor do portal (linhas) | 308 | 294 | 276 |
+| iguais | 233 | 244 | **276 (100%)** |
+| mesma regra, dia diferente | 9 | 8 | 0 |
+| modo ou time mudou depois da geração | 66 | 42 | 0 |
+| PA: `build_pa_assignments` **real do V17** x motor, mesma presença e CONFIG PA (dias / células PA x dia / diferentes) | 22 / 302 / **0** | 21 / 268 / **0** | 23 / 262 / **0** |
+| sem PA diferente / trocas diferentes | 0 / 0 | 0 / 0 | 0 / 0 |
+| PA pelo motor: programação dinâmica, sem PA, trocas | 22, 0, 13 | 21, 0, 27 | 23, 0, 17 |
+
+- **Dezembro**, gerado com a configuração atual, bate 100% no status e 0 diferenças no PA (critério da 4.2 e da 4.4).
+- **Outubro e novembro**: as 17 "mesma regra, dia diferente" são a regra SEMANAL trocada depois da geração e as 108 de "modo ou time mudou" são pessoas que mudaram de modo depois (1.6, item 15); são as divergências já explicadas na 4.3 e na 8.2.
+- A comparação com o portal real (`--portal`, JSON `paridade-escala-v1`) depende do casamento nome → ID preenchido (hoje 0 de 23 linhas com ID) e do portal com os cadastros importados: é o mês em paralelo do deploy 7 (dezembro), com a virada em janeiro só se dezembro bater.
+- A porta da função do V17 foi rodada na estação: as funções `norm`, `txt` e `build_pa_assignments` copiadas do arquivo pelo `ast`, sem mudança; os arquivos intermediários com nomes ficaram só no scratchpad e foram esvaziados no fim.
+
+**Decisões de implementação (a aprovar):**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D-F10-48 | O mês tem `row_version` além da `current_revision`; o 409 da publicação concorrente é pela revisão esperada, com o mês travado (`FOR UPDATE`) | O pedido cita row_version; a revisão já serializa, a versão fica para a leitura |
+| D-F10-49 | O RESUMO de cada dia vai nas contagens da revisão (`por_dia`, só números e status), e a leitura junta pela revisão vigente no dia | A tela e o Excel mostram o RESUMO publicado sem recalcular (recalcular mudaria com ausência nova) |
+| D-F10-50 | A presença da escala do mês ignora o feriado (o rodízio e a distribuição contam o dia); a tela e o Excel só marcam a data | D-F10-4 (a) e D-F9-30: a paridade com o script |
+| D-F10-51 | Quem do grupo comum está sem regra fica fora das linhas do dia e dá `ATENCAO CONFIG` pelo `presence_missing` do motor | Uma regra só para o alerta (o planner não repete) |
+| D-F10-52 | No Excel, o primeiro nome do cadastro; com o primeiro nome repetido, a inicial do último sobrenome (sem nomes no código, ao contrário do `short_pa_name`) | 1.6, item 1 |
+| D-F10-53 | A importação é só do admin (`escala_mensal.import`), com a planilha e o casamento enviados nas duas etapas; nada fica guardado no servidor | Grava em lote; o casamento tem nomes |
+| D-F10-54 | A importação grava só pelos serviços de sempre (times, regras, exceções, ausências, inventário, preferências, vínculos), numa transação; nenhum SQL de escrita próprio | As regras, os 409 e a auditoria de cada cadastro valem |
+| D-F10-55 | Conflito (o que a gestão já marcou pela tela) e "não casou" nunca são gravados; o PA é um todo: conflito no tipo, no dono ou nas preferências deixa o PA inteiro em conflito, e a virada pula esse PA | Pedido: não sobrescrever o que a gestão marcou depois do deploy 5 |
+| D-F10-56 | A importação vale do próximo dia em diante; as exceções e as férias da planilha entram do dia inicial em diante; o ciclo traduzido ganha a âncora no dia inicial (ou na segunda seguinte, no semana a semana), com os mesmos dias | O passado nunca é reescrito |
+| D-F10-57 | O ocupante "Híbrido" da CONFIG PA vira conflito (o Híbrido está na opção c); o "Crítico" vira PA reservado ao Crítico | D-F10-32 e D-F10-19 revista |
+| D-F10-58 | No mês em paralelo (dezembro), a importação confirma times, regras, exceções e inventário, sem a virada; dezembro não é publicado (a paridade usa a prévia); a virada e a 1ª publicação, em janeiro, se dezembro bater | A virada encerra os vínculos que o Mapa PA de dezembro ainda segue; publicar dezembro mostraria duas escalas oficiais |
+| D-F10-59 | A tela "Escala do mês" tem a grade por semana e o RESUMO; PA diário, mapa por semana e resumo de PA ficam no Excel; as travas têm o servidor e a auditoria, sem tela neste lote | Escopo do lote; o Mapa PA já mostra o ocupante do mês |
+| D-F10-60 | A tela reaproveita o CSS da Escala do Crítico (direção "Mesa clara"); no celular, a grade do mês rola no bloco com o nome fixo (a do Crítico continua nos cartões) | Mesma estética, sem CSS novo no portal |
+| D-F10-61 | O leitor da planilha e a tradução das abas saíram da paridade para `services/EscalaBaseWorkbook.php`; a paridade chama a classe | Uma fonte só para a paridade e a importação |
+| D-F10-62 | Deploy 7: o comando 3 usa o hash fixo do último commit de código (`6c910d4`), conferido no `codex` por `merge-base`; os commits depois dele só mudam documentos e a trava | O pedido: comando 3 com o hash validado, sem placeholder |
+
+**Validação:**
+- **Mutação** no worktree, com a trava `mut_guard.php`, cada mutante morto pela conferência certa: commits 1 e 2, 32/32 (na 1ª rodada, 28/32: a coluna de nome na 023, a parada do rollback, a ordem do Crítico no reservado e um mutante equivalente; casos novos no `e7d1ca8`); exportação, 17/17 (na 1ª, 16/17: a guarda do "mês não publicado"; commit refeito antes de qualquer envio); importação, 14/14 (na 1ª, 12/14: o limite de tamanho do leitor e um mutante mal escrito; commit refeito); tela, 18/18 no frontend, 2/2 no PHP e 2/2 no navegador (na 1ª, 16/18: o botão publicar sem confirmar e o exportar sem publicar; commit refeito).
+- **QAs:** `qa-monthly-schedule` 93; `qa:monthly-schedule` 45 (29 `qa:*` no total); bloco 35 do navegador 7/7; trava do roteiro 570 (seção 20); `bash -n` nos 39 comandos do deploy 7.
+- **Achado do roteiro** (corrigido antes do commit): a lista de migrations do comando 4, derivada da do deploy 6, ficava fora da ordem do `sort` (as linhas do ensaio da 023 vêm antes do rollback) e daria PARE no dia; a trava confere a lista exata.
+- **Capturas** (dados fictícios, servidor simulado): 18, em `_referencias\f10\capturas-2026-11-26\` (Mês e RESUMO como técnico, prévia e confirmação de publicar e a prévia de mês novo como Liderança, a divergência, o Mapa PA com a fonte do mês, a importação como admin e o celular; claro e escuro). Duas correções vieram delas: a semana com menos de 5 dias desalinhava a grade e, no celular, a grade sumia.
+- **Bateria completa** (`test-local.ps1 -SkipHttp -Browser`, sozinha): no `6c910d4` (o commit do deploy 7) e no último commit, no resumo da entrega e no estado da sessão.
