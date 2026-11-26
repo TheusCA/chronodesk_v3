@@ -238,6 +238,14 @@ if (!$phpExecutable) {
         Pass "QA da Escala do Critico concluido"
     }
 
+    # Sem banco: escala do mes (migration 023, previa, publicacao, exportacao e importacao).
+    & $phpExecutable (Join-Path $repoRoot "scripts\qa-monthly-schedule.php")
+    if ($LASTEXITCODE -ne 0) {
+        Fail "QA da escala do mes falhou"
+    } else {
+        Pass "QA da escala do mes concluido"
+    }
+
     # Sem banco: travas do roteiro unico do deploy 1 da Parte B (DEPLOY_LINUX.md, desenho 9.13).
     & $phpExecutable (Join-Path $repoRoot "scripts\qa-deploy-runbook.php")
     if ($LASTEXITCODE -ne 0) {

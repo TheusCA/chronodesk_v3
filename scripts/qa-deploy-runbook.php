@@ -267,6 +267,11 @@ $repoMigrations = array_values(array_diff($repoMigrations, $migrationsAfterDeplo
 $migrationsAfterDeploy5 = ['20261124_027_critical_grid.sql'];
 assert_same($migrationsAfterDeploy5, array_values(array_intersect($migrationsAfterDeploy5, $repoMigrations)), 'migrations posteriores ao deploy 5: cada uma existe no repositorio');
 $repoMigrations = array_values(array_diff($repoMigrations, $migrationsAfterDeploy5));
+// [F10-4, 2026-11-26] Os deploys 5 (babcdd9) e 6 (65af3da) ficam congelados:
+// a 023 (escala do mes) vai no deploy 7 (secao 20).
+$migrationsAfterDeploy6 = ['20261126_023_monthly_schedule.sql'];
+assert_same($migrationsAfterDeploy6, array_values(array_intersect($migrationsAfterDeploy6, $repoMigrations)), 'migrations posteriores ao deploy 6: cada uma existe no repositorio');
+$repoMigrations = array_values(array_diff($repoMigrations, $migrationsAfterDeploy6));
 $expectedSorted = $deploy1Migrations;
 sort($expectedSorted);
 assert_same($expectedSorted, $repoMigrations, 'repositorio: as migrations da Parte B sao as do deploy 1 mais as da lista posterior (nova migration exige o roteiro)');
@@ -343,7 +348,10 @@ assert_same($qasAfterDeploy4, array_values(array_intersect($qasAfterDeploy4, $re
 // criado depois dele vai no deploy 6 (secao 19).
 $qasAfterDeploy5 = ['qa-critical-grid'];
 assert_same($qasAfterDeploy5, array_values(array_intersect($qasAfterDeploy5, $repoQas)), 'QAs criados depois do deploy 5: cada um existe no repositorio');
-$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2, $qasAfterDeploy3, $qasAfterDeploy4, $qasAfterDeploy5));
+// [F10-4, 2026-11-26] O QA criado depois do deploy 6 vai no deploy 7 (secao 20).
+$qasAfterDeploy6 = ['qa-monthly-schedule'];
+assert_same($qasAfterDeploy6, array_values(array_intersect($qasAfterDeploy6, $repoQas)), 'QAs criados depois do deploy 6: cada um existe no repositorio');
+$repoQas = array_values(array_diff($repoQas, $qasAfterDeploy2, $qasAfterDeploy3, $qasAfterDeploy4, $qasAfterDeploy5, $qasAfterDeploy6));
 assert_same($repoQas, $sortedRunbookQas, 'roteiro unico: o ensaio roda todos os QAs PHP do repositorio (QA novo exige o roteiro)');
 // [pos-deploy 1, C1c] O 7m varre pelo padrao do mktemp, nao pelo $E: um
 // sudo -i novo no meio do dia perde a variavel (achado do dia do deploy 1).
@@ -840,7 +848,7 @@ sort($runbookQas3);
 $allRepoQas = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
 sort($allRepoQas);
 // [F10-2] Sem os QAs criados depois do deploy 3 (lista na secao 5).
-$allRepoQas = array_values(array_diff($allRepoQas, $qasAfterDeploy3, $qasAfterDeploy4, $qasAfterDeploy5));
+$allRepoQas = array_values(array_diff($allRepoQas, $qasAfterDeploy3, $qasAfterDeploy4, $qasAfterDeploy5, $qasAfterDeploy6));
 assert_same([true, $allRepoQas], [$check3 < $tmpEnv3 && $tmpEnv3 < $archive3 && $archive3 < $qaLoop3 && $qaLoop3 < $qaSweep3 && $qaSweep3 < $merge3, $runbookQas3], 'deploy 3: ensaio do codigo antes do merge, com TODOS os QAs PHP do repositorio (sem lista de excecao)');
 assert_same([true, true], [in_array('qa-pa-distribution', $runbookQas3, true), in_array('qa-paridade-escala', $runbookQas3, true)], 'deploy 3: os QAs do F10-1 no ensaio');
 assert_same(true, strpos($commands3[$archive3] ?? '', 'bash -o pipefail -c \'git archive "$D3" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands3[$qaLoop3] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && strpos($text3, 'qa-timezone.php --db') !== false && substr_count($text3, '--db') === 1, 'deploy 3: ensaio com pipefail, como www-data, e o --db so no qa-timezone do passo 7');
@@ -958,7 +966,7 @@ foreach ($migrationsDeploy4 as $file) {
 $migrationFiles4 = [];
 foreach (['', 'rollback/', 'verificacao/'] as $dir) {
     foreach (glob($root . '/migrations/' . $dir . '*.sql') ?: [] as $path) {
-        if (preg_match('/^2026111[5-9]_|^20261[12]\d{2}_|^2027/', basename($path)) === 1 && preg_match('/_(022|026|027)_/', basename($path)) === 0) {
+        if (preg_match('/^2026111[5-9]_|^20261[12]\d{2}_|^2027/', basename($path)) === 1 && preg_match('/_(022|026|027|023)_/', basename($path)) === 0) {
             $migrationFiles4[] = 'migrations/' . $dir . basename($path);
         }
     }
@@ -1035,7 +1043,7 @@ $qaSweep4 = $first4('for Q in /tmp/ensaio-deploy4-qa.??????; do');
 preg_match('/for q in ([a-z0-9 -]+); do/', $commands4[$qaLoop4] ?? '', $qaList4);
 $runbookQas4 = explode(' ', trim($qaList4[1] ?? ''));
 sort($runbookQas4);
-$everyQa4 = array_values(array_diff(array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []), $qasAfterDeploy4, $qasAfterDeploy5));
+$everyQa4 = array_values(array_diff(array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []), $qasAfterDeploy4, $qasAfterDeploy5, $qasAfterDeploy6));
 sort($everyQa4);
 assert_same($everyQa4, $runbookQas4, 'deploy 4: o ensaio roda TODOS os QAs PHP do repositorio (QA novo exige o roteiro)');
 assert_same($qasAfterDeploy3, array_values(array_intersect($qasAfterDeploy3, $runbookQas4)), 'deploy 4: os QAs criados depois do deploy 3 no ensaio');
@@ -1230,7 +1238,7 @@ $qaSweep5 = $first5('for Q in /tmp/ensaio-deploy5-qa.??????; do');
 preg_match('/for q in ([a-z0-9 -]+); do/', $commands5[$qaLoop5] ?? '', $qaList5);
 $runbookQas5 = explode(' ', trim($qaList5[1] ?? ''));
 sort($runbookQas5);
-$everyQa5 = array_values(array_diff(array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []), $qasAfterDeploy5));
+$everyQa5 = array_values(array_diff(array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []), $qasAfterDeploy5, $qasAfterDeploy6));
 sort($everyQa5);
 assert_same($everyQa5, $runbookQas5, 'deploy 5: o ensaio roda TODOS os QAs PHP do repositorio (QA novo exige o roteiro)');
 assert_same(true, strpos($commands5[$qaArchive5] ?? '', 'bash -o pipefail -c \'git archive "$D5" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands5[$qaLoop5] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text5, '--db') === 1 && strpos($prose5, 'os ' . count($everyQa5) . ' QAs com `OK`') !== false, 'deploy 5: ensaio com pipefail, como www-data, o --db so no qa-timezone e a contagem dos QAs no esperado');
@@ -1446,7 +1454,7 @@ $qaSweep6 = $first6('for Q in /tmp/ensaio-deploy6-qa.??????; do');
 preg_match('/for q in ([a-z0-9 -]+); do/', $commands6[$qaLoop6] ?? '', $qaList6);
 $runbookQas6 = explode(' ', trim($qaList6[1] ?? ''));
 sort($runbookQas6);
-$everyQa6 = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
+$everyQa6 = array_values(array_diff(array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []), $qasAfterDeploy6));
 sort($everyQa6);
 assert_same([$everyQa6, true], [$runbookQas6, in_array('qa-critical-grid', $runbookQas6, true)], 'deploy 6: o ensaio roda TODOS os QAs PHP do repositorio, com o qa-critical-grid (QA novo exige o roteiro)');
 assert_same(true, strpos($commands6[$qaArchive6] ?? '', 'bash -o pipefail -c \'git archive "$D6" | tar -x -C "$Q"\' && chown -R www-data: "$Q" && ') !== false && strpos($commands6[$qaLoop6] ?? '', 'runuser -u www-data -- php "$Q/scripts/$q.php"') !== false && substr_count($text6, '--db') === 1 && strpos($prose6, 'os ' . count($everyQa6) . ' QAs com `OK`') !== false, 'deploy 6: ensaio com pipefail, como www-data, o --db so no qa-timezone e a contagem dos QAs no esperado');

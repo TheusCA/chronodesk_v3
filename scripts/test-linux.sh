@@ -94,6 +94,10 @@ echo "== PHP critical grid QA =="
 # Escala do Critico em grade (migration 027, feriados, vagas, grade do mes); sem banco.
 php scripts/qa-critical-grid.php
 
+echo "== PHP monthly schedule QA =="
+# Escala do mes (migration 023, previa, publicacao, exportacao e importacao); sem banco.
+php scripts/qa-monthly-schedule.php
+
 echo "== PHP presence cutoff QA =="
 # Data de corte do motor (F5): migration 019 e registro do corte; sem banco.
 php scripts/qa-presence-cutoff.php
