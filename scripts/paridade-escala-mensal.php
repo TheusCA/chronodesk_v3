@@ -28,13 +28,8 @@ if (PHP_SAPI !== 'cli') {
 
 require_once __DIR__ . '/../services/PaDistributionEngine.php';
 require_once __DIR__ . '/../services/PresenceEngine.php';
+require_once __DIR__ . '/../services/EscalaBaseWorkbook.php';
 
-const PARIDADE_MAX_FILE_BYTES = 20971520;
-const PARIDADE_MAX_ENTRY_BYTES = 33554432;
-const PARIDADE_MAX_ENTRIES = 2000;
-const PARIDADE_NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
-const PARIDADE_REL_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-const PARIDADE_PKG_REL_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const PARIDADE_TEMPLATE_HEADER = ['nome_planilha', 'nome_normalizado', 'primeiro_nome_pa_diario', 'ambiguo', 'employee_id', 'abas'];
 
 final class ParidadeErro extends RuntimeException
@@ -47,322 +42,86 @@ function paridade_norm(?string $value): string
 }
 
 // ----------------------------------------------------------------------------
-// Leitor de xlsx (zip + zlib + SimpleXML), so leitura, com limites
+// Leitor de xlsx: services/EscalaBaseWorkbook.php (o mesmo da importacao da
+// planilha Base). As funcoes abaixo so traduzem o erro para ParidadeErro.
 // ----------------------------------------------------------------------------
+
+function paridade_reader(callable $call): mixed
+{
+    try {
+        return $call();
+    } catch (EscalaBaseErro $e) {
+        throw new ParidadeErro($e->getMessage());
+    }
+}
 
 /** Conteudo das entradas .xml e .rels do pacote: [nome => bytes]. */
 function paridade_zip_entries(string $path): array
 {
-    if (!is_file($path) || filesize($path) > PARIDADE_MAX_FILE_BYTES) {
-        throw new ParidadeErro('arquivo inexistente ou maior que 20 MB: ' . basename($path));
-    }
-    $data = (string)file_get_contents($path);
-    $eocd = strrpos($data, "PK\x05\x06");
-    if ($eocd === false || strlen($data) - $eocd < 22) {
-        throw new ParidadeErro('pacote zip invalido: ' . basename($path));
-    }
-    $end = unpack('vdisk/vcdDisk/ventriesDisk/ventries/VcdSize/VcdOffset', substr($data, $eocd + 4, 16));
-    if ($end['entries'] > PARIDADE_MAX_ENTRIES || $end['cdOffset'] === 0xFFFFFFFF || $end['cdOffset'] + $end['cdSize'] > $eocd) {
-        throw new ParidadeErro('pacote zip fora do limite ou zip64: ' . basename($path));
-    }
-    $out = [];
-    $pos = $end['cdOffset'];
-    $total = 0;
-    for ($i = 0; $i < $end['entries']; $i++) {
-        if (substr($data, $pos, 4) !== "PK\x01\x02") {
-            throw new ParidadeErro('diretorio central invalido: ' . basename($path));
-        }
-        $h = unpack('vmethod', substr($data, $pos + 10, 2)) + unpack('VcompSize/Vsize/vnameLen/vextraLen/vcommentLen', substr($data, $pos + 20, 14)) + unpack('Voffset', substr($data, $pos + 42, 4));
-        $name = substr($data, $pos + 46, $h['nameLen']);
-        $pos += 46 + $h['nameLen'] + $h['extraLen'] + $h['commentLen'];
-        if (!preg_match('/\.(xml|rels)$/', $name)) {
-            continue;
-        }
-        if ($h['size'] > PARIDADE_MAX_ENTRY_BYTES || ($total += $h['size']) > 4 * PARIDADE_MAX_ENTRY_BYTES || substr($data, $h['offset'], 4) !== "PK\x03\x04") {
-            throw new ParidadeErro('entrada do zip fora do limite: ' . basename($path));
-        }
-        $local = unpack('vnameLen/vextraLen', substr($data, $h['offset'] + 26, 4));
-        $raw = substr($data, $h['offset'] + 30 + $local['nameLen'] + $local['extraLen'], $h['compSize']);
-        if ($h['method'] === 0) {
-            $content = $raw;
-        } elseif ($h['method'] === 8) {
-            set_error_handler(static fn (): bool => true);
-            try {
-                $content = gzinflate($raw, max(1, $h['size']));
-            } finally {
-                restore_error_handler();
-            }
-        } else {
-            throw new ParidadeErro("metodo de compressao {$h['method']} nao suportado");
-        }
-        if (!is_string($content) || strlen($content) !== $h['size']) {
-            throw new ParidadeErro('entrada do zip corrompida: ' . basename($path));
-        }
-        $out[$name] = $content;
-    }
-    return $out;
+    return paridade_reader(static fn (): array => EscalaBaseWorkbook::zipEntries($path));
 }
 
 function paridade_xml(string $content): SimpleXMLElement
 {
-    if (stripos($content, '<!DOCTYPE') !== false) {
-        throw new ParidadeErro('xml com DOCTYPE recusado');
-    }
-    $previous = libxml_use_internal_errors(true);
-    $xml = simplexml_load_string($content, SimpleXMLElement::class, LIBXML_NONET);
-    libxml_use_internal_errors($previous);
-    if ($xml === false) {
-        throw new ParidadeErro('xml invalido no pacote');
-    }
-    return $xml;
+    return paridade_reader(static fn (): SimpleXMLElement => EscalaBaseWorkbook::xml($content));
 }
 
 function paridade_column(string $letters): int
 {
-    $n = 0;
-    foreach (str_split($letters) as $ch) {
-        $n = $n * 26 + ord($ch) - 64;
-    }
-    return $n;
+    return EscalaBaseWorkbook::column($letters);
 }
 
 /** Abas do xlsx: [nome => [linha => [coluna => texto]]], linhas e colunas a partir de 1. */
 function paridade_xlsx_sheets(string $path): array
 {
-    $entries = paridade_zip_entries($path);
-    foreach (['xl/workbook.xml', 'xl/_rels/workbook.xml.rels'] as $required) {
-        if (!isset($entries[$required])) {
-            throw new ParidadeErro('xlsx sem ' . $required);
-        }
-    }
-    $shared = [];
-    if (isset($entries['xl/sharedStrings.xml'])) {
-        foreach (paridade_xml($entries['xl/sharedStrings.xml'])->children(PARIDADE_NS)->si as $si) {
-            $dom = dom_import_simplexml($si);
-            $text = '';
-            foreach ($dom->getElementsByTagNameNS(PARIDADE_NS, 't') as $t) {
-                $text .= $t->textContent;
-            }
-            $shared[] = $text;
-        }
-    }
-    $targets = [];
-    foreach (dom_import_simplexml(paridade_xml($entries['xl/_rels/workbook.xml.rels']))->getElementsByTagNameNS(PARIDADE_PKG_REL_NS, 'Relationship') as $rel) {
-        $target = ltrim($rel->getAttribute('Target'), '/');
-        $targets[$rel->getAttribute('Id')] = strpos($target, 'xl/') === 0 ? $target : 'xl/' . $target;
-    }
-    $sheets = [];
-    foreach (paridade_xml($entries['xl/workbook.xml'])->children(PARIDADE_NS)->sheets->sheet as $sheet) {
-        $rid = (string)$sheet->attributes(PARIDADE_REL_NS)['id'];
-        $file = $targets[$rid] ?? '';
-        if (!isset($entries[$file])) {
-            throw new ParidadeErro('aba sem arquivo no pacote');
-        }
-        $cells = [];
-        foreach (paridade_xml($entries[$file])->children(PARIDADE_NS)->sheetData->row as $row) {
-            foreach ($row->children(PARIDADE_NS)->c as $c) {
-                if (!preg_match('/^([A-Z]+)(\d+)$/', (string)$c->attributes()['r'], $ref)) {
-                    throw new ParidadeErro('referencia de celula invalida');
-                }
-                $type = (string)$c->attributes()['t'];
-                $children = $c->children(PARIDADE_NS);
-                if ($type === 'inlineStr') {
-                    $value = '';
-                    foreach (dom_import_simplexml($c)->getElementsByTagNameNS(PARIDADE_NS, 't') as $t) {
-                        $value .= $t->textContent;
-                    }
-                } elseif (!isset($children->v)) {
-                    continue;
-                } elseif ($type === 's') {
-                    $value = $shared[(int)$children->v] ?? '';
-                } else {
-                    $value = (string)$children->v;
-                }
-                $cells[(int)$ref[2]][paridade_column($ref[1])] = $value;
-            }
-        }
-        $sheets[(string)$sheet->attributes()['name']] = $cells;
-    }
-    return $sheets;
+    return paridade_reader(static fn (): array => EscalaBaseWorkbook::sheets($path));
 }
 
 function paridade_cell(array $sheet, int $row, int $col): string
 {
-    return trim((string)($sheet[$row][$col] ?? ''));
+    return EscalaBaseWorkbook::cell($sheet, $row, $col);
 }
 
 /** excel_date() do script: serial do Excel, dd/mm/aaaa, aaaa-mm-dd ou dd/mm/aa; null se nada servir. */
 function paridade_date(string $value): ?string
 {
-    if ($value === '') {
-        return null;
-    }
-    if (is_numeric($value)) {
-        return gmdate('Y-m-d', ((int)floor((float)$value) - 25569) * 86400);
-    }
-    foreach (['d/m/Y', 'Y-m-d', 'd/m/y'] as $format) {
-        $date = DateTimeImmutable::createFromFormat('!' . $format, substr($value, 0, 10), new DateTimeZone('UTC'));
-        if ($date !== false && $date->format($format) === substr($value, 0, 10)) {
-            return $date->format('Y-m-d');
-        }
-    }
-    return null;
+    return EscalaBaseWorkbook::date($value);
 }
 
 /** int(valor or padrao) do Python: vazio ou zero vira o padrao. */
 function paridade_int_or(string $value, int $default): int
 {
-    return ($value === '' || (float)$value == 0.0) ? $default : (int)(float)$value;
+    return EscalaBaseWorkbook::intOr($value, $default);
 }
 
 function paridade_weekday(string $date): int
 {
-    return (int)gmdate('N', (int)strtotime($date . ' 00:00:00 UTC'));
+    return EscalaBaseWorkbook::weekday($date);
 }
-
 // ----------------------------------------------------------------------------
 // Leitura da base (as abas de entrada do script, mesmas regras)
 // ----------------------------------------------------------------------------
 
 function paridade_base(array $sheets): array
 {
-    foreach (['CONFIG', 'EQUIPE', 'REGRAS FIXAS', 'EXCECOES', 'CONFIG PA', 'HISTORICO'] as $name) {
-        if (!isset($sheets[$name])) {
-            throw new ParidadeErro("a planilha nao tem a aba {$name}");
-        }
-    }
-    $cfg = $sheets['CONFIG'];
-    $config = [
-        'anchor' => paridade_date(paridade_cell($cfg, 6, 2)) ?? '2026-10-01',
-        'phase' => [
-            'TIME 1' => paridade_int_or(paridade_cell($cfg, 10, 2), 0),
-            'TIME 2' => paridade_int_or(paridade_cell($cfg, 11, 2), 1),
-            'TIME 3' => paridade_int_or(paridade_cell($cfg, 12, 2), 2),
-        ],
-    ];
-    $team = [];
-    foreach ($sheets['EQUIPE'] as $r => $row) {
-        $name = paridade_cell($sheets['EQUIPE'], $r, 2);
-        if ($r < 4 || $name === '') {
-            continue;
-        }
-        $team[] = [
-            'name' => $name, 'key' => paridade_norm($name), 'active' => paridade_norm($row[1] ?? '') === 'SIM',
-            'tower' => paridade_norm($row[3] ?? ''), 'mode' => paridade_norm($row[4] ?? ''), 'team' => paridade_norm($row[5] ?? ''),
-            'common' => paridade_norm($row[6] ?? '') === 'SIM',
-        ];
-    }
-    $rules = [];
-    foreach ($sheets['REGRAS FIXAS'] as $r => $row) {
-        $name = paridade_cell($sheets['REGRAS FIXAS'], $r, 2);
-        if ($r < 4 || $name === '' || paridade_norm($row[1] ?? '') !== 'SIM') {
-            continue;
-        }
-        $key = paridade_norm($name);
-        $rules[$key]['type'] = paridade_norm($row[4] ?? '');
-        $week = paridade_int_or(trim((string)($row[5] ?? '')), 1);
-        for ($d = 0; $d < 5; $d++) {
-            $rules[$key]['cycles'][$week][$d] = paridade_norm($row[6 + $d] ?? '');
-        }
-    }
-    $exceptions = [];
-    foreach ($sheets['EXCECOES'] as $r => $row) {
-        $name = paridade_cell($sheets['EXCECOES'], $r, 2);
-        $start = paridade_date(trim((string)($row[3] ?? '')));
-        $end = paridade_date(trim((string)($row[4] ?? '')));
-        $status = paridade_norm($row[5] ?? '');
-        if ($r >= 4 && paridade_norm($row[1] ?? '') === 'SIM' && $name !== '' && $start !== null && $end !== null && in_array($status, ['HOME', 'PRESENCIAL', 'FERIAS'], true)) {
-            $exceptions[] = ['key' => paridade_norm($name), 'start' => $start, 'end' => $end, 'status' => $status];
-        }
-    }
-    $pas = [];
-    foreach ($sheets['CONFIG PA'] as $r => $row) {
-        $pa = trim((string)($row[1] ?? ''));
-        if ($r < 4 || !is_numeric($pa) || paridade_norm($row[8] ?? '') !== 'SIM') {
-            continue;
-        }
-        $pas[] = [
-            'pa' => (int)(float)$pa, 'row' => paridade_norm($row[2] ?? ''), 'order' => is_numeric(trim((string)($row[3] ?? ''))) ? (int)(float)$row[3] : 0,
-            'type' => paridade_norm($row[4] ?? ''), 'fixed' => trim((string)($row[5] ?? '')), 'loan' => paridade_norm($row[6] ?? '') === 'SIM',
-            'prefs' => array_values(array_filter(array_map('trim', explode(';', (string)($row[7] ?? ''))), static fn (string $x): bool => $x !== '')),
-        ];
-    }
-    $history = [];
-    foreach ($sheets['HISTORICO'] as $r => $row) {
-        $date = paridade_date(trim((string)($row[3] ?? '')));
-        $name = trim((string)($row[4] ?? ''));
-        if ($r < 2 || $date === null || $name === '') {
-            continue;
-        }
-        $history[] = ['date' => $date, 'name' => $name, 'key' => paridade_norm($name), 'mode' => paridade_norm($row[5] ?? ''), 'team' => paridade_norm($row[6] ?? ''), 'status' => paridade_norm($row[7] ?? '')];
-    }
-    return [
-        'config' => $config, 'team' => $team, 'rules' => $rules,
-        'fixed_anchor' => paridade_date(paridade_cell($sheets['REGRAS FIXAS'], 4, 13)) ?? '2026-09-28',
-        'exceptions' => $exceptions, 'pas' => $pas, 'history' => $history,
-    ];
+    return paridade_reader(static fn (): array => EscalaBaseWorkbook::base($sheets));
 }
 
 /** EQUIPE ativa por chave (load_team so le ATIVO? = SIM). */
 function paridade_active_team(array $base): array
 {
-    $out = [];
-    foreach ($base['team'] as $person) {
-        if ($person['active']) {
-            $out[$person['key']] = $person;
-        }
-    }
-    return $out;
+    return EscalaBaseWorkbook::activeTeam($base);
 }
 
 function paridade_is_common(array $person): bool
 {
-    return $person['common'] && in_array($person['mode'], ['RODIZIO', 'FIXO', 'SEM HOME'], true);
+    return EscalaBaseWorkbook::isCommon($person);
 }
 
-/**
- * Regra do portal equivalente ao modo da pessoa na configuracao atual (desenho
- * 2.2): RODIZIO = cycle de 3 com a ancora da CONFIG; FIXO CICLO = cycle de 5xN
- * ancorado na segunda (a da ancora, ou a seguinte); FIXO SEMANAL =
- * fixed_weekdays; SEM HOME = always_onsite. Null: sem traducao (time fora de
- * TIME 1..3).
- */
+/** Regra do portal equivalente ao modo da pessoa (desenho 2.2): EscalaBaseWorkbook::portalRule. */
 function paridade_portal_rule(array $base, array $person): ?array
 {
-    $rule = static fn (string $type, ?array $config): array => ['rule_type' => $type, 'rule_config' => $config, 'effective_from' => '2000-01-03', 'effective_until' => null];
-    switch ($person['mode']) {
-        case 'SEM HOME':
-            return $rule('always_onsite', null);
-        case 'RODIZIO':
-            $phase = $base['config']['phase'][$person['team']] ?? null;
-            if ($phase === null) {
-                return null;
-            }
-            return $rule('cycle', ['pattern' => array_map(static fn (int $i): string => $i === $phase ? 'remote' : 'onsite', [0, 1, 2]), 'anchor_date' => $base['config']['anchor']]);
-        case 'FIXO':
-            $rec = $base['rules'][$person['key']] ?? null;
-            if ($rec === null) {
-                return $rule('always_onsite', null);
-            }
-            $day = static fn (array $week, int $d): string => ($week[$d] ?? '') === 'HOME' ? 'remote' : 'onsite';
-            if ($rec['type'] === 'CICLO') {
-                $pattern = [];
-                for ($w = 1; $w <= max(array_keys($rec['cycles'])); $w++) {
-                    $week = $rec['cycles'][$w] ?? ($rec['cycles'][1] ?? []);
-                    for ($d = 0; $d < 5; $d++) {
-                        $pattern[] = $day($week, $d);
-                    }
-                }
-                $anchor = $base['fixed_anchor'];
-                $monday = gmdate('Y-m-d', (int)strtotime($anchor . ' UTC') + ((8 - paridade_weekday($anchor)) % 7) * 86400);
-                return $rule('cycle', ['pattern' => $pattern, 'anchor_date' => $monday]);
-            }
-            $week = $rec['cycles'][1] ?? [];
-            $keys = ['mon', 'tue', 'wed', 'thu', 'fri'];
-            return $rule('fixed_weekdays', ['weekdays' => array_values(array_filter($keys, static fn (string $k, int $d): bool => $day($week, $d) === 'onsite', ARRAY_FILTER_USE_BOTH))]);
-        default:
-            return null;
-    }
+    return EscalaBaseWorkbook::portalRule($base, $person);
 }
 
 function paridade_exception(array $base, string $key, string $date): ?string

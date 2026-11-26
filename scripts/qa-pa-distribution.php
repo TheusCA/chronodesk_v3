@@ -539,6 +539,10 @@ foreach ($iterator as $file) {
     // [F10-3] O Mapa PA usa so as funcoes puras do assento reservado (a regra
     // unica de quem ocupa o reservado do Critico; o qa-pa-inventory, QA do
     // F10-3, fica na lista acima); o distribute continua so no QA e na paridade.
+    // [F10] O leitor da planilha Base so usa o normalizeName (a chave do nome do script).
+    if ($relative === 'services/EscalaBaseWorkbook.php') {
+        $content = str_replace(['require_once __DIR__ . "/PaDistributionEngine.php";', 'PaDistributionEngine::normalizeName('], '', $content);
+    }
     if ($relative === 'services/PaMapService.php') {
         $content = str_replace(["require_once __DIR__ . '/PaDistributionEngine.php';", 'PaDistributionEngine::reservedSeating(', 'PaDistributionEngine::orderReservedPeople('], '', $content);
     }

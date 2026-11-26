@@ -369,4 +369,63 @@ assert_same(['RODÍZIO', 'SEM HOME', 'FULL HOME', 'FIXO', 'FIXO', 'CRÍTICO', 'S
     MonthlySchedulePlanner::modeLabel('n1', 'cycle', null), MonthlySchedulePlanner::modeLabel('n2', 'fixed_weekdays', null), MonthlySchedulePlanner::modeLabel('critico', 'cycle', null), MonthlySchedulePlanner::modeLabel('n1', null, null),
 ], 'modo da planilha pela regra do motor');
 
+// ----------------------------------------------------------------------------
+// 5. Importacao da planilha Base (estrutura e a regra no dia inicial)
+// ----------------------------------------------------------------------------
+require_once $root . '/services/PresenceEngine.php';
+require_once $root . '/services/ScheduleRulePlanner.php';
+require_once $root . '/services/EscalaBaseWorkbook.php';
+$importSource = (string)file_get_contents($root . '/services/EscalaBaseImport.php');
+$importEndpoint = (string)file_get_contents($root . '/api/portal/monthly_schedule_import.php');
+// A regra comecando no dia inicial da os mesmos dias da ancora original.
+$qaRuleFrom = static fn (array $pattern, string $anchor, string $from): array => EscalaBaseWorkbook::ruleFrom(['rule_type' => 'cycle', 'rule_config' => ['pattern' => $pattern, 'anchor_date' => $anchor], 'effective_from' => '2000-01-03', 'effective_until' => null], $from);
+$qaSameDays = static function (array $original, array $moved, string $from, int $days): int {
+    $diff = 0;
+    for ($i = 0, $date = $from; $i < $days; $date = ScheduleRulePlanner::addDays($date, 1)) {
+        if (!PresenceEngine::isBusinessDay($date) || $date < $moved['effective_from']) {
+            continue;
+        }
+        $i++;
+        $size = count($original['pattern']);
+        $diff += $original['pattern'][PresenceEngine::cyclePosition($original['anchor_date'], $date, $size)] === $moved['rule_config']['pattern'][PresenceEngine::cyclePosition($moved['rule_config']['anchor_date'], $date, $size)] ? 0 : 1;
+    }
+    return $diff;
+};
+$qaWeekly = ['remote', 'onsite', 'onsite', 'onsite', 'onsite', 'onsite', 'onsite', 'remote', 'onsite', 'onsite'];
+$qaMoved = $qaRuleFrom($qaWeekly, '2026-09-28', '2026-12-01');
+assert_same(['2026-12-07', '2026-12-07', 0], [$qaMoved['effective_from'], $qaMoved['rule_config']['anchor_date'], $qaSameDays(['pattern' => $qaWeekly, 'anchor_date' => '2026-09-28'], $qaMoved, '2026-12-01', 250)], 'importacao: FIXO CICLO semanal comeca na segunda seguinte, girado, com os mesmos dias (250 dias uteis)');
+$qaRod = ['onsite', 'remote', 'onsite'];
+$qaRodMoved = $qaRuleFrom($qaRod, '2026-10-01', '2026-12-05');
+assert_same(['2026-12-07', 0], [$qaRodMoved['effective_from'], $qaSameDays(['pattern' => $qaRod, 'anchor_date' => '2026-10-01'], $qaRodMoved, '2026-12-05', 250)], 'importacao: ciclo de 3 comeca no 1o dia util a partir do dia inicial, com os mesmos dias');
+assert_same([1, 1, 1], [
+    substr_count($importSource, "if (\$value <= \$today) {\n            throw new DomainException('A importação vale só do próximo dia em diante: o passado não é reescrito.');"),
+    substr_count($importSource, "if (\$item['passo'] === \$step && in_array(\$item['situacao'], ['novo', 'muda'], true)) {"),
+    substr_count($importSource, "if (in_array('conflito', array_column(\$paItems, 'situacao'), true)) {"),
+], 'importacao: so do proximo dia em diante; grava so novo e muda (conflito e nao_casou nunca); o PA e um todo (D-F10-55)');
+assert_same([1, 0, 1], [
+    substr_count($importSource, "\$plan = \$this->plan(\$workbook, \$matchCsv, \$from);\n        \$done = [];\n        \$this->atomic("),
+    preg_match('/INSERT INTO|UPDATE portal_|DELETE FROM/', $importSource),
+    substr_count($importSource, "\$conflictPas[\$item['pa']] = true;"),
+], 'importacao: a confirmacao refaz a previa e grava numa transacao, so pelos servicos (nenhum SQL de escrita proprio); a virada pula o PA em conflito');
+assert_same([1, 1, 1, 0], [
+    substr_count($importEndpoint, "if (!portal_role_can(\$role, 'escala_mensal.import')) {"),
+    substr_count($importEndpoint, 'require_csrf_token();'),
+    substr_count($importEndpoint, "audit_log('ESCALA_BASE_IMPORTADA', EscalaBaseImport::auditDetails(\$result, \$action)"),
+    preg_match('/\$person\[\'name\'\]|\'(nome|name)\' => \$person/', $importSource),
+], 'importacao: so escala_mensal.import (admin), CSRF, auditoria so com contagens, nenhum nome na previa');
+assert_same(1, preg_match("/'chg\\.import',\\n\\s+\\/\\/ \\[F10, importacao da planilha Base\\][^\\n]*\\n\\s+'escala_mensal\\.import',/", $security), 'escala_mensal.import so no conjunto do admin');
+preg_match('/    public static function auditDetails\(array \$result, string \$action\): string\n    \{(.*?)\n    \}\n/s', $importSource, $qaAudit);
+assert_same([0, 2], [preg_match('/itens|employee_id|\$item/', $qaAudit[1] ?? 'x'), substr_count($qaAudit[1] ?? '', '$parts[] =')], 'importacao: auditoria so com o dia inicial e as contagens por passo e situacao (sem itens nem IDs)');
+assert_same([true, true], [
+    strpos((string)file_get_contents($root . '/scripts/paridade-escala-mensal.php'), "require_once __DIR__ . '/../services/EscalaBaseWorkbook.php';") !== false,
+    strpos($importSource, "EscalaBaseWorkbook::base(EscalaBaseWorkbook::sheets(\$workbook))") !== false,
+], 'leitor da planilha numa fonte so: a paridade e a importacao usam o EscalaBaseWorkbook');
+$workbookSource = (string)file_get_contents($root . '/services/EscalaBaseWorkbook.php');
+assert_same([1, 1, 1, 1], [
+    substr_count($workbookSource, 'public const MAX_FILE_BYTES = 20971520;'),
+    substr_count($workbookSource, "if (!is_file(\$path) || filesize(\$path) > self::MAX_FILE_BYTES) {"),
+    substr_count($workbookSource, "if (\$h['size'] > self::MAX_ENTRY_BYTES || (\$total += \$h['size']) > 4 * self::MAX_ENTRY_BYTES"),
+    substr_count($workbookSource, '$xml = simplexml_load_string($content, SimpleXMLElement::class, LIBXML_NONET);'),
+], 'leitor: limites de tamanho do arquivo e das entradas, sem rede no XML');
+
 echo 'QA monthly schedule OK (' . ($GLOBALS['qa_checks'] ?? 0) . " verificacoes)\n";

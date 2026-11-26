@@ -1243,7 +1243,7 @@ foreach ($csvIterator as $csvFile) {
         $offset = $i;
     }
 }
-assert_same([['fputcsv' => 8, 'fgetcsv' => 5, 'str_getcsv' => 0, 'setCsvControl' => 0], 13, []], [$csvCallsByFunction, $csvCallCount, $csvCallsWithoutEscape], 'CSV fora de scripts/: 8 fputcsv (o CSV de horas extras saiu no lote NC revisto) e 5 fgetcsv, todas com o escape \'\\\\\' explicito (PHP 8.4); nenhum str_getcsv nem setCsvControl');
+assert_same([['fputcsv' => 8, 'fgetcsv' => 7, 'str_getcsv' => 0, 'setCsvControl' => 0], 15, []], [$csvCallsByFunction, $csvCallCount, $csvCallsWithoutEscape], 'CSV fora de scripts/: 8 fputcsv (o CSV de horas extras saiu no lote NC revisto) e 7 fgetcsv (2 do casamento da importacao da planilha Base), todas com o escape \'\\\\\' explicito (PHP 8.4); nenhum str_getcsv nem setCsvControl');
 
 foreach ([
     'services/OperationalService.php',
@@ -1865,6 +1865,8 @@ $matrix = [
     // [F10-4] Escala do mes: leitura para todos (D-F10-10); paridade so admin;
     // previa e publicacao com escala_mensal.publish; trava com pa_map.manage.
     'api/portal/monthly_schedule.php GET' => [[], $expect['TODOS']],
+    // [F10] Importacao da planilha Base: so admin (escala_mensal.import).
+    'api/portal/monthly_schedule_import.php POST' => [['content_type' => 'multipart/form-data', 'body' => 'x'], $expect['ADMIN']],
     'api/portal/monthly_schedule.php GET xlsx' => [['query' => ['formato' => 'xlsx', 'mes' => '2026-12']], $expect['GESTAO']],
     'api/portal/monthly_schedule.php GET paridade' => [['query' => ['formato' => 'paridade', 'mes' => '2026-12']], $expect['ADMIN']],
     'api/portal/monthly_schedule.php POST preview' => [['content_type' => $json, 'body' => '{"action":"preview","mes":"2026-12"}'], $expect['ADMIN_LIDERANCA']],
