@@ -532,7 +532,7 @@ foreach ($iterator as $file) {
         continue;
     }
     $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
-    if (in_array($relative, ['services/PaDistributionEngine.php', 'scripts/qa-pa-distribution.php', 'scripts/paridade-escala-mensal.php', 'scripts/qa-paridade-escala.php', 'scripts/qa-pa-inventory.php'], true)) {
+    if (in_array($relative, ['services/PaDistributionEngine.php', 'scripts/qa-pa-distribution.php', 'scripts/paridade-escala-mensal.php', 'scripts/qa-paridade-escala.php', 'scripts/qa-pa-inventory.php', 'services/MonthlySchedulePlanner.php', 'scripts/qa-monthly-schedule.php'], true)) {
         continue;
     }
     $content = (string)file_get_contents($file->getPathname());
@@ -546,6 +546,9 @@ foreach ($iterator as $file) {
         $callers[] = $relative;
     }
 }
-assert_same([], $callers, 'F10-1: o motor (distribute) so e chamado pelo QA e pela paridade; o Mapa PA so usa as funcoes do assento reservado (F10-3)');
+// [F10-4] O distribute entra em producao pela escala do mes: so o
+// MonthlySchedulePlanner o chama (o servico chama o planner).
+assert_same([], $callers, 'F10-1/F10-4: o motor (distribute) so e chamado pelo QA, pela paridade e pelo MonthlySchedulePlanner; o Mapa PA so usa as funcoes do assento reservado (F10-3)');
+assert_same(1, substr_count((string)file_get_contents($root . '/services/MonthlySchedulePlanner.php'), 'PaDistributionEngine::distribute('), 'F10-4: o planner do mes chama o distribute uma vez');
 
 echo "QA PA distribution OK ({$checks} verificacoes; porta do script x motor em {$months} meses, {$totals['dias']} dias)\n";

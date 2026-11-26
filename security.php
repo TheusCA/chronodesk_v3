@@ -955,6 +955,8 @@ function portal_permissions_for_role(?string $role): array {
         'chg.manage',
         // [D-ESC-16] Feriados (027): cadastrar, alterar e remover.
         'feriados.manage',
+        // [F10-4, D-F10-3] Escala do mes: gerar a previa, publicar e regerar.
+        'escala_mensal.publish',
     ]);
     $permissions = [
         'admin' => array_merge($lideranca, [
@@ -968,6 +970,8 @@ function portal_permissions_for_role(?string $role): array {
             'funcionarios.restaurar',
             // [9.17, D-CHG-15] Importar do Controle v5 (grava em lote).
             'chg.import',
+            // [F10, importacao da planilha Base] Importar a configuracao (grava em lote).
+            'escala_mensal.import',
         ]),
         'lideranca' => $lideranca,
         'gestor' => $gestor,

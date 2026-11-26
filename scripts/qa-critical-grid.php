@@ -348,7 +348,8 @@ $presenceSource = (string)file_get_contents($root . '/services/PresenceService.p
 $pauseSource = (string)file_get_contents($root . '/classes/GerenciadorPausas.php');
 $paMapSource = (string)file_get_contents($root . '/services/PaMapService.php');
 assert_same([1, 1, 1, 1], [
-    substr_count($operationalSource, '$holidays = $repository->holidaysByDate($from, $to);'),
+    // [F10-4] So a escala do mes (monthPresence) passa sem feriado (D-F10-4 a).
+    substr_count($operationalSource, '$holidays = $withHolidays ? $repository->holidaysByDate($from, $to) : [];') + substr_count($operationalSource, 'bool $withHolidays = true') - 1 + (substr_count($operationalSource, '$screen, true, false)') === 1 ? 0 : 5),
     substr_count($operationalSource, 'PresenceRepository::shiftFor($employee, $dateKey, $role, $holidays[$dateKey] ?? null)'),
     substr_count($operationalSource, "'holidays' => (new PresenceRepository(\$this->pdo))->holidaysByDate(\$from, \$to)"),
     substr_count($operationalSource, "if ((!\$type || \$type === 'holiday') && !\$status) {"),

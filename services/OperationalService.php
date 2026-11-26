@@ -1951,7 +1951,8 @@ final class OperationalService {
         bool $withAbsenceCategory = false,
         bool $withPartial = false,
         ?array $screenEmployees = null,
-        bool $withRole = false
+        bool $withRole = false,
+        bool $withHolidays = true
     ): array {
         $rulesByEmployee = [];
         foreach ($rules as $rule) {
@@ -1968,7 +1969,9 @@ final class OperationalService {
         $repository = new PresenceRepository($this->pdo);
         $roleDays = PresenceRepository::criticalRoleDays($repository->criticalRoleContext($employees, $from, $to), $from, $to);
         // [D-ESC-17] Feriado: dia sem expediente (sai como o fim de semana).
-        $holidays = $repository->holidaysByDate($from, $to);
+        // [F10-4, D-F10-4 a] A escala do mes ignora o feriado (o rodizio conta o
+        // dia, como o script); a tela so marca o dia.
+        $holidays = $withHolidays ? $repository->holidaysByDate($from, $to) : [];
         $items = [];
         $end = self::dateValue($to, 'Fim');
         for ($date = self::dateValue($from, 'Inicio'); $date <= $end; $date = $date->modify('+1 day')) {
@@ -2102,6 +2105,31 @@ final class OperationalService {
      * data do arquivamento ou null). Categoria pela P9 (gestao e o proprio);
      * observacao nunca; os itens de ausencia so com periodo e horario.
      */
+    /**
+     * [F10-4] Presenca de cada cadastro por dia para a escala do mes, pelo
+     * motor (mesma regra da Escala e do Mapa PA), sem os feriados (D-F10-4 a)
+     * e com o papel do dia do Critico. So IDs, equipe, situacao e origem; sem
+     * nome, categoria nem observacao. Arquivado ate a vespera; fora do Mapa fora.
+     */
+    public function monthPresence(string $from, string $to): array {
+        $rules = $this->scheduleRules(null, null, $from, true, true);
+        $exceptions = $this->scheduleExceptions($from, $to, null, null);
+        $screen = $this->scheduleScreenEmployees(null, null, true);
+        $days = [];
+        foreach ($this->engineSchedule($from, $to, null, null, $rules, $exceptions, true, false, false, $screen, true, false) as $row) {
+            $days[] = [
+                'employee_id' => (int)$row['employee_id'],
+                'name' => (string)$row['employee_name'],
+                'team' => (string)$row['team'],
+                'date' => $row['date'],
+                'presence_type' => $row['presence_type'],
+                'source' => $row['source'],
+                'rule_type' => $row['rule_type'],
+            ] + (isset($row['papel']) ? ['papel' => $row['papel']] : []);
+        }
+        return $days;
+    }
+
     public function mapPresence(string $from, string $to, array $actor): array {
         $rules = $this->scheduleRules(null, null, $from, true, true);
         $exceptions = $this->scheduleExceptions($from, $to, null, null);
