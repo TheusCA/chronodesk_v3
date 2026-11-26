@@ -780,7 +780,7 @@ $count = static function (int $extra) use ($baseDb, $today): array {
 $small = $count(0);
 $large = $count(40);
 assert_same([count($small), $small], [count($large), $large], 'numero de consultas fixo: 40 cadastros a mais com vinculo, regra e tabela antiga nao mudam as consultas (L-10)');
-assert_same(true, count($small) <= 15, 'consultas da leitura do mapa: no maximo 15, com os feriados do motor e do Mapa PA (D-ESC-17) (' . count($small) . ')');
+assert_same(true, count($small) <= 16, 'consultas da leitura do mapa: no maximo 16, com os feriados do motor e do Mapa PA (D-ESC-17) e a conferencia da escala do mes (D-F10-40) (' . count($small) . ')');
 assert_same(1, count(array_filter($small, static fn (string $sql): bool => strpos($sql, 'information_schema') !== false && strpos($sql, '#portal_pa_assignments') !== false)), 'existencia de cada tabela conferida uma vez por requisicao');
 assert_same(0, count(array_filter(array_merge($small, $large), static fn (string $sql): bool => stripos($sql, 'cutoff') !== false)), 'o mapa nao le a data de corte (DF1)');
 $serviceSource = (string)file_get_contents($root . '/services/PaMapService.php');

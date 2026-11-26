@@ -264,6 +264,15 @@ assert_same(0, preg_match('/audit\([^;]*(name|nome|\$names)/', $service), 'audit
 assert_same(true, strpos($service, "'ESCALA_MENSAL_PUBLICADA' : 'ESCALA_MENSAL_REGERADA'") !== false && strpos($service, "\$reason === 'publicacao' ? 'INFO' : 'WARNING'") !== false, 'auditoria: publicada INFO, regerada WARNING');
 assert_same([1, 1], [substr_count($service, '$this->operational()->monthPresence($from, $to)'), substr_count((string)file_get_contents($root . '/services/OperationalService.php'), "\$screen, true, false) as \$row) {")], 'presenca: pelo motor de sempre, sem os feriados (o rodizio conta o dia, D-F10-4 a)');
 
+// Mapa PA com a fonte "escala do mes" (D-F10-40): a linha vigente na data.
+$paMapSource = (string)file_get_contents($root . '/services/PaMapService.php');
+assert_same([1, 1, 1, 1], [
+    substr_count($paMapSource, "if (!\$this->tableExists('portal_monthly_schedule_entries')) {\n            return null;"),
+    substr_count($paMapSource, 'AND r.revision = (SELECT MAX(r2.revision) FROM portal_monthly_schedule_revisions r2 WHERE r2.schedule_id = m.id AND r2.from_date <= :since)'),
+    substr_count($paMapSource, "'absent_now' => (\$day['presence_type'] ?? null) === 'absence',"),
+    substr_count($paMapSource, "+ (\$monthly !== null ? ['monthly_occupant' => \$monthly[(string)\$pa['pa_number']] ?? null] : []);"),
+], 'Mapa PA: a fonte do mes pela revisao vigente, so com mes publicado, com quem se ausentou depois (D-F10-40 e D-F10-14)');
+
 // ----------------------------------------------------------------------------
 // 4. Exportacao em .xlsx (F10-6): as 6 abas do script, lidas de volta
 // ----------------------------------------------------------------------------

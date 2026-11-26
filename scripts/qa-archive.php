@@ -1206,7 +1206,8 @@ final class QaMapStatement extends PDOStatement {
         $active = static fn (array $row): bool => (int)$db->employees[(int)$row['employee_id']]['ativo'] === 1;
         if ($sql === 'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :table_name') {
             // [F10-3] Sem a 022 (o inventario completo tem QA proprio no qa-pa-conflicts).
-            $this->rows[] = ['total' => ($params[':table_name'] ?? '') === 'portal_pa_preferences' ? 0 : 1];
+            // [F10-4] Sem a 023 (a escala do mes tem QA proprio no qa-monthly-schedule).
+            $this->rows[] = ['total' => in_array($params[':table_name'] ?? '', ['portal_pa_preferences', 'portal_monthly_schedule_entries'], true) ? 0 : 1];
             return true;
         }
         if (strpos($sql, 'SELECT id, pa_number, employee_id, employee_name, employee_login, team, schedule_rule_type, schedule_rule_config, valid_from, valid_until, notes, created_by, updated_by, created_at, updated_at FROM portal_pa_assignments WHERE active = 1 AND valid_from <= :date_until AND (valid_until IS NULL OR valid_until >= :date_from)') === 0) {

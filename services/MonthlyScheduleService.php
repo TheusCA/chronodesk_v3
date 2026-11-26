@@ -49,9 +49,18 @@ final class MonthlyScheduleService
         $this->assertCanPublish($actor);
         $month = $this->month($data['mes'] ?? null);
         $from = $this->fromDate($month, $data['from'] ?? null, $this->state($month, false)['current_revision'] > 0);
-        $computed = $this->compute($month, $from);
+        $inputs = $this->inputs($month, $from);
+        $computed = MonthlySchedulePlanner::compute($inputs);
         $state = $this->state($month, false);
-        return $this->view($month, $computed, $state) + ['from_date' => $from];
+        $inGrid = array_flip(array_column($computed['entries'], 'employee_id'));
+        $people = [];
+        foreach ($inputs['presence'] as $row) {
+            $id = (int)$row['employee_id'];
+            if (isset($inGrid[$id])) {
+                $people[$id] ??= ['id' => $id, 'name' => (string)$row['name'], 'team' => PortalTeams::normalize((string)$row['team'])];
+            }
+        }
+        return $this->view($month, $computed, $state) + ['from_date' => $from, 'people' => array_values($people)];
     }
 
     /**

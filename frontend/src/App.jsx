@@ -34,6 +34,7 @@ const PausasPage = lazyPage(() => import('./pages/PausasPage'), 'PausasPage')
 const TechniciansPage = lazyPage(() => import('./pages/TechniciansPage'), 'TechniciansPage')
 const ChgPage = lazyPage(() => import('./pages/ChgPage'), 'ChgPage')
 const CriticalGridPage = lazyPage(() => import('./pages/CriticalGridPage'), 'CriticalGridPage')
+const MonthlySchedulePage = lazyPage(() => import('./pages/MonthlySchedulePage'), 'MonthlySchedulePage')
 
 // [EE5] Ajuda do campo de justificativa de derrubar pausa (vai para a auditoria).
 const FORCE_END_NOTE_HELP = 'Não inclua informações pessoais ou de saúde.'
@@ -240,6 +241,8 @@ export default function App() {
     content = <SchedulePage session={session} notify={notify} />
   } else if (router.path === '/escala-critico') {
     content = <CriticalGridPage notify={notify} />
+  } else if (router.path === '/escala-mes') {
+    content = <MonthlySchedulePage notify={notify} session={session} />
   } else if (router.path === '/ausencias') {
     content = <AbsencesPage session={session} notify={notify} />
   } else if (router.path === '/tecnicos') {

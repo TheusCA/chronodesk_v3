@@ -56,6 +56,9 @@ final class PaMapService {
             $criticalSeating = $this->criticalSeating($inventory, $date, $presence);
         }
         $items =array_merge($this->assignmentsForMap($date, $team, $presence), $this->legacySpecificDateAssignments($date, $team, $presence));
+        // [F10-4, D-F10-40] A fonte "escala do mes": quem a escala publicada senta
+        // em cada PA na data (sem mes publicado, nada).
+        $monthly = $this->monthlySeating($date, $presence);
         $weekRows = $this->weekRows($weekFrom, $weekTo);
         $conflicts = $this->weekConflicts($weekRows, $presence, $weekFrom, $weekTo);
         if (!$canManage) {
@@ -78,7 +81,8 @@ final class PaMapService {
                 'conflict_days' => $conflictDays[$pa['pa_number']] ?? [],
             ] + ($criticalSeating !== null && array_key_exists($pa['pa_number'], $criticalSeating['by_pa'])
                 ? ['reserved_occupant' => $criticalSeating['by_pa'][$pa['pa_number']]]
-                : []);
+                : [])
+              + ($monthly !== null ? ['monthly_occupant' => $monthly[(string)$pa['pa_number']] ?? null] : []);
         }
 
         return [
@@ -91,6 +95,7 @@ final class PaMapService {
             'conflicts' => $conflicts,
             'absences_week' => $this->weekAbsences($weekRows, $presence, $team, $weekFrom, $weekTo),
             'seat_setup' => $seatSetup,
+            'monthly_published' => $monthly !== null,
         ] + ($criticalSeating === null ? [] : ['critical_seating' => [
             'seats' => $criticalSeating['seats'],
             'onsite' => $criticalSeating['onsite'],
@@ -746,6 +751,42 @@ final class PaMapService {
             'onsite' => count($onsite),
             'without_seat' => array_map($person, $seating['without_seat']),
         ];
+    }
+
+    /**
+     * [F10-4, D-F10-40] Ocupante de cada PA pela escala do mes publicada na
+     * data (a linha vigente: a revisao de maior numero com from_date <= data).
+     * null = sem a 023 ou sem mes publicado. Quem se ausentou depois de
+     * publicar sai como "livre (ausencia)" (D-F10-14): so o ID, o nome do
+     * cadastro, a fonte do PA e a divergencia.
+     */
+    private function monthlySeating(string $date, array $presence): ?array {
+        if (!$this->tableExists('portal_monthly_schedule_entries')) {
+            return null;
+        }
+        $stmt = $this->pdo->prepare('SELECT e.employee_id, e.pa_number, e.pa_source FROM portal_monthly_schedule_entries e
+            JOIN portal_monthly_schedule_revisions r ON r.id = e.revision_id
+            JOIN portal_monthly_schedules m ON m.id = r.schedule_id
+            WHERE e.work_date = :work_date AND m.ref_month = :ref_month AND e.pa_number IS NOT NULL
+              AND r.revision = (SELECT MAX(r2.revision) FROM portal_monthly_schedule_revisions r2 WHERE r2.schedule_id = m.id AND r2.from_date <= :since)');
+        $stmt->execute([':work_date' => $date, ':ref_month' => substr($date, 0, 7) . '-01', ':since' => $date]);
+        $rows = $stmt->fetchAll();
+        if ($rows === []) {
+            $published = $this->pdo->prepare('SELECT current_revision FROM portal_monthly_schedules WHERE ref_month = :ref_month');
+            $published->execute([':ref_month' => substr($date, 0, 7) . '-01']);
+            return (int)$published->fetchColumn() > 0 ? [] : null;
+        }
+        $result = [];
+        foreach ($rows as $row) {
+            $day = $presence['days'][$row['employee_id'] . ':' . $date] ?? null;
+            $result[(string)$row['pa_number']] = [
+                'employee_id' => (int)$row['employee_id'],
+                'employee_name' => (string)($day['employee_name'] ?? ''),
+                'source' => (string)$row['pa_source'],
+                'absent_now' => ($day['presence_type'] ?? null) === 'absence',
+            ];
+        }
+        return $result;
     }
 
     private function assignmentsForMap(string $date, ?string $team, array $presence): array {

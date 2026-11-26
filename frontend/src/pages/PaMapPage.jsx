@@ -147,6 +147,13 @@ export function ReservedSeatCard({ pa, onOpen }) {
   )
 }
 
+// [F10-4, D-F10-40] Fonte "escala do mês": quem a escala publicada senta no PA
+// na data; quem se ausentou depois de publicar deixa o PA livre (D-F10-14).
+export function MonthlyOccupant({ occupant }) {
+  const text = occupant === null ? 'livre' : occupant.absent_now ? 'livre (ausência)' : occupant.employee_name
+  return <p className="mt-2 truncate text-xs text-muted" data-monthly-occupant={occupant?.employee_id ?? ''} title={`Escala do mês: ${text}`}>Escala do mês: <span className="font-semibold text-ink-2">{text}</span></p>
+}
+
 export function PaCard({ pa, canManage, onOpen }) {
   const assignments = pa.assignments || []
   const onsiteCount = assignments.filter((item) => item.presence?.status === 'onsite').length
@@ -181,6 +188,7 @@ export function PaCard({ pa, canManage, onOpen }) {
         )}
       </div>
       {pa.has_conflict && <p className="mt-2 text-xs font-semibold text-danger">Conflito: {conflictDays}</p>}
+      {'monthly_occupant' in pa && <MonthlyOccupant occupant={pa.monthly_occupant} />}
 
       {assignments.length ? (
         <div className="mt-4 space-y-2">

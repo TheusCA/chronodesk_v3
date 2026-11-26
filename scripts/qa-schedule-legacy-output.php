@@ -235,6 +235,8 @@ final class QaLegacyStatement extends PDOStatement {
                 'portal_pa_map' => 0,
                 // [F10-3] Sem a 022 (o inventario completo tem QA proprio no qa-pa-conflicts).
                 'portal_pa_preferences' => 0,
+                // [F10-4] Sem a 023 (a escala do mes tem QA proprio no qa-monthly-schedule).
+                'portal_monthly_schedule_entries' => 0,
                 'portal_presence_cutoff' => $db->cutoffTable ? 1 : 0,
                 default => 1,
             }];

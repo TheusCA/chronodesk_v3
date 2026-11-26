@@ -40,6 +40,8 @@ export const navigation: NavigationItem[] = [
   { path: '/escala-presencial', label: 'Escala presencial', icon: 'building' },
   // [D-ESC-1] Escala do Crítico em grade: todos os perfis veem.
   { path: '/escala-critico', label: 'Escala do Crítico', icon: 'calendar' },
+  // [F10-5] Escala do mês: todos veem o publicado; publicar com escala_mensal.publish.
+  { path: '/escala-mes', label: 'Escala do mês', icon: 'calendar' },
   { path: '/ausencias', label: 'Ausências', icon: 'userMinus' },
   { path: '/plantonistas', label: 'Plantonistas', icon: 'phone' },
   { path: '/sobreavisos', label: 'Sobreavisos', icon: 'radio' },
@@ -66,6 +68,7 @@ export const pageMetadata: PageMetadata = {
   '/escala-turnos': ['Escalas de Sábado', 'Publicações da escala de sábado disponíveis para consulta da equipe.'],
   '/escala-presencial': ['Escala presencial', 'Presença por data, equipe e colaborador.'],
   '/escala-critico': ['Escala do Crítico', 'Papéis, ausências e feriados do Crítico, semana a semana.'],
+  '/escala-mes': ['Escala do mês', 'Presencial, home e PA de cada dia útil do mês publicado, com o resumo.'],
   '/ausencias': ['Ausências', 'Folgas, férias, ausências justificadas e compromissos.'],
   '/horas-extras': ['Horas extras', 'Solicitações e aprovações de horas adicionais.'],
   '/correcao-ponto': ['Correção de ponto', 'Solicitações de ajuste de marcação.'],

@@ -3678,6 +3678,77 @@ async function criticalGrid(page, port, mock) {
   }
 }
 
+// 35. [F10-5] Escala do mês com dados fictícios (monthly-fixture.mjs): o técnico
+// só lê (grade, PA, divergência, RESUMO, sem prévia nem publicar); a Liderança
+// gera a prévia, publica com confirmação e a revisão esperada; o 409 descarta
+// a prévia; o admin abre a importação com a prévia por passo; o Mapa PA mostra
+// a fonte "escala do mês"; no celular, sem rolagem lateral da página.
+async function monthlySchedule(page, port, mock) {
+  const posts = (action) => mock.requests.filter((r) => r.method === 'POST' && r.key === 'portal/monthly_schedule.php' && r.body?.action === action)
+  try {
+    mock.useTechnicianSession()
+    await goto(page, port, '/escala-mes', 1366)
+    await page.waitFor(`!!document.querySelector('[data-month-page] .esc-grid')`)
+    const view = await page.evaluate(`({
+      titulo: document.querySelector('[data-month-title]').textContent,
+      semanas: document.querySelectorAll('details.esc-week[open]').length,
+      hoje: document.querySelectorAll('.esc-grid-head.esc-today').length,
+      contorno: getComputedStyle(document.querySelector('.esc-cell.esc-today') || document.body).outlineStyle,
+      pa: document.querySelector('[data-month-cell="2026-12-01"] .esc-cell-detail')?.textContent || '',
+      status: document.querySelector('[data-month-status="2026-12-10"]')?.textContent || '',
+      publicar: !!document.querySelector('[data-month-preview], [data-month-publish], [data-month-export]'),
+      lateral: document.documentElement.scrollWidth > innerWidth,
+    })`)
+    report('Escala do mes (tecnico, 1366 px): titulo, 5 semanas abertas, hoje so no cabecalho, PA do dia, STATUS do RESUMO, sem previa/publicar/exportar, sem rolagem lateral', view.titulo === 'Dezembro 2026' && view.semanas === 5 && view.hoje >= 1 && view.contorno !== 'solid' && /^PA 17\d\d$/.test(view.pa) && view.status === 'PA insuficiente' && !view.publicar && !view.lateral, JSON.stringify(view))
+    await goto(page, port, '/escala-mes', 390)
+    await page.waitFor(`!!document.querySelector('[data-month-page]')`)
+    const phone = await page.evaluate(`(() => { const grid = document.querySelector('details.esc-week .esc-grid'); const first = document.querySelector('details.esc-week .esc-grid-head:nth-child(2)').getBoundingClientRect(); const cell = document.querySelector('details.esc-week [data-month-cell]').getBoundingClientRect(); return { grade: getComputedStyle(grid).display, rola: grid.scrollWidth > grid.clientWidth, alinhada: Math.abs(first.left - cell.left) < 2, lateral: document.documentElement.scrollWidth > innerWidth } })()`)
+    report('Escala do mes (celular, 390 px): a grade aparece e rola no bloco, alinhada com o cabecalho (semana de 4 dias), a pagina sem rolagem lateral', phone.grade === 'grid' && phone.rola && phone.alinhada && !phone.lateral, JSON.stringify(phone))
+
+    mock.useLeadershipSession()
+    await goto(page, port, '/escala-mes', 1366)
+    await page.waitFor(`!!document.querySelector('[data-month-preview]')`)
+    await page.click(`document.querySelector('[data-month-preview]')`)
+    await page.waitFor(`!!document.querySelector('[data-month-preview-banner]')`)
+    const banner = await page.evaluate(`document.querySelector('[data-month-preview-banner]').textContent.replace(/\s+/g, ' ')`)
+    report('Escala do mes (Lideranca): a previa vem do servidor, sem gravar, com as celulas que mudam', posts('preview').length === 1 && /mudam em relação ao publicado/.test(banner) && posts('publish').length === 0, banner)
+    await page.click(`document.querySelector('[data-month-publish]')`)
+    await page.waitFor(`!!document.querySelector('[role="alertdialog"]')`)
+    await page.click(button('Publicar', `document.querySelector('[role="alertdialog"]')`))
+    await page.waitFor(`!document.querySelector('[data-month-preview-banner]')`)
+    const sent = posts('publish').at(-1)?.body
+    report('Escala do mes: publicar pede confirmacao e manda a revisao esperada e o hash da previa', sent?.expected_revision === 1 && sent?.input_hash === 'a'.repeat(64) && sent?.from_date === '2026-12-01', JSON.stringify(sent))
+    mock.refuseMonthlyPublish(409, 'Outra publicação aconteceu; recarregue a prévia.')
+    await page.click(`document.querySelector('[data-month-preview]')`)
+    await page.waitFor(`!!document.querySelector('[data-month-publish]')`)
+    await page.click(`document.querySelector('[data-month-publish]')`)
+    await page.waitFor(`!!document.querySelector('[role="alertdialog"]')`)
+    await page.click(button('Publicar', `document.querySelector('[role="alertdialog"]')`))
+    await page.waitFor(`[...document.querySelectorAll('[role="alert"]')].some((el) => el.textContent.includes('Outra publicação aconteceu'))`)
+    report('Escala do mes: 409 avisa e descarta a previa (precisa refazer)', !(await page.evaluate(`!!document.querySelector('[data-month-preview-banner]')`)))
+
+    mock.useAdminSession()
+    await goto(page, port, '/escala-mes', 1366)
+    await page.waitFor(`!!document.querySelector('[data-month-import-open]')`)
+    await page.click(`document.querySelector('[data-month-import-open]')`)
+    await page.waitFor(`!!document.querySelector('[data-month-import]')`)
+    const disabled = await page.evaluate(`document.querySelector('[data-import-preview]').disabled`)
+    report('Escala do mes (admin): importar a planilha Base pede os dois arquivos e a data antes da previa', disabled === true)
+    await page.press('Escape')
+    await sleep(200)
+
+    mock.useMonthly({ onMap: true })
+    await goto(page, port, '/mapa-pa', 1366)
+    await page.waitFor(`!!document.querySelector('[data-monthly-occupant]')`)
+    const map = await page.evaluate(`[...document.querySelectorAll('[data-monthly-occupant]')].map((el) => el.textContent).join(' | ')`)
+    report('Mapa PA: a fonte "escala do mes" no cartao do PA (D-F10-40)', /Escala do mês: Alice Ficticia/.test(map), map)
+  } finally {
+    mock.refuseMonthlyPublish(null)
+    mock.useMonthly({ published: true, onMap: false })
+    mock.useAdminSession()
+  }
+}
+
 // 32. [F10-3] Mapa PA com o inventario: os reservados do Critico com a pessoa
 // do papel do dia (D-F10-19 revista), o aviso de quem ficou sem PA reservado,
 // o diálogo do reservado sem o formulario do vinculo, o inventario (tipo,
@@ -3791,6 +3862,7 @@ try {
     [32, 'Mapa PA: inventario e reservados do Critico (F10-3)', () => paInventoryF103(page, mock.port, mock)],
     [33, 'Controle de CHG: quadro compacto, painel Abrir e Etapa (ajustes do Tools)', () => chgLayout(page, mock.port, mock)],
     [34, 'Escala do Critico em grade: leitura, teclado, celular, dialogo do dia e feriados (D-ESC)', () => criticalGrid(page, mock.port, mock)],
+    [35, 'Escala do mes: leitura, previa, publicar com 409, importacao e a fonte no Mapa PA (F10-5)', () => monthlySchedule(page, mock.port, mock)],
   ]
   for (const [number, title, run] of blocks) {
     if (onlyBlocks && !onlyBlocks.has(number)) continue

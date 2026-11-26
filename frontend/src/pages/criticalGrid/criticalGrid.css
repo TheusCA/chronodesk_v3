@@ -157,3 +157,18 @@
   .esc-grid { display: none; }
   .esc-cards { display: grid; gap: 1px; background: rgb(var(--line)); }
 }
+
+/* [F10-5] Escala do mês: semana com menos de 5 dias úteis (início e fim do
+   mês) e, no celular, a grade rola dentro do bloco com o nome fixo. */
+.esc-grid.esc-days-1 { grid-template-columns: minmax(8.5rem, 11rem) repeat(1, minmax(8.5rem, 1fr)); }
+.esc-grid.esc-days-2 { grid-template-columns: minmax(8.5rem, 11rem) repeat(2, minmax(8.5rem, 1fr)); }
+.esc-grid.esc-days-3 { grid-template-columns: minmax(8.5rem, 11rem) repeat(3, minmax(8.5rem, 1fr)); }
+.esc-grid.esc-days-4 { grid-template-columns: minmax(8.5rem, 11rem) repeat(4, minmax(8.5rem, 1fr)); }
+@media (max-width: 767px) {
+  .esc-grid.esc-grid-scroll { display: grid; grid-template-columns: 7.5rem repeat(5, 7.5rem); }
+  .esc-grid.esc-grid-scroll.esc-days-1 { grid-template-columns: 7.5rem 7.5rem; }
+  .esc-grid.esc-grid-scroll.esc-days-2 { grid-template-columns: 7.5rem repeat(2, 7.5rem); }
+  .esc-grid.esc-grid-scroll.esc-days-3 { grid-template-columns: 7.5rem repeat(3, 7.5rem); }
+  .esc-grid.esc-grid-scroll.esc-days-4 { grid-template-columns: 7.5rem repeat(4, 7.5rem); }
+  .esc-grid-scroll .esc-grid-name, .esc-grid-scroll > .esc-grid-head:first-child { position: sticky; left: 0; z-index: 1; }
+}

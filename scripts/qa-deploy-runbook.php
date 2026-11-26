@@ -1116,7 +1116,11 @@ assert_same([0, true], [preg_match('/<URL>|<ServerName do vhost>|https:\/\//', $
 $package4 = json_decode((string)file_get_contents($root . '/frontend/package.json'), true);
 $frontendCount4 = 30;
 $frontendCount6 = 3 + count(array_filter(array_keys((array)($package4['scripts'] ?? [])), static fn (string $name): bool => strpos($name, 'qa:') === 0));
-assert_same([true, 1], [$frontendCount6 > $frontendCount4, (int)isset($package4['scripts']['qa:critical-grid'])], 'scripts npm: o qa:critical-grid (deploy 6) alem dos 30 dos deploys 4 e 5');
+// [F10-5, 2026-11-26] O deploy 6 ficou congelado com 31 scripts (o qa:critical-grid);
+// o qa:monthly-schedule vai no deploy 7, com a contagem atual ($frontendCount7).
+$frontendCount7 = $frontendCount6;
+$frontendCount6 = $frontendCount7 - (int)isset($package4['scripts']['qa:monthly-schedule']);
+assert_same([31, 1, 1], [$frontendCount6, (int)isset($package4['scripts']['qa:critical-grid']), $frontendCount7 - $frontendCount6], 'scripts npm: o qa:critical-grid (deploy 6, 31) e o qa:monthly-schedule (deploy 7)');
 assert_same(true, strpos($runbook4, "`frontend: {$frontendCount4} scripts npm rodados (...): {$frontendCount4} OK, 0 com falha`") !== false && strpos($runbook4, '`git fetch origin; git worktree add --detach ..\\chronodesk-deploy4-consolidado origin/feat/employee-form-rhf-zod;') !== false, 'deploy 4: a bateria completa na estacao (item 0) com a contagem atual de scripts npm');
 assert_same(true, strpos($prose4, 'os quatro icones no build (`favicon.ico`, `favicon.svg`, `favicon.png` e `apple-touch-icon.png`)') !== false && strpos($prose4, 'o CSS do portal abaixo de 70000 bytes e o CSS do Controle de CHG abaixo de 25000') !== false, 'deploy 4: o qa:bundle com os quatro icones e os dois orcamentos de CSS');
 assert_same(true, strpos($prose4, '0b. **Aviso a Lideranca e a gestao, na vespera**') !== false && strpos($prose4, '**Nada muda para ninguem no deploy:**') !== false, 'deploy 4: o aviso com marcadores e nada muda para ninguem no deploy');

@@ -36,7 +36,8 @@
     "qa:table": "node scripts/qa-table.mjs",
     "qa:ux-hardening": "node scripts/qa-ux-hardening.mjs",
     "qa:unsaved-changes": "node scripts/qa-unsaved-changes.mjs",
-    "qa:visual": "node scripts/qa-visual.mjs"
+    "qa:visual": "node scripts/qa-visual.mjs",
+    "qa:monthly-schedule": "node scripts/qa-monthly-schedule.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.1",
