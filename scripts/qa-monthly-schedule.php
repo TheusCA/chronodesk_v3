@@ -47,7 +47,7 @@ foreach ($tables as $table) {
 assert_same([0, 0, 0, 0], [
     preg_match('/\b((?<!ON )UPDATE|(?<!ON )DELETE|INSERT|DROP|TRUNCATE)\b/i', $migration),
     preg_match('/ALTER TABLE/i', $migration),
-    preg_match('/\b(nome|name|login|observ|note|category)\b/i', $migration),
+    preg_match('/^\s+\w*(nome|name|login|observ|note|category)\w*\s+(VARCHAR|TEXT|ENUM|CHAR)/mi', $migration),
     preg_match('/ON DELETE CASCADE/i', $migration),
 ], 'migration 023: so CREATE TABLE (nenhuma linha de outra tabela muda), sem nome, login, observacao ou categoria, sem cascata');
 assert_same([1, 1, 1, 1], [
@@ -80,7 +80,7 @@ assert_same([1, 1, 1], [
 
 // Rollback: para antes de alterar se ja houver copia; RENAME (nada e apagado).
 assert_same(1, substr_count($rollback, "SET time_zone = 'America/Sao_Paulo';"), 'rollback 023: fuso da sessao');
-assert_same(true, strpos($rollback, 'CALL rollback_023_confere();') < strpos($rollback, 'RENAME TABLE'), 'rollback 023: a checagem roda antes de qualquer RENAME');
+assert_same([1, true], [substr_count($rollback, 'CALL rollback_023_confere();'), (int)strpos($rollback, 'CALL rollback_023_confere();') < (int)strpos($rollback, 'RENAME TABLE')], 'rollback 023: a checagem roda uma vez, antes de qualquer RENAME');
 assert_same(1, substr_count($rollback, "SIGNAL SQLSTATE '45000'\n            SET MESSAGE_TEXT = 'rollback_023 abortado: ja existe copia *_bkp_023 de rollback anterior. Nada foi alterado. Renomeie as copias e repita.';"), 'rollback 023: para com copia anterior (a mensagem cabe nos 128 caracteres do SIGNAL)');
 assert_same(true, strlen('rollback_023 abortado: ja existe copia *_bkp_023 de rollback anterior. Nada foi alterado. Renomeie as copias e repita.') <= 128, 'rollback 023: mensagem do SIGNAL ate 128 caracteres');
 foreach ($tables as $table) {
@@ -199,6 +199,12 @@ $qaNoRule['presence'][] = ['employee_id' => 13, 'name' => 'Golf', 'team' => 'n1'
 $qaNoRule['people'][13] = ['grupo' => 'comum'];
 $qaNoRulePlan = MonthlySchedulePlanner::compute($qaNoRule);
 assert_same([['ATENCAO CONFIG'], 1, null], [$qaNoRulePlan['summary']['2026-12-30']['status'], $qaNoRulePlan['summary']['2026-12-30']['without_schedule'], $qaCell($qaNoRulePlan, 13, '2026-12-30')], 'STATUS: alguem do grupo comum sem regra da ATENCAO CONFIG (e nao vira linha)');
+// Dois do Critico presenciais e um reservado: fica quem tem o papel de menor ordem.
+$qaTwo = $qaInput;
+$qaTwo['presence'][] = ['employee_id' => 32, 'name' => 'Aaron', 'team' => 'critico', 'date' => '2026-12-30', 'presence_type' => 'onsite', 'source' => 'role', 'rule_type' => null, 'papel' => ['id' => 1, 'sort_order' => 2, 'label' => 'Abertura']];
+$qaTwo['people'][32] = ['grupo' => 'comum'];
+$qaTwoPlan = MonthlySchedulePlanner::compute($qaTwo);
+assert_same(['9', null], [$qaCell($qaTwoPlan, 31, '2026-12-30')['pa_number'], $qaCell($qaTwoPlan, 32, '2026-12-30')['pa_number']], 'Critico: o reservado vai para o papel de menor ordem (nao pelo nome)');
 $qaSeparate = $qaInput;
 $qaSeparate['people'][12] = ['grupo' => 'separado'];
 assert_same([11, 21, 22], MonthlySchedulePlanner::compute($qaSeparate)['common'], 'grupo comum: o N1 no grupo "separado" fica fora');

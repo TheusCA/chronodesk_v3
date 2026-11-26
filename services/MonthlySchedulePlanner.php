@@ -189,10 +189,9 @@ final class MonthlySchedulePlanner
                 }
             }
             ksort($counts['home_by_team']);
+            // Quem do grupo comum esta sem regra nao tem presenca no motor:
+            // o alerta presence_missing ja da o ATENCAO CONFIG (desenho 3.5).
             $status = $day['status'];
-            if (($config[$date] ?? []) !== [] && !in_array(PaDistributionEngine::STATUS_CONFIG, $status, true)) {
-                array_unshift($status, PaDistributionEngine::STATUS_CONFIG);
-            }
             $base = $counts['onsite'] + $counts['remote'];
             $summary[$date] = $counts + [
                 'percent_onsite' => $base === 0 ? null : (int)round(100 * $counts['onsite'] / $base),
