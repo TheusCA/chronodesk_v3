@@ -1164,13 +1164,8 @@ assert_same([0, 0, 0, 0, 0], [
     preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet4),
     preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet4)),
 ], 'folha do deploy 4: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem comando com sudo');
-// A folha do deploy 7 so aponta para a do deploy 4: nenhum comando (a do
-// deploy 5 voltou a ser uma folha de verdade no F10-3, secao 18, e a do
-// deploy 6 na Escala do Critico, secao 19).
-foreach ([7] as $n) {
-    $oldSheet = $readOptional($root . "/docs/DEPLOY{$n}_FOLHA_DO_DIA.md");
-    assert_same([0, true], [preg_match('/```/', $oldSheet), strpos($oldSheet, '`docs/DEPLOY4_FOLHA_DO_DIA.md`') !== false && strpos($oldSheet, '**Nao execute nada a partir desta folha.**') !== false], "folha do deploy {$n}: substituida, so aponta para a do deploy 4, sem comando");
-}
+// As folhas dos deploys 5, 6 e 7 voltaram a ser folhas de verdade (secoes 18,
+// 19 e 20); a do 7 foi substituida em 2026-11-18 e reescrita no F10-4.
 
 // ----------------------------------------------------------------------------
 // 18. Deploy 5 (F10-3, 2026-11-19): a migration 022 antes do merge, com o
@@ -1545,6 +1540,78 @@ assert_same([0, 0, 0, 0, 0, true], [
 ], 'folha do deploy 6: sem IP (alem do 127.0.0.1), e-mail, hostname, senha nem sudo; o worktree e a contagem de scripts no item 0');
 
 // ----------------------------------------------------------------------------
+// 20. Deploy 7 (F10-4 a F10-6 e a importacao da planilha Base; migration 023),
+// depois do 65af3da (o deploy 6). Os comandos sao os do deploy 6 com D7, a
+// base 65af3da e a 023, menos o comando 3, que usa o hash fixo do commit do
+// deploy 7 (6c910d4, validado pela bateria na estacao) conferido no codex por
+// merge-base; o ensaio roda todos os QAs PHP; a folha com os mesmos comandos;
+// o mes em paralelo e a virada depois do deploy.
+// ----------------------------------------------------------------------------
+$heading7 = '### Deploy 7 (escala do mes no portal: F10-4, F10-5, F10-6 e a importacao da planilha Base; migration 023)';
+$start7 = strpos($deployDoc, $heading7);
+$ends7 = $start7 === false ? [] : array_filter([strpos($deployDoc, "\n### ", $start7 + 1), strpos($deployDoc, "\n## ", $start7)], static fn ($pos): bool => $pos !== false);
+$runbook7 = $start7 === false ? '' : substr($deployDoc, $start7, ($ends7 === [] ? strlen($deployDoc) : min($ends7)) - $start7);
+$prose7 = (string)preg_replace('/\s+/', ' ', $runbook7);
+preg_match_all('/```(bash|powershell)\n(.*?)```/s', $runbook7, $blocks7);
+$commands7 = array_values(array_filter(explode("\n", implode("\n", $blocks7[2])), static fn (string $line): bool => trim($line) !== ''));
+$base7 = '65af3dad9a60b6d4d2b22a7009e06b51b30b6569';
+$commit7 = '6c910d4894353ce01393250c77d4b31f233f05a1';
+$expected7 = array_map(static fn (string $line): string => strtr($line, [
+    'babcdd9bde06a9cc6b7b160139dda4e67240aba4' => $base7,
+    'HEAD de producao: babcdd9' => 'HEAD de producao: 65af3da', 'nao o babcdd9' => 'nao o 65af3da', 'o codigo no ar nao e o babcdd9' => 'o codigo no ar nao e o 65af3da',
+    'deploy6' => 'deploy7', 'D6' => 'D7', 'd6_027' => 'd7_023',
+    '20261124_027_critical_grid_check.sql' => '20261126_023_monthly_schedule_check.sql', '20261124_027_critical_grid_down.sql' => '20261126_023_monthly_schedule_down.sql',
+    '20261124_027_ensaio_linhas.sql' => '20261126_023_ensaio_linhas.sql', '20261124_027_critical_grid.sql' => '20261126_023_monthly_schedule.sql',
+    'DADOS=portal_critical_roles,portal_critical_role_rotations,portal_absences' => 'DADOS=funcionarios,portal_pa_inventory',
+    'sem a 027' => 'sem a 023', '027 aplicada' => '023 aplicada', 'a 027 nao foi aplicada' => 'a 023 nao foi aplicada',
+    'a verificacao da 027 falhou' => 'a verificacao da 023 falhou', 'rollback da 027' => 'rollback da 023', 'exatamente as 4 esperadas (027)' => 'exatamente as 4 esperadas (023)',
+    'qa-critical-grid qa-security' => 'qa-critical-grid qa-monthly-schedule qa-security',
+    // A ordem do sort do git diff: as linhas do ensaio antes do rollback da 023.
+    'migrations/rollback/20261124_027_critical_grid_down.sql migrations/rollback/20261124_027_ensaio_linhas.sql' => 'migrations/rollback/20261126_023_ensaio_linhas.sql migrations/rollback/20261126_023_monthly_schedule_down.sql',
+]), $commands6);
+$expected7[$record6] = 'cd /var/www/chronodesk; K=' . $commit7 . '; git fetch origin codex/modernizacao-ui-backend && git cat-file -e "$K^{commit}" && git merge-base --is-ancestor "$K" origin/codex/modernizacao-ui-backend && echo "$K" | tee /var/backups/chronodesk/deploy7-commit || echo "PARE: o 6c910d4 nao esta no origin/codex/modernizacao-ui-backend (ou o fetch falhou)"; unset K';
+assert_same([true, $expected7], [$start7 !== false && $start7 > $start6, $commands7], 'deploy 7: os comandos do deploy 6 com D7, a base 65af3da, a 023 e o qa-monthly-schedule, e o comando 3 no hash fixo do 6c910d4 conferido no codex (merge-base)');
+assert_same([0, 0, 1, 0], [substr_count($runbook7, '<commit validado na estacao>'), preg_match('/rev-parse origin\/codex/', $runbook7), substr_count($runbook7, 'git worktree add --detach ..\chronodesk-deploy7 ' . $commit7 . ';'), preg_match('/\b027\b|\bD6\b|deploy6|babcdd9/', implode("\n", $commands7))], 'deploy 7: sem hash a preencher, sem a ponta do branch, o item 0 no hash fixo, nada do deploy 6 nos comandos');
+$migrationFiles7 = [];
+foreach (['', 'rollback/', 'verificacao/'] as $dir) {
+    foreach (glob($root . '/migrations/' . $dir . '*_023_*.sql') ?: [] as $path) {
+        $migrationFiles7[] = 'migrations/' . $dir . basename($path);
+    }
+}
+sort($migrationFiles7, SORT_STRING);
+assert_same([4, true], [count($migrationFiles7), strpos($commands7[$check6] ?? '', '[ "$L" = "' . implode(' ', $migrationFiles7) . ' " ] && echo "migrations alteradas: exatamente as 4 esperadas (023)"') !== false], 'deploy 7: a 023 tem quatro arquivos e a lista exata conferida logo depois de gravar');
+preg_match('/for q in ([a-z0-9 -]+); do/', $commands7[$qaLoop6] ?? '', $qaList7);
+$runbookQas7 = explode(' ', trim($qaList7[1] ?? ''));
+sort($runbookQas7);
+$everyQa7 = array_map(static fn (string $path): string => basename($path, '.php'), glob($root . '/scripts/qa-*.php') ?: []);
+sort($everyQa7);
+assert_same([$everyQa7, true, true], [$runbookQas7, in_array('qa-monthly-schedule', $runbookQas7, true), strpos($prose7, 'os ' . count($everyQa7) . ' QAs com `OK`') !== false], 'deploy 7: o ensaio roda TODOS os QAs PHP do repositorio, com o qa-monthly-schedule, e a contagem no esperado');
+assert_same([true, true, true, true, true, true], [
+    strpos($prose7, '`frontend: ' . $frontendCount7 . ' scripts npm rodados (...): ' . $frontendCount7 . ' OK, 0 com falha`') !== false && strpos($prose7, 'o hash completo no fim igual a `' . $commit7 . '`') !== false,
+    strpos($prose7, 'Data, janela e quem acompanha: A DEFINIR') !== false && strpos($prose7, '**Nenhum filtro de saida com `umask`**') !== false,
+    strpos($prose7, '**Nenhuma linha de outra tabela muda.**') !== false && strpos($prose7, '**A 023 antes do merge:**') !== false && strpos($prose7, '**15. Rollback da 023') !== false,
+    strpos($prose7, '- **Escala do mes (nova, menu Escalas):** dezembro "Ainda nao publicada"') !== false && strpos($prose7, '(nao gere, nao publique e nao importe agora)') !== false,
+    strpos($prose7, 'a virada (D-F10-8) fica desmarcada ate janeiro**') !== false && strpos($prose7, '- **Dezembro em paralelo, sem publicar:**') !== false && strpos($prose7, '**status 100% igual**') !== false,
+    strpos($prose7, '- **Virada em janeiro, so se dezembro bater:**') !== false && strpos($prose7, 'A planilha continua a oficial em dezembro.') !== false,
+], 'deploy 7: bateria no hash fixo com a contagem atual, A DEFINIR, o que vai com a 023, a conferencia sem publicar, o mes em paralelo sem a virada e a virada em janeiro');
+$sheet7 = $readOptional($root . '/docs/DEPLOY7_FOLHA_DO_DIA.md');
+preg_match_all('/```bash\n(.*?)```/s', $sheet7, $sheet7Blocks);
+$sheet7All = array_values(array_filter(explode("\n", implode("\n", $sheet7Blocks[1])), static fn (string $line): bool => trim($line) !== ''));
+assert_same([true, $commands7], [$sheet7 !== '' && count($sheet7All) === count($commands7), $sheet7All], 'folha do deploy 7: os mesmos comandos do roteiro, na mesma ordem');
+preg_match_all('/^- \[ \] \*\*(\d+)\.\*\* \([^)]*\) Esperado: .*\*\*PARE se:\*\* /m', $sheet7, $sheet7Numbers);
+assert_same(range(1, count($sheet7All)), array_map('intval', $sheet7Numbers[1]), 'folha do deploy 7: cada comando com caixa, numero de 1 em diante, Esperado e PARE se');
+$sheet7NoLoopback = str_replace('127.0.0.1', '', $sheet7);
+assert_same([0, 0, 0, 0, 0, 0, true], [
+    preg_match('/\b\d{1,3}(\.\d{1,3}){3}\b/', $sheet7NoLoopback),
+    preg_match('/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\./', $sheet7),
+    preg_match('/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(local|lan|corp|intra|internal|com|br|net|org)\b/i', $sheet7),
+    preg_match('/MYSQL_PWD=(?!"\$P")|\s-p(?!rint|ath)\S/', $sheet7),
+    preg_match('/\bsudo\b(?! -i)/', str_replace('`sudo`', '', $sheet7)),
+    substr_count($sheet7, '<commit validado na estacao>'),
+    strpos($sheet7, '..\\chronodesk-deploy7 ' . $commit7 . ';') !== false && strpos($sheet7, "`frontend: {$frontendCount7} scripts npm rodados (...): {$frontendCount7} OK, 0 com falha`") !== false && strpos($sheet7, 'confirmar **so** times, regras, excecoes e inventario (a virada fica para janeiro)') !== false,
+], 'folha do deploy 7: sem IP, e-mail, hostname, senha, sudo nem hash a preencher; o item 0 no hash fixo, a contagem de scripts e a importacao sem a virada');
+
+// ----------------------------------------------------------------------------
 // 17. Licao do deploy 4 (19/11/2026): um filtro de resumo com "umask 077"
 // rodou no shell do dia; o merge e o build gravaram arquivos com 600/700, o
 // www-data nao lia o security.php e o portal ficou em manutencao. Em todos os
@@ -1562,6 +1629,7 @@ $lessonRunbooks = [
     4 => [$commands4, $build4, 'pre-deploy4-commit', $sheet4],
     5 => [$commands5, $build5, 'pre-deploy5-commit', $sheet5],
     6 => [$commands6, $build6, 'pre-deploy6-commit', $sheet6],
+    7 => [$commands7, $build6, 'pre-deploy7-commit', $sheet7],
 ];
 foreach ($lessonRunbooks as $n => [$lessonCommands, $lessonBuild, $lessonPre, $lessonSheet]) {
     $envLines = array_values(array_filter($lessonCommands, static fn (string $line): bool => strpos($line, 'R=OK; [ "$(id -u)" = 0 ]') === 0));
