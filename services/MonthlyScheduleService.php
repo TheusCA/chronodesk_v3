@@ -83,7 +83,7 @@ final class MonthlyScheduleService
             $stmt = $this->pdo->prepare('INSERT INTO portal_monthly_schedule_revisions (schedule_id, revision, from_date, input_hash, engine_version, reason, published_by, counts)
                 VALUES (:schedule, :revision, :from_date, :hash, :engine, :reason, :by, :counts)');
             $stmt->execute([':schedule' => $state['id'], ':revision' => $revision, ':from_date' => $from, ':hash' => $computed['input_hash'],
-                ':engine' => $computed['engine_version'], ':reason' => $reason, ':by' => $by, ':counts' => json_encode($computed['counts'])]);
+                ':engine' => $computed['engine_version'], ':reason' => $reason, ':by' => $by, ':counts' => json_encode($computed['counts'] + ['por_dia' => $computed['summary']])]);
             $revisionId = (int)$this->pdo->lastInsertId();
             $insert = $this->pdo->prepare('INSERT INTO portal_monthly_schedule_entries (revision_id, work_date, employee_id, situation, source, team_snapshot, pa_number, pa_source, no_pa, moved)
                 VALUES (:revision, :date, :employee, :situation, :source, :team, :pa, :pa_source, :no_pa, :moved)');
@@ -135,7 +135,7 @@ final class MonthlyScheduleService
                 'revision' => (int)$entry['revision'],
             ] + (isset($divergences[$key]) ? ['divergence' => $divergences[$key]] : []);
         }
-        $summary = $this->publishedSummary($state['id'], $state['current_revision']);
+        $summary = $this->publishedDays($state['id'], $days);
         return [
             'mes' => $month,
             'label' => self::monthLabel($month),
@@ -155,6 +155,46 @@ final class MonthlyScheduleService
             'can_lock' => portal_role_can((string)($actor['role'] ?? ''), 'pa_map.manage'),
             'earliest_from' => MonthlySchedulePlanner::earliestFrom($month, $this->today()),
         ];
+    }
+
+    /**
+     * [F10-6] Dados do .xlsx: o mes publicado (409 sem publicacao), com o
+     * nome do cadastro, a torre, o time e o modo de cada pessoa, o RESUMO de
+     * cada dia e o inventario. Sem categoria de ausencia (D-F10-11 e 6.4).
+     */
+    public function exportData(array $query, array $actor): array
+    {
+        $read = $this->read($query, $actor);
+        if ($read['current_revision'] === 0) {
+            throw new DomainException('O mês ainda não foi publicado: publique antes de exportar.');
+        }
+        $days = $read['days'];
+        $modes = [];
+        $teams = $this->rotation($days[0], end($days));
+        foreach ($this->operational()->monthPresence($days[0], end($days)) as $row) {
+            $id = (int)$row['employee_id'];
+            $modes[$id] ??= ['rule_type' => $row['rule_type']];
+        }
+        $groups = $this->people();
+        $people = [];
+        foreach ($read['people'] as $person) {
+            $id = $person['id'];
+            $team = null;
+            foreach ($days as $day) {
+                $team ??= $teams[$day][$id] ?? null;
+            }
+            $people[] = $person + [
+                'tower' => strtoupper((string)$person['team']),
+                'rotation_team' => $team,
+                'mode' => MonthlySchedulePlanner::modeLabel($person['team'], $modes[$id]['rule_type'] ?? null, $team),
+                'common' => PortalTeams::inCommonGroup($person['team']) && (($groups[$id]['grupo'] ?? null) === 'comum'),
+            ];
+        }
+        $seats = [];
+        foreach ($this->seats($days[0], end($days)) as $seat) {
+            $seats[] = ['pa' => (string)$seat['pa'], 'row' => $seat['row'], 'column' => $seat['column'], 'type' => $seat['type'], 'reserved' => $seat['reserved_for'] !== null, 'active' => $seat['active'] && !$seat['unavailable']];
+        }
+        return ['people' => $people, 'seats' => $seats] + $read;
     }
 
     /** JSON paridade-escala-v1 (so admin): o publicado ou, sem publicacao, a previa. Sem nome. */
@@ -400,15 +440,28 @@ final class MonthlyScheduleService
         return $result;
     }
 
-    private function publishedSummary(int $scheduleId, int $revision): ?array
+    /**
+     * RESUMO de cada dia publicado: o da revisao vigente no dia (a de maior
+     * numero com from_date <= dia), guardado nas contagens da revisao.
+     */
+    private function publishedDays(int $scheduleId, array $days): array
     {
-        if ($revision === 0) {
-            return null;
+        if ($scheduleId === 0) {
+            return [];
         }
-        $stmt = $this->pdo->prepare('SELECT counts FROM portal_monthly_schedule_revisions WHERE schedule_id = :id AND revision = :revision');
-        $stmt->execute([':id' => $scheduleId, ':revision' => $revision]);
-        $counts = json_decode((string)$stmt->fetchColumn(), true);
-        return is_array($counts) ? $counts : null;
+        $stmt = $this->pdo->prepare('SELECT revision, from_date, counts FROM portal_monthly_schedule_revisions WHERE schedule_id = :id ORDER BY revision');
+        $stmt->execute([':id' => $scheduleId]);
+        $result = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $counts = json_decode((string)$row['counts'], true);
+            foreach (is_array($counts['por_dia'] ?? null) ? $counts['por_dia'] : [] as $day => $summary) {
+                if (in_array($day, $days, true) && $day >= $row['from_date']) {
+                    $result[$day] = $summary;
+                }
+            }
+        }
+        ksort($result);
+        return $result;
     }
 
     private function revisions(int $scheduleId): array

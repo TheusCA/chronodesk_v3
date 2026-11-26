@@ -22,6 +22,23 @@ try {
         if ($format === 'paridade') {
             json_response($service->parity($_GET, $actor));
         }
+        if ($format === 'xlsx') {
+            if (!portal_role_can($role, 'relatorios.read')) {
+                audit_log('ESCALA_MENSAL_EXPORTACAO_NEGADA', 'Perfil sem permissao tentou exportar a escala do mes.', 'WARNING');
+                json_response(['sucesso' => false, 'mensagem' => 'Apenas administradores, Liderança e gestão exportam a escala do mês.'], 403);
+            }
+            require_once __DIR__ . '/../../services/MonthlyScheduleSheet.php';
+            $month = $service->exportData($_GET, $actor);
+            $bytes = MonthlyScheduleSheet::build($month);
+            audit_log('ESCALA_MENSAL_EXPORTADA', 'Exportacao XLSX da escala do mes: mes ' . $month['mes'] . ', revisao ' . $month['current_revision'] . ', pessoas ' . count($month['people']) . ', perfil ' . $role . '.', 'INFO');
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . MonthlyScheduleSheet::fileName($month['mes']) . '"');
+            header('Content-Length: ' . strlen($bytes));
+            header('Cache-Control: no-store');
+            header('X-Content-Type-Options: nosniff');
+            echo $bytes;
+            exit;
+        }
         json_response(['sucesso' => true] + $service->read($_GET, $actor));
     }
     require_portal_write_access($role);

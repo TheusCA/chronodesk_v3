@@ -264,4 +264,109 @@ assert_same(0, preg_match('/audit\([^;]*(name|nome|\$names)/', $service), 'audit
 assert_same(true, strpos($service, "'ESCALA_MENSAL_PUBLICADA' : 'ESCALA_MENSAL_REGERADA'") !== false && strpos($service, "\$reason === 'publicacao' ? 'INFO' : 'WARNING'") !== false, 'auditoria: publicada INFO, regerada WARNING');
 assert_same([1, 1], [substr_count($service, '$this->operational()->monthPresence($from, $to)'), substr_count((string)file_get_contents($root . '/services/OperationalService.php'), "\$screen, true, false) as \$row) {")], 'presenca: pelo motor de sempre, sem os feriados (o rodizio conta o dia, D-F10-4 a)');
 
+// ----------------------------------------------------------------------------
+// 4. Exportacao em .xlsx (F10-6): as 6 abas do script, lidas de volta
+// ----------------------------------------------------------------------------
+require_once $root . '/services/MonthlyScheduleSheet.php';
+require_once $root . '/services/PortalTeams.php';
+function qa_zip_entries(string $zip): array {
+    $files = [];
+    $pos = 0;
+    while (substr($zip, $pos, 4) === "PK\x03\x04") {
+        $head = unpack('vversion/vflags/vmethod/vtime/vdate/Vcrc/Vcompressed/Vsize/vname/vextra', substr($zip, $pos + 4, 26));
+        $name = substr($zip, $pos + 30, $head['name']);
+        $files[$name] = substr($zip, $pos + 30 + $head['name'] + $head['extra'], $head['compressed']);
+        $pos += 30 + $head['name'] + $head['extra'] + $head['compressed'];
+    }
+    return $files;
+}
+/** Textos das celulas de uma aba (inlineStr e numeros), por linha. */
+function qa_sheet_rows(string $xml): array {
+    preg_match_all('/<row r="(\d+)"[^>]*>(.*?)<\/row>/s', $xml, $rows, PREG_SET_ORDER);
+    $result = [];
+    foreach ($rows as [, $number, $body]) {
+        preg_match_all('/<c r="([A-Z]+)\d+"[^>]*>(?:<is><t[^>]*>(.*?)<\/t><\/is>|<v>(.*?)<\/v>)<\/c>/s', $body, $cells, PREG_SET_ORDER);
+        foreach ($cells as $cell) {
+            $result[(int)$number][$cell[1]] = html_entity_decode($cell[2] !== '' ? $cell[2] : ($cell[3] ?? ''), ENT_QUOTES | ENT_XML1, 'UTF-8');
+        }
+    }
+    return $result;
+}
+$qaMonth = [
+    'mes' => '2026-12',
+    'days' => ['2026-12-30', '2026-12-31'],
+    'holidays' => ['2026-12-31'],
+    'current_revision' => 1,
+    'people' => [
+        ['id' => 11, 'name' => 'Ana Exemplo', 'team' => 'n1', 'tower' => 'N1', 'rotation_team' => 'Time 1', 'mode' => 'RODÍZIO', 'common' => true],
+        ['id' => 12, 'name' => 'Ana Modelo', 'team' => 'n1', 'tower' => 'N1', 'rotation_team' => 'Time 2', 'mode' => 'RODÍZIO', 'common' => true],
+        ['id' => 21, 'name' => 'Bia Teste', 'team' => 'n2', 'tower' => 'N2', 'rotation_team' => null, 'mode' => 'FIXO', 'common' => true],
+        ['id' => 31, 'name' => '=Eco Formula', 'team' => 'critico', 'tower' => 'CRITICO', 'rotation_team' => null, 'mode' => 'CRÍTICO', 'common' => false],
+    ],
+    'seats' => [
+        ['pa' => '1', 'row' => 1, 'column' => 1, 'type' => 'flexible', 'reserved' => false, 'active' => true],
+        ['pa' => '2', 'row' => 1, 'column' => 2, 'type' => 'flexible', 'reserved' => false, 'active' => true],
+        ['pa' => '9', 'row' => 2, 'column' => 1, 'type' => 'fixed', 'reserved' => true, 'active' => true],
+        ['pa' => '10', 'row' => 2, 'column' => 2, 'type' => 'flexible', 'reserved' => false, 'active' => false],
+    ],
+    'cells' => [
+        '11:2026-12-30' => ['situation' => 'onsite', 'pa' => '1', 'no_pa' => false, 'moved' => false],
+        '12:2026-12-30' => ['situation' => 'remote', 'pa' => null, 'no_pa' => false, 'moved' => false],
+        '21:2026-12-30' => ['situation' => 'absent', 'pa' => null, 'no_pa' => false, 'moved' => false],
+        '31:2026-12-30' => ['situation' => 'onsite', 'pa' => '9', 'no_pa' => false, 'moved' => false],
+        '11:2026-12-31' => ['situation' => 'onsite', 'pa' => '2', 'no_pa' => false, 'moved' => true],
+        '12:2026-12-31' => ['situation' => 'onsite', 'pa' => '1', 'no_pa' => false, 'moved' => false],
+        '21:2026-12-31' => ['situation' => 'onsite', 'pa' => null, 'no_pa' => true, 'moved' => false],
+    ],
+    'summary' => [
+        '2026-12-30' => ['onsite' => 1, 'remote' => 1, 'absent' => 1, 'n1' => 1, 'n2' => 0, 'hybrid' => 0, 'critical' => 1, 'home_by_team' => ['Time 2' => 1], 'percent_onsite' => 50, 'capacity' => 2, 'moves' => 0, 'no_pa' => 0, 'status' => ['OK']],
+        '2026-12-31' => ['onsite' => 3, 'remote' => 0, 'absent' => 0, 'n1' => 2, 'n2' => 1, 'hybrid' => 0, 'critical' => 0, 'home_by_team' => [], 'percent_onsite' => 100, 'capacity' => 2, 'moves' => 1, 'no_pa' => 1, 'status' => ['PA INSUFICIENTE']],
+    ],
+];
+$qaXlsx = MonthlyScheduleSheet::build($qaMonth);
+$qaFiles = qa_zip_entries($qaXlsx);
+preg_match_all('/<sheet name="([^"]+)"/', $qaFiles['xl/workbook.xml'] ?? '', $qaSheetNames);
+assert_same(['ESCALA 12-2026', 'TODOS 12-2026', 'RESUMO 12-2026', 'PA DIARIO 12-2026', 'MAPA PA 12-2026', 'RESUMO PA 12-2026'], $qaSheetNames[1], 'xlsx: as 6 abas do script, na ordem e com o mes');
+assert_same(['Escala do mes 12-2026.xlsx', true], [MonthlyScheduleSheet::fileName('2026-12'), str_starts_with($qaXlsx, "PK\x03\x04")], 'xlsx: nome do arquivo e ZIP (sem o ZipArchive)');
+$qaEscala = qa_sheet_rows($qaFiles['xl/worksheets/sheet1.xml']);
+assert_same(['NOME', 'MODO', 'TIME', 'TORRE', 'QUA', 'QUI', 'HOME NO MÊS'], array_values($qaEscala[1]), 'ESCALA: cabecalho do script e o total de HOME');
+assert_same(['30/12/2026', '31/12/2026 (feriado)'], [$qaEscala[2]['E'], $qaEscala[2]['F']], 'ESCALA: datas, com o feriado so marcado');
+assert_same([['Bia Teste', 'FIXO', null, 'N2', 'AUSENTE', 'PRESENCIAL', '0'], ['Ana Exemplo', 'RODÍZIO', 'Time 1', 'N1', 'PRESENCIAL', 'PRESENCIAL', '0'], ['Ana Modelo', 'Time 2', 'HOME', '1']], [
+    [$qaEscala[3]['A'], $qaEscala[3]['B'], $qaEscala[3]['C'] ?? null, $qaEscala[3]['D'], $qaEscala[3]['E'], $qaEscala[3]['F'], $qaEscala[3]['G']],
+    [$qaEscala[4]['A'], $qaEscala[4]['B'], $qaEscala[4]['C'], $qaEscala[4]['D'], $qaEscala[4]['E'], $qaEscala[4]['F'], $qaEscala[4]['G']],
+    [$qaEscala[5]['A'], $qaEscala[5]['C'], $qaEscala[5]['E'], $qaEscala[5]['G']],
+], 'ESCALA: grupo comum pelo time e nome (como o script); status por dia e o total de HOME');
+assert_same(['Bia Teste', 'AUSENTE'], [$qaEscala[3]['A'], $qaEscala[3]['E']], 'ESCALA: ausente sem categoria (6.4)');
+assert_same(false, isset(array_flip(array_column($qaEscala, 'A'))['=Eco Formula']), 'ESCALA: so o grupo comum (o Critico fica no TODOS)');
+$qaLabels = array_column($qaEscala, 'A');
+assert_same(true, in_array('PRESENCIAIS COMUNS', $qaLabels, true) && in_array('TIME 2 HOME', $qaLabels, true) && in_array('STATUS', $qaLabels, true) && in_array('PAs COMUNS', $qaLabels, true), 'ESCALA: indicadores do script (presenciais, home por time, PAs, STATUS)');
+$qaStatus = array_values(array_filter($qaEscala, static fn (array $r): bool => ($r['A'] ?? '') === 'STATUS'))[0];
+assert_same(['OK', 'PA INSUFICIENTE'], [$qaStatus['E'], $qaStatus['F']], 'ESCALA: STATUS por dia');
+$qaTodos = qa_sheet_rows($qaFiles['xl/worksheets/sheet2.xml']);
+$qaFormula = array_values(array_filter($qaTodos, static fn (array $r): bool => ($r['A'] ?? '') === '=Eco Formula'));
+assert_same(['CRÍTICO', 'PRESENCIAL', 'OUTRA ESCALA'], [$qaFormula[0]['B'] ?? '', $qaFormula[0]['E'] ?? '', $qaFormula[0]['F'] ?? ''], 'TODOS: todos, com quem esta fora do grupo comum');
+assert_same(1, preg_match('/<c r="A\d+" s="\d+" t="inlineStr"><is><t[^>]*>=Eco Formula<\/t>/', $qaFiles['xl/worksheets/sheet2.xml']) + preg_match_all('/<f>/', implode('', $qaFiles)), 'xlsx: texto com "=" fica texto (nenhuma formula no arquivo)');
+$qaResumo = qa_sheet_rows($qaFiles['xl/worksheets/sheet3.xml']);
+assert_same(['30/12/2026', 'QUA', '1', '1', '50%'], array_slice(array_values($qaResumo[2]), 0, 5), 'RESUMO: uma linha por dia com os indicadores');
+$qaDaily = qa_sheet_rows($qaFiles['xl/worksheets/sheet4.xml']);
+assert_same(['1', 'SUPERIOR', 'Ana E.', 'Ana M.'], array_values($qaDaily[2]), 'PA DIARIO: ocupante pelo primeiro nome (com a inicial quando repete, D-F10-52)');
+assert_same(['RESERVADO', 'BLOQUEADO'], [$qaDaily[4]['D'], $qaDaily[5]['C']], 'PA DIARIO: reservado vazio e PA bloqueado');
+assert_same(['TROCAS FLEXÍVEIS', '1', 'SEM PA', 'Bia'], [$qaDaily[6]['A'], $qaDaily[6]['D'], $qaDaily[7]['A'], $qaDaily[7]['D']], 'PA DIARIO: trocas e sem PA do dia');
+$qaMapa = (string)$qaFiles['xl/worksheets/sheet5.xml'];
+assert_same([2, true], [substr_count($qaMapa, '>PA 9<'), strpos($qaMapa, '>QUI 31/12/2026<') !== false], 'MAPA PA: por dia, as fileiras com o PA');
+$qaResumoPa = qa_sheet_rows($qaFiles['xl/worksheets/sheet6.xml']);
+assert_same(['1', 'SUPERIOR', 'COMPARTILHADO', '2', 'Ana E., Ana M.'], array_values($qaResumoPa[3]), 'RESUMO PA: compartilhado com os nomes');
+assert_same(['LIVRE', 'EXCLUSIVO'], [$qaResumoPa[6]['C'], $qaResumoPa[5]['C']], 'RESUMO PA: livre e exclusivo');
+assert_same(['Ana S.', 'Ana', 'Bia'], array_values(MonthlyScheduleSheet::shortNames([['id' => 1, 'name' => 'Ana Silva'], ['id' => 2, 'name' => 'Ana'], ['id' => 3, 'name' => 'Bia Souza']])), 'nome curto: a inicial so para quem tem sobrenome; primeiro nome unico fica sozinho');
+assert_same(false, (bool)preg_match('/ferias|folga|categoria|Férias/i', implode('', $qaFiles)), 'xlsx: sem categoria de ausencia');
+$qaService = (string)file_get_contents($root . '/services/MonthlyScheduleService.php');
+assert_same([1, 1], [
+    substr_count($qaService, "        if (\$read['current_revision'] === 0) {\n            throw new DomainException('O mês ainda não foi publicado: publique antes de exportar.');"),
+    substr_count((string)file_get_contents($root . '/api/portal/monthly_schedule.php'), "if (!portal_role_can(\$role, 'relatorios.read')) {"),
+], 'exportar: so o mes publicado, com relatorios.read (admin, Lideranca e gestor, D-F10-11)');
+assert_same(['RODÍZIO', 'SEM HOME', 'FULL HOME', 'FIXO', 'FIXO', 'CRÍTICO', 'SEM REGRA'], [
+    MonthlySchedulePlanner::modeLabel('n1', 'cycle', 'Time 1'), MonthlySchedulePlanner::modeLabel('n1', 'always_onsite', null), MonthlySchedulePlanner::modeLabel('n2', 'always_remote', null),
+    MonthlySchedulePlanner::modeLabel('n1', 'cycle', null), MonthlySchedulePlanner::modeLabel('n2', 'fixed_weekdays', null), MonthlySchedulePlanner::modeLabel('critico', 'cycle', null), MonthlySchedulePlanner::modeLabel('n1', null, null),
+], 'modo da planilha pela regra do motor');
+
 echo 'QA monthly schedule OK (' . ($GLOBALS['qa_checks'] ?? 0) . " verificacoes)\n";

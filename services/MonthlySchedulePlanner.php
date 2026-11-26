@@ -293,6 +293,21 @@ final class MonthlySchedulePlanner
         ] + $statusDays;
     }
 
+    /** Modo da planilha (aba ESCALA e TODOS) pela regra do motor. */
+    public static function modeLabel(?string $team, ?string $ruleType, ?string $rotationTeam): string
+    {
+        return match (true) {
+            $team === PortalTeams::CRITICAL => 'CRÍTICO',
+            $team === PortalTeams::HYBRID => 'HÍBRIDO',
+            $team === PortalTeams::LEADERSHIP => 'LIDERANÇA',
+            $rotationTeam !== null => 'RODÍZIO',
+            $ruleType === 'always_onsite' => 'SEM HOME',
+            $ruleType === 'always_remote' => 'FULL HOME',
+            $ruleType === 'cycle' || $ruleType === 'fixed_weekdays' => 'FIXO',
+            default => 'SEM REGRA',
+        };
+    }
+
     /** Situacao do contrato paridade-escala-v1 (desenho 8.1). */
     public static function paritySituation(string $presenceType): string
     {

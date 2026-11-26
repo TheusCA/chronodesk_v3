@@ -1865,6 +1865,7 @@ $matrix = [
     // [F10-4] Escala do mes: leitura para todos (D-F10-10); paridade so admin;
     // previa e publicacao com escala_mensal.publish; trava com pa_map.manage.
     'api/portal/monthly_schedule.php GET' => [[], $expect['TODOS']],
+    'api/portal/monthly_schedule.php GET xlsx' => [['query' => ['formato' => 'xlsx', 'mes' => '2026-12']], $expect['GESTAO']],
     'api/portal/monthly_schedule.php GET paridade' => [['query' => ['formato' => 'paridade', 'mes' => '2026-12']], $expect['ADMIN']],
     'api/portal/monthly_schedule.php POST preview' => [['content_type' => $json, 'body' => '{"action":"preview","mes":"2026-12"}'], $expect['ADMIN_LIDERANCA']],
     'api/portal/monthly_schedule.php POST publish' => [['content_type' => $json, 'body' => '{"action":"publish","mes":"2026-12"}'], $expect['ADMIN_LIDERANCA']],
